@@ -22,9 +22,8 @@ const char relResourcePath[] = "src/tests/resources";
  */
 static void getBaseDirectory(char * buffer, size32 bufferSize)
 {
-	GetExecutablePath(buffer, bufferSize);		// <base directory>/build/[os]/bin/something.exe
-	GetParentDirectory(buffer, bufferSize);		// <base directory>/build/[os]/bin/
-	GetParentDirectory(buffer, bufferSize);		// <base directory>/build/[os]
+	GetExecutablePath(buffer, bufferSize);		// <base directory>/build/bin/something.exe
+	GetParentDirectory(buffer, bufferSize);		// <base directory>/build/bin/
 	GetParentDirectory(buffer, bufferSize);		// <base directory>/build/
 	GetParentDirectory(buffer, bufferSize);		// <base directory>
 }

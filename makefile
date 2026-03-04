@@ -29,18 +29,12 @@ endif
 SRCDIRS := $(patsubst %, src/%,\
  btree datumtypes graphics kernel lang memory network parser testing tests util vm)
 
- # source directories for FreeType
+# source directories for FreeType
 # FREETYPE_BASEDIR := third-party/$(FREETYPE)/src
 # FREETYPE_SRCDIRS := $(addprefix $(FREETYPE_BASEDIR)/, base gzip psnames raster smooth sfnt truetype)
 
 # main build directory
-ifdef WINDOWS
-BUILDDIR := build/windows
-else ifdef MACOS
-BUILDDIR := build/mac
-else
-BUILDDIR := build/linux
-endif
+BUILDDIR := build
 
 # object file directories
 OBJDIR := $(BUILDDIR)/obj
@@ -268,7 +262,7 @@ LCOV_EXCLUDE_PATTERN := '*/src/btree/*' '*/src/tests/*'
 
 .PHONY: coverage
 coverage:
-	gcov src/tests/*.c --object-directory build/linux/obj/tests -t > coverage/run_tests.gcov
+	gcov src/tests/*.c --object-directory $(OBJDIR)/tests -t > coverage/run_tests.gcov
 	lcov --capture --directory . --output-file coverage/coverage.info > /dev/null
 	lcov --remove coverage/coverage.info $(LCOV_EXCLUDE_PATTERN) --output-file coverage/coverage_filtered.info
 	genhtml coverage/coverage_filtered.info --output-directory  coverage/lcov-report > /dev/null
