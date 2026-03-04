@@ -8,31 +8,7 @@ Atom is written as far as possible from the ground up, with minimal reliance on 
 
 ## Documentation
 
-See under `docs`.
-
-## Notes on implementation
-
-This version focuses on relations as the main mechanism for implementing the system, and does away with "large datums" (is the plan). Aside from a few "primitive" atom types like integers, all data is stored in relations. Most atoms will be defined by "identifying facts": for example, the atom ID for a string `cat` is a hash of the fact(s)
-```
-list cat length 3 &
-list cat position 1 element @c
-list cat position 2 element @a
-list cat position 3 element @4
-```
-This will be super inefficient in a first implementation, but the philosophy is to postpone all optimization until we have a working system. Eventually we can make special-purpose optimized tables that reduce the above to essentially the same as the C string. The advantage is that the system is conceptually as simple as possible.
-
-## Implementation plan
-
-* DONE Relation tables.
-* DONE Registry for relation tables.
-* DONE IFact table.
-* DONE Convert large datumtypes `Array`, `Quote`, `String`, `Tuple`, `Variable` to IFacts and remove the `Block` ADT. Reference counting now handled by IFact.
-* Lookup. This will require a table listing for each atom the relations it is part of, and the role (marginal fact), e.g. `list cat position _ element _`.
-* Virtual machine and bytecode.
-* Dispatcher
-* Logic rules
-* Compiler
-* Graphics
+Currently maintained separately.
 
 ## Code conventions
 
