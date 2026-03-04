@@ -479,9 +479,15 @@ uint64 RandomInteger(uint64 lowerBound, uint64 upperBound)
 }
 
 
-void SetRandomSeed(void)
+void SetRandomSeed(uint32 seed)
 {
-	srand((uint32) time(NULL));
+	srand(seed);
+}
+
+
+uint32 GenerateRandomSeed(void)
+{
+	return (uint32) time(0);
 }
 
 

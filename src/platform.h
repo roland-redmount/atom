@@ -211,7 +211,16 @@ void AbortProgram(void);
  */
 uint64 RandomInteger(uint64 lowerBound, uint64 upperBound);
 
-void SetRandomSeed(void);
+/**
+ * Set random seed
+ */
+void SetRandomSeed(uint32 seed);
+
+/**
+ * Generate a unique (more or less) random seed based on
+ * an external device, typically the system clock.
+ */
+uint32 GenerateRandomSeed(void);
 
 
 #endif  // PLATFORM_H

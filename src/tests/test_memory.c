@@ -100,7 +100,7 @@ void testAllocate2(void)
 
 void testFuzzAllocate(void)
 {
-	SetRandomSeed();
+	SetRandomSeed(GenerateRandomSeed());
 	size32 initialTotalFree = GetTotalFree();
 
 	for(int k = 0; k < N_FUZZ_ROUNDS; k++) {
@@ -168,7 +168,7 @@ void testReallocate(void)
 
 void testPoolAllocate(void)
 {
-	SetRandomSeed();
+	SetRandomSeed(GenerateRandomSeed());
 	
 	for(int k = 0; k < N_POOL_FUZZ_ROUNDS; k++) {
 		void * items[MAX_POOL_ITEMS];
