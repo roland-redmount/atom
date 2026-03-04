@@ -233,6 +233,7 @@ void testBTreeRandomized(void)
 		itemCopy->key = items[i].key;
         ASSERT_TRUE(BTreeDelete(btree, itemCopy) == BTREE_DELETED)
 		ASSERT_TRUE(testItemsEqual(&items[i], itemCopy))
+		validateBTree(btree);
 	}
     // even-numbered keys should should be absent
     for(index32 i = 0; i < nTestItems; i++) {
@@ -248,6 +249,7 @@ void testBTreeRandomized(void)
 		itemCopy->key = items[i].key;
         ASSERT_TRUE(BTreeDelete(btree, itemCopy) == BTREE_DELETED)
 		ASSERT_TRUE(testItemsEqual(&items[i], itemCopy))
+		validateBTree(btree);
 	}
     for(index32 i = 0; i < nTestItems; i++)
 		ASSERT_FALSE(BTreeContainsItem(btree, &items[i]))
@@ -318,7 +320,10 @@ int main(int argc, char **argv)
 {
 	SetupMemory();
 
-	SetRandomSeed();
+	uint32 randomSeed = GenerateRandomSeed();
+	// PrintF("seed = %u\n", randomSeed);
+ 	SetRandomSeed(randomSeed);
+
 	testBTreeExample();
     testBTreeRandomized();
     testBTreeIterator();

@@ -394,7 +394,7 @@ static void nodeDeleteItem(BTree const * btree, BTreeNode * node, index32 index)
  * move node's item at pivotIndex to the median item of the merged child node.
  * The right child (now empty) is deallocated.
  */
-static void mergeChildNodes(BTree const * btree, BTreeNode * node, index32 pivotIndex)
+static void mergeChildNodes(BTree * btree, BTreeNode * node, index32 pivotIndex)
 {
 	BTreeNode * leftChild = node->children[pivotIndex];
 	ASSERT(leftChild->nItems < btree->minDegree)
@@ -422,6 +422,15 @@ static void mergeChildNodes(BTree const * btree, BTreeNode * node, index32 pivot
 	}
 	leftChild->nItems += rightChild->nItems + 1;
 	freeNode(rightChild);
+
+	// Merging may result in an empty root node.
+	if(node->nItems == 0) {
+		ASSERT(node == btree->root)
+		// replace empty root with the merged chlld node
+		freeNode(btree->root);
+		btree->root = leftChild;
+		btree->height--;
+	}
 }
 
 typedef enum {
@@ -526,14 +535,6 @@ static BTreeDeleteResult btreeDeleteRecursive(BTree * btree, BTreeNode * node, S
 				// make sure we continue with the merged node
 				if(!isLeftChild)
 					child = sibling;
-				if(node->nItems == 0) {
-					// merge may result in an empty node only for the root
-					ASSERT(node == btree->root)
-					// replace empty root with its child
-					freeNode(btree->root);
-					btree->root = child;
-					btree->height--;
-				}
 			}
 		}
 		node = child;
@@ -797,6 +798,8 @@ static bool nodeVerifyBounds(BTree const * btree, BTreeNode const * node, int de
 
 bool BTreeVerifyBounds(BTree const * btree)
 {
+	if(btree->nItemsTotal > 0 && btree->root->nItems == 0)
+		return false;
     return nodeVerifyBounds(btree, btree->root, 1);
 }
 
