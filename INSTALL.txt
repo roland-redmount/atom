@@ -1,0 +1,31 @@
+*
+*  Installation instructions
+*
+
+This is the source distribution for the atom system. It can be installed and built on Linux and (maybe) Windows.
+
+Besides the source in this distribution, atom may require installing additional software. We currently don't have an automated installer, so you may have to do some package installation upfront.
+
+*
+* Graphics 
+*
+
+The following are required for graphics. We could do text interface without.
+
+
+** SDL2 (Simple Direct Media Layer) **
+
+Linux (Ubuntu, Debian):  sudo apt install libsdl2-2.0-0 libsdl2-dev
+Windows: see https://github.com/libsdl-org/SDL/releases
+
+
+** GLEW (OpenGL Extension Wrangler) **
+
+Linux (Ubuntu): sudo apt install libglew2.2 libglew-dev glew-utils
+
+
+** FreeType (font rendering) **
+
+Linux (Ubuntu): sudo apt install libfreetype-dev
+
+To get the required include file paths, do: pkg-config --cflags freetype2

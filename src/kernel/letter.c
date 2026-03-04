@@ -1,0 +1,62 @@
+
+#include <ctype.h>
+
+#include "datumtypes/UInt.h"
+#include "datumtypes/Variable.h"
+#include "kernel/letter.h"
+#include "kernel/ifact.h"
+#include "kernel/ServiceRegistry.h"
+
+
+/**
+ * TODO: Letters are fundamental atoms since they are required to create 
+ * role names and named variables. We need to hardcode the
+ * (letter code) relation since any table query would require a variable,
+ * which in turn requires a (letter code) lookup.
+ * 
+ * In principle, letters should be a DT_ID identified by the letter code,
+ * but for bootstrapping purposes we're now using a separate datum type DT_LETTER,
+ * to avoid having to generate hash values for each letter. 
+ * 
+ * TODO: queries to the (letter code) relation must dispatch to these functions
+ */
+
+static uint8 charToLetterCode(char c)
+{
+	// we use 1,2, ... 26 for A, B, ..., Z
+	uint8 letterCode = toupper(c) - 'A' + 1;
+	ASSERT((letterCode >= 1) && (letterCode <= 26));
+	return letterCode;	
+}
+
+
+static char letterCodeToChar(uint8 letterCode, uint8 letterCase)
+{
+	ASSERT((letterCode >= 1) && (letterCode <= 26));
+	if(letterCase == LETTER_UPPERCASE)
+		return 'A' + letterCode - 1;
+	else
+		return 'a' + letterCode - 1;
+
+}
+
+
+Atom GetAlphabetLetter(char c)
+{
+	return (Atom) {DT_LETTER, 0, 0, 0, charToLetterCode(c)};
+}
+
+
+char LetterToChar(Atom letter, uint8 letterCase)
+{
+	return letterCodeToChar(letter.datum, letterCase);
+}
+
+
+void PrintLetter(Atom letter, uint8 letterCase)
+{
+	char c = LetterToChar(letter, letterCase);
+	PrintChar('\'');
+	PrintChar(c);
+	PrintChar('\'');
+}

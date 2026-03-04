@@ -1,0 +1,90 @@
+/**
+ * A bytecode program consists of a signature, registers,
+ * constants, and an instruction list (program).
+ */
+
+#ifndef BYTECODE_H
+#define BYTECODE_H
+
+#include "kernel/ifact.h"
+#include "vm/instruction.h"
+
+
+typedef struct s_BytecodeDraft {
+	Atom signature;
+	Atom registers;
+	IFactDraft constantsDraft;
+	IFactDraft programDraft;
+	Instruction instructionDraft;
+} BytecodeDraft;
+
+/**
+ * Initialize a bytecode block from a DT_FORMULA signature,
+ * and an array of initial values for registers.
+ */
+void BytecodeBegin(BytecodeDraft * draft, Atom signature, Atom registers);
+
+/**
+ * Being a new bytecode instruction, to be appended to the program
+ */
+void BytecodeBeginInstruction(BytecodeDraft * draft, byte opcode);
+void BytecodeOperandParameter(BytecodeDraft * draft, Atom parameter);
+void BytecodeOperandRegister(BytecodeDraft * draft, index8 registerIndex);
+void BytecodeOperandConstant(BytecodeDraft * draft, Atom constant);
+void BytecodeEndInstruction(BytecodeDraft * draft);
+
+
+/**
+ * Finalize bytecode and create IFact atom. This creates the relations
+ * 
+ * (bytecode @b signature f) where f is a DT_FORMULA
+ * 
+ * (bytecode @b registers r)
+ * where r is a list of initial values for registers (atoms),
+ * which also determines each register's datum type.
+ * 
+ * (bytecode @b constants c)
+ * where c is a list of constants (atoms).
+ *
+ * (bytecode @b program i)  where i is a list of instructions
+ * 
+ */
+Atom BytecodeEnd(BytecodeDraft * draft);
+
+
+bool IsBytecode(Atom atom);
+
+/**
+ * Returns a list of instructions
+ */
+Atom BytecodeGetProgram(Atom bytecode);
+
+/**
+ * Returns a formula
+ */
+Atom BytecodeGetSignature(Atom bytecode);
+
+/**
+ * Read a instruction from a bytecode block.
+ */
+Atom BytecodeGetInstruction(Atom bytecode, index32 pc);
+
+/**
+ * Get a list of registers (initial values)
+ */
+Atom BytecodeGetRegisters(Atom bytecode);
+
+/**
+ * Get a list of constants
+ */
+Atom BytecodeGetConstants(Atom bytecode);
+
+/**
+ * Create core bytecode services, such as arithmetic operations.
+ */
+void SetupCoreServices(void);
+
+void TeardownCoreServices(void);
+
+#endif	// BYTECODE_H
+

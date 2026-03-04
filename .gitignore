@@ -1,0 +1,9 @@
+build/**
+coverage
+docs/~*
+docs/*/~*
+docs/.obsidian
+sqlite/**
+tmp/**
+
+.vscode

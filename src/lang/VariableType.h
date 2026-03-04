@@ -1,0 +1,17 @@
+
+#ifndef VARIABLETYPE_H
+#define VARIABLETYPE_H
+
+#include "lang/DatumType.h"
+
+/**
+ * This structure associates a variable with a datum type
+ */
+struct s_VariableType {
+	Atom variable;		// possibly quoted
+	byte typeId;
+};
+typedef struct s_VariableType VariableType;
+
+
+#endif	// VARIABLETYPE_H
