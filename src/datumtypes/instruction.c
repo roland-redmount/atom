@@ -1,5 +1,5 @@
 
-#include "vm/instruction.h"
+#include "datumtypes/instruction.h"
 
 
 char const * mnemonics[] = {

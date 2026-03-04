@@ -370,6 +370,7 @@ void KernelShutdown(void)
 	ASSERT(ifactCount >= kernel.nCoreIFacts);
 	if(ifactCount > kernel.nCoreIFacts) {
 		PrintF("Failed to remove %u ifacts\n", ifactCount - kernel.nCoreIFacts);
+		DumpIFacts();
 		ASSERT(false);
 	}
 	// check for dangling references

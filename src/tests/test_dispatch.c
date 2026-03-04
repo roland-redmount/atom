@@ -25,8 +25,8 @@ int main(int argc, char * argv[])
 
 	testDispatch();
 
-	TestSummary();
-
 	TeardownCoreServices();
 	KernelShutdown();
+
+	TestSummary();
 }

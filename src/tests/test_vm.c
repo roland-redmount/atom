@@ -1,5 +1,6 @@
 
 #include "datumtypes/Parameter.h"
+#include "datumtypes/instruction.h"
 #include "datumtypes/Int.h"
 #include "datumtypes/Variable.h"
 #include "kernel/kernel.h"
@@ -8,7 +9,6 @@
 #include "lang/Formula.h"
 #include "parser/PredicateBuilder.h"
 #include "vm/bytecode.h"
-#include "vm/instruction.h"
 #include "vm/vm.h"
 
 

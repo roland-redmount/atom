@@ -1,5 +1,5 @@
 /**
- * A bytecode instruction. Should be a datum type?
+ * A bytecode instruction, DT_INSTRUCTION.
  */
 
 #ifndef INSTRUCTION_H

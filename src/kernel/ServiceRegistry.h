@@ -5,10 +5,9 @@
  * For relation tables, any arguments are assumed to be valid,
  * and the signature's actor list is null.
  * 
- * Currently, it is not possible to register both a relation table
- * and a bytecode service of the same form. This restriction may
- * be relaxed in the future, but this would require merging results
- * across multiple services.
+ * For simplicity, currently, we only store one service for each form,
+ * either bytecode or table. There cannot be multiple bytecode
+ * services with different parameters (in/out).
  */
 
 #ifndef TABLEREGISTRY_H
@@ -57,7 +56,6 @@ void TeardownRegistry(void);
  */
 size32 RegistryNServices(void);
 
-
 /**
  * Get the relation table corresponding to a core predicate.
  */
@@ -69,7 +67,6 @@ BTree * RegistryGetCoreTable(index32 index);
 * At this time, we cannot call FormArity(), so the arity must be specified.
 */
 void RegistryCreateCoreTable(index32 index, Atom form, size8 arity);
-
 
 /**
  * Create a new relation table for a form. Returns the created table,
@@ -83,36 +80,29 @@ void RegistryCreateCoreTable(index32 index, Atom form, size8 arity);
 BTree * RegistryCreateTable(Atom form);
 
 /**
- * Return the relation table for a form, or 0 if none exists.
- * The returned pointer is guaranteed to be valid for as long as
- * the relation table exists.
- */
-BTree * RegistryLookupTable(Atom form);
-
-/**
- * Remove a relation table from the registry.
- * All facts must have been retracted so that relation table is empty.
- */
-void RegistryRemoveTable(Atom form);
-
-/**
  * Add a bytecode service to the registry
  */
 Service RegistryAddBytecodeService(Atom bytecode);
 
 /**
- * Remove a bytecode service from the registry.
+ * Remove a service from the registry.
+ * If the service is a relation table, all facts must have been retracted
+ * so that table is empty.
  */
-void RegistryRemoveBytecodeService(Atom form);
-
-
+void RegistryRemoveService(Atom form);
 
 /**
- * Find a service matching a given form.
- * 
- * TODO: there will be multiple matches, this should be an iterator
+ * Find the service registered for a given form.
+ * If no service is found, the returned service.type equals SERVICE_NONE
  */
 Service RegistryFindService(Atom form);
+
+/**
+ * Return the relation table for a form, or 0 if none exists.
+ * The returned pointer is guaranteed to be valid for as long as
+ * the relation table exists.
+ */
+BTree * RegistryLookupTable(Atom form);
 
 
 #endif  // TABLEREGISTRY_H

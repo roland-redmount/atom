@@ -561,3 +561,17 @@ void PrintIFact(Atom atom)
 	PrintF("ID %llx", atom.datum);
 }
 
+
+void DumpIFacts(void)
+{
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, ifactStorage.btree, 0, 0);
+	while(BTreeIteratorHasItem(&iterator)) {
+		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
+		Atom atom = createIFactAtom(header->hash);
+		PrintAtom(atom);
+		PrintChar('\n');
+		BTreeIteratorNext(&iterator);
+	}
+	BTreeIteratorEnd(&iterator);
+}

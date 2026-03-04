@@ -284,10 +284,6 @@ static void createAdditionService(void)
 	// NOTE: the form is now both a registry key and part of the bytecode definition
 	additionService = RegistryAddBytecodeService(bytecode);
 	ReleaseAtom(bytecode);
-	
-	// To find the bytecode, dispatch would query
-	// for the signature
-	// e.g. (service @bytecode) that dispatch can search
 }
 
 
@@ -299,5 +295,5 @@ void SetupCoreServices(void)
 
 void TeardownCoreServices(void)
 {
-	RegistryRemoveBytecodeService(additionService.form);
+	RegistryRemoveService(additionService.form);
 }

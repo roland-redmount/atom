@@ -21,47 +21,16 @@ struct {
 } registry;
 
 
-/**
- * For searching
- */
-
- /*
-static int8 compareServicesByForm(Service const * service1, Service const * service2)
-{
-	return CompareAtoms(service1->form, service2->form);
-}
-
-static int btreeCompareServicesByForm(void const * item1, void const * item2, void * udata)
-{
-	return compareServicesByForm((Service *) item1, (Service *) item2);
-}
-*/
-
-
-/**
- * Services are ordered by form, then by type, then by parameters.
- */
 static int8 compareServices(Service const * service, Service const * serviceOrKey)
 {
-	int8 formOrder = CompareAtoms(service->form, serviceOrKey->form);
-	if(formOrder == 0) {
-		if(service->type < serviceOrKey->type)
-			return -1;
-		else if(service->type > serviceOrKey->type)
-			return 1;
-		else {
-			return CompareAtoms(service->parameters, serviceOrKey->parameters);
-		}
-	}
-	else
-		return formOrder;
+	return CompareAtoms(service->form, serviceOrKey->form);
 }
+
 
 static int8 btreeCompareServices(void const * item, void const * itemOrKey, size32 itemSize)
 {
 	return compareServices((Service *) item, (Service *) itemOrKey);
 }
-
 
 
 static void btreeFreeService(void * item, size32 itemSize)
@@ -87,7 +56,7 @@ void SetupRegistry(void)
 {
 	registry.tree = BTreeCreate(
 	    sizeof(Service),
-	    btreeCompareServices,		// compare_items
+	    btreeCompareServices,
 	    btreeFreeService
 	);
 	SetMemory(registry.coreTables, (N_CORE_PREDICATES + 1) * sizeof(BTree *), 0);
@@ -100,7 +69,7 @@ size32 RegistryNServices(void)
 }
 
 
-// create a Service struct
+// create a Service struct for a B-tree service
 static Service createBTreeService(Atom form, BTree * btree)
 {
 	Service service;
@@ -146,24 +115,6 @@ BTree * RegistryCreateTable(Atom form)
 }
 
 
-BTree * RegistryLookupTable(Atom form)
-{
-	Service service = createBTreeService(form, 0);
-	bool found = BTreeGetItem(registry.tree, &service);
-	if(found)
-		return service.service.tree;
-	else
-		return 0;
-}
-
-
-void RegistryRemoveTable(Atom form)
-{
-	Service key = createBTreeService(form, 0);
-	BTreeDelete(registry.tree, &key);
-}
-
-
 Service RegistryAddBytecodeService(Atom bytecode)
 {
 	Service service;
@@ -180,10 +131,10 @@ Service RegistryAddBytecodeService(Atom bytecode)
 }
 
 
-void RegistryRemoveBytecodeService(Atom form)
+void RegistryRemoveService(Atom form)
 {
-	// TODO:
-	ASSERT(false);
+	Service key = createBTreeService(form, 0);
+	ASSERT(BTreeDelete(registry.tree, &key) == BTREE_DELETED);
 }
 
 
@@ -191,10 +142,16 @@ Service RegistryFindService(Atom form)
 {
 	Service service = {0};
 	service.form = form;
-	
-	Service * storedService = BTreePeekItem(registry.tree, &service);
-	if(storedService)
-		service = *storedService;
-	// else service will be invalid
+	BTreeGetItem(registry.tree, &service);
 	return service;
+}
+
+
+BTree * RegistryLookupTable(Atom form)
+{
+	Service service = RegistryFindService(form);
+	if(service.type == SERVICE_BTREE)
+		return service.service.tree;
+	else
+		return 0;
 }

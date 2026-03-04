@@ -7,7 +7,7 @@
 #define BYTECODE_H
 
 #include "kernel/ifact.h"
-#include "vm/instruction.h"
+#include "datumtypes/instruction.h"
 
 
 typedef struct s_BytecodeDraft {

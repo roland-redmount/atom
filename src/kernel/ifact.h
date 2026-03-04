@@ -133,5 +133,7 @@ bool IFactCheckTuple(BTree const * tree, Atom const * tuple);
 
 void PrintIFact(Atom ifact);
 
+void DumpIFacts(void);
+
 
 #endif  // IFACT_H

@@ -100,7 +100,6 @@ bool SignatureQueryMatch(Signature const * signature, Atom query, Atom * matches
 
 /**
  * Dispatch a query, 
- * When generating bytecode, this is used to
  * 
  */
 Service DispatchQuery(Atom query)
