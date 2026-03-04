@@ -6,10 +6,6 @@ One challenge is that atom makes extensive use of declarative logic which does n
 
 Atom is written as far as possible from the ground up, with minimal reliance on C standard libraries or third-party packages. Instead, we aim to implement features as far as possible within the language itself, to explore its usage for a variety of tasks. We do rely on some external function libraries while bootstrapping, and of course we depend on the host OS, but we aim to isolate all such dependencies into a platform layer. This also helps attain platform independence. Atom is currently being developed on Linux, but the goal is to make the system available on Mac and Windows platforms as well.
 
-## IMPORTANT
-
-This repo should not be made public, as `docs` contain all sorts of internal business documents. Copy the code into a new public repo to remove the commit history.
-
 ## Documentation
 
 See under `docs`.
