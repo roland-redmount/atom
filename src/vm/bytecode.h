@@ -16,6 +16,7 @@ typedef struct s_BytecodeDraft {
 	IFactDraft constantsDraft;
 	IFactDraft programDraft;
 	Instruction instructionDraft;
+	size32 callCounter;
 } BytecodeDraft;
 
 /**
@@ -25,14 +26,47 @@ typedef struct s_BytecodeDraft {
 void BytecodeBegin(BytecodeDraft * draft, Atom signature, Atom registers);
 
 /**
+ * Structure specifying a bytecode argument or operand
+ */
+typedef struct {
+	enum {ARG_PARAMETER, ARG_REGISTER, ARG_CONSTANT} type;
+	union {
+		Atom parameter;
+		index8 registerIndex;
+		Atom constant;
+	} value;
+} BytecodeArgument;
+
+
+
+/**
  * Being a new bytecode instruction, to be appended to the program
  */
 void BytecodeBeginInstruction(BytecodeDraft * draft, byte opcode);
+
+void BytecodeAddOperand(BytecodeDraft * draft, BytecodeArgument argument);
+
+
+void BytecodeOperandConstant(BytecodeDraft * draft, Atom constant);
 void BytecodeOperandParameter(BytecodeDraft * draft, Atom parameter);
 void BytecodeOperandRegister(BytecodeDraft * draft, index8 registerIndex);
-void BytecodeOperandConstant(BytecodeDraft * draft, Atom constant);
 void BytecodeEndInstruction(BytecodeDraft * draft);
 
+/** 
+ * Generate sequence of call instructions
+ * 
+ *   PUSH argument_N
+ *   ...
+ *   PUSH argument_1
+ *   CALL <service>
+ * 
+ * Actors in the query formula may be eiher variables referring to
+ * the calling bytecode's parameters, or integers referring to registers.
+ * (We should probably have a better representation of this.)
+ * This function retrieves the bytecode service and adds the PUSH and
+ * CALL instructions to the bytecode draft.
+ */
+void BytecodeGenerateCall(BytecodeDraft * draft, Atom bytecode, Atom query);
 
 /**
  * Finalize bytecode and create IFact atom. This creates the relations
@@ -78,6 +112,13 @@ Atom BytecodeGetRegisters(Atom bytecode);
  * Get a list of constants
  */
 Atom BytecodeGetConstants(Atom bytecode);
+
+/**
+ * Returns the number of CALL instructions in the bytecode,
+ * which equals the largest number of child contexts that
+ * may be needed during execution.
+ */
+size32 BytecodeNChildContexts(Atom bytecode);
 
 /**
  * Create core bytecode services, such as arithmetic operations.

@@ -1,5 +1,6 @@
 
 #include "datumtypes/Parameter.h"
+#include "datumtypes/register.h"
 #include "datumtypes/Variable.h"
 #include "datumtypes/UInt.h"
 #include "kernel/ifact.h"
@@ -66,14 +67,14 @@ static void setBytecodeConstants(IFactDraft * draft, Atom constantsList)
 	IFactEndConjunction(draft);
 }
 
-
 /**
  * TODO: For the instructions list, we want to use
  * a dense array implementation for performance when executing bytecode.
  * If we let the form (list position element) be implemented by multiple storage
  * engines (B-tree, dense array, ...) then we need to query across all of them.
  * That is a fair amount of added complexity. List iteration must then gather
- * facts across storage engines  ... 
+ * facts across storage engines  ...  We should probably specify in the query
+ * to only search array-based storage (we would know this in advance).
  * 
  * For now we stick with the B-tree list implementation, but we should revisit this.
  */
@@ -83,6 +84,7 @@ void BytecodeBegin(BytecodeDraft * draft, Atom signature, Atom registers)
 	ASSERT(IsFormula(signature));
 	draft->signature = signature;
 	draft->registers = registers;
+	draft->callCounter = 0;
 
 	// draft lists, instructions can add elements
 	ListBegin(&(draft->constantsDraft));
@@ -93,6 +95,24 @@ void BytecodeBegin(BytecodeDraft * draft, Atom signature, Atom registers)
 void BytecodeBeginInstruction(BytecodeDraft * draft, byte opcode)
 {
 	InstructionBegin(&(draft->instructionDraft), opcode);
+}
+
+
+void BytecodeAddOperand(BytecodeDraft * draft, BytecodeArgument argument)
+{
+	switch(argument.type) {
+		case ARG_CONSTANT:
+		BytecodeOperandConstant(draft, argument.value.constant);
+		break;
+
+		case ARG_PARAMETER:
+		BytecodeOperandParameter(draft, argument.value.parameter);
+		break;
+
+		case ARG_REGISTER:
+		BytecodeOperandRegister(draft, argument.value.registerIndex);
+		break;
+	}
 }
 
 
@@ -116,9 +136,9 @@ void BytecodeOperandRegister(BytecodeDraft * draft, index8 registerIndex)
 
 void BytecodeOperandConstant(BytecodeDraft * draft, Atom constant)
 {
-	// NOTE: constants list could be a set
-	index32 constantIndex = ListAddElement(&(draft->constantsDraft), constant);
-	InstructionOperandConstant(&(draft->instructionDraft), constantIndex);
+	// TODO: constants should be a set
+	index8 position = ListAddElement(&(draft->constantsDraft), constant);
+	InstructionOperandConstant(&(draft->instructionDraft), position);
 }
 
 
@@ -126,6 +146,45 @@ void BytecodeEndInstruction(BytecodeDraft * draft)
 {
 	Atom instruction = InstructionEnd(&(draft->instructionDraft));
 	ListAddElement(&(draft->programDraft), instruction);
+}
+
+
+void BytecodeGenerateCall(BytecodeDraft * draft, Atom bytecode, Atom query)
+{
+	ASSERT(IsBytecode(bytecode))
+	ASSERT(IsFormula(query))
+	Atom actorsList = FormulaGetActors(query);
+	size8 arity = ListLength(actorsList);
+
+	// generate push instructions for arguments, in reverse order
+	for(index8 i = 0; i < arity; i++) {
+		BytecodeBeginInstruction(draft, OP_PUSH);
+		Atom actor = ListGetElement(actorsList, arity - i);
+		switch(actor.type) {
+			case DT_PARAMETER:
+			BytecodeOperandParameter(draft, actor);
+			break;
+
+			case DT_REGISTER:
+			BytecodeOperandRegister(draft, RegisterGetIndex(actor));
+			break;
+
+			default:
+			// any other datum is a bytecode constant
+			// NOTE: this acquires the constant atom, as we add it to a list
+			BytecodeOperandConstant(draft, actor);
+			break;
+		}
+		BytecodeEndInstruction(draft);
+	}
+
+	// generate CALL instruction
+	BytecodeBeginInstruction(draft, OP_CALL);
+	BytecodeOperandConstant(draft, bytecode);
+	// Set the child context index.
+	// NOTE: this is pretty ugly ...
+	draft->instructionDraft.fields.op2 = ++draft->callCounter;
+	BytecodeEndInstruction(draft);
 }
 
 
@@ -145,13 +204,11 @@ Atom BytecodeEnd(BytecodeDraft * draft)
 	setBytecodeProgram(&bytecodeDraft, program);
 
 	// (bytecode constants)
-	// TODO: what if there are no constants -- then this list will be empty
 	Atom constants = ListEnd(&(draft->constantsDraft));
 	setBytecodeConstants(&bytecodeDraft, constants);
 
 	Atom bytecode = IFactEnd(&bytecodeDraft);
 	ReleaseAtom(program);
-	ReleaseAtom(constants);
 	SetMemory(draft, sizeof(BytecodeDraft), 0);
 	return bytecode;
 }
@@ -230,6 +287,30 @@ Atom BytecodeGetConstants(Atom bytecode)
 	return tuple[constantsIndex];
 }
 
+
+/**
+ * Compute the number of child contexts by iterating over the program
+ * and counting CALL instructions. We could also precompute this at time of
+ * creating the bytecode and assert a fact.
+ */
+size32 BytecodeNChildContexts(Atom bytecode)
+{
+	size32 callCount = 0;
+
+	Atom program = BytecodeGetProgram(bytecode);
+	ListIterator iterator;
+	ListIterate(program, &iterator);
+	while(ListIteratorHasNext(&iterator)) {
+		Atom inst = ListIteratorGetElement(&iterator);
+		if(InstructionGetOpCode(inst) == OP_CALL)
+			callCount++;
+		ListIteratorNext(&iterator);
+	}
+	ListIteratorEnd(&iterator);
+	return callCount;
+}
+
+
 // TODO: temporary solution to be able to locate
 //  and remove the service (+ + =) to avoid memory leaks.
 //  We need a systematic way of deallocating all services,
@@ -254,7 +335,9 @@ static void createAdditionService(void)
 	Atom signature = CreateFormula(form, actors);
 */
 
-	Atom signature = CStringToPredicate("+ $x>INT + $y>INT = $z<INT");
+	Atom signature = CStringToPredicate("+ $x<INT + $y<INT = $z>INT");
+	PrintFormula(signature);
+	PrintChar('\n');
 	Atom x = CreateParameter('x', PARAMETER_IN, DT_INT);
 	Atom y = CreateParameter('y', PARAMETER_IN, DT_INT);
 	Atom z = CreateParameter('z', PARAMETER_OUT, DT_INT);

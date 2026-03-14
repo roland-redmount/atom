@@ -6,6 +6,47 @@
 #include "lang/Formula.h"
 #include "lang/Quote.h"
 
+
+/**
+ * Dispatch a query, 
+ * 
+ */
+Service DispatchQuery(Atom query)
+{
+	// TODO:
+
+	// 1) Lookup matching bytecode by form from a service directory.
+	
+	Atom queryForm = FormulaGetForm(query);
+	Service service = RegistryFindService(queryForm);
+
+	// 2) Attempt to match candidate services to the query actors,
+	// accounting for permutations and variable types (if any)
+
+	// 3) Execute the service:
+	// For tables, run a table iterator. For services, do VM execution.
+
+
+	/**
+	 * In the long run, we want to integrate the REPL into a top-level
+	 * VM execution context. That means we need a user input method callable
+	 * from the VM that yields a query formula q; this can be a hard-coded
+	 * service (user-query q) that blocks until a query is entered.
+	 */
+
+	return service;
+}
+
+
+void CallService(Service service, Atom * tuple)
+{
+	// TODO
+	// See VMExecute()
+
+	ASSERT(false);
+}
+
+
 /**
  * Test whether a query tuple matches a signature tuple, in the order given.
  * Non-variable atoms in the query must match signature input arguments,
@@ -96,41 +137,4 @@ bool SignatureQueryMatch(Signature const * signature, Atom query, Atom * matches
 	return PermutationMatch(signature->formula, query, matches, perm, signature);
 }
 */
-
-
-/**
- * Dispatch a query, 
- * 
- */
-Service DispatchQuery(Atom query)
-{
-	// TODO:
-
-	// 1) Lookup matching bytecode by form from a service directory.
-	
-	Atom queryForm = FormulaGetForm(query);
-	Service service = RegistryFindService(queryForm);
-
-	// 2) Attempt to match candidate services to the query actors,
-	// accounting for permutations and variable types (if any)
-
-	// 3) Execute the service:
-	// For tables, run a table iterator. For services, do VM execution.
-
-
-	/**
-	 * In the long run, we want to integrate the REPL into a top-level
-	 * VM execution context. That means we need a user input method callable
-	 * from the VM that yields a query formula q; then we ca
-	 */
-
-	return service;
-}
-
-
-void CallService(Service service, Atom * tuple)
-{
-	// TODO
-	ASSERT(false);
-}
 

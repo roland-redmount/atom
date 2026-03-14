@@ -45,9 +45,9 @@ void PrintParameter(Atom parameter)
 	PrintChar('$');
 	PrintChar(arg.fields.name);
 	if(arg.fields.io == PARAMETER_IN)
-		PrintChar('>');
-	else
 		PrintChar('<');
+	else
+		PrintChar('>');
 	if(arg.fields.type)
 		PrintCString(GetDatumTypeName(arg.fields.type));
 }

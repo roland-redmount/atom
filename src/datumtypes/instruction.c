@@ -3,36 +3,22 @@
 
 
 char const * mnemonics[] = {
-	"INVALID",
+	// 0x00 - 0x0F general purpose instructions, any datum type
+
+	"NOP", "COPY", "EQ", "PUSH", "NOP", "NOP", "NOP", "NOP", 
+	"NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
 	
-	// general purpose instructions, any datum type
-	"COPY",
-	"EQ",
+	// 0x10 - 0x1F program control
+	"NOT", "MARK", "JUMP", "ENDIF", "YES", "YESIF", "CALL", "RESUME", 
+	"YIELD", "END", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
 
-	// program control
-	"NOT",
-	"MARK",
-	"JUMP",
-	"ENDIF",
-	"YES",
-	"YESIF",
+	// 0x20 - 0x2F integer arithmetic
+	"ADD", "SUB", "INC", "DEC", "MUL", "LESS", "LESSEQ", "NOP", 
+	"NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
 
-	// integer arithmetic
-	"ADD",
-	"SUB",
-	"INC",
-	"DEC",
-	"MUL",
-	"LESS",
-	"LESSEQ",
-
-	// floating points arithmetic
-	"FADD",
-	"FSUB",
-	"FMUL",
-	"FDIV",
-	"FLESS",
-	"FLESSEQ",
+	// 0x30 - 0x3F floating points arithmetic
+	"FADD", "FSUB", "FMUL", "FDIV", "FLESS", "FLESSEQ", "NOP", "NOP", 
+	"NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
 };
 
 
@@ -105,7 +91,7 @@ static void printOperand(byte accessMode, index8 op)
 		PrintChar('_');
 		break;
 	case ACCESS_REGISTER:
-		PrintChar('@');
+		PrintChar('#');
 		break;
 	default:
 		// no decorator

@@ -21,9 +21,10 @@
  * tokenizer with a "take back" functionality.
  */
 
-#include "datumtypes/Parameter.h"
 #include "datumtypes/FloatIEEE754.h"
 #include "datumtypes/Int.h"
+#include "datumtypes/Parameter.h"
+#include "datumtypes/register.h"
 #include "datumtypes/Variable.h"
 #include "kernel/string.h"
 #include "lang/name.h"
@@ -41,9 +42,6 @@ void TokenizerInit(Tokenizer * tokenizer)
 // return true if character was accepted
 bool TokenizerPush(Tokenizer * tokenizer, char c)
 {
-	// NOTE: the logic is a bit hard to read when split by state
-	// rather than by type ...
-
 	if(tokenizer->isFull) {
 		if(IsWhiteSpace(c) || (c == 0)) {
 			// trailing whitespace or termination char
@@ -74,18 +72,6 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 			tokenizer->isFull = true;
 			return true;
 		}
-		if(IsNameInitialChar(c)) {
-			tokenizer->type = TOKEN_NAME;
-			StringBufferPush(&(tokenizer->buffer), c);
-			tokenizer->isValid = true;
-			return true;
-		}
-		if(IsDigitChar(c)) {
-			tokenizer->type = TOKEN_NUMBER;
-			StringBufferPush(&(tokenizer->buffer), c);
-			tokenizer->isValid = true;
-			return true;
-		}
 		if(c == '"') {
 			tokenizer->type = TOKEN_STRING;
 			tokenizer->isValid = false;
@@ -99,6 +85,23 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		if(c == '$') {
 			tokenizer->type = TOKEN_PARAMETER;
 			tokenizer->isValid = false;
+			return true;
+		}
+		if(c == '#') {
+			tokenizer->type = TOKEN_REGISTER;
+			tokenizer->isValid = false;
+			return true;
+		}
+		if(IsDigitChar(c)) {
+			tokenizer->type = TOKEN_NUMBER;
+			StringBufferPush(&(tokenizer->buffer), c);
+			tokenizer->isValid = true;
+			return true;
+		}
+		if(IsNameInitialChar(c)) {
+			tokenizer->type = TOKEN_NAME;
+			StringBufferPush(&(tokenizer->buffer), c);
+			tokenizer->isValid = true;
 			return true;
 		}
 		if(IsWhiteSpace(c) || (c == 0)) {
@@ -184,7 +187,7 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		}
 		if(!tokenizer->data.parameter.io) {
 			if((c == '>') || (c == '<')) {
-				tokenizer->data.parameter.io = (c == '>') ? PARAMETER_IN : PARAMETER_OUT;
+				tokenizer->data.parameter.io = (c == '<') ? PARAMETER_IN : PARAMETER_OUT;
 				tokenizer->isValid = true;	// type may be omitted
 				return true;
 			}
@@ -217,6 +220,20 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 			else
 				return false;
 		}
+	
+	case TOKEN_REGISTER:
+		// similar to number, but positive integers only
+		if(IsDigitChar(c)) {
+			StringBufferPush(&(tokenizer->buffer), c);
+			tokenizer->isValid = true;
+			return true;
+		}
+		if(IsWhiteSpace(c) || (c == 0)) {
+			// whitespace terminates number
+			tokenizer->isFull = true;
+			return true;
+		}
+		return false;
 
 	default:
 		// should never occur
@@ -273,12 +290,14 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 		// strings entered in formulas are always immutable
 		token.atom = CreateString(string, stringLength);
 		break;
+
 	case TOKEN_NUMBER:
 		if(StringContainsChar(string, stringLength, '.'))
 			token.atom = parseFloat(string, stringLength);
 		else
 			token.atom = parseInteger(string, stringLength);
 		break;
+
 	case TOKEN_VARIABLE:
 		// NOTE: variable names must now be a single char
 		if(stringLength == 0)
@@ -286,6 +305,7 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 		else
 			token.atom = CreateVariable(string[0]);
 		break;
+
 	case TOKEN_PARAMETER:
 		token.atom = CreateParameter(
 			tokenizer->data.parameter.name,
@@ -293,9 +313,18 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 			tokenizer->data.parameter.type
 		);
 		break;
+
+	case TOKEN_REGISTER: {
+		int64 registerIndex = StringToInt64(string, stringLength);
+		ASSERT(registerIndex > 0 && registerIndex <= 255)
+		token.atom = CreateRegister((index8) registerIndex);
+		break;
+	}
+				
 	case TOKEN_NAME:
 		token.atom = CreateName(string, stringLength);
 		break;
+
 	default:
 		// tokens that do not represent an atom
 		token.atom = invalidAtom;

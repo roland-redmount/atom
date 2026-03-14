@@ -24,36 +24,42 @@
 typedef byte OpCode;
 
 // general purpose instructions, any datum type
+#define OP_NOP			0
 #define	OP_COPY			0x01
 #define	OP_EQ			0x02
+#define OP_PUSH			0x03
 
 // program control
-#define	OP_NOT			0x03
-#define	OP_MARK			0x04
-#define	OP_JUMP			0x05		// should we use an instruction offset?
-#define	OP_ENDIF		0x06
-#define	OP_YES			0x07
-#define	OP_YESIF		0x08
+#define	OP_NOT			0x10
+#define	OP_MARK			0x11
+#define	OP_JUMP			0x12		// should we use an instruction offset?
+#define	OP_ENDIF		0x13
+#define	OP_YES			0x14
+#define	OP_YESIF		0x15
+#define OP_CALL			0x16
+#define OP_RESUME		0x17
+#define OP_YIELD		0x18
+#define OP_END			0x19
 
 // integer arithmetic
-#define	OP_ADD			0x09
-#define	OP_SUB			0x0A
-#define	OP_INC			0x0B
-#define	OP_DEC			0x0C
-#define OP_MUL			0x0D
-#define	OP_LESS			0x0E
-#define	OP_LESSEQ		0x0F
+#define	OP_ADD			0x20
+#define	OP_SUB			0x21
+#define	OP_INC			0x22
+#define	OP_DEC			0x23
+#define OP_MUL			0x24
+#define	OP_LESS			0x25
+#define	OP_LESSEQ		0x26
 
 // floating points arithmetic
 // NOTE: we have distinct opcodes from integer arithmetic
 // since floating point operations are approximate and
 // conversion to/from integers should be explicit
-#define	OP_FADD			0x10
-#define	OP_FSUB			0x11
-#define	OP_FMUL			0x12
-#define	OP_FDIV			0x13
-#define	OP_FLESS		0x14
-#define	OP_FLESSEQ		0x15
+#define	OP_FADD			0x30
+#define	OP_FSUB			0x31
+#define	OP_FMUL			0x32
+#define	OP_FDIV			0x33
+#define	OP_FLESS		0x34
+#define	OP_FLESSEQ		0x35
 
 
 /**
@@ -85,7 +91,7 @@ typedef union {
 void InstructionBegin(Instruction * draft, OpCode opcode);
 
 /**
- * Add an argumnet operand represented by an index into the
+ * Add an argument operand represented by an index into the
  * byte code arguments list.
  */
 void InstructionOperandArgument(Instruction * draft, index8 argumentIndex);

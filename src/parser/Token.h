@@ -16,6 +16,7 @@ enum TokenType {
 	TOKEN_STRING,
 	TOKEN_VARIABLE,
 	TOKEN_PARAMETER,
+	TOKEN_REGISTER,
 	TOKEN_AND,		// logical conjunction (&)
 	TOKEN_OR,		// logical disjunction (|)
 	TOKEN_NOT		// logical negation

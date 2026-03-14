@@ -9,7 +9,8 @@ bool TokenIsLiteral(Token token)
 	return (token.type == TOKEN_STRING) ||
 		(token.type == TOKEN_NUMBER) ||
 		(token.type == TOKEN_VARIABLE) ||
-		(token.type == TOKEN_PARAMETER);
+		(token.type == TOKEN_PARAMETER) ||
+		(token.type == TOKEN_REGISTER);
 }
 
 
