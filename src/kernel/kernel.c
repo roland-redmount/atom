@@ -398,11 +398,13 @@ void KernelShutdown(void)
 		// print methods are not available for LookupDump() at this time
 		ASSERT(false);
 	}
-
 	FreeIFacts();
 	FreeLookup();
 	TeardownRegistry();
 	FreeNameStorage();
+
+	// TODO: we are leaking memory
+//	CleanupMemory();
 }
 
 

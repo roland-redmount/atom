@@ -269,7 +269,7 @@ static Service additionService;
  */
 static void createAdditionService(void)
 {
-	Atom signature = CStringToPredicate("+ @INT + @INT = $INT");
+	Atom signature = CStringToPredicate("= $INT + @INT + @INT");
 	PrintFormula(signature);
 	PrintChar('\n');
 
@@ -279,16 +279,16 @@ static void createAdditionService(void)
 	BytecodeDraft bytecodeDraft;
 	BytecodeBegin(&bytecodeDraft, signature, registers);
 	
-	// COPY @1 $3
+	// COPY @2 $1
 	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
-	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 1);
-	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 3);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 2);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 1);
 	BytecodeEndInstruction(&bytecodeDraft);
 
-	// ADD @3 $3
+	// ADD @3 $1
 	BytecodeBeginInstruction(&bytecodeDraft, OP_ADD);
-	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 2);
-	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 3);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 3);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 1);
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	Atom bytecode = BytecodeEnd(&bytecodeDraft);
@@ -301,6 +301,10 @@ static void createAdditionService(void)
 }
 
 
+/**
+ * TODO: This should become part of the "standard library" of services.
+ * This is not "core" services in the sense of being required for the system to function.
+ */
 void SetupCoreServices(void)
 {
 	createAdditionService();
