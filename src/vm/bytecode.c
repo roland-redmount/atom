@@ -17,8 +17,8 @@
 
 static void setBytecodeSignature(IFactDraft * draft, Atom signature)
 {
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_BYTECODE);
-	index8 signatureIndex = GetPredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_BYTECODE);
+	index8 signatureIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_SIGNATURE), bytecodeIndex);
 	Atom tuple[2];
@@ -30,8 +30,8 @@ static void setBytecodeSignature(IFactDraft * draft, Atom signature)
 
 static void setBytecodeProgram(IFactDraft * draft, Atom program)
 {
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_BYTECODE);
-	index8 programIndex = GetPredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_BYTECODE);
+	index8 programIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_PROGRAM), bytecodeIndex);
 	Atom tuple[2];
@@ -44,8 +44,8 @@ static void setBytecodeProgram(IFactDraft * draft, Atom program)
 // (bytecode registers)
 static void setBytecodeRegisters(IFactDraft * draft, Atom registersList)
 {
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_BYTECODE);
-	index8 registersIndex = GetPredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_BYTECODE);
+	index8 registersIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_REGISTERS), bytecodeIndex);
 	Atom tuple[2];
@@ -57,8 +57,8 @@ static void setBytecodeRegisters(IFactDraft * draft, Atom registersList)
 
 static void setBytecodeConstants(IFactDraft * draft, Atom constantsList)
 {
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_BYTECODE);
-	index8 constantsIndex = GetPredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_BYTECODE);
+	index8 constantsIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_CONSTANTS), bytecodeIndex);
 	Atom tuple[2];
@@ -84,9 +84,8 @@ void BytecodeBegin(BytecodeDraft * draft, Atom signature, Atom registers)
 	ASSERT(IsFormula(signature));
 	draft->signature = signature;
 	draft->registers = registers;
-	draft->callCounter = 0;
 
-	// draft lists, instructions can add elements
+	// Draft lists, modified when adding instructions
 	ListBegin(&(draft->constantsDraft));
 	ListBegin(&(draft->programDraft));
 }
@@ -98,93 +97,38 @@ void BytecodeBeginInstruction(BytecodeDraft * draft, byte opcode)
 }
 
 
-void BytecodeAddOperand(BytecodeDraft * draft, BytecodeArgument argument)
+void BytecodeOperandParameter(BytecodeDraft * draft, Operand operand, index8 index)
 {
-	switch(argument.type) {
-		case ARG_CONSTANT:
-		BytecodeOperandConstant(draft, argument.value.constant);
-		break;
-
-		case ARG_PARAMETER:
-		BytecodeOperandParameter(draft, argument.value.parameter);
-		break;
-
-		case ARG_REGISTER:
-		BytecodeOperandRegister(draft, argument.value.registerIndex);
-		break;
-	}
+	InstructionSetOperand(&(draft->instructionDraft), operand, index, ACCESS_PARAMETER);
 }
 
 
-void BytecodeOperandParameter(BytecodeDraft * draft, Atom parameter)
-{
-	index8 position = ListGetPosition(
-		FormulaGetActors(draft->signature),
-		parameter
-	);
-	ASSERT(position > 0)
-	InstructionOperandArgument(&(draft->instructionDraft), position);
-}
-
-
-void BytecodeOperandRegister(BytecodeDraft * draft, index8 registerIndex)
+void BytecodeOperandRegister(BytecodeDraft * draft, Operand operand, index8 registerIndex)
 {
 	ASSERT(registerIndex <= ListLength(draft->registers))
-	InstructionOperandRegister(&(draft->instructionDraft), registerIndex);
+	InstructionSetOperand(&(draft->instructionDraft), operand, registerIndex, ACCESS_REGISTER);
 }
 
 
-void BytecodeOperandConstant(BytecodeDraft * draft, Atom constant)
+void BytecodeOperandConstant(BytecodeDraft * draft, Operand operand, Atom constant)
 {
 	// TODO: constants should be a set
 	index8 position = ListAddElement(&(draft->constantsDraft), constant);
-	InstructionOperandConstant(&(draft->instructionDraft), position);
+	InstructionSetOperand(&(draft->instructionDraft), operand, position, ACCESS_CONSTANT);
 }
+
+
+void BytecodeOperandSetContext(BytecodeDraft * draft, Operand operand, index8 registerIndex)
+{
+	InstructionSetContext(&(draft->instructionDraft), operand, registerIndex);
+}
+
 
 
 void BytecodeEndInstruction(BytecodeDraft * draft)
 {
 	Atom instruction = InstructionEnd(&(draft->instructionDraft));
 	ListAddElement(&(draft->programDraft), instruction);
-}
-
-
-void BytecodeGenerateCall(BytecodeDraft * draft, Atom bytecode, Atom query)
-{
-	ASSERT(IsBytecode(bytecode))
-	ASSERT(IsFormula(query))
-	Atom actorsList = FormulaGetActors(query);
-	size8 arity = ListLength(actorsList);
-
-	// generate push instructions for arguments, in reverse order
-	for(index8 i = 0; i < arity; i++) {
-		BytecodeBeginInstruction(draft, OP_PUSH);
-		Atom actor = ListGetElement(actorsList, arity - i);
-		switch(actor.type) {
-			case DT_PARAMETER:
-			BytecodeOperandParameter(draft, actor);
-			break;
-
-			case DT_REGISTER:
-			BytecodeOperandRegister(draft, RegisterGetIndex(actor));
-			break;
-
-			default:
-			// any other datum is a bytecode constant
-			// NOTE: this acquires the constant atom, as we add it to a list
-			BytecodeOperandConstant(draft, actor);
-			break;
-		}
-		BytecodeEndInstruction(draft);
-	}
-
-	// generate CALL instruction
-	BytecodeBeginInstruction(draft, OP_CALL);
-	BytecodeOperandConstant(draft, bytecode);
-	// Set the child context index.
-	// NOTE: this is pretty ugly ...
-	draft->instructionDraft.fields.op2 = ++draft->callCounter;
-	BytecodeEndInstruction(draft);
 }
 
 
@@ -209,6 +153,7 @@ Atom BytecodeEnd(BytecodeDraft * draft)
 
 	Atom bytecode = IFactEnd(&bytecodeDraft);
 	ReleaseAtom(program);
+	ReleaseAtom(constants);
 	SetMemory(draft, sizeof(BytecodeDraft), 0);
 	return bytecode;
 }
@@ -227,8 +172,8 @@ bool IsBytecode(Atom atom)
 Atom BytecodeGetProgram(Atom bytecode)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_PROGRAM);
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_BYTECODE);
-	index8 programIndex = GetPredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_BYTECODE);
+	index8 programIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
 
 	Atom query[2];
 	query[bytecodeIndex] = bytecode;
@@ -243,8 +188,8 @@ Atom BytecodeGetProgram(Atom bytecode)
 Atom BytecodeGetSignature(Atom bytecode)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_SIGNATURE);
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_BYTECODE);
-	index8 signatureIndex = GetPredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_BYTECODE);
+	index8 signatureIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
 
 	Atom query[2];
 	query[bytecodeIndex] = bytecode;
@@ -259,8 +204,8 @@ Atom BytecodeGetSignature(Atom bytecode)
 Atom BytecodeGetRegisters(Atom bytecode)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_REGISTERS);
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_BYTECODE);
-	index8 registersIndex = GetPredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_BYTECODE);
+	index8 registersIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
 
 	Atom query[2];
 	query[bytecodeIndex] = bytecode;
@@ -275,8 +220,8 @@ Atom BytecodeGetRegisters(Atom bytecode)
 Atom BytecodeGetConstants(Atom bytecode)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_CONSTANTS);
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_BYTECODE);
-	index8 constantsIndex = GetPredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_BYTECODE);
+	index8 constantsIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
 
 	Atom query[2];
 	query[bytecodeIndex] = bytecode;
@@ -302,7 +247,7 @@ size32 BytecodeNChildContexts(Atom bytecode)
 	ListIterate(program, &iterator);
 	while(ListIteratorHasNext(&iterator)) {
 		Atom inst = ListIteratorGetElement(&iterator);
-		if(InstructionGetOpCode(inst) == OP_CALL)
+		if(InstructionGetOpCode(inst) == OP_EXEC)
 			callCount++;
 		ListIteratorNext(&iterator);
 	}
@@ -324,23 +269,9 @@ static Service additionService;
  */
 static void createAdditionService(void)
 {
-/*
-	Atom plus = CreateNameFromCString("+");
-	Atom equals = CreateNameFromCString("=");
-	Atom form = CreatePredicateForm((Atom []) {plus, plus, equals}, 3);
-
-	// TODO: this will not in general match the form order.
-	// we need a way to create formulas correctly without parsing strings.
-	Atom actors = CreateListFromArray((Atom []) {x, y, z}, 3);
-	Atom signature = CreateFormula(form, actors);
-*/
-
-	Atom signature = CStringToPredicate("+ $x<INT + $y<INT = $z>INT");
+	Atom signature = CStringToPredicate("= $1:INT + @2:INT + @3:INT");
 	PrintFormula(signature);
 	PrintChar('\n');
-	Atom x = CreateParameter('x', PARAMETER_IN, DT_INT);
-	Atom y = CreateParameter('y', PARAMETER_IN, DT_INT);
-	Atom z = CreateParameter('z', PARAMETER_OUT, DT_INT);
 
 	Atom registers = CreateListFromArray(0, 0);		// the empty list
 
@@ -348,16 +279,16 @@ static void createAdditionService(void)
 	BytecodeDraft bytecodeDraft;
 	BytecodeBegin(&bytecodeDraft, signature, registers);
 	
-	// COPY x z
+	// COPY @1 $3
 	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
-	BytecodeOperandParameter(&bytecodeDraft, x);
-	BytecodeOperandParameter(&bytecodeDraft, z);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 1);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 3);
 	BytecodeEndInstruction(&bytecodeDraft);
 
-	// ADD y z
+	// ADD @3 $3
 	BytecodeBeginInstruction(&bytecodeDraft, OP_ADD);
-	BytecodeOperandParameter(&bytecodeDraft, y);
-	BytecodeOperandParameter(&bytecodeDraft, z);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 2);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 3);
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	Atom bytecode = BytecodeEnd(&bytecodeDraft);

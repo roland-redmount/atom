@@ -17,7 +17,8 @@ char const * datumTypeNames[] = {
 	"ID",
 	"INSTRUCTION",
 	"PARAMETER",
-	"REGISTER"
+	"REGISTER",
+	"CONTEXT"
 };
 
 

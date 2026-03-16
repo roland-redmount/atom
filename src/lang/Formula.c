@@ -21,9 +21,9 @@
 
 void FormulaSetTuple(Atom * tuple, Atom formula, Atom form, Atom actorsList)
 {
-	tuple[GetPredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA)] = formula;
-	tuple[GetPredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM)] = form;
-	tuple[GetPredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS)] = actorsList;
+	tuple[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA)] = formula;
+	tuple[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM)] = form;
+	tuple[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS)] = actorsList;
 }
 
 
@@ -35,7 +35,7 @@ Atom CreateFormula(Atom form, Atom actorsList)
 	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_FORMULA_FORM_ACTORS),
-		GetPredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA)
+		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA)
 	);
 
 	Atom tuple[3];
@@ -197,7 +197,7 @@ Atom FormulaGetForm(Atom formula)
 	FormulaSetTuple(query, formula, anonymousVariable, anonymousVariable);
 	Atom result[3];
 	RelationBTreeQuerySingle(tree, query, result);
-	return result[GetPredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM)];
+	return result[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM)];
 }
 
 
@@ -208,7 +208,7 @@ Atom FormulaGetActors(Atom formula)
 	FormulaSetTuple(query, formula, anonymousVariable, anonymousVariable);
 	Atom result[3];
 	RelationBTreeQuerySingle(tree, query, result);
-	return result[GetPredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS)];
+	return result[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS)];
 }
 
 

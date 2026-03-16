@@ -5,11 +5,11 @@
 char const * mnemonics[] = {
 	// 0x00 - 0x0F general purpose instructions, any datum type
 
-	"NOP", "COPY", "EQ", "PUSH", "NOP", "NOP", "NOP", "NOP", 
+	"NOP", "COPY", "EQ", "NOP", "NOP", "NOP", "NOP", "NOP", 
 	"NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
 	
 	// 0x10 - 0x1F program control
-	"NOT", "MARK", "JUMP", "ENDIF", "YES", "YESIF", "CALL", "RESUME", 
+	"NOT", "MARK", "JUMP", "ENDIF", "YES", "YESIF", "EXEC", "RESUME", 
 	"YIELD", "END", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
 
 	// 0x20 - 0x2F integer arithmetic
@@ -29,35 +29,31 @@ void InstructionBegin(Instruction * draft, OpCode opcode)
 }
 
 
-static void addOperand(Instruction * draft, byte operand, byte accessMode)
+void InstructionSetOperand(Instruction * draft, Operand operand, index8 opIndex, byte accessMode)
 {
-	if(!draft->fields.op1) {
-		draft->fields.op1 = operand;
+	switch(operand) {
+		case OPERAND_LEFT:
+		draft->fields.op1Index = opIndex;
 		draft->fields.accessMode.op1 = accessMode;
-	}
-	else if(!draft->fields.op2) {
-		draft->fields.op2 = operand;
+		break;
+
+		case OPERAND_RIGHT:
+		draft->fields.op2Index = opIndex;
 		draft->fields.accessMode.op2 = accessMode;
 	}
-	else
-		ASSERT(false);	// both operands have already been assigned
-}
-
-void InstructionOperandArgument(Instruction * draft, index8 argumentIndex)
-{
-	addOperand(draft, argumentIndex, ACCESS_ARGUMENT);
 }
 
 
-void InstructionOperandRegister(Instruction * draft, index8 registerIndex)
+void InstructionSetContext(Instruction * draft, Operand operand, index8 contextIndex)
 {
-	addOperand(draft, registerIndex, ACCESS_REGISTER);
-}
+	switch(operand) {
+		case OPERAND_LEFT:
+		draft->fields.op1ContextRegister = contextIndex;
+		break;
 
-
-void InstructionOperandConstant(Instruction * draft, index8 constantIndex)
-{
-	addOperand(draft, constantIndex, ACCESS_CONSTANT);
+		case OPERAND_RIGHT:
+		draft->fields.op2ContextRegister = contextIndex;
+	}
 }
 
 
@@ -83,12 +79,24 @@ OpCode InstructionGetOpCode(Atom instruction)
 }
 
 
-static void printOperand(byte accessMode, index8 op)
+static void printOperand(Operand operand, byte accessMode, index8 opIndex, index8 contextIndex)
 {
+	// Contexts are always in registers
+	if(contextIndex) {
+		PrintF("#%u", contextIndex);
+		// for contexts, we write to inputs (to set arguments)
+		// and read from outputs (to retrieve results), so we
+		// must flip the operand
+		operand = (operand == OPERAND_LEFT) ? OPERAND_RIGHT : OPERAND_LEFT;
+	}
 	// decorator
 	switch(accessMode) {
-	case ACCESS_ARGUMENT:
-		PrintChar('_');
+	case ACCESS_PARAMETER:
+		// We assume left operand is read (@n), right is write ($n)
+		if(operand == OPERAND_LEFT)
+			PrintChar('@');
+		else
+			PrintChar('$');
 		break;
 	case ACCESS_REGISTER:
 		PrintChar('#');
@@ -97,17 +105,20 @@ static void printOperand(byte accessMode, index8 op)
 		// no decorator
 		break;
 	}	
-	PrintF("%u ", op);
+	PrintF("%u ", opIndex);
 }
 
 
 void PrintInstruction(Atom instruction)
 {
 	Instruction inst = InstructionGetData(instruction);
-
-	PrintCString(mnemonics[inst.fields.opcode]);
-	PrintChar(' ');
-	printOperand(inst.fields.accessMode.op1, inst.fields.op1);
-	printOperand(inst.fields.accessMode.op2, inst.fields.op2);
+	// opcode
+	PrintF("%-7s", mnemonics[inst.fields.opcode]);
+	
+	printOperand(OPERAND_LEFT,
+		inst.fields.accessMode.op1, inst.fields.op1Index, inst.fields.op1ContextRegister);
+	printOperand(OPERAND_RIGHT,
+		inst.fields.accessMode.op2, inst.fields.op2Index, inst.fields.op2ContextRegister);
 	PrintChar('\n');
 }
+

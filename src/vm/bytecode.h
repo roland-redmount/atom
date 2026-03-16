@@ -16,7 +16,7 @@ typedef struct s_BytecodeDraft {
 	IFactDraft constantsDraft;
 	IFactDraft programDraft;
 	Instruction instructionDraft;
-	size32 callCounter;
+	// size32 callCounter;
 } BytecodeDraft;
 
 /**
@@ -44,29 +44,20 @@ typedef struct {
  */
 void BytecodeBeginInstruction(BytecodeDraft * draft, byte opcode);
 
-void BytecodeAddOperand(BytecodeDraft * draft, BytecodeArgument argument);
+/**
+ * Add a operand reference to a parameter @index or $index.
+ * Since read / write access is fully determined by the instruction opcode,
+ * we do not need to explitly specify input or output parameter here.
+ */
+void BytecodeOperandParameter(BytecodeDraft * draft, Operand operand, index8 index);
+void BytecodeOperandRegister(BytecodeDraft * draft, Operand operand, index8 registerIndex);
 
+void BytecodeOperandConstant(BytecodeDraft * draft, Operand operand, Atom constant);
 
-void BytecodeOperandConstant(BytecodeDraft * draft, Atom constant);
-void BytecodeOperandParameter(BytecodeDraft * draft, Atom parameter);
-void BytecodeOperandRegister(BytecodeDraft * draft, index8 registerIndex);
+void BytecodeOperandSetContext(BytecodeDraft * draft, Operand operand, index8 registerIndex);
+
 void BytecodeEndInstruction(BytecodeDraft * draft);
 
-/** 
- * Generate sequence of call instructions
- * 
- *   PUSH argument_N
- *   ...
- *   PUSH argument_1
- *   CALL <service>
- * 
- * Actors in the query formula may be eiher variables referring to
- * the calling bytecode's parameters, or integers referring to registers.
- * (We should probably have a better representation of this.)
- * This function retrieves the bytecode service and adds the PUSH and
- * CALL instructions to the bytecode draft.
- */
-void BytecodeGenerateCall(BytecodeDraft * draft, Atom bytecode, Atom query);
 
 /**
  * Finalize bytecode and create IFact atom. This creates the relations

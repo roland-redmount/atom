@@ -27,7 +27,6 @@ typedef byte OpCode;
 #define OP_NOP			0
 #define	OP_COPY			0x01
 #define	OP_EQ			0x02
-#define OP_PUSH			0x03
 
 // program control
 #define	OP_NOT			0x10
@@ -36,7 +35,7 @@ typedef byte OpCode;
 #define	OP_ENDIF		0x13
 #define	OP_YES			0x14
 #define	OP_YESIF		0x15
-#define OP_CALL			0x16
+#define OP_EXEC			0x16
 #define OP_RESUME		0x17
 #define OP_YIELD		0x18
 #define OP_END			0x19
@@ -65,6 +64,12 @@ typedef byte OpCode;
 /**
  * Structure stored in a 64-bit instruction datum.
  * Each operand is an argument, a register, or a constant.
+ * We may prefix each argument with a register holding
+ * a context object, from which the operand is read.
+ * (By default the operand is read from the current context.)
+ * 
+ * TODO: for JUMP instruction we need a line number instead
+ * of operands. This can be a union.
  */
 typedef union {
 	struct {
@@ -73,15 +78,20 @@ typedef union {
 			byte op1 : 2;
 			byte op2 : 2;
 		} accessMode;
-		index8 op1;		// 1-based indices into operand
-		index8 op2;
+		index8 op1ContextRegister;
+		index8 op1Index;		// 1-based indices into operand
+		index8 op2ContextRegister;
+		index8 op2Index;
 	} fields;
 	data64 value;
 } Instruction;
 
-#define	ACCESS_ARGUMENT		0x1
+#define	ACCESS_PARAMETER	0x1
 #define	ACCESS_REGISTER		0x2
 #define	ACCESS_CONSTANT		0x3
+
+
+typedef enum { OPERAND_LEFT, OPERAND_RIGHT } Operand;
 
 
 /**
@@ -92,19 +102,13 @@ void InstructionBegin(Instruction * draft, OpCode opcode);
 
 /**
  * Add an argument operand represented by an index into the
- * byte code arguments list.
+ * parameters, register or constant lists.
  */
-void InstructionOperandArgument(Instruction * draft, index8 argumentIndex);
+void InstructionSetOperand(Instruction * draft, Operand operand, index8 opIndex, byte accessMode);
 
-/**
- * Add a register operand.
- */
-void InstructionOperandRegister(Instruction * draft, index8 registerIndex);
 
-/**
- * Add a constant operand.
- */
-void InstructionOperandConstant(Instruction * draft, index8 constantIndex);
+void InstructionSetContext(Instruction * draft, Operand operand, index8 registerIndex);
+
 
 Atom InstructionEnd(Instruction * draft);
 

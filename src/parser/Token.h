@@ -15,7 +15,8 @@ enum TokenType {
 	TOKEN_NUMBER,	// TODO: should we differentiate between INT and FLOAT ?
 	TOKEN_STRING,
 	TOKEN_VARIABLE,
-	TOKEN_PARAMETER,
+	TOKEN_IN_PARAMETER,
+	TOKEN_OUT_PARAMETER,
 	TOKEN_REGISTER,
 	TOKEN_AND,		// logical conjunction (&)
 	TOKEN_OR,		// logical disjunction (|)

@@ -22,10 +22,12 @@ struct s_Tokenizer {
 	StringBuffer buffer;
 	union {
 		struct {
-			char name;
-			byte io;
+			index8 index;
 			byte type;
 		} parameter;
+		struct {
+			index8 index;
+		} _register;
 	} data;
 };
 

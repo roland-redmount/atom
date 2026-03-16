@@ -72,9 +72,9 @@ static void testCreateList(void)
 
 	Atom tuple[3];
 
-	index8 listRoleIndex = GetPredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST);
-	index8 positionRoleIndex = GetPredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION);
-	index8 elementRoleIndex = GetPredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT);
+	index8 listRoleIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST);
+	index8 positionRoleIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION);
+	index8 elementRoleIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT);
 
 	// attempt to add a tuple (list @string position 7 element 'Z') will violate the ifact
 	tuple[listRoleIndex] = list;

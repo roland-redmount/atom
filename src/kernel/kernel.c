@@ -328,9 +328,9 @@ static void setupCorePredicateForms(void)
 	}
 
 	// verify hardcoded multiset role index matches computed index
-	ASSERT(GetPredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET) == MULTISET_MULTISET_COLUMN);
-	ASSERT(GetPredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT) == MULTISET_ELEMENT_COLUMN);
-	ASSERT(GetPredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE) == MULTISET_MULTIPLE_COLUMN);
+	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET) == MULTISET_MULTISET_COLUMN);
+	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT) == MULTISET_ELEMENT_COLUMN);
+	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE) == MULTISET_MULTIPLE_COLUMN);
 
 	// NOTE: we now hold 1 reference to each of the core predicate forms.
 }
@@ -464,7 +464,7 @@ Atom GetCoreRoleName(index32 roleId)
 }
 
 
-index8 GetPredicateRoleIndex(index32 formId, index32 roleId)
+index8 CorePredicateRoleIndex(index32 formId, index32 roleId)
 {
 	for(index8 i = 0; i < corePredicateArity[formId]; i++) {
 		if(coreFormRoleIds[formId][i] == roleId)

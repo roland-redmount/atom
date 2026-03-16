@@ -11,9 +11,9 @@
 
 void TermFormSetTuple(Atom * tuple, Atom termForm, Atom predicateForm, Atom sign)
 {
-	tuple[GetPredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM)] = termForm;
-	tuple[GetPredicateRoleIndex(FORM_TERM_FORM, ROLE_PREDICATE_FORM)] = predicateForm;
-	tuple[GetPredicateRoleIndex(FORM_TERM_FORM, ROLE_SIGN)] = sign;
+	tuple[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM)] = termForm;
+	tuple[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_PREDICATE_FORM)] = predicateForm;
+	tuple[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_SIGN)] = sign;
 }
 
 /**
@@ -28,7 +28,7 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 
 	IFactBeginConjunction(
 		&draft, termForm,
-		GetPredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM)
+		CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM)
 	);
 	Atom tuple[3];
 	TermFormSetTuple(tuple, termForm, predicateForm, CreateUInt(sign ? 1 : 0));
@@ -58,7 +58,7 @@ Atom GetPredicateForm(Atom termForm)
 	Atom result[3];
 	RelationBTreeQuerySingle(tree, query, result);
 
-	return result[GetPredicateRoleIndex(FORM_TERM_FORM, ROLE_PREDICATE_FORM)];
+	return result[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_PREDICATE_FORM)];
 }
 
 
@@ -70,7 +70,7 @@ bool TermFormGetSign(Atom termForm)
 	TermFormSetTuple(query, termForm, anonymousVariable, anonymousVariable);
 	Atom tuple[3];
 	RelationBTreeQuerySingle(tree, query, tuple);
-	Atom sign = tuple[GetPredicateRoleIndex(FORM_TERM_FORM, ROLE_SIGN)];
+	Atom sign = tuple[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_SIGN)];
 
 	return (sign.datum == 1);
 }

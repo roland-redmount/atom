@@ -82,8 +82,13 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 			tokenizer->isValid = false;
 			return true;
 		}
+		if(c == '@') {
+			tokenizer->type = TOKEN_IN_PARAMETER;
+			tokenizer->isValid = false;
+			return true;
+		}
 		if(c == '$') {
-			tokenizer->type = TOKEN_PARAMETER;
+			tokenizer->type = TOKEN_OUT_PARAMETER;
 			tokenizer->isValid = false;
 			return true;
 		}
@@ -176,20 +181,30 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		}
 		return false;
 
-	case TOKEN_PARAMETER:
-		if(!tokenizer->data.parameter.name) {
-			if(IsNameChar(c)) {
-				tokenizer->data.parameter.name = c;
+	case TOKEN_IN_PARAMETER:
+	case TOKEN_OUT_PARAMETER:
+		if(tokenizer->data.parameter.index == 0) {
+			// parse integer index
+			if(IsDigitChar(c)) {
+				StringBufferPush(&(tokenizer->buffer), c);
+				tokenizer->isValid = true;
 				return true;
 			}
-			else
-				return false;
-		}
-		if(!tokenizer->data.parameter.io) {
-			if((c == '>') || (c == '<')) {
-				tokenizer->data.parameter.io = (c == '<') ? PARAMETER_IN : PARAMETER_OUT;
-				tokenizer->isValid = true;	// type may be omitted
-				return true;
+			else if(IsWhiteSpace(c) || (c == 0) || (c == ':')) {
+				// terminate parameter index
+				tokenizer->data.parameter.index = StringToInt64(
+					tokenizer->buffer.buffer, tokenizer->buffer.stringLength);
+				StringBufferReset(&(tokenizer->buffer));
+
+				// whitespace terminates parameter, no type specifier
+				if(c == ':') {
+					// expect type specifier next
+					return true;
+				}
+				else {
+					tokenizer->isFull = true;
+					return true;
+				}
 			}
 			else
 				return false;
@@ -222,7 +237,7 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		}
 	
 	case TOKEN_REGISTER:
-		// similar to number, but positive integers only
+		// parse register index
 		if(IsDigitChar(c)) {
 			StringBufferPush(&(tokenizer->buffer), c);
 			tokenizer->isValid = true;
@@ -230,6 +245,8 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		}
 		if(IsWhiteSpace(c) || (c == 0)) {
 			// whitespace terminates number
+			tokenizer->data._register.index = StringToInt64(
+					tokenizer->buffer.buffer, tokenizer->buffer.stringLength);
 			tokenizer->isFull = true;
 			return true;
 		}
@@ -306,18 +323,22 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 			token.atom = CreateVariable(string[0]);
 		break;
 
-	case TOKEN_PARAMETER:
+	case TOKEN_IN_PARAMETER:
+	case TOKEN_OUT_PARAMETER:
+		ASSERT(tokenizer->data.parameter.index > 0)
+		ASSERT(tokenizer->data.parameter.index <= 255)
+
 		token.atom = CreateParameter(
-			tokenizer->data.parameter.name,
-			tokenizer->data.parameter.io,
+			tokenizer->data.parameter.index,
+			tokenizer->type == TOKEN_IN_PARAMETER ? PARAMETER_IN : PARAMETER_OUT,
 			tokenizer->data.parameter.type
 		);
 		break;
 
 	case TOKEN_REGISTER: {
-		int64 registerIndex = StringToInt64(string, stringLength);
-		ASSERT(registerIndex > 0 && registerIndex <= 255)
-		token.atom = CreateRegister((index8) registerIndex);
+		ASSERT(tokenizer->data._register.index > 0)
+		ASSERT(tokenizer->data._register.index <= 255)
+		token.atom = CreateRegister(tokenizer->data._register.index);
 		break;
 	}
 				

@@ -20,7 +20,7 @@ Atom CreateQuote(Atom quoted)
 
 	IFactBeginConjunction(
 		&draft, form,
-		GetPredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTE)
+		CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTE)
 	);
 	
 	Atom tuple[2];
@@ -34,8 +34,8 @@ Atom CreateQuote(Atom quoted)
 
 void QuoteSetTuple(Atom * tuple, Atom quote, Atom quoted)
 {
-	tuple[GetPredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTE)] = quote;
-	tuple[GetPredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED)] = quoted;
+	tuple[CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTE)] = quote;
+	tuple[CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED)] = quoted;
 }
 
 
@@ -58,7 +58,7 @@ Atom QuoteGetQuoted(Atom quote)
 	Atom tuple[2];
 	RelationBTreeQuerySingle(tree, query, tuple);
 
-	return tuple[GetPredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED)];
+	return tuple[CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED)];
 }
 
 

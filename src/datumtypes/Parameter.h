@@ -15,12 +15,12 @@
 /**
  * Create an parameter. For untyped parameters, set type to 0.
  */
-Atom CreateParameter(char name, byte io, byte type);
+Atom CreateParameter(index8 index, byte io, byte type);
 
 bool IsParameter(Atom a);
 
 
-char GetParameterName(Atom parameter);
+index8 GetParameterIndex(Atom parameter);
 
 void PrintParameter(Atom parameter);
 
