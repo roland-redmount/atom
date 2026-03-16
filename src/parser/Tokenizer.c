@@ -54,68 +54,72 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 	switch(tokenizer->type) {
 	case TOKEN_INVALID:
 		// determine the token type from the first character
-		if(c == '&') {
+		switch(c) {
+		case '&':
 			tokenizer->type = TOKEN_AND;
 			tokenizer->isValid = true;
 			tokenizer->isFull = true;
 			return true;
-		}
-		if(c == '|') {
+			
+		case '|':
 			tokenizer->type = TOKEN_OR;
 			tokenizer->isValid = true;
 			tokenizer->isFull = true;
 			return true;
-		}
-		if(c == '!') {
+
+		case '!':
 			tokenizer->type = TOKEN_NOT;
 			tokenizer->isValid = true;
 			tokenizer->isFull = true;
 			return true;
-		}
-		if(c == '"') {
+
+		case '"':
 			tokenizer->type = TOKEN_STRING;
 			tokenizer->isValid = false;
 			return true;
-		}
-		if(c == '_') {
+
+		case '_':
 			tokenizer->type = TOKEN_VARIABLE;
 			tokenizer->isValid = false;
 			return true;
-		}
-		if(c == '@') {
+
+		case '@':
 			tokenizer->type = TOKEN_PARAMETER;
 			tokenizer->data.parameter.io = PARAMETER_IN;
 			tokenizer->isValid = true;
 			return true;
-		}
-		if(c == '$') {
+
+		case '$':
 			tokenizer->type = TOKEN_PARAMETER;
 			tokenizer->data.parameter.io = PARAMETER_OUT;
 			tokenizer->isValid = true;
 			return true;
-		}
-		if(c == '#') {
+
+		case '#':
 			tokenizer->type = TOKEN_REGISTER;
 			tokenizer->isValid = true;
 			return true;
+
+		default:
+			if(IsDigitChar(c)) {
+				tokenizer->type = TOKEN_NUMBER;
+				StringBufferPush(&(tokenizer->buffer), c);
+				tokenizer->isValid = true;
+				return true;
+			}
+			else if(IsNameInitialChar(c)) {
+				tokenizer->type = TOKEN_NAME;
+				StringBufferPush(&(tokenizer->buffer), c);
+				tokenizer->isValid = true;
+				return true;
+			}
+			else if(IsWhiteSpace(c) || (c == 0)) {
+				// leading whitespace does nothibng
+				return true;
+			}
+			else
+				return false;
 		}
-		if(IsDigitChar(c)) {
-			tokenizer->type = TOKEN_NUMBER;
-			StringBufferPush(&(tokenizer->buffer), c);
-			tokenizer->isValid = true;
-			return true;
-		}
-		if(IsNameInitialChar(c)) {
-			tokenizer->type = TOKEN_NAME;
-			StringBufferPush(&(tokenizer->buffer), c);
-			tokenizer->isValid = true;
-			return true;
-		}
-		if(IsWhiteSpace(c) || (c == 0)) {
-			// leading whitespace does nothibng
-			return true;
-		}
-		return false;
 
 	case TOKEN_NAME:
 		if(IsNameChar(c)) {
