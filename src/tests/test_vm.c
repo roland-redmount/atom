@@ -27,7 +27,7 @@ typedef struct {
  * Example program 1, computing $1 = 2*@1 + @1
  * This program tests use of parameters, registers and constants.
  * 
- * number @1:INT triple $2:INT
+ * number @INT triple $INT
  * #1:INT = 0
  *   COPY @1 $2
  * 	 COPY @1 #1
@@ -44,7 +44,7 @@ BytecodeFixture setupBytecodeFixture1(void)
 	// TODO: here we assume the form is in canonical order,
 	// so that we can refer to in/out parameters by index.
 	// Indices in the signature syntax must correspond to this order.
-	fixture.signature = CStringToPredicate("number @1:INT triple $2:INT");
+	fixture.signature = CStringToPredicate("number @INT triple $INT");
 
 	// list of registers with initial values
 	fixture.registers = CreateListFromArray(
@@ -163,7 +163,7 @@ void testExecuteByteCode1(void)
  * This program tests parameter and a registers as
  * arguments to the called service.
  * 
- * number @1:INT quadruple $2:INT
+ * number @INT quadruple $INT
  * #1:INT #2:EXEC
  *   COPY   @1 $2
  *   EXEC   <number triple> #2		// (number @1 triple #1)
@@ -189,7 +189,7 @@ BytecodeFixture setupBytecodeFixture2(void)
 	 * TODO: handle the case where the same parameter appears in multiple
 	 * positions in the signature.
 	 */
-	fixture.signature = CStringToPredicate("number @1:INT quadruple $2:INT");
+	fixture.signature = CStringToPredicate("number @INT quadruple $INT");
 
 	// list of register initial 
 	// TODO: we don't really have an initial value for the context #2 ...

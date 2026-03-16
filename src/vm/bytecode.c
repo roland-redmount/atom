@@ -269,7 +269,7 @@ static Service additionService;
  */
 static void createAdditionService(void)
 {
-	Atom signature = CStringToPredicate("= $1:INT + @2:INT + @3:INT");
+	Atom signature = CStringToPredicate("+ @INT + @INT = $INT");
 	PrintFormula(signature);
 	PrintChar('\n');
 

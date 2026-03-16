@@ -5,35 +5,24 @@
 typedef union
 {
 	struct {
-		index8 index;
 		byte io;
-		byte type;
+		byte datumType;
 	} fields;
 	data64 value;
 } Parameter;
 
 
-Atom CreateParameter(index8 index, byte io, byte type)
+Atom CreateParameter(byte io, byte type)
 {
-	ASSERT(index > 0);
-	Parameter arg = {.value = 0};
-	arg.fields.index = index;
+	Parameter arg;
 	arg.fields.io = io;
-	arg.fields.type = type;
-	return (Atom) {DT_PARAMETER, 0, 0, 0, arg.value};
+	arg.fields.datumType = type;
+	return (Atom) {.type = DT_PARAMETER, .datum = arg.value};
 }
 
 bool IsParameter(Atom a)
 {
 	return a.type == DT_PARAMETER;
-}
-
-
-index8 GetParameterIndex(Atom parameter)
-{
-	Parameter arg;
-	arg.value = parameter.datum;
-	return arg.fields.index;
 }
 
 
@@ -45,9 +34,7 @@ void PrintParameter(Atom parameter)
 		PrintChar('@');
 	else
 		PrintChar('$');
-	PrintChar(arg.fields.index);
-	if(arg.fields.type) {
-		PrintChar(':');
-		PrintCString(GetDatumTypeName(arg.fields.type));
+	if(arg.fields.datumType) {
+		PrintCString(GetDatumTypeName(arg.fields.datumType));
 	}
 }

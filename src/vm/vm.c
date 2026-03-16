@@ -154,25 +154,7 @@ iterate:
 			left = readOperand(context, inst, OPERAND_LEFT);
 			writeOperand(context, inst, OPERAND_RIGHT, left);
 			break;
-/*
-		case OP_IN: {
-			// set the next input argument for an execution context
-			Datum arg = readOperand(context, inst, OPERAND_LEFT);
-			VMContext * argContext = (VMContext *) readOperand(context, inst, OPERAND_RIGHT);
-			// TODO: determine the argument index ...
-			ContextArguments(argContext)[0] = arg;
-			break;
-		}
 
-		case OP_OUT: {
-			// store an output argument from an execution context
-			VMContext * argContext = (VMContext *) readOperand(context, inst, OPERAND_LEFT);
-			// TODO: determine the argument index ...
-			Datum arg = ContextArguments(argContext)[0];
-			writeOperand(context, inst, OPERAND_RIGHT, arg);
-			break;
-		}
-*/
 		case OP_ADD:
 			left = readOperand(context, inst, OPERAND_LEFT);
 			right = readOperand(context, inst, OPERAND_RIGHT);
@@ -263,7 +245,5 @@ iterate:
 		}
 		context->programCounter++;
 	}
-
-
 	
 }

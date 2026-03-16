@@ -22,8 +22,8 @@ struct s_Tokenizer {
 	StringBuffer buffer;
 	union {
 		struct {
-			index8 index;
-			byte type;
+			byte io;
+			byte datumType;
 		} parameter;
 		struct {
 			index8 index;
@@ -49,7 +49,9 @@ void TokenizerReset(Tokenizer * tokenizer);
 /**
  * Return the token represented by a Tokenizer.
  * This can be called when a token is complete.
- * The returned token may contain an atom that must be
+ * If the token corresponding to a "literal" atom
+ * (numbers, strings, parameters ...) then the
+ * returned token contains an atom that must be
  * released by the caller.
  */
 Token TokenizerGetToken(Tokenizer const * tokenizer);

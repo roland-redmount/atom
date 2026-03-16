@@ -83,18 +83,20 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 			return true;
 		}
 		if(c == '@') {
-			tokenizer->type = TOKEN_IN_PARAMETER;
-			tokenizer->isValid = false;
+			tokenizer->type = TOKEN_PARAMETER;
+			tokenizer->data.parameter.io = PARAMETER_IN;
+			tokenizer->isValid = true;
 			return true;
 		}
 		if(c == '$') {
-			tokenizer->type = TOKEN_OUT_PARAMETER;
-			tokenizer->isValid = false;
+			tokenizer->type = TOKEN_PARAMETER;
+			tokenizer->data.parameter.io = PARAMETER_OUT;
+			tokenizer->isValid = true;
 			return true;
 		}
 		if(c == '#') {
 			tokenizer->type = TOKEN_REGISTER;
-			tokenizer->isValid = false;
+			tokenizer->isValid = true;
 			return true;
 		}
 		if(IsDigitChar(c)) {
@@ -181,60 +183,31 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		}
 		return false;
 
-	case TOKEN_IN_PARAMETER:
-	case TOKEN_OUT_PARAMETER:
-		if(tokenizer->data.parameter.index == 0) {
-			// parse integer index
-			if(IsDigitChar(c)) {
-				StringBufferPush(&(tokenizer->buffer), c);
-				tokenizer->isValid = true;
-				return true;
-			}
-			else if(IsWhiteSpace(c) || (c == 0) || (c == ':')) {
-				// terminate parameter index
-				tokenizer->data.parameter.index = StringToInt64(
-					tokenizer->buffer.buffer, tokenizer->buffer.stringLength);
-				StringBufferReset(&(tokenizer->buffer));
-
-				// whitespace terminates parameter, no type specifier
-				if(c == ':') {
-					// expect type specifier next
-					return true;
-				}
-				else {
-					tokenizer->isFull = true;
-					return true;
-				}
+	case TOKEN_PARAMETER:
+		// parse datum type name
+		// TODO: here we must ensure that the string
+		// is always a prefix of valid type name.
+		if(IsNameChar(c)) {
+			StringBufferPush(&(tokenizer->buffer), c);
+			return true;
+		}
+		if(IsWhiteSpace(c) || (c == 0)) {
+			// whitespace terminates parameter
+			if(tokenizer->buffer.stringLength > 0) {
+				tokenizer->data.parameter.datumType = DatumTypeIdFromString(
+					tokenizer->buffer.buffer,
+					tokenizer->buffer.stringLength
+				);
+				ASSERT(tokenizer->data.parameter.datumType);
 			}
 			else
-				return false;
-		}
-		else {
-			// collect type name
-			// TODO: here we must ensure that the string
-			// is always a prefix of valid type name.
-			if(IsNameChar(c)) {
-				StringBufferPush(&(tokenizer->buffer), c);
-				return true;
-			}
-			if(IsWhiteSpace(c) || (c == 0)) {
-				// whitespace terminates parameter
-				if(tokenizer->buffer.stringLength > 0) {
-					tokenizer->data.parameter.type = DatumTypeIdFromString(
-						tokenizer->buffer.buffer,
-						tokenizer->buffer.stringLength
-					);
-					ASSERT(tokenizer->data.parameter.type);
-				}
-				else
-					tokenizer->data.parameter.type = 0;	// untyped parameter
+				tokenizer->data.parameter.datumType = 0;	// untyped parameter
 
-				tokenizer->isFull = true;
-				return true;
-			}
-			else
-				return false;
+			tokenizer->isFull = true;
+			return true;
 		}
+		else
+			return false;
 	
 	case TOKEN_REGISTER:
 		// parse register index
@@ -323,15 +296,10 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 			token.atom = CreateVariable(string[0]);
 		break;
 
-	case TOKEN_IN_PARAMETER:
-	case TOKEN_OUT_PARAMETER:
-		ASSERT(tokenizer->data.parameter.index > 0)
-		ASSERT(tokenizer->data.parameter.index <= 255)
-
+	case TOKEN_PARAMETER:
 		token.atom = CreateParameter(
-			tokenizer->data.parameter.index,
-			tokenizer->type == TOKEN_IN_PARAMETER ? PARAMETER_IN : PARAMETER_OUT,
-			tokenizer->data.parameter.type
+			tokenizer->data.parameter.io,
+			tokenizer->data.parameter.datumType
 		);
 		break;
 
