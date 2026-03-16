@@ -50,6 +50,7 @@ size32 GetTotalFree(void);
 
 // for debugging
 void PrintFreeLists(void);
+void DumpAllocatedBlocks(void);
 bool AllocatorIsEmpty(void);
 
 

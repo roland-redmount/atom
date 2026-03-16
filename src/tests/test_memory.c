@@ -67,6 +67,7 @@ void testAllocate(void)
 
 	newTotalFree = GetTotalFree();
 	ASSERT_UINT32_EQUAL(newTotalFree, initialTotalFree)
+
 	ASSERT_TRUE(AllocatorIsEmpty())
 }
 
@@ -79,18 +80,18 @@ void testAllocate2(void)
 	for(index32 i = 0; i < 7; i++) {
 		size32 size = sizes[i];
 		memBlocks[i] = Allocate(size);
+		ASSERT_NOT_NULL(memBlocks[i])
 	}
 	size32 totalFree = GetTotalFree();
 
 	for(index32 i = 0; i < 7; i++) {
-		if(memBlocks[i]) {
-			uint32 blockSize = GetAllocatedSize(memBlocks[i]) + 4;
-			Free(memBlocks[i]);
-			size32 newTotalFree = GetTotalFree();
-			ASSERT_UINT32_EQUAL(blockSize, newTotalFree - totalFree)
-			totalFree = newTotalFree;
-		}
+		uint32 blockSize = GetAllocatedSize(memBlocks[i]) + 4;
+		Free(memBlocks[i]);
+		size32 newTotalFree = GetTotalFree();
+		ASSERT_UINT32_EQUAL(blockSize, newTotalFree - totalFree)
+		totalFree = newTotalFree;
 	}
+
 	ASSERT_TRUE(AllocatorIsEmpty());
 }
 

@@ -7,8 +7,10 @@
 
 #include "platform.h"
 
-
-bool IsPrintableChar(char c);
+/**
+ * Character classes.
+ * See also platform.h
+ */
 
 bool IsSyntaxChar(char c);
 
@@ -26,20 +28,7 @@ bool IsNameChar(char c);
 
 bool IsSeparatorChar(char c);
 
-bool IsDigitChar(char c);
-
 bool IsWhiteSpace(char c);
-
-/**
- * Test if c is an alphabet letter
- */
-bool IsAlpha(char c);
-
-/**
- * Convert case for alphabet letters
- */
-char ToLower(char c);
-char ToUpper(char c);
 
 /**
  * Test if a string is a valid name

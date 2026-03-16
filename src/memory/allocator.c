@@ -4,7 +4,7 @@
  */
 
 #include "memory/allocator.h"
-
+#include "platform.h"
 
 // The virtual memory area to be used for allocation
 // (We may have several of these in the future)
@@ -37,7 +37,9 @@ typedef uint32 BlockOffset;
 #define OFFSET_BITMASK (MIN_BLOCK_SIZE - 1)
 
 // Zero is a valid offset (to the first block) so we need a different
-// value for the "null pointer" offset
+// value for the "null pointer" offset.
+// NOTE: since the block at offset 0 is always allocated,
+// I think this the zero offset is actually never used?
 #define NULL_OFFSET 0xFFFFFFFF
 
 
@@ -62,18 +64,22 @@ typedef struct FreeHeader {
 #define ALLOC_HEADER_SIZE 4
 
 
-// The following data structure is always stored in the first block of
-// the memory area (to be persistent). For this reason one block is always
-// allocated, and the root node is never free; the largest available block is N / 2.
-//
-// offset   content
-// 0        FreeHeader
-// 12       size8 logAreaSize
-// 13-15    reserved
-// 16		BlockOffset freeLists[maxLevel + 1]
-//
-// For each level k, freeLists[k] is the head of a linked list of free blocks, implemented by
-// a header inserted into each free block.
+/**
+ * The following data structure is always stored in the first block of
+ * the memory area (to be persistent). For this reason one block is always
+ * allocated, and the root node is never free; the largest available block is N / 2.
+ *
+ * offset   content
+ * 0        FreeHeader
+ * 12       size8 logAreaSize
+ * 13-15    reserved
+ * 16		BlockOffset freeLists[maxLevel + 1]
+ *
+ * For each level k, freeLists[k] is the head of a linked list of free blocks, implemented by
+ * a header inserted into each free block.
+ * 
+ * TODO: this would be cleaner as a struct with a variable-size array freeLists[]
+ */
 
 #define ALLOCATOR_STRUCT_SIZE (FREE_HEADER_SIZE + 4)
 
@@ -212,20 +218,103 @@ void PrintFreeLists(void)
 	PrintChar('\n');
 }
 
+/**
+ * TODO: function for dumping allocated memory.
+ * We traverse the binary tree depth-first and
+ * print any memory block not on the free list.
+ */
+
+static void dumpMemoryBlock(BlockOffset start)
+{
+	size32 size = 1 << getLogBlockSize(start);
+	// We assume size is at least 64 bytes. We dump 16 bytes per row
+	for(BlockOffset offset = start; offset < start + size; offset += 16) {
+		byte const * memory = memoryArea + offset;
+		// Dump memory in hex, 4 block of 4 bytes per row
+		data32 const * data = (data32 *) memory;
+		PrintF("%7x: %08x %08x %08x %08x   ", offset, data[0], data[1], data[2], data[3]);
+		// Dump ASCII
+		for(index32 i = 0; i < 16; i++)
+			PrintChar(IsPrintableChar(memory[i]) ? memory[i] : '.');
+		PrintChar('\n');
+	}
+}
+
+static void dumpBlocksRecursive(size8 level, BlockOffset start, BlockOffset end, size8 maxLevel)
+{
+	size32 size = 1 << levelToLogSize(level, getLogAreaSize());
+	BlockOffset freeBlock = getFreeList(level);
+	for(BlockOffset offset = start; offset < end; offset += size) {
+		if(freeBlock != NULL_OFFSET && offset == freeBlock) {
+			// skip this one
+			freeBlock = getNextFreeBlock(freeBlock); 
+		}
+		else {
+			if(level == maxLevel) {
+				// leaf, print memory
+				dumpMemoryBlock(offset);
+				PrintChar('\n');
+			}
+			else {
+				// recurse down to next level
+				dumpBlocksRecursive(level + 1, offset, offset + size, maxLevel);
+			}
+		}
+	}
+}
+
+void DumpAllocatedBlocks(void)
+{
+	BlockOffset maxOffset = 1 << getLogAreaSize();
+	PrintF("maxOffset = %x\n", maxOffset);
+	dumpBlocksRecursive(0, 0, maxOffset, maxLevel(getLogAreaSize()));
+}
+
+
+/**
+ * Add a block the free list for block's level.
+ */
 static void addToFreeList(BlockOffset block)
 {
 	size8 logSize = getLogBlockSize(block);
 	size8 level = logSizeToLevel(logSize, getLogAreaSize());
 
-	BlockOffset firstBlock = getFreeList(level);
-	if(firstBlock != NULL_OFFSET)
-		setPreviousFreeBlock(firstBlock, block);
-	setNextFreeBlock(block, firstBlock);
-	setPreviousFreeBlock(block, NULL_OFFSET);
-	setFreeList(level, block);
+	BlockOffset previousBlock = getFreeList(level);
+	BlockOffset nextBlock;
+	if(previousBlock == NULL_OFFSET) {
+		// add the block as the first block on the list
+		setFreeList(level, block);
+		nextBlock = NULL_OFFSET;
+	}
+	else if(previousBlock > block) {
+		setFreeList(level, block);
+		nextBlock = previousBlock;
+		previousBlock = NULL_OFFSET;
+	}
+	else {
+		// Otherwise we have previousBlock < block.
+		// Find insertion point in the free list to keep the list ordered.
+		// NOTE: this is linear in number of free blocks ...
+		while(true) {
+			nextBlock = getNextFreeBlock(previousBlock);
+			if(nextBlock == NULL_OFFSET || nextBlock > block)
+				break;
+			previousBlock = nextBlock;
+		}
+	}
+	// set block pointers
+	setPreviousFreeBlock(block, previousBlock);
+	if(previousBlock != NULL_OFFSET)
+		setNextFreeBlock(previousBlock, block);
+	setNextFreeBlock(block, nextBlock);
+	if(nextBlock != NULL_OFFSET)
+		setPreviousFreeBlock(nextBlock, block);
 }
 
-
+/**
+ * Remove a block to the beginning of the free list for block's level.
+ * This maintains list ordering.
+ */
 static void removeFromFreeList(BlockOffset block)
 {
 	size8 logSize = getLogBlockSize(block);
@@ -265,12 +354,12 @@ static BlockOffset allocateBlock(size8 logBlockSize)
 		if(block == NULL_OFFSET)
 			return NULL_OFFSET;
 	
-		// split parent block
+		// split parent block in two halves, allocate the first half
 		setLogBlockSize(block, logBlockSize);
 		BlockOffset buddy = getBuddyOffset(block);
+		ASSERT(buddy > block)
 		setLogBlockSize(buddy, logBlockSize);
 		
-		// buddy block becomes first block on free list
 		addToFreeList(buddy);
 		setFreeFlag(buddy, true);
 		return block;

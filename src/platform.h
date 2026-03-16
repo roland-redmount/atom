@@ -143,6 +143,26 @@ int64 StringToInt64(char const * string, size32 length);
 float64 StringToFloat64(char const * string, size32 length);
 
 /**
+ * Character classes
+ */
+bool IsPrintableChar(char c);
+
+bool IsDigitChar(char c);
+
+/**
+ * Test if c is an alphabet letter
+ */
+bool IsAlpha(char c);
+
+
+/**
+ * Convert case for alphabet letters
+ */
+char ToLower(char c);
+char ToUpper(char c);
+
+
+/**
  * Printing to an output stream
  */
 

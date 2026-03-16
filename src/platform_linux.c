@@ -9,6 +9,7 @@
  */
 
 // C standard library includes
+#include <ctype.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -494,4 +495,34 @@ uint32 GenerateRandomSeed(void)
 char const * GetEnvironmentVariable(char const * variableName)
 {
 	return getenv(variableName);
+}
+
+
+bool IsPrintableChar(char c)
+{
+	return isprint(c);
+}
+
+
+bool IsDigitChar(char c)
+{
+	return isdigit(c);
+}
+
+bool IsAlpha(char c)
+{
+	return isalpha(c);
+}
+
+
+char ToLower(char c)
+{
+	ASSERT(IsAlpha(c));
+	return tolower(c);
+}
+
+char ToUpper(char c)
+{
+	ASSERT(IsAlpha(c));
+	return toupper(c);
 }
