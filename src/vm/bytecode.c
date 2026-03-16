@@ -232,29 +232,6 @@ Atom BytecodeGetConstants(Atom bytecode)
 }
 
 
-/**
- * Compute the number of child contexts by iterating over the program
- * and counting CALL instructions. We could also precompute this at time of
- * creating the bytecode and assert a fact.
- */
-size32 BytecodeNChildContexts(Atom bytecode)
-{
-	size32 callCount = 0;
-
-	Atom program = BytecodeGetProgram(bytecode);
-	ListIterator iterator;
-	ListIterate(program, &iterator);
-	while(ListIteratorHasNext(&iterator)) {
-		Atom inst = ListIteratorGetElement(&iterator);
-		if(InstructionGetOpCode(inst) == OP_EXEC)
-			callCount++;
-		ListIteratorNext(&iterator);
-	}
-	ListIteratorEnd(&iterator);
-	return callCount;
-}
-
-
 // TODO: temporary solution to be able to locate
 //  and remove the service (+ + =) to avoid memory leaks.
 //  We need a systematic way of deallocating all services,

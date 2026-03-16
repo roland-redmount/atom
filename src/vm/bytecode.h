@@ -105,13 +105,6 @@ Atom BytecodeGetRegisters(Atom bytecode);
 Atom BytecodeGetConstants(Atom bytecode);
 
 /**
- * Returns the number of CALL instructions in the bytecode,
- * which equals the largest number of child contexts that
- * may be needed during execution.
- */
-size32 BytecodeNChildContexts(Atom bytecode);
-
-/**
  * Create core bytecode services, such as arithmetic operations.
  */
 void SetupCoreServices(void);
