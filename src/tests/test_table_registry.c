@@ -38,7 +38,7 @@ void testAddDropTable(void)
 	ASSERT_PTR_NOT_EQUAL(foundTable, 0)
 	ASSERT_PTR_EQUAL(foundTable, createdTable)
 
-	RegistryRemoveTable(fixture.signature);
+	RegistryRemoveService(fixture.signature);
 	ASSERT_UINT32_EQUAL(RegistryNServices(), nTablesInitial)
 	
 	teardownFixture();

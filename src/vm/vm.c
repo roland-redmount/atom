@@ -5,90 +5,67 @@
 #include "vm/vm.h"
 
 
-static struct {
-	void * stack;		// this should be a predetermined address range 
-	size32 stackSize;
 
-	VMContext * rootContext;
-	VMContext * currentContext;
+
+/**
+ * This structure describes a VM execution thread
+ */
+static struct {
+	bool trace;
+	// Here we can add VM "registers" as necessary.
+	// Or we just keep them on the VM stack
+	bool flag;
+	index8 argIndex;	// used by ARG and EXEC instructions
 } vm;
 
 
 void VMInitialize(void * stack, size32 stackSize)
 {
-	vm.stack = stack;
-	vm.stackSize = stackSize;
-
-	// TODO: create root context
-}
-
-
-static void copyListDatums(Atom list, Datum * datums)
-{
-	Datum * rp = datums;
-	ListIterator iterator;
-	ListIterate(list, &iterator);
-	while(ListIteratorHasNext(&iterator)) {
-		Atom a = ListIteratorGetElement(&iterator);
-		*rp++ = a.datum;
-		ListIteratorNext(&iterator);
-	}
-	ListIteratorEnd(&iterator);
-}
-
-VMContext * VMCreateContext(Atom bytecode, Datum * actors)
-{
-	// temporary
-	VMContext * context = (VMContext * ) vm.stack;
-	SetMemory(context, sizeof(VMContext), 0);
-
-	context->bytecode = bytecode;
-	context->arity = FormulaArity(BytecodeGetSignature(bytecode));
-
-	// NOTE: do we need to copy actors? 
-
-	// copy registers
-	// NOTE: this will be more efficient if we use an array-based list relation
-	// where datums and types are separated
-	copyListDatums(BytecodeGetRegisters(bytecode), &context->registers[0]);
-
-	return context;
+	vm.trace = true;
 }
 
 
 // TODO: this is very inefficient
-static Datum accessConstant(Atom bytecode, index8 op)
+static Datum accessConstant(Atom bytecode, index8 opIndex)
 {
 	Atom constantsList = BytecodeGetConstants(bytecode);
-	return ListGetElement(constantsList, op).datum;
+	return ListGetElement(constantsList, opIndex).datum;
 }
 
-#define OPERAND_LEFT	1
-#define OPERAND_RIGHT	2
 
-static Datum readOperand(
-	VMContext const * context, Instruction inst, Datum * const actors, index8 operand)
+static Datum readOperand(VMContext * context, Instruction inst, Operand operand)
 {
-	index8 op;
+	index8 opIndex;
 	byte accessMode;
-	if(operand == OPERAND_LEFT) {
-		 op = inst.fields.op1;
-		 accessMode = inst.fields.accessMode.op1;
-	}
-	else {
-		op = inst.fields.op2;
+	index8 contextIndex;
+	switch(operand) {
+		case OPERAND_LEFT:
+		opIndex = inst.fields.op1Index;
+		accessMode = inst.fields.accessMode.op1;
+		contextIndex = inst.fields.op1ContextRegister;
+		break;
+	
+		case OPERAND_RIGHT:
+		opIndex = inst.fields.op2Index;
 		accessMode = inst.fields.accessMode.op2;
+		contextIndex = inst.fields.op2ContextRegister;
+		break;
 	}
 
 	switch(accessMode) {
-	case ACCESS_ARGUMENT:
-		return actors[op - 1];
+	case ACCESS_PARAMETER: {
+		// parameters may be read from specific contexts
+		VMContext * operandContext = contextIndex ?
+			(VMContext *) ContextRegisters(context)[contextIndex - 1] :
+			context;
+		return ContextArguments(operandContext)[opIndex - 1];
+	}
 	
 	case ACCESS_REGISTER:
-		return context->registers[op - 1];
+		return ContextRegisters(context)[opIndex - 1];
 
 	case ACCESS_CONSTANT:
-		return accessConstant(context->bytecode, op);
+		return accessConstant(context->bytecode, opIndex);
 
 	default:
 		ASSERT(false);
@@ -97,78 +74,176 @@ static Datum readOperand(
 }
 
 
-static void writeOperand(
-	VMContext * context, Instruction inst, Datum * actors, index8 operand, Datum value)
+void writeOperand(VMContext * context, Instruction inst, index8 operand, Datum datum)
 {
-	index8 op;
+	index8 opIndex;
 	byte accessMode;
-	if(operand == OPERAND_LEFT) {
-		 op = inst.fields.op1;
-		 accessMode = inst.fields.accessMode.op1;
-	}
-	else {
-		op = inst.fields.op2;
+	index8 contextIndex;
+	
+	switch(operand) {
+		case OPERAND_LEFT:
+		opIndex = inst.fields.op1Index;
+		accessMode = inst.fields.accessMode.op1;
+		contextIndex = inst.fields.op1ContextRegister;
+		break;
+	
+		case OPERAND_RIGHT:
+		opIndex = inst.fields.op2Index;
 		accessMode = inst.fields.accessMode.op2;
+		contextIndex = inst.fields.op2ContextRegister;
+		break;
 	}
 
 	switch(accessMode) {
-	case ACCESS_ARGUMENT:
-		actors[op - 1] = value;
+	case ACCESS_PARAMETER: {
+		// parameters may be written to specific contexts
+		VMContext * operandContext = contextIndex ?
+			(VMContext *) ContextRegisters(context)[contextIndex - 1] :
+			context;
+		ContextArguments(operandContext)[opIndex - 1] = datum;
 		break;
+	}
 	
 	case ACCESS_REGISTER:
-		context->registers[op - 1] = value;
+		ContextRegisters(context)[opIndex - 1] = datum;
 		break;
 
 	case ACCESS_CONSTANT:
+		ASSERT(false);
+
+	default:
 		ASSERT(false);
 	}
 }
 
 
-
-void VMExecuteInstruction(VMContext * context, Atom instruction, Datum * actors)
+VMContext * VMCreateRootContext(Atom bytecode, Datum * arguments)
 {
-	Instruction inst = InstructionGetData(instruction);
-	Datum left, right;
-	switch(inst.fields.opcode) {
-	case OP_COPY:
-		left = readOperand(context, inst, actors, OPERAND_LEFT);
-		writeOperand(context, inst, actors, OPERAND_RIGHT, left);
-		break;
+ 	VMContext * context = CreateContext(bytecode, 0);
 
-	case OP_ADD:
-		left = readOperand(context, inst, actors, OPERAND_LEFT);
-		right = readOperand(context, inst, actors, OPERAND_RIGHT);
-		right = ((uint64) left) + ((uint64) right);
-		writeOperand(context, inst, actors, OPERAND_RIGHT, right);
-		break;
+	// copy arguments to context
+	size8 arity = FormulaArity(BytecodeGetSignature(bytecode));
+	for(index8 i = 0; i < arity; i++)
+		ContextArguments(context)[i] = arguments[i];
 
-	case OP_MUL:
-		left = readOperand(context, inst, actors, OPERAND_LEFT);
-		right = readOperand(context, inst, actors, OPERAND_RIGHT);
-		right = ((uint64) left) * ((uint64) right);
-		writeOperand(context, inst, actors, OPERAND_RIGHT, right);
-		break;
-
-	}
+	return context;
 }
 
 
-void VMExecute(Atom bytecode, Datum * actors)
+void VMStart(VMContext * context)
 {
-	VMContext * context = VMCreateContext(bytecode, actors);
 
-	Atom instructions = BytecodeGetProgram(bytecode);
+	// Iterate through program
+iterate:
+	while(true) {
+		Instruction inst;
+		if(context->programCounter <= context->programLength) {
+			Atom instruction = ListGetElement(context->program, context->programCounter);
+			if(vm.trace)
+				 PrintInstruction(instruction);
+			inst = InstructionGetData(instruction);
+		}
+		else {
+			// Reached end of program, implicit END instruction
+			inst.fields.opcode = OP_END;
+		}
 
-	ListIterator iterator;
-	ListIterate(instructions, &iterator);
-	while(ListIteratorHasNext(&iterator)) {
-		Atom instruction = ListIteratorGetElement(&iterator);
-		VMExecuteInstruction(context, instruction, actors);
+		Datum left, right;
+		switch(inst.fields.opcode) {
+		case OP_COPY:
+			left = readOperand(context, inst, OPERAND_LEFT);
+			writeOperand(context, inst, OPERAND_RIGHT, left);
+			break;
 
-		ListIteratorNext(&iterator);
+		case OP_ADD:
+			left = readOperand(context, inst, OPERAND_LEFT);
+			right = readOperand(context, inst, OPERAND_RIGHT);
+			// TODO: INT vs UINT? Overflow?
+			right = ((uint64) left) + ((uint64) right);
+			writeOperand(context, inst, OPERAND_RIGHT, right);
+			break;
+
+		case OP_SUB:
+			left = readOperand(context, inst, OPERAND_LEFT);
+			right = readOperand(context, inst, OPERAND_RIGHT);
+			// TODO: INT vs UINT? Overflow?
+			right = ((uint64) right) - ((uint64) left);
+			writeOperand(context, inst, OPERAND_RIGHT, right);
+			break;
+
+		case OP_INC:
+			left = readOperand(context, inst, OPERAND_LEFT);
+			writeOperand(context, inst, OPERAND_LEFT, ((uint64) left) + 1);
+			break;
+
+		case OP_MUL:
+			left = readOperand(context, inst, OPERAND_LEFT);
+			right = readOperand(context, inst, OPERAND_RIGHT);
+			right = ((uint64) left) * ((uint64) right);
+			writeOperand(context, inst, OPERAND_RIGHT, right);
+			break;
+		
+		case OP_EXEC: {
+			/** 
+			 * EXEC <service> <operand>
+			 * Create a new context and store in the destination operand.
+			 */
+			Atom newBytecode = (Atom) {.type = DT_ID, .datum = readOperand(context, inst, OPERAND_LEFT)};
+			VMContext * newContext = CreateContext(newBytecode, context);
+			writeOperand(context, inst, OPERAND_RIGHT, (Datum) newContext);
+			break;
+		}
+
+		case OP_RESUME: {
+			// RESUME <context>
+			// give control to another execution context
+			VMContext * newContext = (VMContext *) readOperand(context, inst, OPERAND_LEFT);
+			
+			// upon return, we will continue execution at the next instruction
+			newContext->parentContext = context;
+			context->programCounter++;
+
+			// transfer control
+			context = newContext;
+			goto iterate;
+		}
+
+		case OP_YIELD: {
+			vm.flag = true;
+			// On RESUME we will continue at the instruction following this one
+			context->programCounter++;
+			if(context->parentContext) {
+				// continue parent context execution
+				context = context->parentContext;
+				goto iterate;
+			}
+			else {
+				// YIELD from root context ends execution
+				return;
+			}
+		}
+
+		case OP_END: {
+			vm.flag = false;
+			context->programCounter++;
+			if(context->parentContext) {
+				// continue parent context execution
+				context = context->parentContext;
+				// NOTE: should we clear the child context??
+				goto iterate;
+			}
+			else {
+				// END root context execution
+				return;
+			}
+		}
+
+		default:
+			// instruction not implemented yet
+			ASSERT(false)
+			break;
+		}
+		context->programCounter++;
 	}
-
-	ListIteratorEnd(&iterator);
+	
 }

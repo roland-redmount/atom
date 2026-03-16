@@ -126,7 +126,7 @@ Atom GetCoreRoleName(index32 roleId);
 
 /**
  * Find the index in "canonical order" of a role in the
- * tuple of actors corresponding to the given form.
+ * tuple of actors corresponding to the given core predicate form.
  * formId and roleId as as defind above.
  */
-index8 GetPredicateRoleIndex(index32 formId, index32 roleId);
+index8 CorePredicateRoleIndex(index32 formId, index32 roleId);

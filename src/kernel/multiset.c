@@ -11,9 +11,9 @@
 
 void MultisetSetTuple(Atom * tuple, Atom multiset, Atom element, Atom multiple)
 {
-	tuple[GetPredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)] = multiset;
-	tuple[GetPredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)] = element;
-	tuple[GetPredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)] = multiple;
+	tuple[CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)] = multiset;
+	tuple[CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)] = element;
+	tuple[CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)] = multiple;
 }
 
 
@@ -35,7 +35,7 @@ void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, 
 
 	IFactBeginConjunction(
 		draft, form,
-		GetPredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
+		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 	);
 	Atom tuple[3];
 	for(index32 i = 0; i < nUniqueElements; i++) {
@@ -127,8 +127,8 @@ ElementMultiple MultisetIteratorGetElement(MultisetIterator const * iterator)
 {
 	Atom resultTuple[3];
 	RelationBTreeIteratorGetTuple(&(iterator->treeIterator), resultTuple);
-	index8 roleElementIndex = GetPredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT);
-	index8 roleMultipleIndex = GetPredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE);
+	index8 roleElementIndex = CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT);
+	index8 roleMultipleIndex = CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE);
 	
 	ElementMultiple em;
 	em.element = resultTuple[roleElementIndex];

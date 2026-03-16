@@ -1,85 +1,88 @@
 
 #include "datumtypes/Parameter.h"
+#include "datumtypes/instruction.h"
 #include "datumtypes/Int.h"
 #include "datumtypes/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
+#include "lang/name.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
+#include "lang/PredicateForm.h"
 #include "parser/PredicateBuilder.h"
 #include "vm/bytecode.h"
-#include "vm/instruction.h"
 #include "vm/vm.h"
-
 
 #include "testing/testing.h"
 
 
-/**
- * Create an example bytecode program, computing t = x + 2*x
- * 
- * number $x>INT triple $t<INT
- * #1:INT = 0
- *   COPY x t
- * 	 COPY x #1
- *   MUL 2 #1
- *   ADD #1 t
- */
-
-#define N_PARAMETERS 2
-#define N_INSTRUCTIONS 4
-#define N_REGISTERS 1
-
-
 typedef struct {
 	Atom bytecode;
-	Atom signature;
-	Atom registers;
+	Atom signature;		// a formula
+	Atom registers;		// a list
 } BytecodeFixture;
 
 
-BytecodeFixture setupBytecodeFixture(void)
+/**
+ * Example program 1, computing $1 = 2*@1 + @1
+ * This program tests use of parameters, registers and constants.
+ * 
+ * number @INT triple $INT
+ * #1:INT = 0
+ *   COPY @1 $2
+ * 	 COPY @1 #1
+ *   MUL 2 #1    // multiply with constant
+ *   ADD #1 $2
+ *   YIELD
+ */
+
+BytecodeFixture setupBytecodeFixture1(void)
 {
 	BytecodeFixture fixture;
 
 	// Bytecode signature
-	// TODO: should have two distinct datum types, make t a UINT ?
+	// TODO: here we assume the form is in canonical order,
+	// so that we can refer to in/out parameters by index.
+	// Indices in the signature syntax must correspond to this order.
+	fixture.signature = CStringToPredicate("number @INT triple $INT");
 
-	fixture.signature = CStringToPredicate("number $x>INT triple $t<INT");
-
-	Atom x = CreateParameter('x', PARAMETER_IN, DT_INT);
-	Atom t = CreateParameter('t', PARAMETER_OUT, DT_INT);
-
-	// Number of registers and their initial values
-	fixture.registers = CreateListFromArray((Atom []) {CreateInt(0)}, N_REGISTERS);
+	// list of registers with initial values
+	fixture.registers = CreateListFromArray(
+		(Atom []) {CreateInt(0)},
+		1
+	);
 
 	// create bytecode draft
 	BytecodeDraft bytecodeDraft;
 	BytecodeBegin(&bytecodeDraft, fixture.signature, fixture.registers);
 	
 	// add instructions
-	// COPY x t
+	// COPY @1 $2
 	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
-	BytecodeOperandParameter(&bytecodeDraft, x);
-	BytecodeOperandParameter(&bytecodeDraft, t);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 1);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
-	// COPY x $0
+	// COPY @1 #1
 	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
-	BytecodeOperandParameter(&bytecodeDraft, x);
-	BytecodeOperandRegister(&bytecodeDraft, 1);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 1);
+	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 1);
 	BytecodeEndInstruction(&bytecodeDraft);
 
-	// MUL 2 $0
+	// MUL 2 #1
 	BytecodeBeginInstruction(&bytecodeDraft, OP_MUL);
-	BytecodeOperandConstant(&bytecodeDraft, CreateInt(2));
-	BytecodeOperandRegister(&bytecodeDraft, 1);
+	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, CreateInt(2));
+	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 1);
 	BytecodeEndInstruction(&bytecodeDraft);
 
-	// ADD @0 t
+	// ADD #1 @2
 	BytecodeBeginInstruction(&bytecodeDraft, OP_ADD);
-	BytecodeOperandRegister(&bytecodeDraft, 1);
-	BytecodeOperandParameter(&bytecodeDraft, t);
+	BytecodeOperandRegister(&bytecodeDraft, OPERAND_LEFT, 1);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// YIELD
+	BytecodeBeginInstruction(&bytecodeDraft, OP_YIELD);
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	// finalize bytecode and create atom
@@ -97,22 +100,17 @@ static void teardownBytecodeFixture(BytecodeFixture fixture)
 }
 
 
-void testCreateBytecode(void)
+void testBytecodeProgram1(void)
 {
-	BytecodeFixture fixture = setupBytecodeFixture();
+	BytecodeFixture fixture = setupBytecodeFixture1();
 	
 	ASSERT_TRUE(IsBytecode(fixture.bytecode))
 	ASSERT_TRUE(SameAtoms(BytecodeGetSignature(fixture.bytecode), fixture.signature))
 
 	ASSERT_TRUE(SameAtoms(BytecodeGetRegisters(fixture.bytecode), fixture.registers))
 
-	// the constant 2 used in the 3rd MOVE instruction
-	Atom constants = BytecodeGetConstants(fixture.bytecode);
-	ASSERT_UINT32_EQUAL(ListLength(constants), 1);
-	ASSERT_UINT32_EQUAL(ListGetElement(constants, 1).datum, 2);
-
 	Atom program = BytecodeGetProgram(fixture.bytecode);
-	ASSERT_UINT32_EQUAL(ListLength(program), N_INSTRUCTIONS);
+	ASSERT_UINT32_EQUAL(ListLength(program), 5);
 
 	ASSERT_UINT32_EQUAL(
 		InstructionGetOpCode(ListGetElement(program, 1)),
@@ -130,22 +128,137 @@ void testCreateBytecode(void)
 		InstructionGetOpCode(ListGetElement(program, 4)),
 		OP_ADD
 	)
+	ASSERT_UINT32_EQUAL(
+		InstructionGetOpCode(ListGetElement(program, 5)),
+		OP_YIELD
+	)
 
 	teardownBytecodeFixture(fixture);
 }
 
 
-void testExecuteByteCode(void)
+void testExecuteByteCode1(void)
 {
-	BytecodeFixture fixture = setupBytecodeFixture();
-	// PrintFormula(fixture.signature);
-	// PrintChar('\n');
+	BytecodeFixture fixture = setupBytecodeFixture1();
+	PrintFormula(fixture.signature);
+	PrintChar('\n');
 	
-	Datum actors[] = {CreateInt(3).datum, 0};
-
-	VMExecute(fixture.bytecode, actors);
+	// NOTE: arguments must be in canonical order
+	Datum arguments[2] = {CreateInt(3).datum,  CreateInt(0).datum};
+	VMContext * rootContext = VMCreateRootContext(fixture.bytecode, arguments);
+	VMStart(rootContext);
+	Datum * results = ContextArguments(rootContext);
 	// results should be 3 * 3 
-	ASSERT_UINT32_EQUAL(actors[1], 9);
+	ASSERT_UINT32_EQUAL(results[1], 9);
+
+	teardownBytecodeFixture(fixture);
+}
+
+/**
+ * Example program 2, calling program 1
+ * 
+ * To call a bytecode program, we must push its
+ * arguments on the stack in canonical order and
+ * CALL the bytecode service (number triple).
+ * This program tests parameter and a registers as
+ * arguments to the called service.
+ * 
+ * number @INT quadruple $INT
+ * #1:INT #2:EXEC
+ *   COPY   @1 $2
+ *   EXEC   <number triple> #2		// (number @1 triple #1)
+ *   COPY	@1 #2@1					// set @1 in context #2
+ *   RESUME #2
+ *   COPY	#2$2 #1					// copy output $2 from context #2
+ *   ADD    #1 $2
+ *   YIELD
+ *   END
+ */
+BytecodeFixture setupBytecodeFixture2(void)
+{
+	BytecodeFixture childFixture = setupBytecodeFixture1();
+	BytecodeFixture fixture;
+
+	/**
+	 * Bytecode signature.
+	 * The indices for parameters are determined by their position
+	 * in the signature actors list, in canonical order. We here 
+	 * assume that the form is in canonical order so the indices are correct.
+	 * This can be verified while building the predicate.
+	 * 
+	 * TODO: handle the case where the same parameter appears in multiple
+	 * positions in the signature.
+	 */
+	fixture.signature = CStringToPredicate("number @INT quadruple $INT");
+
+	// list of register initial 
+	// TODO: we don't really have an initial value for the context #2 ...
+	fixture.registers = CreateListFromArray(
+		(Atom []) {CreateInt(0), {.type = DT_CONTEXT, .datum = 0}},
+		2
+	);
+
+	// create bytecode draft
+	BytecodeDraft bytecodeDraft;
+	BytecodeBegin(&bytecodeDraft, fixture.signature, fixture.registers);
+
+	// COPY @1 $1
+	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 1);	// read from @1
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);	// write to $2
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// EXEC <number triple> #2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_EXEC);
+	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, childFixture.bytecode);
+	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// COPY	@1 #2@1
+	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 1);
+	BytecodeOperandSetContext(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 1);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// RESUME #2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_RESUME);
+	BytecodeOperandRegister(&bytecodeDraft, OPERAND_LEFT, 2);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// COPY #2$2 #1
+	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
+	BytecodeOperandSetContext(&bytecodeDraft, OPERAND_LEFT, 2);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 2);
+	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 1);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// ADD  #1 $2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_ADD);
+	BytecodeOperandRegister(&bytecodeDraft, OPERAND_LEFT, 1);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// finalize bytecode and create atom
+	fixture.bytecode = BytecodeEnd(&bytecodeDraft);
+	teardownBytecodeFixture(childFixture);
+
+	return fixture;
+}
+
+
+void testExecuteByteCode2(void)
+{
+	BytecodeFixture fixture = setupBytecodeFixture2();
+	PrintFormula(fixture.signature);
+	PrintChar('\n');
+	
+	// NOTE: arguments must be in canonical order
+	Datum arguments[2] = {CreateInt(3).datum,  CreateInt(0).datum};
+	VMContext * rootContext = VMCreateRootContext(fixture.bytecode, arguments);
+	VMStart(rootContext);
+	Datum * results = ContextArguments(rootContext);
+	ASSERT_UINT32_EQUAL(results[1], 3 * 4);
 
 	teardownBytecodeFixture(fixture);
 }
@@ -155,8 +268,9 @@ int main(int argc, char * argv[])
 {
 	KernelInitialize();
 
-	testCreateBytecode();
-	testExecuteByteCode();
+	testBytecodeProgram1();
+	testExecuteByteCode1();
+	testExecuteByteCode2();
 
 	TestSummary();
 

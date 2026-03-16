@@ -5,7 +5,7 @@
 
 Atom CreateInt(int64 value)
 {
-	return (Atom) {DT_INT, 0, 0, 0, value};
+	return (Atom) {.type = DT_INT, .datum = value};
 }
 
 /**

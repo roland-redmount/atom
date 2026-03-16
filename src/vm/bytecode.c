@@ -16,8 +16,8 @@
 
 static void setBytecodeSignature(IFactDraft * draft, Atom signature)
 {
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_BYTECODE);
-	index8 signatureIndex = GetPredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_BYTECODE);
+	index8 signatureIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_SIGNATURE), bytecodeIndex);
 	Atom tuple[2];
@@ -29,8 +29,8 @@ static void setBytecodeSignature(IFactDraft * draft, Atom signature)
 
 static void setBytecodeProgram(IFactDraft * draft, Atom program)
 {
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_BYTECODE);
-	index8 programIndex = GetPredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_BYTECODE);
+	index8 programIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_PROGRAM), bytecodeIndex);
 	Atom tuple[2];
@@ -43,8 +43,8 @@ static void setBytecodeProgram(IFactDraft * draft, Atom program)
 // (bytecode registers)
 static void setBytecodeRegisters(IFactDraft * draft, Atom registersList)
 {
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_BYTECODE);
-	index8 registersIndex = GetPredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_BYTECODE);
+	index8 registersIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_REGISTERS), bytecodeIndex);
 	Atom tuple[2];
@@ -56,8 +56,8 @@ static void setBytecodeRegisters(IFactDraft * draft, Atom registersList)
 
 static void setBytecodeConstants(IFactDraft * draft, Atom constantsList)
 {
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_BYTECODE);
-	index8 constantsIndex = GetPredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_BYTECODE);
+	index8 constantsIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_CONSTANTS), bytecodeIndex);
 	Atom tuple[2];
@@ -66,14 +66,14 @@ static void setBytecodeConstants(IFactDraft * draft, Atom constantsList)
 	IFactEndConjunction(draft);
 }
 
-
 /**
  * TODO: For the instructions list, we want to use
  * a dense array implementation for performance when executing bytecode.
  * If we let the form (list position element) be implemented by multiple storage
  * engines (B-tree, dense array, ...) then we need to query across all of them.
  * That is a fair amount of added complexity. List iteration must then gather
- * facts across storage engines  ... 
+ * facts across storage engines  ...  We should probably specify in the query
+ * to only search array-based storage (we would know this in advance).
  * 
  * For now we stick with the B-tree list implementation, but we should revisit this.
  */
@@ -84,7 +84,7 @@ void BytecodeBegin(BytecodeDraft * draft, Atom signature, Atom registers)
 	draft->signature = signature;
 	draft->registers = registers;
 
-	// draft lists, instructions can add elements
+	// Draft lists, modified when adding instructions
 	ListBegin(&(draft->constantsDraft));
 	ListBegin(&(draft->programDraft));
 }
@@ -96,30 +96,32 @@ void BytecodeBeginInstruction(BytecodeDraft * draft, byte opcode)
 }
 
 
-void BytecodeOperandParameter(BytecodeDraft * draft, Atom parameter)
+void BytecodeOperandParameter(BytecodeDraft * draft, Operand operand, index8 index)
 {
-	index8 position = ListGetPosition(
-		FormulaGetActors(draft->signature),
-		parameter
-	);
-	ASSERT(position > 0)
-	InstructionOperandArgument(&(draft->instructionDraft), position);
+	InstructionSetOperand(&(draft->instructionDraft), operand, index, ACCESS_PARAMETER);
 }
 
 
-void BytecodeOperandRegister(BytecodeDraft * draft, index8 registerIndex)
+void BytecodeOperandRegister(BytecodeDraft * draft, Operand operand, index8 registerIndex)
 {
 	ASSERT(registerIndex <= ListLength(draft->registers))
-	InstructionOperandRegister(&(draft->instructionDraft), registerIndex);
+	InstructionSetOperand(&(draft->instructionDraft), operand, registerIndex, ACCESS_REGISTER);
 }
 
 
-void BytecodeOperandConstant(BytecodeDraft * draft, Atom constant)
+void BytecodeOperandConstant(BytecodeDraft * draft, Operand operand, Atom constant)
 {
-	// NOTE: constants list could be a set
-	index32 constantIndex = ListAddElement(&(draft->constantsDraft), constant);
-	InstructionOperandConstant(&(draft->instructionDraft), constantIndex);
+	// TODO: constants should be a set
+	index8 position = ListAddElement(&(draft->constantsDraft), constant);
+	InstructionSetOperand(&(draft->instructionDraft), operand, position, ACCESS_CONSTANT);
 }
+
+
+void BytecodeOperandSetContext(BytecodeDraft * draft, Operand operand, index8 registerIndex)
+{
+	InstructionSetContext(&(draft->instructionDraft), operand, registerIndex);
+}
+
 
 
 void BytecodeEndInstruction(BytecodeDraft * draft)
@@ -145,7 +147,6 @@ Atom BytecodeEnd(BytecodeDraft * draft)
 	setBytecodeProgram(&bytecodeDraft, program);
 
 	// (bytecode constants)
-	// TODO: what if there are no constants -- then this list will be empty
 	Atom constants = ListEnd(&(draft->constantsDraft));
 	setBytecodeConstants(&bytecodeDraft, constants);
 
@@ -170,8 +171,8 @@ bool IsBytecode(Atom atom)
 Atom BytecodeGetProgram(Atom bytecode)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_PROGRAM);
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_BYTECODE);
-	index8 programIndex = GetPredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_BYTECODE);
+	index8 programIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
 
 	Atom query[2];
 	query[bytecodeIndex] = bytecode;
@@ -186,8 +187,8 @@ Atom BytecodeGetProgram(Atom bytecode)
 Atom BytecodeGetSignature(Atom bytecode)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_SIGNATURE);
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_BYTECODE);
-	index8 signatureIndex = GetPredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_BYTECODE);
+	index8 signatureIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
 
 	Atom query[2];
 	query[bytecodeIndex] = bytecode;
@@ -202,8 +203,8 @@ Atom BytecodeGetSignature(Atom bytecode)
 Atom BytecodeGetRegisters(Atom bytecode)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_REGISTERS);
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_BYTECODE);
-	index8 registersIndex = GetPredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_BYTECODE);
+	index8 registersIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
 
 	Atom query[2];
 	query[bytecodeIndex] = bytecode;
@@ -218,8 +219,8 @@ Atom BytecodeGetRegisters(Atom bytecode)
 Atom BytecodeGetConstants(Atom bytecode)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_CONSTANTS);
-	index8 bytecodeIndex = GetPredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_BYTECODE);
-	index8 constantsIndex = GetPredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_BYTECODE);
+	index8 constantsIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
 
 	Atom query[2];
 	query[bytecodeIndex] = bytecode;
@@ -229,6 +230,7 @@ Atom BytecodeGetConstants(Atom bytecode)
 	RelationBTreeQuerySingle(tree, query, tuple);
 	return tuple[constantsIndex];
 }
+
 
 // TODO: temporary solution to be able to locate
 //  and remove the service (+ + =) to avoid memory leaks.
@@ -243,21 +245,9 @@ static Service additionService;
  */
 static void createAdditionService(void)
 {
-/*
-	Atom plus = CreateNameFromCString("+");
-	Atom equals = CreateNameFromCString("=");
-	Atom form = CreatePredicateForm((Atom []) {plus, plus, equals}, 3);
-
-	// TODO: this will not in general match the form order.
-	// we need a way to create formulas correctly without parsing strings.
-	Atom actors = CreateListFromArray((Atom []) {x, y, z}, 3);
-	Atom signature = CreateFormula(form, actors);
-*/
-
-	Atom signature = CStringToPredicate("+ $x>INT + $y>INT = $z<INT");
-	Atom x = CreateParameter('x', PARAMETER_IN, DT_INT);
-	Atom y = CreateParameter('y', PARAMETER_IN, DT_INT);
-	Atom z = CreateParameter('z', PARAMETER_OUT, DT_INT);
+	Atom signature = CStringToPredicate("= $INT + @INT + @INT");
+	PrintFormula(signature);
+	PrintChar('\n');
 
 	Atom registers = CreateListFromArray(0, 0);		// the empty list
 
@@ -265,16 +255,16 @@ static void createAdditionService(void)
 	BytecodeDraft bytecodeDraft;
 	BytecodeBegin(&bytecodeDraft, signature, registers);
 	
-	// COPY x z
+	// COPY @2 $1
 	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
-	BytecodeOperandParameter(&bytecodeDraft, x);
-	BytecodeOperandParameter(&bytecodeDraft, z);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 2);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 1);
 	BytecodeEndInstruction(&bytecodeDraft);
 
-	// ADD y z
+	// ADD @3 $1
 	BytecodeBeginInstruction(&bytecodeDraft, OP_ADD);
-	BytecodeOperandParameter(&bytecodeDraft, y);
-	BytecodeOperandParameter(&bytecodeDraft, z);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 3);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 1);
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	Atom bytecode = BytecodeEnd(&bytecodeDraft);
@@ -284,13 +274,13 @@ static void createAdditionService(void)
 	// NOTE: the form is now both a registry key and part of the bytecode definition
 	additionService = RegistryAddBytecodeService(bytecode);
 	ReleaseAtom(bytecode);
-	
-	// To find the bytecode, dispatch would query
-	// for the signature
-	// e.g. (service @bytecode) that dispatch can search
 }
 
 
+/**
+ * TODO: This should become part of the "standard library" of services.
+ * This is not "core" services in the sense of being required for the system to function.
+ */
 void SetupCoreServices(void)
 {
 	createAdditionService();
@@ -299,5 +289,5 @@ void SetupCoreServices(void)
 
 void TeardownCoreServices(void)
 {
-	RegistryRemoveBytecodeService(additionService.form);
+	RegistryRemoveService(additionService.form);
 }

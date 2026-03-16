@@ -28,8 +28,9 @@
 
 #define DT_INSTRUCTION			11		// a bytecode instruction
 #define DT_PARAMETER			12		// a parameter in a bytecode service
+#define DT_CONTEXT				13		// a VM execution context
 
-#define N_DATUMTYPES			12
+#define N_DATUMTYPES			13
 
 
 /**

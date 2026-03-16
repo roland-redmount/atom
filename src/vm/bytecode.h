@@ -7,7 +7,7 @@
 #define BYTECODE_H
 
 #include "kernel/ifact.h"
-#include "vm/instruction.h"
+#include "datumtypes/instruction.h"
 
 
 typedef struct s_BytecodeDraft {
@@ -16,6 +16,7 @@ typedef struct s_BytecodeDraft {
 	IFactDraft constantsDraft;
 	IFactDraft programDraft;
 	Instruction instructionDraft;
+	// size32 callCounter;
 } BytecodeDraft;
 
 /**
@@ -25,12 +26,36 @@ typedef struct s_BytecodeDraft {
 void BytecodeBegin(BytecodeDraft * draft, Atom signature, Atom registers);
 
 /**
+ * Structure specifying a bytecode argument or operand
+ */
+typedef struct {
+	enum {ARG_PARAMETER, ARG_REGISTER, ARG_CONSTANT} type;
+	union {
+		Atom parameter;
+		index8 registerIndex;
+		Atom constant;
+	} value;
+} BytecodeArgument;
+
+
+
+/**
  * Being a new bytecode instruction, to be appended to the program
  */
 void BytecodeBeginInstruction(BytecodeDraft * draft, byte opcode);
-void BytecodeOperandParameter(BytecodeDraft * draft, Atom parameter);
-void BytecodeOperandRegister(BytecodeDraft * draft, index8 registerIndex);
-void BytecodeOperandConstant(BytecodeDraft * draft, Atom constant);
+
+/**
+ * Add a operand reference to a parameter @index or $index.
+ * Since read / write access is fully determined by the instruction opcode,
+ * we do not need to explitly specify input or output parameter here.
+ */
+void BytecodeOperandParameter(BytecodeDraft * draft, Operand operand, index8 index);
+void BytecodeOperandRegister(BytecodeDraft * draft, Operand operand, index8 registerIndex);
+
+void BytecodeOperandConstant(BytecodeDraft * draft, Operand operand, Atom constant);
+
+void BytecodeOperandSetContext(BytecodeDraft * draft, Operand operand, index8 registerIndex);
+
 void BytecodeEndInstruction(BytecodeDraft * draft);
 
 

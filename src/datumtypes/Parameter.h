@@ -1,6 +1,7 @@
 /**
- * Parameters are used in service signatures.
- * They are either "input" or "output" and may optionally have a type.
+ * A DT_PARAMETER aton is used in service signatures to mark a position
+ * in the actor list where a parameter is a expected.
+ * A parameter is either "input" or "output" and may optionally have a datum type.
  */
 
 #ifndef	PARAMETER_H
@@ -15,12 +16,9 @@
 /**
  * Create an parameter. For untyped parameters, set type to 0.
  */
-Atom CreateParameter(char name, byte io, byte type);
+Atom CreateParameter(byte io, byte type);
 
 bool IsParameter(Atom a);
-
-
-char GetParameterName(Atom parameter);
 
 void PrintParameter(Atom parameter);
 

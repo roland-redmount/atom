@@ -5,23 +5,19 @@
 typedef union
 {
 	struct {
-		char name;
 		byte io;
-		byte type;
+		byte datumType;
 	} fields;
 	data64 value;
 } Parameter;
 
 
-Atom CreateParameter(char name, byte io, byte type)
+Atom CreateParameter(byte io, byte type)
 {
-	// for now we just store a single lowercase character _x, _y, ...
-	ASSERT(IsAlpha(name));
-	Parameter arg = {.value = 0};
-	arg.fields.name = ToLower(name);
+	Parameter arg;
 	arg.fields.io = io;
-	arg.fields.type = type;
-	return (Atom) {DT_PARAMETER, 0, 0, 0, arg.value};
+	arg.fields.datumType = type;
+	return (Atom) {.type = DT_PARAMETER, .datum = arg.value};
 }
 
 bool IsParameter(Atom a)
@@ -30,24 +26,15 @@ bool IsParameter(Atom a)
 }
 
 
-char GetParameterName(Atom parameter)
-{
-	Parameter arg;
-	arg.value = parameter.datum;
-	return arg.fields.name;
-}
-
-
 void PrintParameter(Atom parameter)
 {
 	Parameter arg;
 	arg.value = parameter.datum;
-	PrintChar('$');
-	PrintChar(arg.fields.name);
 	if(arg.fields.io == PARAMETER_IN)
-		PrintChar('>');
+		PrintChar('@');
 	else
-		PrintChar('<');
-	if(arg.fields.type)
-		PrintCString(GetDatumTypeName(arg.fields.type));
+		PrintChar('$');
+	if(arg.fields.datumType) {
+		PrintCString(GetDatumTypeName(arg.fields.datumType));
+	}
 }

@@ -27,6 +27,7 @@ struct s_BTreeNode {
 	size32 nodeMaxNItems;
 
 	ItemComparator compareItems;
+	void (*freeItem)(void * item, size32 itemSize);
 	
 	uint32 writeLockCount;	// semaphore preventing mutating operations
 	bool readLocked;		// lock for exclusive access

@@ -7,7 +7,7 @@
  */
 Atom CreateUInt(uint64 value)
 {
-	return (Atom) {DT_UINT, 0, 0, 0, value};
+	return (Atom) {.type = DT_UINT, .datum = value};
 }
 
 /**

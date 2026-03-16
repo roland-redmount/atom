@@ -30,6 +30,7 @@ BTree * BTreeCreate(
 	btree->itemSize = itemSize;
 	btree->spareItem = Allocate(itemSize);
 	btree->compareItems = compareItems;
+	btree->freeItem = freeItem;
 
 	/**
 	 * BTREE_NODE_SIZE = sizeof(BTreeNode) + maxItems * itemSize + (maxItems+1) * sizeof(BTreeNode *)
@@ -366,11 +367,14 @@ BTreeInsertResult BTreeInsert(BTree * btree, void const * item)
 
 static void nodeDeleteItem(BTree const * btree, BTreeNode * node, index32 index)
 {
+	void * item = nodeGetItem(btree, node, index);
+	if(btree->freeItem)
+		btree->freeItem(item, btree->itemSize);
 	// delete item by shifting right side items left
 	if(node->nItems > index + 1) {
 		MoveMemory(
 			nodeGetItem(btree, node, index + 1),
-			nodeGetItem(btree, node, index),
+			item,
 			(node->nItems - index - 1) * btree->itemSize
 		);
 	}

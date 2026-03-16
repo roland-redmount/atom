@@ -2,28 +2,33 @@
 #ifndef VM_H
 #define VM_H
 
-#include "vm/context.h"
+#include "datumtypes/context.h"
 
-
+/**
+ * Initalize the VM stack &c
+ */
 void VMInitialize(void * stack,  size32 stackSize);
 
-/**
- * To call a bytecode service, we must create a VM context
- * with program counter, registers and flags.
- * The program will read/write from/to the given actors tuple.
- * The context is stored in the "child" context list
- * of the caller's context (except for the root context).
- * Control (single-threaded for now) passes to the service
- * until a YIELD instruction, or the end of the bytecode program.
- */
 
 /**
- * Push a new context onto the stack and return it.
+ * Create a root context from the given bytecode, with given arguments.
+ * Arguments are given as an array of pointers to datums to allow
+ * writing data into output arguments of the given bytecode.
+ * 
+ * For a basic REPL the bytecode could be a loop calling
+ * a user input function, e.g.
+ * 
+ *  CALL [user-input #1>]
+ *  ...
+ *  RESUME
+ * 
  */
-VMContext * VMCreateContext(Atom bytecode, Datum * actors);
+VMContext * VMCreateRootContext(Atom bytecode, Datum * arguments);
 
-
-void VMExecute(Atom bytecode, Datum * actors);
+/**
+ * Start VM execution with the given context as root context.
+ */
+void VMStart(VMContext * context);
 
 
 #endif	// VM_H

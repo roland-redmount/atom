@@ -1,7 +1,8 @@
 
-#include "datumtypes/Parameter.h"
 #include "datumtypes/FloatIEEE754.h"
 #include "datumtypes/Int.h"
+#include "datumtypes/instruction.h"
+#include "datumtypes/Parameter.h"
 #include "datumtypes/UInt.h"
 #include "datumtypes/Unknown.h"
 #include "datumtypes/Variable.h"
@@ -181,6 +182,10 @@ void PrintAtom(Atom atom)
 
 	case DT_NAME:
 		PrintName(atom);
+		break;
+
+	case DT_INSTRUCTION:
+		PrintInstruction(atom);
 		break;
 
 	case DT_PARAMETER:
