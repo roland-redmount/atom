@@ -24,7 +24,6 @@
 #include "datumtypes/FloatIEEE754.h"
 #include "datumtypes/Int.h"
 #include "datumtypes/Parameter.h"
-#include "datumtypes/register.h"
 #include "datumtypes/Variable.h"
 #include "kernel/string.h"
 #include "lang/name.h"
@@ -92,11 +91,6 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		case '$':
 			tokenizer->type = TOKEN_PARAMETER;
 			tokenizer->data.parameter.io = PARAMETER_OUT;
-			tokenizer->isValid = true;
-			return true;
-
-		case '#':
-			tokenizer->type = TOKEN_REGISTER;
 			tokenizer->isValid = true;
 			return true;
 
@@ -212,22 +206,6 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		}
 		else
 			return false;
-	
-	case TOKEN_REGISTER:
-		// parse register index
-		if(IsDigitChar(c)) {
-			StringBufferPush(&(tokenizer->buffer), c);
-			tokenizer->isValid = true;
-			return true;
-		}
-		if(IsWhiteSpace(c) || (c == 0)) {
-			// whitespace terminates number
-			tokenizer->data._register.index = StringToInt64(
-					tokenizer->buffer.buffer, tokenizer->buffer.stringLength);
-			tokenizer->isFull = true;
-			return true;
-		}
-		return false;
 
 	default:
 		// should never occur
@@ -306,13 +284,6 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 			tokenizer->data.parameter.datumType
 		);
 		break;
-
-	case TOKEN_REGISTER: {
-		ASSERT(tokenizer->data._register.index > 0)
-		ASSERT(tokenizer->data._register.index <= 255)
-		token.atom = CreateRegister(tokenizer->data._register.index);
-		break;
-	}
 				
 	case TOKEN_NAME:
 		token.atom = CreateName(string, stringLength);

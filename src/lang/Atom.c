@@ -3,7 +3,6 @@
 #include "datumtypes/Int.h"
 #include "datumtypes/instruction.h"
 #include "datumtypes/Parameter.h"
-#include "datumtypes/register.h"
 #include "datumtypes/UInt.h"
 #include "datumtypes/Unknown.h"
 #include "datumtypes/Variable.h"
@@ -191,10 +190,6 @@ void PrintAtom(Atom atom)
 
 	case DT_PARAMETER:
 		PrintParameter(atom);
-		break;
-
-	case DT_REGISTER:
-		PrintRegister(atom);
 		break;
 
 	case DT_ID:

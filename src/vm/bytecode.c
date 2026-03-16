@@ -1,6 +1,5 @@
 
 #include "datumtypes/Parameter.h"
-#include "datumtypes/register.h"
 #include "datumtypes/Variable.h"
 #include "datumtypes/UInt.h"
 #include "kernel/ifact.h"

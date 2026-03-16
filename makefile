@@ -148,7 +148,7 @@ LANG_FILES := $(addprefix lang/, \
  Quote SubstitutionList unification TermForm)
 
 DATUMTYPES_FILES := $(addprefix datumtypes/, \
- context FloatIEEE754 instruction Int Parameter register UInt Unknown Variable)
+ context FloatIEEE754 instruction Int Parameter UInt Unknown Variable)
 
 KERNEL_FILES := $(addprefix kernel/, \
  dispatch ifact kernel letter list lookup multiset pair RelationBTree string ServiceRegistry tuples)

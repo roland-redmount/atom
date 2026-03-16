@@ -25,9 +25,6 @@ struct s_Tokenizer {
 			byte io;
 			byte datumType;
 		} parameter;
-		struct {
-			index8 index;
-		} _register;
 	} data;
 };
 
