@@ -235,6 +235,8 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm)
 	size32 nAtoms = ResizingArrayNElements(&datumArray);
 	for(index32 i = 0; i < nAtoms; i++)
 		LookupRemoveAllRoles((Atom) {DT_ID, 0, 0, 0, datums[i]});
+		
+	FreeResizingArray(&datumArray);
 }
 
 
