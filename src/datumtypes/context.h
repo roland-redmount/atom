@@ -16,11 +16,12 @@ typedef struct s_VMContext VMContext;
 struct s_VMContext {
 	VMContext * parentContext;
 	Atom bytecode;
-	Atom program;					// list of instructions
+	Atom program;				// list of instructions
 	size32 programLength;
 	index32 programCounter;
 	size8 arity;
 	size8 nRegisters;
+	// index8 calledContextIndex;		// index into register holding the context last called
 	// Datum arguments[arity]
 	// Datum registers[nRegisters]
 };
@@ -30,7 +31,7 @@ struct s_VMContext {
  * Context size, including registers and child context pointers,
  * but excluding actors
  */
-size32 ContextSize(size8 nRegisters);
+size32 ContextSize(size8 arity, size8 nRegisters);
 
 /**
  * Return arguments array
@@ -49,6 +50,15 @@ Datum * ContextRegisters(VMContext * context);
  * and a working copy of the registers used.
  */
 VMContext * CreateContext(Atom bytecode, VMContext * parentContext);
+
+/**
+ * Check registers for allocated "child" contexts and free them if necessary.
+ * This is used when terminating context execution.
+ */
+void FreeChildContexts(VMContext * context);
+
+
+void FreeContext(VMContext * context);
 
 
 #endif	// CONTEXT_H

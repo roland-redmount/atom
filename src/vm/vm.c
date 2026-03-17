@@ -130,9 +130,8 @@ VMContext * VMCreateRootContext(Atom bytecode, Datum * arguments)
 }
 
 
-void VMStart(VMContext * context)
+void VMExecute(VMContext * context)
 {
-
 	// Iterate through program
 iterate:
 	while(true) {
@@ -140,7 +139,7 @@ iterate:
 		if(context->programCounter <= context->programLength) {
 			Atom instruction = ListGetElement(context->program, context->programCounter);
 			if(vm.trace)
-				 PrintInstruction(instruction);
+				PrintInstruction(instruction);
 			inst = InstructionGetData(instruction);
 		}
 		else {
@@ -196,13 +195,18 @@ iterate:
 
 		case OP_RESUME: {
 			// RESUME <context>
-			// give control to another execution context
+			// Give control to another execution context.
+			// Currently, contexts must be stored in registers.
+			ASSERT(inst.fields.accessMode.op1 == ACCESS_REGISTER)
+	
+			// The new context to switch to. Must have been initialized by EXEC
 			VMContext * newContext = (VMContext *) readOperand(context, inst, OPERAND_LEFT);
-			
-			// upon return, we will continue execution at the next instruction
-			newContext->parentContext = context;
-			context->programCounter++;
+			ASSERT(newContext)
+			// NOTE: if the new context program counter is already at end,
+			// we can abort here
 
+			// upon return, parent will continue execution at the next instruction
+			newContext->parentContext = context;
 			// transfer control
 			context = newContext;
 			goto iterate;
@@ -215,25 +219,29 @@ iterate:
 			if(context->parentContext) {
 				// continue parent context execution
 				context = context->parentContext;
-				goto iterate;
+				break;
 			}
 			else {
 				// YIELD from root context ends execution
+				FreeChildContexts(context);
 				return;
 			}
 		}
 
 		case OP_END: {
+			// END terminates the current context
 			vm.flag = false;
-			context->programCounter++;
-			if(context->parentContext) {
-				// continue parent context execution
-				context = context->parentContext;
-				// NOTE: should we clear the child context??
-				goto iterate;
+			// NOTE: any register holding a reference-counted datum should be released?
+			// Deallocating child contexts seem like a special case of this ...
+			FreeChildContexts(context);	
+			VMContext * parentContext = context->parentContext;
+			if(parentContext) {
+				// switch to parent context
+				context = parentContext;
+				break;
 			}
 			else {
-				// END root context execution
+				// Root context
 				return;
 			}
 		}
@@ -245,5 +253,5 @@ iterate:
 		}
 		context->programCounter++;
 	}
-	
+
 }

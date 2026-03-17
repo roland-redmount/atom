@@ -28,7 +28,7 @@ VMContext * VMCreateRootContext(Atom bytecode, Datum * arguments);
 /**
  * Start VM execution with the given context as root context.
  */
-void VMStart(VMContext * context);
+void VMExecute(VMContext * context);
 
 
 #endif	// VM_H
