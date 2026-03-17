@@ -14,26 +14,26 @@
  */
 typedef struct s_LinkedList LinkedList;
 
-LinkedList* CreateLinkedList(const void* item);
+LinkedList * CreateLinkedList(const void * item);
 
-const void* GetLinkedListItem(LinkedList* list);
-LinkedList* GetNextLinkedList(LinkedList* list);
-bool LinkedListHasNext(LinkedList* list);
+const void * GetLinkedListItem(LinkedList * list);
+LinkedList * GetNextLinkedList(LinkedList * list);
+bool LinkedListHasNext(LinkedList * list);
 
-LinkedList* AppendToLinkedList(LinkedList** list, const void* item);
+LinkedList* AppendToLinkedList(LinkedList ** list, const void * item);
 
 // function type used by FreeLinkedList()
-typedef void (ItemFunction)(const void*);
+typedef void (ItemFunction)(const void *);
 
 // deallocate a linked list, calling the supplied freeItem() function for each item
-void FreeLinkedList(const LinkedList* list, ItemFunction* freeItem);
+void FreeLinkedList(const LinkedList * list, ItemFunction * freeItem);
 
 // function type used by FindLinkedListItem()
-typedef bool (ItemEqualityTest)(const void*, const void*);
+typedef bool (ItemEqualityTest)(const void *, const void *);
 
 // find an item in linked list
 // this returns a pointer-to-pointer to allow modifying the list
-LinkedList** FindLinkedListItem(LinkedList** list, const void* item, ItemEqualityTest* compare);
+LinkedList ** FindLinkedListItem(LinkedList ** list, const void * item, ItemEqualityTest * compare);
 
 
 #endif	// LINKEDLIST_H
