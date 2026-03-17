@@ -54,7 +54,9 @@ BTree * BTreeCreate(
 	void (*freeItem)(void * item, size32 itemSize)
 );
 
-
+/**
+ * Delete all items and free the B-tree structure.
+ */
 void BTreeFree(BTree * btree);
 
 

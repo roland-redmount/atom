@@ -12,7 +12,13 @@ void CloseAllocator(void);
  * The actual size can be found using GetAllocatedSize().
  * The returned memory is not cleared.
  */
+
+#ifdef DEBUG_ALLOCATE
+void * _LogAllocate(const char * fileName, uint32 lineNumber, size32 allocSize);
+#define Allocate(allocSize) _LogAllocate(__FILE__, __LINE__, allocSize)
+#else
 void * Allocate(size32 size);
+#endif
 
 /**
  * Reallocate the given memory block fit the the new size, if necessary.
@@ -32,7 +38,12 @@ void * Reallocate(void * memory, size32 newSize);
 /**
  * Free a previously allocated memory block.
  */
+#ifdef DEBUG_ALLOCATE
+void _LogFree(const char * fileName, uint32 lineNumber, void * block);
+#define Free(memory) _LogFree(__FILE__, __LINE__, memory)
+#else
 void Free(void * memory);
+#endif
 
 /**
  * Return the size (in bytes) of an allocated memory block.
@@ -42,10 +53,19 @@ void Free(void * memory);
 size32 GetAllocatedSize(void * memory);
 
 /**
- * Return the number of bytes available for allocation
- * in the allocator
+ * Number of bytes currently available for allocation.
  */
-size32 GetTotalFree(void);
+size32 AllocatorNBytesFree(void);
+
+/**
+ * Number of bytes currently allocated.
+ */
+size32 AllocatorNBytesAllocated(void);
+
+/**
+ * Maxmimal number of bytes available in this allocator (when empty).
+ */
+size32 AllocatorMaxNBytes(void);
 
 
 // for debugging
@@ -53,5 +73,8 @@ void PrintFreeLists(void);
 void DumpAllocatedBlocks(void);
 bool AllocatorIsEmpty(void);
 
+#ifdef DEBUG_ALLOCATE
+void DumpAllocateLog(void);
+#endif
 
 #endif // ALLOCATOR_H
