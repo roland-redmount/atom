@@ -23,7 +23,7 @@ int main(int argc, char * argv[])
 	KernelInitialize();
 	SetupCoreServices();
 
-	testDispatch();
+	ExecuteTest(testDispatch);
 
 	TeardownCoreServices();
 	KernelShutdown();
