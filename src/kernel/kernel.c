@@ -92,7 +92,7 @@ struct s_Kernel {
 	size32 nCoreNameRefs;
 	size32 nCoreLookupEntries;
 
-} kernel;
+} kernel = {0};
 
 
 // 1 << 20 = 1Mb memory area for allocator

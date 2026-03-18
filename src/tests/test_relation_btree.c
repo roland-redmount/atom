@@ -274,12 +274,12 @@ int main(void)
 	// NOTE: this does not use the kernel, only memory allocation
 	SetupMemory();
 
-	testCreateRelationTable();
-	testAddTuple();
-	testFindTuple();
-	testRemoveTuple();
-	testRemoveTuples();
-	testRemoveAllTuples();
+	ExecuteTest(testCreateRelationTable);
+	ExecuteTest(testAddTuple);
+	ExecuteTest(testFindTuple);
+	ExecuteTest(testRemoveTuple);
+	ExecuteTest(testRemoveTuples);
+	ExecuteTest(testRemoveAllTuples);
 	
 	TestSummary();
 

@@ -58,7 +58,19 @@ typedef struct s_IFactDraft {
 
 } IFactDraft;
 
+/**
+ * Setup ifact storage.
+ */
 void InitializeIFacts(void);
+
+/**
+ * Check if ifact storage has been initialized.
+ */
+bool IFactsInitialized(void);
+
+/**
+ * Teardown ifact storage.
+ */
 void FreeIFacts(void);
 
 /**

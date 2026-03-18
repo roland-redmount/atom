@@ -83,7 +83,7 @@ static IFactConjunction * lastConjunction(IFactHeader * header)
 static struct {
 	BTree * btree;					// tree storing IFactHeader structs
 	uint32 totalReferenceCount;
-} ifactStorage;
+} ifactStorage = {0};
 
 
 static int8 btreeCompareByHash(void const * item1, void const * item2, size32 itemSize)
@@ -119,6 +119,12 @@ void InitializeIFacts(void)
 	);
 
 	ifactStorage.totalReferenceCount = 0;
+}
+
+
+bool IFactsInitialized(void)
+{
+	return ifactStorage.btree != 0;
 }
 
 

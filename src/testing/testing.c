@@ -275,23 +275,29 @@ const char * checkTypeNames[3] = {"Setup", "Test", "Teardown"};
 
 static void executeCheckReferences(void (*function)(void), CheckType checkType)
 {
-	uint32 initialRefCount = TotalIFactReferenceCount();
-	uint32 initialIFactCount = TotalIFactCount();
+	uint32 initialRefCount;
+	uint32 initialIFactCount;
+	if(IFactsInitialized()) {
+		initialRefCount = TotalIFactReferenceCount();
+		initialIFactCount = TotalIFactCount();
+	}
 	uint32 initialBytesAllocated = AllocatorNBytesAllocated();
 
 	function();
+	
+	if(IFactsInitialized()) {
+		int32 refCountDiff = TotalIFactReferenceCount() - initialRefCount;
+		if(checkType != CHECK_TEARDOWN && refCountDiff < 0)
+			PrintF("%s: Lost %d IFact references.\n", checkTypeNames[checkType], refCountDiff);
+		if(checkType != CHECK_SETUP && refCountDiff > 0)
+			PrintF("%s: Failed to release %d IFact references.\n", checkTypeNames[checkType], refCountDiff);
 
-	int32 refCountDiff = TotalIFactReferenceCount() - initialRefCount;
-	if(checkType != CHECK_TEARDOWN && refCountDiff < 0)
-		PrintF("%s: Lost %d IFact references.\n", checkTypeNames[checkType], refCountDiff);
-	if(checkType != CHECK_SETUP && refCountDiff > 0)
-		PrintF("%s: Failed to release %d IFact references.\n", checkTypeNames[checkType], refCountDiff);
-
-	int32 ifactDiff = TotalIFactReferenceCount() - initialIFactCount;
-	if(checkType != CHECK_TEARDOWN && ifactDiff < 0)
-		PrintF("%s: Lost %d IFacts.\n", checkTypeNames[checkType], ifactDiff);
-	if(checkType != CHECK_SETUP && ifactDiff > 0)
-		PrintF("%s: Failed to release %d IFacts.\n", checkTypeNames[checkType], ifactDiff);
+		int32 ifactDiff = TotalIFactCount() - initialIFactCount;
+		if(checkType != CHECK_TEARDOWN && ifactDiff < 0)
+			PrintF("%s: Lost %d IFacts.\n", checkTypeNames[checkType], ifactDiff);
+		if(checkType != CHECK_SETUP && ifactDiff > 0)
+			PrintF("%s: Failed to release %d IFacts.\n", checkTypeNames[checkType], ifactDiff);
+	}
 
 	int32 allocateDiff = AllocatorNBytesAllocated() - initialBytesAllocated;
 	if(checkType != CHECK_TEARDOWN && allocateDiff < 0)
