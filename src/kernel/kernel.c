@@ -126,7 +126,6 @@ void CleanupMemory(void)
 	size32 nBytesAllocated = AllocatorNBytesAllocated();
 	if(nBytesAllocated > 0) {
 		PrintF("Failed to free %u bytes of memory\n", nBytesAllocated);
-		// PrintF("Total %u bytes of memory allocated\n", kernel.initialAllocatorFree);
 		PrintFreeLists();
 		DumpAllocatedBlocks();
 #ifdef DEBUG_ALLOCATE

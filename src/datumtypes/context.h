@@ -21,7 +21,6 @@ struct s_VMContext {
 	index32 programCounter;
 	size8 arity;
 	size8 nRegisters;
-	// index8 calledContextIndex;		// index into register holding the context last called
 	// Datum arguments[arity]
 	// Datum registers[nRegisters]
 };
