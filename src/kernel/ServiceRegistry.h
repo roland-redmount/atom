@@ -69,15 +69,9 @@ BTree * RegistryGetCoreTable(index32 index);
 void RegistryCreateCoreTable(index32 index, Atom form, size8 arity);
 
 /**
- * Create a new relation table for a form. Returns the created table,
- * or 0 if a table with the same form already existed.
- * 
- * NOTE: The registry does not acquire the form atom, and does not make
- * use of it in any way except as a key.
- * 
- * TODO: This should probably not create a btree, just add an existing one?
+ * Add a B-tree backed relation table to the registry.
  */
-BTree * RegistryCreateTable(Atom form);
+Service RegistryAddBTreeService(Atom form, BTree * btree);
 
 /**
  * Add a bytecode service to the registry
@@ -86,8 +80,9 @@ Service RegistryAddBytecodeService(Atom bytecode);
 
 /**
  * Remove a service from the registry.
+ * 
  * If the service is a relation table, all facts must have been retracted
- * so that table is empty.
+ * so that table is empty. The B-tree will be deallocated.
  */
 void RegistryRemoveService(Atom form);
 

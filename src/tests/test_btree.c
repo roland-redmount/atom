@@ -324,9 +324,9 @@ int main(int argc, char **argv)
 	// PrintF("seed = %u\n", randomSeed);
  	SetRandomSeed(randomSeed);
 
-	testBTreeExample();
-    testBTreeRandomized();
-    testBTreeIterator();
+	ExecuteTest(testBTreeExample);
+    ExecuteTest(testBTreeRandomized);
+    ExecuteTest(testBTreeIterator);
 
 	CleanupMemory();
 

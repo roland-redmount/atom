@@ -165,13 +165,13 @@ int main(int argc, char * argv[])
 {
 	SetupMemory();
 
-	testResizingArray();
-	testLinkedList();
-	testResources();
-	testReorderArray();
-	testReorderRaggedArray();
-	testQuickSort();
-	testResizingBuffer();
+	ExecuteTest(testResizingArray);
+	ExecuteTest(testLinkedList);
+	ExecuteTest(testResources);
+	ExecuteTest(testReorderArray);
+	ExecuteTest(testReorderRaggedArray);
+	ExecuteTest(testQuickSort);
+	ExecuteTest(testResizingBuffer);
 
 	CleanupMemory();
 

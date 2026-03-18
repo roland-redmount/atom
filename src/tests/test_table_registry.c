@@ -13,6 +13,7 @@ struct {
 
 static void setupFixture(void)
 {
+	// TODO: we should have a way to parse a form from a C string.
 	Atom formula = CStringToPredicate("foo 0 bar 0 bar 0 baz 0");
 	fixture.signature = FormulaGetForm(formula);
 	AcquireAtom(fixture.signature);
@@ -30,7 +31,8 @@ void testAddDropTable(void)
 	setupFixture();
 	size32 nTablesInitial = RegistryNServices();
 
-	BTree * createdTable = RegistryCreateTable(fixture.signature);
+	BTree * createdTable = CreateRelationBTree(4);
+	RegistryAddBTreeService(fixture.signature, createdTable);
 	ASSERT_UINT32_EQUAL(RegistryNServices(), nTablesInitial + 1)
 	ASSERT_UINT32_EQUAL(RelationBTreeNColumns(createdTable), 4)
 

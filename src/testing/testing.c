@@ -2,6 +2,8 @@
 
 #include "testing/testing.h"
 #include "kernel/ifact.h"
+#include "memory/allocator.h"
+
 
 static size32 testingFailCount = 0;
 static size32 testingSuccessCount = 0;
@@ -263,36 +265,53 @@ void ExecuteTest(void (*test)(void))
 }
 
 /**
- * Execute a function and verify no references has changed.
+ * Execute a setup, teardown or test and verify references.
+ * Tests may not alter any reference; Setup may only add references;
+ * Teardown may only remove references.
  */
-static void executeCheckReferences(void (*function)(void), char const * errorLabel)
+
+typedef enum {CHECK_SETUP = 0, CHECK_TEST = 1, CHECK_TEARDOWN = 2} CheckType;
+const char * checkTypeNames[3] = {"Setup", "Test", "Teardown"};
+
+static void executeCheckReferences(void (*function)(void), CheckType checkType)
 {
-	uint32 initialRefCount = TotalIFactReferenceCount();
-	uint32 initialIFactCount = TotalIFactCount();
+	uint32 initialRefCount;
+	uint32 initialIFactCount;
+	if(IFactsInitialized()) {
+		initialRefCount = TotalIFactReferenceCount();
+		initialIFactCount = TotalIFactCount();
+	}
+	uint32 initialBytesAllocated = AllocatorNBytesAllocated();
 
 	function();
+	
+	if(IFactsInitialized()) {
+		int32 refCountDiff = TotalIFactReferenceCount() - initialRefCount;
+		if(checkType != CHECK_TEARDOWN && refCountDiff < 0)
+			PrintF("%s: Lost %d IFact references.\n", checkTypeNames[checkType], refCountDiff);
+		if(checkType != CHECK_SETUP && refCountDiff > 0)
+			PrintF("%s: Failed to release %d IFact references.\n", checkTypeNames[checkType], refCountDiff);
 
-	uint32 refCountDiff = TotalIFactReferenceCount() - initialRefCount;
-	if(refCountDiff < 0)
-		PrintF("%s: Lost %u IFact references.\n", errorLabel, refCountDiff);
-	if(refCountDiff > 0)
-		PrintF("%s: Failed to release %u IFact references.\n", errorLabel, refCountDiff);
+		int32 ifactDiff = TotalIFactCount() - initialIFactCount;
+		if(checkType != CHECK_TEARDOWN && ifactDiff < 0)
+			PrintF("%s: Lost %d IFacts.\n", checkTypeNames[checkType], ifactDiff);
+		if(checkType != CHECK_SETUP && ifactDiff > 0)
+			PrintF("%s: Failed to release %d IFacts.\n", checkTypeNames[checkType], ifactDiff);
+	}
 
-	uint32 ifactDiff = TotalIFactReferenceCount() - initialIFactCount;
-	if(ifactDiff < 0)
-		PrintF("%s: Lost %u IFacts.\n", errorLabel, ifactDiff);
-	if(ifactDiff > 0)
-		PrintF("%s: Failed to release %u IFacts.\n", errorLabel, ifactDiff);
+	int32 allocateDiff = AllocatorNBytesAllocated() - initialBytesAllocated;
+	if(checkType != CHECK_TEARDOWN && allocateDiff < 0)
+		PrintF("%s: Lost %d allocated bytes.\n", checkTypeNames[checkType], allocateDiff);
+	if(checkType != CHECK_SETUP && allocateDiff > 0)
+		PrintF("%s: Failed to free %d allocated bytes.\n", checkTypeNames[checkType], allocateDiff);
 }
 
 
 void ExecuteTestSetupTearDown(void (*test)(void), void (*setup)(void), void (*teardown)(void))
 {
 	if(setup)
-		executeCheckReferences(setup, "Setup");
-
-	executeCheckReferences(test, "Test");
-
+		executeCheckReferences(setup, CHECK_SETUP);
+	executeCheckReferences(test, CHECK_TEST);
 	if(teardown)
-		executeCheckReferences(teardown, "Teardown");
+		executeCheckReferences(teardown, CHECK_TEARDOWN);
 }

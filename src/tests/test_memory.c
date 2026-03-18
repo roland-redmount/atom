@@ -17,6 +17,7 @@
 static void * memoryArea;
 static size32 memoryAreaNPages;
 
+
 static void setupMemoryAllocator(void)
 {
 	InitializePaging();
@@ -36,28 +37,28 @@ static void teardownMemoryAllocator(void)
 
 void testAllocate(void)
 {
-	size32 initialTotalFree = GetTotalFree();
+	size32 initialTotalFree = AllocatorNBytesFree();
 	size32 totalFree = initialTotalFree;
 
 	// since the allocated block header is 4 bytes,
 	// 60 bytes is the maximum that fits inside a 64-byte block
 	byte * memory = Allocate(60);
 	ASSERT_UINT32_EQUAL(GetAllocatedSize(memory), 64 - 4)
-	size32 newTotalFree = GetTotalFree();
+	size32 newTotalFree = AllocatorNBytesFree();
 	ASSERT_UINT32_EQUAL(newTotalFree, totalFree - 64)
 	totalFree = newTotalFree;
 
 	// a 61 byte allocation requires using a 128-byte block
 	byte * memory2 = Allocate(61);
 	ASSERT_UINT32_EQUAL(GetAllocatedSize(memory2), 128 - 4)
-	newTotalFree = GetTotalFree();
+	newTotalFree = AllocatorNBytesFree();
 	ASSERT_UINT32_EQUAL(newTotalFree, totalFree - 128)
 	totalFree = newTotalFree;
 
 	// allocate the maximum size block
 	byte * memory3 = Allocate(MAX_ALLOC_SIZE);
 	ASSERT_UINT32_EQUAL(GetAllocatedSize(memory3), MAX_BLOCK_SIZE - 4)
-	newTotalFree = GetTotalFree();
+	newTotalFree = AllocatorNBytesFree();
 	ASSERT_UINT32_EQUAL(newTotalFree, totalFree - MAX_BLOCK_SIZE)
 	totalFree = newTotalFree;
 
@@ -65,7 +66,7 @@ void testAllocate(void)
 	Free(memory2);
 	Free(memory3);
 
-	newTotalFree = GetTotalFree();
+	newTotalFree = AllocatorNBytesFree();
 	ASSERT_UINT32_EQUAL(newTotalFree, initialTotalFree)
 	ASSERT_TRUE(AllocatorIsEmpty())
 }
@@ -79,18 +80,18 @@ void testAllocate2(void)
 	for(index32 i = 0; i < 7; i++) {
 		size32 size = sizes[i];
 		memBlocks[i] = Allocate(size);
+		ASSERT_NOT_NULL(memBlocks[i])
 	}
-	size32 totalFree = GetTotalFree();
+	size32 totalFree = AllocatorNBytesFree();
 
 	for(index32 i = 0; i < 7; i++) {
-		if(memBlocks[i]) {
-			uint32 blockSize = GetAllocatedSize(memBlocks[i]) + 4;
-			Free(memBlocks[i]);
-			size32 newTotalFree = GetTotalFree();
-			ASSERT_UINT32_EQUAL(blockSize, newTotalFree - totalFree)
-			totalFree = newTotalFree;
-		}
+		uint32 blockSize = GetAllocatedSize(memBlocks[i]) + 4;
+		Free(memBlocks[i]);
+		size32 newTotalFree = AllocatorNBytesFree();
+		ASSERT_UINT32_EQUAL(blockSize, newTotalFree - totalFree)
+		totalFree = newTotalFree;
 	}
+
 	ASSERT_TRUE(AllocatorIsEmpty());
 }
 
@@ -101,7 +102,7 @@ void testAllocate2(void)
 void testFuzzAllocate(void)
 {
 	SetRandomSeed(GenerateRandomSeed());
-	size32 initialTotalFree = GetTotalFree();
+	size32 initialTotalFree = AllocatorNBytesFree();
 
 	for(int k = 0; k < N_FUZZ_ROUNDS; k++) {
 		void * memBlocks[N_RANDOM_BLOCKS];
@@ -109,18 +110,18 @@ void testFuzzAllocate(void)
 			size32 size = RandomInteger(1, MAX_ALLOC_SIZE / N_RANDOM_BLOCKS);
 			memBlocks[i] = Allocate(size);
 		}
-		size32 totalFree = GetTotalFree();
+		size32 totalFree = AllocatorNBytesFree();
 
 		for(int i = 0; i < N_RANDOM_BLOCKS; i++) {
 			if(memBlocks[i]) {
 				uint32 blockSize = GetAllocatedSize(memBlocks[i]) + 4;
 				Free(memBlocks[i]);
-				size32 newTotalFree = GetTotalFree();
+				size32 newTotalFree = AllocatorNBytesFree();
 				ASSERT_UINT32_EQUAL(blockSize, newTotalFree - totalFree)
 				totalFree = newTotalFree;
 			}
 		}
-		ASSERT_UINT32_EQUAL(GetTotalFree(), initialTotalFree)
+		ASSERT_UINT32_EQUAL(AllocatorNBytesFree(), initialTotalFree)
 		ASSERT_TRUE(AllocatorIsEmpty())
 	}
 }

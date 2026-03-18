@@ -80,7 +80,6 @@ const index32 coreFormRoleIds[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY] = {
 struct s_Kernel {
 	void * allocatorArea;
 	void * vmStack;
-	size32 initialAllocatorFree;
 
 	// Core predicate forms and roles, defined during bootstrapping
 	Atom corePredicateForms[N_CORE_PREDICATES + 1];
@@ -93,7 +92,7 @@ struct s_Kernel {
 	size32 nCoreNameRefs;
 	size32 nCoreLookupEntries;
 
-} kernel;
+} kernel = {0};
 
 
 // 1 << 20 = 1Mb memory area for allocator
@@ -115,7 +114,6 @@ void SetupMemory(void)
 	kernel.allocatorArea = AllocatePages(ALLOCATOR_N_PAGES);
 	ASSERT(kernel.allocatorArea);
 	CreateAllocator(kernel.allocatorArea, LOG_ALLOCATOR_AREA_SIZE);
-	kernel.initialAllocatorFree = GetTotalFree();
 
 	// setup VM stack area
 	kernel.vmStack = AllocatePages(VM_STACK_N_PAGES);
@@ -125,9 +123,14 @@ void SetupMemory(void)
 void CleanupMemory(void)
 {
 	// check for memory leaks
-	size32 freeSize = GetTotalFree();
-	if(freeSize < kernel.initialAllocatorFree) {
-		PrintF("Failed to free %u bytes of memory\n", kernel.initialAllocatorFree - freeSize);
+	size32 nBytesAllocated = AllocatorNBytesAllocated();
+	if(nBytesAllocated > 0) {
+		PrintF("Failed to free %u bytes of memory\n", nBytesAllocated);
+		PrintFreeLists();
+		DumpAllocatedBlocks();
+#ifdef DEBUG_ALLOCATE
+		DumpAllocateLog();
+#endif
 		ASSERT(false);
 	}
 	ASSERT(AllocatorIsEmpty());
@@ -308,7 +311,6 @@ static void setupCorePredicateForms(void)
 	// We can now use CreatePredicateForm() and AssertFact()
 
 	// Create remaining forms
-
 	Atom roles[CORE_FORMS_MAX_ARITY];	
 	for(index32 i = FORM_TERM_FORM; i <= N_CORE_PREDICATES; i++) {
 		for(index8 j = 0; j < corePredicateArity[i]; j++)
@@ -336,7 +338,7 @@ static void setupCorePredicateForms(void)
 }
 
 
-void TeardownCoreForms(void)
+static void teardownCorePredicateForms(void)
 {
 	for(index32 i = N_CORE_PREDICATES; i > 0; i--) {
 		IFactRelease(kernel.corePredicateForms[i]);
@@ -387,10 +389,11 @@ void KernelShutdown(void)
 		ASSERT(false);
 	}
 
-	TeardownCoreForms();
+	teardownCorePredicateForms();
 
-	ASSERT(TotalIFactCount() == 0);
-	ASSERT(TotalIFactReferenceCount() == 0);
+	ASSERT(TotalIFactCount() == 0)
+	ASSERT(TotalIFactReferenceCount() == 0)
+	// remaining name references are freed by FreeNameStorage() below
 
 	uint32 nLookupEntries = LookupTotalCount();
 	if(nLookupEntries > kernel.nCoreLookupEntries) {
@@ -402,9 +405,7 @@ void KernelShutdown(void)
 	FreeLookup();
 	TeardownRegistry();
 	FreeNameStorage();
-
-	// TODO: we are leaking memory
-//	CleanupMemory();
+	CleanupMemory();
 }
 
 

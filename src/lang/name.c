@@ -104,7 +104,7 @@ Atom CreateName(char const * string, size32 length)
 		ASSERT(addNameRecord(&record));
 	}
 	nameStorage.nReferencesTotal++;
-	return (Atom) {DT_NAME, 0, 0, 0, (Datum) hash};
+	return (Atom) {.type = DT_NAME, .datum = hash};
 }
 
 

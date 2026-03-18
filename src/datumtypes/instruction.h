@@ -86,6 +86,7 @@ typedef union {
 	data64 value;
 } Instruction;
 
+#define	ACCESS_NONE			0		// operand not used by instruction
 #define	ACCESS_PARAMETER	0x1
 #define	ACCESS_REGISTER		0x2
 #define	ACCESS_CONSTANT		0x3

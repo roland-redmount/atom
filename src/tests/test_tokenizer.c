@@ -57,6 +57,7 @@ static void testStringBuffer(void)
 		StringBufferPush(&buffer, exampleString[i]);
 
 	ASSERT_MEMORY_EQUAL(buffer.buffer, exampleString, buffer.stringLength)
+	StringBufferCleanup(&buffer);
 }
 
 

@@ -105,13 +105,11 @@ void TeardownRegistry(void)
 }
 
 
-BTree * RegistryCreateTable(Atom form)
+Service RegistryAddBTreeService(Atom form, BTree * btree)
 {
-	Service service = createBTreeService(form, CreateRelationBTree(FormArity(form)));
-	if(BTreeInsert(registry.tree, &service) == BTREE_INSERTED)
-		return service.service.tree;
-	else
-		return 0;
+	Service service = createBTreeService(form, btree);
+	ASSERT(BTreeInsert(registry.tree, &service) == BTREE_INSERTED)
+	return service;
 }
 
 
@@ -134,6 +132,7 @@ Service RegistryAddBytecodeService(Atom bytecode)
 void RegistryRemoveService(Atom form)
 {
 	Service key = createBTreeService(form, 0);
+	// TODO: verify that relation tables are empty
 	ASSERT(BTreeDelete(registry.tree, &key) == BTREE_DELETED);
 }
 

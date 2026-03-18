@@ -109,14 +109,14 @@ int main(int argc, char * argv[])
 	SetupMemory();
 
 	// datum type functions
-	testGetDatumTypeName();
-	testFindTypeFromString();
+	ExecuteTest(testGetDatumTypeName);
+	ExecuteTest(testFindTypeFromString);
 	// simple datums
-	testInt();
-	testUInt();
-	testFloat();
-	testLetter();
-	testVariable();
+	ExecuteTest(testInt);
+	ExecuteTest(testUInt);
+	ExecuteTest(testFloat);
+	ExecuteTest(testLetter);
+	ExecuteTest(testVariable);
 
 	CleanupMemory();
 

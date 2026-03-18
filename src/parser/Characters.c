@@ -1,14 +1,6 @@
 
-// TODO: functions that depend on ctype.h should go to the platform layer
-#include <ctype.h>
-
 #include "parser/Characters.h"
 
-
-bool IsPrintableChar(char c)
-{
-	return isprint(c);
-}
 
 bool IsWhiteSpace(char c)
 {
@@ -69,27 +61,6 @@ bool IsSeparatorChar(char c)
 	return c == ' ' || c == '|' || c == '&';
 }
 
-bool IsDigitChar(char c)
-{
-	return isdigit(c);
-}
-
-bool IsAlpha(char c)
-{
-	return isalpha(c);
-}
-
-char ToLower(char c)
-{
-	ASSERT(IsAlpha(c));
-	return tolower(c);
-}
-
-char ToUpper(char c)
-{
-	ASSERT(IsAlpha(c));
-	return toupper(c);
-}
 
 bool IsNameString(char const * string, size32 length)
 {
@@ -99,7 +70,6 @@ bool IsNameString(char const * string, size32 length)
 	}
 	return true;
 }
-
 
 /**
  * like strchr() but does not assume a terminating '\0'

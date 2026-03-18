@@ -1,11 +1,19 @@
 
 #include "btree/btree.h"
 #include "memory/paging.h"
-#include "memory/allocator.h"
-
 
 #define BTREE_NODE_SIZE		MEMORY_PAGE_SIZE
 
+#ifdef DEBUG_ALLOCATE
+// When debugging Allocate() we need a different allocator for B-tree memory
+#include <stdlib.h>
+#define btreeAllocate malloc
+#define btreeFree free
+#else
+#include "memory/allocator.h"
+#define btreeAllocate Allocate
+#define btreeFree Free
+#endif
 
 static BTreeNode * createNode(void)
 {
@@ -24,11 +32,11 @@ BTree * BTreeCreate(
 	ItemComparator compareItems,
 	void (*freeItem)(void * item, size32 itemSize))
 {
-	BTree * btree = Allocate(sizeof(BTree));
+	BTree * btree = btreeAllocate(sizeof(BTree));
 	SetMemory(btree, sizeof(BTree), 0);
 
 	btree->itemSize = itemSize;
-	btree->spareItem = Allocate(itemSize);
+	btree->spareItem = btreeAllocate(itemSize);
 	btree->compareItems = compareItems;
 	btree->freeItem = freeItem;
 
@@ -83,11 +91,15 @@ static bool isLeaf(BTreeNode const * node)
 }
 
 
-static void freeNodeRecursive(BTreeNode  * node)
+static void freeNodeRecursive(BTree * btree, BTreeNode * node)
 {
 	if(!isLeaf(node)) {
-		for(index32 i = 0; i <= node->nItems; i++)
-			freeNodeRecursive(node->children[i]);
+		for(index32 i = 0; i <= node->nItems; i++) 
+			freeNodeRecursive(btree, node->children[i]);
+	}
+	if(btree->freeItem) {
+		for(index32 i = 0; i < node->nItems; i++)
+			btree->freeItem(nodeGetItem(btree, node, i), btree->itemSize);
 	}
 	freeNode(node);
 }
@@ -95,9 +107,9 @@ static void freeNodeRecursive(BTreeNode  * node)
 
 void BTreeFree(BTree * btree)
 {
-	freeNodeRecursive(btree->root);
-	Free(btree->spareItem);
-	Free(btree);
+	freeNodeRecursive(btree, btree->root);
+	btreeFree(btree->spareItem);
+	btreeFree(btree);
 }
 
 
@@ -554,7 +566,7 @@ BTreeDeleteResult BTreeDelete(BTree * btree, void * item)
 
 void BTreeClear(BTree * btree)
 {
-	freeNodeRecursive(btree->root);
+	freeNodeRecursive(btree, btree->root);
 	// create new root node
 	btree->root = createNode();
 	btree->nItemsTotal = 0;
@@ -682,7 +694,7 @@ void BTreeIterate(
 
 	iterator->btree = btree;
 	iterator->keyItem = key;
-	iterator->stack = Allocate(sizeof(BTreePosition * ) * btree->height);
+	iterator->stack = btreeAllocate(sizeof(BTreePosition) * btree->height);
 	iteratorSearch(iterator, key, compareItemToKey ? compareItemToKey : btree->compareItems);
 }
 
@@ -708,7 +720,7 @@ void BTreeIteratorNext(BTreeIterator * iterator)
 
 void BTreeIteratorEnd(BTreeIterator * iterator)
 {
-	Free(iterator->stack);
+	btreeFree(iterator->stack);
 	BTreeWriteUnlock(iterator->btree);
 	SetMemory(iterator, sizeof(BTreeIterator), 0);
 }

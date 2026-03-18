@@ -146,10 +146,12 @@ void testExecuteByteCode1(void)
 	// NOTE: arguments must be in canonical order
 	Datum arguments[2] = {CreateInt(3).datum,  CreateInt(0).datum};
 	VMContext * rootContext = VMCreateRootContext(fixture.bytecode, arguments);
-	VMStart(rootContext);
+	VMExecute(rootContext);
 	Datum * results = ContextArguments(rootContext);
 	// results should be 3 * 3 
 	ASSERT_UINT32_EQUAL(results[1], 9);
+
+	FreeContext(rootContext);
 
 	teardownBytecodeFixture(fixture);
 }
@@ -172,7 +174,6 @@ void testExecuteByteCode1(void)
  *   COPY	#2$2 #1					// copy output $2 from context #2
  *   ADD    #1 $2
  *   YIELD
- *   END
  */
 BytecodeFixture setupBytecodeFixture2(void)
 {
@@ -191,8 +192,8 @@ BytecodeFixture setupBytecodeFixture2(void)
 	 */
 	fixture.signature = CStringToPredicate("number @INT quadruple $INT");
 
-	// list of register initial 
-	// TODO: we don't really have an initial value for the context #2 ...
+	// list of register with initial values
+	// Registers storing contexts must be initially set to 0
 	fixture.registers = CreateListFromArray(
 		(Atom []) {CreateInt(0), {.type = DT_CONTEXT, .datum = 0}},
 		2
@@ -239,6 +240,10 @@ BytecodeFixture setupBytecodeFixture2(void)
 	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
+	// YIELD
+	BytecodeBeginInstruction(&bytecodeDraft, OP_YIELD);
+	BytecodeEndInstruction(&bytecodeDraft);
+
 	// finalize bytecode and create atom
 	fixture.bytecode = BytecodeEnd(&bytecodeDraft);
 	teardownBytecodeFixture(childFixture);
@@ -256,9 +261,12 @@ void testExecuteByteCode2(void)
 	// NOTE: arguments must be in canonical order
 	Datum arguments[2] = {CreateInt(3).datum,  CreateInt(0).datum};
 	VMContext * rootContext = VMCreateRootContext(fixture.bytecode, arguments);
-	VMStart(rootContext);
+
+	VMExecute(rootContext);
 	Datum * results = ContextArguments(rootContext);
 	ASSERT_UINT32_EQUAL(results[1], 3 * 4);
+
+	FreeContext(rootContext);
 
 	teardownBytecodeFixture(fixture);
 }
@@ -268,9 +276,9 @@ int main(int argc, char * argv[])
 {
 	KernelInitialize();
 
-	testBytecodeProgram1();
-	testExecuteByteCode1();
-	testExecuteByteCode2();
+	ExecuteTest(testBytecodeProgram1);
+	ExecuteTest(testExecuteByteCode1);
+	ExecuteTest(testExecuteByteCode2);
 
 	TestSummary();
 

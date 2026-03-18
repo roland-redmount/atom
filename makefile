@@ -13,17 +13,17 @@
 # Find what system we're on:
 # the OS environment variable is only defined on Windows
 ifdef OS
-WINDOWS := 1
 PLATFORM := WINDOWS
 else
 	PLATFORM := $(shell uname)
 	ifeq ($(PLATFORM), Darwin)
-		MACOS := 1
+		PLATFORM := MACOS
 	else
-		LINUX := 1
+		PLATFORM := LINUX
 	endif
 endif
 
+$(info PLATFORM = $(PLATFORM))
 
 # source directories
 SRCDIRS := $(patsubst %, src/%,\
@@ -52,18 +52,25 @@ BINDIR := $(BUILDDIR)/bin
 CFLAGS_COMMON := -std=c99 -pedantic-errors\
  -Wall -Wstrict-prototypes -Werror\
  -Wno-error=unused-variable -Wno-error=unused-function -Wno-error=unused-but-set-variable -Wpointer-arith\
- -g -m64 -D$(PLATFORM) -DDEBUG\
- -fprofile-arcs -ftest-coverage
+ -m64 -D$(PLATFORM)
 
-ifdef MACOS
+ifdef DEBUG
+CFLAGS_COMMON := $(CFLAGS_COMMON) -g -DDEBUG -fprofile-arcs -ftest-coverage
+endif
+
+ifdef DEBUG_ALLOCATE
+CFLAGS_COMMON := $(CFLAGS_COMMON) -DDEBUG_ALLOCATE
+endif
+
+ifeq ($(PLATFORM), MACOS)
 CFLAGS := $(CFLAGS_COMMON) -ferror-limit=5 -D_POSIX_C_SOURCE=200809L
 endif
 
-ifdef LINUX
+ifeq ($(PLATFORM), LINUX)
 CFLAGS := $(CFLAGS_COMMON) -fmax-errors=5 -D_POSIX_C_SOURCE=200809L
 endif
 
-ifdef WINDOWS
+ifeq ($(PLATFORM), WINDOWS)
 CFLAGS := $(CFLAGS_COMMON) -D__USE_MINGW_ANSI_STDIO
 endif
 
@@ -83,7 +90,7 @@ INCDIR := -I src $(FREETYPE_INCLUDE_DIRS)
 #  -L third-party/$(GLEW)/lib/Release/x64
 
 # commonly used libraries
-ifdef WINDOWS
+ifeq ($(PLATFORM), WINDOWS)
 LIBS := -lmingw32 -lws2_32
 else
 LIBS := 
@@ -108,7 +115,7 @@ all : all_core tests
 
 .PHONY: make_dirs
 make_dirs :
-ifdef WINDOWS
+ifeq ($(PLATFORM), WINDOWS)
 # make directories, changing unix- to windows-style paths
 # the leading - in -cmd causes make to ignore errors
 	-cmd /C mkdir $(subst /,\,$(OBJDIRS))
@@ -129,12 +136,12 @@ endif
 # but perhaps not always.
 #
 
-ifdef LINUX
+ifeq ($(PLATFORM), LINUX)
 PLATFORM_FILE := platform_linux
-else ifdef WINDOWS
-PLATFORM_FILE := platform_win
-else
+else ifeq ($(PLATFORM), MACOS)
 PLATFORM_FILE := platform_mac
+else
+PLATFORM_FILE := platform_win
 endif
 
 
@@ -214,7 +221,7 @@ tests : $(TESTS_EXE_FILES)
 $(BINDIR)/test_% : $(patsubst %, $(OBJDIR)/%.o, $(ALL_CORE_FILES)) \
  $(OBJDIR)/tests/test_%.o | $(BINDIR)
 	$(CC) $^ -o $@
-ifdef MACOS
+ifeq ($(PLATFORM), MACOS)
 	dsymutil $@
 endif
 
@@ -274,7 +281,7 @@ coverage:
 
 .PHONY: clean
 clean:
-ifdef WINDOWS
+ifeq ($(PLATFORM), WINDOWS)
 	-cmd /C del /Q $(subst /,\,$(BINDIR)//*.exe) >nul 2>&1
 	-cmd /C del /Q /S $(subst /,\,$(DEPDIR)//*.d) >nul 2>&1
 	-cmd /C del /Q /S $(subst /,\,$(OBJDIR)//*.o) >nul 2>&1

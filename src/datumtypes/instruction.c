@@ -97,15 +97,26 @@ static void printOperand(Operand operand, byte accessMode, index8 opIndex, index
 			PrintChar('@');
 		else
 			PrintChar('$');
+		PrintF("%u ", opIndex);
 		break;
+
 	case ACCESS_REGISTER:
 		PrintChar('#');
+		PrintF("%u ", opIndex);
 		break;
+
+	case ACCESS_CONSTANT:
+		// NOTE: we cannot print the constant value
+		// without access to the bytecode
+		PrintF("%u ", opIndex);
+		break;
+
+	case ACCESS_NONE:
+		break;
+
 	default:
-		// no decorator
-		break;
+		ASSERT(false)
 	}	
-	PrintF("%u ", opIndex);
 }
 
 
