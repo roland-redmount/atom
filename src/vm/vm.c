@@ -182,7 +182,7 @@ iterate:
 			writeOperand(context, inst, OPERAND_RIGHT, right);
 			break;
 		
-		case OP_EXEC: {
+		case OP_CTX: {
 			/** 
 			 * EXEC <service> <operand>
 			 * Create a new context and store in the destination operand.
@@ -193,7 +193,7 @@ iterate:
 			break;
 		}
 
-		case OP_RESUME: {
+		case OP_CALL: {
 			// RESUME <context>
 			// Give control to another execution context.
 			// Currently, contexts must be stored in registers.

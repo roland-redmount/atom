@@ -92,12 +92,5 @@ void RegistryRemoveService(Atom form);
  */
 Service RegistryFindService(Atom form);
 
-/**
- * Return the relation table for a form, or 0 if none exists.
- * The returned pointer is guaranteed to be valid for as long as
- * the relation table exists.
- */
-BTree * RegistryLookupTable(Atom form);
-
 
 #endif  // TABLEREGISTRY_H

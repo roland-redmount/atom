@@ -16,21 +16,21 @@
 static void checkTypeSizes(void)
 {
 	// make sure the C compiler used gives the expected type sizes
-	ASSERT(sizeof(uint8) == 1);
-	ASSERT(sizeof(uint16) == 2);
-	ASSERT(sizeof(uint32) == 4);
-	ASSERT(sizeof(uint64) == 8);
+	ASSERT(sizeof(uint8) == 1)
+	ASSERT(sizeof(uint16) == 2)
+	ASSERT(sizeof(uint32) == 4)
+	ASSERT(sizeof(uint64) == 8)
 
-	ASSERT(sizeof(int8) == 1);
-	ASSERT(sizeof(int16) == 2);
-	ASSERT(sizeof(int32) == 4);
-	ASSERT(sizeof(int64) == 8);
+	ASSERT(sizeof(int8) == 1)
+	ASSERT(sizeof(int16) == 2)
+	ASSERT(sizeof(int32) == 4)
+	ASSERT(sizeof(int64) == 8)
 
-	ASSERT(sizeof(void *) == 8);
+	ASSERT(sizeof(void *) == 8)
 
 	// check that packed data structures are padded correctly
-	ASSERT(sizeof(Datum) == 8);
-	ASSERT(sizeof(Atom) == 12);
+	ASSERT(sizeof(Datum) == 8)
+	ASSERT(sizeof(Atom) == 12)
 }
 
 
@@ -112,7 +112,7 @@ void SetupMemory(void)
 
 	// setup allocator
 	kernel.allocatorArea = AllocatePages(ALLOCATOR_N_PAGES);
-	ASSERT(kernel.allocatorArea);
+	ASSERT(kernel.allocatorArea)
 	CreateAllocator(kernel.allocatorArea, LOG_ALLOCATOR_AREA_SIZE);
 
 	// setup VM stack area
@@ -131,9 +131,9 @@ void CleanupMemory(void)
 #ifdef DEBUG_ALLOCATE
 		DumpAllocateLog();
 #endif
-		ASSERT(false);
+		ASSERT(false)
 	}
-	ASSERT(AllocatorIsEmpty());
+	ASSERT(AllocatorIsEmpty())
 	CloseAllocator();
 	FreePages(kernel.allocatorArea, ALLOCATOR_N_PAGES);
 }
@@ -185,8 +185,9 @@ static void setupCoreRoleNames(void)
 
 void bootstrapAssertFact(Atom predicateForm, Atom * actors)
 {
-	BTree * table = RegistryLookupTable(predicateForm);
-	RelationBTreeAddTuple(table, actors);
+	Service service = RegistryFindService(predicateForm);
+	ASSERT(service.type == SERVICE_BTREE)
+	RelationBTreeAddTuple(service.service.tree, actors);
 }
 
 
@@ -330,9 +331,9 @@ static void setupCorePredicateForms(void)
 	}
 
 	// verify hardcoded multiset role index matches computed index
-	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET) == MULTISET_MULTISET_COLUMN);
-	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT) == MULTISET_ELEMENT_COLUMN);
-	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE) == MULTISET_MULTIPLE_COLUMN);
+	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET) == MULTISET_MULTISET_COLUMN)
+	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT) == MULTISET_ELEMENT_COLUMN)
+	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE) == MULTISET_MULTIPLE_COLUMN)
 
 	// NOTE: we now hold 1 reference to each of the core predicate forms.
 }
@@ -369,7 +370,7 @@ void KernelShutdown(void)
 {
 	// check for dangling ifacts
 	uint32 ifactCount = TotalIFactCount();
-	ASSERT(ifactCount >= kernel.nCoreIFacts);
+	ASSERT(ifactCount >= kernel.nCoreIFacts)
 	if(ifactCount > kernel.nCoreIFacts) {
 		PrintF("Failed to remove %u ifacts\n", ifactCount - kernel.nCoreIFacts);
 		DumpIFacts();
@@ -377,13 +378,13 @@ void KernelShutdown(void)
 	}
 	// check for dangling references
 	uint32 nIFactRefs = TotalIFactReferenceCount();
-	ASSERT(nIFactRefs >= kernel.nCoreIFactRefs);
+	ASSERT(nIFactRefs >= kernel.nCoreIFactRefs)
 	if(nIFactRefs > kernel.nCoreIFactRefs) {
 		PrintF("Failed to release %u ifact references\n", nIFactRefs - kernel.nCoreIFactRefs);
 		ASSERT(false);
 	}
 	uint32 nNameRefs = NameTotalReferenceCount();
-	ASSERT(nNameRefs >= kernel.nCoreNameRefs);
+	ASSERT(nNameRefs >= kernel.nCoreNameRefs)
 	if(nNameRefs > kernel.nCoreNameRefs) {
 		PrintF("Failed to release %u name references\n", 	nNameRefs - kernel.nCoreNameRefs);
 		ASSERT(false);
@@ -399,7 +400,7 @@ void KernelShutdown(void)
 	if(nLookupEntries > kernel.nCoreLookupEntries) {
 		PrintF("Failed to remove %u lookup entries\n", 	nLookupEntries - kernel.nCoreLookupEntries);
 		// print methods are not available for LookupDump() at this time
-		ASSERT(false);
+		ASSERT(false)
 	}
 	FreeIFacts();
 	FreeLookup();
@@ -416,12 +417,23 @@ void AssertFact(Atom predicateForm, Atom * actors)
 	// TODO: currently we only support creating predicates
 	ASSERT(IsPredicateForm(predicateForm));
 	// add tuple to relation table
-	BTree * table = RegistryLookupTable(predicateForm);
-	if(!table) {
-		// TODO: need to create table
-		ASSERT(false);
+	Service service = RegistryFindService(predicateForm);
+	BTree * btree;
+	if(service.type == SERVICE_BTREE) {
+		RelationBTreeAddTuple(service.service.tree, actors);
 	}
-	RelationBTreeAddTuple(table, actors);
+	else if(service.type == SERVICE_NONE) {
+		// create new relation table
+		size8 arity = PredicateArity(predicateForm);
+		BTree * btree = CreateRelationBTree(arity);
+		RegistryAddBTreeService(predicateForm, btree);
+		RelationBTreeAddTuple(btree, actors);
+	}
+	else {
+		ASSERT(false)
+	}
+
+
 	
 	LookupAddPredicateRoles(predicateForm, actors);
 }
@@ -429,11 +441,17 @@ void AssertFact(Atom predicateForm, Atom * actors)
 
 void RetractFact(Atom predicateForm, Atom * actors)
 {
-	BTree * table = RegistryLookupTable(predicateForm);
-	ASSERT(table);
+	Service service = RegistryFindService(predicateForm);
+	ASSERT(service.type == SERVICE_BTREE)
+	BTree * btree = service.service.tree;
+	ASSERT(btree)
 	// NOTE: this can cause IFacts to be removed if the tuple
 	// being removed holds the last reference to an IFact
-	RelationBTreeRemoveTuples(table, actors, REMOVE_NORMAL);
+	RelationBTreeRemoveTuples(btree, actors, REMOVE_NORMAL);
+	// remove btree if empty
+	if(RelationBTreeNRows(btree) == 0) {
+		RegistryRemoveService(predicateForm);
+	}
 
 	// remove lookup entries for each role in the predicate form
 	LookupRemovePredicateRoles(predicateForm, actors);
@@ -444,10 +462,9 @@ void RetractAllFacts(Atom predicateForm)
 {
 	// iterate over all facts stored in relation tables
 	// and retract all.
-	BTree * table = RegistryLookupTable(predicateForm);
-	ASSERT(table);
-
-	RelationBTreeRemoveTuples(table, 0, REMOVE_NORMAL);
+	Service service = RegistryFindService(predicateForm);
+	ASSERT(service.type == SERVICE_BTREE)
+	RelationBTreeRemoveTuples(service.service.tree, 0, REMOVE_NORMAL);
 
 	LookupRemoveAllPredicateRoles(predicateForm);
 }
@@ -455,14 +472,14 @@ void RetractAllFacts(Atom predicateForm)
 
 Atom GetCorePredicateForm(index32 formId)
 {
-	ASSERT((formId >= 1) && (formId <= N_CORE_PREDICATES));
+	ASSERT((formId >= 1) && (formId <= N_CORE_PREDICATES))
 	return kernel.corePredicateForms[formId];
 }
 
 
 Atom GetCoreRoleName(index32 roleId)
 {
-	ASSERT((roleId >= 1) && (roleId <= N_CORE_ROLES));
+	ASSERT((roleId >= 1) && (roleId <= N_CORE_ROLES))
 	return kernel.coreRoleNames[roleId];
 }
 
@@ -473,6 +490,6 @@ index8 CorePredicateRoleIndex(index32 formId, index32 roleId)
 		if(coreFormRoleIds[formId][i] == roleId)
 			return kernel.corePredicateRoleIndex[formId][i];
 	}
-	ASSERT(false);
+	ASSERT(false)
 	return 0;
 }

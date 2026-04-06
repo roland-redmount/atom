@@ -35,8 +35,8 @@ typedef byte OpCode;
 #define	OP_ENDIF		0x13
 #define	OP_YES			0x14
 #define	OP_YESIF		0x15
-#define OP_EXEC			0x16
-#define OP_RESUME		0x17
+#define OP_CTX			0x16
+#define OP_CALL			0x17
 #define OP_YIELD		0x18
 #define OP_END			0x19
 

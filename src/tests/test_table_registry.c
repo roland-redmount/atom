@@ -36,7 +36,9 @@ void testAddDropTable(void)
 	ASSERT_UINT32_EQUAL(RegistryNServices(), nTablesInitial + 1)
 	ASSERT_UINT32_EQUAL(RelationBTreeNColumns(createdTable), 4)
 
-	BTree * foundTable = RegistryLookupTable(fixture.signature);
+	Service service = RegistryFindService(fixture.signature);
+	ASSERT(service.type == SERVICE_BTREE)
+	BTree * foundTable = service.service.tree;
 	ASSERT_PTR_NOT_EQUAL(foundTable, 0)
 	ASSERT_PTR_EQUAL(foundTable, createdTable)
 

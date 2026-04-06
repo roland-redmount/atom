@@ -132,7 +132,6 @@ Service RegistryAddBytecodeService(Atom bytecode)
 void RegistryRemoveService(Atom form)
 {
 	Service key = createBTreeService(form, 0);
-	// TODO: verify that relation tables are empty
 	ASSERT(BTreeDelete(registry.tree, &key) == BTREE_DELETED);
 }
 
@@ -145,12 +144,3 @@ Service RegistryFindService(Atom form)
 	return service;
 }
 
-
-BTree * RegistryLookupTable(Atom form)
-{
-	Service service = RegistryFindService(form);
-	if(service.type == SERVICE_BTREE)
-		return service.service.tree;
-	else
-		return 0;
-}

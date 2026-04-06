@@ -209,7 +209,7 @@ $(BINDIR)/opengltest : $(patsubst %, $(OBJDIR)/%.o, \
 #
 
 TESTS_EXE_FILES := $(addprefix $(BINDIR)/,\
- test_btree test_datumtypes test_dispatch test_language test_list test_lookup\
+ test_btree test_datumtypes test_dispatch test_kernel test_language test_list test_lookup\
  test_memory test_multiset test_pair test_parsing test_persistence\
  test_quote test_relation_btree test_string\
  test_table_registry test_tokenizer test_utilities test_vm)
@@ -242,6 +242,7 @@ test:
 	$(BINDIR)/test_datumtypes
 	$(BINDIR)/test_btree
 	$(BINDIR)/test_relation_btree
+	$(BINDIR)/test_kernel
 	$(BINDIR)/test_pair
 	$(BINDIR)/test_list
 	$(BINDIR)/test_multiset

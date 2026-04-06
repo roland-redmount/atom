@@ -159,18 +159,15 @@ void testExecuteByteCode1(void)
 /**
  * Example program 2, calling program 1
  * 
- * To call a bytecode program, we must push its
- * arguments on the stack in canonical order and
- * CALL the bytecode service (number triple).
- * This program tests parameter and a registers as
- * arguments to the called service.
+ * To call a bytecode program, we first create a context
+ * with CTX and then CALL the bytecode service (number triple).
  * 
  * number @INT quadruple $INT
- * #1:INT #2:EXEC
+ * #1:INT #2:CONTEXT
  *   COPY   @1 $2
- *   EXEC   <number triple> #2		// (number @1 triple #1)
+ *   CTX    <number triple> #2		// (number @1 triple #1)
  *   COPY	@1 #2@1					// set @1 in context #2
- *   RESUME #2
+ *   CALL   #2
  *   COPY	#2$2 #1					// copy output $2 from context #2
  *   ADD    #1 $2
  *   YIELD
@@ -209,8 +206,8 @@ BytecodeFixture setupBytecodeFixture2(void)
 	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);	// write to $2
 	BytecodeEndInstruction(&bytecodeDraft);
 
-	// EXEC <number triple> #2
-	BytecodeBeginInstruction(&bytecodeDraft, OP_EXEC);
+	// CTX <number triple> #2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_CTX);
 	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, childFixture.bytecode);
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
@@ -222,8 +219,8 @@ BytecodeFixture setupBytecodeFixture2(void)
 	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 1);
 	BytecodeEndInstruction(&bytecodeDraft);
 
-	// RESUME #2
-	BytecodeBeginInstruction(&bytecodeDraft, OP_RESUME);
+	// CALL #2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_CALL);
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_LEFT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
@@ -270,6 +267,89 @@ void testExecuteByteCode2(void)
 
 	teardownBytecodeFixture(fixture);
 }
+
+
+/**
+ * Example program 3, calling a table service
+ * (foo bar)
+ * 
+ * TODO
+ * 
+ * foo @ID barbar $INT
+ * #1:INT #2:CONTEXT
+ *   CTX    <foo bar> #2			// (number @1 triple #1)
+ *   COPY	@1 #2@1					// set @1 in context #2
+ *   CALL   #2
+ *   COPY	#2$2 $2					// copy output $2 from context #2
+ *   MUL    2 $2
+ *   YIELD
+* ... 
+ */
+BytecodeFixture setupBytecodeFixture3(void)
+{
+	// create relation table
+	/*
+	Atom roles[] = {CreateNameFromCString("foo"), CreateNameFromCString("bar")};
+	Atom form = CreatePredicateForm(roles, 2);
+	BTree * btree = CreateRelationBTree(2);
+	Service fooBarService = RegistryAddBTreeService(form, btree);
+	*/
+	
+	BytecodeFixture fixture;
+
+	fixture.signature = CStringToPredicate("number @INT quadruple $INT");
+
+	// list of register with initial values
+	// Registers storing contexts must be initially set to 0
+	fixture.registers = CreateListFromArray(
+		(Atom []) {CreateInt(0), {.type = DT_CONTEXT, .datum = 0}},
+		2
+	);
+
+	// create bytecode draft
+	BytecodeDraft bytecodeDraft;
+	BytecodeBegin(&bytecodeDraft, fixture.signature, fixture.registers);
+
+	BytecodeBeginInstruction(&bytecodeDraft, OP_CTX);
+	// TODO: BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, );
+	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// COPY	@1 #2@1
+	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 1);
+	BytecodeOperandSetContext(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 1);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// CALL #2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_CALL);
+	BytecodeOperandRegister(&bytecodeDraft, OPERAND_LEFT, 2);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// COPY #2$2 $2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
+	BytecodeOperandSetContext(&bytecodeDraft, OPERAND_LEFT, 2);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 2);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// MUL 2 $2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_MUL);
+	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, CreateInt(2));
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// YIELD
+	BytecodeBeginInstruction(&bytecodeDraft, OP_YIELD);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// finalize bytecode and create atom
+	fixture.bytecode = BytecodeEnd(&bytecodeDraft);
+
+	return fixture;
+}
+
 
 
 int main(int argc, char * argv[])
