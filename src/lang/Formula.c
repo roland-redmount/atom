@@ -39,7 +39,7 @@ Atom CreateFormula(Atom form, Atom actorsList)
 	);
 
 	TypedAtom tuple[3];
-	FormulaSetTuple(tuple, invalidAtom, CreateTypedAtom(DT_ID, form), CreateTypedAtom(DT_ID, actorsList));
+	FormulaSetTuple(tuple, invalidAtom, CreateTypedAtom(AT_ID, form), CreateTypedAtom(AT_ID, actorsList));
 	IFactAddClause(&draft, tuple);
 	IFactEndConjunction(&draft);	
 
@@ -105,7 +105,7 @@ index32 FormulaRoleIndex(Atom formula, Atom name)
 
 /**
  * Convenience method to create a predicate from two arrays
- * of role names (DT_NAME) and actors, both of the same length arity.
+ * of role names (AT_NAME) and actors, both of the same length arity.
  */
 Atom CreatePredicate(Atom const * roles, TypedAtom * actors, size8 arity)
 {
@@ -115,7 +115,7 @@ Atom CreatePredicate(Atom const * roles, TypedAtom * actors, size8 arity)
 	// need to convert to atoms for MultisetIterationOrder()
 	TypedAtom roleAtoms[arity];
 	for(index8 i = 0; i < arity; i++)
-		roleAtoms[i] = (TypedAtom) {.type = DT_NAME, .atom = roles[i]};
+		roleAtoms[i] = (TypedAtom) {.type = AT_NAME, .atom = roles[i]};
 	MultisetIterationOrder(predicateForm, roleAtoms, roleOrder, arity);
 
 	TypedAtom actorsOrdered[arity];
@@ -175,7 +175,7 @@ Atom CreateClause(Atom const * terms, size8 nTerms)
 	// need term forms as typed atoms for MultisetIterationOrder()
 	TypedAtom termFormAtoms[nTerms];
 	for(index8 i = 0; i < nTerms; i++)
-		termFormAtoms[i] = CreateTypedAtom(DT_ID, termForms[i]);
+		termFormAtoms[i] = CreateTypedAtom(AT_ID, termForms[i]);
 	// find ordering
 	MultisetIterationOrder(clauseForm, termFormAtoms, termOrder, nTerms);
 	// reorder actors
@@ -200,7 +200,7 @@ Atom FormulaGetForm(Atom formula)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_FORMULA_FORM_ACTORS);
 	TypedAtom query[3];
-	FormulaSetTuple(query, CreateTypedAtom(DT_ID, formula), anonymousVariable, anonymousVariable);
+	FormulaSetTuple(query, CreateTypedAtom(AT_ID, formula), anonymousVariable, anonymousVariable);
 	TypedAtom result[3];
 	RelationBTreeQuerySingle(tree, query, result);
 	return result[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM)].atom;
@@ -211,7 +211,7 @@ Atom FormulaGetActors(Atom formula)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_FORMULA_FORM_ACTORS);
 	TypedAtom query[3];
-	FormulaSetTuple(query, CreateTypedAtom(DT_ID, formula), anonymousVariable, anonymousVariable);
+	FormulaSetTuple(query, CreateTypedAtom(AT_ID, formula), anonymousVariable, anonymousVariable);
 	TypedAtom result[3];
 	RelationBTreeQuerySingle(tree, query, result);
 	return result[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS)].atom;

@@ -1,5 +1,5 @@
 /**
- * DT_CONTEXT reprents a bytecode execution context (a continuation).
+ * AT_CONTEXT reprents a bytecode execution context (a continuation).
  * No two execution contexts are identical, so we can compare pointers directly
  * (the address is a unique identifier for a context).
  */

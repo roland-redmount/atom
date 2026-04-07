@@ -38,7 +38,7 @@ SubstitutionList CreateSubstFromVars(Atom list)
 	for(index8 i = 0; i < nElements; i++) {
 		TypedAtom a = ListGetElement(list, i+1);
 		PrintF("atom %u ", i);
-		if(a.type == DT_VARIABLE)
+		if(a.type == AT_VARIABLE)
 		{
 			// check if variable was already found
 			bool newVariable = true;

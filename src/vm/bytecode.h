@@ -2,7 +2,7 @@
  * A bytecode program consists of a signature, registers,
  * constants, and an instruction list (program).
  * 
- * TODO: The signature is currently a formula where actors are DT_PARAMETER
+ * TODO: The signature is currently a formula where actors are AT_PARAMETER
  * atoms storing a atom type. This should be refactored such that the bytecode
  * block only stores the array of parameters (in canonical order) while Service
  * stores the signature. (A bytecode block could then be associated with more than one
@@ -69,7 +69,7 @@ void BytecodeEndInstruction(BytecodeDraft * draft);
 
 
 /**
- * Finalize bytecode and create a DT_ID atom. This creates the relations
+ * Finalize bytecode and create a AT_ID atom. This creates the relations
  * 
  * (bytecode @b signature f) where f is a formula
  * 
@@ -101,7 +101,7 @@ Atom BytecodeGetProgram(Atom bytecode);
 // Atom BytecodeGetSignature(Atom bytecode);
 
 /**
- * Read a instruction (DT_INSTRUCTION) from a bytecode block.
+ * Read a instruction (AT_INSTRUCTION) from a bytecode block.
  */
 Atom BytecodeGetInstruction(Atom bytecode, index32 pc);
 

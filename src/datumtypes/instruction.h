@@ -1,5 +1,5 @@
 /**
- * A bytecode instruction, DT_INSTRUCTION.
+ * A bytecode instruction, AT_INSTRUCTION.
  */
 
 #ifndef INSTRUCTION_H

@@ -126,7 +126,7 @@ void LookupAddPredicateRoles(Atom predicateForm, TypedAtom * actors)
 	while(MultisetIteratorHasNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
 		for(index8 i = 0; i < em.multiple; i++) {
-			if(actors[index].type == DT_ID)
+			if(actors[index].type == AT_ID)
 				AtomAddRole(actors[index].atom, predicateForm, em.element.atom);
 			index++;
 		}
@@ -179,7 +179,7 @@ void LookupRemovePredicateRoles(Atom predicateForm, TypedAtom * actors)
 	while(MultisetIteratorHasNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
 		for(index8 i = 0; i < em.multiple; i++) {
-			if(actors[index].type == DT_ID)
+			if(actors[index].type == AT_ID)
 				AtomRemoveRole(actors[index].atom, predicateForm, em.element.atom);
 			index++;
 		}

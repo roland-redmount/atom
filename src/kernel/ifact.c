@@ -163,7 +163,7 @@ static void createQueryTuple(TypedAtom * tuple, Atom ifact, size8 nColumns, inde
 		if(j == idColumn) {
 			// query with the ATOM_PROTECTED flag set
 			// to indicate a defining fact should be removed
-			tuple[j] = (TypedAtom) {.type = DT_ID, .flags = ATOM_PROTECTED, .atom = ifact};
+			tuple[j] = (TypedAtom) {.type = AT_ID, .flags = ATOM_PROTECTED, .atom = ifact};
 		}
 		else
 			tuple[j] = anonymousVariable;
@@ -306,7 +306,7 @@ static void sortIFactDraft(IFactDraft * draft)
  */
 static void createFacts(IFactDraft * draft, void (* assertFact)(Atom predicateForm, TypedAtom * actors))
 {
-	TypedAtom ifactAtom = CreateTypedAtom(DT_ID, draft->header.hash);
+	TypedAtom ifactAtom = CreateTypedAtom(AT_ID, draft->header.hash);
 	// NOTE: this should be handled by RelationBTree internally?
 	ifactAtom.flags |= ATOM_PROTECTED;
 
@@ -380,7 +380,7 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 		// create query tuple
 		TypedAtom queryTuple[conjunction->nColumns];
 		// the identified atom must be identical in current and existing
-		TypedAtom idAtom = CreateTypedAtom(DT_ID, draft->header.hash);
+		TypedAtom idAtom = CreateTypedAtom(AT_ID, draft->header.hash);
 		for(index8 j = 0; j < conjunction->nColumns; j++) {
 			if(j == conjunction->idColumn)
 				queryTuple[j] = idAtom;
@@ -477,10 +477,10 @@ Atom IFactEnd(IFactDraft * draft)
  * analogous to such a prefex list. So it seems this should not be allowed.
  *
  * Hence, whenever the user attempts to either remove or add a tuple containing a
- * DT_ID from a table, we must check:
+ * AT_ID from a table, we must check:
  * 
- *   IF the ifact corresponding to the DT_ID refers to the table as a conjuction
- *   AND the DT_ID is in the defining position
+ *   IF the ifact corresponding to the AT_ID refers to the table as a conjuction
+ *   AND the AT_ID is in the defining position
  *   THEN the tuple cannot be added/removed
  * 
  * Note that adding a tuple like (list @animals element 12 position @cat) is valid
@@ -498,7 +498,7 @@ bool IFactCheckTuple(BTree const * tree, TypedAtom const * tuple)
 {
 	size8 nColumns = RelationBTreeNColumns(tree);
 	for(index8 i = 0; i < nColumns; i++) {
-		if(tuple[i].type != DT_ID)
+		if(tuple[i].type != AT_ID)
 			continue;
 		if(tuple[i].flags & ATOM_PROTECTED) // skip check for atoms being identified
 			continue;

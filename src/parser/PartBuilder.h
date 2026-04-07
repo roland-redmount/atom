@@ -23,7 +23,7 @@ bool PartBuilderIsEmpty(PartBuilder const * builder);
 bool PartBuilderComplete(PartBuilder const * builder);
 
 /**
- * Return the role name (DT_NAME)
+ * Return the role name (AT_NAME)
  */
 Atom PartBuilderGetRole(PartBuilder const * builder);
 

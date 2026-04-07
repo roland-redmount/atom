@@ -19,7 +19,7 @@ typedef struct s_ElementMultiple {
 typedef ElementMultiple (*MultisetElementGenerator)(index32 index, void const * data);
 
 /**
- * Create an immutable multiset (DT_ID) using an element generator function
+ * Create an immutable multiset (AT_ID) using an element generator function
  */
 Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size32 nUniqueElements);
 

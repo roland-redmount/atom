@@ -13,21 +13,21 @@
  * Atom type IDs. Zero is invalid / none
  */
 
-#define DT_NONE					0
-#define DT_NAME					1		// a name (symbol) identified by a hash
-#define DT_ID					2		// atom identified by an ifact
+#define AT_NONE					0
+#define AT_NAME					1		// a name (symbol) identified by a hash
+#define AT_ID					2		// atom identified by an ifact
 
-#define DT_UINT					3		// unsigned integer
-#define DT_INT					4		// signed integer
-#define DT_FLOAT32				5		// double-precision floating point number
-#define DT_FLOAT64				6		// double-precision floating point number
+#define AT_UINT					3		// unsigned integer
+#define AT_INT					4		// signed integer
+#define AT_FLOAT32				5		// double-precision floating point number
+#define AT_FLOAT64				6		// double-precision floating point number
 
-#define DT_LETTER				7		// a letter of the English alphabet
-#define DT_VARIABLE             8		// variable with a letter identifier
+#define AT_LETTER				7		// a letter of the English alphabet
+#define AT_VARIABLE             8		// variable with a letter identifier
 
-#define DT_INSTRUCTION			9		// a bytecode instruction
-#define DT_PARAMETER			10		// a parameter in a bytecode service
-#define DT_CONTEXT				11		// a VM execution context
+#define AT_INSTRUCTION			9		// a bytecode instruction
+#define AT_PARAMETER			10		// a parameter in a bytecode service
+#define AT_CONTEXT				11		// a VM execution context
 
 #define N_ATOMTYPES			11
 

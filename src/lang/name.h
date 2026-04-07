@@ -1,5 +1,5 @@
 /**
- * The atom type DT_NAME
+ * The atom type AT_NAME
  * 
  * This should be a list (name n -> list n) but for bootstrapping purposes,
  * we implement this with a btree of C strings. We should implement services

@@ -14,8 +14,8 @@
  * (letter code) relation since any table query would require a variable,
  * which in turn requires a (letter code) lookup.
  * 
- * In principle, letters should be a DT_ID identified by the letter code,
- * but for bootstrapping purposes we're now using a separate atom type DT_LETTER,
+ * In principle, letters should be a AT_ID identified by the letter code,
+ * but for bootstrapping purposes we're now using a separate atom type AT_LETTER,
  * to avoid having to generate hash values for each letter. 
  * 
  * TODO: queries to the (letter code) relation must dispatch to these functions
@@ -43,7 +43,7 @@ static char letterCodeToChar(uint8 letterCode, uint8 letterCase)
 
 TypedAtom GetAlphabetLetter(char c)
 {
-	return (TypedAtom) {DT_LETTER, 0, 0, 0, charToLetterCode(c)};
+	return (TypedAtom) {AT_LETTER, 0, 0, 0, charToLetterCode(c)};
 }
 
 

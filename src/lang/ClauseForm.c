@@ -15,7 +15,7 @@ Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
 	// here we need an array of atoms, since they will be stored in a multiset
 	TypedAtom uniqueTermForms[nTermForms];
 	for(index8 i = 0; i < nTermForms; i++)
-		uniqueTermForms[i] = (TypedAtom) {.type = DT_ID, .atom = termForms[i]};
+		uniqueTermForms[i] = (TypedAtom) {.type = AT_ID, .atom = termForms[i]};
 	uint32 multiplicities[nTermForms];
 	size8 nUniqueTermForms = ReduceTypedAtomsArray(uniqueTermForms, multiplicities, nTermForms);
 

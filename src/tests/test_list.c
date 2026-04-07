@@ -79,13 +79,13 @@ static void testCreateList(void)
 	index8 elementRoleIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT);
 
 	// attempt to add a tuple (list @string position 7 element 'Z') will violate the ifact
-	tuple[listRoleIndex] = CreateTypedAtom(DT_ID, list);
+	tuple[listRoleIndex] = CreateTypedAtom(AT_ID, list);
 	tuple[positionRoleIndex] = CreateUInt(7);
 	tuple[elementRoleIndex] = GetAlphabetLetter('Z');
 	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(listPositionElement, tuple), TUPLE_PROTECTED)
 
 	// attempt to remove any tuple (list @string position _ element _) will violate the ifact
-	tuple[listRoleIndex] = CreateTypedAtom(DT_ID, list);
+	tuple[listRoleIndex] = CreateTypedAtom(AT_ID, list);
 	tuple[positionRoleIndex] = CreateUInt(3);
 	tuple[elementRoleIndex] = GetAlphabetLetter('Y');
 	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuples(listPositionElement, tuple, REMOVE_NORMAL), 0)
@@ -124,7 +124,7 @@ static void testNestedList(void)
 
 	TypedAtom nestedListAtoms[] = {
 		GetAlphabetLetter('A'),
-		CreateTypedAtom(DT_ID, fixture.list)
+		CreateTypedAtom(AT_ID, fixture.list)
 	};
 
 	Atom nestedList = CreateListFromArray(nestedListAtoms, NESTED_LIST_N_ELEMENTS);
@@ -134,7 +134,7 @@ static void testNestedList(void)
 		ASSERT_TRUE(SameTypedAtoms(ListGetElement(nestedList, i+1), nestedListAtoms[i]))
 
 	// test ListGetPosition
-	index32 position = ListGetPosition(nestedList, CreateTypedAtom(DT_ID, fixture.list));
+	index32 position = ListGetPosition(nestedList, CreateTypedAtom(AT_ID, fixture.list));
 	ASSERT_UINT32_EQUAL(position, 2)
 
 	IFactRelease(nestedList);

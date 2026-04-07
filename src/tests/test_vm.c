@@ -193,7 +193,7 @@ BytecodeFixture setupBytecodeFixture2(void)
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
 	fixture.registers = CreateListFromArray(
-		(TypedAtom []) {CreateInt(0), {.type = DT_CONTEXT, .atom = 0}},
+		(TypedAtom []) {CreateInt(0), {.type = AT_CONTEXT, .atom = 0}},
 		2
 	);
 
@@ -210,7 +210,7 @@ BytecodeFixture setupBytecodeFixture2(void)
 	// CTX <number triple> #2
 	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
 	// NOTE: do constants really need to be typed?
-	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, CreateTypedAtom(DT_ID, childFixture.bytecode));
+	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, CreateTypedAtom(AT_ID, childFixture.bytecode));
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
@@ -288,14 +288,14 @@ Service setupTableService(void)
 
 	// Assert facts
 	TypedAtom actors1[2] = {
-		CreateTypedAtom(DT_ID, CreateStringFromCString("baz")),
+		CreateTypedAtom(AT_ID, CreateStringFromCString("baz")),
 		CreateInt(42)
 	};
 	AssertFact(form, actors1);
 	ReleaseTypedAtom(actors1[0]);
 
 	TypedAtom actors2[2]= {
-		CreateTypedAtom(DT_ID, CreateStringFromCString("zzz")),
+		CreateTypedAtom(AT_ID, CreateStringFromCString("zzz")),
 		CreateInt(-1)
 	};
 	AssertFact(form, actors2);
@@ -340,7 +340,7 @@ BytecodeFixture setupBytecodeFixture3(void)
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
 	fixture.registers = CreateListFromArray(
-		(TypedAtom []) {CreateInt(0), {.type = DT_CONTEXT, .atom = 0}},
+		(TypedAtom []) {CreateInt(0), {.type = AT_CONTEXT, .atom = 0}},
 		2
 	);
 

@@ -78,7 +78,7 @@ void testLookupIterator(void)
 
 void testRemoveAllPredicateRoles(void)
 {
-	// create some DT_ID atoms
+	// create some AT_ID atoms
 	Atom foo = CreateStringFromCString("foo");
 	Atom bar = CreateStringFromCString("bar");
 	Atom baz = CreateStringFromCString("baz");
@@ -90,17 +90,17 @@ void testRemoveAllPredicateRoles(void)
 	BTree * tree = CreateRelationBTree(2);
 	RegistryAddBTreeService(form, tree);
 
-	TypedAtom actors1[2] = {CreateTypedAtom(DT_ID, foo), CreateTypedAtom(DT_ID, bar)};
+	TypedAtom actors1[2] = {CreateTypedAtom(AT_ID, foo), CreateTypedAtom(AT_ID, bar)};
 	AssertFact(form, actors1);
 	ASSERT_TRUE(AtomHasRole(foo, form, foobar))
 	ASSERT_TRUE(AtomHasRole(bar, form, barf))
 
-	TypedAtom actors2[2] = {CreateTypedAtom(DT_ID, bar), CreateTypedAtom(DT_ID, baz)};
+	TypedAtom actors2[2] = {CreateTypedAtom(AT_ID, bar), CreateTypedAtom(AT_ID, baz)};
 	AssertFact(form, actors2);
 	ASSERT_TRUE(AtomHasRole(bar, form, foobar))
 	ASSERT_TRUE(AtomHasRole(baz, form, barf))
 
-	TypedAtom actors3[2] = {CreateTypedAtom(DT_ID, foo), CreateTypedAtom(DT_ID, foo)};
+	TypedAtom actors3[2] = {CreateTypedAtom(AT_ID, foo), CreateTypedAtom(AT_ID, foo)};
 	AssertFact(form, actors3);
 	ASSERT_TRUE(AtomHasRole(foo, form, barf))
 

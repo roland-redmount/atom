@@ -31,7 +31,7 @@ void KernelShutdown(void);
 /**
  * High level method to assert a fact.
  * Adds a tuple to the corresponding relation table,
- * and adds an entry to the lookup table for each DT_ID actor.
+ * and adds an entry to the lookup table for each AT_ID actor.
  */
 void AssertFact(Atom form, TypedAtom * actors);
 
@@ -113,13 +113,13 @@ void RetractFact(Atom form, TypedAtom * actors);
 
 /**
  * Lookup one of the "primitive" forms for core tables
- * Return a DT_ID.
+ * Return a AT_ID.
  */
 Atom GetCorePredicateForm(index32 formId);
 
 
 /**
- * Lookup a core role name. Returns a DT_NAME
+ * Lookup a core role name. Returns a AT_NAME
  */
 Atom GetCoreRoleName(index32 roleId);
 

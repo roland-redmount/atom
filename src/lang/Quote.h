@@ -6,7 +6,7 @@
  * 
  * NOTE: For now, this mechanism is not used. We are so far only
  * using quoting for variables, and we currently encode quoting
- * within the DT_VARIABLE atom instead. * 
+ * within the AT_VARIABLE atom instead. * 
  */
 
 #ifndef QUOTE_H

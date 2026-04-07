@@ -89,7 +89,7 @@ void FreeChildContexts(BytecodeContext * context)
 	ListIterate(registersList, &iterator);
 	while(ListIteratorHasNext(&iterator)) {
 		TypedAtom _register = ListIteratorGetElement(&iterator);
-		if(_register.type == DT_CONTEXT && *rp)
+		if(_register.type == AT_CONTEXT && *rp)
 			FreeContext((BytecodeContext *) *rp);
 		ListIteratorNext(&iterator);
 		*rp++ = 0;

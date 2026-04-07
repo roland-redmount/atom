@@ -16,7 +16,7 @@ Atom CreateFullForm(Atom const * clauseForms, size8 nClauseForms, index8 const *
 	TypedAtom uniqueClauseForms[nClauseForms];
 	for(index8 i = 0; i < nClauseForms; i++) {
 		index8 j = order ? order[i] : i;
-		uniqueClauseForms[i] = CreateTypedAtom(DT_ID, clauseForms[j]);
+		uniqueClauseForms[i] = CreateTypedAtom(AT_ID, clauseForms[j]);
 	}
 	// reduce to unique roles
 	uint32 multiplicities[nClauseForms];
@@ -24,7 +24,7 @@ Atom CreateFullForm(Atom const * clauseForms, size8 nClauseForms, index8 const *
 
 	// create a multiset of clause forms
 	Atom conjunctionForm = CreateMultisetFromArrays(uniqueClauseForms, multiplicities, nUniqueClauseForms);
-	TypedAtom conjunctionFormAtom = CreateTypedAtom(DT_ID, conjunctionForm);
+	TypedAtom conjunctionFormAtom = CreateTypedAtom(AT_ID, conjunctionForm);
 	AssertFact(GetCorePredicateForm(FORM_CONJUNCTION_FORM), &conjunctionFormAtom);
 	return conjunctionForm;
 }

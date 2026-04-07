@@ -1,5 +1,5 @@
 /**
- * A DT_PARAMETER aton is used in service signatures to mark a position
+ * A AT_PARAMETER aton is used in service signatures to mark a position
  * in the actor list where a parameter is a expected.
  * A parameter is either "input" or "output" and may optionally have a atom type.
  */

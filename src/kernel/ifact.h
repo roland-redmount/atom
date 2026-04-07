@@ -103,9 +103,9 @@ size32 IFactEndConjunction(IFactDraft * draft);
 size32 IFactDraftCurrentNClauses(IFactDraft * draft);
 
 /**
- * Finish the IFact currently being created. Computes the IFact DT_ID atom's
+ * Finish the IFact currently being created. Computes the IFact AT_ID atom's
  * atom as the hash of the identifying facts, creates the facts and
- * returns the DT_ID atom.
+ * returns the AT_ID atom.
  */
 Atom IFactEnd(IFactDraft * draft);
 

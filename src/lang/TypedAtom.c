@@ -42,18 +42,18 @@ TypedAtom CreateTypedAtom(byte type, Atom atom)
 
 void AcquireTypedAtom(TypedAtom typedAtom)
 {
-	if(typedAtom.type == DT_ID)
+	if(typedAtom.type == AT_ID)
 		IFactAcquire(typedAtom.atom);
-	else if(typedAtom.type == DT_NAME)
+	else if(typedAtom.type == AT_NAME)
 		NameAcquire(typedAtom.atom);
 }
 
 
 void ReleaseTypedAtom(TypedAtom typeAtom)
 {
-	if(typeAtom.type == DT_ID)
+	if(typeAtom.type == AT_ID)
 		IFactRelease(typeAtom.atom);
-	else if(typeAtom.type == DT_NAME)
+	else if(typeAtom.type == AT_NAME)
 		NameRelease(typeAtom.atom);
 }
 
@@ -137,48 +137,48 @@ void PrintTypedAtom(TypedAtom typedAtom)
 {
 	// PrintChar('[');
 	switch(typedAtom.type) {
-	case DT_NONE:
+	case AT_NONE:
 		PrintCString("NONE");
 		break;
 
-	case DT_UINT:
+	case AT_UINT:
 		PrintUInt(typedAtom);
 		break;
 
-	case DT_INT:
+	case AT_INT:
 		PrintInt(typedAtom);
 		break;
 
-	case DT_FLOAT32:
+	case AT_FLOAT32:
 		PrintFloat32(typedAtom);
 		break;
 
-	case DT_FLOAT64:
+	case AT_FLOAT64:
 		PrintFloat64(typedAtom);
 		break;
 
-	case DT_LETTER:
+	case AT_LETTER:
 		PrintLetter(typedAtom, LETTER_UPPERCASE);
 		break;
 
-	case DT_VARIABLE:
+	case AT_VARIABLE:
 		PrintVariable(typedAtom);
 		break;
 
-	case DT_NAME:
+	case AT_NAME:
 		PrintName(typedAtom.atom);
 		break;
 
-	case DT_INSTRUCTION:
+	case AT_INSTRUCTION:
 		PrintInstruction(typedAtom);
 		break;
 
-	case DT_PARAMETER:
+	case AT_PARAMETER:
 		PrintParameter(typedAtom);
 		break;
 
-	case DT_ID:
-		// for DT_ID, string representation depends on the type predicate.
+	case AT_ID:
+		// for AT_ID, string representation depends on the type predicate.
 		// a given atom may satisfy multiple type predicates and therefore have multiple
 		// string representations, so there is no straightforward switch/case.
 		// Here we somewhat arbitrarily try the "most specific" type predicate first

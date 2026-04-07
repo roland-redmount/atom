@@ -10,21 +10,21 @@
 
 void testGetDatumTypeName(void)
 {
-	ASSERT_STRING_EQUAL(GetAtomTypeName(DT_UINT), "UINT")
-	ASSERT_STRING_EQUAL(GetAtomTypeName(DT_INT), "INT")
-	ASSERT_STRING_EQUAL(GetAtomTypeName(DT_FLOAT32), "FLOAT32")
-	ASSERT_STRING_EQUAL(GetAtomTypeName(DT_FLOAT64), "FLOAT64")
-	ASSERT_STRING_EQUAL(GetAtomTypeName(DT_LETTER), "LETTER")
-	ASSERT_STRING_EQUAL(GetAtomTypeName(DT_VARIABLE), "VARIABLE")
-	ASSERT_STRING_EQUAL(GetAtomTypeName(DT_NAME), "NAME")
-	ASSERT_STRING_EQUAL(GetAtomTypeName(DT_ID), "ID")
-	ASSERT_STRING_EQUAL(GetAtomTypeName(DT_INSTRUCTION), "INSTRUCTION")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_UINT), "UINT")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_INT), "INT")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_FLOAT32), "FLOAT32")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_FLOAT64), "FLOAT64")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_LETTER), "LETTER")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_VARIABLE), "VARIABLE")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_NAME), "NAME")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_ID), "ID")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_INSTRUCTION), "INSTRUCTION")
 }
 
 
 void testFindTypeFromString(void)
 {
-	ASSERT_UINT32_EQUAL(AtomTypeFromString("UINT", 4), DT_UINT)
+	ASSERT_UINT32_EQUAL(AtomTypeFromString("UINT", 4), AT_UINT)
 }
 
 
@@ -87,7 +87,7 @@ static void testLetter(void)
 	index8 i = 1;
 	for(char c = 'A'; c <= 'Z'; c++) {
 		TypedAtom letter = GetAlphabetLetter(c);
-		ASSERT_UINT32_EQUAL(letter.type, DT_LETTER)
+		ASSERT_UINT32_EQUAL(letter.type, AT_LETTER)
 		ASSERT_DATA64_EQUAL(letter.atom, i)
 		i++;
 	}
@@ -95,7 +95,7 @@ static void testLetter(void)
 	i = 1;
 	for(char c = 'a'; c <= 'z'; c++) {
 		TypedAtom letter = GetAlphabetLetter(c);
-		ASSERT_UINT32_EQUAL(letter.type, DT_LETTER)
+		ASSERT_UINT32_EQUAL(letter.type, AT_LETTER)
 		ASSERT_DATA64_EQUAL(letter.atom, i)
 		i++;
 	}

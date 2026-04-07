@@ -65,7 +65,7 @@ bool TupleMatch(TypedAtom const * tuple, TypedAtom const * queryTuple, size8 nAt
 {
 	for(index8 i = 0; i < nAtoms; i++) {
 		TypedAtom queryAtom = queryTuple[i];
-		if(queryAtom.type == DT_VARIABLE) {
+		if(queryAtom.type == AT_VARIABLE) {
 			if(VariableIsQuoted(queryAtom)) {
 				// If the query variable is quoted, we remove the (outermost) quote.
 				// This allows querying for a variable _x stored in a relation (foo)

@@ -70,7 +70,7 @@ static void testPredicateForm(void)
 	for(index32 i = 0; i < EXAMPLE_PREDICATE_N_ROLES; i++) {
 		ASSERT_TRUE(MultisetIteratorHasNext(&roleIterator))
 		em = MultisetIteratorGetElement(&roleIterator);
-		ASSERT_UINT32_EQUAL(em.element.type, DT_NAME)
+		ASSERT_UINT32_EQUAL(em.element.type, AT_NAME)
 		MultisetIteratorNext(&roleIterator);
 	}
 	ASSERT_FALSE(MultisetIteratorHasNext(&roleIterator))
@@ -160,7 +160,7 @@ static void testClauseForm(void)
 	for(index8 i = 0; i < EXAMPLE_CLAUSE_N_UNIQUE_TERMS; i++) {
 		ASSERT_TRUE(MultisetIteratorHasNext(&termFormIterator))
 		ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
-		ASSERT_UINT32_EQUAL(em.element.type, DT_ID)
+		ASSERT_UINT32_EQUAL(em.element.type, AT_ID)
 		// order of term forms is arbitrary
 		if(em.element.atom == termFormsFixture.termForm)
 			ASSERT_UINT32_EQUAL(em.multiple, 2)

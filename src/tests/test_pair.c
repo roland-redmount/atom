@@ -35,10 +35,10 @@ static void testPair(void)
 	IFactRelease(pair2);
 	
 	// a pair containing another pair
-	Atom pair3 = CreatePair(CreateTypedAtom(DT_ID, pair1), right);
+	Atom pair3 = CreatePair(CreateTypedAtom(AT_ID, pair1), right);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(pairTable), initialNRows + 2)
 
-	ASSERT_TRUE(SameTypedAtoms(PairGetElement(pair3, PAIR_LEFT), CreateTypedAtom(DT_ID, pair1)))
+	ASSERT_TRUE(SameTypedAtoms(PairGetElement(pair3, PAIR_LEFT), CreateTypedAtom(AT_ID, pair1)))
 	ASSERT_TRUE(SameTypedAtoms(PairGetElement(pair3, PAIR_RIGHT), right))
 	
 	IFactRelease(pair3);

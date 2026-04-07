@@ -21,7 +21,7 @@ static void setBytecodeSignature(IFactDraft * draft, Atom signature)
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_SIGNATURE), bytecodeIndex);
 	TypedAtom tuple[2];
-	tuple[signatureIndex] = CreateTypedAtom(DT_ID, signature);
+	tuple[signatureIndex] = CreateTypedAtom(AT_ID, signature);
 	IFactAddClause(draft, tuple);
 	IFactEndConjunction(draft);
 }
@@ -34,7 +34,7 @@ static void setBytecodeProgram(IFactDraft * draft, Atom program)
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_PROGRAM), bytecodeIndex);
 	TypedAtom tuple[2];
-	tuple[programIndex] = CreateTypedAtom(DT_ID, program);
+	tuple[programIndex] = CreateTypedAtom(AT_ID, program);
 	IFactAddClause(draft, tuple);
 	IFactEndConjunction(draft);
 }
@@ -48,7 +48,7 @@ static void setBytecodeRegisters(IFactDraft * draft, Atom registersList)
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_REGISTERS), bytecodeIndex);
 	TypedAtom tuple[2];
-	tuple[registersIndex] = CreateTypedAtom(DT_ID, registersList);
+	tuple[registersIndex] = CreateTypedAtom(AT_ID, registersList);
 	IFactAddClause(draft, tuple);
 	IFactEndConjunction(draft);
 }
@@ -61,7 +61,7 @@ static void setBytecodeConstants(IFactDraft * draft, Atom constantsList)
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_CONSTANTS), bytecodeIndex);
 	TypedAtom tuple[2];
-	tuple[constantsIndex] = CreateTypedAtom(DT_ID, constantsList);
+	tuple[constantsIndex] = CreateTypedAtom(AT_ID, constantsList);
 	IFactAddClause(draft, tuple);
 	IFactEndConjunction(draft);
 }
@@ -175,7 +175,7 @@ Atom BytecodeGetProgram(Atom bytecode)
 	index8 programIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
 
 	TypedAtom query[2];
-	query[bytecodeIndex] = CreateTypedAtom(DT_ID, bytecode);
+	query[bytecodeIndex] = CreateTypedAtom(AT_ID, bytecode);
 	query[programIndex] = anonymousVariable;
 
 	TypedAtom tuple[2];
@@ -191,7 +191,7 @@ Atom BytecodeGetSignature(Atom bytecode)
 	index8 signatureIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
 
 	TypedAtom query[2];
-	query[bytecodeIndex] = CreateTypedAtom(DT_ID, bytecode);
+	query[bytecodeIndex] = CreateTypedAtom(AT_ID, bytecode);
 	query[signatureIndex] = anonymousVariable;
 
 	TypedAtom tuple[2];
@@ -207,7 +207,7 @@ Atom BytecodeGetRegisters(Atom bytecode)
 	index8 registersIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
 
 	TypedAtom query[2];
-	query[bytecodeIndex] = CreateTypedAtom(DT_ID, bytecode);
+	query[bytecodeIndex] = CreateTypedAtom(AT_ID, bytecode);
 	query[registersIndex] = anonymousVariable;
 
 	TypedAtom tuple[2];
@@ -223,7 +223,7 @@ Atom BytecodeGetConstants(Atom bytecode)
 	index8 constantsIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
 
 	TypedAtom query[2];
-	query[bytecodeIndex] = CreateTypedAtom(DT_ID, bytecode);
+	query[bytecodeIndex] = CreateTypedAtom(AT_ID, bytecode);
 	query[constantsIndex] = anonymousVariable;
 
 	TypedAtom tuple[2];

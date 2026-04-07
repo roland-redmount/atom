@@ -17,12 +17,12 @@ TypedAtom CreateParameter(byte io, byte type)
 	Parameter arg;
 	arg.fields.io = io;
 	arg.fields.datumType = type;
-	return (TypedAtom) {.type = DT_PARAMETER, .atom = arg.value};
+	return (TypedAtom) {.type = AT_PARAMETER, .atom = arg.value};
 }
 
 bool IsParameter(TypedAtom a)
 {
-	return a.type == DT_PARAMETER;
+	return a.type == AT_PARAMETER;
 }
 
 

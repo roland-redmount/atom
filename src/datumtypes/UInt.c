@@ -7,7 +7,7 @@
  */
 TypedAtom CreateUInt(uint64 value)
 {
-	return (TypedAtom) {.type = DT_UINT, .atom = value};
+	return (TypedAtom) {.type = AT_UINT, .atom = value};
 }
 
 /**

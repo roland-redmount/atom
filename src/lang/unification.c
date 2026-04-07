@@ -150,7 +150,7 @@ bool UnifyTuples(Atom list1, Atom list2, SubstitutionList * subst1, Substitution
 			return false;
 		} */
 
-		else if(a1.type == DT_VARIABLE) {
+		else if(a1.type == AT_VARIABLE) {
 			// always replace variable from t1 with atom *or* variable from t2
 			// this ensures all variables in result will derive from t2
 			// (this choice is arbitrary)
@@ -165,7 +165,7 @@ bool UnifyTuples(Atom list1, Atom list2, SubstitutionList * subst1, Substitution
 			SetSubstValue(*subst2, a1, a2);
 		}
 		else {
-			if(a2.type == DT_VARIABLE) {
+			if(a2.type == AT_VARIABLE) {
 				// replace variable from t2 with atom from t1
 				PrintCString("Replace ");
 				PrintTypedAtom(a2);

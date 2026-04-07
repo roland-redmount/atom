@@ -22,7 +22,7 @@ struct {
 } fixture;
 
 
-// NOTE: this table stores no DT_ID atoms, so these test do not
+// NOTE: this table stores no AT_ID atoms, so these test do not
 // cover reference handling
 
 static void setupFixture(void)

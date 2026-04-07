@@ -27,8 +27,8 @@ enum ServiceType {
 };
 
 typedef struct s_Service {
-	Atom form;			// form (DT_ID)
-	Atom parameters;	// list (DT_ID) of atom types
+	Atom form;			// form (AT_ID)
+	Atom parameters;	// list (AT_ID) of atom types
 	enum ServiceType type;
 	union {
 		BTree * tree;

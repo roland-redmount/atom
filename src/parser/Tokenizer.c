@@ -260,7 +260,7 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 	switch(tokenizer->type) {
 	case TOKEN_STRING:
 		// strings entered in formulas are always immutable
-		token.atom = CreateTypedAtom(DT_ID, CreateString(string, stringLength));
+		token.atom = CreateTypedAtom(AT_ID, CreateString(string, stringLength));
 		break;
 
 	case TOKEN_NUMBER:
@@ -286,7 +286,7 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 		break;
 				
 	case TOKEN_NAME:
-		token.atom = CreateTypedAtom(DT_NAME, CreateName(string, stringLength));
+		token.atom = CreateTypedAtom(AT_NAME, CreateName(string, stringLength));
 		break;
 
 	default:

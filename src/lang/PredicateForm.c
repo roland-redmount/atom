@@ -17,7 +17,7 @@ Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
 	// reduce to unique roles, typed for use with multiset
 	TypedAtom uniqueRoles[nRoles];
 	for(index8 i = 0; i < nRoles; i++)
-		uniqueRoles[i] = (TypedAtom) {.type = DT_NAME, .atom = roles[i]};
+		uniqueRoles[i] = (TypedAtom) {.type = AT_NAME, .atom = roles[i]};
 	SortTypedAtoms(uniqueRoles, nRoles);
 	uint32 multiplicities[nRoles];
 	size8 nUniqueRoles = ReduceTypedAtomsArray(uniqueRoles, multiplicities, nRoles);

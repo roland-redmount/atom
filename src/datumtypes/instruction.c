@@ -59,7 +59,7 @@ void InstructionSetContext(Instruction * draft, Operand operand, index8 contextI
 
 TypedAtom InstructionEnd(Instruction * draft)
 {
-	return (TypedAtom) {DT_INSTRUCTION, 0, 0, 0, draft->value};
+	return (TypedAtom) {AT_INSTRUCTION, 0, 0, 0, draft->value};
 }
 
 

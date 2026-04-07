@@ -165,7 +165,7 @@ size32 ListLength(Atom list)
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_LENGTH);
 
 	TypedAtom queryTuple[2];
-	ListLengthSetTuple(queryTuple, CreateTypedAtom(DT_ID, list), anonymousVariable);
+	ListLengthSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), anonymousVariable);
 	TypedAtom resultTuple[2];
 	RelationBTreeQuerySingle(tree, queryTuple, resultTuple);
 	TypedAtom length = resultTuple[CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LENGTH)];
@@ -178,7 +178,7 @@ TypedAtom ListGetElement(Atom list, index32 position)
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
 
 	TypedAtom queryTuple[3];
-	listSetTuple(queryTuple, CreateTypedAtom(DT_ID, list), CreateUInt(position), anonymousVariable);
+	listSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), CreateUInt(position), anonymousVariable);
 	TypedAtom resultTuple[3];
 	RelationBTreeQuerySingle(tree, queryTuple, resultTuple);
 	return resultTuple[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)];
@@ -205,7 +205,7 @@ index32 ListGetPosition(Atom list, TypedAtom element)
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
 
 	TypedAtom queryTuple[3];
-	listSetTuple(queryTuple, CreateTypedAtom(DT_ID, list), anonymousVariable, element);
+	listSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), anonymousVariable, element);
 
 	RelationBTreeIterator iterator;
 	RelationBTreeIterate(tree, queryTuple, &iterator);
@@ -278,7 +278,7 @@ int8 ListLexicalOrdering(Atom list1, Atom list2)
 void ListIterate(Atom list, ListIterator * iterator)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
-	listSetTuple(iterator->queryTuple, CreateTypedAtom(DT_ID, list), anonymousVariable, anonymousVariable);
+	listSetTuple(iterator->queryTuple, CreateTypedAtom(AT_ID, list), anonymousVariable, anonymousVariable);
 	RelationBTreeIterate(tree, iterator->queryTuple, &(iterator->treeIterator));
 }
 

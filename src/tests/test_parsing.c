@@ -33,15 +33,15 @@ static void setupTokensFixture(TokensFixture * fixture)
 {
 	fixture->nameTokens[0] = (Token) {
 		TOKEN_NAME,
-		CreateTypedAtom(DT_NAME, CreateNameFromCString("foo"))
+		CreateTypedAtom(AT_NAME, CreateNameFromCString("foo"))
 	};
 	fixture->nameTokens[1] = (Token) {
 		TOKEN_NAME,
-		CreateTypedAtom(DT_NAME, CreateNameFromCString("bar"))
+		CreateTypedAtom(AT_NAME, CreateNameFromCString("bar"))
 	};
 	fixture->nameTokens[2] = (Token) {
 		TOKEN_NAME,
-		CreateTypedAtom(DT_NAME, CreateNameFromCString("bax"))
+		CreateTypedAtom(AT_NAME, CreateNameFromCString("bax"))
 	};
 
 	fixture->actorTokens[0] = (Token) {
@@ -54,7 +54,7 @@ static void setupTokensFixture(TokensFixture * fixture)
 	};
 	fixture->actorTokens[2] = (Token) {
 		.type = TOKEN_STRING,
-		.atom = CreateTypedAtom(DT_ID, CreateStringFromCString("foobar"))
+		.atom = CreateTypedAtom(AT_ID, CreateStringFromCString("foobar"))
 	};
 
 	for(index8 i = 0; i < EXAMPLE_N_PARTS; i++) {
@@ -329,7 +329,7 @@ static void testCStringToClause(void)
 	ASSERT_TRUE(
 		SameTypedAtoms(
 			ListGetElement(actorsList, 1),
-			CreateTypedAtom(DT_ID, string)
+			CreateTypedAtom(AT_ID, string)
 		)
 	)
 	IFactRelease(string);

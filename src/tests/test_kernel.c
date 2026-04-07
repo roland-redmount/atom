@@ -21,7 +21,7 @@ void testAssertRetract(void)
 	ASSERT(service.type == SERVICE_NONE)
 
 	TypedAtom actors1[2] = {
-		CreateTypedAtom(DT_ID, CreateStringFromCString("barf")),
+		CreateTypedAtom(AT_ID, CreateStringFromCString("barf")),
 		CreateInt(-1)
 	};
 	AssertFact(form, actors1);
@@ -32,7 +32,7 @@ void testAssertRetract(void)
 
 	TypedAtom actors2[] = {
 		CreateInt(42),
-		CreateTypedAtom(DT_ID, CreateStringFromCString("baz"))
+		CreateTypedAtom(AT_ID, CreateStringFromCString("baz"))
 	};
 	AssertFact(form, actors2);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 2)

@@ -55,7 +55,7 @@ bool IsString(Atom atom)
 Atom StringGetLetter(Atom string, index32 position)
 {
 	TypedAtom element = ListGetElement(string, position);
-	ASSERT(element.type == DT_LETTER)
+	ASSERT(element.type == AT_LETTER)
 	return element.atom;
 }
 

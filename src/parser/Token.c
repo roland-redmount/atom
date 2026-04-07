@@ -17,11 +17,11 @@ bool TokenIsLiteral(Token token)
 void ReleaseToken(Token token)
 {
 	if(token.type == TOKEN_NAME) {
-		ASSERT(token.atom.type == DT_NAME)
+		ASSERT(token.atom.type == AT_NAME)
 		NameRelease(token.atom.atom);
 	}
 	if(token.type == TOKEN_STRING) {
-		ASSERT(token.atom.type == DT_ID)
+		ASSERT(token.atom.type == AT_ID)
 		IFactRelease(token.atom.atom);
 	}
 	// other token types have nothing to release

@@ -85,7 +85,7 @@ byte RelationBTreeAddTuple(BTree * tree, TypedAtom const * tuple);
  * 
  * If mode is REMOVE_NORMAL, tuples containing an atom with the ATOM_PROTECTED bit set
  * will NOT be removed. If mode is REMOVE_PROTECTED, all matching tuples are removed.
- * Releases a reference to each DT_ID atom in a removed tuple, except for atoms with
+ * Releases a reference to each AT_ID atom in a removed tuple, except for atoms with
  * the ATOM_PROTECTED bit set.
  */
 size32 RelationBTreeRemoveTuples(BTree * tree, TypedAtom const * queryTuple, uint8 mode);

@@ -1,5 +1,5 @@
 /**
- * Lookup maintains a table of all roles associatd with  DT_ID atoms (ONLY DT_ID atoms)
+ * Lookup maintains a table of all roles associatd with  AT_ID atoms (ONLY AT_ID atoms)
  * across all relation tables. Each lookup entry is a triple [atom form role-name]
  * since both the form and role name are needed to uniquely identify a role.
  * This is information is redundant with the corresponding relation table,
@@ -11,12 +11,12 @@
  * 
  * (list @x element @e position @p)
  * 
- * where @x and @e are DT_ID atoms, AssertFact() creates the lookup entries
+ * where @x and @e are AT_ID atoms, AssertFact() creates the lookup entries
  * 
  * [@x (list element position) list]
  * [@e (list element position) element]
  * 
- * but no entry for @p as it was not a DT_ID atom (usually an integer).
+ * but no entry for @p as it was not a AT_ID atom (usually an integer).
  * 
  * An atom can be associated with a role multiple times, for example
  * atom @x in the facts
@@ -38,7 +38,7 @@ void FreeLookup(void);
 size32 LookupTotalCount(void);
 
 /**
- * Test whether an atom participates in a given role (DT_NAME).
+ * Test whether an atom participates in a given role (AT_NAME).
  * If role == 0, the function returns true if the atom participates
  * in any role in the given predicate form.
  * If predicateForm == 0, the function returns true if the atom participates
@@ -61,7 +61,7 @@ void AtomAddRole(Atom atom, Atom predicateForm, Atom role);
 void AtomRemoveRole(Atom atom, Atom predicateForm, Atom role);
 
 /**
- * Remove all roles for an DT_ID atom. This is used when removing a DT_ID atom.
+ * Remove all roles for an AT_ID atom. This is used when removing a AT_ID atom.
  */
 void LookupRemoveAllRoles(Atom atom);
 
@@ -82,7 +82,7 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm);
 
  /**
  * A record associates any atom (key) to a role (value).
- * Both atom and role must be DT_ID atoms, so we store only their datums.
+ * Both atom and role must be AT_ID atoms, so we store only their datums.
  * Because multiple facts may contain a given role, we count the number
  * of facts in the lookup record. For example, the facts
  * 

@@ -8,7 +8,7 @@ TypedAtom CreateFloat32(float value)
 	// copy float into low 32 bits of atom
 	Atom atom = 0;
 	*((float *) &atom) = value;
-	return (TypedAtom) {DT_FLOAT32, 0, 0, 0, atom};
+	return (TypedAtom) {AT_FLOAT32, 0, 0, 0, atom};
 }
 
 
@@ -17,7 +17,7 @@ TypedAtom CreateFloat64(double value)
 	// copy double, without casting
 	Atom atom;
 	*((double*) &atom) = value;
-	return (TypedAtom) {DT_FLOAT64, 0, 0, 0, atom};;
+	return (TypedAtom) {AT_FLOAT64, 0, 0, 0, atom};;
 }
 
 

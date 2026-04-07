@@ -54,7 +54,7 @@ static void getPairTuple(Atom pair, TypedAtom * tuple)
 	index8 leftIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT);
 	index8 rightIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_RIGHT);
 
-	query[pairIndex] = CreateTypedAtom(DT_ID, pair);
+	query[pairIndex] = CreateTypedAtom(AT_ID, pair);
 	query[leftIndex] = anonymousVariable;
 	query[rightIndex] = anonymousVariable;
 

@@ -106,7 +106,7 @@ size32 MultisetGetElementMultiple(Atom multiset, TypedAtom element)
 void MultisetIterate(Atom multiset, MultisetIterator * iterator)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_MULTISET_ELEMENT_MULTIPLE);
-	MultisetSetTuple(iterator->queryTuple, CreateTypedAtom(DT_ID, multiset), anonymousVariable, anonymousVariable);
+	MultisetSetTuple(iterator->queryTuple, CreateTypedAtom(AT_ID, multiset), anonymousVariable, anonymousVariable);
 	RelationBTreeIterate(tree, iterator->queryTuple, &(iterator->treeIterator));
 }
 

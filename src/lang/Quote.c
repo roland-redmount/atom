@@ -32,7 +32,7 @@ Atom CreateQuote(Atom quoted)
 	);
 	
 	TypedAtom tuple[2];
-	quoteSetTuple(tuple, invalidAtom, CreateTypedAtom(DT_ID, quoted));
+	quoteSetTuple(tuple, invalidAtom, CreateTypedAtom(AT_ID, quoted));
 	IFactAddClause(&draft, tuple);
 	IFactEndConjunction(&draft);
 	
@@ -55,7 +55,7 @@ Atom QuoteGetQuoted(Atom quote)
 	BTree * tree = RegistryGetCoreTable(FORM_QUOTE_QUOTED);
 
 	TypedAtom query[2];
-	quoteSetTuple(query, CreateTypedAtom(DT_ID, quote), anonymousVariable);
+	quoteSetTuple(query, CreateTypedAtom(AT_ID, quote), anonymousVariable);
 	TypedAtom tuple[2];
 	RelationBTreeQuerySingle(tree, query, tuple);
 

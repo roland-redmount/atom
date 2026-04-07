@@ -12,7 +12,7 @@ typedef union
 } Variable;
 
 
-TypedAtom anonymousVariable = {.type = DT_VARIABLE, .atom = 0};
+TypedAtom anonymousVariable = {.type = AT_VARIABLE, .atom = 0};
 
 
 TypedAtom CreateVariable(char name)
@@ -22,7 +22,7 @@ TypedAtom CreateVariable(char name)
 	Variable var = {.value = 0};
 	var.fields.name = ToLower(name);
 	var.fields.quoteCount = 0;
-	return (TypedAtom) {.type = DT_VARIABLE, .atom = var.value};
+	return (TypedAtom) {.type = AT_VARIABLE, .atom = var.value};
 }
 
 
@@ -39,7 +39,7 @@ char GetVariableName(TypedAtom variable)
 
 bool IsVariable(TypedAtom a)
 {
-	return a.type == DT_VARIABLE;
+	return a.type == AT_VARIABLE;
 }
 
 
@@ -69,7 +69,7 @@ TypedAtom QuoteVariable(TypedAtom variable)
 	// check for uint8 wraparound
 	ASSERT(var.fields.quoteCount > 0);
 
-	return (TypedAtom) {.type = DT_VARIABLE, .atom = var.value};
+	return (TypedAtom) {.type = AT_VARIABLE, .atom = var.value};
 }
 
 
@@ -80,7 +80,7 @@ TypedAtom UnquoteVariable(TypedAtom variable)
 	var.value = variable.atom;
 	ASSERT(var.fields.quoteCount > 0);
 	var.fields.quoteCount--;
-	return (TypedAtom) {.type = DT_VARIABLE, .atom = var.value};
+	return (TypedAtom) {.type = AT_VARIABLE, .atom = var.value};
 }
 
 
