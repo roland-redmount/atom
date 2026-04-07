@@ -27,12 +27,12 @@ enum ServiceType {
 };
 
 typedef struct s_Service {
-	Datum form;			// form (DT_ID)
-	Datum parameters;	// list (DT_ID) of datum types
+	Atom form;			// form (DT_ID)
+	Atom parameters;	// list (DT_ID) of atom types
 	enum ServiceType type;
 	union {
 		BTree * tree;
-		Datum bytecode;
+		Atom bytecode;
 	} service;
 	
 } Service;
@@ -64,17 +64,17 @@ BTree * RegistryGetCoreTable(index32 index);
 * core language elements. These must be created when a new "world" is initialized.
 * At this time, we cannot call FormArity(), so the arity must be specified.
 */
-void RegistryCreateCoreTable(index32 index, Datum form, size8 arity);
+void RegistryCreateCoreTable(index32 index, Atom form, size8 arity);
 
 /**
  * Add a B-tree backed relation table to the registry.
  */
-Service RegistryAddBTreeService(Datum form, BTree * btree);
+Service RegistryAddBTreeService(Atom form, BTree * btree);
 
 /**
  * Add a bytecode service to the registry
  */
-Service RegistryAddBytecodeService(Datum bytecode, Datum form, Datum parameters);
+Service RegistryAddBytecodeService(Atom bytecode, Atom form, Atom parameters);
 
 /**
  * Remove a service from the registry.
@@ -82,13 +82,13 @@ Service RegistryAddBytecodeService(Datum bytecode, Datum form, Datum parameters)
  * If the service is a relation table, all facts must have been retracted
  * so that table is empty. The B-tree will be deallocated.
  */
-void RegistryRemoveService(Datum form);
+void RegistryRemoveService(Atom form);
 
 /**
  * Find the service registered for a given form.
  * If no service is found, the returned service.type equals SERVICE_NONE
  */
-Service RegistryFindService(Datum form);
+Service RegistryFindService(Atom form);
 
 
 #endif  // TABLEREGISTRY_H

@@ -6,8 +6,8 @@
 #ifndef TYPEDATOM_H
 #define TYPEDATOM_H
 
-#include "Datum.h"
-#include "DatumType.h"
+#include "lang/Atom.h"
+#include "lang/DatumType.h"
 
 typedef struct s_TypedAtom
 {
@@ -15,7 +15,7 @@ typedef struct s_TypedAtom
 	byte flags;		// TODO: this only holds the ATOM_PROTECTED flag, should be moved
 	byte reserved1;
 	byte reserved2;
-	Datum datum;					// the 64-bit datum
+	Atom atom;
 } __attribute__((packed)) TypedAtom;
 
 
@@ -28,9 +28,9 @@ typedef struct s_TypedAtom
 extern TypedAtom invalidAtom;
 
 /**
- * Shorthand for (TypedAtom) {.type = type, .datum = datum}
+ * Shorthand for (TypedAtom) {.type = type, .atom = atom}
  */
-TypedAtom CreateTypedAtom(byte type, Datum datum);
+TypedAtom CreateTypedAtom(byte type, Atom atom);
 
 // reference handling
 void AcquireTypedAtom(TypedAtom atom);

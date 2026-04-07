@@ -7,13 +7,13 @@
 #include "lang/PredicateForm.h"
 
 
-Datum CreateTermForm(Datum predicateForm, bool sign);
+Atom CreateTermForm(Atom predicateForm, bool sign);
 
-bool IsTermForm(Datum form);
+bool IsTermForm(Atom form);
 
-Datum GetPredicateForm(Datum termForm);
-bool TermFormGetSign(Datum termForm);
+Atom GetPredicateForm(Atom termForm);
+bool TermFormGetSign(Atom termForm);
 
-void PrintTermForm(Datum termForm);
+void PrintTermForm(Atom termForm);
 
-size8 TermFormArity(Datum termForm);
+size8 TermFormArity(Atom termForm);

@@ -11,9 +11,9 @@
 
 void testLookup(void)
 {
-	Datum string = CreateStringFromCString("foo");
-	Datum stringForm = GetCorePredicateForm(FORM_STRING);
-	Datum stringRole = GetCoreRoleName(ROLE_STRING);
+	Atom string = CreateStringFromCString("foo");
+	Atom stringForm = GetCorePredicateForm(FORM_STRING);
+	Atom stringRole = GetCoreRoleName(ROLE_STRING);
 
 	ASSERT_TRUE(AtomHasRole(string, stringForm, stringRole))
 
@@ -48,7 +48,7 @@ void testLookup(void)
 
 void testLookupIterator(void)
 {
-	Datum string = CreateStringFromCString("foo");
+	Atom string = CreateStringFromCString("foo");
 	
 	/**
 	 * A string atom should have 3 lookup records:
@@ -61,7 +61,7 @@ void testLookupIterator(void)
 	LookupIterate(string, &iterator);
 	for(index32 i = 0; i < 3; i++) {
 		ASSERT_TRUE(LookupIteratorHasRecord(&iterator))
-		Datum role = LookupIteratorGetRole(&iterator);
+		Atom role = LookupIteratorGetRole(&iterator);
 		// the role is either list or string
 		ASSERT_TRUE(
 			(role == GetCoreRoleName(ROLE_LIST)) ||
@@ -79,14 +79,14 @@ void testLookupIterator(void)
 void testRemoveAllPredicateRoles(void)
 {
 	// create some DT_ID atoms
-	Datum foo = CreateStringFromCString("foo");
-	Datum bar = CreateStringFromCString("bar");
-	Datum baz = CreateStringFromCString("baz");
+	Atom foo = CreateStringFromCString("foo");
+	Atom bar = CreateStringFromCString("bar");
+	Atom baz = CreateStringFromCString("baz");
 	
 	// create a new relation and assert some facts
-	Datum foobar = CreateNameFromCString("foobar");
-	Datum barf = CreateNameFromCString("barf");
-	Datum form = CreatePredicateForm((Datum []) {foobar, barf}, 2);
+	Atom foobar = CreateNameFromCString("foobar");
+	Atom barf = CreateNameFromCString("barf");
+	Atom form = CreatePredicateForm((Atom []) {foobar, barf}, 2);
 	BTree * tree = CreateRelationBTree(2);
 	RegistryAddBTreeService(form, tree);
 

@@ -16,7 +16,7 @@ TypedAtom stringElementGenerator(index32 index, void const * data)
 	return GetAlphabetLetter(string[index]);
 }
 
-Datum CreateString(char const * chars, size32 length)
+Atom CreateString(char const * chars, size32 length)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
@@ -37,13 +37,13 @@ Datum CreateString(char const * chars, size32 length)
 }
 
 
-Datum CreateStringFromCString(char const * cString)
+Atom CreateStringFromCString(char const * cString)
 {
 	return CreateString(cString, CStringLength(cString));
 }
 
 
-bool IsString(Datum atom)
+bool IsString(Atom atom)
 {
 	return AtomHasRole(
 		atom,
@@ -52,22 +52,22 @@ bool IsString(Datum atom)
 	);
 }
 
-Datum StringGetLetter(Datum string, index32 position)
+Atom StringGetLetter(Atom string, index32 position)
 {
 	TypedAtom element = ListGetElement(string, position);
 	ASSERT(element.type == DT_LETTER)
-	return element.datum;
+	return element.atom;
 }
 
 
-size32 GetStringLength(Datum string)
+size32 GetStringLength(Atom string)
 {
 	return ListLength(string);
 }
 
 
 // TODO: printing case should be configurable, lower/upper/sentence/camel case
-void PrintString(Datum string)
+void PrintString(Atom string)
 {
 	PrintChar('"');
 	ListIterator iterator;
@@ -86,7 +86,7 @@ void PrintString(Datum string)
  * Parse a string literal starting at the given string pointer
  * (no whitespace allowed)
  */
-Datum ParseString(char const * syntax, size32 length)
+Atom ParseString(char const * syntax, size32 length)
 {
 	// check syntax
 	ASSERT(syntax[0] == '\"');

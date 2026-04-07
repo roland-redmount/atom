@@ -9,21 +9,21 @@
 #include "lang/TypedAtom.h"
 
 
-Datum CreateString(char const * chars, size32 length);
-Datum CreateStringFromCString(char const * cString);
+Atom CreateString(char const * chars, size32 length);
+Atom CreateStringFromCString(char const * cString);
 
-bool IsString(Datum atom);
+bool IsString(Atom atom);
 
-size32 GetStringLength(Datum string);
+size32 GetStringLength(Atom string);
 
 /**
  * Returne the letter (DT_LETTER) at the given position (1-based).
  */
-Datum StringGetLetter(Datum string, index32 position);
+Atom StringGetLetter(Atom string, index32 position);
 
-void PrintString(Datum string);
+void PrintString(Atom string);
 
-Datum ParseString(char const * syntax, size32 length);
+Atom ParseString(char const * syntax, size32 length);
 
 
 #endif //	STRING_H

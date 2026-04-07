@@ -5,7 +5,7 @@
 #include "lang/DatumType.h"
 
 /**
- * This structure associates a variable with a datum type
+ * This structure associates a variable with a atom type
  */
 struct s_VariableType {
 	Atom variable;		// possibly quoted

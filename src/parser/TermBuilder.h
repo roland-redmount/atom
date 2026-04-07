@@ -20,7 +20,7 @@ bool TermBuilderPush(TermBuilder * builder, Token token);
 bool TermBuilderIsValid(TermBuilder const * builder);
 bool TermBuilderIsEmpty(TermBuilder const * builder);
 
-Datum TermBuilderCreateFormula(TermBuilder const * builder);
+Atom TermBuilderCreateFormula(TermBuilder const * builder);
 
 void TermBuilderReset(TermBuilder * builder);
 void CleanupTermBuilder(TermBuilder * builder);

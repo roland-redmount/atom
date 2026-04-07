@@ -7,7 +7,7 @@
 #include "lang/PredicateForm.h"
 
 
-size8 FormArity(Datum form)
+size8 FormArity(Atom form)
 {
 	if(IsPredicateForm(form))
 		return PredicateArity(form);

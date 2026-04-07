@@ -9,7 +9,7 @@
 
 static void testPair(void)
 {
-	Datum form = GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT);
+	Atom form = GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT);
 	Service service = RegistryFindService(form);
 	ASSERT(service.type == SERVICE_BTREE)
 	BTree * pairTable = service.service.tree;
@@ -18,7 +18,7 @@ static void testPair(void)
 	// create a pair
 	TypedAtom left = GetAlphabetLetter('x');
 	TypedAtom right = CreateUInt(42);
-	Datum pair1 = CreatePair(left, right);
+	Atom pair1 = CreatePair(left, right);
 	
 	ASSERT_TRUE(IsPair(pair1))
 
@@ -29,13 +29,13 @@ static void testPair(void)
 
 
 	// attempt to add the same pair again
-	Datum pair2 = CreatePair(left, right);
+	Atom pair2 = CreatePair(left, right);
 	ASSERT_DATA64_EQUAL(pair1, pair2)
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(pairTable), initialNRows + 1)
 	IFactRelease(pair2);
 	
 	// a pair containing another pair
-	Datum pair3 = CreatePair(CreateTypedAtom(DT_ID, pair1), right);
+	Atom pair3 = CreatePair(CreateTypedAtom(DT_ID, pair1), right);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(pairTable), initialNRows + 2)
 
 	ASSERT_TRUE(SameTypedAtoms(PairGetElement(pair3, PAIR_LEFT), CreateTypedAtom(DT_ID, pair1)))

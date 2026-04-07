@@ -74,7 +74,7 @@ typedef struct s_PredicateIterator
 	Permutation ** rolePerm;			// array of permutations, 1 per unique role
 } PredicateIterator;
 
-PredicateIterator* CreatePredicateIterator(Datum predicateForm);
+PredicateIterator* CreatePredicateIterator(Atom predicateForm);
 bool NextPredicatePermutation(PredicateIterator * iter);
 void FreePredicateIterator(PredicateIterator * iter);
 
@@ -91,7 +91,7 @@ typedef struct s_ClauseIterator
 } ClauseIterator;
 
 
-ClauseIterator * CreateClauseIterator(Datum clauseForm);
+ClauseIterator * CreateClauseIterator(Atom clauseForm);
 bool NextClausePermutation(ClauseIterator * iter);
 void FreeClauseIterator(ClauseIterator * iter);
 
@@ -107,20 +107,20 @@ typedef struct s_ConjunctionIterator
 } ConjunctionIterator;
 
 
-ConjunctionIterator * CreateConjectionIterator(Datum conjunctionForm);
+ConjunctionIterator * CreateConjectionIterator(Atom conjunctionForm);
 bool NextConjunctionPermutation(ConjunctionIterator * iter);
 void FreeConjunctionIterator(ConjunctionIterator * iter);
 
 
 typedef struct s_FormIterator {
-	Datum form;
+	Atom form;
 	void * topIterator;
 } FormIterator;
 
 // permute an array of indexes a, a+1., ..., a+n-1
 bool PermuteArray(index8 * perm, index8 a, size8 n);
 
-FormIterator * CreateFormIterator(Datum form);
+FormIterator * CreateFormIterator(Atom form);
 bool NextFormPermutation(FormIterator* iter);
 // get corresponding tuple permutation vector
 void GetTuplePermutation(const FormIterator * iter, index8 * permutation);

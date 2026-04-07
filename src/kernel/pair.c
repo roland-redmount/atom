@@ -7,7 +7,7 @@
 #include "lang/PredicateForm.h"
 
 
-Datum CreatePair(TypedAtom left, TypedAtom right)
+Atom CreatePair(TypedAtom left, TypedAtom right)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
@@ -19,7 +19,7 @@ Datum CreatePair(TypedAtom left, TypedAtom right)
 void AddPairToIFact(IFactDraft * draft, TypedAtom left, TypedAtom right)
 {
 	// assert (pair left right) fact
-	Datum form = GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT);
+	Atom form = GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT);
 
 	index8 pairIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_PAIR);
 	index8 leftIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT);
@@ -35,7 +35,7 @@ void AddPairToIFact(IFactDraft * draft, TypedAtom left, TypedAtom right)
 }
 
 
-bool IsPair(Datum atom)
+bool IsPair(Atom atom)
 {
 	return AtomHasRole(
 		atom,
@@ -45,7 +45,7 @@ bool IsPair(Datum atom)
 }
 
 
-static void getPairTuple(Datum pair, TypedAtom * tuple)
+static void getPairTuple(Atom pair, TypedAtom * tuple)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_PAIR_LEFT_RIGHT);
 
@@ -62,7 +62,7 @@ static void getPairTuple(Datum pair, TypedAtom * tuple)
 }
 
 
-TypedAtom PairGetElement(Datum pair, uint8 element)
+TypedAtom PairGetElement(Atom pair, uint8 element)
 {
 	TypedAtom pairTuple[3];
 	getPairTuple(pair, pairTuple);
@@ -80,7 +80,7 @@ TypedAtom PairGetElement(Datum pair, uint8 element)
 }
 
 
-void PrintPair(Datum pair)
+void PrintPair(Atom pair)
 {
 	TypedAtom pairTuple[3];
 	getPairTuple(pair, pairTuple);

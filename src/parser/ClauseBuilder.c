@@ -15,7 +15,7 @@
 void InitializeClauseBuilder(ClauseBuilder * builder)
 {
 	InitializeTermBuilder(&(builder->termBuilder));
-	CreateResizingArray(&(builder->terms), sizeof(Datum), INITIAL_N_TERMS);
+	CreateResizingArray(&(builder->terms), sizeof(Atom), INITIAL_N_TERMS);
 	builder->arity = 0;
 	builder->isValid = false;
 }
@@ -24,7 +24,7 @@ void InitializeClauseBuilder(ClauseBuilder * builder)
 static void addCurrentTerm(ClauseBuilder * builder)
 {
 	// add current term to array
-	Datum term = TermBuilderCreateFormula(&(builder->termBuilder));
+	Atom term = TermBuilderCreateFormula(&(builder->termBuilder));
 	TermBuilderReset(&(builder->termBuilder));
 	// update arity
 	uint8 termArity = FormulaArity(term);
@@ -72,12 +72,12 @@ static void finishClauseBuilder(ClauseBuilder * builder)
 }
 
 
-Datum ClauseBuilderCreateFormula(ClauseBuilder * builder)
+Atom ClauseBuilderCreateFormula(ClauseBuilder * builder)
 {
 	finishClauseBuilder(builder);
 
 	size8 nTerms = ResizingArrayNElements(&(builder->terms));
-	Datum const * terms = ResizingArrayGetMemory(&(builder->terms));
+	Atom const * terms = ResizingArrayGetMemory(&(builder->terms));
 	return CreateClause(terms, nTerms);
 }
 
@@ -87,7 +87,7 @@ void ClauseBuilderReset(ClauseBuilder * builder)
 	TermBuilderReset(&(builder->termBuilder));
 	size8 nTerms = ResizingArrayNElements(&(builder->terms));
 	for(index8 i = 0; i < nTerms; i++) {
-		Datum term = *((Datum const *) ResizingArrayGetElement(&(builder->terms), i));
+		Atom term = *((Atom const *) ResizingArrayGetElement(&(builder->terms), i));
 		IFactRelease(term);
 	}
 	ResizingArrayReset(&(builder->terms));
@@ -102,7 +102,7 @@ void CleanupClauseBuilder(ClauseBuilder * builder)
 }
 
 
-Datum CStringToClause(char const * string, size32 length)
+Atom CStringToClause(char const * string, size32 length)
 {
 	Tokenizer tokenizer;
 	TokenizerInit(&tokenizer);
@@ -118,7 +118,7 @@ Datum CStringToClause(char const * string, size32 length)
 		}
 	}
 	ASSERT(ClauseBuilderIsValid(&builder));
-	Datum clause = ClauseBuilderCreateFormula(&builder);
+	Atom clause = ClauseBuilderCreateFormula(&builder);
 	
 	CleanupClauseBuilder(&builder);
 	TokenizerCleanup(&tokenizer);

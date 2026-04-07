@@ -67,7 +67,7 @@ static bool findInUGraph(TypedAtom a1, TypedAtom a2, TypedAtom const * edges, ui
  * 
  * Returns the number of edges added
  */
-static uint8 CreateUnificationGraph(Datum list1, Datum list2, TypedAtom * edges, size8 nAtoms)
+static uint8 CreateUnificationGraph(Atom list1, Atom list2, TypedAtom * edges, size8 nAtoms)
 {
 	PrintF("CreateUnificationGraph() nAtoms = %u\n", nAtoms);
 	uint8 nEdges = 0;
@@ -102,7 +102,7 @@ static uint8 CreateUnificationGraph(Datum list1, Datum list2, TypedAtom * edges,
  * in both cases.
  * If the tuples do not unify, returns false.
  */
-bool UnifyTuples(Datum list1, Datum list2, SubstitutionList * subst1, SubstitutionList * subst2)
+bool UnifyTuples(Atom list1, Atom list2, SubstitutionList * subst1, SubstitutionList * subst2)
 {
 	size32 nAtoms = ListLength(list1);
 	ASSERT(nAtoms <= 255);

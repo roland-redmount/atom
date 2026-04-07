@@ -3,7 +3,7 @@
 #define CLAUSEBUILDER_H
 
 
-#include "lang/Datum.h"
+#include "lang/Atom.h"
 #include "parser/TermBuilder.h"
 #include "util/ResizingArray.h"
 
@@ -19,13 +19,13 @@ void InitializeClauseBuilder(ClauseBuilder * builder);
 
 bool ClauseBuilderPush(ClauseBuilder * builder, Token token);
 bool ClauseBuilderIsValid(ClauseBuilder const * builder);
-Datum ClauseBuilderCreateFormula(ClauseBuilder * builder);
+Atom ClauseBuilderCreateFormula(ClauseBuilder * builder);
 void ClauseBuilderReset(ClauseBuilder * builder);
 
 void CleanupClauseBuilder(ClauseBuilder * builder);
 
 // convenience method for testing
-Datum CStringToClause(char const * string, size32 length);
+Atom CStringToClause(char const * string, size32 length);
 
 
 #endif	// CLAUSEBUILDER_H

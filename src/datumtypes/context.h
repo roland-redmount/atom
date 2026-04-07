@@ -14,14 +14,14 @@ typedef struct s_BytecodeContext BytecodeContext;
 
 struct s_BytecodeContext {
 	BytecodeContext * parentContext;
-	Datum bytecode;
-	Datum program;				// list of instructions
+	Atom bytecode;
+	Atom program;				// list of instructions
 	size32 programLength;
 	index32 programCounter;
 	size8 arity;
 	size8 nRegisters;
-	// Datum arguments[arity]
-	// Datum registers[nRegisters]
+	// Atom arguments[arity]
+	// Atom registers[nRegisters]
 };
 
 
@@ -34,12 +34,12 @@ size32 ContextSize(size8 arity, size8 nRegisters);
 /**
  * Return arguments array
  */
-Datum * ContextArguments(BytecodeContext * context);
+Atom * ContextArguments(BytecodeContext * context);
 
 /**
  * Return register at the given index (1-based)
  */
-Datum * ContextRegisters(BytecodeContext * context);
+Atom * ContextRegisters(BytecodeContext * context);
 
 /**
  * Create a new execution context for the given bytecode program on the top of the stack. 
@@ -47,7 +47,7 @@ Datum * ContextRegisters(BytecodeContext * context);
  * The child context contains pointers to the bytecode program
  * and a working copy of the registers used.
  */
-BytecodeContext * CreateContext(Datum bytecode, BytecodeContext * parentContext);
+BytecodeContext * CreateContext(Atom bytecode, BytecodeContext * parentContext);
 
 /**
  * Check registers for allocated "child" contexts and free them if necessary.

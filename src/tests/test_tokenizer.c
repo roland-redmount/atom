@@ -93,7 +93,7 @@ static void testTokenizer(void)
 	TokenizerReset(&tokenizer);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_STRING)
 	ASSERT_UINT32_EQUAL(token.atom.type, DT_ID)
-	Datum tokenString = token.atom.datum;
+	Atom tokenString = token.atom.atom;
 	ASSERT_UINT32_EQUAL(ListLength(tokenString), 6)
 	for(index32 i = 0; i < 6; i++) {
 		TypedAtom letter = ListGetElement(tokenString, i+1);

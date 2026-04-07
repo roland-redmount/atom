@@ -22,7 +22,7 @@ static void testMultiset(void)
 	};
 	size32 multiples[] = {1, 2, 3};
 
-	Datum multiset = CreateMultisetFromArrays(elements, multiples, TEST_MULTISET_N_UNIQUE);
+	Atom multiset = CreateMultisetFromArrays(elements, multiples, TEST_MULTISET_N_UNIQUE);
 
 	// we should have 3 tuples added to the table
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(table), initialNRows + 3)
@@ -48,7 +48,7 @@ static void testMultiset(void)
 	MultisetIteratorEnd(&iterator);
  
 	// creating again from the same elements should yield the same atom, with one additional reference
-	Datum multiset2 = CreateMultisetFromArrays(elements, multiples, TEST_MULTISET_N_UNIQUE);
+	Atom multiset2 = CreateMultisetFromArrays(elements, multiples, TEST_MULTISET_N_UNIQUE);
 	ASSERT_DATA64_EQUAL(multiset, multiset2)
 	IFactRelease(multiset2);
 
@@ -60,7 +60,7 @@ static void testMultiset(void)
 	};
 	size32 permutedMultiples[] = {3, 1, 2};
 
-	Datum multiset3 = CreateMultisetFromArrays(permutedElements, permutedMultiples, TEST_MULTISET_N_UNIQUE);
+	Atom multiset3 = CreateMultisetFromArrays(permutedElements, permutedMultiples, TEST_MULTISET_N_UNIQUE);
 
 	ASSERT_DATA64_EQUAL(multiset, multiset3)
 	IFactRelease(multiset3);

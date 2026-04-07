@@ -18,7 +18,7 @@
 
 #include "lang/TypedAtom.h"
 #include "lang/ClauseForm.h"
-#include "lang/Datum.h"
+#include "lang/Atom.h"
 #include "lang/Formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
@@ -34,95 +34,95 @@ TypedAtom invalidAtom = {0};
  * Create (typed) atom
  */
 
-TypedAtom CreateTypedAtom(byte type, Datum datum)
+TypedAtom CreateTypedAtom(byte type, Atom atom)
 {
-	return (TypedAtom) {.type = type, .datum = datum};
+	return (TypedAtom) {.type = type, .atom = atom};
 }
 
 
-void AcquireTypedAtom(TypedAtom atom)
+void AcquireTypedAtom(TypedAtom typedAtom)
 {
-	if(atom.type == DT_ID)
-		IFactAcquire(atom.datum);
-	else if(atom.type == DT_NAME)
-		NameAcquire(atom.datum);
+	if(typedAtom.type == DT_ID)
+		IFactAcquire(typedAtom.atom);
+	else if(typedAtom.type == DT_NAME)
+		NameAcquire(typedAtom.atom);
 }
 
 
-void ReleaseTypedAtom(TypedAtom atom)
+void ReleaseTypedAtom(TypedAtom typeAtom)
 {
-	if(atom.type == DT_ID)
-		IFactRelease(atom.datum);
-	else if(atom.type == DT_NAME)
-		NameRelease(atom.datum);
+	if(typeAtom.type == DT_ID)
+		IFactRelease(typeAtom.atom);
+	else if(typeAtom.type == DT_NAME)
+		NameRelease(typeAtom.atom);
 }
 
 
 /**
  * Compare two atoms for identity
  */
-bool SameTypedAtoms(TypedAtom a1, TypedAtom a2)
+bool SameTypedAtoms(TypedAtom typedAtom1, TypedAtom typedAtom2)
 {
-	return (a1.type == a2.type) && (a1.datum == a2.datum);
+	return (typedAtom1.type == typedAtom2.type) && (typedAtom1.atom == typedAtom2.atom);
 }
 
 
 /**
- * Canonical ordering of atoms. This is used by CompareTuples()
+ * Canonical ordering of typed atoms. This is used by CompareTuples()
  * which is used to order tuple storage in RelationBTree
  * 
- * NOTE: this orders atoms by the datum 64-bit value, which means
+ * NOTE: this orders atoms by the atom 64-bit value, which means
  * that IFacts including strings will be ordered by address.
  */
-int8 CompareTypedAtoms(TypedAtom atom1, TypedAtom atom2)
+int8 CompareTypedAtoms(TypedAtom typedAtom1, TypedAtom typedAtom2)
 {
-	// first order by datum type
-	if(atom1.type < atom2.type)
+	// first order by atom type
+	if(typedAtom1.type < typedAtom2.type)
 		return -1;
-	if(atom1.type > atom2.type)
+	if(typedAtom1.type > typedAtom2.type)
 		return 1;
-	// for atoms of same type, order by datum
-	return CompareDatums(atom1.datum, atom2.datum);
+	// same type, order by atom alue
+	return CompareAtoms(typedAtom1.atom, typedAtom2.atom);
 }
 
 
 static int8 quickSortCompareAtoms(void const * item1, void const * item2, size32 itemSize)
 {
 	ASSERT(itemSize = sizeof(TypedAtom));
-	TypedAtom atom1 = *((const TypedAtom *) item1);
-	TypedAtom atom2 = *((const TypedAtom *) item2);
-	return CompareTypedAtoms(atom1, atom2);
+	TypedAtom typedAtom1 = *((const TypedAtom *) item1);
+	TypedAtom typedAtom2 = *((const TypedAtom *) item2);
+	return CompareTypedAtoms(typedAtom1, typedAtom2);
 }
 
 
-void SortTypedAtoms(TypedAtom * atoms, size32 nAtoms)
+void SortTypedAtoms(TypedAtom * typedAtoms, size32 nAtoms)
 {
-	QuickSort(atoms, nAtoms, sizeof(TypedAtom), quickSortCompareAtoms);
+	QuickSort(typedAtoms, nAtoms, sizeof(TypedAtom), quickSortCompareAtoms);
 }
 
 
-static void shiftAtomArrayLeft(TypedAtom * array, uint8 nAtoms, uint8 steps)
+static void shiftAtomArrayLeft(TypedAtom * typedAtoms, uint8 nAtoms, uint8 steps)
 {
 	for(index8 i = 0; i < nAtoms - steps; i++)
-		array[i] = array[i + steps];
+		typedAtoms[i] = typedAtoms[i + steps];
 }
 
 
 /**
  * Reduce a list of atoms in-place so that each atom occurs only once,
  * assuming that any duplicated atoms are adjacent in the array.
- * Writes the multiplicities of each datum to the
+ * Writes the multiplicities of each atom to the
  * provided multiplicities array and returns the number of unique datums.
  */
-size8 ReduceTypedAtomsArray(TypedAtom * atoms, uint32 * multiplicities, size8 nAtoms)
+size8 ReduceTypedAtomsArray(TypedAtom * typedAtoms, uint32 * multiplicities, size8 nAtoms)
 {
 	for(index8 k = 0; k < nAtoms; k++) {
 		index8 i = k + 1;
-		while((i < nAtoms) && SameTypedAtoms(atoms[k], atoms[i]))
+		while((i < nAtoms) && SameTypedAtoms(typedAtoms[k], typedAtoms[i]))
 			i++;
 		multiplicities[k] = i - k;
 		if(multiplicities[k] > 1) {
-			shiftAtomArrayLeft(atoms + k, nAtoms - k, multiplicities[k] - 1);
+			shiftAtomArrayLeft(typedAtoms + k, nAtoms - k, multiplicities[k] - 1);
 			nAtoms -= (multiplicities[k] - 1);
 		}
 	}
@@ -131,50 +131,50 @@ size8 ReduceTypedAtomsArray(TypedAtom * atoms, uint32 * multiplicities, size8 nA
 
 /**
  * Print atom to stdout
- * This calls the datum print function for the datum type, wraps in [ ]
+ * This calls the atom print function for the atom type, wraps in [ ]
  */
-void PrintTypedAtom(TypedAtom atom)
+void PrintTypedAtom(TypedAtom typedAtom)
 {
 	// PrintChar('[');
-	switch(atom.type) {
+	switch(typedAtom.type) {
 	case DT_NONE:
 		PrintCString("NONE");
 		break;
 
 	case DT_UINT:
-		PrintUInt(atom);
+		PrintUInt(typedAtom);
 		break;
 
 	case DT_INT:
-		PrintInt(atom);
+		PrintInt(typedAtom);
 		break;
 
 	case DT_FLOAT32:
-		PrintFloat32(atom);
+		PrintFloat32(typedAtom);
 		break;
 
 	case DT_FLOAT64:
-		PrintFloat64(atom);
+		PrintFloat64(typedAtom);
 		break;
 
 	case DT_LETTER:
-		PrintLetter(atom, LETTER_UPPERCASE);
+		PrintLetter(typedAtom, LETTER_UPPERCASE);
 		break;
 
 	case DT_VARIABLE:
-		PrintVariable(atom);
+		PrintVariable(typedAtom);
 		break;
 
 	case DT_NAME:
-		PrintName(atom.datum);
+		PrintName(typedAtom.atom);
 		break;
 
 	case DT_INSTRUCTION:
-		PrintInstruction(atom);
+		PrintInstruction(typedAtom);
 		break;
 
 	case DT_PARAMETER:
-		PrintParameter(atom);
+		PrintParameter(typedAtom);
 		break;
 
 	case DT_ID:
@@ -183,38 +183,38 @@ void PrintTypedAtom(TypedAtom atom)
 		// string representations, so there is no straightforward switch/case.
 		// Here we somewhat arbitrarily try the "most specific" type predicate first
 		// TODO: move this to id.h
-		if(IsPair(atom.datum)) {
-			if(IsFormula(atom.datum))
-				PrintFormula(atom.datum);
-			else if(IsQuote(atom.datum))
-				PrintQuoted(atom.datum);
+		if(IsPair(typedAtom.atom)) {
+			if(IsFormula(typedAtom.atom))
+				PrintFormula(typedAtom.atom);
+			else if(IsQuote(typedAtom.atom))
+				PrintQuoted(typedAtom.atom);
 			else
-				PrintPair(atom.datum);
+				PrintPair(typedAtom.atom);
 		}
-		else if(IsList(atom.datum)) {
-			if(IsString(atom.datum))
-				PrintString(atom.datum);
-			else if(IsName(atom))
-				PrintName(atom.datum);
+		else if(IsList(typedAtom.atom)) {
+			if(IsString(typedAtom.atom))
+				PrintString(typedAtom.atom);
+			else if(IsName(typedAtom))
+				PrintName(typedAtom.atom);
 			else
-				PrintList(atom.datum);
+				PrintList(typedAtom.atom);
 		}
-		else if(IsMultiset(atom.datum)) {
-			if(IsPredicateForm(atom.datum))
-				PrintPredicateForm(atom.datum);
-			else if(IsTermForm(atom.datum))
-				PrintTermForm(atom.datum);
-			else if(IsClauseForm(atom.datum))
-				PrintClauseForm(atom.datum);
+		else if(IsMultiset(typedAtom.atom)) {
+			if(IsPredicateForm(typedAtom.atom))
+				PrintPredicateForm(typedAtom.atom);
+			else if(IsTermForm(typedAtom.atom))
+				PrintTermForm(typedAtom.atom);
+			else if(IsClauseForm(typedAtom.atom))
+				PrintClauseForm(typedAtom.atom);
 			else
-				PrintMultiset(atom.datum);
+				PrintMultiset(typedAtom.atom);
 		}
 		else
-			PrintIFact(atom.datum);
+			PrintIFact(typedAtom.atom);
 		break;
 
 	default:
-		PrintF("ERROR: No Print method for datum type %u\n", atom.type);
+		PrintF("ERROR: No Print method for atom type %u\n", typedAtom.type);
 		ASSERT(false);
 	}
 	// PrintChar(']');

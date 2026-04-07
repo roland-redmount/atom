@@ -30,7 +30,7 @@ static data64 nameHash(char const * string, size32 length, data64 initialHash)
 
 static int8 compareNameRecords(NameRecord const * record1, NameRecord const * record2)
 {
-	return CompareDatums(record1->hash, record2->hash);
+	return CompareAtoms(record1->hash, record2->hash);
 }
 
 
@@ -84,7 +84,7 @@ size32 NumberOfNames(void)
 }
 
 
-Datum CreateName(char const * string, size32 length)
+Atom CreateName(char const * string, size32 length)
 {
 	data64 hash = nameHash(string, length, djb2InitialHash);
 	NameRecord * existingRecord = peekNameRecord(hash);
@@ -104,18 +104,18 @@ Datum CreateName(char const * string, size32 length)
 		ASSERT(addNameRecord(&record));
 	}
 	nameStorage.nReferencesTotal++;
-	return (Datum) hash;
+	return (Atom) hash;
 }
 
 
-Datum CreateNameFromCString(char const * cString)
+Atom CreateNameFromCString(char const * cString)
 {
 	size32 length = CStringLength(cString);
 	return CreateName(cString, length);
 }
 
 
-void NameAcquire(Datum name)
+void NameAcquire(Atom name)
 {
 	NameRecord * nameRecord = peekNameRecord(name);
 	nameRecord->nReferences++;
@@ -123,7 +123,7 @@ void NameAcquire(Datum name)
 }
 
 
-void NameRelease(Datum name)
+void NameRelease(Atom name)
 {
 	NameRecord * nameRecord = peekNameRecord(name);
 	ASSERT(nameRecord->nReferences > 0);
@@ -146,7 +146,7 @@ bool IsName(TypedAtom atom)
 	return atom.type == DT_NAME;
 }
 
-void PrintName(Datum name)
+void PrintName(Atom name)
 {
 	NameRecord * nameRecord = peekNameRecord(name);
 	ASSERT(nameRecord);

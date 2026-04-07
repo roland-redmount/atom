@@ -182,7 +182,7 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		return false;
 
 	case TOKEN_PARAMETER:
-		// parse datum type name
+		// parse atom type name
 		// TODO: here we must ensure that the string
 		// is always a prefix of valid type name.
 		if(IsNameChar(c)) {

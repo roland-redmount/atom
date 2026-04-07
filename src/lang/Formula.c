@@ -27,7 +27,7 @@ void FormulaSetTuple(TypedAtom * tuple, TypedAtom formula, TypedAtom form, Typed
 }
 
 
-Datum CreateFormula(Datum form, Datum actorsList)
+Atom CreateFormula(Atom form, Atom actorsList)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
@@ -50,17 +50,17 @@ Datum CreateFormula(Datum form, Datum actorsList)
  * Create a form from an array of actors. The array must have as least as
  * many elements as the arity of the given form.
  */
-Datum CreateFormulaFromArray(Datum form, TypedAtom * actors)
+Atom CreateFormulaFromArray(Atom form, TypedAtom * actors)
 {
 	size8 arity = FormArity(form);
-	Datum actorsList = CreateListFromArray(actors, arity);
-	Datum formula = CreateFormula(form, actorsList);
+	Atom actorsList = CreateListFromArray(actors, arity);
+	Atom formula = CreateFormula(form, actorsList);
 	IFactRelease(actorsList);
 	return formula;
 }
 
 
-bool IsFormula(Datum atom)
+bool IsFormula(Atom atom)
 {
 	return AtomHasRole(
 		atom,
@@ -70,31 +70,31 @@ bool IsFormula(Datum atom)
 }
 
 
-bool FormulaIsPredicate(Datum formula)
+bool FormulaIsPredicate(Atom formula)
 {
 	return IsPredicateForm(FormulaGetForm(formula));
 }
 
 
-bool FormulaIsTerm(Datum formula)
+bool FormulaIsTerm(Atom formula)
 {
 	return IsTermForm(FormulaGetForm(formula));
 }
 
 
-bool FormulaIsClause(Datum formula)
+bool FormulaIsClause(Atom formula)
 {
 	return IsClauseForm(FormulaGetForm(formula));
 }
 
 
-bool FormulaIsConjunction(Datum formula)
+bool FormulaIsConjunction(Atom formula)
 {
 	return IsPredicateForm(FormulaGetForm(formula));
 }
 
 
-index32 FormulaRoleIndex(Datum formula, Datum name)
+index32 FormulaRoleIndex(Atom formula, Atom name)
 {
 	// TODO: currently this only supports predicates.
 	// Need to implement GetClauseRoleIndex() &c
@@ -107,22 +107,22 @@ index32 FormulaRoleIndex(Datum formula, Datum name)
  * Convenience method to create a predicate from two arrays
  * of role names (DT_NAME) and actors, both of the same length arity.
  */
-Datum CreatePredicate(Datum const * roles, TypedAtom * actors, size8 arity)
+Atom CreatePredicate(Atom const * roles, TypedAtom * actors, size8 arity)
 {
-	Datum predicateForm = CreatePredicateForm(roles, arity);
+	Atom predicateForm = CreatePredicateForm(roles, arity);
 
 	index8 roleOrder[arity];
 	// need to convert to atoms for MultisetIterationOrder()
 	TypedAtom roleAtoms[arity];
 	for(index8 i = 0; i < arity; i++)
-		roleAtoms[i] = (TypedAtom) {.type = DT_NAME, .datum = roles[i]};
+		roleAtoms[i] = (TypedAtom) {.type = DT_NAME, .atom = roles[i]};
 	MultisetIterationOrder(predicateForm, roleAtoms, roleOrder, arity);
 
 	TypedAtom actorsOrdered[arity];
 	CopyMemory(actors, actorsOrdered, arity * sizeof(TypedAtom));
 	ReorderArray(actorsOrdered, roleOrder, arity, sizeof(TypedAtom));
 
-	Datum predicate = CreateFormulaFromArray(
+	Atom predicate = CreateFormulaFromArray(
 		predicateForm,
 		actorsOrdered
 	);
@@ -134,12 +134,12 @@ Datum CreatePredicate(Datum const * roles, TypedAtom * actors, size8 arity)
 /**
  * Create a term from a predicate and sign
  */
-Datum CreateTerm(Datum predicate, bool sign)
+Atom CreateTerm(Atom predicate, bool sign)
 {
 	ASSERT(FormulaIsPredicate(predicate));
-	Datum predicateForm = FormulaGetForm(predicate);
-	Datum termForm = CreateTermForm(predicateForm, sign);
-	Datum term = CreateFormula(
+	Atom predicateForm = FormulaGetForm(predicate);
+	Atom termForm = CreateTermForm(predicateForm, sign);
+	Atom term = CreateFormula(
 		termForm,
 		FormulaGetActors(predicate)
 	);
@@ -148,10 +148,10 @@ Datum CreateTerm(Datum predicate, bool sign)
 }
 
 
-Datum CreateClause(Datum const * terms, size8 nTerms)
+Atom CreateClause(Atom const * terms, size8 nTerms)
 {
 	// collect term forms and their arities
-	Datum termForms[nTerms];
+	Atom termForms[nTerms];
 	size8 termArities[nTerms];
 	size8 clauseArity = 0;
 	for(index8 i = 0; i < nTerms; i++) {
@@ -160,12 +160,12 @@ Datum CreateClause(Datum const * terms, size8 nTerms)
 		ASSERT(clauseArity < 255 - termArities[i]);
 		clauseArity += termArities[i];
 	}
-	Datum clauseForm = CreateClauseForm(termForms, nTerms);
+	Atom clauseForm = CreateClauseForm(termForms, nTerms);
 
 	// collect actors from terms into a single array
 	TypedAtom actors[clauseArity];
 	for(index8 i = 0, k = 0; i < nTerms; i++) {
-		Datum actorsList = FormulaGetActors(terms[i]);
+		Atom actorsList = FormulaGetActors(terms[i]);
 		for(index8 j = 0; j < termArities[i]; j++)
 			actors[k++] = ListGetElement(actorsList, j + 1);
 	}
@@ -184,51 +184,51 @@ Datum CreateClause(Datum const * terms, size8 nTerms)
 		blockSizes[i] = termArities[i] * sizeof(TypedAtom);
 	ReorderRaggedArray(actors, termOrder, blockSizes, nTerms);
 
-	Datum clause = CreateFormulaFromArray(clauseForm, actors);
+	Atom clause = CreateFormulaFromArray(clauseForm, actors);
 	IFactRelease(clauseForm);
 	return clause;
 }
 
 
-uint8 FormulaArity(Datum formula)
+uint8 FormulaArity(Atom formula)
 {
 	return FormArity(FormulaGetForm(formula));
 }
 
 
-Datum FormulaGetForm(Datum formula)
+Atom FormulaGetForm(Atom formula)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_FORMULA_FORM_ACTORS);
 	TypedAtom query[3];
 	FormulaSetTuple(query, CreateTypedAtom(DT_ID, formula), anonymousVariable, anonymousVariable);
 	TypedAtom result[3];
 	RelationBTreeQuerySingle(tree, query, result);
-	return result[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM)].datum;
+	return result[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM)].atom;
 }
 
 
-Datum FormulaGetActors(Datum formula)
+Atom FormulaGetActors(Atom formula)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_FORMULA_FORM_ACTORS);
 	TypedAtom query[3];
 	FormulaSetTuple(query, CreateTypedAtom(DT_ID, formula), anonymousVariable, anonymousVariable);
 	TypedAtom result[3];
 	RelationBTreeQuerySingle(tree, query, result);
-	return result[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS)].datum;
+	return result[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS)].atom;
 }
 
 
 /**
  * Print a predicate with actors in the order given by atomIndex
  */
-static void printPredicate(Datum predicateForm, Datum atomsList, index8 * atomIndex)
+static void printPredicate(Atom predicateForm, Atom atomsList, index8 * atomIndex)
 {	
 	MultisetIterator iterator;
 	MultisetIterate(predicateForm, &iterator);
 	while(MultisetIteratorHasNext(&iterator)) {	
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
-			PrintName(em.element.datum);
+			PrintName(em.element.atom);
 			PrintChar(' ');
 			PrintTypedAtom(ListGetElement(atomsList, *atomIndex + 1));
 			PrintChar(' ');
@@ -240,7 +240,7 @@ static void printPredicate(Datum predicateForm, Datum atomsList, index8 * atomIn
 }
 
 
-static void printTerm(Datum termForm, Datum atomsList, index8 * atomIndex)
+static void printTerm(Atom termForm, Atom atomsList, index8 * atomIndex)
 {
 	bool sign = TermFormGetSign(termForm);
 	if(!sign)
@@ -249,7 +249,7 @@ static void printTerm(Datum termForm, Datum atomsList, index8 * atomIndex)
 }
 
 
-static void printClause(Datum clauseForm, Datum atomsList, index8 * atomIndex)
+static void printClause(Atom clauseForm, Atom atomsList, index8 * atomIndex)
 {	
 	MultisetIterator iterator;
 	MultisetIterate(clauseForm, &iterator);
@@ -258,7 +258,7 @@ static void printClause(Datum clauseForm, Datum atomsList, index8 * atomIndex)
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		MultisetIteratorNext(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
-			printTerm(em.element.datum, atomsList, atomIndex);
+			printTerm(em.element.atom, atomsList, atomIndex);
 			if((j < em.multiple - 1) | MultisetIteratorHasNext(&iterator))
 				PrintCString(" | ");
 		}
@@ -267,7 +267,7 @@ static void printClause(Datum clauseForm, Datum atomsList, index8 * atomIndex)
 }
 
 
-static void printConjunction(Datum form, Datum atomsList, index8* atomIndex)
+static void printConjunction(Atom form, Atom atomsList, index8* atomIndex)
 {
 	MultisetIterator iterator;
 	MultisetIterate(form, &iterator);
@@ -276,7 +276,7 @@ static void printConjunction(Datum form, Datum atomsList, index8* atomIndex)
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		MultisetIteratorNext(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
-			printClause(em.element.datum, atomsList, atomIndex);
+			printClause(em.element.atom, atomsList, atomIndex);
 			if((j < em.multiple - 1) | MultisetIteratorHasNext(&iterator))
 				PrintCString(" & ");
 		}
@@ -288,12 +288,12 @@ static void printConjunction(Datum form, Datum atomsList, index8* atomIndex)
 /**
  * Traverse and print a formula
  */
-void PrintFormula(Datum formula)
+void PrintFormula(Atom formula)
 {
 	// atom index
 	index8 atomIndex = 0;
-	Datum form = FormulaGetForm(formula);
-	Datum actorsList = FormulaGetActors(formula);
+	Atom form = FormulaGetForm(formula);
+	Atom actorsList = FormulaGetActors(formula);
 
 	if(FormulaIsPredicate(formula))
 		printPredicate(form, actorsList, &atomIndex);
@@ -315,9 +315,9 @@ data64 FormulaHashFormActors(data64 formHash, TypedAtom const * actors, size32 n
 }
 
 
-size8 FormulaUniqueVariables(Datum formula, TypedAtom * variables)
+size8 FormulaUniqueVariables(Atom formula, TypedAtom * variables)
 {
-	Datum actorsList = FormulaGetActors(formula);
+	Atom actorsList = FormulaGetActors(formula);
 	ListIterator iterator;
 	ListIterate(actorsList, &iterator);
 	index8 i = 0;

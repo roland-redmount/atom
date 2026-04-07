@@ -1,5 +1,5 @@
 /**
- * The datum type DT_NAME
+ * The atom type DT_NAME
  * 
  * This should be a list (name n -> list n) but for bootstrapping purposes,
  * we implement this with a btree of C strings. We should implement services
@@ -19,20 +19,20 @@ size32 NumberOfNames(void);
 /**
  * Create a name from an existing char string and length.
  */
-Datum CreateName(char const * string, size32 length);
+Atom CreateName(char const * string, size32 length);
 
 /**
  * Create from a C string. Copies the string.
  */
-Datum CreateNameFromCString(char const * cString);
+Atom CreateNameFromCString(char const * cString);
 
-void NameAcquire(Datum name);
-void NameRelease(Datum name);
+void NameAcquire(Atom name);
+void NameRelease(Atom name);
 uint32 NameTotalReferenceCount(void);
 
 bool IsName(TypedAtom atom);
 
-void PrintName(Datum name);
+void PrintName(Atom name);
 
 data64 NameHashFromCString(char const * cString, data64 initialHash);
 

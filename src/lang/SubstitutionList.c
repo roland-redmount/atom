@@ -24,7 +24,7 @@ static SubstitutionList allocateSubstList(uint8 nPairs)
  * Create a substitution list from the unique variables of a tuple,
  * such that each variable maps to itself, var -> var
  */
-SubstitutionList CreateSubstFromVars(Datum list)
+SubstitutionList CreateSubstFromVars(Atom list)
 {
 	size32 nElements = ListLength(list);
 	ASSERT(nElements <= 255);

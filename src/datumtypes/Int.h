@@ -1,5 +1,5 @@
 /**
- * Datum types for signed integers, two's complement, little endian
+ * Atom types for signed integers, two's complement, little endian
  */
 
 #include "lang/TypedAtom.h"

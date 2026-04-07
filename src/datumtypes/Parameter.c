@@ -17,7 +17,7 @@ TypedAtom CreateParameter(byte io, byte type)
 	Parameter arg;
 	arg.fields.io = io;
 	arg.fields.datumType = type;
-	return (TypedAtom) {.type = DT_PARAMETER, .datum = arg.value};
+	return (TypedAtom) {.type = DT_PARAMETER, .atom = arg.value};
 }
 
 bool IsParameter(TypedAtom a)
@@ -29,7 +29,7 @@ bool IsParameter(TypedAtom a)
 void PrintParameter(TypedAtom parameter)
 {
 	Parameter arg;
-	arg.value = parameter.datum;
+	arg.value = parameter.atom;
 	if(arg.fields.io == PARAMETER_IN)
 		PrintChar('@');
 	else

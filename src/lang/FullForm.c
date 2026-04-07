@@ -11,7 +11,7 @@
  * 
  * TODO: this should determine order of clauses from multiset iteration order
  */
-Datum CreateFullForm(Datum const * clauseForms, size8 nClauseForms, index8 const * order)
+Atom CreateFullForm(Atom const * clauseForms, size8 nClauseForms, index8 const * order)
 {
 	TypedAtom uniqueClauseForms[nClauseForms];
 	for(index8 i = 0; i < nClauseForms; i++) {
@@ -23,14 +23,14 @@ Datum CreateFullForm(Datum const * clauseForms, size8 nClauseForms, index8 const
 	size8 nUniqueClauseForms = ReduceTypedAtomsArray(uniqueClauseForms, multiplicities, nClauseForms);
 
 	// create a multiset of clause forms
-	Datum conjunctionForm = CreateMultisetFromArrays(uniqueClauseForms, multiplicities, nUniqueClauseForms);
+	Atom conjunctionForm = CreateMultisetFromArrays(uniqueClauseForms, multiplicities, nUniqueClauseForms);
 	TypedAtom conjunctionFormAtom = CreateTypedAtom(DT_ID, conjunctionForm);
 	AssertFact(GetCorePredicateForm(FORM_CONJUNCTION_FORM), &conjunctionFormAtom);
 	return conjunctionForm;
 }
 
 
-bool IsConjunctionForm(Datum atom)
+bool IsConjunctionForm(Atom atom)
 {
 	return AtomHasRole(
 		atom,
@@ -40,19 +40,19 @@ bool IsConjunctionForm(Datum atom)
 }
 
 
-size8 FullFormNUniqueClauseForms(Datum form)
+size8 FullFormNUniqueClauseForms(Atom form)
 {
 	return MultisetNUniqueElements(form);
 }
 
 
-size8 FullFormNClauseFormsTotal(Datum form)
+size8 FullFormNClauseFormsTotal(Atom form)
 {
 	return MultisetSize(form);
 }
 
 
-size8 FullFormArity(Datum form)
+size8 FullFormArity(Atom form)
 {
 	// the arity of a cojunction is the sum of unique terms arity * multiple
 	MultisetIterator iterator;
@@ -60,7 +60,7 @@ size8 FullFormArity(Datum form)
 	size8 arity = 0;
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
-		uint8 clauseArity = ClauseArity(elementMultiple.element.datum);
+		uint8 clauseArity = ClauseArity(elementMultiple.element.atom);
 		arity += clauseArity * elementMultiple.multiple;
 		MultisetIteratorNext(&iterator);
 	}
@@ -71,7 +71,7 @@ size8 FullFormArity(Datum form)
 /**
  * Traverse and print a form to stdout
  */
-void PrintFullForm(Datum form)
+void PrintFullForm(Atom form)
 {
 	MultisetIterator iterator;
 	MultisetIterate(form, &iterator);
@@ -80,7 +80,7 @@ void PrintFullForm(Datum form)
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
-			PrintClauseForm(elementMultiple.element.datum);
+			PrintClauseForm(elementMultiple.element.atom);
 			PrintCString(" & ");
 		}
 		MultisetIteratorNext(&iterator);

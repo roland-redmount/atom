@@ -1,5 +1,5 @@
 /**
- * Datum type for IEE754 floating point numbers
+ * Atom type for IEE754 floating point numbers
  * This implements 32-bit and 64-bit numbers.
  * We assume that the C float type is 32-bit, and double is 64-bit
  */

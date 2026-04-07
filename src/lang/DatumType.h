@@ -1,5 +1,5 @@
 /**
- * The datum type determines how to interpret a datum,
+ * The atom type determines how to interpret a atom,
  * and is used to determine how to dispatch calls to bytecode programs
  */
 
@@ -10,7 +10,7 @@
 
 
 /**
- * Datum type IDs. Zero is invalid / none
+ * Atom type IDs. Zero is invalid / none
  */
 
 #define DT_NONE					0
@@ -33,12 +33,12 @@
 
 
 /**
- * Get a datum type syntax string from its id.
+ * Get a atom type syntax string from its id.
  */
 char const * GetDatumTypeName(byte typeId);
 
 /**
- * Find a datum type id from its syntax string.
+ * Find a atom type id from its syntax string.
  * NOTE: this function does not handle extra whitespace.
  */
 byte DatumTypeIdFromString(char const * syntax, size32 length);

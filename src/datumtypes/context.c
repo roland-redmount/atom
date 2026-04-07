@@ -8,31 +8,31 @@
 
 size32 ContextSize(size8 arity, size8 nRegisters)
 {
-	return sizeof(BytecodeContext) + (arity + nRegisters) * sizeof(Datum);
+	return sizeof(BytecodeContext) + (arity + nRegisters) * sizeof(Atom);
 }
 
 
-Datum * ContextArguments(BytecodeContext * context)
+Atom * ContextArguments(BytecodeContext * context)
 {
-	return (Datum *) (((byte *) context) + sizeof(BytecodeContext));
+	return (Atom *) (((byte *) context) + sizeof(BytecodeContext));
 }
 
-Datum * ContextRegisters(BytecodeContext * context)
+Atom * ContextRegisters(BytecodeContext * context)
 {
-	return (Datum *) (
-		((byte *) context) + sizeof(BytecodeContext) + context->arity * sizeof(Datum)
+	return (Atom *) (
+		((byte *) context) + sizeof(BytecodeContext) + context->arity * sizeof(Atom)
 	);
 }
 
 
-static void copyListDatums(Datum list, Datum * datums)
+static void copyListDatums(Atom list, Atom * datums)
 {
-	Datum * rp = datums;
+	Atom * rp = datums;
 	ListIterator iterator;
 	ListIterate(list, &iterator);
 	while(ListIteratorHasNext(&iterator)) {
 		TypedAtom a = ListIteratorGetElement(&iterator);
-		*rp++ = a.datum;
+		*rp++ = a.atom;
 		ListIteratorNext(&iterator);
 	}
 	ListIteratorEnd(&iterator);
@@ -45,12 +45,12 @@ static void copyListDatums(Datum list, Datum * datums)
  * The child context contains pointers to the bytecode program
  * and a working copy of the registers used.
  */
-BytecodeContext * CreateContext(Datum bytecode, BytecodeContext * parentContext)
+BytecodeContext * CreateContext(Atom bytecode, BytecodeContext * parentContext)
 {
 	// NOTE: Should contexts acquire the bytecode program?
 	// I think not, since the lifetime of a context is only
 	// the execution of the bytecode block.
-	Datum registersList = BytecodeGetRegisters(bytecode);
+	Atom registersList = BytecodeGetRegisters(bytecode);
 	// TODO: this must come from a Service
 	size8 arity = 0;	// FormulaArity(BytecodeGetSignature(bytecode));
 	ASSERT(false)
@@ -80,10 +80,10 @@ BytecodeContext * CreateContext(Datum bytecode, BytecodeContext * parentContext)
 
 void FreeChildContexts(BytecodeContext * context)
 {
-	// This requires knowing the register's datum type, so we need
+	// This requires knowing the register's atom type, so we need
 	// to retrieve the register list from the bytecode again ...
-	Datum registersList = BytecodeGetRegisters(context->bytecode);
-	Datum * rp = ContextRegisters(context);
+	Atom registersList = BytecodeGetRegisters(context->bytecode);
+	Atom * rp = ContextRegisters(context);
 	
 	ListIterator iterator;
 	ListIterate(registersList, &iterator);

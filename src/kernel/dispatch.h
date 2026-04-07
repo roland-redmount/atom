@@ -18,7 +18,7 @@
 /**
  * Dispatch a query (formula), return the first matching service, if any.
  */
-Service DispatchQuery(Datum query);
+Service DispatchQuery(Atom query);
 
 void CallService(Service service, TypedAtom * tuple);
 
@@ -51,7 +51,7 @@ void CallService(Service service, TypedAtom * tuple);
  *
  * TODO: this does not handle unification properly! Generally, there may be
  *   more than one matching tuple, and we must select the most general unifier.
- *   We should probably replace this with unification followed by a datum type check
+ *   We should probably replace this with unification followed by a atom type check
  */
 
 // bool SignatureQueryMatch(const Signature* signature, Atom query, Atom * inputs, index8 * perm);

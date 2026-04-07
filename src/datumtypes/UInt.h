@@ -1,7 +1,7 @@
 /**
- * Datum type for insigned integers, little endian
+ * Atom type for insigned integers, little endian
  * 
- * NOTE: consider removing this so that we have only one integer datum.
+ * NOTE: consider removing this so that we have only one integer atom.
  */
 
 #include "lang/TypedAtom.h"

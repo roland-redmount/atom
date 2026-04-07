@@ -24,7 +24,7 @@
  * Corresponding tuples are stored in the BTree.
  */
 typedef struct s_IFactConjunction {
-	Datum form;				// clause or predicate form for the relation
+	Atom form;				// clause or predicate form for the relation
 	index8 idColumn;		// these 3 fields total 4 bytes
 	size8 nColumns;
 	size16 nRows;
@@ -81,7 +81,7 @@ void IFactBegin(IFactDraft * draft);
  * Begin a new conjunction for the IFact currently being created.
  * Each clause (row, fact) in the conjunction will have the given form.
  */
-void IFactBeginConjunction(IFactDraft * draft, Datum form, index8 idColumn);
+void IFactBeginConjunction(IFactDraft * draft, Atom form, index8 idColumn);
 
 /**
  * Add a tuple that defines one clause of the current conjunction fact.
@@ -104,18 +104,18 @@ size32 IFactDraftCurrentNClauses(IFactDraft * draft);
 
 /**
  * Finish the IFact currently being created. Computes the IFact DT_ID atom's
- * datum as the hash of the identifying facts, creates the facts and
+ * atom as the hash of the identifying facts, creates the facts and
  * returns the DT_ID atom.
  */
-Datum IFactEnd(IFactDraft * draft);
+Atom IFactEnd(IFactDraft * draft);
 
 // This variant is only used during bootstrapping.
-Datum IFactEndCustom(IFactDraft * draft, data64 hash, void (* assertFact)(Datum predicateForm, TypedAtom * actors));
+Atom IFactEndCustom(IFactDraft * draft, data64 hash, void (* assertFact)(Atom predicateForm, TypedAtom * actors));
 
-void IFactAcquire(Datum ifact);
-void IFactRelease(Datum ifact);
+void IFactAcquire(Atom ifact);
+void IFactRelease(Atom ifact);
 
-uint32 IFactReferenceCount(Datum ifact);
+uint32 IFactReferenceCount(Atom ifact);
 uint32 TotalIFactReferenceCount(void);
 uint32 TotalIFactCount(void);
 
@@ -140,7 +140,7 @@ uint32 TotalIFactCount(void);
 // TODO: this should take a form atom, not a tree pointer
 bool IFactCheckTuple(BTree const * tree, TypedAtom const * tuple);
 
-void PrintIFact(Datum ifact);
+void PrintIFact(Atom ifact);
 
 void DumpIFacts(void);
 

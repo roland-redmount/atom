@@ -9,7 +9,7 @@
 #include "lang/TypedAtom.h"
 
 
-size8 FormArity(Datum form);
+size8 FormArity(Atom form);
 
 
 #endif  // FORM_H

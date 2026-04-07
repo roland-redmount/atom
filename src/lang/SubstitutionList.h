@@ -17,7 +17,7 @@ typedef struct s_SubstitutionList {
 
 
 // create an array of the unique variables in tuple
-SubstitutionList CreateSubstFromVars(Datum list);
+SubstitutionList CreateSubstFromVars(Atom list);
 
 // Find the value corresponding to a given variable
 TypedAtom FindSubstValue(SubstitutionList subst, TypedAtom variable);

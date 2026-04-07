@@ -36,14 +36,14 @@ static void testCreateList(void)
 {
 	AtomsFixture fixture = createAtomsFixture();
 	
-	Datum list = CreateListFromArray(fixture.atoms, EXAMPLE_LIST_N_ELEMENTS);
+	Atom list = CreateListFromArray(fixture.atoms, EXAMPLE_LIST_N_ELEMENTS);
 	
 	// test (list length) relation table
 	BTree * listLength = RegistryGetCoreTable(FORM_LIST_LENGTH);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(listLength), 1)
 
 	// test (list position element) relation table
-	Datum listPositionElementForm = GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT);
+	Atom listPositionElementForm = GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT);
 	Service service = RegistryFindService(listPositionElementForm);
 	ASSERT(service.type == SERVICE_BTREE)
 	BTree * listPositionElement = service.service.tree;
@@ -96,7 +96,7 @@ static void testCreateList(void)
 
 typedef struct {
 	AtomsFixture atomsFixture;
-	Datum list;
+	Atom list;
 } ExampleListFixture;
 
 // a list containing only "small" datums
@@ -127,7 +127,7 @@ static void testNestedList(void)
 		CreateTypedAtom(DT_ID, fixture.list)
 	};
 
-	Datum nestedList = CreateListFromArray(nestedListAtoms, NESTED_LIST_N_ELEMENTS);
+	Atom nestedList = CreateListFromArray(nestedListAtoms, NESTED_LIST_N_ELEMENTS);
 	
 	// test ListGetElement
 	for(index8 i = 0; i < NESTED_LIST_N_ELEMENTS; i++)
@@ -145,7 +145,7 @@ static void testNestedList(void)
 
 static void testCreateEmptyList(void)
 {
-	Datum emptyList = CreateListFromArray(0, 0);
+	Atom emptyList = CreateListFromArray(0, 0);
 	ASSERT_TRUE(IsList(emptyList))
 	ASSERT_UINT32_EQUAL(ListLength(emptyList), 0)
 

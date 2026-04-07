@@ -10,7 +10,7 @@
 /**
  * A bytecode instruction is coded as a one-byte opcode,
  * optionally an access mode byte, and one or two operand bytes,
- * for a maximum size fo 4 bytes. We store each instruction in a Datum.
+ * for a maximum size fo 4 bytes. We store each instruction in a Atom.
  * 
  * Instructions with zero operands (NOT, END, etc) use only the opcode byte.
  * For two-operand instructions, operand 1 is always the source, operand 2 is destination.
@@ -23,7 +23,7 @@
 
 typedef byte OpCode;
 
-// general purpose instructions, any datum type
+// general purpose instructions, any atom type
 #define OP_NOP			0
 #define	OP_COPY			0x01
 #define	OP_EQ			0x02
@@ -63,7 +63,7 @@ typedef byte OpCode;
 
 
 /**
- * Structure stored in a 64-bit instruction datum.
+ * Structure stored in a 64-bit instruction atom.
  * Each operand is an argument, a register, or a constant.
  * We may prefix each argument with a register holding
  * a context object, from which the operand is read.

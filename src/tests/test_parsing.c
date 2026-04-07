@@ -24,7 +24,7 @@
 typedef struct {
 	Token nameTokens[EXAMPLE_N_PARTS];
 	Token actorTokens[EXAMPLE_N_PARTS];
-	Datum names[EXAMPLE_N_PARTS];
+	Atom names[EXAMPLE_N_PARTS];
 	TypedAtom actors[EXAMPLE_N_PARTS];
 } TokensFixture;
 
@@ -58,7 +58,7 @@ static void setupTokensFixture(TokensFixture * fixture)
 	};
 
 	for(index8 i = 0; i < EXAMPLE_N_PARTS; i++) {
-		fixture->names[i] = fixture->nameTokens[i].atom.datum;
+		fixture->names[i] = fixture->nameTokens[i].atom.atom;
 		fixture->actors[i] = fixture->actorTokens[i].atom;
 	}
 
@@ -105,7 +105,7 @@ static void testPartBuilder(void)
 
 typedef struct {
 	TokensFixture tokensFixture;
-	Datum predicate;
+	Atom predicate;
 } PredicateFixture;
 
 
@@ -145,7 +145,7 @@ static void testPredicateBuilder(void)
 		ASSERT_TRUE(PredicateBuilderPush(&builder, tokensFixture->actorTokens[i]))
 		ASSERT_TRUE(PredicateBuilderIsValid(&builder))
 	}
-	Datum predicate = PredicateBuilderCreateFormula(&builder);
+	Atom predicate = PredicateBuilderCreateFormula(&builder);
 
 	ASSERT_DATA64_EQUAL(predicate, fixture.predicate)
 	// the forms are identical
@@ -164,7 +164,7 @@ static void testPredicateBuilder(void)
 
 typedef struct {
 	PredicateFixture predicateFixture;
-	Datum term, negatedTerm;
+	Atom term, negatedTerm;
 } TermFixture;
 
 
@@ -206,9 +206,9 @@ static void testTermBuilder(void)
 			ASSERT_TRUE(TermBuilderPush(&builder, tokensFixture->actorTokens[i]))
 			ASSERT_TRUE(TermBuilderIsValid(&builder))
 		}
-		Datum term = TermBuilderCreateFormula(&builder);
+		Atom term = TermBuilderCreateFormula(&builder);
 
-		Datum fixtureTerm = sign ? fixture.term : fixture.negatedTerm;
+		Atom fixtureTerm = sign ? fixture.term : fixture.negatedTerm;
 		ASSERT_DATA64_EQUAL(term, fixtureTerm)
 
 		IFactRelease(term);
@@ -227,8 +227,8 @@ static void testTermBuilder(void)
 
 typedef struct {
 	TermFixture termFixture;
-	Datum terms[EXAMPLE_CLAUSE_N_TERMS];
-	Datum clause;
+	Atom terms[EXAMPLE_CLAUSE_N_TERMS];
+	Atom clause;
 } ClauseFixture;
 
 
@@ -279,12 +279,12 @@ static void testClauseBuilder(void)
 			ASSERT_FALSE(ClauseBuilderIsValid(&builder))
 		}
 	}
-	Datum clause = ClauseBuilderCreateFormula(&builder);
+	Atom clause = ClauseBuilderCreateFormula(&builder);
 	CleanupClauseBuilder(&builder);
 
 	ASSERT_DATA64_EQUAL(clause, fixture.clause)
 
-	Datum actorsList = FormulaGetActors(clause);
+	Atom actorsList = FormulaGetActors(clause);
 	ASSERT_UINT32_EQUAL(ListLength(actorsList), EXAMPLE_CLAUSE_ARITY)
 
 	IFactRelease(clause);
@@ -296,12 +296,12 @@ static void testClauseBuilder(void)
 static void testCStringToPredicate(void)
 {
 	char const * exampleString = "foo 123 bar 456 bar 789 baz 0"; // "foo _x bar 123.45 bar 4567 baz \"foobar\"";
-	Datum predicate = CStringToPredicate(exampleString);
+	Atom predicate = CStringToPredicate(exampleString);
 
-	Datum predicateForm = FormulaGetForm(predicate);
+	Atom predicateForm = FormulaGetForm(predicate);
 	ASSERT_UINT32_EQUAL(PredicateArity(predicateForm), 4)
 
-	Datum actorsList = FormulaGetActors(predicate);
+	Atom actorsList = FormulaGetActors(predicate);
 	ASSERT_UINT32_EQUAL(ListLength(actorsList), 4)
 
 	IFactRelease(predicate);
@@ -312,20 +312,20 @@ static void testCStringToClause(void)
 {
 	// NOTE: this string must be in canonical order
 	char const * exampleString = "aarf \"foobar\" | foo _x bar 123.45";
-	Datum clause = CStringToClause(exampleString, CStringLength(exampleString));
+	Atom clause = CStringToClause(exampleString, CStringLength(exampleString));
 
 	// TODO: more complex test cases, and conjunctions, e.g.
 	// foo 42 bar 3.4 | !string "baaz" & + 2 + 2 = 4 & foobar _x | foobar _y & + 3 + 4 = 8
 
 	// PrintFormula(clause);
 
-	Datum clauseForm = FormulaGetForm(clause);
+	Atom clauseForm = FormulaGetForm(clause);
 	ASSERT_UINT32_EQUAL(ClauseArity(clauseForm), 3)
 
-	Datum actorsList = FormulaGetActors(clause);
+	Atom actorsList = FormulaGetActors(clause);
 	ASSERT_UINT32_EQUAL(ListLength(actorsList), 3)
 
-	Datum string = CreateStringFromCString("foobar");
+	Atom string = CreateStringFromCString("foobar");
 	ASSERT_TRUE(
 		SameTypedAtoms(
 			ListGetElement(actorsList, 1),

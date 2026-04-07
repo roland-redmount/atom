@@ -6,7 +6,7 @@
 #define	VARIABLE_H 
 
 #include "lang/TypedAtom.h"
-#include "lang/Datum.h"
+#include "lang/Atom.h"
 
 /**
  * Create a variable with given name.

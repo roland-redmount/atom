@@ -18,11 +18,11 @@ void ReleaseToken(Token token)
 {
 	if(token.type == TOKEN_NAME) {
 		ASSERT(token.atom.type == DT_NAME)
-		NameRelease(token.atom.datum);
+		NameRelease(token.atom.atom);
 	}
 	if(token.type == TOKEN_STRING) {
 		ASSERT(token.atom.type == DT_ID)
-		IFactRelease(token.atom.datum);
+		IFactRelease(token.atom.atom);
 	}
 	// other token types have nothing to release
 }

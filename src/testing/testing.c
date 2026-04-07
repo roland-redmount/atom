@@ -36,7 +36,7 @@ static void printLocation(char const * functionName, char const * fileName, uint
 
 
 /**
- * NOTE: the below has a lot of repetition, but varying datum types
+ * NOTE: the below has a lot of repetition, but varying atom types
  * makes it difficult to extract out the pattern to a single function,
  * and I wanted to avoid macros as far as possible.
  */

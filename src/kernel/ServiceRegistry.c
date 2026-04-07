@@ -23,7 +23,7 @@ struct {
 
 static int8 compareServices(Service const * service, Service const * serviceOrKey)
 {
-	return CompareDatums(service->form, serviceOrKey->form);
+	return CompareAtoms(service->form, serviceOrKey->form);
 }
 
 
@@ -70,7 +70,7 @@ size32 RegistryNServices(void)
 
 
 // create a Service struct for a B-tree service
-static Service createBTreeService(Datum form, BTree * btree)
+static Service createBTreeService(Atom form, BTree * btree)
 {
 	Service service;
 	service.form = form;
@@ -81,7 +81,7 @@ static Service createBTreeService(Datum form, BTree * btree)
 }
 
 
-void RegistryCreateCoreTable(index32 index, Datum form, size8 arity)
+void RegistryCreateCoreTable(index32 index, Atom form, size8 arity)
 {
 	ASSERT(index >= 1);
 	ASSERT(index <= N_CORE_PREDICATES)
@@ -105,7 +105,7 @@ void TeardownRegistry(void)
 }
 
 
-Service RegistryAddBTreeService(Datum form, BTree * btree)
+Service RegistryAddBTreeService(Atom form, BTree * btree)
 {
 	Service service = createBTreeService(form, btree);
 	ASSERT(BTreeInsert(registry.tree, &service) == BTREE_INSERTED)
@@ -113,7 +113,7 @@ Service RegistryAddBTreeService(Datum form, BTree * btree)
 }
 
 
-Service RegistryAddBytecodeService(Datum bytecode, Datum form, Datum parameters)
+Service RegistryAddBytecodeService(Atom bytecode, Atom form, Atom parameters)
 {
 	Service service;
 	service.form = form;
@@ -128,14 +128,14 @@ Service RegistryAddBytecodeService(Datum bytecode, Datum form, Datum parameters)
 }
 
 
-void RegistryRemoveService(Datum form)
+void RegistryRemoveService(Atom form)
 {
 	Service key = createBTreeService(form, 0);
 	ASSERT(BTreeDelete(registry.tree, &key) == BTREE_DELETED);
 }
 
 
-Service RegistryFindService(Datum form)
+Service RegistryFindService(Atom form)
 {
 	Service service = {0};
 	service.form = form;

@@ -15,7 +15,7 @@
  * which in turn requires a (letter code) lookup.
  * 
  * In principle, letters should be a DT_ID identified by the letter code,
- * but for bootstrapping purposes we're now using a separate datum type DT_LETTER,
+ * but for bootstrapping purposes we're now using a separate atom type DT_LETTER,
  * to avoid having to generate hash values for each letter. 
  * 
  * TODO: queries to the (letter code) relation must dispatch to these functions
@@ -49,7 +49,7 @@ TypedAtom GetAlphabetLetter(char c)
 
 char LetterToChar(TypedAtom letter, uint8 letterCase)
 {
-	return letterCodeToChar(letter.datum, letterCase);
+	return letterCodeToChar(letter.atom, letterCase);
 }
 
 

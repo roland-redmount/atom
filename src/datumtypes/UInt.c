@@ -7,7 +7,7 @@
  */
 TypedAtom CreateUInt(uint64 value)
 {
-	return (TypedAtom) {.type = DT_UINT, .datum = value};
+	return (TypedAtom) {.type = DT_UINT, .atom = value};
 }
 
 /**
@@ -15,7 +15,7 @@ TypedAtom CreateUInt(uint64 value)
  */
 uint64 GetUIntValue(TypedAtom integer)
 {
-	return (uint64) integer.datum;
+	return (uint64) integer.atom;
 }
 
 

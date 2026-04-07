@@ -141,7 +141,7 @@ static void acquireIFact(IFactHeader * header)
 }
 
 
-void IFactAcquire(Datum ifact)
+void IFactAcquire(Atom ifact)
 {
 	IFactHeader * header = peekIFactHeader(ifact);
 	ASSERT(header);
@@ -157,20 +157,20 @@ void IFactAcquire(Datum ifact)
  */
 
 // create query tuple to match all tuples
-static void createQueryTuple(TypedAtom * tuple, Datum ifact, size8 nColumns, index8 idColumn)
+static void createQueryTuple(TypedAtom * tuple, Atom ifact, size8 nColumns, index8 idColumn)
 {
 	for(index8 j = 0; j < nColumns; j++) {
 		if(j == idColumn) {
 			// query with the ATOM_PROTECTED flag set
 			// to indicate a defining fact should be removed
-			tuple[j] = (TypedAtom) {.type = DT_ID, .flags = ATOM_PROTECTED, .datum = ifact};
+			tuple[j] = (TypedAtom) {.type = DT_ID, .flags = ATOM_PROTECTED, .atom = ifact};
 		}
 		else
 			tuple[j] = anonymousVariable;
 	}
 }
 
-uint32 IFactReferenceCount(Datum ifact)
+uint32 IFactReferenceCount(Atom ifact)
 {
 	IFactHeader * header = peekIFactHeader(ifact);
 	ASSERT(header);
@@ -208,7 +208,7 @@ void IFactBegin(IFactDraft * draft)
 }
 
 
-void IFactBeginConjunction(IFactDraft * draft, Datum form, index8 idColumn)
+void IFactBeginConjunction(IFactDraft * draft, Atom form, index8 idColumn)
 {
 	ASSERT(!draft->hasBegunConjunction);
 
@@ -275,7 +275,7 @@ static void sortIFactDraft(IFactDraft * draft)
 	IFactHeader * ifact = &(draft->header);
 	// first sort the tuples for each conjunction
 	IFactConjunction * conjunction = ifact->conjunctions;
-	Datum forms[ifact->nConjunctions];
+	Atom forms[ifact->nConjunctions];
 	size32 tupleBlockSizes[ifact->nConjunctions];
 	TypedAtom * tuples = draft->tupleStorage;
 	for(index8 i = 0; i < ifact->nConjunctions; i++) {
@@ -290,7 +290,7 @@ static void sortIFactDraft(IFactDraft * draft)
 	}
 
 	// then sort the conjunctions by form
-	// NOTE: this ordering depends on the form datum (ifact) and so is system-dependent
+	// NOTE: this ordering depends on the form atom (ifact) and so is system-dependent
 	index8 ordering[ifact->nConjunctions];
 	FindArrayOrdering((byte *) &forms, ifact->nConjunctions, sizeof(TypedAtom), ordering, 0);
 	ReorderArray(ifact->conjunctions, ordering, ifact->nConjunctions, sizeof(IFactConjunction));
@@ -304,7 +304,7 @@ static void sortIFactDraft(IFactDraft * draft)
  * The assertFact() function is typically AssertFact()
  * but an alternative version is used during bootstrap.
  */
-static void createFacts(IFactDraft * draft, void (* assertFact)(Datum predicateForm, TypedAtom * actors))
+static void createFacts(IFactDraft * draft, void (* assertFact)(Atom predicateForm, TypedAtom * actors))
 {
 	TypedAtom ifactAtom = CreateTypedAtom(DT_ID, draft->header.hash);
 	// NOTE: this should be handled by RelationBTree internally?
@@ -410,7 +410,7 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 }
 
 
-Datum IFactEndCustom(IFactDraft * draft, data64 hash, void (* assertFact)(Datum predicateForm, TypedAtom * actors))
+Atom IFactEndCustom(IFactDraft * draft, data64 hash, void (* assertFact)(Atom predicateForm, TypedAtom * actors))
 {
 	ASSERT(!draft->hasBegunConjunction);
 	ASSERT(draft->header.conjunctions);
@@ -443,11 +443,11 @@ Datum IFactEndCustom(IFactDraft * draft, data64 hash, void (* assertFact)(Datum 
 	}
 	FreePage(draft->tupleStorage);
 
-	return (Datum) draft->header.hash;
+	return (Atom) draft->header.hash;
 }
 
 
-Datum IFactEnd(IFactDraft * draft)
+Atom IFactEnd(IFactDraft * draft)
 {
 	return IFactEndCustom(draft, 0, AssertFact);
 }
@@ -502,7 +502,7 @@ bool IFactCheckTuple(BTree const * tree, TypedAtom const * tuple)
 			continue;
 		if(tuple[i].flags & ATOM_PROTECTED) // skip check for atoms being identified
 			continue;
-		IFactHeader * header = peekIFactHeader(tuple[i].datum);
+		IFactHeader * header = peekIFactHeader(tuple[i].atom);
 		size8 nConjunctions = header->nConjunctions;
 		IFactConjunction * conjunctions = header->conjunctions;
 		ASSERT(header);
@@ -518,7 +518,7 @@ bool IFactCheckTuple(BTree const * tree, TypedAtom const * tuple)
 }
 
 
-void IFactRelease(Datum ifact)
+void IFactRelease(Atom ifact)
 {
 	IFactHeader * header = peekIFactHeader(ifact);
 	ASSERT(header);
@@ -561,7 +561,7 @@ void IFactRelease(Datum ifact)
 }
 
 
-void PrintIFact(Datum atom)
+void PrintIFact(Atom atom)
 {
 	PrintF("ID %llx", atom);
 }
@@ -573,7 +573,7 @@ void DumpIFacts(void)
 	BTreeIterate(&iterator, ifactStorage.btree, 0, 0);
 	while(BTreeIteratorHasItem(&iterator)) {
 		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
-		PrintIFact((Datum) header->hash);
+		PrintIFact((Atom) header->hash);
 		PrintChar('\n');
 		BTreeIteratorNext(&iterator);
 	}

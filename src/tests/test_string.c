@@ -10,7 +10,7 @@
 void testString(void)
 {
 	char const * cString1 = "foobar";
-	Datum string1 = CreateStringFromCString(cString1);
+	Atom string1 = CreateStringFromCString(cString1);
 	ASSERT_UINT32_EQUAL(CStringLength(cString1), ListLength(string1))
 
 	// TODO: reference handling is now different: creating a string
@@ -26,7 +26,7 @@ void testString(void)
 
 	// second call to CreateString() should return the same string
 	// and add one reference
-	Datum string1Clone = CreateStringFromCString(cString1);
+	Atom string1Clone = CreateStringFromCString(cString1);
 	ASSERT_DATA64_EQUAL(string1, string1Clone)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(string1), 2)
 	IFactRelease(string1Clone);
@@ -34,7 +34,7 @@ void testString(void)
 
 	// create a second string
 	char const * cString2 = "fubar";
-	Datum string2 = CreateStringFromCString(cString2);
+	Atom string2 = CreateStringFromCString(cString2);
 	ASSERT_UINT32_EQUAL(ListLength(string2), CStringLength(cString2))
 
 	// we should have "foobar" < "fubar"

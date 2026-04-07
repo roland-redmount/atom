@@ -88,7 +88,7 @@ static void testLetter(void)
 	for(char c = 'A'; c <= 'Z'; c++) {
 		TypedAtom letter = GetAlphabetLetter(c);
 		ASSERT_UINT32_EQUAL(letter.type, DT_LETTER)
-		ASSERT_DATA64_EQUAL(letter.datum, i)
+		ASSERT_DATA64_EQUAL(letter.atom, i)
 		i++;
 	}
 
@@ -96,7 +96,7 @@ static void testLetter(void)
 	for(char c = 'a'; c <= 'z'; c++) {
 		TypedAtom letter = GetAlphabetLetter(c);
 		ASSERT_UINT32_EQUAL(letter.type, DT_LETTER)
-		ASSERT_DATA64_EQUAL(letter.datum, i)
+		ASSERT_DATA64_EQUAL(letter.atom, i)
 		i++;
 	}
 }
@@ -106,7 +106,7 @@ int main(int argc, char * argv[])
 {
 	SetupMemory();
 
-	// datum type functions
+	// atom type functions
 	ExecuteTest(testGetDatumTypeName);
 	ExecuteTest(testFindTypeFromString);
 	// simple datums

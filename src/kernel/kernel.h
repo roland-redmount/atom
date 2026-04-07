@@ -33,7 +33,7 @@ void KernelShutdown(void);
  * Adds a tuple to the corresponding relation table,
  * and adds an entry to the lookup table for each DT_ID actor.
  */
-void AssertFact(Datum form, TypedAtom * actors);
+void AssertFact(Atom form, TypedAtom * actors);
 
 
 /**
@@ -43,7 +43,7 @@ void AssertFact(Datum form, TypedAtom * actors);
  * This function should always succeed, as facts can always
  * be retracted at any time.
  */
-void RetractFact(Datum form, TypedAtom * actors);
+void RetractFact(Atom form, TypedAtom * actors);
 
 
 /**
@@ -115,13 +115,13 @@ void RetractFact(Datum form, TypedAtom * actors);
  * Lookup one of the "primitive" forms for core tables
  * Return a DT_ID.
  */
-Datum GetCorePredicateForm(index32 formId);
+Atom GetCorePredicateForm(index32 formId);
 
 
 /**
  * Lookup a core role name. Returns a DT_NAME
  */
-Datum GetCoreRoleName(index32 roleId);
+Atom GetCoreRoleName(index32 roleId);
 
 
 /**

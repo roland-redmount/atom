@@ -1,14 +1,14 @@
 /**
  * A DT_PARAMETER aton is used in service signatures to mark a position
  * in the actor list where a parameter is a expected.
- * A parameter is either "input" or "output" and may optionally have a datum type.
+ * A parameter is either "input" or "output" and may optionally have a atom type.
  */
 
 #ifndef	PARAMETER_H
 #define	PARAMETER_H 
 
 #include "lang/TypedAtom.h"
-#include "lang/Datum.h"
+#include "lang/Atom.h"
 
 #define PARAMETER_IN	1
 #define PARAMETER_OUT	2

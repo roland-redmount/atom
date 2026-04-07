@@ -40,7 +40,7 @@ static void listSetTuple(TypedAtom * tuple, TypedAtom list, TypedAtom position, 
  * but those are not workable for "core" tables so we must check explicitly.
  */
 
-Datum CreateList(ListElementGenerator generator, void const * data, size32 nElements)
+Atom CreateList(ListElementGenerator generator, void const * data, size32 nElements)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
@@ -52,7 +52,7 @@ Datum CreateList(ListElementGenerator generator, void const * data, size32 nElem
 // assert (list length) fact
 static void assertListLength(IFactDraft * draft, size32 nElements)
 {
-	Datum listLengthForm = GetCorePredicateForm(FORM_LIST_LENGTH);
+	Atom listLengthForm = GetCorePredicateForm(FORM_LIST_LENGTH);
 
 	IFactBeginConjunction(
 		draft, listLengthForm, 
@@ -113,7 +113,7 @@ index32 ListAddElement(IFactDraft * draft, TypedAtom element)
 }
 
 
-Datum ListEnd(IFactDraft * draft)
+Atom ListEnd(IFactDraft * draft)
 {
 	size32 nElements;
 	if(draft->hasBegunConjunction) {
@@ -144,13 +144,13 @@ TypedAtom arrayElementGenerator(index32 index, void const * data)
 }
 
 
-Datum CreateListFromArray(TypedAtom const * atoms, size8 nAtoms)
+Atom CreateListFromArray(TypedAtom const * atoms, size8 nAtoms)
 {
 	return CreateList(arrayElementGenerator, atoms, nAtoms);
 }
 
 
-bool IsList(Datum atom)
+bool IsList(Atom atom)
 {
 	return AtomHasRole(
 		atom,
@@ -160,7 +160,7 @@ bool IsList(Datum atom)
 }
 
 
-size32 ListLength(Datum list)
+size32 ListLength(Atom list)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_LENGTH);
 
@@ -173,7 +173,7 @@ size32 ListLength(Datum list)
 }
 
 
-TypedAtom ListGetElement(Datum list, index32 position)
+TypedAtom ListGetElement(Atom list, index32 position)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
 
@@ -185,7 +185,7 @@ TypedAtom ListGetElement(Datum list, index32 position)
 }
 
 
-void ListGetElementsArray(Datum list, TypedAtom * elements)
+void ListGetElementsArray(Atom list, TypedAtom * elements)
 {
 	ASSERT(IsList(list))
 	ListIterator iterator;
@@ -199,7 +199,7 @@ void ListGetElementsArray(Datum list, TypedAtom * elements)
 }
 
 
-index32 ListGetPosition(Datum list, TypedAtom element)
+index32 ListGetPosition(Atom list, TypedAtom element)
 {
 	ASSERT(IsList(list))
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
@@ -229,7 +229,7 @@ index32 ListGetPosition(Datum list, TypedAtom element)
 // canonical ordering of list (and string) datums
 // since this function depends on B-tree iteration,
 // which leads to infinite recursion when comparing B-tree ḱeys
-int8 ListLexicalOrdering(Datum list1, Datum list2)
+int8 ListLexicalOrdering(Atom list1, Atom list2)
 {
 	if(list1 == list2)
 		return 0;
@@ -275,7 +275,7 @@ int8 ListLexicalOrdering(Datum list1, Datum list2)
  * This is a thin wrapper around RelationBTreeIterator.
  */
 
-void ListIterate(Datum list, ListIterator * iterator)
+void ListIterate(Atom list, ListIterator * iterator)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
 	listSetTuple(iterator->queryTuple, CreateTypedAtom(DT_ID, list), anonymousVariable, anonymousVariable);
@@ -309,7 +309,7 @@ void ListIteratorEnd(ListIterator * iterator)
 }
 
 
-void PrintList(Datum list)
+void PrintList(Atom list)
 {
 	PrintChar('{');
 

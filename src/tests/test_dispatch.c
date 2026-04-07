@@ -9,7 +9,7 @@
 void testDispatch(void)
 {
 
-	Datum query = CStringToPredicate("+ 3 + 4 = _");
+	Atom query = CStringToPredicate("+ 3 + 4 = _");
 
 	Service service = DispatchQuery(query);
 	ASSERT(service.type == SERVICE_BYTECODE);

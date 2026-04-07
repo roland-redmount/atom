@@ -15,7 +15,7 @@
 typedef struct s_PredicateBuilder {
 	bool isValid;
 	PartBuilder partBuilder;
-	ResizingArray roles;		// array of DT_NAME datum
+	ResizingArray roles;		// array of DT_NAME atom
 	ResizingArray actors;		// array of atoms
 } PredicateBuilder;
 
@@ -26,13 +26,13 @@ bool PredicateBuilderPush(PredicateBuilder * builder, Token token);
 bool PredicateBuilderIsEmpty(PredicateBuilder const * builder);
 bool PredicateBuilderIsValid(PredicateBuilder const * builder);
 
-Datum PredicateBuilderCreateFormula(PredicateBuilder const * builder);
+Atom PredicateBuilderCreateFormula(PredicateBuilder const * builder);
 
 void PredicateBuilderReset(PredicateBuilder * builder);
 
 void CleanupPredicateBuilder(PredicateBuilder * builder);
 
-Datum CStringToPredicate(char const * string);
+Atom CStringToPredicate(char const * string);
 
 
 #endif	// PREDICATEBUILDER_H

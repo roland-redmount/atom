@@ -17,14 +17,14 @@ static void quoteSetTuple(TypedAtom * tuple, TypedAtom quote, TypedAtom quoted)
 }
 
 
-Datum CreateQuote(Datum quoted)
+Atom CreateQuote(Atom quoted)
 {
 	ASSERT(IsFormula(quoted));
 
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	Datum form = GetCorePredicateForm(FORM_QUOTE_QUOTED);
+	Atom form = GetCorePredicateForm(FORM_QUOTE_QUOTED);
 
 	IFactBeginConjunction(
 		&draft, form,
@@ -40,7 +40,7 @@ Datum CreateQuote(Datum quoted)
 }
 
 
-bool IsQuote(Datum atom)
+bool IsQuote(Atom atom)
 {
 	return AtomHasRole(
 		atom,
@@ -50,7 +50,7 @@ bool IsQuote(Datum atom)
 }
 
 
-Datum QuoteGetQuoted(Datum quote)
+Atom QuoteGetQuoted(Atom quote)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_QUOTE_QUOTED);
 
@@ -59,11 +59,11 @@ Datum QuoteGetQuoted(Datum quote)
 	TypedAtom tuple[2];
 	RelationBTreeQuerySingle(tree, query, tuple);
 
-	return tuple[CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED)].datum;
+	return tuple[CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED)].atom;
 }
 
 
-void PrintQuoted(Datum quoted)
+void PrintQuoted(Atom quoted)
 {
 	PrintChar('\'');
 	PrintFormula(QuoteGetQuoted(quoted));

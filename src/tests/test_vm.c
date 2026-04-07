@@ -18,9 +18,9 @@
 
 
 typedef struct {
-	Datum bytecode;
-	Datum signature;		// a formula
-	Datum registers;		// a list
+	Atom bytecode;
+	Atom signature;		// a formula
+	Atom registers;		// a list
 } BytecodeFixture;
 
 
@@ -110,7 +110,7 @@ void testBytecodeProgram1(void)
 
 	ASSERT_DATA64_EQUAL(BytecodeGetRegisters(fixture.bytecode), fixture.registers)
 
-	Datum program = BytecodeGetProgram(fixture.bytecode);
+	Atom program = BytecodeGetProgram(fixture.bytecode);
 	ASSERT_UINT32_EQUAL(ListLength(program), 5);
 
 	ASSERT_UINT32_EQUAL(
@@ -145,10 +145,10 @@ void testExecuteByteCode1(void)
 	PrintChar('\n');
 	
 	// NOTE: arguments must be in canonical order
-	Datum arguments[2] = {CreateInt(3).datum,  CreateInt(0).datum};
+	Atom arguments[2] = {CreateInt(3).atom,  CreateInt(0).atom};
 	BytecodeContext * rootContext = VMCreateRootContext(fixture.bytecode, arguments);
 	VMExecute(rootContext);
-	Datum * results = ContextArguments(rootContext);
+	Atom * results = ContextArguments(rootContext);
 	// results should be 3 * 3 
 	ASSERT_UINT32_EQUAL(results[1], 9);
 
@@ -193,7 +193,7 @@ BytecodeFixture setupBytecodeFixture2(void)
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
 	fixture.registers = CreateListFromArray(
-		(TypedAtom []) {CreateInt(0), {.type = DT_CONTEXT, .datum = 0}},
+		(TypedAtom []) {CreateInt(0), {.type = DT_CONTEXT, .atom = 0}},
 		2
 	);
 
@@ -258,11 +258,11 @@ void testExecuteByteCode2(void)
 	PrintChar('\n');
 	
 	// NOTE: arguments must be in canonical order
-	Datum arguments[2] = {CreateInt(3).datum,  CreateInt(0).datum};
+	Atom arguments[2] = {CreateInt(3).atom,  CreateInt(0).atom};
 	BytecodeContext * rootContext = VMCreateRootContext(fixture.bytecode, arguments);
 
 	VMExecute(rootContext);
-	Datum * results = ContextArguments(rootContext);
+	Atom * results = ContextArguments(rootContext);
 	ASSERT_UINT32_EQUAL(results[1], 3 * 4);
 
 	FreeContext(rootContext);
@@ -273,13 +273,13 @@ void testExecuteByteCode2(void)
 
 /**
  * Create a service 
- * TODO: the service needs datum types in order to interface with bytecode
+ * TODO: the service needs atom types in order to interface with bytecode
  */
 Service setupTableService(void)
 {
 	// form (foo barbar)
-	Datum roles[2] = {CreateNameFromCString("foo"), CreateNameFromCString("bar")};
-	Datum form = CreatePredicateForm(roles, 2);
+	Atom roles[2] = {CreateNameFromCString("foo"), CreateNameFromCString("bar")};
+	Atom form = CreatePredicateForm(roles, 2);
 	IFactRelease(roles[0]);
 	IFactRelease(roles[1]);
 	// create the service
@@ -340,7 +340,7 @@ BytecodeFixture setupBytecodeFixture3(void)
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
 	fixture.registers = CreateListFromArray(
-		(TypedAtom []) {CreateInt(0), {.type = DT_CONTEXT, .datum = 0}},
+		(TypedAtom []) {CreateInt(0), {.type = DT_CONTEXT, .atom = 0}},
 		2
 	);
 

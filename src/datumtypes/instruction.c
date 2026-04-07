@@ -3,7 +3,7 @@
 
 
 char const * mnemonics[] = {
-	// 0x00 - 0x0F general purpose instructions, any datum type
+	// 0x00 - 0x0F general purpose instructions, any atom type
 
 	"NOP", "COPY", "EQ", "NOP", "NOP", "NOP", "NOP", "NOP", 
 	"NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
@@ -66,7 +66,7 @@ TypedAtom InstructionEnd(Instruction * draft)
 Instruction InstructionGetData(TypedAtom instruction)
 {
 	Instruction inst;
-	inst.value = instruction.datum;
+	inst.value = instruction.atom;
 	return inst;
 }
 

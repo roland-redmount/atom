@@ -19,12 +19,12 @@ void TermFormSetTuple(TypedAtom * tuple, TypedAtom termForm, TypedAtom predicate
 /**
  * The term form is negated if sign is false
  */
-Datum CreateTermForm(Datum predicateForm, bool sign)
+Atom CreateTermForm(Atom predicateForm, bool sign)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	Datum termForm = GetCorePredicateForm(FORM_TERM_FORM);
+	Atom termForm = GetCorePredicateForm(FORM_TERM_FORM);
 
 	IFactBeginConjunction(
 		&draft, termForm,
@@ -42,7 +42,7 @@ Datum CreateTermForm(Datum predicateForm, bool sign)
 }
 
 
-bool IsTermForm(Datum atom)
+bool IsTermForm(Atom atom)
 {
 	return AtomHasRole(
 		atom,
@@ -52,7 +52,7 @@ bool IsTermForm(Datum atom)
 }
 
 
-Datum GetPredicateForm(Datum termForm)
+Atom GetPredicateForm(Atom termForm)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_TERM_FORM);
 
@@ -62,11 +62,11 @@ Datum GetPredicateForm(Datum termForm)
 	TypedAtom result[3];
 	RelationBTreeQuerySingle(tree, query, result);
 
-	return result[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_PREDICATE_FORM)].datum;
+	return result[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_PREDICATE_FORM)].atom;
 }
 
 
-bool TermFormGetSign(Datum termForm)
+bool TermFormGetSign(Atom termForm)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_TERM_FORM);
 
@@ -76,11 +76,11 @@ bool TermFormGetSign(Datum termForm)
 	RelationBTreeQuerySingle(tree, query, tuple);
 	TypedAtom sign = tuple[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_SIGN)];
 
-	return (sign.datum == 1);
+	return (sign.atom == 1);
 }
 
 
-void PrintTermForm(Datum termForm)
+void PrintTermForm(Atom termForm)
 {	
 	if(!TermFormGetSign(termForm))
 		PrintChar('!');
@@ -88,7 +88,7 @@ void PrintTermForm(Datum termForm)
 }
 
 
-size8 TermFormArity(Datum termForm)
+size8 TermFormArity(Atom termForm)
 {
 	return PredicateArity(GetPredicateForm(termForm));
 }

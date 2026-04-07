@@ -12,8 +12,8 @@
 void testAssertRetract(void)
 {
 	// form (foo bar)
-	Datum roles[2] = {CreateNameFromCString("foo"), CreateNameFromCString("bar")};
-	Datum form = CreatePredicateForm(roles, 2);
+	Atom roles[2] = {CreateNameFromCString("foo"), CreateNameFromCString("bar")};
+	Atom form = CreatePredicateForm(roles, 2);
 	NameRelease(roles[0]);
 	NameRelease(roles[1]);
 	

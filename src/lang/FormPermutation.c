@@ -96,7 +96,7 @@ static bool NextPermutation(Permutation * permutation)
 /**
  * Create a new predicate iterator, starting from the identity permutation
  */
-PredicateIterator * CreatePredicateIterator(Datum predicateForm)
+PredicateIterator * CreatePredicateIterator(Atom predicateForm)
 {
 	PredicateIterator* iter = malloc(sizeof(PredicateIterator));
 	iter->nUniqueRoles = PredicateNRoles(predicateForm);
@@ -172,7 +172,7 @@ void FreePredicateIterator(PredicateIterator * iter)
 /**
  * Create a new clause iterator, starting from the identity permutation
  */
-ClauseIterator * CreateClauseIterator(Datum clauseForm)
+ClauseIterator * CreateClauseIterator(Atom clauseForm)
 {
 	ClauseIterator* iter = malloc(sizeof(ClauseIterator));
 	iter->nUniqueTerms = ClauseNUniqueTerms(clauseForm);
@@ -193,7 +193,7 @@ ClauseIterator * CreateClauseIterator(Datum clauseForm)
 
 		// create a predicate iterator for each multiple of each term form
 		iter->predIter[i] = malloc(em.multiple * sizeof(PredicateIterator *));
-		Datum predicateForm = GetPredicateForm(em.element.datum);
+		Atom predicateForm = GetPredicateForm(em.element.atom);
 		for(index8 j = 0; j < em.multiple; j++) {
 			iter->predIter[i][j] = CreatePredicateIterator(predicateForm);
 		}
@@ -282,7 +282,7 @@ void FreeClauseIterator(ClauseIterator * iter)
 /**
  * Create a new conjunction form iterator, starting from the identity permutation
  */
-ConjunctionIterator * CreateConjunctionIterator(Datum form)
+ConjunctionIterator * CreateConjunctionIterator(Atom form)
 {
 	ConjunctionIterator* iter = malloc(sizeof(ConjunctionIterator));
 	iter->nClauses = FullFormNUniqueClauseForms(form);
@@ -302,7 +302,7 @@ ConjunctionIterator * CreateConjunctionIterator(Datum form)
 		// create a clause iterator for each multiple of each clause form
 		iter->clauseIter[i] = malloc(em.multiple * sizeof(ClauseIterator *));
 		for(index8 j = 0; j < em.multiple; j++) {
-			iter->clauseIter[i][j] = CreateClauseIterator(em.element.datum);
+			iter->clauseIter[i][j] = CreateClauseIterator(em.element.atom);
 		}
 	}
 	MultisetIteratorEnd(&iterator);
@@ -378,7 +378,7 @@ static void getConjunctionPermutation(const ConjunctionIterator * iter, index8 *
 // we now need interface functions here since form can take several types
 // poor mans polymorphism ...
 
-FormIterator* CreateFormIterator(Datum form)
+FormIterator* CreateFormIterator(Atom form)
 {
 	FormIterator * iter = malloc(sizeof(FormIterator));
 	iter->form = form;

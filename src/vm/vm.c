@@ -26,14 +26,14 @@ void VMInitialize(void * stack, size32 stackSize)
 
 
 // TODO: this is very inefficient
-static Datum accessConstant(Datum bytecode, index8 opIndex)
+static Atom accessConstant(Atom bytecode, index8 opIndex)
 {
-	Datum constantsList = BytecodeGetConstants(bytecode);
-	return ListGetElement(constantsList, opIndex).datum;
+	Atom constantsList = BytecodeGetConstants(bytecode);
+	return ListGetElement(constantsList, opIndex).atom;
 }
 
 
-static Datum readOperand(BytecodeContext * context, Instruction inst, Operand operand)
+static Atom readOperand(BytecodeContext * context, Instruction inst, Operand operand)
 {
 	index8 opIndex;
 	byte accessMode;
@@ -74,7 +74,7 @@ static Datum readOperand(BytecodeContext * context, Instruction inst, Operand op
 }
 
 
-void writeOperand(BytecodeContext * context, Instruction inst, index8 operand, Datum datum)
+void writeOperand(BytecodeContext * context, Instruction inst, index8 operand, Atom atom)
 {
 	index8 opIndex;
 	byte accessMode;
@@ -100,12 +100,12 @@ void writeOperand(BytecodeContext * context, Instruction inst, index8 operand, D
 		BytecodeContext * operandContext = contextIndex ?
 			(BytecodeContext *) ContextRegisters(context)[contextIndex - 1] :
 			context;
-		ContextArguments(operandContext)[opIndex - 1] = datum;
+		ContextArguments(operandContext)[opIndex - 1] = atom;
 		break;
 	}
 	
 	case ACCESS_REGISTER:
-		ContextRegisters(context)[opIndex - 1] = datum;
+		ContextRegisters(context)[opIndex - 1] = atom;
 		break;
 
 	case ACCESS_CONSTANT:
@@ -117,7 +117,7 @@ void writeOperand(BytecodeContext * context, Instruction inst, index8 operand, D
 }
 
 
-BytecodeContext * VMCreateRootContext(Datum bytecode, Datum * arguments)
+BytecodeContext * VMCreateRootContext(Atom bytecode, Atom * arguments)
 {
  	BytecodeContext * context = CreateContext(bytecode, 0);
 
@@ -150,7 +150,7 @@ iterate:
 			inst.fields.opcode = OP_END;
 		}
 
-		Datum left, right;
+		Atom left, right;
 		switch(inst.fields.opcode) {
 		case OP_COPY:
 			left = readOperand(context, inst, OPERAND_LEFT);
@@ -190,9 +190,9 @@ iterate:
 			 * BCTX <service> <operand>
 			 * Create a bytecode context and store in the destination operand.
 			 */
-			Datum newBytecode = readOperand(context, inst, OPERAND_LEFT);
+			Atom newBytecode = readOperand(context, inst, OPERAND_LEFT);
 			BytecodeContext * newContext = CreateContext(newBytecode, context);
-			writeOperand(context, inst, OPERAND_RIGHT, (Datum) newContext);
+			writeOperand(context, inst, OPERAND_RIGHT, (Atom) newContext);
 			break;
 		}
 
@@ -237,7 +237,7 @@ iterate:
 		case OP_END: {
 			// END terminates the current context
 			vm.flag = false;
-			// NOTE: any register holding a reference-counted datum should be released?
+			// NOTE: any register holding a reference-counted atom should be released?
 			// Deallocating child contexts seem like a special case of this ...
 			FreeChildContexts(context);	
 			BytecodeContext * parentContext = context->parentContext;
