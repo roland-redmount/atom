@@ -26,14 +26,14 @@ void VMInitialize(void * stack, size32 stackSize)
 
 
 // TODO: this is very inefficient
-static Datum accessConstant(Atom bytecode, index8 opIndex)
+static Datum accessConstant(Datum bytecode, index8 opIndex)
 {
-	Atom constantsList = BytecodeGetConstants(bytecode);
+	Datum constantsList = BytecodeGetConstants(bytecode);
 	return ListGetElement(constantsList, opIndex).datum;
 }
 
 
-static Datum readOperand(VMContext * context, Instruction inst, Operand operand)
+static Datum readOperand(BytecodeContext * context, Instruction inst, Operand operand)
 {
 	index8 opIndex;
 	byte accessMode;
@@ -55,8 +55,8 @@ static Datum readOperand(VMContext * context, Instruction inst, Operand operand)
 	switch(accessMode) {
 	case ACCESS_PARAMETER: {
 		// parameters may be read from specific contexts
-		VMContext * operandContext = contextIndex ?
-			(VMContext *) ContextRegisters(context)[contextIndex - 1] :
+		BytecodeContext * operandContext = contextIndex ?
+			(BytecodeContext *) ContextRegisters(context)[contextIndex - 1] :
 			context;
 		return ContextArguments(operandContext)[opIndex - 1];
 	}
@@ -74,7 +74,7 @@ static Datum readOperand(VMContext * context, Instruction inst, Operand operand)
 }
 
 
-void writeOperand(VMContext * context, Instruction inst, index8 operand, Datum datum)
+void writeOperand(BytecodeContext * context, Instruction inst, index8 operand, Datum datum)
 {
 	index8 opIndex;
 	byte accessMode;
@@ -97,8 +97,8 @@ void writeOperand(VMContext * context, Instruction inst, index8 operand, Datum d
 	switch(accessMode) {
 	case ACCESS_PARAMETER: {
 		// parameters may be written to specific contexts
-		VMContext * operandContext = contextIndex ?
-			(VMContext *) ContextRegisters(context)[contextIndex - 1] :
+		BytecodeContext * operandContext = contextIndex ?
+			(BytecodeContext *) ContextRegisters(context)[contextIndex - 1] :
 			context;
 		ContextArguments(operandContext)[opIndex - 1] = datum;
 		break;
@@ -117,12 +117,15 @@ void writeOperand(VMContext * context, Instruction inst, index8 operand, Datum d
 }
 
 
-VMContext * VMCreateRootContext(Atom bytecode, Datum * arguments)
+BytecodeContext * VMCreateRootContext(Datum bytecode, Datum * arguments)
 {
- 	VMContext * context = CreateContext(bytecode, 0);
+ 	BytecodeContext * context = CreateContext(bytecode, 0);
 
 	// copy arguments to context
-	size8 arity = FormulaArity(BytecodeGetSignature(bytecode));
+	// TODO
+	ASSERT(false)
+
+	size8 arity = 0;	// FormulaArity(BytecodeGetSignature(bytecode));
 	for(index8 i = 0; i < arity; i++)
 		ContextArguments(context)[i] = arguments[i];
 
@@ -130,7 +133,7 @@ VMContext * VMCreateRootContext(Atom bytecode, Datum * arguments)
 }
 
 
-void VMExecute(VMContext * context)
+void VMExecute(BytecodeContext * context)
 {
 	// Iterate through program
 iterate:
@@ -182,25 +185,28 @@ iterate:
 			writeOperand(context, inst, OPERAND_RIGHT, right);
 			break;
 		
-		case OP_CTX: {
+		case OP_BCTX: {
 			/** 
-			 * EXEC <service> <operand>
-			 * Create a new context and store in the destination operand.
+			 * BCTX <service> <operand>
+			 * Create a bytecode context and store in the destination operand.
 			 */
-			Atom newBytecode = (Atom) {.type = DT_ID, .datum = readOperand(context, inst, OPERAND_LEFT)};
-			VMContext * newContext = CreateContext(newBytecode, context);
+			Datum newBytecode = readOperand(context, inst, OPERAND_LEFT);
+			BytecodeContext * newContext = CreateContext(newBytecode, context);
 			writeOperand(context, inst, OPERAND_RIGHT, (Datum) newContext);
 			break;
 		}
 
 		case OP_CALL: {
-			// RESUME <context>
-			// Give control to another execution context.
+			/**
+			 * CALL <context>
+			 * Give control to another execution context.
+			 */
+
 			// Currently, contexts must be stored in registers.
 			ASSERT(inst.fields.accessMode.op1 == ACCESS_REGISTER)
 	
-			// The new context to switch to. Must have been initialized by EXEC
-			VMContext * newContext = (VMContext *) readOperand(context, inst, OPERAND_LEFT);
+			// The new context to switch to. Must have been initialized by CTX
+			BytecodeContext * newContext = (BytecodeContext *) readOperand(context, inst, OPERAND_LEFT);
 			ASSERT(newContext)
 			// NOTE: if the new context program counter is already at end,
 			// we can abort here
@@ -234,7 +240,7 @@ iterate:
 			// NOTE: any register holding a reference-counted datum should be released?
 			// Deallocating child contexts seem like a special case of this ...
 			FreeChildContexts(context);	
-			VMContext * parentContext = context->parentContext;
+			BytecodeContext * parentContext = context->parentContext;
 			if(parentContext) {
 				// switch to parent context
 				context = parentContext;

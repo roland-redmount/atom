@@ -9,11 +9,13 @@
 #include "kernel/ServiceRegistry.h"
 
 
-Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
+Datum CreateClauseForm(Datum const * termForms, size8 nTermForms)
 {
 	// reduce to unique terms
+	// here we need an array of atoms, since they will be stored in a multiset
 	Atom uniqueTermForms[nTermForms];
-	CopyMemory(termForms, uniqueTermForms, nTermForms * sizeof(Atom));
+	for(index8 i = 0; i < nTermForms; i++)
+		uniqueTermForms[i] = (Atom) {.type = DT_ID, .datum = termForms[i]};
 	uint32 multiplicities[nTermForms];
 	size8 nUniqueTermForms = ReduceAtomArray(uniqueTermForms, multiplicities, nTermForms);
 
@@ -34,7 +36,7 @@ Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
 }
 
 
-bool IsClauseForm(Atom form)
+bool IsClauseForm(Datum form)
 {
 	return AtomHasRole(
 		form,
@@ -44,19 +46,19 @@ bool IsClauseForm(Atom form)
 }
 
 
-size8 ClauseNUniqueTerms(Atom clauseForm)
+size8 ClauseNUniqueTerms(Datum clauseForm)
 {
 	return MultisetNUniqueElements(clauseForm);
 }
 
 
-size8 ClauseNTermsTotal(Atom clauseForm)
+size8 ClauseNTermsTotal(Datum clauseForm)
 {
 	return MultisetSize(clauseForm);
 }
 
 
-size8 ClauseArity(Atom clauseForm)
+size8 ClauseArity(Datum clauseForm)
 {
 	// the arity of a clause is the sum of unique terms arity * multiple
 	MultisetIterator iterator;
@@ -64,7 +66,7 @@ size8 ClauseArity(Atom clauseForm)
 	size8 arity = 0;
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
-		uint8 termArity = TermFormArity(elementMultiple.element);
+		uint8 termArity = TermFormArity(elementMultiple.element.datum);
 		arity += termArity * elementMultiple.multiple;
 		MultisetIteratorNext(&iterator);
 	}
@@ -73,7 +75,7 @@ size8 ClauseArity(Atom clauseForm)
 }
 
 
-void PrintClauseForm(Atom clauseForm)
+void PrintClauseForm(Datum clauseForm)
 {	
 	MultisetIterator iterator;
 	MultisetIterate(clauseForm, &iterator);
@@ -81,7 +83,7 @@ void PrintClauseForm(Atom clauseForm)
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
-			PrintTermForm(elementMultiple.element);
+			PrintTermForm(elementMultiple.element.datum);
 			PrintCString(" | ");
 		}
 		MultisetIteratorNext(&iterator);

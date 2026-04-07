@@ -35,10 +35,11 @@ typedef byte OpCode;
 #define	OP_ENDIF		0x13
 #define	OP_YES			0x14
 #define	OP_YESIF		0x15
-#define OP_CTX			0x16
-#define OP_CALL			0x17
-#define OP_YIELD		0x18
-#define OP_END			0x19
+#define OP_BCTX			0x16		// create bytecode context
+#define OP_CCTX			0x17		// create C context -- should this be separate?
+#define OP_CALL			0x18
+#define OP_YIELD		0x19
+#define OP_END			0x1A
 
 // integer arithmetic
 #define	OP_ADD			0x20

@@ -11,27 +11,27 @@
  * Create a predicate form from a list of roles (DT_NAME),
  * possibly containing duplicates.
  */
-Atom CreatePredicateForm(Atom const * roles, size8 nRoles);
+Datum CreatePredicateForm(Datum const * roles, size8 nRoles);
 
-bool IsPredicateForm(Atom form);
+bool IsPredicateForm(Datum form);
 
 /**
  * Number of distinct roles, without multiplicity
  */
-size8 PredicateNRoles(Atom predicateForm);
+size8 PredicateNRoles(Datum predicateForm);
 
 /**
  * Arity is the number of actors = number of roles * multiplicity
  */
-size8 PredicateArity(Atom predicateForm);
+size8 PredicateArity(Datum predicateForm);
 
 /**
  * 0-based index of the first occurence of the given role (a DT_NAME)
  * The role must exist in predicateForm, or an ASSERT occurs.
  */
-index8 PredicateRoleIndex(Atom predicateForm, Atom role);
+index8 PredicateRoleIndex(Datum predicateForm, Datum role);
 
-void PrintPredicateForm(Atom predicateForm);
+void PrintPredicateForm(Datum predicateForm);
 
 
 #endif	// PREDICATEFORM_H

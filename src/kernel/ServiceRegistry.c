@@ -23,7 +23,7 @@ struct {
 
 static int8 compareServices(Service const * service, Service const * serviceOrKey)
 {
-	return CompareAtoms(service->form, serviceOrKey->form);
+	return CompareDatums(service->form, serviceOrKey->form);
 }
 
 
@@ -43,7 +43,7 @@ static void btreeFreeService(void * item, size32 itemSize)
 		break;
 		
 		case SERVICE_BYTECODE:
-		ReleaseAtom(service->service.bytecode);
+		IFactRelease(service->service.bytecode);
 		break;
 
 		default:
@@ -70,18 +70,18 @@ size32 RegistryNServices(void)
 
 
 // create a Service struct for a B-tree service
-static Service createBTreeService(Atom form, BTree * btree)
+static Service createBTreeService(Datum form, BTree * btree)
 {
 	Service service;
 	service.form = form;
-	service.parameters = invalidAtom;	// not used for relation tables
+	service.parameters = 0;		// TODO
 	service.type = SERVICE_BTREE;
 	service.service.tree = btree;
 	return service;
 }
 
 
-void RegistryCreateCoreTable(index32 index, Atom form, size8 arity)
+void RegistryCreateCoreTable(index32 index, Datum form, size8 arity)
 {
 	ASSERT(index >= 1);
 	ASSERT(index <= N_CORE_PREDICATES)
@@ -105,7 +105,7 @@ void TeardownRegistry(void)
 }
 
 
-Service RegistryAddBTreeService(Atom form, BTree * btree)
+Service RegistryAddBTreeService(Datum form, BTree * btree)
 {
 	Service service = createBTreeService(form, btree);
 	ASSERT(BTreeInsert(registry.tree, &service) == BTREE_INSERTED)
@@ -113,30 +113,29 @@ Service RegistryAddBTreeService(Atom form, BTree * btree)
 }
 
 
-Service RegistryAddBytecodeService(Atom bytecode)
+Service RegistryAddBytecodeService(Datum bytecode, Datum form, Datum parameters)
 {
 	Service service;
-	Atom signature = BytecodeGetSignature(bytecode);
-	service.form = FormulaGetForm(signature);
-	service.parameters = FormulaGetActors(signature);
+	service.form = form;
+	service.parameters = parameters;
 	service.type = SERVICE_BYTECODE;
 	service.service.bytecode = bytecode;
 	// TODO: handle the case of existing service
 	ASSERT(BTreeInsert(registry.tree, &service) == BTREE_INSERTED)
-	AcquireAtom(bytecode);
+	IFactAcquire(bytecode);
 
 	return service;
 }
 
 
-void RegistryRemoveService(Atom form)
+void RegistryRemoveService(Datum form)
 {
 	Service key = createBTreeService(form, 0);
 	ASSERT(BTreeDelete(registry.tree, &key) == BTREE_DELETED);
 }
 
 
-Service RegistryFindService(Atom form)
+Service RegistryFindService(Datum form)
 {
 	Service service = {0};
 	service.form = form;

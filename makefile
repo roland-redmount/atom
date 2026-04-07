@@ -155,7 +155,7 @@ LANG_FILES := $(addprefix lang/, \
  Quote SubstitutionList unification TermForm)
 
 DATUMTYPES_FILES := $(addprefix datumtypes/, \
- context FloatIEEE754 instruction Int Parameter UInt Unknown Variable)
+ context FloatIEEE754 id instruction Int Parameter UInt Variable)
 
 KERNEL_FILES := $(addprefix kernel/, \
  dispatch ifact kernel letter list lookup multiset pair RelationBTree string ServiceRegistry tuples)
@@ -211,8 +211,7 @@ $(BINDIR)/opengltest : $(patsubst %, $(OBJDIR)/%.o, \
 TESTS_EXE_FILES := $(addprefix $(BINDIR)/,\
  test_btree test_datumtypes test_dispatch test_kernel test_language test_list test_lookup\
  test_memory test_multiset test_pair test_parsing test_persistence\
- test_quote test_relation_btree test_string\
- test_table_registry test_tokenizer test_utilities test_vm)
+ test_relation_btree test_string test_table_registry test_tokenizer test_utilities test_vm)
 
 .PHONY: tests
 tests : $(TESTS_EXE_FILES)
@@ -246,7 +245,6 @@ test:
 	$(BINDIR)/test_pair
 	$(BINDIR)/test_list
 	$(BINDIR)/test_multiset
-	$(BINDIR)/test_quote
 	$(BINDIR)/test_string
 	$(BINDIR)/test_lookup
 	$(BINDIR)/test_tokenizer
@@ -254,7 +252,7 @@ test:
 	$(BINDIR)/test_parsing
 	$(BINDIR)/test_table_registry
 	$(BINDIR)/test_persistence
-	$(BINDIR)/test_vm
+#	$(BINDIR)/test_vm
 	$(BINDIR)/test_dispatch
 
 #

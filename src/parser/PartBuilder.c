@@ -19,7 +19,8 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 	case STATE_EMPTY:
 		if(token.type != TOKEN_NAME)
 			return false;
-		builder->role = token.atom;
+		ASSERT(token.atom.type == DT_NAME)
+		builder->role = token.atom.datum;
 		NameAcquire(builder->role);
 		builder->state = STATE_PARTIAL;
 		return true;	
@@ -55,7 +56,7 @@ bool PartBuilderComplete(PartBuilder const * builder)
 }
 
 
-Atom PartBuilderGetRole(PartBuilder const * builder)
+Datum PartBuilderGetRole(PartBuilder const * builder)
 {
 	return builder->role;
 }

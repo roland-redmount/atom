@@ -1,4 +1,5 @@
 
+#include "datumtypes/id.h"
 #include "datumtypes/UInt.h"
 #include "datumtypes/Variable.h"
 #include "kernel/dispatch.h"
@@ -40,7 +41,7 @@ static void listSetTuple(Atom * tuple, Atom list, Atom position, Atom element)
  * but those are not workable for "core" tables so we must check explicitly.
  */
 
-Atom CreateList(ListElementGenerator generator, void const * data, size32 nElements)
+Datum CreateList(ListElementGenerator generator, void const * data, size32 nElements)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
@@ -52,7 +53,7 @@ Atom CreateList(ListElementGenerator generator, void const * data, size32 nEleme
 // assert (list length) fact
 static void assertListLength(IFactDraft * draft, size32 nElements)
 {
-	Atom listLengthForm = GetCorePredicateForm(FORM_LIST_LENGTH);
+	Datum listLengthForm = GetCorePredicateForm(FORM_LIST_LENGTH);
 
 	IFactBeginConjunction(
 		draft, listLengthForm, 
@@ -113,7 +114,7 @@ index32 ListAddElement(IFactDraft * draft, Atom element)
 }
 
 
-Atom ListEnd(IFactDraft * draft)
+Datum ListEnd(IFactDraft * draft)
 {
 	size32 nElements;
 	if(draft->hasBegunConjunction) {
@@ -144,13 +145,13 @@ Atom arrayElementGenerator(index32 index, void const * data)
 }
 
 
-Atom CreateListFromArray(Atom const * atoms, size8 nAtoms)
+Datum CreateListFromArray(Atom const * atoms, size8 nAtoms)
 {
 	return CreateList(arrayElementGenerator, atoms, nAtoms);
 }
 
 
-bool IsList(Atom atom)
+bool IsList(Datum atom)
 {
 	return AtomHasRole(
 		atom,
@@ -160,12 +161,12 @@ bool IsList(Atom atom)
 }
 
 
-size32 ListLength(Atom list)
+size32 ListLength(Datum list)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_LENGTH);
 
 	Atom queryTuple[2];
-	ListLengthSetTuple(queryTuple, list, anonymousVariable);
+	ListLengthSetTuple(queryTuple, CreateID(list), anonymousVariable);
 	Atom resultTuple[2];
 	RelationBTreeQuerySingle(tree, queryTuple, resultTuple);
 	Atom length = resultTuple[CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LENGTH)];
@@ -173,19 +174,19 @@ size32 ListLength(Atom list)
 }
 
 
-Atom ListGetElement(Atom list, index32 position)
+Atom ListGetElement(Datum list, index32 position)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
 
 	Atom queryTuple[3];
-	listSetTuple(queryTuple, list, CreateUInt(position), anonymousVariable);
+	listSetTuple(queryTuple, CreateID(list), CreateUInt(position), anonymousVariable);
 	Atom resultTuple[3];
 	RelationBTreeQuerySingle(tree, queryTuple, resultTuple);
 	return resultTuple[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)];
 }
 
 
-void ListGetElementsArray(Atom list, Atom * elements)
+void ListGetElementsArray(Datum list, Atom * elements)
 {
 	ASSERT(IsList(list))
 	ListIterator iterator;
@@ -199,13 +200,13 @@ void ListGetElementsArray(Atom list, Atom * elements)
 }
 
 
-index32 ListGetPosition(Atom list, Atom element)
+index32 ListGetPosition(Datum list, Atom element)
 {
 	ASSERT(IsList(list))
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
 
 	Atom queryTuple[3];
-	listSetTuple(queryTuple, list, anonymousVariable, element);
+	listSetTuple(queryTuple, CreateID(list), anonymousVariable, element);
 
 	RelationBTreeIterator iterator;
 	RelationBTreeIterate(tree, queryTuple, &iterator);
@@ -229,11 +230,9 @@ index32 ListGetPosition(Atom list, Atom element)
 // canonical ordering of list (and string) datums
 // since this function depends on B-tree iteration,
 // which leads to infinite recursion when comparing B-tree ḱeys
-int8 ListLexicalOrdering(Atom list1, Atom list2)
+int8 ListLexicalOrdering(Datum list1, Datum list2)
 {
-	ASSERT(list1.type == list2.type);
-
-	if(list1.datum == list2.datum)
+	if(list1 == list2)
 		return 0;
 
 	ListIterator iterator1;
@@ -277,10 +276,10 @@ int8 ListLexicalOrdering(Atom list1, Atom list2)
  * This is a thin wrapper around RelationBTreeIterator.
  */
 
-void ListIterate(Atom list, ListIterator * iterator)
+void ListIterate(Datum list, ListIterator * iterator)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
-	listSetTuple(iterator->queryTuple, list, anonymousVariable, anonymousVariable);
+	listSetTuple(iterator->queryTuple, CreateID(list), anonymousVariable, anonymousVariable);
 	RelationBTreeIterate(tree, iterator->queryTuple, &(iterator->treeIterator));
 }
 
@@ -311,7 +310,7 @@ void ListIteratorEnd(ListIterator * iterator)
 }
 
 
-void PrintList(Atom list)
+void PrintList(Datum list)
 {
 	PrintChar('{');
 

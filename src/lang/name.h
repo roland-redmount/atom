@@ -19,20 +19,20 @@ size32 NumberOfNames(void);
 /**
  * Create a name from an existing char string and length.
  */
-Atom CreateName(char const * string, size32 length);
+Datum CreateName(char const * string, size32 length);
 
 /**
  * Create from a C string. Copies the string.
  */
-Atom CreateNameFromCString(char const * cString);
+Datum CreateNameFromCString(char const * cString);
 
-void NameAcquire(Atom name);
-void NameRelease(Atom name);
+void NameAcquire(Datum name);
+void NameRelease(Datum name);
 uint32 NameTotalReferenceCount(void);
 
 bool IsName(Atom atom);
 
-void PrintName(Atom name);
+void PrintName(Datum name);
 
 data64 NameHashFromCString(char const * cString, data64 initialHash);
 

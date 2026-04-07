@@ -17,12 +17,12 @@
  */
 typedef Atom (*ListElementGenerator)(index32 index, void const * data);
 
-Atom CreateList(ListElementGenerator generator, void const * data, size32 nElements);
+Datum CreateList(ListElementGenerator generator, void const * data, size32 nElements);
 
 /**
- * Create a list from an array of atoms
+ * Create a list from an array of list elements
  */
-Atom CreateListFromArray(Atom const * atoms, size8 nAtoms);
+Datum CreateListFromArray(Atom const * listElements, size8 nAtoms);
 
 
 /**
@@ -46,14 +46,14 @@ index32 ListAddElement(IFactDraft * draft, Atom element);
 /**
  * Finalize a draft list, returning the completed list atom.
  */
-Atom ListEnd(IFactDraft * draft);
+Datum ListEnd(IFactDraft * draft);
 
 /**
  * An atom @a "is a list" if there exists a fact (list @a length _).
  * The empty list satisfies (list @emptyList length 0) but does
  * not have any (list positin element) facts.
  */
-bool IsList(Atom atom);
+bool IsList(Datum atom);
 
 
 /**
@@ -65,21 +65,21 @@ void ListLengthSetTuple(Atom * tuple, Atom list, Atom length);
 /**
  * Return l from the query (list @list length l)
  */
-size32 ListLength(Atom list);
+size32 ListLength(Datum list);
 
 /**
  * Return e from the query (list @list position @position element e)
  * 
  * NOTE: position is 1-based.
  */
-Atom ListGetElement(Atom list, index32 position);
+Atom ListGetElement(Datum list, index32 position);
 
 
 /**
  * Copy all list elements into a given array
  * (assumed to be large enough to hold the eleements)
  */
-void ListGetElementsArray(Atom list, Atom * elements);
+void ListGetElementsArray(Datum list, Atom * elements);
 
 
 /**
@@ -94,11 +94,11 @@ void ListGetElementsArray(Atom list, Atom * elements);
  * To find elements that are variables, we would have to use a quoted variable '_x.
  * This is not yet implemented.
  */
-index32 ListGetPosition(Atom list, Atom element);
+index32 ListGetPosition(Datum list, Atom element);
 
-void PrintList(Atom list);
+void PrintList(Datum list);
 
-int8 ListLexicalOrdering(Atom list1, Atom list2);
+int8 ListLexicalOrdering(Datum list1, Datum list2);
 
 
 /**
@@ -113,7 +113,7 @@ typedef struct s_ListIterator
 } ListIterator;
 
 
-void ListIterate(Atom list, ListIterator * iterator);
+void ListIterate(Datum list, ListIterator * iterator);
 bool ListIteratorHasNext(ListIterator const * iterator);
 Atom ListIteratorGetElement(ListIterator const * iterator);
 void ListIteratorNext(ListIterator * iterator);

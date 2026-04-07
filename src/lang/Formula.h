@@ -62,45 +62,55 @@
  * Create a formula from a form and an actors list (DT_LIST).
  * The order of actors must correspond to the iteration order of the form.
  */
-Atom CreateFormula(Atom form, Atom actorsList);
+Datum CreateFormula(Datum form, Datum actorsList);
 
-Atom CreateFormulaFromArray(Atom form, Atom * actors);
+Datum CreateFormulaFromArray(Datum form, Atom * actors);
 
 /**
  * Convenience functions for creating formulas
  */
-Atom CreatePredicate(Atom const * roles, Atom * actors, size8 nParts);
-Atom CreateTerm(Atom predicate, bool negated);
-Atom CreateClause(Atom const * terms, size8 nTerms);
+Datum CreatePredicate(Datum const * roles, Atom * actors, size8 nParts);
+Datum CreateTerm(Datum predicate, bool negated);
+
+/**
+ * Create a clause from a list of terms, in any order.
+ */
+Datum CreateClause(Datum const * terms, size8 nTerms);
 
 /**
  * Test if the atom is a formula
  */
-bool IsFormula(Atom atom);
+bool IsFormula(Datum atom);
 
 /**
  * Formula type predicates. These assume the atom is indeed a formula.
  */
-bool FormulaIsPredicate(Atom formula);
-bool FormulaIsTerm(Atom formula);
-bool FormulaIsClause(Atom formula);
-bool FormulaIsConjunction(Atom formula);
+bool FormulaIsPredicate(Datum formula);
+bool FormulaIsTerm(Datum formula);
+bool FormulaIsClause(Datum formula);
+bool FormulaIsConjunction(Datum formula);
 
-uint8 FormulaArity(Atom formula);
+uint8 FormulaArity(Datum formula);
 
-Atom FormulaGetForm(Atom formula);
+Datum FormulaGetForm(Datum formula);
 
-Atom FormulaGetActors(Atom formula);
+/**
+ * Return the list of actors
+ */
+Datum FormulaGetActors(Datum formula);
 
-index32 FormulaRoleIndex(Atom formula, Atom name);
+/**
+ * Return the index of the given name in the corresponding form
+ */
+index32 FormulaRoleIndex(Datum formula, Datum name);
 
 /**
  * Store a list of the unique formula variables into the provided array,
  * in left-to-right canonical order, and return the number of variables.
  */
-size8 FormulaUniqueVariables(Atom formula, Atom * variables);
+size8 FormulaUniqueVariables(Datum formula, Atom * variables);
 
-void PrintFormula(Atom formula);
+void PrintFormula(Datum formula);
 
 /**
  * Compute hash of a formula from the form hash value and actors tuple

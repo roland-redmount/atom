@@ -96,15 +96,15 @@ static bool NextPermutation(Permutation * permutation)
 /**
  * Create a new predicate iterator, starting from the identity permutation
  */
-PredicateIterator * CreatePredicateIterator(Atom predForm)
+PredicateIterator * CreatePredicateIterator(Datum predicateForm)
 {
 	PredicateIterator* iter = malloc(sizeof(PredicateIterator));
-	iter->nUniqueRoles = PredicateNRoles(predForm);
+	iter->nUniqueRoles = PredicateNRoles(predicateForm);
 
 	iter->rolePerm = malloc(iter->nUniqueRoles * sizeof(Permutation *));
 	// create iterators for each unique role
 	MultisetIterator iterator;
-	MultisetIterate(predForm, &iterator);
+	MultisetIterate(predicateForm, &iterator);
 	iter->arity = 0;
 	for(index8 i = 0; i < iter->nUniqueRoles; i++) {
 		ASSERT(MultisetIteratorHasNext(&iterator));
@@ -121,7 +121,7 @@ PredicateIterator * CreatePredicateIterator(Atom predForm)
 /**
  * Advance predicate iterator to next permutation
 */
-bool NextPredicatePermutation(PredicateIterator* iter)
+bool NextPredicatePermutation(PredicateIterator * iter)
 {
 	// permute roles
 	for(index8 i = 0; i < iter->nUniqueRoles; i++) {
@@ -172,7 +172,7 @@ void FreePredicateIterator(PredicateIterator * iter)
 /**
  * Create a new clause iterator, starting from the identity permutation
  */
-ClauseIterator * CreateClauseIterator(Atom clauseForm)
+ClauseIterator * CreateClauseIterator(Datum clauseForm)
 {
 	ClauseIterator* iter = malloc(sizeof(ClauseIterator));
 	iter->nUniqueTerms = ClauseNUniqueTerms(clauseForm);
@@ -193,11 +193,11 @@ ClauseIterator * CreateClauseIterator(Atom clauseForm)
 
 		// create a predicate iterator for each multiple of each term form
 		iter->predIter[i] = malloc(em.multiple * sizeof(PredicateIterator *));
-		Atom predForm = GetPredicateForm(em.element);
+		Datum predicateForm = GetPredicateForm(em.element.datum);
 		for(index8 j = 0; j < em.multiple; j++) {
-			iter->predIter[i][j] = CreatePredicateIterator(predForm);
+			iter->predIter[i][j] = CreatePredicateIterator(predicateForm);
 		}
-		iter->arity += PredicateArity(predForm);
+		iter->arity += PredicateArity(predicateForm);
 	}
 	MultisetIteratorEnd(&iterator);
 	return iter;
@@ -280,9 +280,9 @@ void FreeClauseIterator(ClauseIterator * iter)
 
 
 /**
- * Create a new form iterator, starting from the identity permutation
+ * Create a new conjunction form iterator, starting from the identity permutation
  */
-ConjunctionIterator * CreateConjunctionIterator(Atom form)
+ConjunctionIterator * CreateConjunctionIterator(Datum form)
 {
 	ConjunctionIterator* iter = malloc(sizeof(ConjunctionIterator));
 	iter->nClauses = FullFormNUniqueClauseForms(form);
@@ -302,7 +302,7 @@ ConjunctionIterator * CreateConjunctionIterator(Atom form)
 		// create a clause iterator for each multiple of each clause form
 		iter->clauseIter[i] = malloc(em.multiple * sizeof(ClauseIterator *));
 		for(index8 j = 0; j < em.multiple; j++) {
-			iter->clauseIter[i][j] = CreateClauseIterator(em.element);
+			iter->clauseIter[i][j] = CreateClauseIterator(em.element.datum);
 		}
 	}
 	MultisetIteratorEnd(&iterator);
@@ -378,7 +378,7 @@ static void getConjunctionPermutation(const ConjunctionIterator * iter, index8 *
 // we now need interface functions here since form can take several types
 // poor mans polymorphism ...
 
-FormIterator* CreateFormIterator(Atom form)
+FormIterator* CreateFormIterator(Datum form)
 {
 	FormIterator * iter = malloc(sizeof(FormIterator));
 	iter->form = form;

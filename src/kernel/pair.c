@@ -1,4 +1,5 @@
 
+#include "datumtypes/id.h"
 #include "datumtypes/Variable.h"
 #include "kernel/pair.h"
 #include "kernel/lookup.h"
@@ -7,7 +8,7 @@
 #include "lang/PredicateForm.h"
 
 
-Atom CreatePair(Atom left, Atom right)
+Datum CreatePair(Atom left, Atom right)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
@@ -19,7 +20,7 @@ Atom CreatePair(Atom left, Atom right)
 void AddPairToIFact(IFactDraft * draft, Atom left, Atom right)
 {
 	// assert (pair left right) fact
-	Atom form = GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT);
+	Datum form = GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT);
 
 	index8 pairIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_PAIR);
 	index8 leftIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT);
@@ -35,7 +36,7 @@ void AddPairToIFact(IFactDraft * draft, Atom left, Atom right)
 }
 
 
-bool IsPair(Atom atom)
+bool IsPair(Datum atom)
 {
 	return AtomHasRole(
 		atom,
@@ -45,7 +46,7 @@ bool IsPair(Atom atom)
 }
 
 
-static void getPairTuple(Atom pair, Atom * tuple)
+static void getPairTuple(Datum pair, Atom * tuple)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_PAIR_LEFT_RIGHT);
 
@@ -54,7 +55,7 @@ static void getPairTuple(Atom pair, Atom * tuple)
 	index8 leftIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT);
 	index8 rightIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_RIGHT);
 
-	query[pairIndex] = pair;
+	query[pairIndex] = CreateID(pair);
 	query[leftIndex] = anonymousVariable;
 	query[rightIndex] = anonymousVariable;
 
@@ -62,7 +63,7 @@ static void getPairTuple(Atom pair, Atom * tuple)
 }
 
 
-Atom PairGetElement(Atom pair, uint8 element)
+Atom PairGetElement(Datum pair, uint8 element)
 {
 	Atom pairTuple[3];
 	getPairTuple(pair, pairTuple);
@@ -80,7 +81,7 @@ Atom PairGetElement(Atom pair, uint8 element)
 }
 
 
-void PrintPair(Atom pair)
+void PrintPair(Datum pair)
 {
 	Atom pairTuple[3];
 	getPairTuple(pair, pairTuple);

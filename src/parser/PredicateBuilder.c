@@ -17,7 +17,7 @@
 void InitializePredicateBuilder(PredicateBuilder * builder)
 {
 	InitializePartBuilder(&(builder->partBuilder));
-	CreateResizingArray(&(builder->roles), sizeof(Atom), INITIAL_N_ACTORS);
+	CreateResizingArray(&(builder->roles), sizeof(Datum), INITIAL_N_ACTORS);
 	CreateResizingArray(&(builder->actors), sizeof(Atom), INITIAL_N_ACTORS);
 	builder->isValid = false;
 }
@@ -27,7 +27,7 @@ bool PredicateBuilderPush(PredicateBuilder * builder, Token token)
 {
 	if(PartBuilderPush(&(builder->partBuilder), token)) {
 		if(PartBuilderComplete(&(builder->partBuilder))) {
-			Atom role = PartBuilderGetRole(&(builder->partBuilder));
+			Datum role = PartBuilderGetRole(&(builder->partBuilder));
 			NameAcquire(role);
 			ResizingArrayAppend(&(builder->roles), &role);
 			
@@ -74,16 +74,18 @@ bool PredicateBuilderIsEmpty(PredicateBuilder const * builder)
 /**
  * Create a DT_FORMULA from the lists of roles and actors stored in this builder.
  */
-Atom PredicateBuilderCreateFormula(PredicateBuilder const * builder)
+Datum PredicateBuilderCreateFormula(PredicateBuilder const * builder)
 {
 	size8 arity = predicateArity(builder);
-	Atom const * roles = ResizingArrayGetMemory(&(builder->roles));
-
-	Atom form = CreatePredicateForm(roles, arity);
+	Datum const * roles = ResizingArrayGetMemory(&(builder->roles));
+	Datum form = CreatePredicateForm(roles, arity);
 
 	// determine the order of roles used by multiset
+	Atom roleAtoms[arity];
+	for(index8 i = 0; i < arity; i++)
+		roleAtoms[i] = (Atom) {.type = DT_NAME, .datum = roles[i]};
 	index8 order[arity]; 
-	MultisetIterationOrder(form, roles, order, arity);
+	MultisetIterationOrder(form, roleAtoms, order, arity);
 
 	// ordered list of atoms
 	Atom actors[arity];
@@ -92,7 +94,7 @@ Atom PredicateBuilderCreateFormula(PredicateBuilder const * builder)
 		actors[i] = actor;
 	}
 	
-	Atom formula = CreateFormulaFromArray(form, actors);
+	Datum formula = CreateFormulaFromArray(form, actors);
 	IFactRelease(form);
 	return formula;
 }
@@ -105,7 +107,7 @@ void PredicateBuilderReset(PredicateBuilder * builder)
 	size32 nElements = ResizingArrayNElements(&(builder->roles));
 
 	for(index8 i = 0; i < nElements; i++) {
-		Atom role = *((Atom *) ResizingArrayGetElement(&(builder->roles), i));
+		Datum role = *((Datum *) ResizingArrayGetElement(&(builder->roles), i));
 		NameRelease(role);
 	}
 	ResizingArrayReset(&(builder->roles));
@@ -128,7 +130,7 @@ void CleanupPredicateBuilder(PredicateBuilder * builder)
 }
 
 
-Atom CStringToPredicate(char const * string)
+Datum CStringToPredicate(char const * string)
 {
 	size32 length = CStringLength(string);
 	Tokenizer tokenizer;
@@ -146,7 +148,7 @@ Atom CStringToPredicate(char const * string)
 		}
 	}
 	ASSERT(PredicateBuilderIsValid(&builder));
-	Atom predicate = PredicateBuilderCreateFormula(&builder);
+	Datum predicate = PredicateBuilderCreateFormula(&builder);
 	
 	CleanupPredicateBuilder(&builder);
 	TokenizerCleanup(&tokenizer);

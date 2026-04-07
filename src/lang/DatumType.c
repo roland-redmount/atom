@@ -4,17 +4,15 @@
 
 // this array specifies a printable name string for each of the N_DATUMTYPES
 char const * datumTypeNames[] = {
-	"INVALID",
-	"UNKNOWN",
-	"DATUMTYPE",
+	"NONE",
+	"NAME",
+	"ID",
 	"UINT",
 	"INT",
 	"FLOAT32",
 	"FLOAT64",
 	"LETTER",
 	"VARIABLE",
-	"NAME",
-	"ID",
 	"INSTRUCTION",
 	"PARAMETER",
 	"CONTEXT"

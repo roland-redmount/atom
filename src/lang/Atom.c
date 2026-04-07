@@ -4,7 +4,6 @@
 #include "datumtypes/instruction.h"
 #include "datumtypes/Parameter.h"
 #include "datumtypes/UInt.h"
-#include "datumtypes/Unknown.h"
 #include "datumtypes/Variable.h"
 
 #include "lang/name.h"
@@ -29,33 +28,33 @@
 #include "util/sort.h"
 
 // global constant invalid atom
-Atom invalidAtom = {0, 0, 0, 0, 0};
+Atom invalidAtom = {0};
 
 /**
- * Create atom
+ * Create (typed) atom
  */
-/*
-Atom CreateAtom(DatumType type, TypePredicate predicate, data64 datum)
+
+Atom CreateAtom(byte type, Datum datum)
 {
-	return (Atom) {type, predicate, 0, 0, datum};
+	return (Atom) {.type = type, .datum = datum};
 }
-*/
+
 
 void AcquireAtom(Atom atom)
 {
 	if(atom.type == DT_ID)
-		IFactAcquire(atom);
+		IFactAcquire(atom.datum);
 	else if(atom.type == DT_NAME)
-		NameAcquire(atom);
+		NameAcquire(atom.datum);
 }
 
 
 void ReleaseAtom(Atom atom)
 {
 	if(atom.type == DT_ID)
-		IFactRelease(atom);
+		IFactRelease(atom.datum);
 	else if(atom.type == DT_NAME)
-		NameRelease(atom);
+		NameRelease(atom.datum);
 }
 
 
@@ -64,7 +63,7 @@ void ReleaseAtom(Atom atom)
  */
 bool ValidAtomQ(Atom a)
 {
-	return a.type != 0;
+	return a.type != DT_NONE;
 }
 
 
@@ -147,13 +146,8 @@ void PrintAtom(Atom atom)
 {
 	// PrintChar('[');
 	switch(atom.type) {
-	case 0:
-		// for debugging
-		PrintCString("INVALID");
-		break;
-
-	case DT_UNKNOWN:
-		PrintUnknown();
+	case DT_NONE:
+		PrintCString("NONE");
 		break;
 
 	case DT_UINT:
@@ -181,7 +175,7 @@ void PrintAtom(Atom atom)
 		break;
 
 	case DT_NAME:
-		PrintName(atom);
+		PrintName(atom.datum);
 		break;
 
 	case DT_INSTRUCTION:
@@ -193,38 +187,39 @@ void PrintAtom(Atom atom)
 		break;
 
 	case DT_ID:
-		// for IFacts, string representation depends on the type predicate.
+		// for DT_ID, string representation depends on the type predicate.
 		// a given atom may satisfy multiple type predicates and therefore have multiple
 		// string representations, so there is no straightforward switch/case.
 		// Here we somewhat arbitrarily try the "most specific" type predicate first
-		if(IsPair(atom)) {
-			if(IsFormula(atom))
-				PrintFormula(atom);
-			else if(IsQuote(atom))
-				PrintQuoted(atom);
+		// TODO: move this to id.h
+		if(IsPair(atom.datum)) {
+			if(IsFormula(atom.datum))
+				PrintFormula(atom.datum);
+			else if(IsQuote(atom.datum))
+				PrintQuoted(atom.datum);
 			else
-				PrintPair(atom);
+				PrintPair(atom.datum);
 		}
-		else if(IsList(atom)) {
-			if(IsString(atom))
-				PrintString(atom);
+		else if(IsList(atom.datum)) {
+			if(IsString(atom.datum))
+				PrintString(atom.datum);
 			else if(IsName(atom))
-				PrintName(atom);
+				PrintName(atom.datum);
 			else
-				PrintList(atom);
+				PrintList(atom.datum);
 		}
-		else if(IsMultiset(atom)) {
-			if(IsPredicateForm(atom))
-				PrintPredicateForm(atom);
-			else if(IsTermForm(atom))
-				PrintTermForm(atom);
-			else if(IsClauseForm(atom))
-				PrintClauseForm(atom);
+		else if(IsMultiset(atom.datum)) {
+			if(IsPredicateForm(atom.datum))
+				PrintPredicateForm(atom.datum);
+			else if(IsTermForm(atom.datum))
+				PrintTermForm(atom.datum);
+			else if(IsClauseForm(atom.datum))
+				PrintClauseForm(atom.datum);
 			else
-				PrintMultiset(atom);
+				PrintMultiset(atom.datum);
 		}
 		else
-			PrintIFact(atom);
+			PrintIFact(atom.datum);
 		break;
 
 	default:

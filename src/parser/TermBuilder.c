@@ -53,11 +53,11 @@ bool TermBuilderIsEmpty(TermBuilder const * builder)
 }
 
 
-Atom TermBuilderCreateFormula(TermBuilder const * builder)
+Datum TermBuilderCreateFormula(TermBuilder const * builder)
 {
 	ASSERT(builder->isValid);
-	Atom predicate = PredicateBuilderCreateFormula(&(builder->predicateBuilder));
-	Atom term = CreateTerm(predicate, builder->sign);
+	Datum predicate = PredicateBuilderCreateFormula(&(builder->predicateBuilder));
+	Datum term = CreateTerm(predicate, builder->sign);
 	IFactRelease(predicate);
 	return term;
 }

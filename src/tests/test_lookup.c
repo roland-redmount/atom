@@ -1,4 +1,6 @@
 
+#include "datumtypes/id.h"
+#include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/lookup.h"
 #include "kernel/ServiceRegistry.h"
@@ -10,17 +12,17 @@
 
 void testLookup(void)
 {
-	Atom string = CreateStringFromCString("foo");
-	Atom stringForm = GetCorePredicateForm(FORM_STRING);
-	Atom stringRole = GetCoreRoleName(ROLE_STRING);
+	Datum string = CreateStringFromCString("foo");
+	Datum stringForm = GetCorePredicateForm(FORM_STRING);
+	Datum stringRole = GetCoreRoleName(ROLE_STRING);
 
 	ASSERT_TRUE(AtomHasRole(string, stringForm, stringRole))
 
 	// add 1 occurence of role
 	AtomAddRole(string, stringForm, stringRole);
 	ASSERT_TRUE(AtomHasRole(string, stringForm, stringRole))
-	ASSERT_TRUE(AtomHasRole(string, stringForm, invalidAtom))
-	ASSERT_TRUE(AtomHasRole(string, invalidAtom, invalidAtom))
+	ASSERT_TRUE(AtomHasRole(string, stringForm, 0))
+	ASSERT_TRUE(AtomHasRole(string, 0, 0))
 	
 	AtomRemoveRole(string, stringForm, stringRole);
 	ASSERT_TRUE(AtomHasRole(string, stringForm, stringRole))
@@ -41,13 +43,13 @@ void testLookup(void)
 	LookupRemoveAllRoles(string);
 	ASSERT_FALSE(AtomHasRole(string, stringForm, stringRole))
 
-	ReleaseAtom(string);
+	IFactRelease(string);
 }
 
 
 void testLookupIterator(void)
 {
-	Atom string = CreateStringFromCString("foo");
+	Datum string = CreateStringFromCString("foo");
 	
 	/**
 	 * A string atom should have 3 lookup records:
@@ -60,52 +62,55 @@ void testLookupIterator(void)
 	LookupIterate(string, &iterator);
 	for(index32 i = 0; i < 3; i++) {
 		ASSERT_TRUE(LookupIteratorHasRecord(&iterator))
-		Atom role = LookupIteratorGetRole(&iterator);
+		Datum role = LookupIteratorGetRole(&iterator);
 		// the role is either list or string
 		ASSERT_TRUE(
-			SameAtoms(role, GetCoreRoleName(ROLE_LIST)) ||
-			SameAtoms(role, GetCoreRoleName(ROLE_STRING))
+			(role == GetCoreRoleName(ROLE_LIST)) ||
+			(role == GetCoreRoleName(ROLE_STRING))
 		)
 		LookupIteratorNext(&iterator);
 	}
 	ASSERT_FALSE(LookupIteratorHasRecord(&iterator))
 	FreeLookupIterator(&iterator);
 
-	ReleaseAtom(string);
+	IFactRelease(string);
 }
 
 
 void testRemoveAllPredicateRoles(void)
 {
 	// create some DT_ID atoms
-	Atom foo = CreateStringFromCString("foo");
-	Atom bar = CreateStringFromCString("bar");
-	Atom baz = CreateStringFromCString("baz");
+	Datum foo = CreateStringFromCString("foo");
+	Datum bar = CreateStringFromCString("bar");
+	Datum baz = CreateStringFromCString("baz");
 	
 	// create a new relation and assert some facts
-	Atom foobar = CreateNameFromCString("foobar");
-	Atom barf = CreateNameFromCString("barf");
-	Atom form = CreatePredicateForm((Atom []) {foobar, barf}, 2);
+	Datum foobar = CreateNameFromCString("foobar");
+	Datum barf = CreateNameFromCString("barf");
+	Datum form = CreatePredicateForm((Datum []) {foobar, barf}, 2);
 	BTree * tree = CreateRelationBTree(2);
 	RegistryAddBTreeService(form, tree);
 
-	AssertFact(form, (Atom[]) {foo, bar});
+	Atom actors1[2] = {CreateID(foo), CreateID(bar)};
+	AssertFact(form, actors1);
 	ASSERT_TRUE(AtomHasRole(foo, form, foobar))
 	ASSERT_TRUE(AtomHasRole(bar, form, barf))
 
-	AssertFact(form, (Atom[]) {bar, baz});
+	Atom actors2[2] = {CreateID(bar), CreateID(baz)};
+	AssertFact(form, actors2);
 	ASSERT_TRUE(AtomHasRole(bar, form, foobar))
 	ASSERT_TRUE(AtomHasRole(baz, form, barf))
 
-	AssertFact(form, (Atom[]) {foo, foo});
+	Atom actors3[2] = {CreateID(foo), CreateID(foo)};
+	AssertFact(form, actors3);
 	ASSERT_TRUE(AtomHasRole(foo, form, barf))
 
 	LookupRemoveAllPredicateRoles(form);
 
 	// all associations with the form should now be removed.
-	ASSERT_FALSE(AtomHasRole(foo, form, invalidAtom))
-	ASSERT_FALSE(AtomHasRole(bar, form, invalidAtom))
-	ASSERT_FALSE(AtomHasRole(baz, form, invalidAtom))
+	ASSERT_FALSE(AtomHasRole(foo, form, 0))
+	ASSERT_FALSE(AtomHasRole(bar, form, 0))
+	ASSERT_FALSE(AtomHasRole(baz, form, 0))
 
 	// remove corresponding relation table rows
 	RelationBTreeRemoveTuples(tree, 0, REMOVE_NORMAL);
@@ -113,12 +118,12 @@ void testRemoveAllPredicateRoles(void)
 	// drop the relation table
 	RegistryRemoveService(form);
 
-	ReleaseAtom(form);
-	ReleaseAtom(foo);
-	ReleaseAtom(bar);
-	ReleaseAtom(baz);
-	ReleaseAtom(foobar);
-	ReleaseAtom(barf);
+	IFactRelease(form);
+	IFactRelease(foo);
+	IFactRelease(bar);
+	IFactRelease(baz);
+	NameRelease(foobar);
+	NameRelease(barf);
 }
 
 

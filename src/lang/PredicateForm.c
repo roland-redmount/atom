@@ -12,11 +12,12 @@
 
 
 
-Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
+Datum CreatePredicateForm(Datum const * roles, size8 nRoles)
 {
-	// reduce to unique roles
+	// reduce to unique roles, typed for use with multiset
 	Atom uniqueRoles[nRoles];
-	CopyMemory(roles, uniqueRoles, nRoles * sizeof(Atom));
+	for(index8 i = 0; i < nRoles; i++)
+		uniqueRoles[i] = (Atom) {.type = DT_NAME, .datum = roles[i]};
 	SortAtoms(uniqueRoles, nRoles);
 	uint32 multiplicities[nRoles];
 	size8 nUniqueRoles = ReduceAtomArray(uniqueRoles, multiplicities, nRoles);
@@ -40,10 +41,10 @@ Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
 }
 
 
-bool IsPredicateForm(Atom atom)
+bool IsPredicateForm(Datum atom)
 {
 	// special case for (multiset element multiple) form, for bootstrapping
-	if(atom.datum == GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE).datum)
+	if(atom == GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE))
 		return true;
 
 	return AtomHasRole(
@@ -54,22 +55,22 @@ bool IsPredicateForm(Atom atom)
 }
 
 
-size8 PredicateNRoles(Atom predicateForm)
+size8 PredicateNRoles(Datum predicateForm)
 {
 	return MultisetNUniqueElements(predicateForm);
 }
 
 
-size8 PredicateArity(Atom predicateForm)
+size8 PredicateArity(Datum predicateForm)
 {
 	return MultisetSize(predicateForm);
 }
 
 
 // TODO: this could use MultisetIterationOrder() instead
-index8 PredicateRoleIndex(Atom predicateForm, Atom role)
+index8 PredicateRoleIndex(Datum predicateForm, Datum role)
 {
-	ASSERT(role.type == DT_NAME)
+	ASSERT(IsPredicateForm(predicateForm));
 	MultisetIterator iterator;
 	MultisetIterate(predicateForm, &iterator);
 
@@ -77,7 +78,7 @@ index8 PredicateRoleIndex(Atom predicateForm, Atom role)
 	bool found = false;
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
-		if(SameAtoms(elementMultiple.element, role)) {
+		if(elementMultiple.element.datum == role) {
 			found = true;
 			break;
 		}
@@ -90,7 +91,7 @@ index8 PredicateRoleIndex(Atom predicateForm, Atom role)
 }
 
 
-void PrintPredicateForm(Atom predicateForm)
+void PrintPredicateForm(Datum predicateForm)
 {	
 	MultisetIterator iterator;
 	MultisetIterate(predicateForm, &iterator);
@@ -99,7 +100,7 @@ void PrintPredicateForm(Atom predicateForm)
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
-			PrintName(elementMultiple.element);
+			PrintName(elementMultiple.element.datum);
 			PrintChar(' ');
 		}
 		MultisetIteratorNext(&iterator);

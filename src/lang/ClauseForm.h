@@ -10,19 +10,19 @@
 /**
  * Create a clause form from a list of term forms, possibly containing duplicates.
  */
-Atom CreateClauseForm(Atom const * termForms, size8 nTerms);
+Datum CreateClauseForm(Datum const * termForms, size8 nTerms);
 
-bool IsClauseForm(Atom form);
+bool IsClauseForm(Datum form);
 
-size8 ClauseNUniqueTerms(Atom clauseForm);
-size8 ClauseNTermsTotal(Atom clauseForm);
+size8 ClauseNUniqueTerms(Datum clauseForm);
+size8 ClauseNTermsTotal(Datum clauseForm);
 
-size8 ClauseArity(Atom clauseForm);
+size8 ClauseArity(Datum clauseForm);
 
 /**
  * Print a clause form to stdout
  */
-void PrintClauseForm(Atom clauseForm);
+void PrintClauseForm(Datum clauseForm);
 
 
 #endif	// CLAUSEFORM_H

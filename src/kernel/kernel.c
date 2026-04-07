@@ -1,4 +1,5 @@
 
+#include "datumtypes/id.h"
 #include "datumtypes/UInt.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
@@ -82,8 +83,8 @@ struct s_Kernel {
 	void * vmStack;
 
 	// Core predicate forms and roles, defined during bootstrapping
-	Atom corePredicateForms[N_CORE_PREDICATES + 1];
-	Atom coreRoleNames[N_CORE_ROLES + 1];
+	Datum corePredicateForms[N_CORE_PREDICATES + 1];
+	Datum coreRoleNames[N_CORE_ROLES + 1];
 	index8 corePredicateRoleIndex[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY];
 
 	// number of ifacts abnd references created by bootstrapping
@@ -143,7 +144,7 @@ void CleanupMemory(void)
 static void setupCoreRoleNames(void)
 {
 	InitializeNameStorage();
-	kernel.coreRoleNames[0] = invalidAtom;
+	kernel.coreRoleNames[0] = 0;
 	kernel.coreRoleNames[ROLE_MULTISET] = CreateNameFromCString("multiset");
 	kernel.coreRoleNames[ROLE_ELEMENT] = CreateNameFromCString("element");
 	kernel.coreRoleNames[ROLE_MULTIPLE] = CreateNameFromCString("multiple");
@@ -183,7 +184,7 @@ static void setupCoreRoleNames(void)
 #define MULTISET_MULTIPLE_COLUMN	0
 
 
-void bootstrapAssertFact(Atom predicateForm, Atom * actors)
+void bootstrapAssertFact(Datum predicateForm, Atom * actors)
 {
 	Service service = RegistryFindService(predicateForm);
 	ASSERT(service.type == SERVICE_BTREE)
@@ -233,9 +234,9 @@ static void setupCorePredicateForms(void)
 	 */
 
 	// fixed values for @multiset-form and @predicate-form
-	Atom multisetForm = (Atom) {DT_ID, 0, 0, 0, 1};
+	Datum multisetForm = 1;
 	kernel.corePredicateForms[FORM_MULTISET_ELEMENT_MULTIPLE] = multisetForm;
-	Atom predicateForm = (Atom) {DT_ID, 0, 0, 0, 2};
+	Datum predicateForm = 2;
 	kernel.corePredicateForms[FORM_PREDICATE_FORM] = predicateForm;
 
 	// register tables and set role index arrays
@@ -257,23 +258,42 @@ static void setupCorePredicateForms(void)
 	kernel.corePredicateRoleIndex[FORM_PREDICATE_FORM][0] = 0;
 	
 	// create @multiset-form
-	
+	Atom multisetFormAtom = CreateID(multisetForm);
 	IFactDraft multisetDraft;
 	IFactBegin(&multisetDraft);
 	Atom tuple[3];
 
 	// defining facts
+	// (multiset @multiset-form element "multiset" multiple 1)
 	IFactBeginConjunction(&multisetDraft, multisetForm, MULTISET_MULTISET_COLUMN);
-	MultisetSetTuple(tuple, multisetForm, GetCoreRoleName(ROLE_MULTISET), CreateUInt(1));
+	MultisetSetTuple(
+		tuple,
+		CreateID(multisetForm),
+		(Atom) {.type = DT_NAME, .datum = GetCoreRoleName(ROLE_MULTISET)},
+		CreateUInt(1)
+	);
 	IFactAddClause(&multisetDraft, tuple);
-	MultisetSetTuple(tuple, multisetForm, GetCoreRoleName(ROLE_ELEMENT), CreateUInt(1));
+	// (multiset @multiset-form element "element" multiple 1)
+	MultisetSetTuple(
+		tuple,
+		CreateID(multisetForm),
+		(Atom) {.type = DT_NAME, .datum = GetCoreRoleName(ROLE_ELEMENT)},
+		CreateUInt(1)
+	);
 	IFactAddClause(&multisetDraft, tuple);
-	MultisetSetTuple(tuple, multisetForm, GetCoreRoleName(ROLE_MULTIPLE), CreateUInt(1));
+	// (multiset @multiset-form element "multiple" multiple 1)
+	MultisetSetTuple(
+		tuple,
+		CreateID(multisetForm),
+		(Atom) {.type = DT_NAME, .datum = GetCoreRoleName(ROLE_MULTIPLE)},
+		CreateUInt(1)
+	);
 	IFactAddClause(&multisetDraft, tuple);
 	IFactEndConjunction(&multisetDraft);
 
+	// (predicate-form @multiset-form)
 	IFactBeginConjunction(&multisetDraft, predicateForm, 0);
-	IFactAddClause(&multisetDraft, &multisetForm);
+	IFactAddClause(&multisetDraft, &multisetFormAtom);
 	IFactEndConjunction(&multisetDraft);
 
 	/**
@@ -283,27 +303,34 @@ static void setupCorePredicateForms(void)
 	 * Instead we define the hash to be the same as the form hash,
 	 * and provide our own bootstrapAssertFact() function.
 	 */
-	IFactEndCustom(&multisetDraft, multisetForm.datum, bootstrapAssertFact);
+	IFactEndCustom(&multisetDraft, multisetForm, bootstrapAssertFact);
 
 	// add lookup
 	AtomAddRole(multisetForm, multisetForm, GetCoreRoleName(ROLE_MULTISET));
 	AtomAddRole(multisetForm, predicateForm, GetCoreRoleName(ROLE_PREDICATE_FORM));
 	
 	// create @predicate-form
+	Atom predicateFormAtom = CreateID(predicateForm);
 	IFactDraft predicateFormDraft;
 	IFactBegin(&predicateFormDraft);
 
 	// defining facts
+	// (multiset @predicate-form element "predicate-form" multiple 1)
 	IFactBeginConjunction(&predicateFormDraft, multisetForm, MULTISET_MULTISET_COLUMN);
-	MultisetSetTuple(tuple, predicateForm, GetCoreRoleName(ROLE_PREDICATE_FORM), CreateUInt(1));
+	MultisetSetTuple(
+		tuple,
+		predicateFormAtom,
+		(Atom) {.type = DT_NAME, .datum = GetCoreRoleName(ROLE_PREDICATE_FORM)},
+		CreateUInt(1)
+	);
 	IFactAddClause(&predicateFormDraft, tuple);
 	IFactEndConjunction(&predicateFormDraft);
-
+	// (predicate-form @predicate-form)
 	IFactBeginConjunction(&predicateFormDraft, predicateForm, 0);
-	IFactAddClause(&predicateFormDraft, &predicateForm);
+	IFactAddClause(&predicateFormDraft, &predicateFormAtom);
 	IFactEndConjunction(&predicateFormDraft);
 
-	IFactEndCustom(&predicateFormDraft, predicateForm.datum, bootstrapAssertFact);
+	IFactEndCustom(&predicateFormDraft, predicateForm, bootstrapAssertFact);
 
 	// add lookup
 	AtomAddRole(predicateForm, multisetForm, GetCoreRoleName(ROLE_MULTISET));
@@ -312,12 +339,12 @@ static void setupCorePredicateForms(void)
 	// We can now use CreatePredicateForm() and AssertFact()
 
 	// Create remaining forms
-	Atom roles[CORE_FORMS_MAX_ARITY];	
+	Datum roles[CORE_FORMS_MAX_ARITY];	
 	for(index32 i = FORM_TERM_FORM; i <= N_CORE_PREDICATES; i++) {
 		for(index8 j = 0; j < corePredicateArity[i]; j++)
 			roles[j] = kernel.coreRoleNames[coreFormRoleIds[i][j]];
 
-		Atom form = CreatePredicateForm(roles, corePredicateArity[i]);
+		Datum form = CreatePredicateForm(roles, corePredicateArity[i]);
 
 		kernel.corePredicateForms[i] = form;
 		RegistryCreateCoreTable(i, form, corePredicateArity[i]);
@@ -412,13 +439,12 @@ void KernelShutdown(void)
 
 // TODO: this should return a status code indicating whether the fact was created,
 // already existed, or if the assert failed due to logical inconsistency
-void AssertFact(Atom predicateForm, Atom * actors)
+void AssertFact(Datum predicateForm, Atom * actors)
 {
 	// TODO: currently we only support creating predicates
 	ASSERT(IsPredicateForm(predicateForm));
 	// add tuple to relation table
 	Service service = RegistryFindService(predicateForm);
-	BTree * btree;
 	if(service.type == SERVICE_BTREE) {
 		RelationBTreeAddTuple(service.service.tree, actors);
 	}
@@ -439,7 +465,7 @@ void AssertFact(Atom predicateForm, Atom * actors)
 }
 
 
-void RetractFact(Atom predicateForm, Atom * actors)
+void RetractFact(Datum predicateForm, Atom * actors)
 {
 	Service service = RegistryFindService(predicateForm);
 	ASSERT(service.type == SERVICE_BTREE)
@@ -458,7 +484,7 @@ void RetractFact(Atom predicateForm, Atom * actors)
 }
 
 
-void RetractAllFacts(Atom predicateForm)
+void RetractAllFacts(Datum predicateForm)
 {
 	// iterate over all facts stored in relation tables
 	// and retract all.
@@ -470,14 +496,14 @@ void RetractAllFacts(Atom predicateForm)
 }
 
 
-Atom GetCorePredicateForm(index32 formId)
+Datum GetCorePredicateForm(index32 formId)
 {
 	ASSERT((formId >= 1) && (formId <= N_CORE_PREDICATES))
 	return kernel.corePredicateForms[formId];
 }
 
 
-Atom GetCoreRoleName(index32 roleId)
+Datum GetCoreRoleName(index32 roleId)
 {
 	ASSERT((roleId >= 1) && (roleId <= N_CORE_ROLES))
 	return kernel.coreRoleNames[roleId];

@@ -21,6 +21,7 @@
  * tokenizer with a "take back" functionality.
  */
 
+#include "datumtypes/id.h"
 #include "datumtypes/FloatIEEE754.h"
 #include "datumtypes/Int.h"
 #include "datumtypes/Parameter.h"
@@ -260,7 +261,7 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 	switch(tokenizer->type) {
 	case TOKEN_STRING:
 		// strings entered in formulas are always immutable
-		token.atom = CreateString(string, stringLength);
+		token.atom = CreateID(CreateString(string, stringLength));
 		break;
 
 	case TOKEN_NUMBER:
@@ -286,7 +287,7 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 		break;
 				
 	case TOKEN_NAME:
-		token.atom = CreateName(string, stringLength);
+		token.atom = CreateAtom(DT_NAME, CreateName(string, stringLength));
 		break;
 
 	default:

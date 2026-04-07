@@ -10,11 +10,12 @@
 
 
 /**
- * Datum type IDs. Zero is invalid.
+ * Datum type IDs. Zero is invalid / none
  */
 
-#define DT_UNKNOWN				1		// unique IDs, including the nil atom
-#define DT_DATUMTYPE			2
+#define DT_NONE					0
+#define DT_NAME					1		// a name (symbol) identified by a hash
+#define DT_ID					2		// atom identified by an ifact
 
 #define DT_UINT					3		// unsigned integer
 #define DT_INT					4		// signed integer
@@ -23,14 +24,12 @@
 
 #define DT_LETTER				7		// a letter of the English alphabet
 #define DT_VARIABLE             8		// variable with a letter identifier
-#define DT_NAME					9		// a name (symbol) identified by a hash
-#define DT_ID					10		// atom identified by an ifact
 
-#define DT_INSTRUCTION			11		// a bytecode instruction
-#define DT_PARAMETER			12		// a parameter in a bytecode service
-#define DT_CONTEXT				13		// a VM execution context
+#define DT_INSTRUCTION			9		// a bytecode instruction
+#define DT_PARAMETER			10		// a parameter in a bytecode service
+#define DT_CONTEXT				11		// a VM execution context
 
-#define N_DATUMTYPES			13
+#define N_DATUMTYPES			11
 
 
 /**

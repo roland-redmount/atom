@@ -1,6 +1,15 @@
 /**
  * A bytecode program consists of a signature, registers,
  * constants, and an instruction list (program).
+ * 
+ * TODO: The signature is currently a formula where actors are DT_PARAMETER
+ * atoms storing a datum type. This should be refactored such that the bytecode
+ * block only stores the array of parameters (in canonical order) while Service
+ * stores the signature. (A bytecode block could then be associated with more than one
+ * signature, for aliases.) C-level programs also need to store datum types.
+ * 
+ * A parameter type can be DT_NONE, indicating that the program accepts any
+ * datum type; in this case only genera-purpose instructions like COPY are applicable.
  */
 
 #ifndef BYTECODE_H
@@ -11,8 +20,8 @@
 
 
 typedef struct s_BytecodeDraft {
-	Atom signature;
-	Atom registers;
+	Datum signature;	
+	Datum registers;
 	IFactDraft constantsDraft;
 	IFactDraft programDraft;
 	Instruction instructionDraft;
@@ -23,7 +32,7 @@ typedef struct s_BytecodeDraft {
  * Initialize a bytecode block from a DT_FORMULA signature,
  * and an array of initial values for registers.
  */
-void BytecodeBegin(BytecodeDraft * draft, Atom signature, Atom registers);
+void BytecodeBegin(BytecodeDraft * draft, Datum signature, Datum registers);
 
 /**
  * Structure specifying a bytecode argument or operand
@@ -60,9 +69,9 @@ void BytecodeEndInstruction(BytecodeDraft * draft);
 
 
 /**
- * Finalize bytecode and create IFact atom. This creates the relations
+ * Finalize bytecode and create a DT_ID atom. This creates the relations
  * 
- * (bytecode @b signature f) where f is a DT_FORMULA
+ * (bytecode @b signature f) where f is a formula
  * 
  * (bytecode @b registers r)
  * where r is a list of initial values for registers (atoms),
@@ -74,35 +83,37 @@ void BytecodeEndInstruction(BytecodeDraft * draft);
  * (bytecode @b program i)  where i is a list of instructions
  * 
  */
-Atom BytecodeEnd(BytecodeDraft * draft);
+Datum BytecodeEnd(BytecodeDraft * draft);
 
 
-bool IsBytecode(Atom atom);
+bool IsBytecode(Datum atom);
 
 /**
  * Returns a list of instructions
  */
-Atom BytecodeGetProgram(Atom bytecode);
+Datum BytecodeGetProgram(Datum bytecode);
 
 /**
  * Returns a formula
+ * TODO: this should be factored out to Service,
+ * not needed by the bytecode block itself
  */
-Atom BytecodeGetSignature(Atom bytecode);
+// Atom BytecodeGetSignature(Atom bytecode);
 
 /**
- * Read a instruction from a bytecode block.
+ * Read a instruction (DT_INSTRUCTION) from a bytecode block.
  */
-Atom BytecodeGetInstruction(Atom bytecode, index32 pc);
+Datum BytecodeGetInstruction(Datum bytecode, index32 pc);
 
 /**
- * Get a list of registers (initial values)
+ * Get the list of registers (initial values)
  */
-Atom BytecodeGetRegisters(Atom bytecode);
+Datum BytecodeGetRegisters(Datum bytecode);
 
 /**
  * Get a list of constants
  */
-Atom BytecodeGetConstants(Atom bytecode);
+Datum BytecodeGetConstants(Datum bytecode);
 
 /**
  * Create core bytecode services, such as arithmetic operations.

@@ -10,7 +10,7 @@
 
 typedef struct s_ClauseBuilder {
 	TermBuilder termBuilder;
-	ResizingArray terms;			// array of DT_FORMULA terms
+	ResizingArray terms;			// array of DT_ID datums
 	size8 arity;
 	bool isValid;
 } ClauseBuilder;
@@ -19,13 +19,13 @@ void InitializeClauseBuilder(ClauseBuilder * builder);
 
 bool ClauseBuilderPush(ClauseBuilder * builder, Token token);
 bool ClauseBuilderIsValid(ClauseBuilder const * builder);
-Atom ClauseBuilderCreateFormula(ClauseBuilder * builder);
+Datum ClauseBuilderCreateFormula(ClauseBuilder * builder);
 void ClauseBuilderReset(ClauseBuilder * builder);
 
 void CleanupClauseBuilder(ClauseBuilder * builder);
 
 // convenience method for testing
-Atom CStringToClause(char const * string, size32 length);
+Datum CStringToClause(char const * string, size32 length);
 
 
 #endif	// CLAUSEBUILDER_H

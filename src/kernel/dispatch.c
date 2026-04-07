@@ -11,13 +11,14 @@
  * Dispatch a query, 
  * 
  */
-Service DispatchQuery(Atom query)
+Service DispatchQuery(Datum query)
 {
+	ASSERT(IsFormula(query))
 	// TODO:
 
 	// 1) Lookup matching bytecode by form from a service directory.
 	
-	Atom queryForm = FormulaGetForm(query);
+	Datum queryForm = FormulaGetForm(query);
 	Service service = RegistryFindService(queryForm);
 
 	// 2) Attempt to match candidate services to the query actors,

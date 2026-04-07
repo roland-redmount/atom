@@ -1,4 +1,5 @@
 
+#include "datumtypes/id.h"
 #include "lang/FullForm.h"
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
@@ -11,25 +12,26 @@
  * 
  * TODO: this should determine order of clauses from multiset iteration order
  */
-Atom CreateFullForm(Atom const * clauseForms, size8 nClauseForms, index8 const * order)
+Datum CreateFullForm(Datum const * clauseForms, size8 nClauseForms, index8 const * order)
 {
 	Atom uniqueClauseForms[nClauseForms];
 	for(index8 i = 0; i < nClauseForms; i++) {
 		index8 j = order ? order[i] : i;
-		uniqueClauseForms[i] = clauseForms[j];
+		uniqueClauseForms[i] = CreateID(clauseForms[j]);
 	}
 	// reduce to unique roles
 	uint32 multiplicities[nClauseForms];
 	size8 nUniqueClauseForms = ReduceAtomArray(uniqueClauseForms, multiplicities, nClauseForms);
 
 	// create a multiset of clause forms
-	Atom conjunctionForm = CreateMultisetFromArrays(uniqueClauseForms, multiplicities, nUniqueClauseForms);
-	AssertFact(GetCorePredicateForm(FORM_CONJUNCTION_FORM), &conjunctionForm);
+	Datum conjunctionForm = CreateMultisetFromArrays(uniqueClauseForms, multiplicities, nUniqueClauseForms);
+	Atom conjunctionFormAtom = CreateID(conjunctionForm);
+	AssertFact(GetCorePredicateForm(FORM_CONJUNCTION_FORM), &conjunctionFormAtom);
 	return conjunctionForm;
 }
 
 
-bool IsConjunctionForm(Atom atom)
+bool IsConjunctionForm(Datum atom)
 {
 	return AtomHasRole(
 		atom,
@@ -39,19 +41,19 @@ bool IsConjunctionForm(Atom atom)
 }
 
 
-size8 FullFormNUniqueClauseForms(Atom form)
+size8 FullFormNUniqueClauseForms(Datum form)
 {
 	return MultisetNUniqueElements(form);
 }
 
 
-size8 FullFormNClauseFormsTotal(Atom form)
+size8 FullFormNClauseFormsTotal(Datum form)
 {
 	return MultisetSize(form);
 }
 
 
-size8 FullFormArity(Atom form)
+size8 FullFormArity(Datum form)
 {
 	// the arity of a cojunction is the sum of unique terms arity * multiple
 	MultisetIterator iterator;
@@ -59,7 +61,7 @@ size8 FullFormArity(Atom form)
 	size8 arity = 0;
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
-		uint8 clauseArity = ClauseArity(elementMultiple.element);
+		uint8 clauseArity = ClauseArity(elementMultiple.element.datum);
 		arity += clauseArity * elementMultiple.multiple;
 		MultisetIteratorNext(&iterator);
 	}
@@ -70,7 +72,7 @@ size8 FullFormArity(Atom form)
 /**
  * Traverse and print a form to stdout
  */
-void PrintFullForm(Atom form)
+void PrintFullForm(Datum form)
 {
 	MultisetIterator iterator;
 	MultisetIterate(form, &iterator);
@@ -79,7 +81,7 @@ void PrintFullForm(Atom form)
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
-			PrintClauseForm(elementMultiple.element);
+			PrintClauseForm(elementMultiple.element.datum);
 			PrintCString(" & ");
 		}
 		MultisetIteratorNext(&iterator);

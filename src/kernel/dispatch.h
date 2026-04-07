@@ -16,9 +16,9 @@
 
 
 /**
- * Dispatch a query, return the first matching service, if any.
+ * Dispatch a query (formula), return the first matching service, if any.
  */
-Service DispatchQuery(Atom query);
+Service DispatchQuery(Datum query);
 
 void CallService(Service service, Atom * tuple);
 

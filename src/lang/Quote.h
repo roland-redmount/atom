@@ -1,7 +1,7 @@
 /**
  * A quote is defined by the relation (quote @q quoted @atom)
  *
- * Only expressions (DT_VARIABLE, DT_FORMULA  ?) can be quoted
+ * Only expressions (DT_IDs) can be quoted
  * Quoted atoms are (will be) used in reflection.
  * 
  * NOTE: For now, this mechanism is not used. We are so far only
@@ -16,15 +16,13 @@
 #include "lang/Datum.h"
 
 
-Atom CreateQuote(Atom quoted);
+Datum CreateQuote(Datum quoted);
 
-void QuoteSetTuple(Atom * tuple, Atom quote, Atom quoted);
+bool IsQuote(Datum atom);
 
-bool IsQuote(Atom atom);
+Datum QuoteGetQuoted(Datum quote);
 
-Atom QuoteGetQuoted(Atom quote);
-
-void PrintQuoted(Atom quote);
+void PrintQuoted(Datum quote);
 
 
 # endif	// QUOTE_H

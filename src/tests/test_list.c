@@ -1,4 +1,5 @@
 
+#include "datumtypes/id.h"
 #include "datumtypes/UInt.h"
 #include "datumtypes/Variable.h"
 #include "kernel/kernel.h"
@@ -36,14 +37,14 @@ static void testCreateList(void)
 {
 	AtomsFixture fixture = createAtomsFixture();
 	
-	Atom list = CreateListFromArray(fixture.atoms, EXAMPLE_LIST_N_ELEMENTS);
+	Datum list = CreateListFromArray(fixture.atoms, EXAMPLE_LIST_N_ELEMENTS);
 	
 	// test (list length) relation table
 	BTree * listLength = RegistryGetCoreTable(FORM_LIST_LENGTH);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(listLength), 1)
 
 	// test (list position element) relation table
-	Atom listPositionElementForm = GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT);
+	Datum listPositionElementForm = GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT);
 	Service service = RegistryFindService(listPositionElementForm);
 	ASSERT(service.type == SERVICE_BTREE)
 	BTree * listPositionElement = service.service.tree;
@@ -79,24 +80,24 @@ static void testCreateList(void)
 	index8 elementRoleIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT);
 
 	// attempt to add a tuple (list @string position 7 element 'Z') will violate the ifact
-	tuple[listRoleIndex] = list;
+	tuple[listRoleIndex] = CreateID(list);
 	tuple[positionRoleIndex] = CreateUInt(7);
 	tuple[elementRoleIndex] = GetAlphabetLetter('Z');
 	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(listPositionElement, tuple), TUPLE_PROTECTED)
 
 	// attempt to remove any tuple (list @string position _ element _) will violate the ifact
-	tuple[listRoleIndex] = list;
+	tuple[listRoleIndex] = CreateID(list);
 	tuple[positionRoleIndex] = CreateUInt(3);
 	tuple[elementRoleIndex] = GetAlphabetLetter('Y');
 	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuples(listPositionElement, tuple, REMOVE_NORMAL), 0)
 	
-	ReleaseAtom(list);
+	IFactRelease(list);
 }
 
 
 typedef struct {
 	AtomsFixture atomsFixture;
-	Atom list;
+	Datum list;
 } ExampleListFixture;
 
 // a list containing only "small" datums
@@ -111,7 +112,7 @@ static ExampleListFixture setupExampleListFixture(void)
 
 static void teardownExampleListFixture(ExampleListFixture fixture)
 {
-	ReleaseAtom(fixture.list);
+	IFactRelease(fixture.list);
 }
 
 
@@ -124,20 +125,20 @@ static void testNestedList(void)
 
 	Atom nestedListAtoms[] = {
 		GetAlphabetLetter('A'),
-		fixture.list
+		CreateID(fixture.list)
 	};
 
-	Atom nestedList = CreateListFromArray(nestedListAtoms, NESTED_LIST_N_ELEMENTS);
+	Datum nestedList = CreateListFromArray(nestedListAtoms, NESTED_LIST_N_ELEMENTS);
 	
 	// test ListGetElement
 	for(index8 i = 0; i < NESTED_LIST_N_ELEMENTS; i++)
 		ASSERT_TRUE(SameAtoms(ListGetElement(nestedList, i+1), nestedListAtoms[i]))
 
 	// test ListGetPosition
-	index32 position = ListGetPosition(nestedList, fixture.list);
+	index32 position = ListGetPosition(nestedList, CreateID(fixture.list));
 	ASSERT_UINT32_EQUAL(position, 2)
 
-	ReleaseAtom(nestedList);
+	IFactRelease(nestedList);
 
 	teardownExampleListFixture(fixture);
 }
@@ -145,7 +146,7 @@ static void testNestedList(void)
 
 static void testCreateEmptyList(void)
 {
-	Atom emptyList = CreateListFromArray(0, 0);
+	Datum emptyList = CreateListFromArray(0, 0);
 	ASSERT_TRUE(IsList(emptyList))
 	ASSERT_UINT32_EQUAL(ListLength(emptyList), 0)
 
@@ -154,7 +155,7 @@ static void testCreateEmptyList(void)
 	ASSERT_FALSE(ListIteratorHasNext(&iterator))
 	ListIteratorEnd(&iterator);
 
-	ReleaseAtom(emptyList);
+	IFactRelease(emptyList);
 }
 
 

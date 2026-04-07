@@ -10,14 +10,14 @@
 
 typedef struct s_SubstitutionList {
 	uint8 nPairs;
-	Atom *variables;
-	Atom *values;
+	Atom * variables;
+	Atom * values;
 } SubstitutionList;
 
 
 
 // create an array of the unique variables in tuple
-SubstitutionList CreateSubstFromVars(Atom list);
+SubstitutionList CreateSubstFromVars(Datum list);
 
 // Find the value corresponding to a given variable
 Atom FindSubstValue(SubstitutionList subst, Atom variable);

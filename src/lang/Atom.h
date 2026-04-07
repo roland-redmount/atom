@@ -6,7 +6,7 @@
  * serialized form is data type-dependent, but must include enough information
  * to uniquely identify the datum _within the context of the data node_.  
  * 
- * TODO:  I think this should be called TypedDatum to avoid confusion. Atom is a more high-level concept
+ * TODO:  I think this should be called TypedDatum to avoid confusion.
  */
 
 #ifndef ATOM_H
@@ -32,7 +32,7 @@
 typedef struct s_Atom
 {
 	byte type;
-	byte flags;
+	byte flags;		// TODO: this only holds the ATOM_PROTECTED flag, should be moved
 	byte reserved1;
 	byte reserved2;
 	Datum datum;					// the 64-bit datum
@@ -48,6 +48,11 @@ typedef struct s_Atom
 extern Atom invalidAtom;
 // the "unknown" atom
 extern Atom unknownAtom;
+
+/**
+ * Shorthand for (Atom) {.type = type, .datum = datum}
+ */
+Atom CreateAtom(byte type, Datum datum);
 
 // reference handling
 void AcquireAtom(Atom atom);
@@ -69,6 +74,10 @@ void SortAtoms(Atom * atoms, size32 nAtoms);
 
 // NOTE: this shold probably go elsewhere
 size8 ReduceAtomArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms);
+
+// same, for datums. I'm not sure if we end up needning both
+size8 ReduceDatumArray(Datum * atoms, uint32 * multiplicities, size8 nAtoms);
+
 
 /**
  * Pretty-print an atom to stdout.

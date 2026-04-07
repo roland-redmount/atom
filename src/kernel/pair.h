@@ -16,7 +16,7 @@
  * (pair @atom left @left) & (pair @atom right @right) instead.
  * This is not a true trinary relation.
  */
-Atom CreatePair(Atom left, Atom right);
+Datum CreatePair(Atom left, Atom right);
 
 /**
  * Add pair ifacts (pair @atom left @left right @right) to a draft IFact
@@ -24,11 +24,11 @@ Atom CreatePair(Atom left, Atom right);
 void AddPairToIFact(IFactDraft * draft, Atom left, Atom right);
 
 
-bool IsPair(Atom atom);
+bool IsPair(Datum atom);
 
-Atom PairGetElement(Atom pair, uint8 element);
+Atom PairGetElement(Datum pair, uint8 element);
 
-void PrintPair(Atom pair);
+void PrintPair(Datum pair);
 
 
 #endif	// PAIR_H

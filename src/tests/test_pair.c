@@ -1,5 +1,5 @@
 
-
+#include "datumtypes/id.h"
 #include "datumtypes/UInt.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
@@ -10,7 +10,7 @@
 
 static void testPair(void)
 {
-	Atom form = GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT);
+	Datum form = GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT);
 	Service service = RegistryFindService(form);
 	ASSERT(service.type == SERVICE_BTREE)
 	BTree * pairTable = service.service.tree;
@@ -19,9 +19,8 @@ static void testPair(void)
 	// create a pair
 	Atom left = GetAlphabetLetter('x');
 	Atom right = CreateUInt(42);
-	Atom pair1 = CreatePair(left, right);
+	Datum pair1 = CreatePair(left, right);
 	
-	ASSERT_UINT32_EQUAL(pair1.type, DT_ID)
 	ASSERT_TRUE(IsPair(pair1))
 
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(pairTable), initialNRows + 1)
@@ -31,20 +30,20 @@ static void testPair(void)
 
 
 	// attempt to add the same pair again
-	Atom pair2 = CreatePair(left, right);
-	ASSERT_TRUE(SameAtoms(pair1, pair2))
+	Datum pair2 = CreatePair(left, right);
+	ASSERT_DATA64_EQUAL(pair1, pair2)
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(pairTable), initialNRows + 1)
-	ReleaseAtom(pair2);
+	IFactRelease(pair2);
 	
 	// a pair containing another pair
-	Atom pair3 = CreatePair(pair1, right);
+	Datum pair3 = CreatePair(CreateID(pair1), right);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(pairTable), initialNRows + 2)
 
-	ASSERT_TRUE(SameAtoms(PairGetElement(pair3, PAIR_LEFT), pair1))
+	ASSERT_TRUE(SameAtoms(PairGetElement(pair3, PAIR_LEFT), CreateID(pair1)))
 	ASSERT_TRUE(SameAtoms(PairGetElement(pair3, PAIR_RIGHT), right))
 	
-	ReleaseAtom(pair3);
-	ReleaseAtom(pair1);
+	IFactRelease(pair3);
+	IFactRelease(pair1);
 
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(pairTable), initialNRows)
 }

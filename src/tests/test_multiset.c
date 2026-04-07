@@ -1,4 +1,5 @@
 
+#include "datumtypes/id.h"
 #include "datumtypes/UInt.h"
 #include "kernel/letter.h"
 #include "kernel/kernel.h"
@@ -22,7 +23,7 @@ static void testMultiset(void)
 	};
 	size32 multiples[] = {1, 2, 3};
 
-	Atom multiset = CreateMultisetFromArrays(elements, multiples, TEST_MULTISET_N_UNIQUE);
+	Datum multiset = CreateMultisetFromArrays(elements, multiples, TEST_MULTISET_N_UNIQUE);
 
 	// we should have 3 tuples added to the table
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(table), initialNRows + 3)
@@ -48,9 +49,9 @@ static void testMultiset(void)
 	MultisetIteratorEnd(&iterator);
  
 	// creating again from the same elements should yield the same atom, with one additional reference
-	Atom multiset2 = CreateMultisetFromArrays(elements, multiples, TEST_MULTISET_N_UNIQUE);
-	ASSERT_TRUE(SameAtoms(multiset, multiset2))
-	ReleaseAtom(multiset2);
+	Datum multiset2 = CreateMultisetFromArrays(elements, multiples, TEST_MULTISET_N_UNIQUE);
+	ASSERT_DATA64_EQUAL(multiset, multiset2)
+	IFactRelease(multiset2);
 
 	// creating from permuted elements should yield the same multiset
 	Atom permutedElements[] = {
@@ -60,23 +61,23 @@ static void testMultiset(void)
 	};
 	size32 permutedMultiples[] = {3, 1, 2};
 
-	Atom multiset3 = CreateMultisetFromArrays(permutedElements, permutedMultiples, TEST_MULTISET_N_UNIQUE);
+	Datum multiset3 = CreateMultisetFromArrays(permutedElements, permutedMultiples, TEST_MULTISET_N_UNIQUE);
 
-	ASSERT_TRUE(SameAtoms(multiset, multiset3))
-	ReleaseAtom(multiset3);
+	ASSERT_DATA64_EQUAL(multiset, multiset3)
+	IFactRelease(multiset3);
 
 	// asserting a fact (multiset @multiset element 'D' multiple 1) should fail
 	// TODO: this fails now
 	Atom tuple1[3];
-	MultisetSetTuple(tuple1, multiset, GetAlphabetLetter('D'), CreateUInt(1));
+	MultisetSetTuple(tuple1, CreateID(multiset), GetAlphabetLetter('D'), CreateUInt(1));
 	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(table, tuple1), TUPLE_PROTECTED)
 
 	// attempt to remove any tuple (list @string position _ element _) should fail
 	Atom tuple2[3];
-	MultisetSetTuple(tuple2, multiset, GetAlphabetLetter('B'), CreateUInt(2));
+	MultisetSetTuple(tuple2, CreateID(multiset), GetAlphabetLetter('B'), CreateUInt(2));
 	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuples(table, tuple2, REMOVE_NORMAL), 0)
 
-	ReleaseAtom(multiset);
+	IFactRelease(multiset);
 }
 
 

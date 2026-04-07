@@ -1,5 +1,5 @@
 /**
- * Lookup maintains a table of all roles that DT_ID atoms are associated with
+ * Lookup maintains a table of all roles associatd with  DT_ID atoms (ONLY DT_ID atoms)
  * across all relation tables. Each lookup entry is a triple [atom form role-name]
  * since both the form and role name are needed to uniquely identify a role.
  * This is information is redundant with the corresponding relation table,
@@ -38,47 +38,47 @@ void FreeLookup(void);
 size32 LookupTotalCount(void);
 
 /**
- * Test whether an atom participates in a given role.
- * If role == invalidAtom, the function returns true if the atom participates
+ * Test whether an atom participates in a given role (DT_NAME).
+ * If role == 0, the function returns true if the atom participates
  * in any role in the given predicate form.
- * If predicateForm == invalidAtom, the function returns true if the atom participates
+ * If predicateForm == 0, the function returns true if the atom participates
  * in any role in any predicate form.
  * 
  * NOTE: these functions could take datums, as the datum types are always the same
  */
-bool AtomHasRole(Atom atom, Atom predicateForm, Atom role);
+bool AtomHasRole(Datum atom, Datum predicateForm, Datum role);
 
 /**
  * Add a lookup entry for an atom participating in a role.
  * This is called by AssertFact()
  */
-void AtomAddRole(Atom atom, Atom predicateForm, Atom role);
+void AtomAddRole(Datum atom, Datum predicateForm, Datum role);
 
 /**
  * Remove a lookup entry for an atom participating in a role.
  * This is called by RetractFact()
  */
-void AtomRemoveRole(Atom atom, Atom predicateForm, Atom role);
+void AtomRemoveRole(Datum atom, Datum predicateForm, Datum role);
 
 /**
- * Remove all roles for an atom. This is used when removing a DT_ID atom.
+ * Remove all roles for an DT_ID atom. This is used when removing a DT_ID atom.
  */
-void LookupRemoveAllRoles(Atom atom);
+void LookupRemoveAllRoles(Datum atom);
 
 /**
  * Add lookup entries for all actors in a predicate.
  */
-void LookupAddPredicateRoles(Atom predicateForm, Atom * actors);
+void LookupAddPredicateRoles(Datum predicateForm, Atom * actors);
 
 /**
  *	Remove lookup entries for each actor in a predicate.
  */
-void LookupRemovePredicateRoles(Atom predicateForm, Atom * actors);
+void LookupRemovePredicateRoles(Datum predicateForm, Atom * actors);
 
 /**
  *	Remove lookup entries for all atoms acting in the given predicate form.
  */
-void LookupRemoveAllPredicateRoles(Atom predicateForm);
+void LookupRemoveAllPredicateRoles(Datum predicateForm);
 
  /**
  * A record associates any atom (key) to a role (value).
@@ -112,15 +112,15 @@ typedef struct s_LookupIterator {
 /**
  * Iterate over lookup records for a given atom.
  */
-void LookupIterate(Atom atom, LookupIterator * iterator);
+void LookupIterate(Datum atom, LookupIterator * iterator);
 
 bool LookupIteratorHasRecord(LookupIterator const * iterator);
 
 void LookupIteratorNext(LookupIterator * iterator);
 
-Atom LookupIteratorGetForm(LookupIterator const * iterator);
+Datum LookupIteratorGetForm(LookupIterator const * iterator);
 
-Atom LookupIteratorGetRole(LookupIterator const * iterator);
+Datum LookupIteratorGetRole(LookupIterator const * iterator);
 
 void FreeLookupIterator(LookupIterator * iterator);
 

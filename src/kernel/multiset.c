@@ -1,4 +1,5 @@
 
+#include "datumtypes/id.h"
 #include "datumtypes/UInt.h"
 #include "datumtypes/Variable.h"
 #include "lang/Atom.h"
@@ -17,7 +18,7 @@ void MultisetSetTuple(Atom * tuple, Atom multiset, Atom element, Atom multiple)
 }
 
 
-Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size32 nUniqueElements)
+Datum CreateMultiset(MultisetElementGenerator generator, void const * data, size32 nUniqueElements)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
@@ -31,7 +32,7 @@ Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size3
 void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, void const * data, size32 nUniqueElements)
 {
 	// assert (multiset element multiple) facts
-	Atom form = GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE);
+	Datum form = GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE);
 
 	IFactBeginConjunction(
 		draft, form,
@@ -63,7 +64,7 @@ static ElementMultiple arrayElementGenerator(index32 index, void const * data)
 }
 
 
-Atom CreateMultisetFromArrays(Atom const * atoms, size32 const * multiples, size32 nUniqueElements)
+Datum CreateMultisetFromArrays(Atom const * atoms, size32 const * multiples, size32 nUniqueElements)
 {
 	MultisetElementData elementData;
 	elementData.atoms = atoms;
@@ -82,7 +83,7 @@ void AddMultisetToIFactFromArrays(IFactDraft * draft, Atom const * atoms, size32
 	AddMultisetToIFact(draft, &arrayElementGenerator, &elementData, nUniqueElements);
 }
 
-bool IsMultiset(Atom atom)
+bool IsMultiset(Datum atom)
 {
 	return AtomHasRole(
 		atom,
@@ -91,7 +92,7 @@ bool IsMultiset(Atom atom)
 	);
 }
 
-size32 MultisetGetElementMultiple(Atom multiset, Atom element)
+size32 MultisetGetElementMultiple(Datum multiset, Atom element)
 {
 	// TODO
 	ASSERT(false);
@@ -103,10 +104,10 @@ size32 MultisetGetElementMultiple(Atom multiset, Atom element)
  * Multiset iterator
  */
 
-void MultisetIterate(Atom multiset, MultisetIterator * iterator)
+void MultisetIterate(Datum multiset, MultisetIterator * iterator)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_MULTISET_ELEMENT_MULTIPLE);
-	MultisetSetTuple(iterator->queryTuple, multiset, anonymousVariable, anonymousVariable);
+	MultisetSetTuple(iterator->queryTuple, CreateID(multiset), anonymousVariable, anonymousVariable);
 	RelationBTreeIterate(tree, iterator->queryTuple, &(iterator->treeIterator));
 }
 
@@ -142,7 +143,7 @@ void MultisetIteratorEnd(MultisetIterator * iterator)
 }
 
 
-size32 MultisetNUniqueElements(Atom multiset)
+size32 MultisetNUniqueElements(Datum multiset)
 {
 	MultisetIterator iterator;
 	MultisetIterate(multiset, &iterator);
@@ -156,7 +157,7 @@ size32 MultisetNUniqueElements(Atom multiset)
 }
 
 
-size32 MultisetSize(Atom multiset)
+size32 MultisetSize(Datum multiset)
 {
 	MultisetIterator iterator;
 	MultisetIterate(multiset, &iterator);
@@ -171,7 +172,7 @@ size32 MultisetSize(Atom multiset)
 }
 
 
-void PrintMultiset(Atom multiset)
+void PrintMultiset(Datum multiset)
 {
 	PrintChar('{');
 	MultisetIterator iterator;
@@ -189,8 +190,7 @@ void PrintMultiset(Atom multiset)
 }
 
 
-
-void MultisetIterationOrder(Atom multiset, Atom const * elements, index8 * order, size8 nElements)
+void MultisetIterationOrder(Datum multiset, Atom const * elements, index8 * order, size8 nElements)
 {
 	MultisetIterator iterator;
 	MultisetIterate(multiset, &iterator);
@@ -198,6 +198,7 @@ void MultisetIterationOrder(Atom multiset, Atom const * elements, index8 * order
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		index8 m = 0;
+		// find corresponding element in the elements array
 		for(index8 j = 0; j < nElements; j++) {
 			if(SameAtoms(elements[j], em.element)) {
 				order[i + m] = j;
@@ -211,3 +212,4 @@ void MultisetIterationOrder(Atom multiset, Atom const * elements, index8 * order
 	}
 	MultisetIteratorEnd(&iterator);
 }
+

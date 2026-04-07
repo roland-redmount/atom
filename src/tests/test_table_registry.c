@@ -8,21 +8,21 @@
 
 
 struct {
-	Atom signature;		// a form
+	Datum signature;		// a form
 } fixture;
 
 static void setupFixture(void)
 {
 	// TODO: we should have a way to parse a form from a C string.
-	Atom formula = CStringToPredicate("foo 0 bar 0 bar 0 baz 0");
+	Datum formula = CStringToPredicate("foo 0 bar 0 bar 0 baz 0");
 	fixture.signature = FormulaGetForm(formula);
-	AcquireAtom(fixture.signature);
+	IFactAcquire(fixture.signature);
 	IFactRelease(formula);
 }
 
 static void teardownFixture(void)
 {
-	ReleaseAtom(fixture.signature);
+	IFactRelease(fixture.signature);
 }
 
 

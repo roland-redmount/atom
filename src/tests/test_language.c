@@ -14,7 +14,7 @@
 
 
 static struct {
-	Atom foo, bar, baz;
+	Datum foo, bar, baz;
 } exampleNames;
 
 
@@ -40,10 +40,10 @@ static void teardown(void)
 #define EXAMPLE_PREDICATE_ARITY 4
 #define EXAMPLE_PREDICATE_N_ROLES 3
 
-static Atom examplePredicateForm(void)
+static Datum examplePredicateForm(void)
 {
 	return CreatePredicateForm(
-		(Atom[]) {
+		(Datum[]) {
 			exampleNames.bar,
 			exampleNames.baz,
 			exampleNames.baz,
@@ -56,7 +56,7 @@ static Atom examplePredicateForm(void)
 
 static void testPredicateForm(void)
 {
-	Atom predicateForm = examplePredicateForm();
+	Datum predicateForm = examplePredicateForm();
 	
 	ASSERT_UINT32_EQUAL(PredicateNRoles(predicateForm), EXAMPLE_PREDICATE_N_ROLES)
 	ASSERT_UINT32_EQUAL(PredicateArity(predicateForm), EXAMPLE_PREDICATE_ARITY)
@@ -83,12 +83,12 @@ static void testPredicateForm(void)
 static void testTermForm(void)
 {
 	// arrange, should be part of setup function
-	Atom predicateForm = examplePredicateForm();
+	Datum predicateForm = examplePredicateForm();
 
-	Atom termForm = CreateTermForm(predicateForm, false);
+	Datum termForm = CreateTermForm(predicateForm, false);
 
 	ASSERT_TRUE(IsTermForm(termForm))
-	ASSERT_TRUE(SameAtoms(GetPredicateForm(termForm), predicateForm))
+	ASSERT_DATA64_EQUAL(GetPredicateForm(termForm), predicateForm)
 	ASSERT_FALSE(TermFormGetSign(termForm))
 	ASSERT_UINT32_EQUAL(TermFormArity(termForm), PredicateArity(predicateForm))
 
@@ -105,9 +105,9 @@ static void testTermForm(void)
 
 
 typedef struct {
-	Atom predicateForm;	// belongs to a predicateFormFixture
-	Atom termForm;
-	Atom negatedTermForm;
+	Datum predicateForm;	// belongs to a predicateFormFixture
+	Datum termForm;
+	Datum negatedTermForm;
 } TermFormsFixture;
 
 
@@ -130,9 +130,9 @@ static void teardownTermForms(TermFormsFixture fixture)
 }
 
 
-static Atom exampleClauseForm(TermFormsFixture termFormsFixture)
+static Datum exampleClauseForm(TermFormsFixture termFormsFixture)
 {
-	Atom termForms[] = {
+	Datum termForms[] = {
 		termFormsFixture.negatedTermForm,
 		termFormsFixture.termForm,
 		termFormsFixture.termForm
@@ -147,7 +147,7 @@ static void testClauseForm(void)
 	TermFormsFixture termFormsFixture = setupTermForms();
 
 	// act
-	Atom clauseForm = exampleClauseForm(termFormsFixture);
+	Datum clauseForm = exampleClauseForm(termFormsFixture);
 	// RelationBTreeDump(RegistryGetCoreTable(FORM_PAIR_LEFT_RIGHT));
 
 	// assert
@@ -162,10 +162,10 @@ static void testClauseForm(void)
 		ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
 		ASSERT_UINT32_EQUAL(em.element.type, DT_ID)
 		// order of term forms is arbitrary
-		if(SameAtoms(em.element, termFormsFixture.termForm))
+		if(em.element.datum == termFormsFixture.termForm)
 			ASSERT_UINT32_EQUAL(em.multiple, 2)
 		else {
-			ASSERT_TRUE(SameAtoms(em.element, termFormsFixture.negatedTermForm))
+			ASSERT_DATA64_EQUAL(em.element.datum, termFormsFixture.negatedTermForm)
 			ASSERT_UINT32_EQUAL(em.multiple, 1)
 		}
 		MultisetIteratorNext(&termFormIterator);
@@ -182,7 +182,7 @@ static void testClauseForm(void)
 
 typedef struct {
 	TermFormsFixture termFormsFixture;
-	Atom clauseForm;
+	Datum clauseForm;
 } ClauseFormFixture;
 
 
@@ -210,15 +210,15 @@ static void testCreateClause(void)
 	Atom actors[EXAMPLE_CLAUSE_ARITY];
 	for(index8 i = 0; i < EXAMPLE_CLAUSE_ARITY; i++)
 		actors[i] = CreateInt(i + 1);
-	Atom actorsList = CreateListFromArray(actors, EXAMPLE_CLAUSE_ARITY);
+	Datum actorsList = CreateListFromArray(actors, EXAMPLE_CLAUSE_ARITY);
 
 	// act
-	Atom clause = CreateFormula(clauseFormFixture.clauseForm, actorsList);
+	Datum clause = CreateFormula(clauseFormFixture.clauseForm, actorsList);
 
 	// assert
 	ASSERT_TRUE(IsFormula(clause))
 	ASSERT_UINT32_EQUAL(FormulaArity(clause), ClauseArity(clauseFormFixture.clauseForm))
-	ASSERT_TRUE(SameAtoms(FormulaGetActors(clause), actorsList))
+	ASSERT_DATA64_EQUAL(FormulaGetActors(clause), actorsList)
 
 	IFactRelease(clause);
 
@@ -232,7 +232,7 @@ static void testPredicatePermutation(void)
 {
 	// the example (foo bar baz baz) has two permutations
 	// which depend on the canonical ording of names
-	Atom predicateForm = examplePredicateForm();
+	Datum predicateForm = examplePredicateForm();
 	index8 expectedPermutations[2][EXAMPLE_PREDICATE_ARITY] = {
 		{0, 1, 2, 3},
 		{0, 1, 3, 2}

@@ -87,33 +87,23 @@ size32 LookupTotalCount(void)
 }
 
 
-bool AtomHasRole(Atom atom, Atom predicateForm, Atom role)
+bool AtomHasRole(Datum atom, Datum predicateForm, Datum role)
 {
-	ASSERT(atom.type == DT_ID)
-	if(predicateForm.datum) {
-		ASSERT(predicateForm.type == DT_ID)
-		if(role.datum) {
-			ASSERT(role.type == DT_NAME)
-		}
-	}
 	LookupRecord record;
-	record.atom = atom.datum;
-	record.predicateForm = predicateForm.datum;
-	record.role = role.datum;
+	record.atom = atom;
+	record.predicateForm = predicateForm;
+	record.role = role;
 
 	return BTreeContainsItem(lookup.btree, &record);
 }
 
 
-void AtomAddRole(Atom atom, Atom predicateForm, Atom role)
+void AtomAddRole(Datum atom, Datum predicateForm, Datum role)
 {
-	ASSERT(atom.type == DT_ID)
-	ASSERT(predicateForm.type == DT_ID)
-	ASSERT(role.type == DT_NAME)
 	LookupRecord record;
-	record.atom = atom.datum;
-	record.predicateForm = predicateForm.datum;
-	record.role = role.datum;
+	record.atom = atom;
+	record.predicateForm = predicateForm;
+	record.role = role;
 
 	LookupRecord * existingRecord = BTreePeekItem(lookup.btree, &record);
 	if(existingRecord)
@@ -126,7 +116,7 @@ void AtomAddRole(Atom atom, Atom predicateForm, Atom role)
 }
 
 
-void LookupAddPredicateRoles(Atom predicateForm, Atom * actors)
+void LookupAddPredicateRoles(Datum predicateForm, Atom * actors)
 {
 	// iterate over roles names in the predicate form
 	// and add entries to lookup table
@@ -137,7 +127,7 @@ void LookupAddPredicateRoles(Atom predicateForm, Atom * actors)
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
 		for(index8 i = 0; i < em.multiple; i++) {
 			if(actors[index].type == DT_ID)
-				AtomAddRole(actors[index], predicateForm, em.element);
+				AtomAddRole(actors[index].datum, predicateForm, em.element.datum);
 			index++;
 		}
 		MultisetIteratorNext(&formIterator);
@@ -146,15 +136,12 @@ void LookupAddPredicateRoles(Atom predicateForm, Atom * actors)
 }
 
 
-void AtomRemoveRole(Atom atom, Atom predicateForm, Atom role)
+void AtomRemoveRole(Datum atom, Datum predicateForm, Datum role)
 {
-	ASSERT(atom.type == DT_ID)
-	ASSERT(predicateForm.type == DT_ID)
-	ASSERT(role.type == DT_NAME)
 	LookupRecord record;
-	record.atom = atom.datum;
-	record.predicateForm = predicateForm.datum;
-	record.role = role.datum;
+	record.atom = atom;
+	record.predicateForm = predicateForm;
+	record.role = role;
 
 	LookupRecord * existingRecord = BTreePeekItem(lookup.btree, &record);
 	ASSERT(existingRecord)
@@ -167,12 +154,10 @@ void AtomRemoveRole(Atom atom, Atom predicateForm, Atom role)
 }
 
 
-void LookupRemoveAllRoles(Atom atom)
+void LookupRemoveAllRoles(Datum atom)
 {
-	ASSERT(atom.type == DT_ID);
-
 	LookupRecord record;
-	record.atom = atom.datum;
+	record.atom = atom;
 	record.predicateForm = 0;
 	record.role = 0;
 
@@ -186,7 +171,7 @@ void LookupRemoveAllRoles(Atom atom)
 }
 
 
-void LookupRemovePredicateRoles(Atom predicateForm, Atom * actors)
+void LookupRemovePredicateRoles(Datum predicateForm, Atom * actors)
 {
 	MultisetIterator formIterator;
 	MultisetIterate(predicateForm, &formIterator);
@@ -195,7 +180,7 @@ void LookupRemovePredicateRoles(Atom predicateForm, Atom * actors)
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
 		for(index8 i = 0; i < em.multiple; i++) {
 			if(actors[index].type == DT_ID)
-				AtomRemoveRole(actors[index], predicateForm, em.element);
+				AtomRemoveRole(actors[index].datum, predicateForm, em.element.datum);
 			index++;
 		}
 		MultisetIteratorNext(&formIterator);
@@ -204,7 +189,7 @@ void LookupRemovePredicateRoles(Atom predicateForm, Atom * actors)
 }
 
 
-void LookupRemoveAllPredicateRoles(Atom predicateForm)
+void LookupRemoveAllPredicateRoles(Datum predicateForm)
 {
 	// NOTE: this requires scanning the entire lookup table,
 	// since it is indexed by atom, not predicate form.
@@ -218,7 +203,7 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm)
 	Datum previousAtom = 0;
 	while(BTreeIteratorHasItem(&iterator)) {
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
-		if(record->predicateForm == predicateForm.datum) {
+		if(record->predicateForm == predicateForm) {
 			// since lookup entries are ordered by atom,
 			// we can skip any entry with the same atom as previous
 			if(record->atom != previousAtom) {
@@ -234,16 +219,15 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm)
 	Datum const * datums = ResizingArrayGetMemory(&datumArray);
 	size32 nAtoms = ResizingArrayNElements(&datumArray);
 	for(index32 i = 0; i < nAtoms; i++)
-		LookupRemoveAllRoles((Atom) {DT_ID, 0, 0, 0, datums[i]});
+		LookupRemoveAllRoles(datums[i]);
 		
 	FreeResizingArray(&datumArray);
 }
 
 
-void LookupIterate(Atom atom, LookupIterator * iterator)
+void LookupIterate(Datum atom, LookupIterator * iterator)
 {
-	ASSERT(atom.type == DT_ID)
-	iterator->query.atom = atom.datum;
+	iterator->query.atom = atom;
 	iterator->query.predicateForm = 0;
 	iterator->query.role = 0;
 
@@ -276,17 +260,17 @@ void LookupIteratorNext(LookupIterator * iterator)
 }
 
 
-Atom LookupIteratorGetForm(LookupIterator const * iterator)
+Datum LookupIteratorGetForm(LookupIterator const * iterator)
 {
 	LookupRecord const * record = BTreeIteratorPeekItem(&(iterator->treeIterator));
-	return (Atom) {DT_ID, 0, 0, 0, record->predicateForm};
+	return record->predicateForm;
 }
 
 
-Atom LookupIteratorGetRole(LookupIterator const * iterator)
+Datum LookupIteratorGetRole(LookupIterator const * iterator)
 {
 	LookupRecord const * record = BTreeIteratorPeekItem(&(iterator->treeIterator));
-	return (Atom) {DT_NAME, 0, 0, 0, record->role};
+	return record->role;
 }
 
 
@@ -304,11 +288,11 @@ void LookupDump(void)
 	BTreeIterate(&iterator, lookup.btree, 0, 0);
 	while(BTreeIteratorHasItem(&iterator)) {
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
-		PrintAtom((Atom) {DT_ID, 0, 0, 0, record->atom});
+		PrintIFact(record->atom);
 		PrintChar(' ');
-		PrintPredicateForm((Atom) {DT_ID, 0, 0, 0, record->predicateForm});
+		PrintPredicateForm(record->predicateForm);
 		PrintChar(' ');
-		PrintName((Atom) {DT_NAME, 0, 0, 0, record->role});
+		PrintName(record->role);
 		PrintF(" %u\n", record->nFacts);
 		BTreeIteratorNext(&iterator);
 	}

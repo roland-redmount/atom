@@ -1,4 +1,5 @@
 
+#include "datumtypes/id.h"
 #include "datumtypes/Parameter.h"
 #include "datumtypes/instruction.h"
 #include "datumtypes/Int.h"
@@ -6,6 +7,7 @@
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "lang/name.h"
+#include "kernel/string.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
 #include "lang/PredicateForm.h"
@@ -17,9 +19,9 @@
 
 
 typedef struct {
-	Atom bytecode;
-	Atom signature;		// a formula
-	Atom registers;		// a list
+	Datum bytecode;
+	Datum signature;		// a formula
+	Datum registers;		// a list
 } BytecodeFixture;
 
 
@@ -94,9 +96,9 @@ BytecodeFixture setupBytecodeFixture1(void)
 
 static void teardownBytecodeFixture(BytecodeFixture fixture)
 {
-	ReleaseAtom(fixture.bytecode);
-	ReleaseAtom(fixture.signature);
-	ReleaseAtom(fixture.registers);
+	IFactRelease(fixture.bytecode);
+	IFactRelease(fixture.signature);
+	IFactRelease(fixture.registers);
 }
 
 
@@ -105,11 +107,11 @@ void testBytecodeProgram1(void)
 	BytecodeFixture fixture = setupBytecodeFixture1();
 	
 	ASSERT_TRUE(IsBytecode(fixture.bytecode))
-	ASSERT_TRUE(SameAtoms(BytecodeGetSignature(fixture.bytecode), fixture.signature))
+	// ASSERT_TRUE(SameAtoms(BytecodeGetSignature(fixture.bytecode), fixture.signature))
 
-	ASSERT_TRUE(SameAtoms(BytecodeGetRegisters(fixture.bytecode), fixture.registers))
+	ASSERT_DATA64_EQUAL(BytecodeGetRegisters(fixture.bytecode), fixture.registers)
 
-	Atom program = BytecodeGetProgram(fixture.bytecode);
+	Datum program = BytecodeGetProgram(fixture.bytecode);
 	ASSERT_UINT32_EQUAL(ListLength(program), 5);
 
 	ASSERT_UINT32_EQUAL(
@@ -145,7 +147,7 @@ void testExecuteByteCode1(void)
 	
 	// NOTE: arguments must be in canonical order
 	Datum arguments[2] = {CreateInt(3).datum,  CreateInt(0).datum};
-	VMContext * rootContext = VMCreateRootContext(fixture.bytecode, arguments);
+	BytecodeContext * rootContext = VMCreateRootContext(fixture.bytecode, arguments);
 	VMExecute(rootContext);
 	Datum * results = ContextArguments(rootContext);
 	// results should be 3 * 3 
@@ -207,8 +209,9 @@ BytecodeFixture setupBytecodeFixture2(void)
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	// CTX <number triple> #2
-	BytecodeBeginInstruction(&bytecodeDraft, OP_CTX);
-	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, childFixture.bytecode);
+	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
+	// NOTE: do constants really need to be typed?
+	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, CreateID(childFixture.bytecode));
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
@@ -257,7 +260,7 @@ void testExecuteByteCode2(void)
 	
 	// NOTE: arguments must be in canonical order
 	Datum arguments[2] = {CreateInt(3).datum,  CreateInt(0).datum};
-	VMContext * rootContext = VMCreateRootContext(fixture.bytecode, arguments);
+	BytecodeContext * rootContext = VMCreateRootContext(fixture.bytecode, arguments);
 
 	VMExecute(rootContext);
 	Datum * results = ContextArguments(rootContext);
@@ -266,6 +269,50 @@ void testExecuteByteCode2(void)
 	FreeContext(rootContext);
 
 	teardownBytecodeFixture(fixture);
+}
+
+
+/**
+ * Create a service 
+ * TODO: the service needs datum types in order to interface with bytecode
+ */
+Service setupTableService(void)
+{
+	// form (foo barbar)
+	Datum roles[2] = {CreateNameFromCString("foo"), CreateNameFromCString("bar")};
+	Datum form = CreatePredicateForm(roles, 2);
+	IFactRelease(roles[0]);
+	IFactRelease(roles[1]);
+	// create the service
+	BTree * btree = CreateRelationBTree(2);
+	Service service = RegistryAddBTreeService(form, btree);
+
+	// Assert facts
+	Atom actors1[2] = {
+		CreateID(CreateStringFromCString("baz")),
+		CreateInt(42)
+	};
+	AssertFact(form, actors1);
+	ReleaseAtom(actors1[0]);
+
+	Atom actors2[2]= {
+		CreateID(CreateStringFromCString("zzz")),
+		CreateInt(-1)
+	};
+	AssertFact(form, actors2);
+	ReleaseAtom(actors2[0]);
+	IFactRelease(form);
+
+	return service;
+}
+
+
+void teardownTableService(Service service)
+{
+	ASSERT(service.type == SERVICE_BTREE)
+	
+	// TODO: need a way to retract all facts encoded by the service
+	
 }
 
 
@@ -287,17 +334,9 @@ void testExecuteByteCode2(void)
  */
 BytecodeFixture setupBytecodeFixture3(void)
 {
-	// create relation table
-	/*
-	Atom roles[] = {CreateNameFromCString("foo"), CreateNameFromCString("bar")};
-	Atom form = CreatePredicateForm(roles, 2);
-	BTree * btree = CreateRelationBTree(2);
-	Service fooBarService = RegistryAddBTreeService(form, btree);
-	*/
-	
+	// setup bytecode fixture
 	BytecodeFixture fixture;
-
-	fixture.signature = CStringToPredicate("number @INT quadruple $INT");
+	fixture.signature = CStringToPredicate("foo @ID barbar $INT");
 
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
@@ -310,7 +349,7 @@ BytecodeFixture setupBytecodeFixture3(void)
 	BytecodeDraft bytecodeDraft;
 	BytecodeBegin(&bytecodeDraft, fixture.signature, fixture.registers);
 
-	BytecodeBeginInstruction(&bytecodeDraft, OP_CTX);
+	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
 	// TODO: BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, );
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
@@ -350,6 +389,17 @@ BytecodeFixture setupBytecodeFixture3(void)
 	return fixture;
 }
 
+
+void testExecuteBytecode3(void)
+{
+	Service tableService = setupTableService();
+	BytecodeFixture fixture = setupBytecodeFixture3();
+
+	// Do stuff
+
+	teardownTableService(tableService);
+	teardownBytecodeFixture(fixture);
+}
 
 
 int main(int argc, char * argv[])

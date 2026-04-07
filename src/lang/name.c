@@ -84,7 +84,7 @@ size32 NumberOfNames(void)
 }
 
 
-Atom CreateName(char const * string, size32 length)
+Datum CreateName(char const * string, size32 length)
 {
 	data64 hash = nameHash(string, length, djb2InitialHash);
 	NameRecord * existingRecord = peekNameRecord(hash);
@@ -104,30 +104,28 @@ Atom CreateName(char const * string, size32 length)
 		ASSERT(addNameRecord(&record));
 	}
 	nameStorage.nReferencesTotal++;
-	return (Atom) {.type = DT_NAME, .datum = hash};
+	return (Datum) hash;
 }
 
 
-Atom CreateNameFromCString(char const * cString)
+Datum CreateNameFromCString(char const * cString)
 {
 	size32 length = CStringLength(cString);
 	return CreateName(cString, length);
 }
 
 
-void NameAcquire(Atom name)
+void NameAcquire(Datum name)
 {
-	ASSERT(name.type == DT_NAME);
-	NameRecord * nameRecord = peekNameRecord(name.datum);
+	NameRecord * nameRecord = peekNameRecord(name);
 	nameRecord->nReferences++;
 	nameStorage.nReferencesTotal++;
 }
 
 
-void NameRelease(Atom name)
+void NameRelease(Datum name)
 {
-	ASSERT(name.type == DT_NAME);
-	NameRecord * nameRecord = peekNameRecord(name.datum);
+	NameRecord * nameRecord = peekNameRecord(name);
 	ASSERT(nameRecord->nReferences > 0);
 	nameRecord->nReferences--;
 	if(nameRecord->nReferences == 0) {
@@ -148,9 +146,9 @@ bool IsName(Atom atom)
 	return atom.type == DT_NAME;
 }
 
-void PrintName(Atom name)
+void PrintName(Datum name)
 {
-	NameRecord * nameRecord = peekNameRecord(name.datum);
+	NameRecord * nameRecord = peekNameRecord(name);
 	ASSERT(nameRecord);
 	PrintCharString(nameRecord->string, nameRecord->length);
 }
