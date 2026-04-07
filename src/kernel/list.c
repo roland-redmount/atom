@@ -7,7 +7,7 @@
 #include "kernel/list.h"
 #include "kernel/kernel.h"
 #include "kernel/ServiceRegistry.h"
-#include "lang/DatumType.h"
+#include "lang/AtomType.h"
 #include "lang/PredicateForm.h"
 #include "util/hashing.h"
 

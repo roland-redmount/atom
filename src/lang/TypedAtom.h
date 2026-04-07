@@ -7,7 +7,7 @@
 #define TYPEDATOM_H
 
 #include "lang/Atom.h"
-#include "lang/DatumType.h"
+#include "lang/AtomType.h"
 
 typedef struct s_TypedAtom
 {

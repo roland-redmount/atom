@@ -3,7 +3,7 @@
 
 #include "kernel/multiset.h"
 #include "lang/ClauseForm.h"
-#include "lang/DatumType.h"
+#include "lang/AtomType.h"
 #include "lang/FullForm.h"
 #include "lang/Form.h"
 #include "lang/FormPermutation.h"

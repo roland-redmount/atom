@@ -3,8 +3,8 @@
  * and is used to determine how to dispatch calls to bytecode programs
  */
 
-#ifndef DATUMTYPE_H
-#define DATUMTYPE_H
+#ifndef ATOMTYPE_H
+#define ATOMTYPE_H
 
 #include "platform.h"
 
@@ -29,21 +29,21 @@
 #define DT_PARAMETER			10		// a parameter in a bytecode service
 #define DT_CONTEXT				11		// a VM execution context
 
-#define N_DATUMTYPES			11
+#define N_ATOMTYPES			11
 
 
 /**
  * Get a atom type syntax string from its id.
  */
-char const * GetDatumTypeName(byte typeId);
+char const * GetAtomTypeName(byte type);
 
 /**
  * Find a atom type id from its syntax string.
  * NOTE: this function does not handle extra whitespace.
  */
-byte DatumTypeIdFromString(char const * syntax, size32 length);
+byte AtomTypeFromString(char const * syntax, size32 length);
 
 
 
 
-#endif // DATUMTYPES_H
+#endif // ATOMTYPE_H

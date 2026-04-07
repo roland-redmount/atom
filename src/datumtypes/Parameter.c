@@ -35,6 +35,6 @@ void PrintParameter(TypedAtom parameter)
 	else
 		PrintChar('$');
 	if(arg.fields.datumType) {
-		PrintCString(GetDatumTypeName(arg.fields.datumType));
+		PrintCString(GetAtomTypeName(arg.fields.datumType));
 	}
 }

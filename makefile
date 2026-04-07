@@ -151,7 +151,7 @@ UTIL_FILES := $(addprefix util/, \
  LinkedList ResizingArray ResizingBuffer hashing sort resources utilities)
 
 LANG_FILES := $(addprefix lang/, \
- Atom ClauseForm DatumType Form Formula FormPermutation FullForm name PredicateForm \
+ Atom AtomType ClauseForm Form Formula FormPermutation FullForm name PredicateForm \
  Quote SubstitutionList unification TermForm TypedAtom)
 
 DATUMTYPES_FILES := $(addprefix datumtypes/, \

@@ -192,7 +192,7 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		if(IsWhiteSpace(c) || (c == 0)) {
 			// whitespace terminates parameter
 			if(tokenizer->buffer.stringLength > 0) {
-				tokenizer->data.parameter.datumType = DatumTypeIdFromString(
+				tokenizer->data.parameter.datumType = AtomTypeFromString(
 					tokenizer->buffer.buffer,
 					tokenizer->buffer.stringLength
 				);

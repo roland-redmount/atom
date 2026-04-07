@@ -2,7 +2,7 @@
 #ifndef VARIABLETYPE_H
 #define VARIABLETYPE_H
 
-#include "lang/DatumType.h"
+#include "lang/AtomType.h"
 
 /**
  * This structure associates a variable with a atom type
