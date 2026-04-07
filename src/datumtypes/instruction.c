@@ -57,13 +57,13 @@ void InstructionSetContext(Instruction * draft, Operand operand, index8 contextI
 }
 
 
-Atom InstructionEnd(Instruction * draft)
+TypedAtom InstructionEnd(Instruction * draft)
 {
-	return (Atom) {DT_INSTRUCTION, 0, 0, 0, draft->value};
+	return (TypedAtom) {DT_INSTRUCTION, 0, 0, 0, draft->value};
 }
 
 
-Instruction InstructionGetData(Atom instruction)
+Instruction InstructionGetData(TypedAtom instruction)
 {
 	Instruction inst;
 	inst.value = instruction.datum;
@@ -72,7 +72,7 @@ Instruction InstructionGetData(Atom instruction)
 
 
 
-OpCode InstructionGetOpCode(Atom instruction)
+OpCode InstructionGetOpCode(TypedAtom instruction)
 {
 	Instruction inst = InstructionGetData(instruction);
 	return inst.fields.opcode;	
@@ -120,7 +120,7 @@ static void printOperand(Operand operand, byte accessMode, index8 opIndex, index
 }
 
 
-void PrintInstruction(Atom instruction)
+void PrintInstruction(TypedAtom instruction)
 {
 	Instruction inst = InstructionGetData(instruction);
 	// opcode

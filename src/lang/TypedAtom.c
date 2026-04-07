@@ -16,7 +16,7 @@
 #include "kernel/pair.h"
 #include "kernel/string.h"
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 #include "lang/ClauseForm.h"
 #include "lang/Datum.h"
 #include "lang/Formula.h"
@@ -28,19 +28,19 @@
 #include "util/sort.h"
 
 // global constant invalid atom
-Atom invalidAtom = {0};
+TypedAtom invalidAtom = {0};
 
 /**
  * Create (typed) atom
  */
 
-Atom CreateAtom(byte type, Datum datum)
+TypedAtom CreateTypedAtom(byte type, Datum datum)
 {
-	return (Atom) {.type = type, .datum = datum};
+	return (TypedAtom) {.type = type, .datum = datum};
 }
 
 
-void AcquireAtom(Atom atom)
+void AcquireTypedAtom(TypedAtom atom)
 {
 	if(atom.type == DT_ID)
 		IFactAcquire(atom.datum);
@@ -49,7 +49,7 @@ void AcquireAtom(Atom atom)
 }
 
 
-void ReleaseAtom(Atom atom)
+void ReleaseTypedAtom(TypedAtom atom)
 {
 	if(atom.type == DT_ID)
 		IFactRelease(atom.datum);
@@ -59,18 +59,9 @@ void ReleaseAtom(Atom atom)
 
 
 /**
- * Test for the invalid atom
- */
-bool ValidAtomQ(Atom a)
-{
-	return a.type != DT_NONE;
-}
-
-
-/**
  * Compare two atoms for identity
  */
-bool SameAtoms(Atom a1, Atom a2)
+bool SameTypedAtoms(TypedAtom a1, TypedAtom a2)
 {
 	return (a1.type == a2.type) && (a1.datum == a2.datum);
 }
@@ -83,7 +74,7 @@ bool SameAtoms(Atom a1, Atom a2)
  * NOTE: this orders atoms by the datum 64-bit value, which means
  * that IFacts including strings will be ordered by address.
  */
-int8 CompareAtoms(Atom atom1, Atom atom2)
+int8 CompareTypedAtoms(TypedAtom atom1, TypedAtom atom2)
 {
 	// first order by datum type
 	if(atom1.type < atom2.type)
@@ -97,20 +88,20 @@ int8 CompareAtoms(Atom atom1, Atom atom2)
 
 static int8 quickSortCompareAtoms(void const * item1, void const * item2, size32 itemSize)
 {
-	ASSERT(itemSize = sizeof(Atom));
-	Atom atom1 = *((const Atom *) item1);
-	Atom atom2 = *((const Atom *) item2);
-	return CompareAtoms(atom1, atom2);
+	ASSERT(itemSize = sizeof(TypedAtom));
+	TypedAtom atom1 = *((const TypedAtom *) item1);
+	TypedAtom atom2 = *((const TypedAtom *) item2);
+	return CompareTypedAtoms(atom1, atom2);
 }
 
 
-void SortAtoms(Atom * atoms, size32 nAtoms)
+void SortTypedAtoms(TypedAtom * atoms, size32 nAtoms)
 {
-	QuickSort(atoms, nAtoms, sizeof(Atom), quickSortCompareAtoms);
+	QuickSort(atoms, nAtoms, sizeof(TypedAtom), quickSortCompareAtoms);
 }
 
 
-static void shiftAtomArrayLeft(Atom * array, uint8 nAtoms, uint8 steps)
+static void shiftAtomArrayLeft(TypedAtom * array, uint8 nAtoms, uint8 steps)
 {
 	for(index8 i = 0; i < nAtoms - steps; i++)
 		array[i] = array[i + steps];
@@ -123,11 +114,11 @@ static void shiftAtomArrayLeft(Atom * array, uint8 nAtoms, uint8 steps)
  * Writes the multiplicities of each datum to the
  * provided multiplicities array and returns the number of unique datums.
  */
-size8 ReduceAtomArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms)
+size8 ReduceTypedAtomsArray(TypedAtom * atoms, uint32 * multiplicities, size8 nAtoms)
 {
 	for(index8 k = 0; k < nAtoms; k++) {
 		index8 i = k + 1;
-		while((i < nAtoms) && SameAtoms(atoms[k], atoms[i]))
+		while((i < nAtoms) && SameTypedAtoms(atoms[k], atoms[i]))
 			i++;
 		multiplicities[k] = i - k;
 		if(multiplicities[k] > 1) {
@@ -142,7 +133,7 @@ size8 ReduceAtomArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms)
  * Print atom to stdout
  * This calls the datum print function for the datum type, wraps in [ ]
  */
-void PrintAtom(Atom atom)
+void PrintTypedAtom(TypedAtom atom)
 {
 	// PrintChar('[');
 	switch(atom.type) {

@@ -6,7 +6,7 @@
 #ifndef FORM_H
 #define FORM_H
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 
 
 size8 FormArity(Datum form);

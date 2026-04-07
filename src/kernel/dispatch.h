@@ -20,7 +20,7 @@
  */
 Service DispatchQuery(Datum query);
 
-void CallService(Service service, Atom * tuple);
+void CallService(Service service, TypedAtom * tuple);
 
 
 // generic tuple matching across formula permutations

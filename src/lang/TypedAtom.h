@@ -1,0 +1,61 @@
+/**
+ * An typed atom stores an atom type and an atom.
+ * See DatumType.h
+ */
+
+#ifndef TYPEDATOM_H
+#define TYPEDATOM_H
+
+#include "Datum.h"
+#include "DatumType.h"
+
+typedef struct s_TypedAtom
+{
+	byte type;
+	byte flags;		// TODO: this only holds the ATOM_PROTECTED flag, should be moved
+	byte reserved1;
+	byte reserved2;
+	Datum datum;					// the 64-bit datum
+} __attribute__((packed)) TypedAtom;
+
+
+// flags
+#define ATOM_PROTECTED		1	// used in tuples storing ifacts to mark the identified atom
+								// NOTE: this should be internal to RelationBTree,
+								// as it only affect btree/ifact storage logic
+
+// the invalid atom, only used internally to signal errors
+extern TypedAtom invalidAtom;
+
+/**
+ * Shorthand for (TypedAtom) {.type = type, .datum = datum}
+ */
+TypedAtom CreateTypedAtom(byte type, Datum datum);
+
+// reference handling
+void AcquireTypedAtom(TypedAtom atom);
+void ReleaseTypedAtom(TypedAtom atom);
+
+// compare two typed atoms for identity
+bool SameTypedAtoms(TypedAtom a1, TypedAtom a2);
+
+/**
+ * Ordering of two typed atoms
+ */
+int8 CompareTypedAtoms(TypedAtom atom1, TypedAtom atom2);
+
+/**
+ * Sort a list of atoms in-place, ordered by CompareTypedAtoms()
+ */
+void SortTypedAtoms(TypedAtom * atoms, size32 nAtoms);
+
+// NOTE: this shold probably go elsewhere
+size8 ReduceTypedAtomsArray(TypedAtom * atoms, uint32 * multiplicities, size8 nAtoms);
+
+/**
+ * Pretty-print an atom to stdout.
+ */
+void PrintTypedAtom(TypedAtom a);
+
+
+#endif	// TYPEDATOM_H

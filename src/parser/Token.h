@@ -6,7 +6,7 @@
 #ifndef TOKEN_H
 #define TOKEN_H
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 
 
 enum TokenType {
@@ -23,7 +23,7 @@ enum TokenType {
 
 typedef struct s_Token {
 	enum TokenType type;
-	Atom atom;
+	TypedAtom atom;
 } Token;
 
 

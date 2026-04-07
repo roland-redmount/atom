@@ -1,6 +1,6 @@
-																					/**
- * Identifying facts are a set of tuples across one or more tables
- * that together identify an atom. To create an identifying fact,
+/**
+ * An identifying fact (ifact) is a conjunction across one or more relations
+ * that uniquely identify an atom. To create an identifying fact,
  * we must process a formula (conjunction), locate or create the
  * corresponding tuples across one or more tables, mark them as
  * protected from deletion, and compute a hash value of the formula.
@@ -50,12 +50,10 @@ struct s_IFactHeader {
  * A "draft" ifact, used while building a ifact
  */
 typedef struct s_IFactDraft {
-	Atom * tupleStorage;
-	Atom * currentTuple;
-
+	TypedAtom * tupleStorage;
+	TypedAtom * currentTuple;
 	IFactHeader header;		// IFact being constructed
 	bool hasBegunConjunction;
-
 } IFactDraft;
 
 /**
@@ -90,7 +88,7 @@ void IFactBeginConjunction(IFactDraft * draft, Datum form, index8 idColumn);
  * The atom in the column of the identified fact is ignored; it will
  * be computed by calling IFactEnd()
  */
-void IFactAddClause(IFactDraft * draft, Atom const * tuple);
+void IFactAddClause(IFactDraft * draft, TypedAtom const * tuple);
 
 /**
  * End the current conjunction. This function must be called before
@@ -112,9 +110,8 @@ size32 IFactDraftCurrentNClauses(IFactDraft * draft);
 Datum IFactEnd(IFactDraft * draft);
 
 // This variant is only used during bootstrapping.
-Datum IFactEndCustom(IFactDraft * draft, data64 hash, void (* assertFact)(Datum predicateForm, Atom * actors));
+Datum IFactEndCustom(IFactDraft * draft, data64 hash, void (* assertFact)(Datum predicateForm, TypedAtom * actors));
 
-// TODO: these should be renamed AcquireID, ReleaseID, and moved to id.h
 void IFactAcquire(Datum ifact);
 void IFactRelease(Datum ifact);
 
@@ -141,9 +138,8 @@ uint32 TotalIFactCount(void);
  */
 
 // TODO: this should take a form atom, not a tree pointer
-bool IFactCheckTuple(BTree const * tree, Atom const * tuple);
+bool IFactCheckTuple(BTree const * tree, TypedAtom const * tuple);
 
-// TODO: move to id.h
 void PrintIFact(Datum ifact);
 
 void DumpIFacts(void);

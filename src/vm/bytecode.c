@@ -1,5 +1,4 @@
 
-#include "datumtypes/id.h"
 #include "datumtypes/Parameter.h"
 #include "datumtypes/Variable.h"
 #include "datumtypes/UInt.h"
@@ -21,8 +20,8 @@ static void setBytecodeSignature(IFactDraft * draft, Datum signature)
 	index8 signatureIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_SIGNATURE), bytecodeIndex);
-	Atom tuple[2];
-	tuple[signatureIndex] = CreateID(signature);
+	TypedAtom tuple[2];
+	tuple[signatureIndex] = CreateTypedAtom(DT_ID, signature);
 	IFactAddClause(draft, tuple);
 	IFactEndConjunction(draft);
 }
@@ -34,8 +33,8 @@ static void setBytecodeProgram(IFactDraft * draft, Datum program)
 	index8 programIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_PROGRAM), bytecodeIndex);
-	Atom tuple[2];
-	tuple[programIndex] = CreateID(program);
+	TypedAtom tuple[2];
+	tuple[programIndex] = CreateTypedAtom(DT_ID, program);
 	IFactAddClause(draft, tuple);
 	IFactEndConjunction(draft);
 }
@@ -48,8 +47,8 @@ static void setBytecodeRegisters(IFactDraft * draft, Datum registersList)
 	index8 registersIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_REGISTERS), bytecodeIndex);
-	Atom tuple[2];
-	tuple[registersIndex] = CreateID(registersList);
+	TypedAtom tuple[2];
+	tuple[registersIndex] = CreateTypedAtom(DT_ID, registersList);
 	IFactAddClause(draft, tuple);
 	IFactEndConjunction(draft);
 }
@@ -61,8 +60,8 @@ static void setBytecodeConstants(IFactDraft * draft, Datum constantsList)
 	index8 constantsIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
 
 	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_CONSTANTS), bytecodeIndex);
-	Atom tuple[2];
-	tuple[constantsIndex] = CreateID(constantsList);
+	TypedAtom tuple[2];
+	tuple[constantsIndex] = CreateTypedAtom(DT_ID, constantsList);
 	IFactAddClause(draft, tuple);
 	IFactEndConjunction(draft);
 }
@@ -110,7 +109,7 @@ void BytecodeOperandRegister(BytecodeDraft * draft, Operand operand, index8 regi
 }
 
 
-void BytecodeOperandConstant(BytecodeDraft * draft, Operand operand, Atom constant)
+void BytecodeOperandConstant(BytecodeDraft * draft, Operand operand, TypedAtom constant)
 {
 	// TODO: constants should be a set
 	index8 position = ListAddElement(&(draft->constantsDraft), constant);
@@ -127,7 +126,7 @@ void BytecodeOperandSetContext(BytecodeDraft * draft, Operand operand, index8 re
 
 void BytecodeEndInstruction(BytecodeDraft * draft)
 {
-	Atom instruction = InstructionEnd(&(draft->instructionDraft));
+	TypedAtom instruction = InstructionEnd(&(draft->instructionDraft));
 	ListAddElement(&(draft->programDraft), instruction);
 }
 
@@ -175,11 +174,11 @@ Datum BytecodeGetProgram(Datum bytecode)
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_BYTECODE);
 	index8 programIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
 
-	Atom query[2];
-	query[bytecodeIndex] = CreateID(bytecode);
+	TypedAtom query[2];
+	query[bytecodeIndex] = CreateTypedAtom(DT_ID, bytecode);
 	query[programIndex] = anonymousVariable;
 
-	Atom tuple[2];
+	TypedAtom tuple[2];
 	RelationBTreeQuerySingle(tree, query, tuple);
 	return tuple[programIndex].datum;
 }
@@ -191,11 +190,11 @@ Datum BytecodeGetSignature(Datum bytecode)
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_BYTECODE);
 	index8 signatureIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
 
-	Atom query[2];
-	query[bytecodeIndex] = CreateID(bytecode);
+	TypedAtom query[2];
+	query[bytecodeIndex] = CreateTypedAtom(DT_ID, bytecode);
 	query[signatureIndex] = anonymousVariable;
 
-	Atom tuple[2];
+	TypedAtom tuple[2];
 	RelationBTreeQuerySingle(tree, query, tuple);
 	return tuple[signatureIndex].datum;
 }
@@ -207,11 +206,11 @@ Datum BytecodeGetRegisters(Datum bytecode)
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_BYTECODE);
 	index8 registersIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
 
-	Atom query[2];
-	query[bytecodeIndex] = CreateID(bytecode);
+	TypedAtom query[2];
+	query[bytecodeIndex] = CreateTypedAtom(DT_ID, bytecode);
 	query[registersIndex] = anonymousVariable;
 
-	Atom tuple[2];
+	TypedAtom tuple[2];
 	RelationBTreeQuerySingle(tree, query, tuple);
 	return tuple[registersIndex].datum;
 }
@@ -223,11 +222,11 @@ Datum BytecodeGetConstants(Datum bytecode)
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_BYTECODE);
 	index8 constantsIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
 
-	Atom query[2];
-	query[bytecodeIndex] = CreateID(bytecode);
+	TypedAtom query[2];
+	query[bytecodeIndex] = CreateTypedAtom(DT_ID, bytecode);
 	query[constantsIndex] = anonymousVariable;
 
-	Atom tuple[2];
+	TypedAtom tuple[2];
 	RelationBTreeQuerySingle(tree, query, tuple);
 	return tuple[constantsIndex].datum;
 }

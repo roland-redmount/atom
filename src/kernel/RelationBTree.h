@@ -6,13 +6,13 @@
 #define RELATION_B_TREE_H
 
 #include "btree/btree.h"
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 
 
 typedef struct s_RelationBTreeIterator {
 	BTree * btree;
 	BTreeIterator treeIterator;
-	Atom const * queryTuple;	// NOTE: this is a pointer since the tuple is variable size
+	TypedAtom const * queryTuple;	// NOTE: this is a pointer since the tuple is variable size
 	size8 nColumns;
 } RelationBTreeIterator;
 
@@ -34,7 +34,7 @@ size32 RelationBTreeNRows(BTree const * tree);
  * NOTE: the iterator does not keep a copy of queryTuple,
  * so it must remain unchanged during the iteration.
  */
-void RelationBTreeIterate(BTree * tree, Atom const * queryTuple, RelationBTreeIterator * iterator);
+void RelationBTreeIterate(BTree * tree, TypedAtom const * queryTuple, RelationBTreeIterator * iterator);
 
 /**
  * Test if the iterator has a next element.
@@ -48,12 +48,12 @@ bool RelationBTreeIteratorHasTuple(RelationBTreeIterator const * iterator);
  */
 void RelationBTreeIteratorNext(RelationBTreeIterator * iterator);
 
-Atom RelationBTreeIteratorGetAtom(RelationBTreeIterator const * iterator, index8 i);
+TypedAtom RelationBTreeIteratorGetAtom(RelationBTreeIterator const * iterator, index8 i);
 
 /**
  * Copy the iterator's current tuple into a tuple provided by the caller.
  */
-void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, Atom * tuple);
+void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, TypedAtom * tuple);
 
 /**
  * Terminate the iterator, releasing lock from the tree.
@@ -64,14 +64,14 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator);
  * Query the relation and return a single tuple.
  * The relation table must have exactly one tuple matching the query.
  */
-void RelationBTreeQuerySingle(BTree * tree, Atom const * queryTuple, Atom * resultTuple);
+void RelationBTreeQuerySingle(BTree * tree, TypedAtom const * queryTuple, TypedAtom * resultTuple);
 
 
 /**
  * Add a aingle tuple to the relation, acquiring each atom in the tuple.
  * Does not add entries to lookup; see AssertFact()
  */
-byte RelationBTreeAddTuple(BTree * tree, Atom const * tuple);
+byte RelationBTreeAddTuple(BTree * tree, TypedAtom const * tuple);
 
 // result codes for RelationBTreeAddTuple()
 #define TUPLE_ADDED			1
@@ -88,7 +88,7 @@ byte RelationBTreeAddTuple(BTree * tree, Atom const * tuple);
  * Releases a reference to each DT_ID atom in a removed tuple, except for atoms with
  * the ATOM_PROTECTED bit set.
  */
-size32 RelationBTreeRemoveTuples(BTree * tree, Atom const * queryTuple, uint8 mode);
+size32 RelationBTreeRemoveTuples(BTree * tree, TypedAtom const * queryTuple, uint8 mode);
 
 #define REMOVE_NORMAL		0
 #define REMOVE_PROTECTED	1

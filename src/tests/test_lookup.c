@@ -1,5 +1,4 @@
 
-#include "datumtypes/id.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/lookup.h"
@@ -91,17 +90,17 @@ void testRemoveAllPredicateRoles(void)
 	BTree * tree = CreateRelationBTree(2);
 	RegistryAddBTreeService(form, tree);
 
-	Atom actors1[2] = {CreateID(foo), CreateID(bar)};
+	TypedAtom actors1[2] = {CreateTypedAtom(DT_ID, foo), CreateTypedAtom(DT_ID, bar)};
 	AssertFact(form, actors1);
 	ASSERT_TRUE(AtomHasRole(foo, form, foobar))
 	ASSERT_TRUE(AtomHasRole(bar, form, barf))
 
-	Atom actors2[2] = {CreateID(bar), CreateID(baz)};
+	TypedAtom actors2[2] = {CreateTypedAtom(DT_ID, bar), CreateTypedAtom(DT_ID, baz)};
 	AssertFact(form, actors2);
 	ASSERT_TRUE(AtomHasRole(bar, form, foobar))
 	ASSERT_TRUE(AtomHasRole(baz, form, barf))
 
-	Atom actors3[2] = {CreateID(foo), CreateID(foo)};
+	TypedAtom actors3[2] = {CreateTypedAtom(DT_ID, foo), CreateTypedAtom(DT_ID, foo)};
 	AssertFact(form, actors3);
 	ASSERT_TRUE(AtomHasRole(foo, form, barf))
 

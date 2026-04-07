@@ -1,5 +1,4 @@
 
-#include "datumtypes/id.h"
 #include "datumtypes/UInt.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
@@ -31,7 +30,7 @@ static void checkTypeSizes(void)
 
 	// check that packed data structures are padded correctly
 	ASSERT(sizeof(Datum) == 8)
-	ASSERT(sizeof(Atom) == 12)
+	ASSERT(sizeof(TypedAtom) == 12)
 }
 
 
@@ -184,7 +183,7 @@ static void setupCoreRoleNames(void)
 #define MULTISET_MULTIPLE_COLUMN	0
 
 
-void bootstrapAssertFact(Datum predicateForm, Atom * actors)
+void bootstrapAssertFact(Datum predicateForm, TypedAtom * actors)
 {
 	Service service = RegistryFindService(predicateForm);
 	ASSERT(service.type == SERVICE_BTREE)
@@ -258,34 +257,34 @@ static void setupCorePredicateForms(void)
 	kernel.corePredicateRoleIndex[FORM_PREDICATE_FORM][0] = 0;
 	
 	// create @multiset-form
-	Atom multisetFormAtom = CreateID(multisetForm);
+	TypedAtom multisetFormAtom = CreateTypedAtom(DT_ID, multisetForm);
 	IFactDraft multisetDraft;
 	IFactBegin(&multisetDraft);
-	Atom tuple[3];
+	TypedAtom tuple[3];
 
 	// defining facts
 	// (multiset @multiset-form element "multiset" multiple 1)
 	IFactBeginConjunction(&multisetDraft, multisetForm, MULTISET_MULTISET_COLUMN);
 	MultisetSetTuple(
 		tuple,
-		CreateID(multisetForm),
-		(Atom) {.type = DT_NAME, .datum = GetCoreRoleName(ROLE_MULTISET)},
+		CreateTypedAtom(DT_ID, multisetForm),
+		(TypedAtom) {.type = DT_NAME, .datum = GetCoreRoleName(ROLE_MULTISET)},
 		CreateUInt(1)
 	);
 	IFactAddClause(&multisetDraft, tuple);
 	// (multiset @multiset-form element "element" multiple 1)
 	MultisetSetTuple(
 		tuple,
-		CreateID(multisetForm),
-		(Atom) {.type = DT_NAME, .datum = GetCoreRoleName(ROLE_ELEMENT)},
+		CreateTypedAtom(DT_ID, multisetForm),
+		(TypedAtom) {.type = DT_NAME, .datum = GetCoreRoleName(ROLE_ELEMENT)},
 		CreateUInt(1)
 	);
 	IFactAddClause(&multisetDraft, tuple);
 	// (multiset @multiset-form element "multiple" multiple 1)
 	MultisetSetTuple(
 		tuple,
-		CreateID(multisetForm),
-		(Atom) {.type = DT_NAME, .datum = GetCoreRoleName(ROLE_MULTIPLE)},
+		CreateTypedAtom(DT_ID, multisetForm),
+		(TypedAtom) {.type = DT_NAME, .datum = GetCoreRoleName(ROLE_MULTIPLE)},
 		CreateUInt(1)
 	);
 	IFactAddClause(&multisetDraft, tuple);
@@ -310,7 +309,7 @@ static void setupCorePredicateForms(void)
 	AtomAddRole(multisetForm, predicateForm, GetCoreRoleName(ROLE_PREDICATE_FORM));
 	
 	// create @predicate-form
-	Atom predicateFormAtom = CreateID(predicateForm);
+	TypedAtom predicateFormAtom = CreateTypedAtom(DT_ID, predicateForm);
 	IFactDraft predicateFormDraft;
 	IFactBegin(&predicateFormDraft);
 
@@ -320,7 +319,7 @@ static void setupCorePredicateForms(void)
 	MultisetSetTuple(
 		tuple,
 		predicateFormAtom,
-		(Atom) {.type = DT_NAME, .datum = GetCoreRoleName(ROLE_PREDICATE_FORM)},
+		(TypedAtom) {.type = DT_NAME, .datum = GetCoreRoleName(ROLE_PREDICATE_FORM)},
 		CreateUInt(1)
 	);
 	IFactAddClause(&predicateFormDraft, tuple);
@@ -439,7 +438,7 @@ void KernelShutdown(void)
 
 // TODO: this should return a status code indicating whether the fact was created,
 // already existed, or if the assert failed due to logical inconsistency
-void AssertFact(Datum predicateForm, Atom * actors)
+void AssertFact(Datum predicateForm, TypedAtom * actors)
 {
 	// TODO: currently we only support creating predicates
 	ASSERT(IsPredicateForm(predicateForm));
@@ -465,7 +464,7 @@ void AssertFact(Datum predicateForm, Atom * actors)
 }
 
 
-void RetractFact(Datum predicateForm, Atom * actors)
+void RetractFact(Datum predicateForm, TypedAtom * actors)
 {
 	Service service = RegistryFindService(predicateForm);
 	ASSERT(service.type == SERVICE_BTREE)

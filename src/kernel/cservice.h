@@ -6,7 +6,7 @@
 #ifndef CSERVICE_H
 #define CSERVICE_H
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 
 /**
  * A C service context consists of function pointers
@@ -23,11 +23,11 @@ typedef struct CServiceContext_s CServiceContext;
 typedef struct CService_s {
 	CServiceContext * createContext(CService * service);
 	// returns true if the flag should be set
-	bool call(CServiceContext * context, Atom const * queryTuple);
+	bool call(CServiceContext * context, TypedAtom const * queryTuple);
 
 
-	Atom getatom(RelationBTreeIterator const * iterator, index8 i);
-	void getTuple(RelationBTreeIterator const * iterator, Atom * tuple);
+	TypedAtom getatom(RelationBTreeIterator const * iterator, index8 i);
+	void getTuple(RelationBTreeIterator const * iterator, TypedAtom * tuple);
 
 	void end(RelationBTreeIterator * iterator);
 } CService;

@@ -3,28 +3,28 @@
 #include "datumtypes/FloatIEEE754.h"
 
 
-Atom CreateFloat32(float value)
+TypedAtom CreateFloat32(float value)
 {
 	// copy float into low 32 bits of datum
 	Datum datum = 0;
 	*((float *) &datum) = value;
-	return (Atom) {DT_FLOAT32, 0, 0, 0, datum};
+	return (TypedAtom) {DT_FLOAT32, 0, 0, 0, datum};
 }
 
 
-Atom CreateFloat64(double value)
+TypedAtom CreateFloat64(double value)
 {
 	// copy double, without casting
 	Datum datum;
 	*((double*) &datum) = value;
-	return (Atom) {DT_FLOAT64, 0, 0, 0, datum};;
+	return (TypedAtom) {DT_FLOAT64, 0, 0, 0, datum};;
 }
 
 
 /**
  * Get C floating point values
  */
-float GetFloat32Value(Atom float32)
+float GetFloat32Value(TypedAtom float32)
 {
 	// reinterpret the low 32 bits of the datum as a float
 	float f;
@@ -32,7 +32,7 @@ float GetFloat32Value(Atom float32)
 	return f;
 }
 
-double GetFloat64Value(Atom float64)
+double GetFloat64Value(TypedAtom float64)
 {
 	// reinterpret the datum as a double
 	double d;
@@ -41,13 +41,13 @@ double GetFloat64Value(Atom float64)
 }
 
 
-void PrintFloat32(Atom float32)
+void PrintFloat32(TypedAtom float32)
 {
 	PrintF("%f", GetFloat32Value(float32));
 }		
 
 
-void PrintFloat64(Atom float64)
+void PrintFloat64(TypedAtom float64)
 {
 	PrintF("%f", GetFloat64Value(float64));
 }

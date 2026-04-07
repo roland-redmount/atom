@@ -12,21 +12,21 @@ typedef union
 } Variable;
 
 
-Atom anonymousVariable = {.type = DT_VARIABLE, .datum = 0};
+TypedAtom anonymousVariable = {.type = DT_VARIABLE, .datum = 0};
 
 
-Atom CreateVariable(char name)
+TypedAtom CreateVariable(char name)
 {
 	// for now we just store a single lowercase character _x, _y, ...
 	ASSERT(IsAlpha(name));
 	Variable var = {.value = 0};
 	var.fields.name = ToLower(name);
 	var.fields.quoteCount = 0;
-	return (Atom) {.type = DT_VARIABLE, .datum = var.value};
+	return (TypedAtom) {.type = DT_VARIABLE, .datum = var.value};
 }
 
 
-char GetVariableName(Atom variable)
+char GetVariableName(TypedAtom variable)
 {
 	Variable var;
 	var.value = variable.datum;
@@ -37,13 +37,13 @@ char GetVariableName(Atom variable)
 }
 
 
-bool IsVariable(Atom a)
+bool IsVariable(TypedAtom a)
 {
 	return a.type == DT_VARIABLE;
 }
 
 
-bool SameVariable(Atom variable1, Atom variable2)
+bool SameVariable(TypedAtom variable1, TypedAtom variable2)
 {
 	if(variable1.datum & variable2.datum)
 		return variable1.datum == variable2.datum;
@@ -54,14 +54,14 @@ bool SameVariable(Atom variable1, Atom variable2)
 }
 
 
-bool VariableIsQuoted(Atom variable)
+bool VariableIsQuoted(TypedAtom variable)
 {
 	Variable var;
 	var.value = variable.datum;
 	return var.fields.quoteCount > 0;	
 }
 
-Atom QuoteVariable(Atom variable)
+TypedAtom QuoteVariable(TypedAtom variable)
 {
 	Variable var;
 	var.value = variable.datum;
@@ -69,22 +69,22 @@ Atom QuoteVariable(Atom variable)
 	// check for uint8 wraparound
 	ASSERT(var.fields.quoteCount > 0);
 
-	return (Atom) {.type = DT_VARIABLE, .datum = var.value};
+	return (TypedAtom) {.type = DT_VARIABLE, .datum = var.value};
 }
 
 
-Atom UnquoteVariable(Atom variable)
+TypedAtom UnquoteVariable(TypedAtom variable)
 {
 	
 	Variable var;
 	var.value = variable.datum;
 	ASSERT(var.fields.quoteCount > 0);
 	var.fields.quoteCount--;
-	return (Atom) {.type = DT_VARIABLE, .datum = var.value};
+	return (TypedAtom) {.type = DT_VARIABLE, .datum = var.value};
 }
 
 
-void PrintVariable(Atom variable)
+void PrintVariable(TypedAtom variable)
 {
 	Variable var;
 	var.value = variable.datum;

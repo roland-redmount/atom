@@ -5,7 +5,7 @@
 #ifndef PREDICATEFORM_H
 #define PREDICATEFORM_H
 
-#include "Atom.h"
+#include "lang/TypedAtom.h"
 
 /**
  * Create a predicate form from a list of roles (DT_NAME),

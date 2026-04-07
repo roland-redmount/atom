@@ -141,7 +141,7 @@ uint32 NameTotalReferenceCount(void)
 }
 
 
-bool IsName(Atom atom)
+bool IsName(TypedAtom atom)
 {
 	return atom.type == DT_NAME;
 }

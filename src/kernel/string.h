@@ -6,7 +6,7 @@
 #ifndef STRING_H
 #define STRING_H
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 
 
 Datum CreateString(char const * chars, size32 length);

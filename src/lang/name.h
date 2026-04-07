@@ -9,7 +9,7 @@
 #ifndef NAME_H
 #define NAME_H
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 
 void InitializeNameStorage(void);
 void FreeNameStorage(void);
@@ -30,7 +30,7 @@ void NameAcquire(Datum name);
 void NameRelease(Datum name);
 uint32 NameTotalReferenceCount(void);
 
-bool IsName(Atom atom);
+bool IsName(TypedAtom atom);
 
 void PrintName(Datum name);
 

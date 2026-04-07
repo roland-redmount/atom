@@ -29,7 +29,7 @@
  */
 
 #include "btree/btree.h"
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 
 
 void InitializeLookup(void);
@@ -68,12 +68,12 @@ void LookupRemoveAllRoles(Datum atom);
 /**
  * Add lookup entries for all actors in a predicate.
  */
-void LookupAddPredicateRoles(Datum predicateForm, Atom * actors);
+void LookupAddPredicateRoles(Datum predicateForm, TypedAtom * actors);
 
 /**
  *	Remove lookup entries for each actor in a predicate.
  */
-void LookupRemovePredicateRoles(Datum predicateForm, Atom * actors);
+void LookupRemovePredicateRoles(Datum predicateForm, TypedAtom * actors);
 
 /**
  *	Remove lookup entries for all atoms acting in the given predicate form.

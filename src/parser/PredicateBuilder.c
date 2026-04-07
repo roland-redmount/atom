@@ -18,7 +18,7 @@ void InitializePredicateBuilder(PredicateBuilder * builder)
 {
 	InitializePartBuilder(&(builder->partBuilder));
 	CreateResizingArray(&(builder->roles), sizeof(Datum), INITIAL_N_ACTORS);
-	CreateResizingArray(&(builder->actors), sizeof(Atom), INITIAL_N_ACTORS);
+	CreateResizingArray(&(builder->actors), sizeof(TypedAtom), INITIAL_N_ACTORS);
 	builder->isValid = false;
 }
 
@@ -31,8 +31,8 @@ bool PredicateBuilderPush(PredicateBuilder * builder, Token token)
 			NameAcquire(role);
 			ResizingArrayAppend(&(builder->roles), &role);
 			
-			Atom actor = PartBuilderGetActor(&(builder->partBuilder));
-			AcquireAtom(actor);
+			TypedAtom actor = PartBuilderGetActor(&(builder->partBuilder));
+			AcquireTypedAtom(actor);
 			ResizingArrayAppend(&(builder->actors), &actor);
 
 			PartBuilderReset(&(builder->partBuilder));
@@ -81,16 +81,16 @@ Datum PredicateBuilderCreateFormula(PredicateBuilder const * builder)
 	Datum form = CreatePredicateForm(roles, arity);
 
 	// determine the order of roles used by multiset
-	Atom roleAtoms[arity];
+	TypedAtom roleAtoms[arity];
 	for(index8 i = 0; i < arity; i++)
-		roleAtoms[i] = (Atom) {.type = DT_NAME, .datum = roles[i]};
+		roleAtoms[i] = (TypedAtom) {.type = DT_NAME, .datum = roles[i]};
 	index8 order[arity]; 
 	MultisetIterationOrder(form, roleAtoms, order, arity);
 
 	// ordered list of atoms
-	Atom actors[arity];
+	TypedAtom actors[arity];
 	for(index8 i = 0; i < arity; i++) {
-		Atom actor = *((Atom *) ResizingArrayGetElement(&(builder->actors), order[i]));
+		TypedAtom actor = *((TypedAtom *) ResizingArrayGetElement(&(builder->actors), order[i]));
 		actors[i] = actor;
 	}
 	
@@ -113,8 +113,8 @@ void PredicateBuilderReset(PredicateBuilder * builder)
 	ResizingArrayReset(&(builder->roles));
 
 	for(index8 i = 0; i < nElements; i++) {
-		Atom actor = *((Atom *) ResizingArrayGetElement(&(builder->actors), i));
-		ReleaseAtom(actor);
+		TypedAtom actor = *((TypedAtom *) ResizingArrayGetElement(&(builder->actors), i));
+		ReleaseTypedAtom(actor);
 	}
 	ResizingArrayReset(&(builder->actors));
 

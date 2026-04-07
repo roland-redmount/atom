@@ -3,7 +3,7 @@
 #include "kernel/kernel.h"
 #include "kernel/lookup.h"
 #include "kernel/ServiceRegistry.h"
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 #include "lang/Form.h"
 #include "lang/Formula.h"
 #include "memory/pool.h"

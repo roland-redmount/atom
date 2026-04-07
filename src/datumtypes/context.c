@@ -31,7 +31,7 @@ static void copyListDatums(Datum list, Datum * datums)
 	ListIterator iterator;
 	ListIterate(list, &iterator);
 	while(ListIteratorHasNext(&iterator)) {
-		Atom a = ListIteratorGetElement(&iterator);
+		TypedAtom a = ListIteratorGetElement(&iterator);
 		*rp++ = a.datum;
 		ListIteratorNext(&iterator);
 	}
@@ -88,7 +88,7 @@ void FreeChildContexts(BytecodeContext * context)
 	ListIterator iterator;
 	ListIterate(registersList, &iterator);
 	while(ListIteratorHasNext(&iterator)) {
-		Atom _register = ListIteratorGetElement(&iterator);
+		TypedAtom _register = ListIteratorGetElement(&iterator);
 		if(_register.type == DT_CONTEXT && *rp)
 			FreeContext((BytecodeContext *) *rp);
 		ListIteratorNext(&iterator);

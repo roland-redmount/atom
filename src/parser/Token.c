@@ -49,7 +49,7 @@ void PrintToken(Token token)
 	case TOKEN_NUMBER:
 	case TOKEN_VARIABLE:
 	case TOKEN_STRING:
-		PrintAtom(token.atom);
+		PrintTypedAtom(token.atom);
 
 	default:
 		PrintF("Token type %u", token.type);

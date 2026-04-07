@@ -1,5 +1,4 @@
 
-#include "datumtypes/id.h"
 #include "datumtypes/Variable.h"
 #include "kernel/pair.h"
 #include "kernel/lookup.h"
@@ -8,7 +7,7 @@
 #include "lang/PredicateForm.h"
 
 
-Datum CreatePair(Atom left, Atom right)
+Datum CreatePair(TypedAtom left, TypedAtom right)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
@@ -17,7 +16,7 @@ Datum CreatePair(Atom left, Atom right)
 }
 
 
-void AddPairToIFact(IFactDraft * draft, Atom left, Atom right)
+void AddPairToIFact(IFactDraft * draft, TypedAtom left, TypedAtom right)
 {
 	// assert (pair left right) fact
 	Datum form = GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT);
@@ -28,7 +27,7 @@ void AddPairToIFact(IFactDraft * draft, Atom left, Atom right)
 
 	IFactBeginConjunction(draft, form, pairIndex);
 	
-	Atom tuple[3];
+	TypedAtom tuple[3];
 	tuple[leftIndex] = left;
 	tuple[rightIndex] = right;
 	IFactAddClause(draft, tuple);
@@ -46,16 +45,16 @@ bool IsPair(Datum atom)
 }
 
 
-static void getPairTuple(Datum pair, Atom * tuple)
+static void getPairTuple(Datum pair, TypedAtom * tuple)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_PAIR_LEFT_RIGHT);
 
-	Atom query[3];
+	TypedAtom query[3];
 	index8 pairIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_PAIR);
 	index8 leftIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT);
 	index8 rightIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_RIGHT);
 
-	query[pairIndex] = CreateID(pair);
+	query[pairIndex] = CreateTypedAtom(DT_ID, pair);
 	query[leftIndex] = anonymousVariable;
 	query[rightIndex] = anonymousVariable;
 
@@ -63,9 +62,9 @@ static void getPairTuple(Datum pair, Atom * tuple)
 }
 
 
-Atom PairGetElement(Datum pair, uint8 element)
+TypedAtom PairGetElement(Datum pair, uint8 element)
 {
-	Atom pairTuple[3];
+	TypedAtom pairTuple[3];
 	getPairTuple(pair, pairTuple);
 	switch(element) {
 	case PAIR_LEFT:
@@ -83,12 +82,12 @@ Atom PairGetElement(Datum pair, uint8 element)
 
 void PrintPair(Datum pair)
 {
-	Atom pairTuple[3];
+	TypedAtom pairTuple[3];
 	getPairTuple(pair, pairTuple);
 	PrintChar('[');
-	PrintAtom(pairTuple[CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT)]);
+	PrintTypedAtom(pairTuple[CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT)]);
 	PrintChar(' ');
-	PrintAtom(pairTuple[CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_RIGHT)]);
+	PrintTypedAtom(pairTuple[CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_RIGHT)]);
 	PrintChar(']');
 }
 

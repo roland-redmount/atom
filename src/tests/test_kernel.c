@@ -20,8 +20,8 @@ void testAssertRetract(void)
 	Service service = RegistryFindService(form);
 	ASSERT(service.type == SERVICE_NONE)
 
-	Atom actors1[2] = {
-		CreateAtom(DT_ID, CreateStringFromCString("barf")),
+	TypedAtom actors1[2] = {
+		CreateTypedAtom(DT_ID, CreateStringFromCString("barf")),
 		CreateInt(-1)
 	};
 	AssertFact(form, actors1);
@@ -30,9 +30,9 @@ void testAssertRetract(void)
 	BTree * btree = service.service.tree;
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 1)
 
-	Atom actors2[] = {
+	TypedAtom actors2[] = {
 		CreateInt(42),
-		CreateAtom(DT_ID, CreateStringFromCString("baz"))
+		CreateTypedAtom(DT_ID, CreateStringFromCString("baz"))
 	};
 	AssertFact(form, actors2);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 2)
@@ -43,8 +43,8 @@ void testAssertRetract(void)
 	RetractFact(form, actors1);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 0)
 
-	ReleaseAtom(actors1[0]);
-	ReleaseAtom(actors2[1]);
+	ReleaseTypedAtom(actors1[0]);
+	ReleaseTypedAtom(actors2[1]);
 	IFactRelease(form);
 }
 

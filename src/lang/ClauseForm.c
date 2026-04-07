@@ -13,11 +13,11 @@ Datum CreateClauseForm(Datum const * termForms, size8 nTermForms)
 {
 	// reduce to unique terms
 	// here we need an array of atoms, since they will be stored in a multiset
-	Atom uniqueTermForms[nTermForms];
+	TypedAtom uniqueTermForms[nTermForms];
 	for(index8 i = 0; i < nTermForms; i++)
-		uniqueTermForms[i] = (Atom) {.type = DT_ID, .datum = termForms[i]};
+		uniqueTermForms[i] = (TypedAtom) {.type = DT_ID, .datum = termForms[i]};
 	uint32 multiplicities[nTermForms];
-	size8 nUniqueTermForms = ReduceAtomArray(uniqueTermForms, multiplicities, nTermForms);
+	size8 nUniqueTermForms = ReduceTypedAtomsArray(uniqueTermForms, multiplicities, nTermForms);
 
 	IFactDraft draft;
 	IFactBegin(&draft);

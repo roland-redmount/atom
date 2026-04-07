@@ -1,5 +1,4 @@
 
-#include "datumtypes/id.h"
 #include "datumtypes/Variable.h"
 #include "datumtypes/UInt.h"
 #include "kernel/ifact.h"
@@ -10,7 +9,7 @@
 #include "lang/TermForm.h"
 
 
-void TermFormSetTuple(Atom * tuple, Atom termForm, Atom predicateForm, Atom sign)
+void TermFormSetTuple(TypedAtom * tuple, TypedAtom termForm, TypedAtom predicateForm, TypedAtom sign)
 {
 	tuple[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM)] = termForm;
 	tuple[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_PREDICATE_FORM)] = predicateForm;
@@ -31,9 +30,9 @@ Datum CreateTermForm(Datum predicateForm, bool sign)
 		&draft, termForm,
 		CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM)
 	);
-	Atom tuple[3];
+	TypedAtom tuple[3];
 	TermFormSetTuple(tuple,
-		CreateID(termForm),	CreateID(predicateForm),
+		CreateTypedAtom(DT_ID, termForm),	CreateTypedAtom(DT_ID, predicateForm),
 		CreateUInt(sign ? 1 : 0)
 	);
 	IFactAddClause(&draft, tuple);
@@ -57,10 +56,10 @@ Datum GetPredicateForm(Datum termForm)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_TERM_FORM);
 
-	Atom query[3];
+	TypedAtom query[3];
 	TermFormSetTuple(query,
-		CreateID(termForm), anonymousVariable, anonymousVariable);
-	Atom result[3];
+		CreateTypedAtom(DT_ID, termForm), anonymousVariable, anonymousVariable);
+	TypedAtom result[3];
 	RelationBTreeQuerySingle(tree, query, result);
 
 	return result[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_PREDICATE_FORM)].datum;
@@ -71,11 +70,11 @@ bool TermFormGetSign(Datum termForm)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_TERM_FORM);
 
-	Atom query[3];
-	TermFormSetTuple(query, CreateID(termForm), anonymousVariable, anonymousVariable);
-	Atom tuple[3];
+	TypedAtom query[3];
+	TermFormSetTuple(query, CreateTypedAtom(DT_ID, termForm), anonymousVariable, anonymousVariable);
+	TypedAtom tuple[3];
 	RelationBTreeQuerySingle(tree, query, tuple);
-	Atom sign = tuple[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_SIGN)];
+	TypedAtom sign = tuple[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_SIGN)];
 
 	return (sign.datum == 1);
 }

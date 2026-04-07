@@ -1,5 +1,4 @@
 
-#include "datumtypes/id.h"
 #include "datumtypes/FloatIEEE754.h"
 #include "datumtypes/Variable.h"
 #include "kernel/kernel.h"
@@ -26,7 +25,7 @@ typedef struct {
 	Token nameTokens[EXAMPLE_N_PARTS];
 	Token actorTokens[EXAMPLE_N_PARTS];
 	Datum names[EXAMPLE_N_PARTS];
-	Atom actors[EXAMPLE_N_PARTS];
+	TypedAtom actors[EXAMPLE_N_PARTS];
 } TokensFixture;
 
 
@@ -34,15 +33,15 @@ static void setupTokensFixture(TokensFixture * fixture)
 {
 	fixture->nameTokens[0] = (Token) {
 		TOKEN_NAME,
-		CreateAtom(DT_NAME, CreateNameFromCString("foo"))
+		CreateTypedAtom(DT_NAME, CreateNameFromCString("foo"))
 	};
 	fixture->nameTokens[1] = (Token) {
 		TOKEN_NAME,
-		CreateAtom(DT_NAME, CreateNameFromCString("bar"))
+		CreateTypedAtom(DT_NAME, CreateNameFromCString("bar"))
 	};
 	fixture->nameTokens[2] = (Token) {
 		TOKEN_NAME,
-		CreateAtom(DT_NAME, CreateNameFromCString("bax"))
+		CreateTypedAtom(DT_NAME, CreateNameFromCString("bax"))
 	};
 
 	fixture->actorTokens[0] = (Token) {
@@ -55,7 +54,7 @@ static void setupTokensFixture(TokensFixture * fixture)
 	};
 	fixture->actorTokens[2] = (Token) {
 		.type = TOKEN_STRING,
-		.atom = CreateAtom(DT_ID, CreateStringFromCString("foobar"))
+		.atom = CreateTypedAtom(DT_ID, CreateStringFromCString("foobar"))
 	};
 
 	for(index8 i = 0; i < EXAMPLE_N_PARTS; i++) {
@@ -69,8 +68,8 @@ static void setupTokensFixture(TokensFixture * fixture)
 static void teardownTokensFixture(TokensFixture * fixture)
 {
 	for(index8 i = 0; i < EXAMPLE_N_PARTS; i++) {
-		ReleaseAtom(fixture->nameTokens[i].atom);
-		ReleaseAtom(fixture->actorTokens[i].atom);
+		ReleaseTypedAtom(fixture->nameTokens[i].atom);
+		ReleaseTypedAtom(fixture->actorTokens[i].atom);
 	}
 }
 
@@ -92,8 +91,8 @@ static void testPartBuilder(void)
 
 		ASSERT_DATA64_EQUAL(PartBuilderGetRole(&builder), fixture.names[i])
 
-		Atom actor = PartBuilderGetActor(&builder);
-		ASSERT_TRUE(SameAtoms(actor, fixture.actors[i]))
+		TypedAtom actor = PartBuilderGetActor(&builder);
+		ASSERT_TRUE(SameTypedAtoms(actor, fixture.actors[i]))
 
 		PartBuilderReset(&builder);
 		ASSERT_TRUE(PartBuilderIsEmpty(&builder))
@@ -328,20 +327,20 @@ static void testCStringToClause(void)
 
 	Datum string = CreateStringFromCString("foobar");
 	ASSERT_TRUE(
-		SameAtoms(
+		SameTypedAtoms(
 			ListGetElement(actorsList, 1),
-			CreateID(string)
+			CreateTypedAtom(DT_ID, string)
 		)
 	)
 	IFactRelease(string);
 	ASSERT_TRUE(
-		SameAtoms(
+		SameTypedAtoms(
 			ListGetElement(actorsList, 2),
 			CreateVariable('x')
 		)
 	)
 	ASSERT_TRUE(
-		SameAtoms(
+		SameTypedAtoms(
 			ListGetElement(actorsList, 3),
 			CreateFloat64(123.45)
 		)

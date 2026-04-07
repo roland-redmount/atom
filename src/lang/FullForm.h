@@ -6,8 +6,8 @@
 #ifndef FULLFORM_H
 #define FULLFORM_H
 
-#include "Atom.h"
-#include "ClauseForm.h"
+#include "lang/TypedAtom.h"
+#include "lang/ClauseForm.h"
 
 
 Datum CreateFullForm(Datum const * clauseForms, size8 nClauseForms, index8 const * order);

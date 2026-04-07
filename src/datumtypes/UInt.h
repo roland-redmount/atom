@@ -4,16 +4,16 @@
  * NOTE: consider removing this so that we have only one integer datum.
  */
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 
 #ifndef UINT_H
 #define UINT_H
 
 
-Atom CreateUInt(uint64 value);
-uint64 GetUIntValue(Atom integer);
+TypedAtom CreateUInt(uint64 value);
+uint64 GetUIntValue(TypedAtom integer);
 
-void PrintUInt(Atom integer);
+void PrintUInt(TypedAtom integer);
 
 
 #endif // UINT_H

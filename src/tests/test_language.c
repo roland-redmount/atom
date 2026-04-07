@@ -207,7 +207,7 @@ static void testCreateClause(void)
 	// arrange
 	ClauseFormFixture clauseFormFixture = setupClauseForm();
 
-	Atom actors[EXAMPLE_CLAUSE_ARITY];
+	TypedAtom actors[EXAMPLE_CLAUSE_ARITY];
 	for(index8 i = 0; i < EXAMPLE_CLAUSE_ARITY; i++)
 		actors[i] = CreateInt(i + 1);
 	Datum actorsList = CreateListFromArray(actors, EXAMPLE_CLAUSE_ARITY);

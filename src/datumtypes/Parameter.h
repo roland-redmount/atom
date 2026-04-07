@@ -7,7 +7,7 @@
 #ifndef	PARAMETER_H
 #define	PARAMETER_H 
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 #include "lang/Datum.h"
 
 #define PARAMETER_IN	1
@@ -16,11 +16,11 @@
 /**
  * Create an parameter. For untyped parameters, set type to 0.
  */
-Atom CreateParameter(byte io, byte type);
+TypedAtom CreateParameter(byte io, byte type);
 
-bool IsParameter(Atom a);
+bool IsParameter(TypedAtom a);
 
-void PrintParameter(Atom parameter);
+void PrintParameter(TypedAtom parameter);
 
 
 #endif	// PARAMETER_H

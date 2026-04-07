@@ -5,7 +5,7 @@
 #ifndef	VARIABLE_H
 #define	VARIABLE_H 
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 #include "lang/Datum.h"
 
 /**
@@ -15,7 +15,7 @@
  * by their index (order) in the formula in which they reside.
  * The character (or name) is for user readability only.
  */
-Atom CreateVariable(char name);
+TypedAtom CreateVariable(char name);
 
 /**
  * The anonymous variable _
@@ -25,31 +25,29 @@ Atom CreateVariable(char name);
  * unequal to all other variables, it cannot be queried for
  * with e.g. (foo '_)
  */
-extern Atom anonymousVariable;
+extern TypedAtom anonymousVariable;
 
-bool IsVariable(Atom a);
+bool IsVariable(TypedAtom a);
 
 /**
  * Compare variables, such that the anonymous variable _
  * compares unequal to any other variable, and to itself.
  */
-bool SameVariable(Atom variable1, Atom variable2);
+bool SameVariable(TypedAtom variable1, TypedAtom variable2);
 
 /**
  * Get the variable name, or '_' for the anonymous variable.
  */
-char GetVariableName(Atom variable);
+char GetVariableName(TypedAtom variable);
 
 
 /**
  * Handle quoted variables
  */
-bool VariableIsQuoted(Atom variable);
-Atom QuoteVariable(Atom variable);
-Atom UnquoteVariable(Atom variable);
+bool VariableIsQuoted(TypedAtom variable);
+TypedAtom QuoteVariable(TypedAtom variable);
+TypedAtom UnquoteVariable(TypedAtom variable);
 
-void PrintVariable(Atom variable);
-
- // Atom ParseVariable(char const * syntax, size32 length);
+void PrintVariable(TypedAtom variable);
 
 #endif	// VARIABLE_H

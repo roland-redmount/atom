@@ -40,9 +40,9 @@ void BytecodeBegin(BytecodeDraft * draft, Datum signature, Datum registers);
 typedef struct {
 	enum {ARG_PARAMETER, ARG_REGISTER, ARG_CONSTANT} type;
 	union {
-		Atom parameter;
+		TypedAtom parameter;
 		index8 registerIndex;
-		Atom constant;
+		TypedAtom constant;
 	} value;
 } BytecodeArgument;
 
@@ -61,7 +61,7 @@ void BytecodeBeginInstruction(BytecodeDraft * draft, byte opcode);
 void BytecodeOperandParameter(BytecodeDraft * draft, Operand operand, index8 index);
 void BytecodeOperandRegister(BytecodeDraft * draft, Operand operand, index8 registerIndex);
 
-void BytecodeOperandConstant(BytecodeDraft * draft, Operand operand, Atom constant);
+void BytecodeOperandConstant(BytecodeDraft * draft, Operand operand, TypedAtom constant);
 
 void BytecodeOperandSetContext(BytecodeDraft * draft, Operand operand, index8 registerIndex);
 

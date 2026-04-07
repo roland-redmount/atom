@@ -116,7 +116,7 @@ void AtomAddRole(Datum atom, Datum predicateForm, Datum role)
 }
 
 
-void LookupAddPredicateRoles(Datum predicateForm, Atom * actors)
+void LookupAddPredicateRoles(Datum predicateForm, TypedAtom * actors)
 {
 	// iterate over roles names in the predicate form
 	// and add entries to lookup table
@@ -171,7 +171,7 @@ void LookupRemoveAllRoles(Datum atom)
 }
 
 
-void LookupRemovePredicateRoles(Datum predicateForm, Atom * actors)
+void LookupRemovePredicateRoles(Datum predicateForm, TypedAtom * actors)
 {
 	MultisetIterator formIterator;
 	MultisetIterate(predicateForm, &formIterator);

@@ -11,7 +11,7 @@
 
 
 typedef struct s_ElementMultiple {
-	Atom element;
+	TypedAtom element;
 	size32 multiple;
 } ElementMultiple;
 
@@ -30,9 +30,9 @@ void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, 
  * Create a multiset from arrays of atoms (unique elements) and corresponding multiples.
  * The array order is not significant.
  */
-Datum CreateMultisetFromArrays(Atom const * atoms, size32 const * multiples, size32 nUniqueElements);
+Datum CreateMultisetFromArrays(TypedAtom const * atoms, size32 const * multiples, size32 nUniqueElements);
 
-void AddMultisetToIFactFromArrays(IFactDraft * draft, Atom const * atoms, size32 const * multiples, size32 nUniqueElements);
+void AddMultisetToIFactFromArrays(IFactDraft * draft, TypedAtom const * atoms, size32 const * multiples, size32 nUniqueElements);
 
 /**
  * Evaluate (multiset @atom)
@@ -49,12 +49,12 @@ size32 MultisetNUniqueElements(Datum multiset);
  */
 size32 MultisetSize(Datum multiset);
 
-size32 MultisetGetElementMultiple(Datum multiset, Atom element);
+size32 MultisetGetElementMultiple(Datum multiset, TypedAtom element);
 
 /**
  * Assign values to a tuple of the (multiset element multiple) relation
  */
-void MultisetSetTuple(Atom * tuple, Atom multiset, Atom element, Atom multiple);
+void MultisetSetTuple(TypedAtom * tuple, TypedAtom multiset, TypedAtom element, TypedAtom multiple);
 
 /**
  * Find an order for a given array of elements consistent with
@@ -73,7 +73,7 @@ void MultisetSetTuple(Atom * tuple, Atom multiset, Atom element, Atom multiple);
  * 
  * NOTE: the length of elements and order arrays must equal MultisetSize()
  */
-void MultisetIterationOrder(Datum multiset, Atom const * elements, index8 * order, size8 nElements);
+void MultisetIterationOrder(Datum multiset, TypedAtom const * elements, index8 * order, size8 nElements);
 
 
 /**
@@ -87,7 +87,7 @@ void MultisetIterationOrder(Datum multiset, Atom const * elements, index8 * orde
 
 typedef struct s_MultisetIterator
 {
-	Atom queryTuple[3];
+	TypedAtom queryTuple[3];
 	RelationBTreeIterator treeIterator;
 } MultisetIterator;
 

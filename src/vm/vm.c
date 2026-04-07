@@ -140,7 +140,7 @@ iterate:
 	while(true) {
 		Instruction inst;
 		if(context->programCounter <= context->programLength) {
-			Atom instruction = ListGetElement(context->program, context->programCounter);
+			TypedAtom instruction = ListGetElement(context->program, context->programCounter);
 			if(vm.trace)
 				PrintInstruction(instruction);
 			inst = InstructionGetData(instruction);

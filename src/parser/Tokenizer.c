@@ -21,7 +21,6 @@
  * tokenizer with a "take back" functionality.
  */
 
-#include "datumtypes/id.h"
 #include "datumtypes/FloatIEEE754.h"
 #include "datumtypes/Int.h"
 #include "datumtypes/Parameter.h"
@@ -237,13 +236,13 @@ void TokenizerCleanup(Tokenizer * tokenizer)
 }
 
 
-static Atom parseFloat(char const * syntax, size32 length)
+static TypedAtom parseFloat(char const * syntax, size32 length)
 {
 	return CreateFloat64(StringToFloat64(syntax, length));
 }
 
 
-static Atom parseInteger(char const * syntax, size32 length)
+static TypedAtom parseInteger(char const * syntax, size32 length)
 {
 	return CreateInt(StringToInt64(syntax, length));
 }
@@ -261,7 +260,7 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 	switch(tokenizer->type) {
 	case TOKEN_STRING:
 		// strings entered in formulas are always immutable
-		token.atom = CreateID(CreateString(string, stringLength));
+		token.atom = CreateTypedAtom(DT_ID, CreateString(string, stringLength));
 		break;
 
 	case TOKEN_NUMBER:
@@ -287,7 +286,7 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 		break;
 				
 	case TOKEN_NAME:
-		token.atom = CreateAtom(DT_NAME, CreateName(string, stringLength));
+		token.atom = CreateTypedAtom(DT_NAME, CreateName(string, stringLength));
 		break;
 
 	default:

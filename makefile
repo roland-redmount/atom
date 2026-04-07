@@ -151,11 +151,11 @@ UTIL_FILES := $(addprefix util/, \
  LinkedList ResizingArray ResizingBuffer hashing sort resources utilities)
 
 LANG_FILES := $(addprefix lang/, \
- Atom ClauseForm Datum DatumType Form Formula FormPermutation FullForm name PredicateForm \
- Quote SubstitutionList unification TermForm)
+ ClauseForm Datum DatumType Form Formula FormPermutation FullForm name PredicateForm \
+ Quote SubstitutionList unification TermForm TypedAtom)
 
 DATUMTYPES_FILES := $(addprefix datumtypes/, \
- context FloatIEEE754 id instruction Int Parameter UInt Variable)
+ context FloatIEEE754 instruction Int Parameter UInt Variable)
 
 KERNEL_FILES := $(addprefix kernel/, \
  dispatch ifact kernel letter list lookup multiset pair RelationBTree string ServiceRegistry tuples)

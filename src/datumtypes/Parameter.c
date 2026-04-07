@@ -12,21 +12,21 @@ typedef union
 } Parameter;
 
 
-Atom CreateParameter(byte io, byte type)
+TypedAtom CreateParameter(byte io, byte type)
 {
 	Parameter arg;
 	arg.fields.io = io;
 	arg.fields.datumType = type;
-	return (Atom) {.type = DT_PARAMETER, .datum = arg.value};
+	return (TypedAtom) {.type = DT_PARAMETER, .datum = arg.value};
 }
 
-bool IsParameter(Atom a)
+bool IsParameter(TypedAtom a)
 {
 	return a.type == DT_PARAMETER;
 }
 
 
-void PrintParameter(Atom parameter)
+void PrintParameter(TypedAtom parameter)
 {
 	Parameter arg;
 	arg.value = parameter.datum;

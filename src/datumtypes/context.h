@@ -7,7 +7,7 @@
 #ifndef CONTEXT_H
 #define CONTEXT_H
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 
 
 typedef struct s_BytecodeContext BytecodeContext;

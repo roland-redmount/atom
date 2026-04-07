@@ -2,7 +2,7 @@
  * Main kernel routines
  */
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 #include "platform.h"
 
 
@@ -33,7 +33,7 @@ void KernelShutdown(void);
  * Adds a tuple to the corresponding relation table,
  * and adds an entry to the lookup table for each DT_ID actor.
  */
-void AssertFact(Datum form, Atom * actors);
+void AssertFact(Datum form, TypedAtom * actors);
 
 
 /**
@@ -43,7 +43,7 @@ void AssertFact(Datum form, Atom * actors);
  * This function should always succeed, as facts can always
  * be retracted at any time.
  */
-void RetractFact(Datum form, Atom * actors);
+void RetractFact(Datum form, TypedAtom * actors);
 
 
 /**

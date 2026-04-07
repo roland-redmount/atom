@@ -12,7 +12,7 @@
 #ifndef QUOTE_H
 #define QUOTE_H
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 #include "lang/Datum.h"
 
 

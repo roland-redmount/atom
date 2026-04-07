@@ -1,5 +1,4 @@
 
-#include "datumtypes/id.h"
 #include "datumtypes/UInt.h"
 #include "kernel/letter.h"
 #include "kernel/kernel.h"
@@ -16,7 +15,7 @@ static void testMultiset(void)
 	BTree * table = RegistryGetCoreTable(FORM_MULTISET_ELEMENT_MULTIPLE);
 	uint32 initialNRows = RelationBTreeNRows(table);
 	
-	Atom elements[] = {
+	TypedAtom elements[] = {
 		GetAlphabetLetter('A'),
 		GetAlphabetLetter('B'),
 		GetAlphabetLetter('C')
@@ -41,7 +40,7 @@ static void testMultiset(void)
 	for(index32 i = 0; i < TEST_MULTISET_N_UNIQUE; i++) {
 		ASSERT_TRUE(MultisetIteratorHasNext(&iterator))
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
-		ASSERT_TRUE(SameAtoms(em.element, elements[i]))
+		ASSERT_TRUE(SameTypedAtoms(em.element, elements[i]))
 		ASSERT_UINT32_EQUAL(em.multiple, multiples[i])
 		MultisetIteratorNext(&iterator);
 	}
@@ -54,7 +53,7 @@ static void testMultiset(void)
 	IFactRelease(multiset2);
 
 	// creating from permuted elements should yield the same multiset
-	Atom permutedElements[] = {
+	TypedAtom permutedElements[] = {
 		GetAlphabetLetter('C'),
 		GetAlphabetLetter('A'),
 		GetAlphabetLetter('B')
@@ -68,13 +67,13 @@ static void testMultiset(void)
 
 	// asserting a fact (multiset @multiset element 'D' multiple 1) should fail
 	// TODO: this fails now
-	Atom tuple1[3];
-	MultisetSetTuple(tuple1, CreateID(multiset), GetAlphabetLetter('D'), CreateUInt(1));
+	TypedAtom tuple1[3];
+	MultisetSetTuple(tuple1, CreateTypedAtom(DT_ID, multiset), GetAlphabetLetter('D'), CreateUInt(1));
 	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(table, tuple1), TUPLE_PROTECTED)
 
 	// attempt to remove any tuple (list @string position _ element _) should fail
-	Atom tuple2[3];
-	MultisetSetTuple(tuple2, CreateID(multiset), GetAlphabetLetter('B'), CreateUInt(2));
+	TypedAtom tuple2[3];
+	MultisetSetTuple(tuple2, CreateTypedAtom(DT_ID, multiset), GetAlphabetLetter('B'), CreateUInt(2));
 	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuples(table, tuple2, REMOVE_NORMAL), 0)
 
 	IFactRelease(multiset);

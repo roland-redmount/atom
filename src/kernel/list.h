@@ -7,7 +7,7 @@
 #ifndef LIST_H
 #define	LIST_H
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 #include "kernel/ifact.h"
 #include "kernel/RelationBTree.h"
 
@@ -15,14 +15,14 @@
 /**
  * Create a list from a callback function generating list element atoms.
  */
-typedef Atom (*ListElementGenerator)(index32 index, void const * data);
+typedef TypedAtom (*ListElementGenerator)(index32 index, void const * data);
 
 Datum CreateList(ListElementGenerator generator, void const * data, size32 nElements);
 
 /**
  * Create a list from an array of list elements
  */
-Datum CreateListFromArray(Atom const * listElements, size8 nAtoms);
+Datum CreateListFromArray(TypedAtom const * listElements, size8 nAtoms);
 
 
 /**
@@ -41,7 +41,7 @@ void ListBegin(IFactDraft * draft);
  * Returns the (1-based) position of the new element,
  * which is the same as the new length of the list.
  */
-index32 ListAddElement(IFactDraft * draft, Atom element);
+index32 ListAddElement(IFactDraft * draft, TypedAtom element);
 
 /**
  * Finalize a draft list, returning the completed list atom.
@@ -59,7 +59,7 @@ bool IsList(Datum atom);
 /**
  * Assign values to a tuple from the (list length) relation
  */
-void ListLengthSetTuple(Atom * tuple, Atom list, Atom length);
+void ListLengthSetTuple(TypedAtom * tuple, TypedAtom list, TypedAtom length);
 
 
 /**
@@ -72,14 +72,14 @@ size32 ListLength(Datum list);
  * 
  * NOTE: position is 1-based.
  */
-Atom ListGetElement(Datum list, index32 position);
+TypedAtom ListGetElement(Datum list, index32 position);
 
 
 /**
  * Copy all list elements into a given array
  * (assumed to be large enough to hold the eleements)
  */
-void ListGetElementsArray(Datum list, Atom * elements);
+void ListGetElementsArray(Datum list, TypedAtom * elements);
 
 
 /**
@@ -94,7 +94,7 @@ void ListGetElementsArray(Datum list, Atom * elements);
  * To find elements that are variables, we would have to use a quoted variable '_x.
  * This is not yet implemented.
  */
-index32 ListGetPosition(Datum list, Atom element);
+index32 ListGetPosition(Datum list, TypedAtom element);
 
 void PrintList(Datum list);
 
@@ -108,14 +108,14 @@ int8 ListLexicalOrdering(Datum list1, Datum list2);
 
 typedef struct s_ListIterator
 {
-	Atom queryTuple[3];
+	TypedAtom queryTuple[3];
 	RelationBTreeIterator treeIterator;
 } ListIterator;
 
 
 void ListIterate(Datum list, ListIterator * iterator);
 bool ListIteratorHasNext(ListIterator const * iterator);
-Atom ListIteratorGetElement(ListIterator const * iterator);
+TypedAtom ListIteratorGetElement(ListIterator const * iterator);
 void ListIteratorNext(ListIterator * iterator);
 void ListIteratorEnd(ListIterator * iterator);
 

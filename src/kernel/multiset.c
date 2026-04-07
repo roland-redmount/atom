@@ -1,8 +1,7 @@
 
-#include "datumtypes/id.h"
 #include "datumtypes/UInt.h"
 #include "datumtypes/Variable.h"
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
@@ -10,7 +9,7 @@
 #include "util/sort.h"
 
 
-void MultisetSetTuple(Atom * tuple, Atom multiset, Atom element, Atom multiple)
+void MultisetSetTuple(TypedAtom * tuple, TypedAtom multiset, TypedAtom element, TypedAtom multiple)
 {
 	tuple[CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)] = multiset;
 	tuple[CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)] = element;
@@ -38,7 +37,7 @@ void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, 
 		draft, form,
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 	);
-	Atom tuple[3];
+	TypedAtom tuple[3];
 	for(index32 i = 0; i < nUniqueElements; i++) {
 		ElementMultiple em = generator(i, data);
 		MultisetSetTuple(tuple, invalidAtom, em.element, CreateUInt(em.multiple));
@@ -49,7 +48,7 @@ void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, 
 
 
 typedef struct {
-	Atom const * atoms;
+	TypedAtom const * atoms;
 	size32 const * multiples;
 } MultisetElementData;
 
@@ -64,7 +63,7 @@ static ElementMultiple arrayElementGenerator(index32 index, void const * data)
 }
 
 
-Datum CreateMultisetFromArrays(Atom const * atoms, size32 const * multiples, size32 nUniqueElements)
+Datum CreateMultisetFromArrays(TypedAtom const * atoms, size32 const * multiples, size32 nUniqueElements)
 {
 	MultisetElementData elementData;
 	elementData.atoms = atoms;
@@ -74,7 +73,7 @@ Datum CreateMultisetFromArrays(Atom const * atoms, size32 const * multiples, siz
 }
 
 
-void AddMultisetToIFactFromArrays(IFactDraft * draft, Atom const * atoms, size32 const * multiples, size32 nUniqueElements)
+void AddMultisetToIFactFromArrays(IFactDraft * draft, TypedAtom const * atoms, size32 const * multiples, size32 nUniqueElements)
 {
 	MultisetElementData elementData;
 	elementData.atoms = atoms;
@@ -92,7 +91,7 @@ bool IsMultiset(Datum atom)
 	);
 }
 
-size32 MultisetGetElementMultiple(Datum multiset, Atom element)
+size32 MultisetGetElementMultiple(Datum multiset, TypedAtom element)
 {
 	// TODO
 	ASSERT(false);
@@ -107,7 +106,7 @@ size32 MultisetGetElementMultiple(Datum multiset, Atom element)
 void MultisetIterate(Datum multiset, MultisetIterator * iterator)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_MULTISET_ELEMENT_MULTIPLE);
-	MultisetSetTuple(iterator->queryTuple, CreateID(multiset), anonymousVariable, anonymousVariable);
+	MultisetSetTuple(iterator->queryTuple, CreateTypedAtom(DT_ID, multiset), anonymousVariable, anonymousVariable);
 	RelationBTreeIterate(tree, iterator->queryTuple, &(iterator->treeIterator));
 }
 
@@ -126,7 +125,7 @@ void MultisetIteratorNext(MultisetIterator * iterator)
 
 ElementMultiple MultisetIteratorGetElement(MultisetIterator const * iterator)
 {
-	Atom resultTuple[3];
+	TypedAtom resultTuple[3];
 	RelationBTreeIteratorGetTuple(&(iterator->treeIterator), resultTuple);
 	index8 roleElementIndex = CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT);
 	index8 roleMultipleIndex = CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE);
@@ -179,7 +178,7 @@ void PrintMultiset(Datum multiset)
 	MultisetIterate(multiset, &iterator);
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
-		PrintAtom(em.element);
+		PrintTypedAtom(em.element);
 		PrintF("(%u)", em.multiple);
 		MultisetIteratorNext(&iterator);
 		if(MultisetIteratorHasNext(&iterator))
@@ -190,7 +189,7 @@ void PrintMultiset(Datum multiset)
 }
 
 
-void MultisetIterationOrder(Datum multiset, Atom const * elements, index8 * order, size8 nElements)
+void MultisetIterationOrder(Datum multiset, TypedAtom const * elements, index8 * order, size8 nElements)
 {
 	MultisetIterator iterator;
 	MultisetIterate(multiset, &iterator);
@@ -200,7 +199,7 @@ void MultisetIterationOrder(Datum multiset, Atom const * elements, index8 * orde
 		index8 m = 0;
 		// find corresponding element in the elements array
 		for(index8 j = 0; j < nElements; j++) {
-			if(SameAtoms(elements[j], em.element)) {
+			if(SameTypedAtoms(elements[j], em.element)) {
 				order[i + m] = j;
 				m++;
 			}

@@ -10,7 +10,7 @@
 #include "kernel/ServiceRegistry.h"
 
 
-Atom stringElementGenerator(index32 index, void const * data)
+TypedAtom stringElementGenerator(index32 index, void const * data)
 {
 	char const * string = (char const *) data;
 	return GetAlphabetLetter(string[index]);
@@ -29,7 +29,7 @@ Datum CreateString(char const * chars, size32 length)
 		GetCorePredicateForm(FORM_STRING),
 		0
 	);
-	Atom string = invalidAtom;
+	TypedAtom string = invalidAtom;
 	IFactAddClause(&draft, &string);
 	IFactEndConjunction(&draft);
 
@@ -54,7 +54,7 @@ bool IsString(Datum atom)
 
 Datum StringGetLetter(Datum string, index32 position)
 {
-	Atom element = ListGetElement(string, position);
+	TypedAtom element = ListGetElement(string, position);
 	ASSERT(element.type == DT_LETTER)
 	return element.datum;
 }
@@ -73,7 +73,7 @@ void PrintString(Datum string)
 	ListIterator iterator;
 	ListIterate(string, &iterator);
 	while(ListIteratorHasNext(&iterator)) {
-		Atom letter = ListIteratorGetElement(&iterator);
+		TypedAtom letter = ListIteratorGetElement(&iterator);
 		PrintChar(LetterToChar(letter, LETTER_LOWERCASE));
 		ListIteratorNext(&iterator);
 	}

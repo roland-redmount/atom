@@ -1,5 +1,4 @@
 
-#include "datumtypes/id.h"
 #include "datumtypes/Parameter.h"
 #include "datumtypes/instruction.h"
 #include "datumtypes/Int.h"
@@ -50,7 +49,7 @@ BytecodeFixture setupBytecodeFixture1(void)
 
 	// list of registers with initial values
 	fixture.registers = CreateListFromArray(
-		(Atom []) {CreateInt(0)},
+		(TypedAtom []) {CreateInt(0)},
 		1
 	);
 
@@ -194,7 +193,7 @@ BytecodeFixture setupBytecodeFixture2(void)
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
 	fixture.registers = CreateListFromArray(
-		(Atom []) {CreateInt(0), {.type = DT_CONTEXT, .datum = 0}},
+		(TypedAtom []) {CreateInt(0), {.type = DT_CONTEXT, .datum = 0}},
 		2
 	);
 
@@ -211,7 +210,7 @@ BytecodeFixture setupBytecodeFixture2(void)
 	// CTX <number triple> #2
 	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
 	// NOTE: do constants really need to be typed?
-	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, CreateID(childFixture.bytecode));
+	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, CreateTypedAtom(DT_ID, childFixture.bytecode));
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
@@ -288,19 +287,19 @@ Service setupTableService(void)
 	Service service = RegistryAddBTreeService(form, btree);
 
 	// Assert facts
-	Atom actors1[2] = {
-		CreateID(CreateStringFromCString("baz")),
+	TypedAtom actors1[2] = {
+		CreateTypedAtom(DT_ID, CreateStringFromCString("baz")),
 		CreateInt(42)
 	};
 	AssertFact(form, actors1);
-	ReleaseAtom(actors1[0]);
+	ReleaseTypedAtom(actors1[0]);
 
-	Atom actors2[2]= {
-		CreateID(CreateStringFromCString("zzz")),
+	TypedAtom actors2[2]= {
+		CreateTypedAtom(DT_ID, CreateStringFromCString("zzz")),
 		CreateInt(-1)
 	};
 	AssertFact(form, actors2);
-	ReleaseAtom(actors2[0]);
+	ReleaseTypedAtom(actors2[0]);
 	IFactRelease(form);
 
 	return service;
@@ -341,7 +340,7 @@ BytecodeFixture setupBytecodeFixture3(void)
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
 	fixture.registers = CreateListFromArray(
-		(Atom []) {CreateInt(0), {.type = DT_CONTEXT, .datum = 0}},
+		(TypedAtom []) {CreateInt(0), {.type = DT_CONTEXT, .datum = 0}},
 		2
 	);
 

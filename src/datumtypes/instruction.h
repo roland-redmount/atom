@@ -5,7 +5,7 @@
 #ifndef INSTRUCTION_H
 #define INSTRUCTION_H
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 
 /**
  * A bytecode instruction is coded as a one-byte opcode,
@@ -112,18 +112,18 @@ void InstructionSetOperand(Instruction * draft, Operand operand, index8 opIndex,
 void InstructionSetContext(Instruction * draft, Operand operand, index8 registerIndex);
 
 
-Atom InstructionEnd(Instruction * draft);
+TypedAtom InstructionEnd(Instruction * draft);
 
 /**
  * View the instruction data structure
  */
-Instruction InstructionGetData(Atom instruction);
+Instruction InstructionGetData(TypedAtom instruction);
 
 
 // NOTE: this can be removed
-OpCode InstructionGetOpCode(Atom instruction);
+OpCode InstructionGetOpCode(TypedAtom instruction);
 
-void PrintInstruction(Atom instruction);
+void PrintInstruction(TypedAtom instruction);
 
 
 #endif	// INSTRUCTION_H

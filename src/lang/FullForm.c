@@ -1,5 +1,4 @@
 
-#include "datumtypes/id.h"
 #include "lang/FullForm.h"
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
@@ -14,18 +13,18 @@
  */
 Datum CreateFullForm(Datum const * clauseForms, size8 nClauseForms, index8 const * order)
 {
-	Atom uniqueClauseForms[nClauseForms];
+	TypedAtom uniqueClauseForms[nClauseForms];
 	for(index8 i = 0; i < nClauseForms; i++) {
 		index8 j = order ? order[i] : i;
-		uniqueClauseForms[i] = CreateID(clauseForms[j]);
+		uniqueClauseForms[i] = CreateTypedAtom(DT_ID, clauseForms[j]);
 	}
 	// reduce to unique roles
 	uint32 multiplicities[nClauseForms];
-	size8 nUniqueClauseForms = ReduceAtomArray(uniqueClauseForms, multiplicities, nClauseForms);
+	size8 nUniqueClauseForms = ReduceTypedAtomsArray(uniqueClauseForms, multiplicities, nClauseForms);
 
 	// create a multiset of clause forms
 	Datum conjunctionForm = CreateMultisetFromArrays(uniqueClauseForms, multiplicities, nUniqueClauseForms);
-	Atom conjunctionFormAtom = CreateID(conjunctionForm);
+	TypedAtom conjunctionFormAtom = CreateTypedAtom(DT_ID, conjunctionForm);
 	AssertFact(GetCorePredicateForm(FORM_CONJUNCTION_FORM), &conjunctionFormAtom);
 	return conjunctionForm;
 }

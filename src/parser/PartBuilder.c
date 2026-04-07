@@ -29,7 +29,7 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 		if(!TokenIsLiteral(token))
 			return false;
 		builder->actor = token.atom;
-		AcquireAtom(builder->actor);
+		AcquireTypedAtom(builder->actor);
 		builder->state = STATE_COMPLETE;
 		return true;
 
@@ -62,7 +62,7 @@ Datum PartBuilderGetRole(PartBuilder const * builder)
 }
 
 
-Atom PartBuilderGetActor(PartBuilder const * builder)
+TypedAtom PartBuilderGetActor(PartBuilder const * builder)
 {
 	return builder->actor;
 }
@@ -75,7 +75,7 @@ void PartBuilderReset(PartBuilder * builder)
 	}
 	else if(builder->state == STATE_COMPLETE) {
 		NameRelease(builder->role);
-		ReleaseAtom(builder->actor);
+		ReleaseTypedAtom(builder->actor);
 	}
 	builder->state = STATE_EMPTY;
 }

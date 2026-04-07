@@ -2,7 +2,7 @@
 #ifndef SUBSTITUTIONLIST_H
 #define SUBSTITUTIONLIST_H
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 
 /**
  * A list of (variable -> value) pairs used for variable substitution
@@ -10,8 +10,8 @@
 
 typedef struct s_SubstitutionList {
 	uint8 nPairs;
-	Atom * variables;
-	Atom * values;
+	TypedAtom * variables;
+	TypedAtom * values;
 } SubstitutionList;
 
 
@@ -20,9 +20,9 @@ typedef struct s_SubstitutionList {
 SubstitutionList CreateSubstFromVars(Datum list);
 
 // Find the value corresponding to a given variable
-Atom FindSubstValue(SubstitutionList subst, Atom variable);
+TypedAtom FindSubstValue(SubstitutionList subst, TypedAtom variable);
 // Replace a substitution value for a given variable (if it exists)
-void SetSubstValue(SubstitutionList subst, Atom variable, Atom value); 
+void SetSubstValue(SubstitutionList subst, TypedAtom variable, TypedAtom value); 
 
 void FreeSubstitutionList(SubstitutionList subst);
 

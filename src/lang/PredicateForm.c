@@ -5,7 +5,7 @@
 #include "kernel/kernel.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/multiset.h"
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "util/utilities.h"
@@ -15,12 +15,12 @@
 Datum CreatePredicateForm(Datum const * roles, size8 nRoles)
 {
 	// reduce to unique roles, typed for use with multiset
-	Atom uniqueRoles[nRoles];
+	TypedAtom uniqueRoles[nRoles];
 	for(index8 i = 0; i < nRoles; i++)
-		uniqueRoles[i] = (Atom) {.type = DT_NAME, .datum = roles[i]};
-	SortAtoms(uniqueRoles, nRoles);
+		uniqueRoles[i] = (TypedAtom) {.type = DT_NAME, .datum = roles[i]};
+	SortTypedAtoms(uniqueRoles, nRoles);
 	uint32 multiplicities[nRoles];
-	size8 nUniqueRoles = ReduceAtomArray(uniqueRoles, multiplicities, nRoles);
+	size8 nUniqueRoles = ReduceTypedAtomsArray(uniqueRoles, multiplicities, nRoles);
 
 	IFactDraft draft;
 	IFactBegin(&draft);
@@ -33,7 +33,7 @@ Datum CreatePredicateForm(Datum const * roles, size8 nRoles)
 		GetCorePredicateForm(FORM_PREDICATE_FORM),
 		0
 	);
-	Atom form = invalidAtom;
+	TypedAtom form = invalidAtom;
 	IFactAddClause(&draft, &form);
 	IFactEndConjunction(&draft);
 

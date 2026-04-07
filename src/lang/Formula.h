@@ -55,7 +55,7 @@
 #ifndef FORMULA_H
 #define FORMULA_H
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 
 
 /**
@@ -64,12 +64,12 @@
  */
 Datum CreateFormula(Datum form, Datum actorsList);
 
-Datum CreateFormulaFromArray(Datum form, Atom * actors);
+Datum CreateFormulaFromArray(Datum form, TypedAtom * actors);
 
 /**
  * Convenience functions for creating formulas
  */
-Datum CreatePredicate(Datum const * roles, Atom * actors, size8 nParts);
+Datum CreatePredicate(Datum const * roles, TypedAtom * actors, size8 nParts);
 Datum CreateTerm(Datum predicate, bool negated);
 
 /**
@@ -108,13 +108,13 @@ index32 FormulaRoleIndex(Datum formula, Datum name);
  * Store a list of the unique formula variables into the provided array,
  * in left-to-right canonical order, and return the number of variables.
  */
-size8 FormulaUniqueVariables(Datum formula, Atom * variables);
+size8 FormulaUniqueVariables(Datum formula, TypedAtom * variables);
 
 void PrintFormula(Datum formula);
 
 /**
  * Compute hash of a formula from the form hash value and actors tuple
  */
-data64 FormulaHashFormActors(data64 formHash, Atom const * actors, size32 nActors, data64 initialHash);
+data64 FormulaHashFormActors(data64 formHash, TypedAtom const * actors, size32 nActors, data64 initialHash);
 
 #endif	// FORMULA_H

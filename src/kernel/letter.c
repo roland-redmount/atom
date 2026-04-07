@@ -41,19 +41,19 @@ static char letterCodeToChar(uint8 letterCode, uint8 letterCase)
 }
 
 
-Atom GetAlphabetLetter(char c)
+TypedAtom GetAlphabetLetter(char c)
 {
-	return (Atom) {DT_LETTER, 0, 0, 0, charToLetterCode(c)};
+	return (TypedAtom) {DT_LETTER, 0, 0, 0, charToLetterCode(c)};
 }
 
 
-char LetterToChar(Atom letter, uint8 letterCase)
+char LetterToChar(TypedAtom letter, uint8 letterCase)
 {
 	return letterCodeToChar(letter.datum, letterCase);
 }
 
 
-void PrintLetter(Atom letter, uint8 letterCase)
+void PrintLetter(TypedAtom letter, uint8 letterCase)
 {
 	char c = LetterToChar(letter, letterCase);
 	PrintChar('\'');

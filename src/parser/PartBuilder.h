@@ -10,7 +10,7 @@
 typedef struct s_PartBuilder {
 	enum BuilderState {STATE_EMPTY, STATE_PARTIAL, STATE_COMPLETE} state;
 	Datum role;
-	Atom actor;
+	TypedAtom actor;
 } PartBuilder;
 
 
@@ -30,7 +30,7 @@ Datum PartBuilderGetRole(PartBuilder const * builder);
 /**
  * Return the actor (any datum type)
  */
-Atom PartBuilderGetActor(PartBuilder const * builder);
+TypedAtom PartBuilderGetActor(PartBuilder const * builder);
 
 void PartBuilderReset(PartBuilder * builder);
 

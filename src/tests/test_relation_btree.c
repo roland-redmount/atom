@@ -15,9 +15,9 @@
 
 struct {
 	BTree * tree;
-	Atom tuple1[TEST_N_COLUMNS];
-	Atom tuple2[TEST_N_COLUMNS];
-	Atom tuple3[TEST_N_COLUMNS];
+	TypedAtom tuple1[TEST_N_COLUMNS];
+	TypedAtom tuple2[TEST_N_COLUMNS];
+	TypedAtom tuple3[TEST_N_COLUMNS];
 	uint32 initialRefCount;
 } fixture;
 
@@ -87,11 +87,11 @@ void testFindTuple(void)
 	RelationBTreeAddTuple(fixture.tree, fixture.tuple2);
 	RelationBTreeAddTuple(fixture.tree, fixture.tuple3);
 
-	Atom queryTuple[TEST_N_COLUMNS];
+	TypedAtom queryTuple[TEST_N_COLUMNS];
 	RelationBTreeIterator iterator;
-	Atom resultTuple[TEST_N_COLUMNS];
-	Atom tupleVariable1 = CreateVariable('x');
-	Atom tupleVariable2 = CreateVariable('y');
+	TypedAtom resultTuple[TEST_N_COLUMNS];
+	TypedAtom tupleVariable1 = CreateVariable('x');
+	TypedAtom tupleVariable2 = CreateVariable('y');
 	
 	// find tuple 1
 	{
@@ -224,7 +224,7 @@ void testRemoveTuples(void)
 	size32 nRemoved;
 
 	// remove tuple 1 and 2
-	Atom queryTuple[TEST_N_COLUMNS];
+	TypedAtom queryTuple[TEST_N_COLUMNS];
 	queryTuple[0] = fixture.tuple1[0];
 	queryTuple[1] =	fixture.tuple1[1];
 	queryTuple[2] =	anonymousVariable;
@@ -255,7 +255,7 @@ void testRemoveAllTuples(void)
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 3)
 
 	// query tuple matching any tuple
-	Atom queryTuple[TEST_N_COLUMNS];
+	TypedAtom queryTuple[TEST_N_COLUMNS];
 	queryTuple[0] = anonymousVariable;
 	queryTuple[1] =	anonymousVariable;
 	queryTuple[2] =	anonymousVariable;
