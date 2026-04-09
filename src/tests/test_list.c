@@ -44,7 +44,7 @@ static void testCreateList(void)
 
 	// test (list position element) relation table
 	Atom listPositionElementForm = GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT);
-	Service service = RegistryFindService(listPositionElementForm);
+	Service service = RegistryFindBTreeService(listPositionElementForm);
 	ASSERT(service.type == SERVICE_BTREE)
 	BTree * listPositionElement = service.service.tree;
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(listPositionElement), EXAMPLE_LIST_N_ELEMENTS)
@@ -99,7 +99,7 @@ typedef struct {
 	Atom list;
 } ExampleListFixture;
 
-// a list containing only "small" datums
+// a list containing only "small" atoms
 static ExampleListFixture setupExampleListFixture(void)
 {
 	ExampleListFixture fixture;

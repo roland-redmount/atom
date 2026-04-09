@@ -20,19 +20,17 @@
 
 
 typedef struct s_BytecodeDraft {
-	Atom signature;	
 	Atom registers;
 	IFactDraft constantsDraft;
 	IFactDraft programDraft;
 	Instruction instructionDraft;
-	// size32 callCounter;
 } BytecodeDraft;
 
 /**
  * Initialize a bytecode block from a DT_FORMULA signature,
  * and an array of initial values for registers.
  */
-void BytecodeBegin(BytecodeDraft * draft, Atom signature, Atom registers);
+void BytecodeBegin(BytecodeDraft * draft, Atom registers);
 
 /**
  * Structure specifying a bytecode argument or operand
@@ -92,13 +90,6 @@ bool IsBytecode(Atom atom);
  * Returns a list of instructions
  */
 Atom BytecodeGetProgram(Atom bytecode);
-
-/**
- * Returns a formula
- * TODO: this should be factored out to Service,
- * not needed by the bytecode block itself
- */
-// Atom BytecodeGetSignature(Atom bytecode);
 
 /**
  * Read a instruction (AT_INSTRUCTION) from a bytecode block.

@@ -88,7 +88,7 @@ void testRemoveAllPredicateRoles(void)
 	Atom barf = CreateNameFromCString("barf");
 	Atom form = CreatePredicateForm((Atom []) {foobar, barf}, 2);
 	BTree * tree = CreateRelationBTree(2);
-	RegistryAddBTreeService(form, tree);
+	Service service = RegistryAddBTreeService(form, tree);
 
 	TypedAtom actors1[2] = {CreateTypedAtom(AT_ID, foo), CreateTypedAtom(AT_ID, bar)};
 	AssertFact(form, actors1);
@@ -115,7 +115,7 @@ void testRemoveAllPredicateRoles(void)
 	RelationBTreeRemoveTuples(tree, 0, REMOVE_NORMAL);
 
 	// drop the relation table
-	RegistryRemoveService(form);
+	RegistryRemoveService(service);
 
 	IFactRelease(form);
 	IFactRelease(foo);

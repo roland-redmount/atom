@@ -28,6 +28,7 @@
 #define AT_INSTRUCTION			9		// a bytecode instruction
 #define AT_PARAMETER			10		// a parameter in a bytecode service
 #define AT_CONTEXT				11		// a VM execution context
+#define AT_SERVICE				12		// a service record
 
 #define N_ATOMTYPES			11
 

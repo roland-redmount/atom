@@ -93,6 +93,7 @@ index8 PredicateRoleIndex(Atom predicateForm, Atom role)
 
 void PrintPredicateForm(Atom predicateForm)
 {	
+	ASSERT(IsPredicateForm(predicateForm))
 	MultisetIterator iterator;
 	MultisetIterate(predicateForm, &iterator);
 

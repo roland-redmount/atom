@@ -7,44 +7,26 @@
 #include "lang/Quote.h"
 
 
-/**
- * Dispatch a query, 
- * 
- */
 Service DispatchQuery(Atom query)
 {
 	ASSERT(IsFormula(query))
-	// TODO:
-
-	// 1) Lookup matching bytecode by form from a service directory.
-	
-	Atom queryForm = FormulaGetForm(query);
-	Service service = RegistryFindService(queryForm);
-
-	// 2) Attempt to match candidate services to the query actors,
-	// accounting for permutations and variable types (if any)
-
-	// 3) Execute the service:
-	// For tables, run a table iterator. For services, do VM execution.
-
 
 	/**
-	 * In the long run, we want to integrate the REPL into a top-level
-	 * VM execution context. That means we need a user input method callable
-	 * from the VM that yields a query formula q; this can be a hard-coded
-	 * service (user-query q) that blocks until a query is entered.
+	 * 1) Iterate over candidate services matching the query form.
+	 * 2) Test each for a candidate service using SignatureQueryMatch().
+	 *    There can be only 1 matching service per candidate.
 	 */
 
+	Atom queryForm = FormulaGetForm(query);
+	// TODO: we must construct a list of parameters corresponding to
+	// the query, such that atoms map to input parameters and variables 
+	// to output parameters, with types.
+	Atom parameters = 0;
+	Atom signature = CreateFormula(queryForm, parameters);
+	Service service = RegistryFindService(signature);
+	IFactRelease(signature);
+
 	return service;
-}
-
-
-void CallService(Service service, TypedAtom * tuple)
-{
-	// TODO
-	// See VMExecute()
-
-	ASSERT(false);
 }
 
 

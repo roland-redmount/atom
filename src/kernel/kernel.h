@@ -88,9 +88,9 @@ void RetractFact(Atom form, TypedAtom * actors);
 
 
 /**
- * Permanent identifiers for core predicates forms.
- * These are also used by TableRegistry for the corresponding
- * core relation tables.
+ * Indexes the for core predicates forms into lookup tables (see kernel.c)
+ * and into to the "core" B-tree services in ServiceRegistry.
+ * For forms 1 and 2 these are also the hardcoded atom values.
  */
 
 #define FORM_MULTISET_ELEMENT_MULTIPLE		1	// (multiset element multiple)
@@ -113,13 +113,13 @@ void RetractFact(Atom form, TypedAtom * actors);
 
 /**
  * Lookup one of the "primitive" forms for core tables
- * Return a AT_ID.
+ * Returns an AT_ID atom.
  */
 Atom GetCorePredicateForm(index32 formId);
 
 
 /**
- * Lookup a core role name. Returns a AT_NAME
+ * Lookup a core role name. Returns an AT_NAME atom.
  */
 Atom GetCoreRoleName(index32 roleId);
 
@@ -127,6 +127,6 @@ Atom GetCoreRoleName(index32 roleId);
 /**
  * Find the index in "canonical order" of a role in the
  * tuple of actors corresponding to the given core predicate form.
- * formId and roleId as as defind above.
+ * formId and roleId as as defined above.
  */
 index8 CorePredicateRoleIndex(index32 formId, index32 roleId);

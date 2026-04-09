@@ -185,7 +185,7 @@ static void setupCoreRoleNames(void)
 
 void bootstrapAssertFact(Atom predicateForm, TypedAtom * actors)
 {
-	Service service = RegistryFindService(predicateForm);
+	Service service = RegistryFindBTreeService(predicateForm);
 	ASSERT(service.type == SERVICE_BTREE)
 	RelationBTreeAddTuple(service.service.tree, actors);
 }
@@ -238,8 +238,8 @@ static void setupCorePredicateForms(void)
 	Atom predicateForm = 2;
 	kernel.corePredicateForms[FORM_PREDICATE_FORM] = predicateForm;
 
-	// register tables and set role index arrays
-	RegistryCreateCoreTable(
+	// create services and set role index arrays
+	RegistryAddCoreBTreeService(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
 		multisetForm,
 		corePredicateArity[FORM_MULTISET_ELEMENT_MULTIPLE]
@@ -249,7 +249,7 @@ static void setupCorePredicateForms(void)
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][1] = MULTISET_ELEMENT_COLUMN;
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][2] = MULTISET_MULTIPLE_COLUMN;
 
-	RegistryCreateCoreTable(
+	RegistryAddCoreBTreeService(
 		FORM_PREDICATE_FORM,
 		predicateForm,
 		corePredicateArity[FORM_PREDICATE_FORM]
@@ -301,6 +301,7 @@ static void setupCorePredicateForms(void)
 	 * (2) AssertFact() which requires these forms to be in place already
 	 * Instead we define the hash to be the same as the form hash,
 	 * and provide our own bootstrapAssertFact() function.
+	 * This gives us 1 reference to the multisetForm atom.
 	 */
 	IFactEndCustom(&multisetDraft, multisetForm, bootstrapAssertFact);
 
@@ -329,6 +330,7 @@ static void setupCorePredicateForms(void)
 	IFactAddClause(&predicateFormDraft, &predicateFormAtom);
 	IFactEndConjunction(&predicateFormDraft);
 
+	// This gives 1 reference to the predicateForm atom
 	IFactEndCustom(&predicateFormDraft, predicateForm, bootstrapAssertFact);
 
 	// add lookup
@@ -346,7 +348,7 @@ static void setupCorePredicateForms(void)
 		Atom form = CreatePredicateForm(roles, corePredicateArity[i]);
 
 		kernel.corePredicateForms[i] = form;
-		RegistryCreateCoreTable(i, form, corePredicateArity[i]);
+		RegistryAddCoreBTreeService(i, form, corePredicateArity[i]);
 
 		// precompute role indices (relation columns) for GetPredicateRoleIndex()
 		for(index8 j = 0; j < corePredicateArity[i]; j++) {
@@ -368,6 +370,8 @@ static void setupCorePredicateForms(void)
 static void teardownCorePredicateForms(void)
 {
 	for(index32 i = N_CORE_PREDICATES; i > 0; i--) {
+		if(i > 2)
+			RegistryRemoveCoreBTreeService(i);
 		IFactRelease(kernel.corePredicateForms[i]);
 	}
 }
@@ -430,7 +434,7 @@ void KernelShutdown(void)
 	}
 	FreeIFacts();
 	FreeLookup();
-	TeardownRegistry();
+	FreeRegistry();
 	FreeNameStorage();
 	CleanupMemory();
 }
@@ -443,7 +447,7 @@ void AssertFact(Atom predicateForm, TypedAtom * actors)
 	// TODO: currently we only support creating predicates
 	ASSERT(IsPredicateForm(predicateForm));
 	// add tuple to relation table
-	Service service = RegistryFindService(predicateForm);
+	Service service = RegistryFindBTreeService(predicateForm);
 	if(service.type == SERVICE_BTREE) {
 		RelationBTreeAddTuple(service.service.tree, actors);
 	}
@@ -466,7 +470,7 @@ void AssertFact(Atom predicateForm, TypedAtom * actors)
 
 void RetractFact(Atom predicateForm, TypedAtom * actors)
 {
-	Service service = RegistryFindService(predicateForm);
+	Service service = RegistryFindBTreeService(predicateForm);
 	ASSERT(service.type == SERVICE_BTREE)
 	BTree * btree = service.service.tree;
 	ASSERT(btree)
@@ -475,7 +479,7 @@ void RetractFact(Atom predicateForm, TypedAtom * actors)
 	RelationBTreeRemoveTuples(btree, actors, REMOVE_NORMAL);
 	// remove btree if empty
 	if(RelationBTreeNRows(btree) == 0) {
-		RegistryRemoveService(predicateForm);
+		RegistryRemoveService(service);
 	}
 
 	// remove lookup entries for each role in the predicate form
@@ -487,7 +491,7 @@ void RetractAllFacts(Atom predicateForm)
 {
 	// iterate over all facts stored in relation tables
 	// and retract all.
-	Service service = RegistryFindService(predicateForm);
+	Service service = RegistryFindBTreeService(predicateForm);
 	ASSERT(service.type == SERVICE_BTREE)
 	RelationBTreeRemoveTuples(service.service.tree, 0, REMOVE_NORMAL);
 

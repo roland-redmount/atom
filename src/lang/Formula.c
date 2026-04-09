@@ -203,7 +203,9 @@ Atom FormulaGetForm(Atom formula)
 	FormulaSetTuple(query, CreateTypedAtom(AT_ID, formula), anonymousVariable, anonymousVariable);
 	TypedAtom result[3];
 	RelationBTreeQuerySingle(tree, query, result);
-	return result[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM)].atom;
+	TypedAtom form = result[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM)];
+	ASSERT(form.type == AT_ID)
+	return form.atom;
 }
 
 

@@ -15,7 +15,8 @@ char const * atomTypeNames[] = {
 	"VARIABLE",
 	"INSTRUCTION",
 	"PARAMETER",
-	"CONTEXT"
+	"CONTEXT",
+	"SERVICE"
 };
 
 

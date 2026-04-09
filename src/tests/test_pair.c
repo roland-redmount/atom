@@ -10,7 +10,7 @@
 static void testPair(void)
 {
 	Atom form = GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT);
-	Service service = RegistryFindService(form);
+	Service service = RegistryFindBTreeService(form);
 	ASSERT(service.type == SERVICE_BTREE)
 	BTree * pairTable = service.service.tree;
 	uint32 initialNRows = RelationBTreeNRows(pairTable);

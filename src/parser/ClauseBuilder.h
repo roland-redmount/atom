@@ -10,7 +10,7 @@
 
 typedef struct s_ClauseBuilder {
 	TermBuilder termBuilder;
-	ResizingArray terms;			// array of AT_ID datums
+	ResizingArray terms;			// array of AT_ID atoms
 	size8 arity;
 	bool isValid;
 } ClauseBuilder;

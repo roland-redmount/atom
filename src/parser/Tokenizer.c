@@ -192,14 +192,14 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		if(IsWhiteSpace(c) || (c == 0)) {
 			// whitespace terminates parameter
 			if(tokenizer->buffer.stringLength > 0) {
-				tokenizer->data.parameter.datumType = AtomTypeFromString(
+				tokenizer->data.parameter.atomType = AtomTypeFromString(
 					tokenizer->buffer.buffer,
 					tokenizer->buffer.stringLength
 				);
-				ASSERT(tokenizer->data.parameter.datumType);
+				ASSERT(tokenizer->data.parameter.atomType);
 			}
 			else
-				tokenizer->data.parameter.datumType = 0;	// untyped parameter
+				tokenizer->data.parameter.atomType = 0;	// untyped parameter
 
 			tokenizer->isFull = true;
 			return true;
@@ -281,7 +281,7 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 	case TOKEN_PARAMETER:
 		token.atom = CreateParameter(
 			tokenizer->data.parameter.io,
-			tokenizer->data.parameter.datumType
+			tokenizer->data.parameter.atomType
 		);
 		break;
 				

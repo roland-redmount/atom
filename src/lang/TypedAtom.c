@@ -108,12 +108,6 @@ static void shiftAtomArrayLeft(TypedAtom * typedAtoms, uint8 nAtoms, uint8 steps
 }
 
 
-/**
- * Reduce a list of atoms in-place so that each atom occurs only once,
- * assuming that any duplicated atoms are adjacent in the array.
- * Writes the multiplicities of each atom to the
- * provided multiplicities array and returns the number of unique datums.
- */
 size8 ReduceTypedAtomsArray(TypedAtom * typedAtoms, uint32 * multiplicities, size8 nAtoms)
 {
 	for(index8 k = 0; k < nAtoms; k++) {

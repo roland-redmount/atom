@@ -167,7 +167,7 @@ void testFindTuple(void)
 		RelationBTreeIteratorEnd(&iterator);
 	}
 
-	// repeated variables
+	// repeated variables (equality constraint)
 	{
 		queryTuple[0] = CreateInt(13);
 		queryTuple[1] =	tupleVariable1;

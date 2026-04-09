@@ -212,7 +212,7 @@ void IFactBeginConjunction(IFactDraft * draft, Atom form, index8 idColumn)
 {
 	ASSERT(!draft->hasBegunConjunction);
 
-	Service service = RegistryFindService(form);
+	Service service = RegistryFindBTreeService(form);
 	ASSERT(service.type == SERVICE_BTREE)
 	BTree * tree = service.service.tree;
 
@@ -387,7 +387,7 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 			else
 				queryTuple[j] = anonymousVariable;
 		}
-		Service service = RegistryFindService(conjunction->form);
+		Service service = RegistryFindBTreeService(conjunction->form);
 		ASSERT(service.type == SERVICE_BTREE)
 		BTree * tree = service.service.tree;
 
@@ -507,7 +507,7 @@ bool IFactCheckTuple(BTree const * tree, TypedAtom const * tuple)
 		IFactConjunction * conjunctions = header->conjunctions;
 		ASSERT(header);
 		for(index32 j = 0; j < nConjunctions; j++) {
-			Service service = RegistryFindService(conjunctions[j].form);
+			Service service = RegistryFindBTreeService(conjunctions[j].form);
 			ASSERT(service.type == SERVICE_BTREE)
 			BTree * conjunctionTree = service.service.tree;
 			if((conjunctionTree == tree) && (conjunctions[j].idColumn == i))
@@ -548,7 +548,7 @@ void IFactRelease(Atom ifact)
 			// Unfortunately btree_delete() as currently used is not.
 
 			// NOTE: this does not remove entries from the lookup table
-			Service service = RegistryFindService(conjunction->form);
+			Service service = RegistryFindBTreeService(conjunction->form);
 			ASSERT(service.type == SERVICE_BTREE)
 			RelationBTreeRemoveTuples(service.service.tree, queryTuple, REMOVE_PROTECTED);
 		}

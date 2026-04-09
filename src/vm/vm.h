@@ -12,7 +12,7 @@ void VMInitialize(void * stack,  size32 stackSize);
 
 /**
  * Create a root context from the given bytecode, with given arguments.
- * Arguments are given as an array of pointers to datums to allow
+ * Arguments are given as an array of pointers to atoms to allow
  * writing data into output arguments of the given bytecode.
  * 
  * For a basic REPL the bytecode could be a loop calling
@@ -23,7 +23,7 @@ void VMInitialize(void * stack,  size32 stackSize);
  *  RESUME
  * 
  */
-BytecodeContext * VMCreateRootContext(Atom bytecode, Atom * arguments);
+BytecodeContext * VMCreateRootContext(Service * service, Atom * arguments);
 
 /**
  * Start VM execution with the given context as root context.

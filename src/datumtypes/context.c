@@ -1,5 +1,6 @@
 
 #include "datumtypes/context.h"
+#include "lang/Form.h"
 #include "lang/Formula.h"
 #include "kernel/list.h"
 #include "memory/allocator.h"
@@ -25,9 +26,9 @@ Atom * ContextRegisters(BytecodeContext * context)
 }
 
 
-static void copyListDatums(Atom list, Atom * datums)
+static void copyListDatums(Atom list, Atom * atoms)
 {
-	Atom * rp = datums;
+	Atom * rp = atoms;
 	ListIterator iterator;
 	ListIterate(list, &iterator);
 	while(ListIteratorHasNext(&iterator)) {
@@ -40,29 +41,27 @@ static void copyListDatums(Atom list, Atom * datums)
 
 
 /**
- * Create a new execution context for the given bytecode program on the top of the stack. 
+ * Create a new execution context for the given bytecode service.
  * The program arguments must have been pushed prior to calling this function.
  * The child context contains pointers to the bytecode program
  * and a working copy of the registers used.
  */
-BytecodeContext * CreateContext(Atom bytecode, BytecodeContext * parentContext)
+BytecodeContext * CreateBytecodeContext(Service * service, BytecodeContext * parentContext)
 {
-	// NOTE: Should contexts acquire the bytecode program?
-	// I think not, since the lifetime of a context is only
-	// the execution of the bytecode block.
-	Atom registersList = BytecodeGetRegisters(bytecode);
-	// TODO: this must come from a Service
-	size8 arity = 0;	// FormulaArity(BytecodeGetSignature(bytecode));
-	ASSERT(false)
+	ASSERT(service->type == SERVICE_BYTECODE)
 
+	// determine context size
+	Atom bytecode = service->service.bytecode;
+	size8 arity = FormArity(service->form);
+	Atom registersList = BytecodeGetRegisters(bytecode);
 	size8 nRegisters = ListLength(registersList);
 	size32 contextSize = ContextSize(arity, nRegisters);
-
+	// allocate context
 	BytecodeContext * context = Allocate(contextSize);
 	SetMemory(context, contextSize, 0);
-
-	context->parentContext = parentContext;
+	// set fields
 	context->bytecode = bytecode;
+	context->parentContext = parentContext;
 	context->arity = arity;
 	context->nRegisters = nRegisters;
 
@@ -72,7 +71,7 @@ BytecodeContext * CreateContext(Atom bytecode, BytecodeContext * parentContext)
 
 	// Copy registers (initial values).
 	// NOTE: this will be more efficient if we use an array-based list relation
-	// where datums and types are separated
+	// where atoms and types are separated
 	copyListDatums(registersList, ContextRegisters(context));
 
 	return context;

@@ -252,7 +252,7 @@ test:
 	$(BINDIR)/test_parsing
 	$(BINDIR)/test_table_registry
 	$(BINDIR)/test_persistence
-#	$(BINDIR)/test_vm
+	$(BINDIR)/test_vm
 	$(BINDIR)/test_dispatch
 
 #

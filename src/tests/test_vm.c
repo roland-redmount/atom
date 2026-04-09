@@ -5,10 +5,10 @@
 #include "datumtypes/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
-#include "lang/name.h"
 #include "kernel/string.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
+#include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "parser/PredicateBuilder.h"
 #include "vm/bytecode.h"
@@ -19,9 +19,11 @@
 
 typedef struct {
 	Atom bytecode;
-	Atom signature;		// a formula
+	// Atom form;
+	// Atom parameters;
 	Atom registers;		// a list
-} BytecodeFixture;
+	Service service;
+} BytecodeServiceFixture;
 
 
 /**
@@ -37,15 +39,9 @@ typedef struct {
  *   YIELD
  */
 
-BytecodeFixture setupBytecodeFixture1(void)
+BytecodeServiceFixture setupBytecodeFixture1(void)
 {
-	BytecodeFixture fixture;
-
-	// Bytecode signature
-	// TODO: here we assume the form is in canonical order,
-	// so that we can refer to in/out parameters by index.
-	// Indices in the signature syntax must correspond to this order.
-	fixture.signature = CStringToPredicate("number @INT triple $INT");
+	BytecodeServiceFixture fixture;
 
 	// list of registers with initial values
 	fixture.registers = CreateListFromArray(
@@ -55,7 +51,7 @@ BytecodeFixture setupBytecodeFixture1(void)
 
 	// create bytecode draft
 	BytecodeDraft bytecodeDraft;
-	BytecodeBegin(&bytecodeDraft, fixture.signature, fixture.registers);
+	BytecodeBegin(&bytecodeDraft, fixture.registers);
 	
 	// add instructions
 	// COPY @1 $2
@@ -72,6 +68,7 @@ BytecodeFixture setupBytecodeFixture1(void)
 
 	// MUL 2 #1
 	BytecodeBeginInstruction(&bytecodeDraft, OP_MUL);
+	// NOTE: do constants really need to be typed?
 	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, CreateInt(2));
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 1);
 	BytecodeEndInstruction(&bytecodeDraft);
@@ -89,29 +86,41 @@ BytecodeFixture setupBytecodeFixture1(void)
 	// finalize bytecode and create atom
 	fixture.bytecode = BytecodeEnd(&bytecodeDraft);
 
+	// Bytecode signature
+	// TODO: find some better way to initalize this
+	Atom signature = CStringToPredicate("number @INT triple $INT");
+
+	// create service
+	fixture.service = RegistryAddBytecodeService(
+		signature, fixture.bytecode
+	);
+	IFactRelease(signature);
 	return fixture;
 }
 
 
-static void teardownBytecodeFixture(BytecodeFixture fixture)
+static void teardownBytecodeFixture(BytecodeServiceFixture fixture)
 {
+	RegistryRemoveService(fixture.service);
 	IFactRelease(fixture.bytecode);
-	IFactRelease(fixture.signature);
 	IFactRelease(fixture.registers);
 }
 
 
 void testBytecodeProgram1(void)
 {
-	BytecodeFixture fixture = setupBytecodeFixture1();
-	
+	BytecodeServiceFixture fixture = setupBytecodeFixture1();
+	ASSERT_INT32_EQUAL(fixture.service.type, SERVICE_BYTECODE)
+	ASSERT_TRUE(IsPredicateForm(fixture.service.form))
+	ASSERT_TRUE(IsList(fixture.service.parameters))
 	ASSERT_TRUE(IsBytecode(fixture.bytecode))
-	// ASSERT_TRUE(SameAtoms(BytecodeGetSignature(fixture.bytecode), fixture.signature))
-
+	ASSERT_TRUE(IsList(fixture.registers))
+	
 	ASSERT_DATA64_EQUAL(BytecodeGetRegisters(fixture.bytecode), fixture.registers)
 
 	Atom program = BytecodeGetProgram(fixture.bytecode);
-	ASSERT_UINT32_EQUAL(ListLength(program), 5);
+	ASSERT_TRUE(IsList(program))
+	ASSERT_UINT32_EQUAL(ListLength(program), 5)
 
 	ASSERT_UINT32_EQUAL(
 		InstructionGetOpCode(ListGetElement(program, 1)),
@@ -140,13 +149,13 @@ void testBytecodeProgram1(void)
 
 void testExecuteByteCode1(void)
 {
-	BytecodeFixture fixture = setupBytecodeFixture1();
-	PrintFormula(fixture.signature);
+	BytecodeServiceFixture fixture = setupBytecodeFixture1();
+	PrintPredicateForm(fixture.service.form);
 	PrintChar('\n');
 	
 	// NOTE: arguments must be in canonical order
 	Atom arguments[2] = {CreateInt(3).atom,  CreateInt(0).atom};
-	BytecodeContext * rootContext = VMCreateRootContext(fixture.bytecode, arguments);
+	BytecodeContext * rootContext = VMCreateRootContext(&fixture.service, arguments);
 	VMExecute(rootContext);
 	Atom * results = ContextArguments(rootContext);
 	// results should be 3 * 3 
@@ -173,33 +182,24 @@ void testExecuteByteCode1(void)
  *   ADD    #1 $2
  *   YIELD
  */
-BytecodeFixture setupBytecodeFixture2(void)
+BytecodeServiceFixture setupBytecodeFixture2(void)
 {
-	BytecodeFixture childFixture = setupBytecodeFixture1();
-	BytecodeFixture fixture;
-
-	/**
-	 * Bytecode signature.
-	 * The indices for parameters are determined by their position
-	 * in the signature actors list, in canonical order. We here 
-	 * assume that the form is in canonical order so the indices are correct.
-	 * This can be verified while building the predicate.
-	 * 
-	 * TODO: handle the case where the same parameter appears in multiple
-	 * positions in the signature.
-	 */
-	fixture.signature = CStringToPredicate("number @INT quadruple $INT");
+	BytecodeServiceFixture childFixture = setupBytecodeFixture1();
+	BytecodeServiceFixture fixture;
 
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
 	fixture.registers = CreateListFromArray(
-		(TypedAtom []) {CreateInt(0), {.type = AT_CONTEXT, .atom = 0}},
+		(TypedAtom []) {
+			CreateInt(0),
+			CreateTypedAtom(AT_CONTEXT, 0)
+		},
 		2
 	);
 
 	// create bytecode draft
 	BytecodeDraft bytecodeDraft;
-	BytecodeBegin(&bytecodeDraft, fixture.signature, fixture.registers);
+	BytecodeBegin(&bytecodeDraft, fixture.registers);
 
 	// COPY @1 $1
 	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
@@ -209,8 +209,11 @@ BytecodeFixture setupBytecodeFixture2(void)
 
 	// CTX <number triple> #2
 	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
-	// NOTE: do constants really need to be typed?
-	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, CreateTypedAtom(AT_ID, childFixture.bytecode));
+	// We could use the service signature (formula), but who keeps the reference?
+	BytecodeOperandConstant(
+		&bytecodeDraft, OPERAND_LEFT,
+		CreateTypedAtom(AT_ID, ServiceCreateSignature(&childFixture.service))
+	);
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
@@ -247,19 +250,25 @@ BytecodeFixture setupBytecodeFixture2(void)
 	fixture.bytecode = BytecodeEnd(&bytecodeDraft);
 	teardownBytecodeFixture(childFixture);
 
+	// create service
+	Atom signature = CStringToPredicate("number @INT quadruple $INT");
+	fixture.service = RegistryAddBytecodeService(
+		signature,
+		fixture.bytecode
+	);
 	return fixture;
 }
 
 
 void testExecuteByteCode2(void)
 {
-	BytecodeFixture fixture = setupBytecodeFixture2();
-	PrintFormula(fixture.signature);
+	BytecodeServiceFixture fixture = setupBytecodeFixture2();
+	PrintPredicateForm(fixture.service.form);
 	PrintChar('\n');
 	
 	// NOTE: arguments must be in canonical order
 	Atom arguments[2] = {CreateInt(3).atom,  CreateInt(0).atom};
-	BytecodeContext * rootContext = VMCreateRootContext(fixture.bytecode, arguments);
+	BytecodeContext * rootContext = VMCreateRootContext(&fixture.service, arguments);
 
 	VMExecute(rootContext);
 	Atom * results = ContextArguments(rootContext);
@@ -316,8 +325,8 @@ void teardownTableService(Service service)
 
 
 /**
- * Example program 3, calling a table service
- * (foo bar)
+ * Example program 3, calling a B-tree service (foo bar).
+ * 
  * 
  * TODO
  * 
@@ -331,11 +340,10 @@ void teardownTableService(Service service)
  *   YIELD
 * ... 
  */
-BytecodeFixture setupBytecodeFixture3(void)
+BytecodeServiceFixture setupBytecodeFixture3(void)
 {
 	// setup bytecode fixture
-	BytecodeFixture fixture;
-	fixture.signature = CStringToPredicate("foo @ID barbar $INT");
+	BytecodeServiceFixture fixture;
 
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
@@ -346,7 +354,7 @@ BytecodeFixture setupBytecodeFixture3(void)
 
 	// create bytecode draft
 	BytecodeDraft bytecodeDraft;
-	BytecodeBegin(&bytecodeDraft, fixture.signature, fixture.registers);
+	BytecodeBegin(&bytecodeDraft, fixture.registers);
 
 	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
 	// TODO: BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, );
@@ -385,6 +393,11 @@ BytecodeFixture setupBytecodeFixture3(void)
 	// finalize bytecode and create atom
 	fixture.bytecode = BytecodeEnd(&bytecodeDraft);
 
+	// create service
+	Atom signature = CStringToPredicate("foo @ID barbar $INT");
+	fixture.service = RegistryAddBytecodeService(
+		signature, fixture.bytecode
+	);
 	return fixture;
 }
 
@@ -392,7 +405,7 @@ BytecodeFixture setupBytecodeFixture3(void)
 void testExecuteBytecode3(void)
 {
 	Service tableService = setupTableService();
-	BytecodeFixture fixture = setupBytecodeFixture3();
+	BytecodeServiceFixture fixture = setupBytecodeFixture3();
 
 	// Do stuff
 

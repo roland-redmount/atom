@@ -43,8 +43,6 @@ size32 LookupTotalCount(void);
  * in any role in the given predicate form.
  * If predicateForm == 0, the function returns true if the atom participates
  * in any role in any predicate form.
- * 
- * NOTE: these functions could take datums, as the atom types are always the same
  */
 bool AtomHasRole(Atom atom, Atom predicateForm, Atom role);
 
@@ -82,7 +80,7 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm);
 
  /**
  * A record associates any atom (key) to a role (value).
- * Both atom and role must be AT_ID atoms, so we store only their datums.
+ * Both the atom and role must be AT_ID atoms.
  * Because multiple facts may contain a given role, we count the number
  * of facts in the lookup record. For example, the facts
  * 

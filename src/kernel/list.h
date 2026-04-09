@@ -98,7 +98,7 @@ index32 ListGetPosition(Atom list, TypedAtom element);
 
 void PrintList(Atom list);
 
-int8 ListLexicalOrdering(Atom list1, Atom list2);
+int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, TypedAtom));
 
 
 /**

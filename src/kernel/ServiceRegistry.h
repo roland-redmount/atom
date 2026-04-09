@@ -1,13 +1,16 @@
 /**
- * The service registry maps signatures to relation tables
- * or bytecode services- For bytecode services, a signature
- * is a formula where the actors contain parameters.
- * For relation tables, any arguments are assumed to be valid,
- * and the signature's actor list is null.
+ * The service registry maps signatures to services, so that dispatch
+ * can efficiently match services to queries. A service can either
+ * be a bytecode service or a machine code (C) service.
+ * A signature is a formula whose actors list contains DT_PARAMETER atoms,
+ * indicating the parameter io mode (in/out) and atom type for each argument;
+ * atom type may be AT_NONE to indicate that any type is acceptable. 
  * 
- * For simplicity, currently, we only store one service for each form,
- * either bytecode or table. There cannot be multiple bytecode
- * services with different parameters (in/out).
+ * There can be only one service for each signature. A DT_NONE parameter
+ * acts as a "wildcard" when determining equality between signatures,
+ * matching any other parameter type: for example, the two signature
+ * (foo x:INT bar y:FLOAT) and (foo x:INT bar y:NONE) cannot coexist,
+ * since a query with a FLOAT atom y matches both.
  */
 
 #ifndef TABLEREGISTRY_H
@@ -16,8 +19,10 @@
 #include "kernel/RelationBTree.h"
 
 /**
- * A service might be a bytecode service or a C iterator
- * for hardcoded implementations.
+ * TODO: for bytecode to be able to create contexts from services
+ * (instrution CTX), this structure must be represented as an Atom.
+ * Currently we use AT_BYTECODE but this must be generalized
+ * to cover native services.
  */
 
 enum ServiceType {
@@ -27,14 +32,19 @@ enum ServiceType {
 };
 
 typedef struct s_Service {
-	Atom form;			// form (AT_ID)
-	Atom parameters;	// list (AT_ID) of atom types
+	// we store the form and parameters lists of the signature separately
+	// to allow iterating across all services matching a given form
+	Atom form;
+	// For parameters, a zero value is taken to mean a list where all
+	// parameters have type AT_NONE and io mode PARAMETER_IN_OUT.
+	// This solves a bootstrap problem where parameter lists cannot be
+	// generated for core relation tables before (list) is available.
+	Atom parameters;
 	enum ServiceType type;
 	union {
 		BTree * tree;
 		Atom bytecode;
 	} service;
-	
 } Service;
 
 
@@ -44,10 +54,10 @@ typedef struct s_Service {
 void SetupRegistry(void);
 
 /**
- * Deallocate the registry. Before calling this function, all facts
- * must have been retracted so that relation tables are empty.
+ * Deallocate the registry. Before calling this function,
+ * all services must have been removed.
  */
-void TeardownRegistry(void);
+void FreeRegistry(void);
 
 /**
  * Total number of services registered.
@@ -60,35 +70,71 @@ size32 RegistryNServices(void);
 BTree * RegistryGetCoreTable(index32 index);
 
 /**
-* A number of tables in the registry must be hardcoded to support
-* core language elements. These must be created when a new "world" is initialized.
+* Create a special B-tree services in the registry for core language elements.
+* These must be created during bootstrap when a new "world" is initialized.
 * At this time, we cannot call FormArity(), so the arity must be specified.
 */
-void RegistryCreateCoreTable(index32 index, Atom form, size8 arity);
+void RegistryAddCoreBTreeService(index32 index, Atom form, size8 arity);
 
 /**
- * Add a B-tree backed relation table to the registry.
+ * Remove a core service.
+ */
+void RegistryRemoveCoreBTreeService(index32 index);
+
+/**
+ * Add a B-tree backed service the registry.
+ * Since B-trees can read and write any column, 
+ * TODO: how to handle parameter i/o mode? B-tree supports in/out for all arguments
  */
 Service RegistryAddBTreeService(Atom form, BTree * btree);
 
 /**
  * Add a bytecode service to the registry
  */
-Service RegistryAddBytecodeService(Atom bytecode, Atom form, Atom parameters);
+Service RegistryAddBytecodeService(Atom signature, Atom bytecode);
 
 /**
- * Remove a service from the registry.
+ * Remove the given service from the registry.
  * 
  * If the service is a relation table, all facts must have been retracted
  * so that table is empty. The B-tree will be deallocated.
  */
-void RegistryRemoveService(Atom form);
+void RegistryRemoveService(Service service);
 
 /**
- * Find the service registered for a given form.
+ * Find the service registered for a given signature.
  * If no service is found, the returned service.type equals SERVICE_NONE
+ * For matching services to queries, see dispatch.c
  */
-Service RegistryFindService(Atom form);
+Service RegistryFindService(Atom signature);
+
+/**
+ * Special case for B-tree services (for now)
+ */
+Service RegistryFindBTreeService(Atom form);
+
+/**
+ * Create a signature (formula) for this service.
+ * This is needed due to special encoding of the parameter field.
+ * The returned atom must be released by the caller.
+ */
+// Atom ServiceCreateSignature(Service const * service);
+
+
+/**
+ * Iterating over services
+ */
+typedef struct {
+	Atom form;
+} RegistryIterator;
+
+/**
+ * Create iterator over services matching the given form,
+ */
+void RegistryIterate(Atom form, RegistryIterator * iterator);
+
+Service RegistryIteratorGetService(RegistryIterator * iterator);
+
 
 
 #endif  // TABLEREGISTRY_H

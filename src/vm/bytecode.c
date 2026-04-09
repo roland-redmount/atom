@@ -13,7 +13,7 @@
 #include "parser/PredicateBuilder.h"
 #include "vm/bytecode.h"
 
-
+/*
 static void setBytecodeSignature(IFactDraft * draft, Atom signature)
 {
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_BYTECODE);
@@ -25,7 +25,7 @@ static void setBytecodeSignature(IFactDraft * draft, Atom signature)
 	IFactAddClause(draft, tuple);
 	IFactEndConjunction(draft);
 }
-
+*/
 
 static void setBytecodeProgram(IFactDraft * draft, Atom program)
 {
@@ -78,10 +78,9 @@ static void setBytecodeConstants(IFactDraft * draft, Atom constantsList)
  * For now we stick with the B-tree list implementation, but we should revisit this.
  */
 
-void BytecodeBegin(BytecodeDraft * draft, Atom signature, Atom registers)
+void BytecodeBegin(BytecodeDraft * draft, Atom registers)
 {
-	ASSERT(IsFormula(signature));
-	draft->signature = signature;
+	ASSERT(IsList(registers));
 	draft->registers = registers;
 
 	// Draft lists, modified when adding instructions
@@ -136,9 +135,6 @@ Atom BytecodeEnd(BytecodeDraft * draft)
 	IFactDraft bytecodeDraft;
 	IFactBegin(&bytecodeDraft);
 
-	// (bytecode signature)
-	setBytecodeSignature(&bytecodeDraft, draft->signature);
-
 	// (bytecode registers)
 	setBytecodeRegisters(&bytecodeDraft, draft->registers);
 
@@ -162,7 +158,7 @@ bool IsBytecode(Atom atom)
 {
 	return AtomHasRole(
 		atom,
-		GetCorePredicateForm(FORM_BYTECODE_SIGNATURE),
+		GetCorePredicateForm(FORM_BYTECODE_PROGRAM),
 		GetCoreRoleName(ROLE_BYTECODE)
 	);
 }
@@ -183,7 +179,7 @@ Atom BytecodeGetProgram(Atom bytecode)
 	return tuple[programIndex].atom;
 }
 
-
+/*
 Atom BytecodeGetSignature(Atom bytecode)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_SIGNATURE);
@@ -198,7 +194,7 @@ Atom BytecodeGetSignature(Atom bytecode)
 	RelationBTreeQuerySingle(tree, query, tuple);
 	return tuple[signatureIndex].atom;
 }
-
+*/
 
 Atom BytecodeGetRegisters(Atom bytecode)
 {
@@ -253,7 +249,7 @@ static void createAdditionService(void)
 
 	// create bytecode draft
 	BytecodeDraft bytecodeDraft;
-	BytecodeBegin(&bytecodeDraft, signature, registers);
+	BytecodeBegin(&bytecodeDraft, registers);
 	
 	// COPY @2 $1
 	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
@@ -271,9 +267,10 @@ static void createAdditionService(void)
 	IFactRelease(signature);
 	IFactRelease(registers);
 
-	// NOTE: the form is now both a registry key and part of the bytecode definition
+	// TODO: create the service properly
 	additionService = RegistryAddBytecodeService(
-		bytecode, FormulaGetForm(signature), FormulaGetActors(signature)
+		signature,
+		bytecode
 	);
 	IFactRelease(bytecode);
 }
@@ -291,5 +288,5 @@ void SetupCoreServices(void)
 
 void TeardownCoreServices(void)
 {
-	RegistryRemoveService(additionService.form);
+	RegistryRemoveService(additionService);
 }

@@ -17,7 +17,7 @@ void testAssertRetract(void)
 	NameRelease(roles[0]);
 	NameRelease(roles[1]);
 	
-	Service service = RegistryFindService(form);
+	Service service = RegistryFindBTreeService(form);
 	ASSERT(service.type == SERVICE_NONE)
 
 	TypedAtom actors1[2] = {
@@ -25,7 +25,7 @@ void testAssertRetract(void)
 		CreateInt(-1)
 	};
 	AssertFact(form, actors1);
-	service = RegistryFindService(form);
+	service = RegistryFindBTreeService(form);
 	ASSERT(service.type == SERVICE_BTREE)
 	BTree * btree = service.service.tree;
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 1)

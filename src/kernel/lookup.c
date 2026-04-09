@@ -216,10 +216,10 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm)
 	BTreeIteratorEnd(&iterator);
 
 	// Free all lookup entries for discovered atoms
-	Atom const * datums = ResizingArrayGetMemory(&datumArray);
+	Atom const * atoms = ResizingArrayGetMemory(&datumArray);
 	size32 nAtoms = ResizingArrayNElements(&datumArray);
 	for(index32 i = 0; i < nAtoms; i++)
-		LookupRemoveAllRoles(datums[i]);
+		LookupRemoveAllRoles(atoms[i]);
 		
 	FreeResizingArray(&datumArray);
 }

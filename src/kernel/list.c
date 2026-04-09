@@ -226,10 +226,10 @@ index32 ListGetPosition(Atom list, TypedAtom element)
 // lexical ordering of two lists
 // NOTE: it is currently not possible to use this
 // in the CompareTypedAtoms() function for
-// canonical ordering of list (and string) datums
+// canonical ordering of list (and string) atoms
 // since this function depends on B-tree iteration,
 // which leads to infinite recursion when comparing B-tree ḱeys
-int8 ListLexicalOrdering(Atom list1, Atom list2)
+int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, TypedAtom))
 {
 	if(list1 == list2)
 		return 0;
@@ -254,9 +254,9 @@ int8 ListLexicalOrdering(Atom list1, Atom list2)
 		ASSERT(hasNext1 && hasNext2);
 		TypedAtom atom1 = ListIteratorGetElement(&iterator1);
 		TypedAtom atom2 = ListIteratorGetElement(&iterator2);
-		int8 letterOrder = CompareTypedAtoms(atom1, atom2);
-		if(letterOrder != 0) {
-			listOrder = letterOrder;
+		int8 atomOrder = compare(atom1, atom2);
+		if(atomOrder != 0) {
+			listOrder = atomOrder;
 			break;
 		}
 		ListIteratorNext(&iterator1);

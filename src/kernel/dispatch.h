@@ -1,12 +1,7 @@
 
 /**
  * The dispatcher accepts a query (formula) and finds a matching service
- * within the current process, which can be either a relation table or
- * a bytecode service. The service can then be called from within Imladris
- * using the CALL instruction, or from kernel code using CallService()
- * 
- * Queries dispatched to relation tables are handled by a built-in mechanism
- * that behaves in the same as bytecode services.
+ * within the current process.
  */
 
 #ifndef DISPATCH_H
@@ -16,11 +11,10 @@
 
 
 /**
- * Dispatch a query (formula), return the first matching service, if any.
+ * Dispatch a query (formula), return the matching service, if any.
  */
 Service DispatchQuery(Atom query);
 
-void CallService(Service service, TypedAtom * tuple);
 
 
 // generic tuple matching across formula permutations

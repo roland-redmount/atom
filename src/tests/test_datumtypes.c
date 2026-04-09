@@ -106,10 +106,9 @@ int main(int argc, char * argv[])
 {
 	SetupMemory();
 
-	// atom type functions
 	ExecuteTest(testGetDatumTypeName);
 	ExecuteTest(testFindTypeFromString);
-	// simple datums
+
 	ExecuteTest(testInt);
 	ExecuteTest(testUInt);
 	ExecuteTest(testFloat);

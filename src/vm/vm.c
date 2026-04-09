@@ -1,10 +1,8 @@
-
 #include "kernel/list.h"
+#include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
 #include "vm/bytecode.h"
 #include "vm/vm.h"
-
-
 
 
 /**
@@ -117,16 +115,11 @@ void writeOperand(BytecodeContext * context, Instruction inst, index8 operand, A
 }
 
 
-BytecodeContext * VMCreateRootContext(Atom bytecode, Atom * arguments)
+BytecodeContext * VMCreateRootContext(Service * service, Atom * arguments)
 {
- 	BytecodeContext * context = CreateContext(bytecode, 0);
-
+ 	BytecodeContext * context = CreateBytecodeContext(service, 0);
 	// copy arguments to context
-	// TODO
-	ASSERT(false)
-
-	size8 arity = 0;	// FormulaArity(BytecodeGetSignature(bytecode));
-	for(index8 i = 0; i < arity; i++)
+	for(index8 i = 0; i < context->arity; i++)
 		ContextArguments(context)[i] = arguments[i];
 
 	return context;
@@ -189,9 +182,13 @@ iterate:
 			/** 
 			 * BCTX <service> <operand>
 			 * Create a bytecode context and store in the destination operand.
+			 * TODO: it would be more efficient to use at AT_SERVICE atom
+			 * encapsulating a pointer to the service. We would need the bytecode
+			 * to keep a reference to this atom so that the service cannot be deallocated.
 			 */
-			Atom newBytecode = readOperand(context, inst, OPERAND_LEFT);
-			BytecodeContext * newContext = CreateContext(newBytecode, context);
+			Atom serviceSignature = readOperand(context, inst, OPERAND_LEFT);
+			Service service = RegistryFindService(serviceSignature);
+			BytecodeContext * newContext = CreateBytecodeContext(&service, context);
 			writeOperand(context, inst, OPERAND_RIGHT, (Atom) newContext);
 			break;
 		}

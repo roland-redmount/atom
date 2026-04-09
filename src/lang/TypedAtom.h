@@ -49,7 +49,12 @@ int8 CompareTypedAtoms(TypedAtom atom1, TypedAtom atom2);
  */
 void SortTypedAtoms(TypedAtom * atoms, size32 nAtoms);
 
-// NOTE: this shold probably go elsewhere
+/**
+ * Reduce a list of tyoed atoms in-place so that each atom occurs only once,
+ * assuming that any duplicated atoms are adjacent in the array.
+ * Writes the multiplicities of each atom to the
+ * provided multiplicities array and returns the number of unique atoms.
+ */
 size8 ReduceTypedAtomsArray(TypedAtom * atoms, uint32 * multiplicities, size8 nAtoms);
 
 /**
