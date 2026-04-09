@@ -4,7 +4,7 @@
  * 
  * TODO: The signature is currently a formula where actors are AT_PARAMETER
  * atoms storing a atom type. This should be refactored such that the bytecode
- * block only stores the array of parameters (in canonical order) while Service
+ * block only stores the array of parameters (in canonical order) while ServiceRecord
  * stores the signature. (A bytecode block could then be associated with more than one
  * signature, for aliases.) C-level programs also need to store atom types.
  * 

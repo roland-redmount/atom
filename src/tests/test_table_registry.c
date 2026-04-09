@@ -32,13 +32,13 @@ void testAddDropTable(void)
 	size32 nTablesInitial = RegistryNServices();
 
 	BTree * createdTable = CreateRelationBTree(4);
-	RegistryAddBTreeService(fixture.form, createdTable);
+	Atom service = RegistryAddBTreeService(fixture.form, createdTable);
 	ASSERT_UINT32_EQUAL(RegistryNServices(), nTablesInitial + 1)
 	ASSERT_UINT32_EQUAL(RelationBTreeNColumns(createdTable), 4)
 
-	Service service = RegistryFindBTreeService(fixture.form);
-	ASSERT(service.type == SERVICE_BTREE)
-	BTree * foundTable = service.service.tree;
+	ServiceRecord record = RegistryFindBTreeService(fixture.form);
+	ASSERT(record.type == SERVICE_BTREE)
+	BTree * foundTable = record.provider.tree;
 	ASSERT_PTR_NOT_EQUAL(foundTable, 0)
 	ASSERT_PTR_EQUAL(foundTable, createdTable)
 

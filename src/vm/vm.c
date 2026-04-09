@@ -115,7 +115,7 @@ void writeOperand(BytecodeContext * context, Instruction inst, index8 operand, A
 }
 
 
-BytecodeContext * VMCreateRootContext(Service * service, Atom * arguments)
+BytecodeContext * VMCreateRootContext(ServiceRecord * service, Atom * arguments)
 {
  	BytecodeContext * context = CreateBytecodeContext(service, 0);
 	// copy arguments to context
@@ -187,7 +187,7 @@ iterate:
 			 * to keep a reference to this atom so that the service cannot be deallocated.
 			 */
 			Atom serviceSignature = readOperand(context, inst, OPERAND_LEFT);
-			Service service = RegistryFindService(serviceSignature);
+			ServiceRecord service = RegistryGetServiceRecord(serviceSignature);
 			BytecodeContext * newContext = CreateBytecodeContext(&service, context);
 			writeOperand(context, inst, OPERAND_RIGHT, (Atom) newContext);
 			break;

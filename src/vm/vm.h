@@ -23,7 +23,7 @@ void VMInitialize(void * stack,  size32 stackSize);
  *  RESUME
  * 
  */
-BytecodeContext * VMCreateRootContext(Service * service, Atom * arguments);
+BytecodeContext * VMCreateRootContext(ServiceRecord * service, Atom * arguments);
 
 /**
  * Start VM execution with the given context as root context.

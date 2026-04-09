@@ -46,12 +46,12 @@ static void copyListDatums(Atom list, Atom * atoms)
  * The child context contains pointers to the bytecode program
  * and a working copy of the registers used.
  */
-BytecodeContext * CreateBytecodeContext(Service * service, BytecodeContext * parentContext)
+BytecodeContext * CreateBytecodeContext(ServiceRecord * service, BytecodeContext * parentContext)
 {
 	ASSERT(service->type == SERVICE_BYTECODE)
 
 	// determine context size
-	Atom bytecode = service->service.bytecode;
+	Atom bytecode = service->provider.bytecode;
 	size8 arity = FormArity(service->form);
 	Atom registersList = BytecodeGetRegisters(bytecode);
 	size8 nRegisters = ListLength(registersList);

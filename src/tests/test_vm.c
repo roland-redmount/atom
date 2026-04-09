@@ -22,7 +22,7 @@ typedef struct {
 	// Atom form;
 	// Atom parameters;
 	Atom registers;		// a list
-	Service service;
+	Atom service;
 } BytecodeServiceFixture;
 
 
@@ -110,9 +110,12 @@ static void teardownBytecodeFixture(BytecodeServiceFixture fixture)
 void testBytecodeProgram1(void)
 {
 	BytecodeServiceFixture fixture = setupBytecodeFixture1();
-	ASSERT_INT32_EQUAL(fixture.service.type, SERVICE_BYTECODE)
-	ASSERT_TRUE(IsPredicateForm(fixture.service.form))
-	ASSERT_TRUE(IsList(fixture.service.parameters))
+	ServiceRecord record = RegistryGetServiceRecord(fixture.service);
+	PrintPredicateForm(record.form);
+
+	ASSERT_INT32_EQUAL(record.type, SERVICE_BYTECODE)
+	ASSERT_TRUE(IsPredicateForm(record.form))
+	ASSERT_TRUE(IsList(record.parameters))
 	ASSERT_TRUE(IsBytecode(fixture.bytecode))
 	ASSERT_TRUE(IsList(fixture.registers))
 	
@@ -150,12 +153,13 @@ void testBytecodeProgram1(void)
 void testExecuteByteCode1(void)
 {
 	BytecodeServiceFixture fixture = setupBytecodeFixture1();
-	PrintPredicateForm(fixture.service.form);
+	ServiceRecord record = RegistryGetServiceRecord(fixture.service);
+	PrintPredicateForm(record.form);
 	PrintChar('\n');
 	
 	// NOTE: arguments must be in canonical order
 	Atom arguments[2] = {CreateInt(3).atom,  CreateInt(0).atom};
-	BytecodeContext * rootContext = VMCreateRootContext(&fixture.service, arguments);
+	BytecodeContext * rootContext = VMCreateRootContext(&record, arguments);
 	VMExecute(rootContext);
 	Atom * results = ContextArguments(rootContext);
 	// results should be 3 * 3 
@@ -212,7 +216,7 @@ BytecodeServiceFixture setupBytecodeFixture2(void)
 	// We could use the service signature (formula), but who keeps the reference?
 	BytecodeOperandConstant(
 		&bytecodeDraft, OPERAND_LEFT,
-		CreateTypedAtom(AT_ID, ServiceCreateSignature(&childFixture.service))
+		CreateTypedAtom(AT_SERVICE, childFixture.service)
 	);
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
@@ -263,12 +267,13 @@ BytecodeServiceFixture setupBytecodeFixture2(void)
 void testExecuteByteCode2(void)
 {
 	BytecodeServiceFixture fixture = setupBytecodeFixture2();
-	PrintPredicateForm(fixture.service.form);
+	ServiceRecord record = RegistryGetServiceRecord(fixture.service);
+	PrintPredicateForm(record.form);
 	PrintChar('\n');
 	
 	// NOTE: arguments must be in canonical order
 	Atom arguments[2] = {CreateInt(3).atom,  CreateInt(0).atom};
-	BytecodeContext * rootContext = VMCreateRootContext(&fixture.service, arguments);
+	BytecodeContext * rootContext = VMCreateRootContext(&record, arguments);
 
 	VMExecute(rootContext);
 	Atom * results = ContextArguments(rootContext);
@@ -284,7 +289,7 @@ void testExecuteByteCode2(void)
  * Create a service 
  * TODO: the service needs atom types in order to interface with bytecode
  */
-Service setupTableService(void)
+Atom setupTableService(void)
 {
 	// form (foo barbar)
 	Atom roles[2] = {CreateNameFromCString("foo"), CreateNameFromCString("bar")};
@@ -293,7 +298,7 @@ Service setupTableService(void)
 	IFactRelease(roles[1]);
 	// create the service
 	BTree * btree = CreateRelationBTree(2);
-	Service service = RegistryAddBTreeService(form, btree);
+	Atom service = RegistryAddBTreeService(form, btree);
 
 	// Assert facts
 	TypedAtom actors1[2] = {
@@ -315,12 +320,14 @@ Service setupTableService(void)
 }
 
 
-void teardownTableService(Service service)
+void teardownTableService(Atom service)
 {
-	ASSERT(service.type == SERVICE_BTREE)
+	ServiceRecord record = RegistryGetServiceRecord(service);
+
+	ASSERT(record.type == SERVICE_BTREE)
 	
 	// TODO: need a way to retract all facts encoded by the service
-	
+	ASSERT(false)
 }
 
 
@@ -348,7 +355,10 @@ BytecodeServiceFixture setupBytecodeFixture3(void)
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
 	fixture.registers = CreateListFromArray(
-		(TypedAtom []) {CreateInt(0), {.type = AT_CONTEXT, .atom = 0}},
+		(TypedAtom []) {
+			CreateInt(0),
+			CreateTypedAtom(AT_CONTEXT, 0)
+		},
 		2
 	);
 
@@ -404,7 +414,7 @@ BytecodeServiceFixture setupBytecodeFixture3(void)
 
 void testExecuteBytecode3(void)
 {
-	Service tableService = setupTableService();
+	Atom tableService = setupTableService();
 	BytecodeServiceFixture fixture = setupBytecodeFixture3();
 
 	// Do stuff

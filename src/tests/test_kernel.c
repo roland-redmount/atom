@@ -17,17 +17,19 @@ void testAssertRetract(void)
 	NameRelease(roles[0]);
 	NameRelease(roles[1]);
 	
-	Service service = RegistryFindBTreeService(form);
-	ASSERT(service.type == SERVICE_NONE)
+	// check that service does not already exist
+	ServiceRecord record = RegistryFindBTreeService(form);
+	ASSERT(record.type == SERVICE_NONE)
 
+	// asserting the first fact should create the service
 	TypedAtom actors1[2] = {
 		CreateTypedAtom(AT_ID, CreateStringFromCString("barf")),
 		CreateInt(-1)
 	};
 	AssertFact(form, actors1);
-	service = RegistryFindBTreeService(form);
-	ASSERT(service.type == SERVICE_BTREE)
-	BTree * btree = service.service.tree;
+	record = RegistryFindBTreeService(form);
+	ASSERT(record.type == SERVICE_BTREE)
+	BTree * btree = record.provider.tree;
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 1)
 
 	TypedAtom actors2[] = {
@@ -40,8 +42,10 @@ void testAssertRetract(void)
 	RetractFact(form, actors2);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 1)
 
+	// retracting the last fact should remove the service
 	RetractFact(form, actors1);
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 0)
+	record = RegistryFindBTreeService(form);
+	ASSERT(record.type == SERVICE_NONE)
 
 	ReleaseTypedAtom(actors1[0]);
 	ReleaseTypedAtom(actors2[1]);

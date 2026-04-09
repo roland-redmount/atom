@@ -32,6 +32,7 @@ enum ServiceType {
 };
 
 typedef struct s_Service {
+	Atom service;
 	// we store the form and parameters lists of the signature separately
 	// to allow iterating across all services matching a given form
 	Atom form;
@@ -44,8 +45,8 @@ typedef struct s_Service {
 	union {
 		BTree * tree;
 		Atom bytecode;
-	} service;
-} Service;
+	} provider;
+} ServiceRecord;
 
 
 /**
@@ -83,42 +84,36 @@ void RegistryRemoveCoreBTreeService(index32 index);
 
 /**
  * Add a B-tree backed service the registry.
- * Since B-trees can read and write any column, 
- * TODO: how to handle parameter i/o mode? B-tree supports in/out for all arguments
+ * The parameter field of the service record will be 0.
+ * Returns an AT_SERVICE atom.
  */
-Service RegistryAddBTreeService(Atom form, BTree * btree);
+Atom RegistryAddBTreeService(Atom form, BTree * btree);
 
 /**
- * Add a bytecode service to the registry
+ * Add a bytecode service to the registry.
+ * Returns an AT_SERVICE atom.
  */
-Service RegistryAddBytecodeService(Atom signature, Atom bytecode);
+Atom RegistryAddBytecodeService(Atom signature, Atom bytecode);
 
 /**
  * Remove the given service from the registry.
  * 
  * If the service is a relation table, all facts must have been retracted
- * so that table is empty. The B-tree will be deallocated.
+ * so that table is empty; the B-tree will be deallocated.
  */
-void RegistryRemoveService(Service service);
+void RegistryRemoveService(Atom service);
 
 /**
- * Find the service registered for a given signature.
+ * Retrieve a service record.
  * If no service is found, the returned service.type equals SERVICE_NONE
  * For matching services to queries, see dispatch.c
  */
-Service RegistryFindService(Atom signature);
+ServiceRecord RegistryGetServiceRecord(Atom service);
 
 /**
  * Special case for B-tree services (for now)
  */
-Service RegistryFindBTreeService(Atom form);
-
-/**
- * Create a signature (formula) for this service.
- * This is needed due to special encoding of the parameter field.
- * The returned atom must be released by the caller.
- */
-// Atom ServiceCreateSignature(Service const * service);
+ServiceRecord RegistryFindBTreeService(Atom form);
 
 
 /**
@@ -133,7 +128,7 @@ typedef struct {
  */
 void RegistryIterate(Atom form, RegistryIterator * iterator);
 
-Service RegistryIteratorGetService(RegistryIterator * iterator);
+ServiceRecord RegistryIteratorGetService(RegistryIterator * iterator);
 
 
 

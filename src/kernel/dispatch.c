@@ -7,7 +7,7 @@
 #include "lang/Quote.h"
 
 
-Service DispatchQuery(Atom query)
+ServiceRecord DispatchQuery(Atom query)
 {
 	ASSERT(IsFormula(query))
 
@@ -23,7 +23,7 @@ Service DispatchQuery(Atom query)
 	// to output parameters, with types.
 	Atom parameters = 0;
 	Atom signature = CreateFormula(queryForm, parameters);
-	Service service = RegistryFindService(signature);
+	ServiceRecord service = RegistryGetServiceRecord(signature);
 	IFactRelease(signature);
 
 	return service;

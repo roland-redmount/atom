@@ -233,7 +233,7 @@ Atom BytecodeGetConstants(Atom bytecode)
 //  We need a systematic way of deallocating all services,
 //  and dismantling the system in general.
 
-static Service additionService;
+static Atom additionService;
 
 
 /**

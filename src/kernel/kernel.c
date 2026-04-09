@@ -185,9 +185,9 @@ static void setupCoreRoleNames(void)
 
 void bootstrapAssertFact(Atom predicateForm, TypedAtom * actors)
 {
-	Service service = RegistryFindBTreeService(predicateForm);
-	ASSERT(service.type == SERVICE_BTREE)
-	RelationBTreeAddTuple(service.service.tree, actors);
+	ServiceRecord record = RegistryFindBTreeService(predicateForm);
+	ASSERT(record.type == SERVICE_BTREE)
+	RelationBTreeAddTuple(record.provider.tree, actors);
 }
 
 
@@ -447,11 +447,11 @@ void AssertFact(Atom predicateForm, TypedAtom * actors)
 	// TODO: currently we only support creating predicates
 	ASSERT(IsPredicateForm(predicateForm));
 	// add tuple to relation table
-	Service service = RegistryFindBTreeService(predicateForm);
-	if(service.type == SERVICE_BTREE) {
-		RelationBTreeAddTuple(service.service.tree, actors);
+	ServiceRecord record = RegistryFindBTreeService(predicateForm);
+	if(record.type == SERVICE_BTREE) {
+		RelationBTreeAddTuple(record.provider.tree, actors);
 	}
-	else if(service.type == SERVICE_NONE) {
+	else if(record.type == SERVICE_NONE) {
 		// create new relation table
 		size8 arity = PredicateArity(predicateForm);
 		BTree * btree = CreateRelationBTree(arity);
@@ -470,16 +470,16 @@ void AssertFact(Atom predicateForm, TypedAtom * actors)
 
 void RetractFact(Atom predicateForm, TypedAtom * actors)
 {
-	Service service = RegistryFindBTreeService(predicateForm);
-	ASSERT(service.type == SERVICE_BTREE)
-	BTree * btree = service.service.tree;
+	ServiceRecord record = RegistryFindBTreeService(predicateForm);
+	ASSERT(record.type == SERVICE_BTREE)
+	BTree * btree = record.provider.tree;
 	ASSERT(btree)
 	// NOTE: this can cause IFacts to be removed if the tuple
 	// being removed holds the last reference to an IFact
 	RelationBTreeRemoveTuples(btree, actors, REMOVE_NORMAL);
 	// remove btree if empty
 	if(RelationBTreeNRows(btree) == 0) {
-		RegistryRemoveService(service);
+		RegistryRemoveService(record.service);
 	}
 
 	// remove lookup entries for each role in the predicate form
@@ -491,9 +491,9 @@ void RetractAllFacts(Atom predicateForm)
 {
 	// iterate over all facts stored in relation tables
 	// and retract all.
-	Service service = RegistryFindBTreeService(predicateForm);
-	ASSERT(service.type == SERVICE_BTREE)
-	RelationBTreeRemoveTuples(service.service.tree, 0, REMOVE_NORMAL);
+	ServiceRecord record = RegistryFindBTreeService(predicateForm);
+	ASSERT(record.type == SERVICE_BTREE)
+	RelationBTreeRemoveTuples(record.provider.tree, 0, REMOVE_NORMAL);
 
 	LookupRemoveAllPredicateRoles(predicateForm);
 }

@@ -212,9 +212,9 @@ void IFactBeginConjunction(IFactDraft * draft, Atom form, index8 idColumn)
 {
 	ASSERT(!draft->hasBegunConjunction);
 
-	Service service = RegistryFindBTreeService(form);
+	ServiceRecord service = RegistryFindBTreeService(form);
 	ASSERT(service.type == SERVICE_BTREE)
-	BTree * tree = service.service.tree;
+	BTree * tree = service.provider.tree;
 
 	// append new conjunction
 	draft->header.nConjunctions++;
@@ -387,9 +387,9 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 			else
 				queryTuple[j] = anonymousVariable;
 		}
-		Service service = RegistryFindBTreeService(conjunction->form);
+		ServiceRecord service = RegistryFindBTreeService(conjunction->form);
 		ASSERT(service.type == SERVICE_BTREE)
-		BTree * tree = service.service.tree;
+		BTree * tree = service.provider.tree;
 
 		RelationBTreeIterate(tree, queryTuple, &iterator);
 		TypedAtom resultTuple[conjunction->nColumns];
@@ -507,9 +507,9 @@ bool IFactCheckTuple(BTree const * tree, TypedAtom const * tuple)
 		IFactConjunction * conjunctions = header->conjunctions;
 		ASSERT(header);
 		for(index32 j = 0; j < nConjunctions; j++) {
-			Service service = RegistryFindBTreeService(conjunctions[j].form);
+			ServiceRecord service = RegistryFindBTreeService(conjunctions[j].form);
 			ASSERT(service.type == SERVICE_BTREE)
-			BTree * conjunctionTree = service.service.tree;
+			BTree * conjunctionTree = service.provider.tree;
 			if((conjunctionTree == tree) && (conjunctions[j].idColumn == i))
 				return false;
 		}
@@ -548,9 +548,9 @@ void IFactRelease(Atom ifact)
 			// Unfortunately btree_delete() as currently used is not.
 
 			// NOTE: this does not remove entries from the lookup table
-			Service service = RegistryFindBTreeService(conjunction->form);
+			ServiceRecord service = RegistryFindBTreeService(conjunction->form);
 			ASSERT(service.type == SERVICE_BTREE)
-			RelationBTreeRemoveTuples(service.service.tree, queryTuple, REMOVE_PROTECTED);
+			RelationBTreeRemoveTuples(service.provider.tree, queryTuple, REMOVE_PROTECTED);
 		}
 		LookupRemoveAllRoles(ifact);
 

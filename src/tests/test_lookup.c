@@ -88,7 +88,7 @@ void testRemoveAllPredicateRoles(void)
 	Atom barf = CreateNameFromCString("barf");
 	Atom form = CreatePredicateForm((Atom []) {foobar, barf}, 2);
 	BTree * tree = CreateRelationBTree(2);
-	Service service = RegistryAddBTreeService(form, tree);
+	Atom service = RegistryAddBTreeService(form, tree);
 
 	TypedAtom actors1[2] = {CreateTypedAtom(AT_ID, foo), CreateTypedAtom(AT_ID, bar)};
 	AssertFact(form, actors1);
