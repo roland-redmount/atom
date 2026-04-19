@@ -284,7 +284,7 @@ static void executeCheckReferences(void (*function)(void), CheckType checkType)
 	uint32 initialBytesAllocated = AllocatorNBytesAllocated();
 
 	function();
-	
+
 	if(IFactsInitialized()) {
 		int32 refCountDiff = TotalIFactReferenceCount() - initialRefCount;
 		if(checkType != CHECK_TEARDOWN && refCountDiff < 0)

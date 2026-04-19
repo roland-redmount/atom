@@ -18,14 +18,17 @@ Atom CreatePair(TypedAtom left, TypedAtom right)
 
 void AddPairToIFact(IFactDraft * draft, TypedAtom left, TypedAtom right)
 {
-	// assert (pair left right) fact
-	Atom form = GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT);
-
+	// assert (pair left right)
 	index8 pairIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_PAIR);
 	index8 leftIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT);
 	index8 rightIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_RIGHT);
 
-	IFactBeginConjunction(draft, form, pairIndex);
+	IFactBeginConjunction(
+		draft,
+		GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT),
+		RegistryGetCoreTable(FORM_PAIR_LEFT_RIGHT),
+		pairIndex
+	);
 	
 	TypedAtom tuple[3];
 	tuple[leftIndex] = left;

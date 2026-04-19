@@ -3,6 +3,7 @@
 #include "datumtypes/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
+#include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "lang/ClauseForm.h"
 #include "lang/Formula.h"
@@ -295,8 +296,10 @@ static void testClauseBuilder(void)
 
 static void testCStringToPredicate(void)
 {
-	char const * exampleString = "foo 123 bar 456 bar 789 baz 0"; // "foo _x bar 123.45 bar 4567 baz \"foobar\"";
+	char const * exampleString = "foo 123 baz \"foobar\" bar 456 bar 789";
 	Atom predicate = CStringToPredicate(exampleString);
+	// PrintFormula(predicate);
+	// PrintChar('\n');
 
 	Atom predicateForm = FormulaGetForm(predicate);
 	ASSERT_UINT32_EQUAL(PredicateArity(predicateForm), 4)
@@ -304,20 +307,27 @@ static void testCStringToPredicate(void)
 	Atom actorsList = FormulaGetActors(predicate);
 	ASSERT_UINT32_EQUAL(ListLength(actorsList), 4)
 
+	Atom string = CreateStringFromCString("foobar");
+	ASSERT_TRUE(
+		SameTypedAtoms(
+			ListGetElement(actorsList, 2),
+			CreateTypedAtom(AT_ID, string)
+		)
+	)
+	IFactRelease(string);
+
 	IFactRelease(predicate);
 }
 
 
 static void testCStringToClause(void)
 {
+	
 	// NOTE: this string must be in canonical order
-	char const * exampleString = "aarf \"foobar\" | foo _x bar 123.45";
+	char const * exampleString = "foo _x bar 123.45 | aarf \"foobar\"";
 	Atom clause = CStringToClause(exampleString, CStringLength(exampleString));
-
-	// TODO: more complex test cases, and conjunctions, e.g.
-	// foo 42 bar 3.4 | !string "baaz" & + 2 + 2 = 4 & foobar _x | foobar _y & + 3 + 4 = 8
-
 	// PrintFormula(clause);
+	// PrintChar('\n');
 
 	Atom clauseForm = FormulaGetForm(clause);
 	ASSERT_UINT32_EQUAL(ClauseArity(clauseForm), 3)
@@ -325,29 +335,30 @@ static void testCStringToClause(void)
 	Atom actorsList = FormulaGetActors(clause);
 	ASSERT_UINT32_EQUAL(ListLength(actorsList), 3)
 
-	Atom string = CreateStringFromCString("foobar");
 	ASSERT_TRUE(
 		SameTypedAtoms(
 			ListGetElement(actorsList, 1),
-			CreateTypedAtom(AT_ID, string)
-		)
-	)
-	IFactRelease(string);
-	ASSERT_TRUE(
-		SameTypedAtoms(
-			ListGetElement(actorsList, 2),
 			CreateVariable('x')
 		)
 	)
 	ASSERT_TRUE(
 		SameTypedAtoms(
-			ListGetElement(actorsList, 3),
+			ListGetElement(actorsList, 2),
 			CreateFloat64(123.45)
 		)
 	)
-
-
+	Atom string = CreateStringFromCString("foobar");
+	ASSERT_TRUE(
+		SameTypedAtoms(
+			ListGetElement(actorsList, 3),
+			CreateTypedAtom(AT_ID, string)
+		)
+	)
+	IFactRelease(string);
 	IFactRelease(clause);
+
+	// TODO: more complex test cases, and conjunctions, e.g.
+	// foo 42 bar 3.4 | !string "baaz" & + 2 + 2 = 4 & foobar _x | foobar _y & + 3 + 4 = 8
 }
 
 

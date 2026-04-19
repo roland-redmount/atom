@@ -186,9 +186,9 @@ iterate:
 			 * encapsulating a pointer to the service. We would need the bytecode
 			 * to keep a reference to this atom so that the service cannot be deallocated.
 			 */
-			Atom serviceSignature = readOperand(context, inst, OPERAND_LEFT);
-			ServiceRecord service = RegistryGetServiceRecord(serviceSignature);
-			BytecodeContext * newContext = CreateBytecodeContext(&service, context);
+			Atom service = readOperand(context, inst, OPERAND_LEFT);
+			ServiceRecord record = RegistryGetServiceRecord(service);
+			BytecodeContext * newContext = CreateBytecodeContext(&record, context);
 			writeOperand(context, inst, OPERAND_RIGHT, (Atom) newContext);
 			break;
 		}

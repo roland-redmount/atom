@@ -13,6 +13,14 @@
  */
 Atom CreatePredicateForm(Atom const * roles, size8 nRoles);
 
+
+/**
+ * Create a predicate form from a list of roles (AT_NAME),
+ * with a custom assertFact function. This is used when bootstrapping the kernel.
+ */
+Atom CreatePredicateFormBootstrap(Atom const * roles, size8 nRoles, void (* assertFact)(Atom, TypedAtom *));
+
+
 bool IsPredicateForm(Atom form);
 
 /**

@@ -46,13 +46,29 @@ void testString(void)
 }
 
 
+void fuzzTestString(void)
+{
+	char const * cString = "foobar";
+
+	Atom string = CreateStringFromCString(cString);
+	for(index32 i = 0; i < 100; i++) {
+		Atom stringClone = CreateStringFromCString(cString);
+		ASSERT_DATA64_EQUAL(string, stringClone);
+		IFactRelease(stringClone);
+	}
+	IFactRelease(string);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
 
 	ExecuteTest(testString);
+	ExecuteTest(fuzzTestString);
 	
 	KernelShutdown();
 
 	TestSummary();
 }
+

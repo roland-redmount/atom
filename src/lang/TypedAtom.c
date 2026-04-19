@@ -42,19 +42,29 @@ TypedAtom CreateTypedAtom(byte type, Atom atom)
 
 void AcquireTypedAtom(TypedAtom typedAtom)
 {
-	if(typedAtom.type == AT_ID)
+	switch(typedAtom.type) {
+		case AT_ID:
 		IFactAcquire(typedAtom.atom);
-	else if(typedAtom.type == AT_NAME)
+		break;
+
+		case AT_NAME:
 		NameAcquire(typedAtom.atom);
+		break;
+	}
 }
 
 
-void ReleaseTypedAtom(TypedAtom typeAtom)
+void ReleaseTypedAtom(TypedAtom typedAtom)
 {
-	if(typeAtom.type == AT_ID)
-		IFactRelease(typeAtom.atom);
-	else if(typeAtom.type == AT_NAME)
-		NameRelease(typeAtom.atom);
+	switch(typedAtom.type) {
+		case AT_ID:
+		IFactRelease(typedAtom.atom);
+		break;
+
+		case AT_NAME:
+		NameRelease(typedAtom.atom);
+		break;
+	}
 }
 
 

@@ -24,10 +24,10 @@ Atom CreateQuote(Atom quoted)
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	Atom form = GetCorePredicateForm(FORM_QUOTE_QUOTED);
-
 	IFactBeginConjunction(
-		&draft, form,
+		&draft,
+		GetCorePredicateForm(FORM_QUOTE_QUOTED),
+		RegistryGetCoreTable(FORM_QUOTE_QUOTED),
 		CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTE)
 	);
 	

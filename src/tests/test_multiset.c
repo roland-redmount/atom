@@ -65,8 +65,8 @@ static void testMultiset(void)
 	ASSERT_DATA64_EQUAL(multiset, multiset3)
 	IFactRelease(multiset3);
 
-	// asserting a fact (multiset @multiset element 'D' multiple 1) should fail
-	// TODO: this fails now
+	// adding a tuple (multiset @multiset element 'D' multiple 1) should fail
+	// since @multiset is an ifact
 	TypedAtom tuple1[3];
 	MultisetSetTuple(tuple1, CreateTypedAtom(AT_ID, multiset), GetAlphabetLetter('D'), CreateUInt(1));
 	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(table, tuple1), TUPLE_PROTECTED)

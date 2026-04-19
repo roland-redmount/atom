@@ -35,19 +35,19 @@ static AtomsFixture createAtomsFixture(void)
 static void testCreateList(void)
 {
 	AtomsFixture fixture = createAtomsFixture();
+	BTree * listLength = RegistryGetCoreTable(FORM_LIST_LENGTH);
+	BTree * listPositionElement = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
+	size32 listLengthNRowsInitial = RelationBTreeNRows(listLength);
+	size32 listPositionElementNRowsInitial = RelationBTreeNRows(listPositionElement);
 	
 	Atom list = CreateListFromArray(fixture.atoms, EXAMPLE_LIST_N_ELEMENTS);
-	
 	// test (list length) relation table
-	BTree * listLength = RegistryGetCoreTable(FORM_LIST_LENGTH);
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(listLength), 1)
-
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(listLength),listLengthNRowsInitial + 1)
 	// test (list position element) relation table
-	Atom listPositionElementForm = GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT);
-	ServiceRecord record = RegistryFindBTreeService(listPositionElementForm);
-	ASSERT(record.type == SERVICE_BTREE)
-	BTree * listPositionElement = record.provider.tree;
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(listPositionElement), EXAMPLE_LIST_N_ELEMENTS)
+	ASSERT_UINT32_EQUAL(
+		RelationBTreeNRows(listPositionElement),
+		listPositionElementNRowsInitial + EXAMPLE_LIST_N_ELEMENTS
+	)
 
 	// test elements are as expected
 	for(index8 i = 0; i < EXAMPLE_LIST_N_ELEMENTS; i++)

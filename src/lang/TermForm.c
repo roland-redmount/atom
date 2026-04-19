@@ -27,7 +27,9 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 	Atom termForm = GetCorePredicateForm(FORM_TERM_FORM);
 
 	IFactBeginConjunction(
-		&draft, termForm,
+		&draft,
+		termForm,
+		RegistryGetCoreTable(FORM_TERM_FORM),
 		CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM)
 	);
 	TypedAtom tuple[3];

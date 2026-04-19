@@ -111,7 +111,6 @@ void testBytecodeProgram1(void)
 {
 	BytecodeServiceFixture fixture = setupBytecodeFixture1();
 	ServiceRecord record = RegistryGetServiceRecord(fixture.service);
-	PrintPredicateForm(record.form);
 
 	ASSERT_INT32_EQUAL(record.type, SERVICE_BYTECODE)
 	ASSERT_TRUE(IsPredicateForm(record.form))
@@ -213,7 +212,8 @@ BytecodeServiceFixture setupBytecodeFixture2(void)
 
 	// CTX <number triple> #2
 	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
-	// We could use the service signature (formula), but who keeps the reference?
+	// Here we store the service atom in a constant,
+	// which will trigger AcquireTypedAtom()
 	BytecodeOperandConstant(
 		&bytecodeDraft, OPERAND_LEFT,
 		CreateTypedAtom(AT_SERVICE, childFixture.service)

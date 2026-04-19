@@ -82,6 +82,8 @@ struct s_Kernel {
 	void * vmStack;
 
 	// Core predicate forms and roles, defined during bootstrapping
+	// TODO: this is redundant with the ServiceRegistry core tables array
+	//  which also stores the core predicate forms
 	Atom corePredicateForms[N_CORE_PREDICATES + 1];
 	Atom coreRoleNames[N_CORE_ROLES + 1];
 	index8 corePredicateRoleIndex[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY];
@@ -191,7 +193,7 @@ void bootstrapAssertFact(Atom predicateForm, TypedAtom * actors)
 }
 
 
-static void setupCorePredicateForms(void)
+static void setupCoreServices(void)
 {
 	/** 
 	 * We must first create the forms
@@ -239,7 +241,7 @@ static void setupCorePredicateForms(void)
 	kernel.corePredicateForms[FORM_PREDICATE_FORM] = predicateForm;
 
 	// create services and set role index arrays
-	RegistryAddCoreBTreeService(
+	BTree * multisetBTree = RegistryAddCoreBTreeService(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
 		multisetForm,
 		corePredicateArity[FORM_MULTISET_ELEMENT_MULTIPLE]
@@ -249,7 +251,7 @@ static void setupCorePredicateForms(void)
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][1] = MULTISET_ELEMENT_COLUMN;
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][2] = MULTISET_MULTIPLE_COLUMN;
 
-	RegistryAddCoreBTreeService(
+	BTree * predicateFormBTree = RegistryAddCoreBTreeService(
 		FORM_PREDICATE_FORM,
 		predicateForm,
 		corePredicateArity[FORM_PREDICATE_FORM]
@@ -264,7 +266,7 @@ static void setupCorePredicateForms(void)
 
 	// defining facts
 	// (multiset @multiset-form element "multiset" multiple 1)
-	IFactBeginConjunction(&multisetDraft, multisetForm, MULTISET_MULTISET_COLUMN);
+	IFactBeginConjunction(&multisetDraft,multisetForm, multisetBTree, MULTISET_MULTISET_COLUMN);
 	MultisetSetTuple(
 		tuple,
 		CreateTypedAtom(AT_ID, multisetForm),
@@ -291,7 +293,7 @@ static void setupCorePredicateForms(void)
 	IFactEndConjunction(&multisetDraft);
 
 	// (predicate-form @multiset-form)
-	IFactBeginConjunction(&multisetDraft, predicateForm, 0);
+	IFactBeginConjunction(&multisetDraft, predicateForm, predicateFormBTree, 0);
 	IFactAddClause(&multisetDraft, &multisetFormAtom);
 	IFactEndConjunction(&multisetDraft);
 
@@ -303,7 +305,7 @@ static void setupCorePredicateForms(void)
 	 * and provide our own bootstrapAssertFact() function.
 	 * This gives us 1 reference to the multisetForm atom.
 	 */
-	IFactEndCustom(&multisetDraft, multisetForm, bootstrapAssertFact);
+	IFactEndBootstrap(&multisetDraft, multisetForm, bootstrapAssertFact);
 
 	// add lookup
 	AtomAddRole(multisetForm, multisetForm, GetCoreRoleName(ROLE_MULTISET));
@@ -316,7 +318,7 @@ static void setupCorePredicateForms(void)
 
 	// defining facts
 	// (multiset @predicate-form element "predicate-form" multiple 1)
-	IFactBeginConjunction(&predicateFormDraft, multisetForm, MULTISET_MULTISET_COLUMN);
+	IFactBeginConjunction(&predicateFormDraft, multisetForm, multisetBTree, MULTISET_MULTISET_COLUMN);
 	MultisetSetTuple(
 		tuple,
 		predicateFormAtom,
@@ -326,12 +328,12 @@ static void setupCorePredicateForms(void)
 	IFactAddClause(&predicateFormDraft, tuple);
 	IFactEndConjunction(&predicateFormDraft);
 	// (predicate-form @predicate-form)
-	IFactBeginConjunction(&predicateFormDraft, predicateForm, 0);
+	IFactBeginConjunction(&predicateFormDraft, predicateForm, predicateFormBTree, 0);
 	IFactAddClause(&predicateFormDraft, &predicateFormAtom);
 	IFactEndConjunction(&predicateFormDraft);
 
 	// This gives 1 reference to the predicateForm atom
-	IFactEndCustom(&predicateFormDraft, predicateForm, bootstrapAssertFact);
+	IFactEndBootstrap(&predicateFormDraft, predicateForm, bootstrapAssertFact);
 
 	// add lookup
 	AtomAddRole(predicateForm, multisetForm, GetCoreRoleName(ROLE_MULTISET));
@@ -339,7 +341,7 @@ static void setupCorePredicateForms(void)
 
 	// We can now use CreatePredicateForm() and AssertFact()
 
-	// Create remaining forms
+	// Create remaining forms and their associated services
 	Atom roles[CORE_FORMS_MAX_ARITY];	
 	for(index32 i = FORM_TERM_FORM; i <= N_CORE_PREDICATES; i++) {
 		for(index8 j = 0; j < corePredicateArity[i]; j++)
@@ -357,23 +359,18 @@ static void setupCorePredicateForms(void)
 			);
 		}
 	}
+	// NOTE: we now hold 1 reference to each of the core predicate forms.
 
 	// verify hardcoded multiset role index matches computed index
 	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET) == MULTISET_MULTISET_COLUMN)
 	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT) == MULTISET_ELEMENT_COLUMN)
 	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE) == MULTISET_MULTIPLE_COLUMN)
 
-	// NOTE: we now hold 1 reference to each of the core predicate forms.
-}
-
-
-static void teardownCorePredicateForms(void)
-{
-	for(index32 i = N_CORE_PREDICATES; i > 0; i--) {
-		if(i > 2)
-			RegistryRemoveCoreBTreeService(i);
+	RegistryFinalizeCoreServices();
+	// The service registry now holds references to each core predicate form,
+	// so we can release our references
+	for(index32 i = 1; i <= N_CORE_PREDICATES; i++)
 		IFactRelease(kernel.corePredicateForms[i]);
-	}
 }
 
 
@@ -385,7 +382,7 @@ void KernelInitialize(void)
 	InitializeIFacts();
 
 	setupCoreRoleNames();
-	setupCorePredicateForms();
+	setupCoreServices();
 
 	VMInitialize(kernel.vmStack, VM_STACK_AREA_SIZE);
 
@@ -420,7 +417,13 @@ void KernelShutdown(void)
 		ASSERT(false);
 	}
 
-	teardownCorePredicateForms();
+	/**
+	 * NOTE: The below removes all core services to rewind everything
+	 * back to initial state. This is rather complicated due to special
+	 * bootstrap considerations, and it is unnecessary in practise, as
+	 * we would typically never completely destroy the "world" anyway.
+	 */
+	RegistryTeardownCoreServices();
 
 	ASSERT(TotalIFactCount() == 0)
 	ASSERT(TotalIFactReferenceCount() == 0)
@@ -461,9 +464,6 @@ void AssertFact(Atom predicateForm, TypedAtom * actors)
 	else {
 		ASSERT(false)
 	}
-
-
-	
 	LookupAddPredicateRoles(predicateForm, actors);
 }
 

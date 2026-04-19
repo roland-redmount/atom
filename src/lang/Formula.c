@@ -35,6 +35,7 @@ Atom CreateFormula(Atom form, Atom actorsList)
 	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_FORMULA_FORM_ACTORS),
+		RegistryGetCoreTable(FORM_FORMULA_FORM_ACTORS),
 		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA)
 	);
 

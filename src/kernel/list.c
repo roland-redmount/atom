@@ -55,7 +55,9 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 	Atom listLengthForm = GetCorePredicateForm(FORM_LIST_LENGTH);
 
 	IFactBeginConjunction(
-		draft, listLengthForm, 
+		draft,
+		listLengthForm, 
+		RegistryGetCoreTable(FORM_LIST_LENGTH),
 		CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LIST)
 	);
 
@@ -73,6 +75,7 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 		IFactBeginConjunction(
 			draft,
 			GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT),
+			RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT),
 			CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST)
 		);
 
@@ -101,6 +104,7 @@ index32 ListAddElement(IFactDraft * draft, TypedAtom element)
 		IFactBeginConjunction(
 			draft,
 			GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT),
+			RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT),
 			CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST)
 		);
 	}

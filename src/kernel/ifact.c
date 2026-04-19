@@ -101,7 +101,7 @@ static int8 btreeCompareByHash(void const * item1, void const * item2, size32 it
 void InitializeIFacts(void)
 {
 	// check packed data structures
-	ASSERT(sizeof(IFactConjunction) == 12);
+	ASSERT(sizeof(IFactConjunction) == 20);
 	ASSERT(sizeof(IFactHeader) == 24);
 
 	SetMemory(&ifactStorage, sizeof ifactStorage, 0);
@@ -208,15 +208,11 @@ void IFactBegin(IFactDraft * draft)
 }
 
 
-void IFactBeginConjunction(IFactDraft * draft, Atom form, index8 idColumn)
+void IFactBeginConjunction(IFactDraft * draft, Atom form, BTree * btree, index8 idColumn)
 {
 	ASSERT(!draft->hasBegunConjunction);
 
-	ServiceRecord service = RegistryFindBTreeService(form);
-	ASSERT(service.type == SERVICE_BTREE)
-	BTree * tree = service.provider.tree;
-
-	// append new conjunction
+	// append new conjunction to array
 	draft->header.nConjunctions++;
 	draft->header.conjunctions = Reallocate(
 		draft->header.conjunctions,
@@ -224,9 +220,10 @@ void IFactBeginConjunction(IFactDraft * draft, Atom form, index8 idColumn)
 	);
 	IFactConjunction * conjunction = lastConjunction(&(draft->header));
 	conjunction->form = form;
+	conjunction->btree = btree;
 	conjunction->idColumn = idColumn;
 	conjunction->nRows = 0;
-	conjunction->nColumns = RelationBTreeNColumns(tree);
+	conjunction->nColumns = RelationBTreeNColumns(btree);
 
 	draft->hasBegunConjunction = true;
 }
@@ -274,28 +271,26 @@ static void sortIFactDraft(IFactDraft * draft)
 {
 	IFactHeader * ifact = &(draft->header);
 	// first sort the tuples for each conjunction
-	IFactConjunction * conjunction = ifact->conjunctions;
 	Atom forms[ifact->nConjunctions];
 	size32 tupleBlockSizes[ifact->nConjunctions];
 	TypedAtom * tuples = draft->tupleStorage;
 	for(index8 i = 0; i < ifact->nConjunctions; i++) {
-		SortTuples(tuples, conjunction->nRows, conjunction->nColumns);
-
+		IFactConjunction * conjunction = &(ifact->conjunctions[i]);
 		size32 nAtoms = conjunction->nRows * conjunction->nColumns;
 		tupleBlockSizes[i] = nAtoms * sizeof(TypedAtom);
 		forms[i] = conjunction->form;
 
+		SortTuples(tuples, conjunction->nRows, conjunction->nColumns);
 		tuples += nAtoms;
-		conjunction++;
 	}
 
 	// then sort the conjunctions by form
 	// NOTE: this ordering depends on the form atom (ifact) and so is system-dependent
-	index8 ordering[ifact->nConjunctions];
-	FindArrayOrdering((byte *) &forms, ifact->nConjunctions, sizeof(TypedAtom), ordering, 0);
-	ReorderArray(ifact->conjunctions, ordering, ifact->nConjunctions, sizeof(IFactConjunction));
+	index8 conjunctionOrder[ifact->nConjunctions];
+	FindArrayOrdering((byte *) &forms, ifact->nConjunctions, sizeof(Atom), conjunctionOrder, 0);
+	ReorderArray(ifact->conjunctions, conjunctionOrder, ifact->nConjunctions, sizeof(IFactConjunction));
 	// reorder the tuple blocks accordingly
-	ReorderRaggedArray(draft->tupleStorage, ordering, tupleBlockSizes, ifact->nConjunctions);
+	ReorderRaggedArray(draft->tupleStorage, conjunctionOrder, tupleBlockSizes, ifact->nConjunctions);
 }
 
 
@@ -387,11 +382,7 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 			else
 				queryTuple[j] = anonymousVariable;
 		}
-		ServiceRecord service = RegistryFindBTreeService(conjunction->form);
-		ASSERT(service.type == SERVICE_BTREE)
-		BTree * tree = service.provider.tree;
-
-		RelationBTreeIterate(tree, queryTuple, &iterator);
+		RelationBTreeIterate(conjunction->btree, queryTuple, &iterator);
 		TypedAtom resultTuple[conjunction->nColumns];
 		while(RelationBTreeIteratorHasTuple(&iterator)) {
 			RelationBTreeIteratorGetTuple(&iterator, resultTuple);
@@ -410,7 +401,7 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 }
 
 
-Atom IFactEndCustom(IFactDraft * draft, data64 hash, void (* assertFact)(Atom predicateForm, TypedAtom * actors))
+Atom IFactEndBootstrap(IFactDraft * draft, data64 hash, void (* assertFact)(Atom predicateForm, TypedAtom * actors))
 {
 	ASSERT(!draft->hasBegunConjunction);
 	ASSERT(draft->header.conjunctions);
@@ -449,7 +440,7 @@ Atom IFactEndCustom(IFactDraft * draft, data64 hash, void (* assertFact)(Atom pr
 
 Atom IFactEnd(IFactDraft * draft)
 {
-	return IFactEndCustom(draft, 0, AssertFact);
+	return IFactEndBootstrap(draft, 0, AssertFact);
 }
 
 
@@ -507,10 +498,7 @@ bool IFactCheckTuple(BTree const * tree, TypedAtom const * tuple)
 		IFactConjunction * conjunctions = header->conjunctions;
 		ASSERT(header);
 		for(index32 j = 0; j < nConjunctions; j++) {
-			ServiceRecord service = RegistryFindBTreeService(conjunctions[j].form);
-			ASSERT(service.type == SERVICE_BTREE)
-			BTree * conjunctionTree = service.provider.tree;
-			if((conjunctionTree == tree) && (conjunctions[j].idColumn == i))
+			if((conjunctions[j].btree == tree) && (conjunctions[j].idColumn == i))
 				return false;
 		}
  	}
@@ -548,9 +536,7 @@ void IFactRelease(Atom ifact)
 			// Unfortunately btree_delete() as currently used is not.
 
 			// NOTE: this does not remove entries from the lookup table
-			ServiceRecord service = RegistryFindBTreeService(conjunction->form);
-			ASSERT(service.type == SERVICE_BTREE)
-			RelationBTreeRemoveTuples(service.provider.tree, queryTuple, REMOVE_PROTECTED);
+			RelationBTreeRemoveTuples(conjunction->btree, queryTuple, REMOVE_PROTECTED);
 		}
 		LookupRemoveAllRoles(ifact);
 

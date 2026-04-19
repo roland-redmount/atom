@@ -25,6 +25,7 @@
  */
 typedef struct s_IFactConjunction {
 	Atom form;				// clause or predicate form for the relation
+	BTree * btree;			// B-tree storing the relation
 	index8 idColumn;		// these 3 fields total 4 bytes
 	size8 nColumns;
 	size16 nRows;
@@ -81,7 +82,7 @@ void IFactBegin(IFactDraft * draft);
  * Begin a new conjunction for the IFact currently being created.
  * Each clause (row, fact) in the conjunction will have the given form.
  */
-void IFactBeginConjunction(IFactDraft * draft, Atom form, index8 idColumn);
+void IFactBeginConjunction(IFactDraft * draft, Atom form, BTree * btree, index8 idColumn);
 
 /**
  * Add a tuple that defines one clause of the current conjunction fact.
@@ -110,7 +111,7 @@ size32 IFactDraftCurrentNClauses(IFactDraft * draft);
 Atom IFactEnd(IFactDraft * draft);
 
 // This variant is only used during bootstrapping.
-Atom IFactEndCustom(IFactDraft * draft, data64 hash, void (* assertFact)(Atom predicateForm, TypedAtom * actors));
+Atom IFactEndBootstrap(IFactDraft * draft, data64 hash, void (* assertFact)(Atom predicateForm, TypedAtom * actors));
 
 void IFactAcquire(Atom ifact);
 void IFactRelease(Atom ifact);

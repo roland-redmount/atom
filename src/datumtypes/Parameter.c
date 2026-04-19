@@ -14,7 +14,7 @@ typedef union
 
 TypedAtom CreateParameter(byte io, byte type)
 {
-	Parameter param;
+	Parameter param = {0};
 	param.fields.io = io;
 	param.fields.atomType = type;
 	return (TypedAtom) {.type = AT_PARAMETER, .atom = param.value};

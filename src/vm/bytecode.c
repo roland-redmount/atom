@@ -32,7 +32,12 @@ static void setBytecodeProgram(IFactDraft * draft, Atom program)
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_BYTECODE);
 	index8 programIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
 
-	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_PROGRAM), bytecodeIndex);
+	IFactBeginConjunction(
+		draft,
+		GetCorePredicateForm(FORM_BYTECODE_PROGRAM),
+		RegistryGetCoreTable(FORM_BYTECODE_CONSTANTS),
+		bytecodeIndex
+	);
 	TypedAtom tuple[2];
 	tuple[programIndex] = CreateTypedAtom(AT_ID, program);
 	IFactAddClause(draft, tuple);
@@ -46,7 +51,12 @@ static void setBytecodeRegisters(IFactDraft * draft, Atom registersList)
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_BYTECODE);
 	index8 registersIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
 
-	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_REGISTERS), bytecodeIndex);
+	IFactBeginConjunction(
+		draft,
+		GetCorePredicateForm(FORM_BYTECODE_REGISTERS),
+		RegistryGetCoreTable(FORM_BYTECODE_REGISTERS),
+		bytecodeIndex
+	);
 	TypedAtom tuple[2];
 	tuple[registersIndex] = CreateTypedAtom(AT_ID, registersList);
 	IFactAddClause(draft, tuple);
@@ -59,7 +69,12 @@ static void setBytecodeConstants(IFactDraft * draft, Atom constantsList)
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_BYTECODE);
 	index8 constantsIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
 
-	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_CONSTANTS), bytecodeIndex);
+	IFactBeginConjunction(
+		draft,
+		GetCorePredicateForm(FORM_BYTECODE_CONSTANTS),
+		RegistryGetCoreTable(FORM_BYTECODE_CONSTANTS),
+		bytecodeIndex
+	);
 	TypedAtom tuple[2];
 	tuple[constantsIndex] = CreateTypedAtom(AT_ID, constantsList);
 	IFactAddClause(draft, tuple);

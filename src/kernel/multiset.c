@@ -31,10 +31,10 @@ Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size3
 void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, void const * data, size32 nUniqueElements)
 {
 	// assert (multiset element multiple) facts
-	Atom form = GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE);
-
 	IFactBeginConjunction(
-		draft, form,
+		draft, 
+		GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE),
+		RegistryGetCoreTable(FORM_MULTISET_ELEMENT_MULTIPLE),
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 	);
 	TypedAtom tuple[3];
