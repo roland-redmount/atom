@@ -67,7 +67,7 @@ static int8 compareServiceRecords(ServiceRecord const * record, ServiceRecord co
 		data32 recordOrKeyParameters32 = recordOrKey->service && 0xFFFFFFFF;
 		if(recordParameters32 < recordOrKeyParameters32)
 			return -1;
-		else if(recordParameters32 < recordOrKeyParameters32)
+		else if(recordParameters32 > recordOrKeyParameters32)
 			return 1;
 		else
 			return 0;
@@ -244,13 +244,15 @@ Atom RegistryAddBTreeService(Atom form, BTree * btree)
 Atom RegistryAddBytecodeService(Atom signature, Atom bytecode)
 {
 	ASSERT(IsFormula(signature))
+	Atom form = FormulaGetForm(signature);
+	Atom parameters = FormulaGetActors(signature);
 	ServiceRecord record = {
-		.form = FormulaGetForm(signature),
-		.parameters = FormulaGetActors(signature),
+		.service = serviceRecordHash(form, parameters),
+		.form = form,
+		.parameters = parameters,
 		.type = SERVICE_BYTECODE,
 		.provider.bytecode = bytecode
 	};
-	record.service = serviceRecordHash(record.form, record.parameters);
 	// TODO: here we must ensure that no other service exists
 	// that can "overlap" with this one during dispatch
 	addService(&record);

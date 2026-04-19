@@ -188,6 +188,7 @@ iterate:
 			 */
 			Atom service = readOperand(context, inst, OPERAND_LEFT);
 			ServiceRecord record = RegistryGetServiceRecord(service);
+			ASSERT(record.type == SERVICE_BYTECODE);
 			BytecodeContext * newContext = CreateBytecodeContext(&record, context);
 			writeOperand(context, inst, OPERAND_RIGHT, (Atom) newContext);
 			break;

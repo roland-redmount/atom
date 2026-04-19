@@ -155,7 +155,6 @@ Atom BytecodeEnd(BytecodeDraft * draft)
 	IFactRelease(constants);
 	SetMemory(draft, sizeof(BytecodeDraft), 0);
 
-	PrintF("program %u refs\n", IFactReferenceCount(program));
 	return bytecode;
 }
 

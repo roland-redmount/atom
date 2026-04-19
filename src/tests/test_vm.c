@@ -19,8 +19,6 @@
 
 typedef struct {
 	Atom bytecode;
-	// Atom form;
-	// Atom parameters;
 	Atom registers;		// a list
 	Atom service;
 } BytecodeServiceFixture;
@@ -99,7 +97,7 @@ BytecodeServiceFixture setupBytecodeFixture1(void)
 }
 
 
-static void teardownBytecodeFixture(BytecodeServiceFixture fixture)
+static void teardownBytecodeFixture1(BytecodeServiceFixture fixture)
 {
 	RegistryRemoveService(fixture.service);
 	IFactRelease(fixture.bytecode);
@@ -145,7 +143,7 @@ void testBytecodeProgram1(void)
 		OP_YIELD
 	)
 
-	teardownBytecodeFixture(fixture);
+	teardownBytecodeFixture1(fixture);
 }
 
 
@@ -166,8 +164,16 @@ void testExecuteByteCode1(void)
 
 	FreeContext(rootContext);
 
-	teardownBytecodeFixture(fixture);
+	teardownBytecodeFixture1(fixture);
 }
+
+typedef struct {
+	BytecodeServiceFixture childFixture;
+	Atom bytecode;
+	Atom registers;		// a list
+	Atom service;
+} BytecodeServiceFixture2;
+
 
 /**
  * Example program 2, calling program 1
@@ -185,10 +191,10 @@ void testExecuteByteCode1(void)
  *   ADD    #1 $2
  *   YIELD
  */
-BytecodeServiceFixture setupBytecodeFixture2(void)
+BytecodeServiceFixture2 setupBytecodeFixture2(void)
 {
-	BytecodeServiceFixture childFixture = setupBytecodeFixture1();
-	BytecodeServiceFixture fixture;
+	BytecodeServiceFixture2 fixture;
+	fixture.childFixture = setupBytecodeFixture1();
 
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
@@ -216,7 +222,7 @@ BytecodeServiceFixture setupBytecodeFixture2(void)
 	// which will trigger AcquireTypedAtom()
 	BytecodeOperandConstant(
 		&bytecodeDraft, OPERAND_LEFT,
-		CreateTypedAtom(AT_SERVICE, childFixture.service)
+		CreateTypedAtom(AT_SERVICE, fixture.childFixture.service)
 	);
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
@@ -252,7 +258,6 @@ BytecodeServiceFixture setupBytecodeFixture2(void)
 
 	// finalize bytecode and create atom
 	fixture.bytecode = BytecodeEnd(&bytecodeDraft);
-	teardownBytecodeFixture(childFixture);
 
 	// create service
 	Atom signature = CStringToPredicate("number @INT quadruple $INT");
@@ -260,13 +265,23 @@ BytecodeServiceFixture setupBytecodeFixture2(void)
 		signature,
 		fixture.bytecode
 	);
+	IFactRelease(signature);
 	return fixture;
+}
+
+
+static void teardownBytecodeFixture2(BytecodeServiceFixture2 fixture)
+{
+	RegistryRemoveService(fixture.service);
+	IFactRelease(fixture.bytecode);
+	IFactRelease(fixture.registers);
+	teardownBytecodeFixture1(fixture.childFixture);
 }
 
 
 void testExecuteByteCode2(void)
 {
-	BytecodeServiceFixture fixture = setupBytecodeFixture2();
+	BytecodeServiceFixture2 fixture = setupBytecodeFixture2();
 	ServiceRecord record = RegistryGetServiceRecord(fixture.service);
 	PrintPredicateForm(record.form);
 	PrintChar('\n');
@@ -281,7 +296,7 @@ void testExecuteByteCode2(void)
 
 	FreeContext(rootContext);
 
-	teardownBytecodeFixture(fixture);
+	teardownBytecodeFixture2(fixture);
 }
 
 
@@ -420,7 +435,7 @@ void testExecuteBytecode3(void)
 	// Do stuff
 
 	teardownTableService(tableService);
-	teardownBytecodeFixture(fixture);
+	teardownBytecodeFixture1(fixture);
 }
 
 
