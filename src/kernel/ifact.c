@@ -83,6 +83,7 @@ static IFactConjunction * lastConjunction(IFactHeader * header)
 static struct {
 	BTree * btree;					// tree storing IFactHeader structs
 	uint32 totalReferenceCount;
+	bool flagCreatedIFacts;
 } ifactStorage = {0};
 
 
@@ -113,6 +114,7 @@ void InitializeIFacts(void)
 	);
 
 	ifactStorage.totalReferenceCount = 0;
+	ifactStorage.flagCreatedIFacts = false;
 }
 
 
@@ -156,7 +158,7 @@ void IFactAcquire(Atom ifact)
  * we cannot represent the facts involving the atom.
  */
 
-// create query tuple to match all tuples
+// create query tuple to match all tuples.
 static void createQueryTuple(TypedAtom * tuple, Atom ifact, size8 nColumns, index8 idColumn)
 {
 	for(index8 j = 0; j < nColumns; j++) {
@@ -430,7 +432,10 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash, void (* assertFact)(Atom
 		// new ifact
 		createFacts(draft, assertFact);
 		acquireIFact(&(draft->header));
+		if(ifactStorage.flagCreatedIFacts)
+			draft->header.flags |= IFACT_NEW;
 		ASSERT(BTreeInsert(ifactStorage.btree, &(draft->header)) == BTREE_INSERTED)
+			
 	}
 	FreePage(draft->tupleStorage);
 
@@ -561,6 +566,42 @@ void DumpIFacts(void)
 		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
 		PrintIFact((Atom) header->hash);
 		PrintChar('\n');
+		BTreeIteratorNext(&iterator);
+	}
+	BTreeIteratorEnd(&iterator);
+}
+
+
+void EnableFlagCreatedIFacts(void)
+{
+	ifactStorage.flagCreatedIFacts = true;
+}
+
+void DumpFlaggedIFacts(void)
+{
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, ifactStorage.btree, 0, 0);
+	while(BTreeIteratorHasItem(&iterator)) {
+		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
+		if(header->flags & IFACT_NEW) {
+			PrintTypedAtom(CreateTypedAtom(AT_ID, header->hash));
+			PrintChar('\n');
+		}
+		BTreeIteratorNext(&iterator);
+	}
+	BTreeIteratorEnd(&iterator);
+}
+
+void DisableFlagCreatedIFacts(void)
+{
+	ifactStorage.flagCreatedIFacts = false;
+	// clear all flags
+	byte mask = ~((byte) IFACT_NEW);
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, ifactStorage.btree, 0, 0);
+	while(BTreeIteratorHasItem(&iterator)) {
+		IFactHeader * header = BTreeIteratorPeekItem(&iterator);
+		header->flags &= mask;
 		BTreeIteratorNext(&iterator);
 	}
 	BTreeIteratorEnd(&iterator);

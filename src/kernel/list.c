@@ -315,7 +315,7 @@ void ListIteratorEnd(ListIterator * iterator)
 
 void PrintList(Atom list)
 {
-	PrintChar('{');
+	PrintCString("LIST{");
 
 	ListIterator iterator;
 	ListIterate(list, & iterator);

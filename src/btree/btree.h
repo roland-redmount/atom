@@ -172,7 +172,7 @@ bool BTreeIteratorHasItem(BTreeIterator const * iterator);
  * Return a pointer to the current item.
  * This pointer is valid until BTreeIteratorEnd() is called.
  */
-void const * BTreeIteratorPeekItem(BTreeIterator const * iterator);
+void * BTreeIteratorPeekItem(BTreeIterator const * iterator);
 
 void BTreeIteratorNext(BTreeIterator * iterator);
 

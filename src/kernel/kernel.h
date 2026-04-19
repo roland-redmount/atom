@@ -78,13 +78,12 @@ void RetractFact(Atom form, TypedAtom * actors);
 #define ROLE_ACTORS					20
 
 #define ROLE_BYTECODE				21
-#define ROLE_SIGNATURE				22
-#define ROLE_PROGRAM				23
-#define ROLE_PARAMETER				24
-#define ROLE_REGISTERS				25
-#define ROLE_CONSTANTS				26
+#define ROLE_PROGRAM				22
+#define ROLE_PARAMETER				23
+#define ROLE_REGISTERS				24
+#define ROLE_CONSTANTS				25
 
-#define N_CORE_ROLES				26
+#define N_CORE_ROLES				25
 
 
 /**
@@ -104,12 +103,11 @@ void RetractFact(Atom form, TypedAtom * actors);
 #define FORM_FORMULA_FORM_ACTORS			9	// (formula form actors)
 #define FORM_QUOTE_QUOTED					10	// (quote quoted)
 #define FORM_STRING							11	// (string)
-#define FORM_BYTECODE_SIGNATURE				12	// (bytecode signature)
-#define FORM_BYTECODE_PROGRAM				13	// (bytecode program)
-#define FORM_BYTECODE_REGISTERS	    		14	// (bytecode registers)
-#define FORM_BYTECODE_CONSTANTS	    		15	// (bytecode registers)
+#define FORM_BYTECODE_PROGRAM				12	// (bytecode program)
+#define FORM_BYTECODE_REGISTERS	    		13	// (bytecode registers)
+#define FORM_BYTECODE_CONSTANTS	    		14	// (bytecode registers)
 
-#define N_CORE_PREDICATES					15
+#define N_CORE_PREDICATES					14
 
 /**
  * Lookup one of the "primitive" forms for core tables

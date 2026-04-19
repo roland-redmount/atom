@@ -26,6 +26,8 @@
 
 #include "util/hashing.h"
 #include "util/sort.h"
+#include "vm/bytecode.h"
+
 
 // global constant invalid atom
 TypedAtom invalidAtom = {0};
@@ -186,7 +188,8 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		// a given atom may satisfy multiple type predicates and therefore have multiple
 		// string representations, so there is no straightforward switch/case.
 		// Here we somewhat arbitrarily try the "most specific" type predicate first
-		// TODO: move this to id.h
+		
+		// TODO: move this somewhere better
 		if(IsPair(typedAtom.atom)) {
 			if(IsFormula(typedAtom.atom))
 				PrintFormula(typedAtom.atom);
@@ -213,6 +216,8 @@ void PrintTypedAtom(TypedAtom typedAtom)
 			else
 				PrintMultiset(typedAtom.atom);
 		}
+		else if(IsBytecode(typedAtom.atom))
+			PrintBytecode(typedAtom.atom);
 		else
 			PrintIFact(typedAtom.atom);
 		break;

@@ -13,20 +13,8 @@
 #include "parser/PredicateBuilder.h"
 #include "vm/bytecode.h"
 
-/*
-static void setBytecodeSignature(IFactDraft * draft, Atom signature)
-{
-	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_BYTECODE);
-	index8 signatureIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
 
-	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_SIGNATURE), bytecodeIndex);
-	TypedAtom tuple[2];
-	tuple[signatureIndex] = CreateTypedAtom(AT_ID, signature);
-	IFactAddClause(draft, tuple);
-	IFactEndConjunction(draft);
-}
-*/
-
+// (bytecode program)
 static void setBytecodeProgram(IFactDraft * draft, Atom program)
 {
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_BYTECODE);
@@ -35,7 +23,7 @@ static void setBytecodeProgram(IFactDraft * draft, Atom program)
 	IFactBeginConjunction(
 		draft,
 		GetCorePredicateForm(FORM_BYTECODE_PROGRAM),
-		RegistryGetCoreTable(FORM_BYTECODE_CONSTANTS),
+		RegistryGetCoreTable(FORM_BYTECODE_PROGRAM),
 		bytecodeIndex
 	);
 	TypedAtom tuple[2];
@@ -64,6 +52,7 @@ static void setBytecodeRegisters(IFactDraft * draft, Atom registersList)
 }
 
 
+// (bytecode constants)
 static void setBytecodeConstants(IFactDraft * draft, Atom constantsList)
 {
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_BYTECODE);
@@ -165,6 +154,8 @@ Atom BytecodeEnd(BytecodeDraft * draft)
 	IFactRelease(program);
 	IFactRelease(constants);
 	SetMemory(draft, sizeof(BytecodeDraft), 0);
+
+	PrintF("program %u refs\n", IFactReferenceCount(program));
 	return bytecode;
 }
 
@@ -304,4 +295,11 @@ void SetupCoreServices(void)
 void TeardownCoreServices(void)
 {
 	RegistryRemoveService(additionService);
+}
+
+
+void PrintBytecode(Atom bytecode)
+{	
+	Atom program = BytecodeGetProgram(bytecode);
+	PrintF("Bytecode[%u instructions]", ListLength(program));
 }

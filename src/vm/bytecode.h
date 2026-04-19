@@ -113,5 +113,8 @@ void SetupCoreServices(void);
 
 void TeardownCoreServices(void);
 
+void PrintBytecode(Atom bytecode);
+
+
 #endif	// BYTECODE_H
 

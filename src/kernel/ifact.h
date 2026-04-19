@@ -41,10 +41,13 @@ typedef struct s_IFactHeader IFactHeader;
 struct s_IFactHeader {
 	data64 hash;				// 8 bytes
 	size8 nConjunctions;
-	data8 reserved[3];			// pad to even 4-byte
+	data8 flags;
+	data8 reserved[2];			// pad to even 4-byte
 	uint32 refCount;
 	IFactConjunction * conjunctions;	// pointer, 8 bytes
 } __attribute__((packed)) ;
+
+#define IFACT_NEW		1
 
 
 /**
@@ -144,6 +147,16 @@ bool IFactCheckTuple(BTree const * tree, TypedAtom const * tuple);
 void PrintIFact(Atom ifact);
 
 void DumpIFacts(void);
+
+/**
+ * Enable flagging of newly created ifacts, for debugging.
+ */
+void EnableFlagCreatedIFacts(void);
+
+void DumpFlaggedIFacts(void);
+
+void DisableFlagCreatedIFacts(void);
+
 
 
 #endif  // IFACT_H
