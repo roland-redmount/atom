@@ -107,7 +107,9 @@ void InstructionBegin(Instruction * draft, byte opcode);
  */
 void InstructionSetOperand(Instruction * draft, Operand operand, index8 opIndex, byte accessMode);
 
-
+/**
+ * Set the context to be use for the given operand.
+ */
 void InstructionSetContext(Instruction * draft, Operand operand, index8 registerIndex);
 
 

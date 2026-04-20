@@ -57,34 +57,6 @@ Atom * BytecodeContextConstants(Atom context)
 }
 
 
-Atom BytecodeContextGetParent(Atom context)
-{
-	BytecodeContext * _context = (BytecodeContext *) context;
-	return (Atom) _context->parentContext;
-}
-
-
-void BytecodeContextSetParent(Atom context, Atom parentContext)
-{
-	BytecodeContext * _context = (BytecodeContext *) context;
-	_context->parentContext = (BytecodeContext *) parentContext;
-}
-
-
-static void copyListDatums(Atom list, Atom * atoms)
-{
-	Atom * rp = atoms;
-	ListIterator iterator;
-	ListIterate(list, &iterator);
-	while(ListIteratorHasNext(&iterator)) {
-		TypedAtom a = ListIteratorGetElement(&iterator);
-		*rp++ = a.atom;
-		ListIteratorNext(&iterator);
-	}
-	ListIteratorEnd(&iterator);
-}
-
-
 Atom CreateBytecodeContext(ServiceRecord * service, Atom parentContext)
 {
 	ASSERT(service->type == SERVICE_BYTECODE)
@@ -118,6 +90,35 @@ Atom CreateBytecodeContext(ServiceRecord * service, Atom parentContext)
 	copyListDatums(constantsList, BytecodeContextConstants((Atom) context));
 	return (Atom) context;
 }
+
+
+Atom BytecodeContextGetParent(Atom context)
+{
+	BytecodeContext * _context = (BytecodeContext *) context;
+	return (Atom) _context->parentContext;
+}
+
+
+void BytecodeContextSetParent(Atom context, Atom parentContext)
+{
+	BytecodeContext * _context = (BytecodeContext *) context;
+	_context->parentContext = (BytecodeContext *) parentContext;
+}
+
+
+static void copyListDatums(Atom list, Atom * atoms)
+{
+	Atom * rp = atoms;
+	ListIterator iterator;
+	ListIterate(list, &iterator);
+	while(ListIteratorHasNext(&iterator)) {
+		TypedAtom a = ListIteratorGetElement(&iterator);
+		*rp++ = a.atom;
+		ListIteratorNext(&iterator);
+	}
+	ListIteratorEnd(&iterator);
+}
+
 
 /*  Reference handling -- not sure if this is a good idea,
     Only needed if context are ever references from more than
@@ -167,7 +168,7 @@ void BytecodeContextFreeChildContexts(Atom context)
 	ListIterate(registersList, &iterator);
 	while(ListIteratorHasNext(&iterator)) {
 		TypedAtom _register = ListIteratorGetElement(&iterator);
-		if(_register.type == AT_CONTEXT && *rp)
+		if(_register.type == AT_BCONTEXT && *rp)
 			FreeBytecodeContext(*rp);
 		ListIteratorNext(&iterator);
 		*rp++ = 0;

@@ -17,8 +17,10 @@ static struct {
 } vm;
 
 
-void VMInitialize(void * stack, size32 stackSize)
+void VMInitialize()
 {
+	ASSERT(sizeof(Instruction) == 8)
+
 	vm.trace = true;
 }
 
@@ -46,6 +48,7 @@ static Atom readOperand(Atom context, Instruction inst, Operand operand)
 	switch(accessMode) {
 	case ACCESS_PARAMETER: {
 		// parameters may be read from specific contexts
+		// NOTE: what if we're reading from a compiled context?
 		Atom operandContext = contextIndex ?
 			BytecodeContextRegisters(context)[contextIndex - 1] :
 			context;

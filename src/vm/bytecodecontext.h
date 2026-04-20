@@ -1,7 +1,7 @@
 /**
  * A bytecode execution context (a continuation), representing the state of a
  * running bytecode program. This structure is created by the VM CTX instruction.
- * A BytecodeContext * pointer is an AT_CONTEXT atom, stored in VM registers;
+ * A BytecodeContext * pointer is an AT_BCONTEXT atom, stored in VM registers;
  * since no two execution contexts are identical, the pointer identifies the atom.
  * 
  * TODO: rename this file to vm/bytecodecontext.h
@@ -15,7 +15,7 @@
 
 
 /**
- * Create a new execution context for the given bytecode service.
+ * Create a new execution context (AT_BCONTEXT) for the given bytecode service.
  * The context contains pointers/references to the bytecode program,
  * and the arguments, registers and constands used by the program.
  * Arguments are read/written with VM instructions using context addressing.
@@ -66,7 +66,7 @@ bool BytecodeContextNextInstruction(Atom context, Atom * instruction);
 /**
  * Check registers for allocated "child" contexts and free them if necessary.
  * This is used when terminating context execution.
- * NOTE: Having reference-counted AT_CONTEXT atoms would render this unnecessary.
+ * NOTE: Having reference-counted AT_BCONTEXT atoms would render this unnecessary.
  */
 void BytecodeContextFreeChildContexts(Atom context);
 

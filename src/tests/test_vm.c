@@ -203,7 +203,7 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 	fixture.registers = CreateListFromArray(
 		(TypedAtom []) {
 			CreateTypedAtom(AT_INT, 0),
-			CreateTypedAtom(AT_CONTEXT, 0)
+			CreateTypedAtom(AT_BCONTEXT, 0)
 		},
 		2
 	);
@@ -371,7 +371,7 @@ BytecodeServiceFixture setupBytecodeFixture3(void)
 	fixture.registers = CreateListFromArray(
 		(TypedAtom []) {
 			CreateTypedAtom(AT_INT, 0),
-			CreateTypedAtom(AT_CONTEXT, 0)
+			CreateTypedAtom(AT_BCONTEXT, 0)
 		},
 		2
 	);

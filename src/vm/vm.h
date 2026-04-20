@@ -5,9 +5,9 @@
 #include "kernel/ServiceRegistry.h"
 
 /**
- * Initalize the VM stack &c
+ * Initalize the VM
  */
-void VMInitialize(void * stack,  size32 stackSize);
+void VMInitialize(void);
 
 
 /**

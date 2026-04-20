@@ -79,7 +79,6 @@ const index32 coreFormRoleIds[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY] = {
 // TODO: this structure must be persistent
 struct s_Kernel {
 	void * allocatorArea;
-	void * vmStack;
 
 	// Core predicate forms and roles, defined during bootstrapping
 	// TODO: this is redundant with the ServiceRegistry core tables array
@@ -102,10 +101,6 @@ struct s_Kernel {
 #define ALLOCATOR_AREA_SIZE 		(1 << LOG_ALLOCATOR_AREA_SIZE)
 #define ALLOCATOR_N_PAGES			(ALLOCATOR_AREA_SIZE / MEMORY_PAGE_SIZE)
 
-// 1 << 20 = 1Mb memory area for VM stack
-#define VM_STACK_AREA_SIZE 			(1 << 20)
-#define VM_STACK_N_PAGES			(VM_STACK_AREA_SIZE / MEMORY_PAGE_SIZE)
-
 
 void SetupMemory(void)
 {
@@ -116,9 +111,6 @@ void SetupMemory(void)
 	kernel.allocatorArea = AllocatePages(ALLOCATOR_N_PAGES);
 	ASSERT(kernel.allocatorArea)
 	CreateAllocator(kernel.allocatorArea, LOG_ALLOCATOR_AREA_SIZE);
-
-	// setup VM stack area
-	kernel.vmStack = AllocatePages(VM_STACK_N_PAGES);
 }
 
 
@@ -384,7 +376,7 @@ void KernelInitialize(void)
 	setupCoreRoleNames();
 	setupCoreServices();
 
-	VMInitialize(kernel.vmStack, VM_STACK_AREA_SIZE);
+	VMInitialize();
 
 	kernel.nCoreIFacts = TotalIFactCount();
 	kernel.nCoreIFactRefs = TotalIFactReferenceCount();
