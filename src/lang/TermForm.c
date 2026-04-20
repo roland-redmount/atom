@@ -1,6 +1,6 @@
 
-#include "datumtypes/Variable.h"
-#include "datumtypes/UInt.h"
+#include "lang/Variable.h"
+#include "kernel/UInt.h"
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
@@ -35,7 +35,7 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 	TypedAtom tuple[3];
 	TermFormSetTuple(tuple,
 		CreateTypedAtom(AT_ID, termForm),	CreateTypedAtom(AT_ID, predicateForm),
-		CreateUInt(sign ? 1 : 0)
+		CreateTypedAtom(AT_UINT, sign ? 1 : 0)
 	);
 	IFactAddClause(&draft, tuple);
 	IFactEndConjunction(&draft);

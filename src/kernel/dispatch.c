@@ -1,5 +1,5 @@
 
-#include "datumtypes/Variable.h"
+#include "lang/Variable.h"
 #include "kernel/dispatch.h"
 #include "kernel/list.h"
 #include "lang/FormPermutation.h"

@@ -21,10 +21,10 @@
  * tokenizer with a "take back" functionality.
  */
 
-#include "datumtypes/FloatIEEE754.h"
-#include "datumtypes/Int.h"
-#include "datumtypes/Parameter.h"
-#include "datumtypes/Variable.h"
+#include "kernel/FloatIEEE754.h"
+#include "kernel/Int.h"
+#include "kernel/Parameter.h"
+#include "lang/Variable.h"
 #include "kernel/string.h"
 #include "lang/name.h"
 #include "parser/Characters.h"
@@ -238,13 +238,13 @@ void TokenizerCleanup(Tokenizer * tokenizer)
 
 static TypedAtom parseFloat(char const * syntax, size32 length)
 {
-	return CreateFloat64(StringToFloat64(syntax, length));
+	return CreateTypedAtom(AT_FLOAT64, CreateFloat64(StringToFloat64(syntax, length)));
 }
 
 
 static TypedAtom parseInteger(char const * syntax, size32 length)
 {
-	return CreateInt(StringToInt64(syntax, length));
+	return CreateTypedAtom(AT_INT, StringToInt64(syntax, length));
 }
 
 
@@ -260,38 +260,38 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 	switch(tokenizer->type) {
 	case TOKEN_STRING:
 		// strings entered in formulas are always immutable
-		token.atom = CreateTypedAtom(AT_ID, CreateString(string, stringLength));
+		token.typedAtom = CreateTypedAtom(AT_ID, CreateString(string, stringLength));
 		break;
 
 	case TOKEN_NUMBER:
 		if(StringContainsChar(string, stringLength, '.'))
-			token.atom = parseFloat(string, stringLength);
+			token.typedAtom = parseFloat(string, stringLength);
 		else
-			token.atom = parseInteger(string, stringLength);
+			token.typedAtom = parseInteger(string, stringLength);
 		break;
 
 	case TOKEN_VARIABLE:
 		// NOTE: variable names must now be a single char
 		if(stringLength == 0)
-			token.atom = anonymousVariable;
+			token.typedAtom = anonymousVariable;
 		else
-			token.atom = CreateVariable(string[0]);
+			token.typedAtom = CreateVariable(string[0]);
 		break;
 
 	case TOKEN_PARAMETER:
-		token.atom = CreateParameter(
+		token.typedAtom = CreateParameter(
 			tokenizer->data.parameter.io,
 			tokenizer->data.parameter.atomType
 		);
 		break;
 				
 	case TOKEN_NAME:
-		token.atom = CreateTypedAtom(AT_NAME, CreateName(string, stringLength));
+		token.typedAtom = CreateTypedAtom(AT_NAME, CreateName(string, stringLength));
 		break;
 
 	default:
 		// tokens that do not represent an atom
-		token.atom = invalidAtom;
+		token.typedAtom = invalidAtom;
 	}
 	return token;
 }

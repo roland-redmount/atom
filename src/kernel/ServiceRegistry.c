@@ -1,6 +1,6 @@
 
-#include "datumtypes/Parameter.h"
-#include "datumtypes/UInt.h"
+#include "kernel/Parameter.h"
+#include "kernel/UInt.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/lookup.h"

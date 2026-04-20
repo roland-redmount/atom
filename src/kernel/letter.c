@@ -1,8 +1,8 @@
 
 #include <ctype.h>
 
-#include "datumtypes/UInt.h"
-#include "datumtypes/Variable.h"
+#include "kernel/UInt.h"
+#include "lang/Variable.h"
 #include "kernel/letter.h"
 #include "kernel/ifact.h"
 #include "kernel/ServiceRegistry.h"

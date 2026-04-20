@@ -1,10 +1,10 @@
 
-#include "datumtypes/FloatIEEE754.h"
-#include "datumtypes/Int.h"
-#include "datumtypes/instruction.h"
-#include "datumtypes/Parameter.h"
-#include "datumtypes/UInt.h"
-#include "datumtypes/Variable.h"
+#include "kernel/FloatIEEE754.h"
+#include "kernel/Int.h"
+#include "vm/instruction.h"
+#include "kernel/Parameter.h"
+#include "kernel/UInt.h"
+#include "lang/Variable.h"
 
 #include "lang/name.h"
 #include "lang/Quote.h"
@@ -148,19 +148,19 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		break;
 
 	case AT_UINT:
-		PrintUInt(typedAtom);
+		PrintUInt(typedAtom.atom);
 		break;
 
 	case AT_INT:
-		PrintInt(typedAtom);
+		PrintInt(typedAtom.atom);
 		break;
 
 	case AT_FLOAT32:
-		PrintFloat32(typedAtom);
+		PrintFloat32(typedAtom.atom);
 		break;
 
 	case AT_FLOAT64:
-		PrintFloat64(typedAtom);
+		PrintFloat64(typedAtom.atom);
 		break;
 
 	case AT_LETTER:

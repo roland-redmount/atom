@@ -1,5 +1,5 @@
 
-#include "datumtypes/Variable.h"
+#include "lang/Variable.h"
 #include "kernel/ifact.h"
 #include "kernel/letter.h"
 #include "kernel/list.h"

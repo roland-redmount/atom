@@ -1,6 +1,6 @@
 
 #include "btree/btree.h"
-#include "datumtypes/Variable.h"
+#include "lang/Variable.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/lookup.h"

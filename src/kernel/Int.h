@@ -8,10 +8,7 @@
 #define INT_H
 
 
-TypedAtom CreateInt(int64 value);
-int64 GetIntValue(TypedAtom a);
-
-void PrintInt(TypedAtom integer);
+void PrintInt(Atom integer);
 
 
 #endif		// INT_H

@@ -1,6 +1,6 @@
 
-#include "datumtypes/FloatIEEE754.h"
-#include "datumtypes/Variable.h"
+#include "kernel/FloatIEEE754.h"
+#include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/ServiceRegistry.h"
@@ -47,20 +47,20 @@ static void setupTokensFixture(TokensFixture * fixture)
 
 	fixture->actorTokens[0] = (Token) {
 		.type = TOKEN_VARIABLE,
-		.atom = CreateVariable('x')
+		.typedAtom = CreateVariable('x')
 	};	
 	fixture->actorTokens[1] = (Token) {
 		.type = TOKEN_NUMBER,
-		.atom = CreateFloat32(123.45)
+		.typedAtom = CreateTypedAtom(AT_FLOAT32, CreateFloat32(123.45))
 	};
 	fixture->actorTokens[2] = (Token) {
 		.type = TOKEN_STRING,
-		.atom = CreateTypedAtom(AT_ID, CreateStringFromCString("foobar"))
+		.typedAtom = CreateTypedAtom(AT_ID, CreateStringFromCString("foobar"))
 	};
 
 	for(index8 i = 0; i < EXAMPLE_N_PARTS; i++) {
-		fixture->names[i] = fixture->nameTokens[i].atom.atom;
-		fixture->actors[i] = fixture->actorTokens[i].atom;
+		fixture->names[i] = fixture->nameTokens[i].typedAtom.atom;
+		fixture->actors[i] = fixture->actorTokens[i].typedAtom;
 	}
 
 }
@@ -69,8 +69,8 @@ static void setupTokensFixture(TokensFixture * fixture)
 static void teardownTokensFixture(TokensFixture * fixture)
 {
 	for(index8 i = 0; i < EXAMPLE_N_PARTS; i++) {
-		ReleaseTypedAtom(fixture->nameTokens[i].atom);
-		ReleaseTypedAtom(fixture->actorTokens[i].atom);
+		ReleaseTypedAtom(fixture->nameTokens[i].typedAtom);
+		ReleaseTypedAtom(fixture->actorTokens[i].typedAtom);
 	}
 }
 
@@ -344,7 +344,7 @@ static void testCStringToClause(void)
 	ASSERT_TRUE(
 		SameTypedAtoms(
 			ListGetElement(actorsList, 2),
-			CreateFloat64(123.45)
+			CreateTypedAtom(AT_FLOAT64, CreateFloat64(123.45))
 		)
 	)
 	Atom string = CreateStringFromCString("foobar");

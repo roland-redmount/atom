@@ -1,6 +1,6 @@
 
-#include "datumtypes/UInt.h"
-#include "datumtypes/Variable.h"
+#include "kernel/UInt.h"
+#include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/letter.h"
@@ -23,7 +23,7 @@ typedef struct {
 static AtomsFixture createAtomsFixture(void)
 {
 	AtomsFixture fixture;
-	fixture.atoms[0] = CreateUInt(42);
+	fixture.atoms[0] = CreateTypedAtom(AT_UINT, 42);
 	fixture.atoms[1] = GetAlphabetLetter('X');
 	fixture.atoms[2] = GetAlphabetLetter('Y');
 	return fixture;
@@ -80,13 +80,13 @@ static void testCreateList(void)
 
 	// attempt to add a tuple (list @string position 7 element 'Z') will violate the ifact
 	tuple[listRoleIndex] = CreateTypedAtom(AT_ID, list);
-	tuple[positionRoleIndex] = CreateUInt(7);
+	tuple[positionRoleIndex] = CreateTypedAtom(AT_UINT, 7);
 	tuple[elementRoleIndex] = GetAlphabetLetter('Z');
 	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(listPositionElement, tuple), TUPLE_PROTECTED)
 
 	// attempt to remove any tuple (list @string position _ element _) will violate the ifact
 	tuple[listRoleIndex] = CreateTypedAtom(AT_ID, list);
-	tuple[positionRoleIndex] = CreateUInt(3);
+	tuple[positionRoleIndex] = CreateTypedAtom(AT_UINT, 3);
 	tuple[elementRoleIndex] = GetAlphabetLetter('Y');
 	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuples(listPositionElement, tuple, REMOVE_NORMAL), 0)
 	

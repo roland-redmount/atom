@@ -1,5 +1,5 @@
 
-#include "datumtypes/UInt.h"
+#include "kernel/UInt.h"
 #include "kernel/letter.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
@@ -68,12 +68,18 @@ static void testMultiset(void)
 	// adding a tuple (multiset @multiset element 'D' multiple 1) should fail
 	// since @multiset is an ifact
 	TypedAtom tuple1[3];
-	MultisetSetTuple(tuple1, CreateTypedAtom(AT_ID, multiset), GetAlphabetLetter('D'), CreateUInt(1));
+	MultisetSetTuple(
+		tuple1,
+		CreateTypedAtom(AT_ID, multiset), GetAlphabetLetter('D'), CreateTypedAtom(AT_UINT, 1)
+	);
 	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(table, tuple1), TUPLE_PROTECTED)
 
 	// attempt to remove any tuple (list @string position _ element _) should fail
 	TypedAtom tuple2[3];
-	MultisetSetTuple(tuple2, CreateTypedAtom(AT_ID, multiset), GetAlphabetLetter('B'), CreateUInt(2));
+	MultisetSetTuple(
+		tuple2,
+		CreateTypedAtom(AT_ID, multiset), GetAlphabetLetter('B'), CreateTypedAtom(AT_UINT, 2)
+	);
 	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuples(table, tuple2, REMOVE_NORMAL), 0)
 
 	IFactRelease(multiset);

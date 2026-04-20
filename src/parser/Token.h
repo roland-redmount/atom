@@ -23,7 +23,7 @@ enum TokenType {
 
 typedef struct s_Token {
 	enum TokenType type;
-	TypedAtom atom;
+	TypedAtom typedAtom;
 } Token;
 
 

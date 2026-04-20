@@ -1,14 +1,14 @@
 
-#include "datumtypes/FloatIEEE754.h"
-#include "datumtypes/Int.h"
-#include "datumtypes/UInt.h"
-#include "datumtypes/Variable.h"
+#include "kernel/FloatIEEE754.h"
+#include "kernel/Int.h"
+#include "kernel/UInt.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
-
+#include "lang/Variable.h"
 #include "testing/testing.h"
 
-void testGetDatumTypeName(void)
+
+void testGetAtomTypeName(void)
 {
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_UINT), "UINT")
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_INT), "INT")
@@ -22,7 +22,7 @@ void testGetDatumTypeName(void)
 }
 
 
-void testFindTypeFromString(void)
+void testAtomTypeFromString(void)
 {
 	ASSERT_UINT32_EQUAL(AtomTypeFromString("UINT", 4), AT_UINT)
 }
@@ -31,11 +31,11 @@ void testFindTypeFromString(void)
 void testFloat(void)
 {
 	double float64Value = 3.1415926535897932384;
-	TypedAtom float64 = CreateFloat64(float64Value);
+	Atom float64 = CreateFloat64(float64Value);
 	ASSERT_DOUBLE_EQUAL(GetFloat64Value(float64), float64Value)
 
 	float float32Value = 3.141592;
-	TypedAtom float32 = CreateFloat32((float) float32Value);
+	Atom float32 = CreateFloat32((float) float32Value);
 	ASSERT_FLOAT_EQUAL(GetFloat32Value(float32), float32Value)
 }
 
@@ -45,8 +45,8 @@ void testInt(void)
 	const int values[] = {42, 0, -7};
 	size32 n_values = sizeof(values) / sizeof(int);
 	for(index32 i = 0; i < n_values; i++) {
-		TypedAtom integer = CreateInt(values[i]);
-		ASSERT_INT64_EQUAL(GetIntValue(integer), values[i])
+		TypedAtom integer = CreateTypedAtom(AT_INT, values[i]);
+		ASSERT_INT64_EQUAL(integer.atom, values[i])
 	}
 }
 
@@ -56,8 +56,8 @@ void testUInt(void)
 	const uint64 values[] = {42, 0, 0xFFFFFFFFFFFFFFFFUL};
 	size32 n_values = sizeof(values) / sizeof(uint64);
 	for(index32 i = 0; i < n_values; i++) {
-		TypedAtom integer = CreateUInt(values[i]);
-		ASSERT_UINT64_EQUAL(GetUIntValue(integer), values[i])
+		TypedAtom integer = CreateTypedAtom(AT_UINT, values[i]);
+		ASSERT_UINT64_EQUAL(integer.atom, values[i])
 	}
 }
 
@@ -106,8 +106,8 @@ int main(int argc, char * argv[])
 {
 	SetupMemory();
 
-	ExecuteTest(testGetDatumTypeName);
-	ExecuteTest(testFindTypeFromString);
+	ExecuteTest(testGetAtomTypeName);
+	ExecuteTest(testAtomTypeFromString);
 
 	ExecuteTest(testInt);
 	ExecuteTest(testUInt);

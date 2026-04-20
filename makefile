@@ -27,7 +27,7 @@ $(info PLATFORM = $(PLATFORM))
 
 # source directories
 SRCDIRS := $(patsubst %, src/%,\
- btree datumtypes graphics kernel lang memory network parser testing tests util vm)
+ btree graphics kernel lang memory network parser testing tests util vm)
 
 # source directories for FreeType
 # FREETYPE_BASEDIR := third-party/$(FREETYPE)/src
@@ -50,7 +50,7 @@ BINDIR := $(BUILDDIR)/bin
 # commands and flags
 # TODO: can we export the common flags to environment variables to avoid crazy long command lines ?
 CFLAGS_COMMON := -std=c99 -pedantic-errors\
- -Wall -Wstrict-prototypes -Werror\
+ -Wall -Wstrict-prototypes -Werror -fstrict-aliasing -Wstrict-aliasing=2\
  -Wno-error=unused-variable -Wno-error=unused-function -Wno-error=unused-but-set-variable -Wpointer-arith\
  -m64 -D$(PLATFORM)
 
@@ -152,13 +152,11 @@ UTIL_FILES := $(addprefix util/, \
 
 LANG_FILES := $(addprefix lang/, \
  Atom AtomType ClauseForm Form Formula FormPermutation FullForm name PredicateForm \
- Quote SubstitutionList unification TermForm TypedAtom)
-
-DATUMTYPES_FILES := $(addprefix datumtypes/, \
- FloatIEEE754 instruction Int Parameter UInt Variable)
+ Quote SubstitutionList TermForm TypedAtom unification Variable)
 
 KERNEL_FILES := $(addprefix kernel/, \
- dispatch ifact kernel letter list lookup multiset pair RelationBTree string ServiceRegistry tuples)
+ dispatch ifact FloatIEEE754 Int kernel letter list lookup multiset pair \
+ Parameter RelationBTree string ServiceRegistry tuples UInt)
 
 MEMORY_FILES := $(addprefix memory/, allocator paging pool)
 
@@ -167,7 +165,7 @@ NETWORK_FILES := $(addprefix network/, Connection Network)
 PARSER_FILES := $(addprefix parser/, Characters ClauseBuilder PartBuilder PredicateBuilder \
  StringBuffer TermBuilder Token Tokenizer)
 
-VM_FILES := $(addprefix vm/, bytecode bytecodecontext ccontext vm)
+VM_FILES := $(addprefix vm/, bytecode bytecodecontext ccontext instruction vm)
 
 GRAPHICS_FILES := $(addprefix graphics/, \
  Graphics Mesh Point Polygon TextBlock Triangle)
@@ -209,7 +207,7 @@ $(BINDIR)/opengltest : $(patsubst %, $(OBJDIR)/%.o, \
 #
 
 TESTS_EXE_FILES := $(addprefix $(BINDIR)/,\
- test_btree test_datumtypes test_dispatch test_kernel test_language test_list test_lookup\
+ test_btree test_atomtypes test_dispatch test_kernel test_language test_list test_lookup\
  test_memory test_multiset test_pair test_parsing test_persistence\
  test_relation_btree test_string test_table_registry test_tokenizer test_utilities test_vm)
 
@@ -238,7 +236,7 @@ test:
 	find $(OBJDIR) -name '*.gcda' -delete
 	$(BINDIR)/test_memory
 	$(BINDIR)/test_utilities
-	$(BINDIR)/test_datumtypes
+	$(BINDIR)/test_atomtypes
 	$(BINDIR)/test_btree
 	$(BINDIR)/test_relation_btree
 	$(BINDIR)/test_kernel
