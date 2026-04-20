@@ -1,15 +1,5 @@
 /**
- * A bytecode program consists of a signature, registers,
- * constants, and an instruction list (program).
- * 
- * TODO: The signature is currently a formula where actors are AT_PARAMETER
- * atoms storing a atom type. This should be refactored such that the bytecode
- * block only stores the array of parameters (in canonical order) while ServiceRecord
- * stores the signature. (A bytecode block could then be associated with more than one
- * signature, for aliases.) C-level programs also need to store atom types.
- * 
- * A parameter type can be DT_NONE, indicating that the program accepts any
- * atom type; in this case only genera-purpose instructions like COPY are applicable.
+ * A bytecode program consists of registers, constants, and an instruction list.
  */
 
 #ifndef BYTECODE_H
