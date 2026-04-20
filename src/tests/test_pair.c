@@ -14,7 +14,7 @@ static void testPair(void)
 
 	// create a pair
 	TypedAtom left = GetAlphabetLetter('x');
-	TypedAtom right = CreateUInt(42);
+	TypedAtom right = CreateTypedAtom(AT_UINT, 42);
 	Atom pair1 = CreatePair(left, right);
 	
 	ASSERT_TRUE(IsPair(pair1))

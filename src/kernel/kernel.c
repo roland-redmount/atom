@@ -267,24 +267,24 @@ static void setupCoreServices(void)
 	MultisetSetTuple(
 		tuple,
 		CreateTypedAtom(AT_ID, multisetForm),
-		(TypedAtom) {.type = AT_NAME, .atom = GetCoreRoleName(ROLE_MULTISET)},
-		CreateUInt(1)
+		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_MULTISET)),
+		CreateTypedAtom(AT_UINT, 1)
 	);
 	IFactAddClause(&multisetDraft, tuple);
 	// (multiset @multiset-form element "element" multiple 1)
 	MultisetSetTuple(
 		tuple,
 		CreateTypedAtom(AT_ID, multisetForm),
-		(TypedAtom) {.type = AT_NAME, .atom = GetCoreRoleName(ROLE_ELEMENT)},
-		CreateUInt(1)
+		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_ELEMENT)),
+		CreateTypedAtom(AT_UINT, 1)
 	);
 	IFactAddClause(&multisetDraft, tuple);
 	// (multiset @multiset-form element "multiple" multiple 1)
 	MultisetSetTuple(
 		tuple,
 		CreateTypedAtom(AT_ID, multisetForm),
-		(TypedAtom) {.type = AT_NAME, .atom = GetCoreRoleName(ROLE_MULTIPLE)},
-		CreateUInt(1)
+		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_MULTIPLE)),
+		CreateTypedAtom(AT_UINT, 1)
 	);
 	IFactAddClause(&multisetDraft, tuple);
 	IFactEndConjunction(&multisetDraft);
@@ -319,8 +319,8 @@ static void setupCoreServices(void)
 	MultisetSetTuple(
 		tuple,
 		predicateFormAtom,
-		(TypedAtom) {.type = AT_NAME, .atom = GetCoreRoleName(ROLE_PREDICATE_FORM)},
-		CreateUInt(1)
+		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_PREDICATE_FORM)),
+		CreateTypedAtom(AT_UINT, 1)
 	);
 	IFactAddClause(&predicateFormDraft, tuple);
 	IFactEndConjunction(&predicateFormDraft);

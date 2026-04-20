@@ -2,13 +2,13 @@
 #include "kernel/FloatIEEE754.h"
 #include "kernel/Int.h"
 #include "kernel/UInt.h"
-#include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
-
+#include "lang/Variable.h"
 #include "testing/testing.h"
 
-void testGetDatumTypeName(void)
+
+void testGetAtomTypeName(void)
 {
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_UINT), "UINT")
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_INT), "INT")
@@ -22,7 +22,7 @@ void testGetDatumTypeName(void)
 }
 
 
-void testFindTypeFromString(void)
+void testAtomTypeFromString(void)
 {
 	ASSERT_UINT32_EQUAL(AtomTypeFromString("UINT", 4), AT_UINT)
 }
@@ -56,8 +56,8 @@ void testUInt(void)
 	const uint64 values[] = {42, 0, 0xFFFFFFFFFFFFFFFFUL};
 	size32 n_values = sizeof(values) / sizeof(uint64);
 	for(index32 i = 0; i < n_values; i++) {
-		TypedAtom integer = CreateUInt(values[i]);
-		ASSERT_UINT64_EQUAL(GetUIntValue(integer), values[i])
+		TypedAtom integer = CreateTypedAtom(AT_UINT, values[i]);
+		ASSERT_UINT64_EQUAL(integer.atom, values[i])
 	}
 }
 
@@ -106,8 +106,8 @@ int main(int argc, char * argv[])
 {
 	SetupMemory();
 
-	ExecuteTest(testGetDatumTypeName);
-	ExecuteTest(testFindTypeFromString);
+	ExecuteTest(testGetAtomTypeName);
+	ExecuteTest(testAtomTypeFromString);
 
 	ExecuteTest(testInt);
 	ExecuteTest(testUInt);

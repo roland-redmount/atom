@@ -148,7 +148,7 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		break;
 
 	case AT_UINT:
-		PrintUInt(typedAtom);
+		PrintUInt(typedAtom.atom);
 		break;
 
 	case AT_INT:

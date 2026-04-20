@@ -40,7 +40,7 @@ void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, 
 	TypedAtom tuple[3];
 	for(index32 i = 0; i < nUniqueElements; i++) {
 		ElementMultiple em = generator(i, data);
-		MultisetSetTuple(tuple, invalidAtom, em.element, CreateUInt(em.multiple));
+		MultisetSetTuple(tuple, invalidAtom, em.element, CreateTypedAtom(AT_UINT, em.multiple));
 		IFactAddClause(draft, tuple);
 	}
 	IFactEndConjunction(draft);

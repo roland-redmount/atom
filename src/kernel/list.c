@@ -62,7 +62,7 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 	);
 
 	TypedAtom listLengthTuple[2];
-	ListLengthSetTuple(listLengthTuple, invalidAtom, CreateUInt(nElements));
+	ListLengthSetTuple(listLengthTuple, invalidAtom, CreateTypedAtom(AT_UINT, nElements));
 	IFactAddClause(draft, listLengthTuple);
 	IFactEndConjunction(draft);	
 }
@@ -81,7 +81,7 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 
 		TypedAtom listElementTuple[3];
 		for(index32 i = 0; i < nElements; i++) {
-			listSetTuple(listElementTuple, invalidAtom, CreateUInt(i + 1), generator(i, data));
+			listSetTuple(listElementTuple, invalidAtom, CreateTypedAtom(AT_UINT, i + 1), generator(i, data));
 			IFactAddClause(draft, listElementTuple);
 		}
 		IFactEndConjunction(draft);
@@ -111,7 +111,7 @@ index32 ListAddElement(IFactDraft * draft, TypedAtom element)
 
 	TypedAtom listElementTuple[3];
 	index32 position = IFactDraftCurrentNClauses(draft) + 1;
-	listSetTuple(listElementTuple, invalidAtom, CreateUInt(position), element);
+	listSetTuple(listElementTuple, invalidAtom, CreateTypedAtom(AT_UINT, position), element);
 	IFactAddClause(draft, listElementTuple);
 	return position;
 }
@@ -173,7 +173,7 @@ size32 ListLength(Atom list)
 	TypedAtom resultTuple[2];
 	RelationBTreeQuerySingle(tree, queryTuple, resultTuple);
 	TypedAtom length = resultTuple[CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LENGTH)];
-	return (size32) GetUIntValue(length);
+	return (size32) length.atom;
 }
 
 
@@ -182,7 +182,7 @@ TypedAtom ListGetElement(Atom list, index32 position)
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
 
 	TypedAtom queryTuple[3];
-	listSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), CreateUInt(position), anonymousVariable);
+	listSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), CreateTypedAtom(AT_UINT, position), anonymousVariable);
 	TypedAtom resultTuple[3];
 	RelationBTreeQuerySingle(tree, queryTuple, resultTuple);
 	return resultTuple[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)];
@@ -220,7 +220,7 @@ index32 ListGetPosition(Atom list, TypedAtom element)
 			&iterator,
 			CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION)
 		);
-		p = GetUIntValue(position);
+		p = (index32) position.atom;
 	}
 	RelationBTreeIteratorEnd(&iterator);
 	return p;
