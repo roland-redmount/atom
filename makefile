@@ -155,7 +155,7 @@ LANG_FILES := $(addprefix lang/, \
  Quote SubstitutionList unification TermForm TypedAtom)
 
 DATUMTYPES_FILES := $(addprefix datumtypes/, \
- context FloatIEEE754 instruction Int Parameter UInt Variable)
+ FloatIEEE754 instruction Int Parameter UInt Variable)
 
 KERNEL_FILES := $(addprefix kernel/, \
  dispatch ifact kernel letter list lookup multiset pair RelationBTree string ServiceRegistry tuples)
@@ -167,7 +167,7 @@ NETWORK_FILES := $(addprefix network/, Connection Network)
 PARSER_FILES := $(addprefix parser/, Characters ClauseBuilder PartBuilder PredicateBuilder \
  StringBuffer TermBuilder Token Tokenizer)
 
-VM_FILES := $(addprefix vm/, bytecode vm)
+VM_FILES := $(addprefix vm/, bytecode bytecodecontext ccontext vm)
 
 GRAPHICS_FILES := $(addprefix graphics/, \
  Graphics Mesh Point Polygon TextBlock Triangle)

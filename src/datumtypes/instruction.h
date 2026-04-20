@@ -36,10 +36,11 @@ typedef byte OpCode;
 #define	OP_YES			0x14
 #define	OP_YESIF		0x15
 #define OP_BCTX			0x16		// create bytecode context
-#define OP_CCTX			0x17		// create C context -- should this be separate?
-#define OP_CALL			0x18
-#define OP_YIELD		0x19
-#define OP_END			0x1A
+#define OP_CCTX			0x17		// create C context
+#define OP_BCALL		0x18		// call bytecode context
+#define OP_CCALL		0x19		// call C service
+#define OP_YIELD		0x1A
+#define OP_END			0x1B
 
 // integer arithmetic
 #define	OP_ADD			0x20

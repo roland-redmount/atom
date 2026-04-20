@@ -12,6 +12,7 @@
 #include "lang/PredicateForm.h"
 #include "parser/PredicateBuilder.h"
 #include "vm/bytecode.h"
+#include "vm/bytecodecontext.h"
 #include "vm/vm.h"
 
 #include "testing/testing.h"
@@ -158,11 +159,11 @@ void testExecuteByteCode1(void)
 	Atom arguments[2] = {CreateInt(3).atom,  CreateInt(0).atom};
 	Atom rootContext = VMCreateRootContext(&record, arguments);
 	VMExecute(rootContext);
-	Atom * results = ContextArguments(rootContext);
+	Atom * results = BytecodeContextArguments(rootContext);
 	// results should be 3 * 3 
 	ASSERT_UINT32_EQUAL(results[1], 9);
 
-	FreeContext(rootContext);
+	FreeBytecodeContext(rootContext);
 
 	teardownBytecodeFixture1(fixture);
 }
@@ -235,7 +236,7 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	// CALL #2
-	BytecodeBeginInstruction(&bytecodeDraft, OP_CALL);
+	BytecodeBeginInstruction(&bytecodeDraft, OP_BCALL);
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_LEFT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
@@ -291,10 +292,10 @@ void testExecuteByteCode2(void)
 	Atom rootContext = VMCreateRootContext(&record, arguments);
 
 	VMExecute(rootContext);
-	Atom * results = ContextArguments(rootContext);
+	Atom * results = BytecodeContextArguments(rootContext);
 	ASSERT_UINT32_EQUAL(results[1], 3 * 4);
 
-	FreeContext(rootContext);
+	FreeBytecodeContext(rootContext);
 
 	teardownBytecodeFixture2(fixture);
 }
@@ -394,7 +395,7 @@ BytecodeServiceFixture setupBytecodeFixture3(void)
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	// CALL #2
-	BytecodeBeginInstruction(&bytecodeDraft, OP_CALL);
+	BytecodeBeginInstruction(&bytecodeDraft, OP_BCALL);
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_LEFT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 

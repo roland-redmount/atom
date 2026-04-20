@@ -1,16 +1,15 @@
 
-#include "datumtypes/context.h"
 #include "lang/Form.h"
 #include "lang/Formula.h"
 #include "kernel/list.h"
 #include "memory/allocator.h"
 #include "vm/bytecode.h"
+#include "vm/bytecodecontext.h"
 
 
 typedef struct s_BytecodeContext BytecodeContext;
 
 struct s_BytecodeContext {
-	uint32 nReferences;
 	BytecodeContext * parentContext;
 	Atom bytecode;
 	Atom program;				// list of instructions
@@ -25,47 +24,47 @@ struct s_BytecodeContext {
 };
 
 
-size32 ContextSize(size8 arity, size8 nRegisters)
+size32 BytecodeContextSize(size8 arity, size8 nRegisters)
 {
 	return sizeof(BytecodeContext) + (arity + nRegisters) * sizeof(Atom);
 }
 
 
-Atom * ContextArguments(Atom context)
+Atom * BytecodeContextArguments(Atom context)
 {
 	return (Atom *) (((byte *) context) + sizeof(BytecodeContext));
 }
 
 
-size8 ContextNArguments(Atom context)
+size8 BytecodeContextNArguments(Atom context)
 {
 	BytecodeContext * _context = (BytecodeContext *) context;
 	return _context->nArguments;
 }
 
 
-Atom * ContextRegisters(Atom context)
+Atom * BytecodeContextRegisters(Atom context)
 {
 	BytecodeContext * _context = (BytecodeContext *) context;
-	return ContextArguments(context) + _context->nArguments;
+	return BytecodeContextArguments(context) + _context->nArguments;
 }
 
 
-Atom * ContextConstants(Atom context)
+Atom * BytecodeContextConstants(Atom context)
 {
 	BytecodeContext * _context = (BytecodeContext *) context;
-	return ContextRegisters(context) + _context->nRegisters;
+	return BytecodeContextRegisters(context) + _context->nRegisters;
 }
 
 
-Atom ContextGetParent(Atom context)
+Atom BytecodeContextGetParent(Atom context)
 {
 	BytecodeContext * _context = (BytecodeContext *) context;
 	return (Atom) _context->parentContext;
 }
 
 
-void ContextSetParent(Atom context, Atom parentContext)
+void BytecodeContextSetParent(Atom context, Atom parentContext)
 {
 	BytecodeContext * _context = (BytecodeContext *) context;
 	_context->parentContext = (BytecodeContext *) parentContext;
@@ -95,16 +94,14 @@ Atom CreateBytecodeContext(ServiceRecord * service, Atom parentContext)
 	size8 arity = FormArity(service->form);
 	Atom registersList = BytecodeGetRegisters(bytecode);
 	size8 nRegisters = ListLength(registersList);
-	size32 contextSize = ContextSize(arity, nRegisters);
+	size32 contextSize = BytecodeContextSize(arity, nRegisters);
 	// allocate context
 	BytecodeContext * context = Allocate(contextSize);
 	SetMemory(context, contextSize, 0);
-	// set fields
-	context->bytecode = bytecode;	// needed by FreeChildContexts()
+	context->bytecode = bytecode;	// needed by BytecodeContextFreeChildContexts()
 	context->parentContext = (BytecodeContext *) parentContext;
 	context->nArguments = arity;
 	context->nRegisters = nRegisters;
-
 	context->program = BytecodeGetProgram(bytecode);
 	context->programLength = ListLength(context->program);
 	// 1-based program counter, marking the last instruction retrieved;
@@ -114,16 +111,38 @@ Atom CreateBytecodeContext(ServiceRecord * service, Atom parentContext)
 	// Copy registers (initial values).
 	// NOTE: this will be more efficient if we use an array-based list relation
 	// where atoms and types are separated
-	copyListDatums(registersList, ContextRegisters((Atom) context));
+	copyListDatums(registersList, BytecodeContextRegisters((Atom) context));
 	// Copy constants. Not strictly needed since they never change,
 	// but allows faster access
 	Atom constantsList = BytecodeGetConstants(bytecode);
-	copyListDatums(constantsList, ContextConstants((Atom) context));
+	copyListDatums(constantsList, BytecodeContextConstants((Atom) context));
 	return (Atom) context;
 }
 
+/*  Reference handling -- not sure if this is a good idea,
+    Only needed if context are ever references from more than
+	one parent context, and I don't think that will happen.
 
-bool ContextNextInstruction(Atom context, Atom * instruction)
+void ContextAcquire(Atom context)
+{
+	BytecodeContext * _context = (BytecodeContext *) context;
+	_context->nReferences++;
+}
+
+
+void ContextRelease(Atom context)
+{
+	BytecodeContext * _context = (BytecodeContext *) context;
+	ASSERT(_context->nReferences > 0);
+	_context->nReferences--;
+	if(_context->nReferences == 0) {
+		FreeChildContexts(context);
+		Free((BytecodeContext *) context);
+	}
+}
+*/
+
+bool BytecodeContextNextInstruction(Atom context, Atom * instruction)
 {
 	BytecodeContext * _context = (BytecodeContext *) context;
 	if(_context->programCounter < _context->programLength) {
@@ -136,20 +155,20 @@ bool ContextNextInstruction(Atom context, Atom * instruction)
 }
 
 
-void FreeChildContexts(Atom context)
+void BytecodeContextFreeChildContexts(Atom context)
 {
 	// This requires knowing the register's atom type, so we need
 	// to retrieve the register list from the bytecode again ...
 	BytecodeContext * _context = (BytecodeContext *) context;
 	Atom registersList = BytecodeGetRegisters(_context->bytecode);
-	Atom * rp = ContextRegisters(context);
+	Atom * rp = BytecodeContextRegisters(context);
 	
 	ListIterator iterator;
 	ListIterate(registersList, &iterator);
 	while(ListIteratorHasNext(&iterator)) {
 		TypedAtom _register = ListIteratorGetElement(&iterator);
 		if(_register.type == AT_CONTEXT && *rp)
-			FreeContext(*rp);
+			FreeBytecodeContext(*rp);
 		ListIteratorNext(&iterator);
 		*rp++ = 0;
 	}
@@ -157,8 +176,8 @@ void FreeChildContexts(Atom context)
 }
 
 
-void FreeContext(Atom context)
+void FreeBytecodeContext(Atom context)
 {
-	FreeChildContexts(context);
+	BytecodeContextFreeChildContexts(context);
 	Free((BytecodeContext *) context);
 }

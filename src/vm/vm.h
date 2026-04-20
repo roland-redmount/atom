@@ -2,7 +2,7 @@
 #ifndef VM_H
 #define VM_H
 
-#include "datumtypes/context.h"
+#include "kernel/ServiceRegistry.h"
 
 /**
  * Initalize the VM stack &c
