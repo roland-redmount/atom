@@ -1,7 +1,7 @@
 #ifndef PAIR_H
 #define PAIR_H
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 #include "kernel/ifact.h"
 
 
@@ -16,17 +16,17 @@
  * (pair @atom left @left) & (pair @atom right @right) instead.
  * This is not a true trinary relation.
  */
-Atom CreatePair(Atom left, Atom right);
+Atom CreatePair(TypedAtom left, TypedAtom right);
 
 /**
  * Add pair ifacts (pair @atom left @left right @right) to a draft IFact
  */
-void AddPairToIFact(IFactDraft * draft, Atom left, Atom right);
+void AddPairToIFact(IFactDraft * draft, TypedAtom left, TypedAtom right);
 
 
 bool IsPair(Atom atom);
 
-Atom PairGetElement(Atom pair, uint8 element);
+TypedAtom PairGetElement(Atom pair, uint8 element);
 
 void PrintPair(Atom pair);
 

@@ -15,8 +15,8 @@ static SubstitutionList allocateSubstList(uint8 nPairs)
 {
 	SubstitutionList subst;
 	subst.nPairs = nPairs;
-	subst.variables = malloc(sizeof(Atom*) * nPairs);
-	subst.values = malloc(sizeof(Atom*) * nPairs);
+	subst.variables = malloc(sizeof(TypedAtom*) * nPairs);
+	subst.values = malloc(sizeof(TypedAtom*) * nPairs);
 	return subst;
 }
 
@@ -36,14 +36,14 @@ SubstitutionList CreateSubstFromVars(Atom list)
 	// count number of unique variables = no. pairs
 	subst.nPairs = 0;
 	for(index8 i = 0; i < nElements; i++) {
-		Atom a = ListGetElement(list, i+1);
+		TypedAtom a = ListGetElement(list, i+1);
 		PrintF("atom %u ", i);
-		if(a.type == DT_VARIABLE)
+		if(a.type == AT_VARIABLE)
 		{
 			// check if variable was already found
 			bool newVariable = true;
 			for(index8 j = 0; j < subst.nPairs; j++) {
-				if(SameAtoms(subst.variables[i], a)) {
+				if(SameTypedAtoms(subst.variables[i], a)) {
 					PrintF("variable exists\n");
 					newVariable = false;
 					break;
@@ -65,10 +65,10 @@ SubstitutionList CreateSubstFromVars(Atom list)
 /**
  * Find the value corresponding to a given variable
  */
-Atom FindSubstValue(SubstitutionList subst, Atom variable)
+TypedAtom FindSubstValue(SubstitutionList subst, TypedAtom variable)
 {
 	for(index8 i = 0; i < subst.nPairs; i++) {
-		if(SameAtoms(subst.variables[i], variable))
+		if(SameTypedAtoms(subst.variables[i], variable))
 			return subst.values[i];
 	}
 	// variable not found
@@ -78,10 +78,10 @@ Atom FindSubstValue(SubstitutionList subst, Atom variable)
 /**
  * Replace a substitution value for a given variable (if it exists)
  */
-void SetSubstValue(SubstitutionList subst, Atom variable, Atom value)
+void SetSubstValue(SubstitutionList subst, TypedAtom variable, TypedAtom value)
 {
 	for(index8 i = 0; i < subst.nPairs; i++) {
-		if(SameAtoms(subst.variables[i], variable)) {
+		if(SameTypedAtoms(subst.variables[i], variable)) {
 			// variable found, change value
 			subst.values[i] = value;
 			return;

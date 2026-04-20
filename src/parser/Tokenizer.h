@@ -23,7 +23,7 @@ struct s_Tokenizer {
 	union {
 		struct {
 			byte io;
-			byte datumType;
+			byte atomType;
 		} parameter;
 	} data;
 };

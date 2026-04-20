@@ -11,7 +11,7 @@
 
 
 typedef struct s_ElementMultiple {
-	Atom element;
+	TypedAtom element;
 	size32 multiple;
 } ElementMultiple;
 
@@ -19,7 +19,7 @@ typedef struct s_ElementMultiple {
 typedef ElementMultiple (*MultisetElementGenerator)(index32 index, void const * data);
 
 /**
- * Create an immutable multiset backed by an ifact, using an element generator function
+ * Create an immutable multiset (AT_ID) using an element generator function
  */
 Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size32 nUniqueElements);
 
@@ -30,10 +30,13 @@ void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, 
  * Create a multiset from arrays of atoms (unique elements) and corresponding multiples.
  * The array order is not significant.
  */
-Atom CreateMultisetFromArrays(Atom const * atoms, size32 const * multiples, size32 nUniqueElements);
+Atom CreateMultisetFromArrays(TypedAtom const * atoms, size32 const * multiples, size32 nUniqueElements);
 
-void AddMultisetToIFactFromArrays(IFactDraft * draft, Atom const * atoms, size32 const * multiples, size32 nUniqueElements);
+void AddMultisetToIFactFromArrays(IFactDraft * draft, TypedAtom const * atoms, size32 const * multiples, size32 nUniqueElements);
 
+/**
+ * Evaluate (multiset @atom)
+ */
 bool IsMultiset(Atom atom);
 
 /**
@@ -46,12 +49,12 @@ size32 MultisetNUniqueElements(Atom multiset);
  */
 size32 MultisetSize(Atom multiset);
 
-size32 MultisetGetElementMultiple(Atom multiset, Atom element);
+size32 MultisetGetElementMultiple(Atom multiset, TypedAtom element);
 
 /**
  * Assign values to a tuple of the (multiset element multiple) relation
  */
-void MultisetSetTuple(Atom * tuple, Atom multiset, Atom element, Atom multiple);
+void MultisetSetTuple(TypedAtom * tuple, TypedAtom multiset, TypedAtom element, TypedAtom multiple);
 
 /**
  * Find an order for a given array of elements consistent with
@@ -70,7 +73,7 @@ void MultisetSetTuple(Atom * tuple, Atom multiset, Atom element, Atom multiple);
  * 
  * NOTE: the length of elements and order arrays must equal MultisetSize()
  */
-void MultisetIterationOrder(Atom multiset, Atom const * elements, index8 * order, size8 nElements);
+void MultisetIterationOrder(Atom multiset, TypedAtom const * elements, index8 * order, size8 nElements);
 
 
 /**
@@ -84,7 +87,7 @@ void MultisetIterationOrder(Atom multiset, Atom const * elements, index8 * order
 
 typedef struct s_MultisetIterator
 {
-	Atom queryTuple[3];
+	TypedAtom queryTuple[3];
 	RelationBTreeIterator treeIterator;
 } MultisetIterator;
 

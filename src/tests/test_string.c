@@ -27,7 +27,7 @@ void testString(void)
 	// second call to CreateString() should return the same string
 	// and add one reference
 	Atom string1Clone = CreateStringFromCString(cString1);
-	ASSERT_TRUE(SameAtoms(string1, string1Clone))
+	ASSERT_DATA64_EQUAL(string1, string1Clone)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(string1), 2)
 	IFactRelease(string1Clone);
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(string1), 1)
@@ -38,11 +38,25 @@ void testString(void)
 	ASSERT_UINT32_EQUAL(ListLength(string2), CStringLength(cString2))
 
 	// we should have "foobar" < "fubar"
-	ASSERT_INT64_EQUAL(ListLexicalOrdering(string1, string2), -1)
-	ASSERT_INT64_EQUAL(ListLexicalOrdering(string2, string1), 1)
+	ASSERT_INT64_EQUAL(ListLexicalOrdering(string1, string2, &CompareTypedAtoms), -1)
+	ASSERT_INT64_EQUAL(ListLexicalOrdering(string2, string1, &CompareTypedAtoms), 1)
 
 	IFactRelease(string1);
 	IFactRelease(string2);
+}
+
+
+void fuzzTestString(void)
+{
+	char const * cString = "foobar";
+
+	Atom string = CreateStringFromCString(cString);
+	for(index32 i = 0; i < 100; i++) {
+		Atom stringClone = CreateStringFromCString(cString);
+		ASSERT_DATA64_EQUAL(string, stringClone);
+		IFactRelease(stringClone);
+	}
+	IFactRelease(string);
 }
 
 
@@ -51,8 +65,10 @@ int main(int argc, char * argv[])
 	KernelInitialize();
 
 	ExecuteTest(testString);
+	ExecuteTest(fuzzTestString);
 	
 	KernelShutdown();
 
 	TestSummary();
 }
+

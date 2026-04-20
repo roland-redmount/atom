@@ -10,34 +10,32 @@
 
 void testGetDatumTypeName(void)
 {
-	ASSERT_STRING_EQUAL(GetDatumTypeName(DT_UNKNOWN), "UNKNOWN")
-	ASSERT_STRING_EQUAL(GetDatumTypeName(DT_DATUMTYPE), "DATUMTYPE")
-	ASSERT_STRING_EQUAL(GetDatumTypeName(DT_UINT), "UINT")
-	ASSERT_STRING_EQUAL(GetDatumTypeName(DT_INT), "INT")
-	ASSERT_STRING_EQUAL(GetDatumTypeName(DT_FLOAT32), "FLOAT32")
-	ASSERT_STRING_EQUAL(GetDatumTypeName(DT_FLOAT64), "FLOAT64")
-	ASSERT_STRING_EQUAL(GetDatumTypeName(DT_LETTER), "LETTER")
-	ASSERT_STRING_EQUAL(GetDatumTypeName(DT_VARIABLE), "VARIABLE")
-	ASSERT_STRING_EQUAL(GetDatumTypeName(DT_NAME), "NAME")
-	ASSERT_STRING_EQUAL(GetDatumTypeName(DT_ID), "ID")
-	ASSERT_STRING_EQUAL(GetDatumTypeName(DT_INSTRUCTION), "INSTRUCTION")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_UINT), "UINT")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_INT), "INT")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_FLOAT32), "FLOAT32")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_FLOAT64), "FLOAT64")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_LETTER), "LETTER")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_VARIABLE), "VARIABLE")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_NAME), "NAME")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_ID), "ID")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_INSTRUCTION), "INSTRUCTION")
 }
 
 
 void testFindTypeFromString(void)
 {
-	ASSERT_UINT32_EQUAL(DatumTypeIdFromString("UINT", 4), DT_UINT)
+	ASSERT_UINT32_EQUAL(AtomTypeFromString("UINT", 4), AT_UINT)
 }
 
 
 void testFloat(void)
 {
 	double float64Value = 3.1415926535897932384;
-	Atom float64 = CreateFloat64(float64Value);
+	TypedAtom float64 = CreateFloat64(float64Value);
 	ASSERT_DOUBLE_EQUAL(GetFloat64Value(float64), float64Value)
 
 	float float32Value = 3.141592;
-	Atom float32 = CreateFloat32((float) float32Value);
+	TypedAtom float32 = CreateFloat32((float) float32Value);
 	ASSERT_FLOAT_EQUAL(GetFloat32Value(float32), float32Value)
 }
 
@@ -47,7 +45,7 @@ void testInt(void)
 	const int values[] = {42, 0, -7};
 	size32 n_values = sizeof(values) / sizeof(int);
 	for(index32 i = 0; i < n_values; i++) {
-		Atom integer = CreateInt(values[i]);
+		TypedAtom integer = CreateInt(values[i]);
 		ASSERT_INT64_EQUAL(GetIntValue(integer), values[i])
 	}
 }
@@ -58,7 +56,7 @@ void testUInt(void)
 	const uint64 values[] = {42, 0, 0xFFFFFFFFFFFFFFFFUL};
 	size32 n_values = sizeof(values) / sizeof(uint64);
 	for(index32 i = 0; i < n_values; i++) {
-		Atom integer = CreateUInt(values[i]);
+		TypedAtom integer = CreateUInt(values[i]);
 		ASSERT_UINT64_EQUAL(GetUIntValue(integer), values[i])
 	}
 }
@@ -66,21 +64,21 @@ void testUInt(void)
 
 void testVariable(void)
 {
-	Atom var1 = CreateVariable('X');
+	TypedAtom var1 = CreateVariable('X');
 	ASSERT_CHAR_EQUAL(GetVariableName(var1), 'x')
 
 	// variables are always lowercase
-	Atom var2 = CreateVariable('y');
+	TypedAtom var2 = CreateVariable('y');
 	ASSERT_CHAR_EQUAL(GetVariableName(var2), 'y')
 
-	Atom var3 = anonymousVariable;
+	TypedAtom var3 = anonymousVariable;
 	ASSERT_CHAR_EQUAL(GetVariableName(var3), '_')
 
 	// test quoting
 	ASSERT_FALSE(VariableIsQuoted(var1))
-	Atom quotedVar1 = QuoteVariable(var1);
+	TypedAtom quotedVar1 = QuoteVariable(var1);
 	ASSERT_TRUE(VariableIsQuoted(quotedVar1))
-	ASSERT_TRUE(SameAtoms(UnquoteVariable(quotedVar1), var1))
+	ASSERT_TRUE(SameTypedAtoms(UnquoteVariable(quotedVar1), var1))
 }
 
 
@@ -88,17 +86,17 @@ static void testLetter(void)
 {
 	index8 i = 1;
 	for(char c = 'A'; c <= 'Z'; c++) {
-		Atom letter = GetAlphabetLetter(c);
-		ASSERT_UINT32_EQUAL(letter.type, DT_LETTER)
-		ASSERT_DATA64_EQUAL(letter.datum, i)
+		TypedAtom letter = GetAlphabetLetter(c);
+		ASSERT_UINT32_EQUAL(letter.type, AT_LETTER)
+		ASSERT_DATA64_EQUAL(letter.atom, i)
 		i++;
 	}
 
 	i = 1;
 	for(char c = 'a'; c <= 'z'; c++) {
-		Atom letter = GetAlphabetLetter(c);
-		ASSERT_UINT32_EQUAL(letter.type, DT_LETTER)
-		ASSERT_DATA64_EQUAL(letter.datum, i)
+		TypedAtom letter = GetAlphabetLetter(c);
+		ASSERT_UINT32_EQUAL(letter.type, AT_LETTER)
+		ASSERT_DATA64_EQUAL(letter.atom, i)
 		i++;
 	}
 }
@@ -108,10 +106,9 @@ int main(int argc, char * argv[])
 {
 	SetupMemory();
 
-	// datum type functions
 	ExecuteTest(testGetDatumTypeName);
 	ExecuteTest(testFindTypeFromString);
-	// simple datums
+
 	ExecuteTest(testInt);
 	ExecuteTest(testUInt);
 	ExecuteTest(testFloat);

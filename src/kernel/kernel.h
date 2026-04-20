@@ -2,7 +2,7 @@
  * Main kernel routines
  */
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 #include "platform.h"
 
 
@@ -31,9 +31,9 @@ void KernelShutdown(void);
 /**
  * High level method to assert a fact.
  * Adds a tuple to the corresponding relation table,
- * and adds an entry to the lookup table for each DT_ID actor.
+ * and adds an entry to the lookup table for each AT_ID actor.
  */
-void AssertFact(Atom form, Atom * actors);
+void AssertFact(Atom form, TypedAtom * actors);
 
 
 /**
@@ -43,7 +43,13 @@ void AssertFact(Atom form, Atom * actors);
  * This function should always succeed, as facts can always
  * be retracted at any time.
  */
-void RetractFact(Atom form, Atom * actors);
+void RetractFact(Atom form, TypedAtom * actors);
+
+
+/**
+ * Remove all facts of a given form
+ */
+void RetractAllFacts(Atom predicateForm);
 
 
 /**
@@ -78,19 +84,18 @@ void RetractFact(Atom form, Atom * actors);
 #define ROLE_ACTORS					20
 
 #define ROLE_BYTECODE				21
-#define ROLE_SIGNATURE				22
-#define ROLE_PROGRAM				23
-#define ROLE_PARAMETER				24
-#define ROLE_REGISTERS				25
-#define ROLE_CONSTANTS				26
+#define ROLE_PROGRAM				22
+#define ROLE_PARAMETER				23
+#define ROLE_REGISTERS				24
+#define ROLE_CONSTANTS				25
 
-#define N_CORE_ROLES				26
+#define N_CORE_ROLES				25
 
 
 /**
- * Permanent identifiers for core predicates forms.
- * These are also used by TableRegistry for the corresponding
- * core relation tables.
+ * Indexes the for core predicates forms into lookup tables (see kernel.c)
+ * and into to the "core" B-tree services in ServiceRegistry.
+ * For forms 1 and 2 these are also the hardcoded atom values.
  */
 
 #define FORM_MULTISET_ELEMENT_MULTIPLE		1	// (multiset element multiple)
@@ -104,22 +109,21 @@ void RetractFact(Atom form, Atom * actors);
 #define FORM_FORMULA_FORM_ACTORS			9	// (formula form actors)
 #define FORM_QUOTE_QUOTED					10	// (quote quoted)
 #define FORM_STRING							11	// (string)
-#define FORM_BYTECODE_SIGNATURE				12	// (bytecode signature)
-#define FORM_BYTECODE_PROGRAM				13	// (bytecode program)
-#define FORM_BYTECODE_REGISTERS	    		14	// (bytecode registers)
-#define FORM_BYTECODE_CONSTANTS	    		15	// (bytecode registers)
+#define FORM_BYTECODE_PROGRAM				12	// (bytecode program)
+#define FORM_BYTECODE_REGISTERS	    		13	// (bytecode registers)
+#define FORM_BYTECODE_CONSTANTS	    		14	// (bytecode registers)
 
-#define N_CORE_PREDICATES					15
+#define N_CORE_PREDICATES					14
 
 /**
  * Lookup one of the "primitive" forms for core tables
- * Return a DT_ID.
+ * Returns an AT_ID atom.
  */
 Atom GetCorePredicateForm(index32 formId);
 
 
 /**
- * Lookup a core role name
+ * Lookup a core role name. Returns an AT_NAME atom.
  */
 Atom GetCoreRoleName(index32 roleId);
 
@@ -127,6 +131,6 @@ Atom GetCoreRoleName(index32 roleId);
 /**
  * Find the index in "canonical order" of a role in the
  * tuple of actors corresponding to the given core predicate form.
- * formId and roleId as as defind above.
+ * formId and roleId as as defined above.
  */
 index8 CorePredicateRoleIndex(index32 formId, index32 roleId);

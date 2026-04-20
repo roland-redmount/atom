@@ -74,7 +74,7 @@ typedef struct s_PredicateIterator
 	Permutation ** rolePerm;			// array of permutations, 1 per unique role
 } PredicateIterator;
 
-PredicateIterator* CreatePredicateIterator(Atom predForm);
+PredicateIterator* CreatePredicateIterator(Atom predicateForm);
 bool NextPredicatePermutation(PredicateIterator * iter);
 void FreePredicateIterator(PredicateIterator * iter);
 
@@ -118,9 +118,9 @@ typedef struct s_FormIterator {
 } FormIterator;
 
 // permute an array of indexes a, a+1., ..., a+n-1
-bool PermuteArray(index8* perm, index8 a, size8 n);
+bool PermuteArray(index8 * perm, index8 a, size8 n);
 
-FormIterator* CreateFormIterator(Atom form);
+FormIterator * CreateFormIterator(Atom form);
 bool NextFormPermutation(FormIterator* iter);
 // get corresponding tuple permutation vector
 void GetTuplePermutation(const FormIterator * iter, index8 * permutation);

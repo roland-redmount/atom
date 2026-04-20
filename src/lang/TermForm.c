@@ -1,6 +1,6 @@
 
-#include "datumtypes/UInt.h"
 #include "datumtypes/Variable.h"
+#include "datumtypes/UInt.h"
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
@@ -9,7 +9,7 @@
 #include "lang/TermForm.h"
 
 
-void TermFormSetTuple(Atom * tuple, Atom termForm, Atom predicateForm, Atom sign)
+void TermFormSetTuple(TypedAtom * tuple, TypedAtom termForm, TypedAtom predicateForm, TypedAtom sign)
 {
 	tuple[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM)] = termForm;
 	tuple[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_PREDICATE_FORM)] = predicateForm;
@@ -27,11 +27,16 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 	Atom termForm = GetCorePredicateForm(FORM_TERM_FORM);
 
 	IFactBeginConjunction(
-		&draft, termForm,
+		&draft,
+		termForm,
+		RegistryGetCoreTable(FORM_TERM_FORM),
 		CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM)
 	);
-	Atom tuple[3];
-	TermFormSetTuple(tuple, termForm, predicateForm, CreateUInt(sign ? 1 : 0));
+	TypedAtom tuple[3];
+	TermFormSetTuple(tuple,
+		CreateTypedAtom(AT_ID, termForm),	CreateTypedAtom(AT_ID, predicateForm),
+		CreateUInt(sign ? 1 : 0)
+	);
 	IFactAddClause(&draft, tuple);
 	IFactEndConjunction(&draft);
 
@@ -53,12 +58,13 @@ Atom GetPredicateForm(Atom termForm)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_TERM_FORM);
 
-	Atom query[3];
-	TermFormSetTuple(query, termForm, anonymousVariable, anonymousVariable);
-	Atom result[3];
+	TypedAtom query[3];
+	TermFormSetTuple(query,
+		CreateTypedAtom(AT_ID, termForm), anonymousVariable, anonymousVariable);
+	TypedAtom result[3];
 	RelationBTreeQuerySingle(tree, query, result);
 
-	return result[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_PREDICATE_FORM)];
+	return result[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_PREDICATE_FORM)].atom;
 }
 
 
@@ -66,13 +72,13 @@ bool TermFormGetSign(Atom termForm)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_TERM_FORM);
 
-	Atom query[3];
-	TermFormSetTuple(query, termForm, anonymousVariable, anonymousVariable);
-	Atom tuple[3];
+	TypedAtom query[3];
+	TermFormSetTuple(query, CreateTypedAtom(AT_ID, termForm), anonymousVariable, anonymousVariable);
+	TypedAtom tuple[3];
 	RelationBTreeQuerySingle(tree, query, tuple);
-	Atom sign = tuple[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_SIGN)];
+	TypedAtom sign = tuple[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_SIGN)];
 
-	return (sign.datum == 1);
+	return (sign.atom == 1);
 }
 
 

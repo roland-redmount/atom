@@ -5,7 +5,7 @@
 #include "kernel/kernel.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/multiset.h"
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "util/utilities.h"
@@ -14,12 +14,13 @@
 
 Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
 {
-	// reduce to unique roles
-	Atom uniqueRoles[nRoles];
-	CopyMemory(roles, uniqueRoles, nRoles * sizeof(Atom));
-	SortAtoms(uniqueRoles, nRoles);
+	// reduce to unique roles, typed for use with multiset
+	TypedAtom uniqueRoles[nRoles];
+	for(index8 i = 0; i < nRoles; i++)
+		uniqueRoles[i] = (TypedAtom) {.type = AT_NAME, .atom = roles[i]};
+	SortTypedAtoms(uniqueRoles, nRoles);
 	uint32 multiplicities[nRoles];
-	size8 nUniqueRoles = ReduceAtomArray(uniqueRoles, multiplicities, nRoles);
+	size8 nUniqueRoles = ReduceTypedAtomsArray(uniqueRoles, multiplicities, nRoles);
 
 	IFactDraft draft;
 	IFactBegin(&draft);
@@ -30,9 +31,10 @@ Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
 	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_PREDICATE_FORM),
+		RegistryGetCoreTable(FORM_PREDICATE_FORM),
 		0
 	);
-	Atom form = invalidAtom;
+	TypedAtom form = invalidAtom;
 	IFactAddClause(&draft, &form);
 	IFactEndConjunction(&draft);
 
@@ -43,7 +45,7 @@ Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
 bool IsPredicateForm(Atom atom)
 {
 	// special case for (multiset element multiple) form, for bootstrapping
-	if(atom.datum == GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE).datum)
+	if(atom == GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE))
 		return true;
 
 	return AtomHasRole(
@@ -69,7 +71,7 @@ size8 PredicateArity(Atom predicateForm)
 // TODO: this could use MultisetIterationOrder() instead
 index8 PredicateRoleIndex(Atom predicateForm, Atom role)
 {
-	ASSERT(role.type == DT_NAME)
+	ASSERT(IsPredicateForm(predicateForm));
 	MultisetIterator iterator;
 	MultisetIterate(predicateForm, &iterator);
 
@@ -77,7 +79,7 @@ index8 PredicateRoleIndex(Atom predicateForm, Atom role)
 	bool found = false;
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
-		if(SameAtoms(elementMultiple.element, role)) {
+		if(elementMultiple.element.atom == role) {
 			found = true;
 			break;
 		}
@@ -92,6 +94,7 @@ index8 PredicateRoleIndex(Atom predicateForm, Atom role)
 
 void PrintPredicateForm(Atom predicateForm)
 {	
+	ASSERT(IsPredicateForm(predicateForm))
 	MultisetIterator iterator;
 	MultisetIterate(predicateForm, &iterator);
 
@@ -99,7 +102,7 @@ void PrintPredicateForm(Atom predicateForm)
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
-			PrintName(elementMultiple.element);
+			PrintName(elementMultiple.element.atom);
 			PrintChar(' ');
 		}
 		MultisetIteratorNext(&iterator);

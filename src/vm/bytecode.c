@@ -14,27 +14,20 @@
 #include "vm/bytecode.h"
 
 
-static void setBytecodeSignature(IFactDraft * draft, Atom signature)
-{
-	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_BYTECODE);
-	index8 signatureIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
-
-	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_SIGNATURE), bytecodeIndex);
-	Atom tuple[2];
-	tuple[signatureIndex] = signature;
-	IFactAddClause(draft, tuple);
-	IFactEndConjunction(draft);
-}
-
-
+// (bytecode program)
 static void setBytecodeProgram(IFactDraft * draft, Atom program)
 {
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_BYTECODE);
 	index8 programIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
 
-	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_PROGRAM), bytecodeIndex);
-	Atom tuple[2];
-	tuple[programIndex] = program;
+	IFactBeginConjunction(
+		draft,
+		GetCorePredicateForm(FORM_BYTECODE_PROGRAM),
+		RegistryGetCoreTable(FORM_BYTECODE_PROGRAM),
+		bytecodeIndex
+	);
+	TypedAtom tuple[2];
+	tuple[programIndex] = CreateTypedAtom(AT_ID, program);
 	IFactAddClause(draft, tuple);
 	IFactEndConjunction(draft);
 }
@@ -46,22 +39,33 @@ static void setBytecodeRegisters(IFactDraft * draft, Atom registersList)
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_BYTECODE);
 	index8 registersIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
 
-	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_REGISTERS), bytecodeIndex);
-	Atom tuple[2];
-	tuple[registersIndex] = registersList;
+	IFactBeginConjunction(
+		draft,
+		GetCorePredicateForm(FORM_BYTECODE_REGISTERS),
+		RegistryGetCoreTable(FORM_BYTECODE_REGISTERS),
+		bytecodeIndex
+	);
+	TypedAtom tuple[2];
+	tuple[registersIndex] = CreateTypedAtom(AT_ID, registersList);
 	IFactAddClause(draft, tuple);
 	IFactEndConjunction(draft);
 }
 
 
+// (bytecode constants)
 static void setBytecodeConstants(IFactDraft * draft, Atom constantsList)
 {
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_BYTECODE);
 	index8 constantsIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
 
-	IFactBeginConjunction(draft, GetCorePredicateForm(FORM_BYTECODE_CONSTANTS), bytecodeIndex);
-	Atom tuple[2];
-	tuple[constantsIndex] = constantsList;
+	IFactBeginConjunction(
+		draft,
+		GetCorePredicateForm(FORM_BYTECODE_CONSTANTS),
+		RegistryGetCoreTable(FORM_BYTECODE_CONSTANTS),
+		bytecodeIndex
+	);
+	TypedAtom tuple[2];
+	tuple[constantsIndex] = CreateTypedAtom(AT_ID, constantsList);
 	IFactAddClause(draft, tuple);
 	IFactEndConjunction(draft);
 }
@@ -78,10 +82,9 @@ static void setBytecodeConstants(IFactDraft * draft, Atom constantsList)
  * For now we stick with the B-tree list implementation, but we should revisit this.
  */
 
-void BytecodeBegin(BytecodeDraft * draft, Atom signature, Atom registers)
+void BytecodeBegin(BytecodeDraft * draft, Atom registers)
 {
-	ASSERT(IsFormula(signature));
-	draft->signature = signature;
+	ASSERT(IsList(registers));
 	draft->registers = registers;
 
 	// Draft lists, modified when adding instructions
@@ -109,7 +112,7 @@ void BytecodeOperandRegister(BytecodeDraft * draft, Operand operand, index8 regi
 }
 
 
-void BytecodeOperandConstant(BytecodeDraft * draft, Operand operand, Atom constant)
+void BytecodeOperandConstant(BytecodeDraft * draft, Operand operand, TypedAtom constant)
 {
 	// TODO: constants should be a set
 	index8 position = ListAddElement(&(draft->constantsDraft), constant);
@@ -127,7 +130,7 @@ void BytecodeOperandSetContext(BytecodeDraft * draft, Operand operand, index8 re
 void BytecodeEndInstruction(BytecodeDraft * draft)
 {
 	Atom instruction = InstructionEnd(&(draft->instructionDraft));
-	ListAddElement(&(draft->programDraft), instruction);
+	ListAddElement(&(draft->programDraft), CreateTypedAtom(AT_INSTRUCTION, instruction));
 }
 
 
@@ -135,9 +138,6 @@ Atom BytecodeEnd(BytecodeDraft * draft)
 {
 	IFactDraft bytecodeDraft;
 	IFactBegin(&bytecodeDraft);
-
-	// (bytecode signature)
-	setBytecodeSignature(&bytecodeDraft, draft->signature);
 
 	// (bytecode registers)
 	setBytecodeRegisters(&bytecodeDraft, draft->registers);
@@ -151,9 +151,10 @@ Atom BytecodeEnd(BytecodeDraft * draft)
 	setBytecodeConstants(&bytecodeDraft, constants);
 
 	Atom bytecode = IFactEnd(&bytecodeDraft);
-	ReleaseAtom(program);
-	ReleaseAtom(constants);
+	IFactRelease(program);
+	IFactRelease(constants);
 	SetMemory(draft, sizeof(BytecodeDraft), 0);
+
 	return bytecode;
 }
 
@@ -162,7 +163,7 @@ bool IsBytecode(Atom atom)
 {
 	return AtomHasRole(
 		atom,
-		GetCorePredicateForm(FORM_BYTECODE_SIGNATURE),
+		GetCorePredicateForm(FORM_BYTECODE_PROGRAM),
 		GetCoreRoleName(ROLE_BYTECODE)
 	);
 }
@@ -174,31 +175,31 @@ Atom BytecodeGetProgram(Atom bytecode)
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_BYTECODE);
 	index8 programIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
 
-	Atom query[2];
-	query[bytecodeIndex] = bytecode;
+	TypedAtom query[2];
+	query[bytecodeIndex] = CreateTypedAtom(AT_ID, bytecode);
 	query[programIndex] = anonymousVariable;
 
-	Atom tuple[2];
+	TypedAtom tuple[2];
 	RelationBTreeQuerySingle(tree, query, tuple);
-	return tuple[programIndex];
+	return tuple[programIndex].atom;
 }
 
-
+/*
 Atom BytecodeGetSignature(Atom bytecode)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_SIGNATURE);
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_BYTECODE);
 	index8 signatureIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
 
-	Atom query[2];
-	query[bytecodeIndex] = bytecode;
+	TypedAtom query[2];
+	query[bytecodeIndex] = CreateTypedAtom(AT_ID, bytecode);
 	query[signatureIndex] = anonymousVariable;
 
-	Atom tuple[2];
+	TypedAtom tuple[2];
 	RelationBTreeQuerySingle(tree, query, tuple);
-	return tuple[signatureIndex];
+	return tuple[signatureIndex].atom;
 }
-
+*/
 
 Atom BytecodeGetRegisters(Atom bytecode)
 {
@@ -206,13 +207,13 @@ Atom BytecodeGetRegisters(Atom bytecode)
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_BYTECODE);
 	index8 registersIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
 
-	Atom query[2];
-	query[bytecodeIndex] = bytecode;
+	TypedAtom query[2];
+	query[bytecodeIndex] = CreateTypedAtom(AT_ID, bytecode);
 	query[registersIndex] = anonymousVariable;
 
-	Atom tuple[2];
+	TypedAtom tuple[2];
 	RelationBTreeQuerySingle(tree, query, tuple);
-	return tuple[registersIndex];
+	return tuple[registersIndex].atom;
 }
 
 
@@ -222,22 +223,21 @@ Atom BytecodeGetConstants(Atom bytecode)
 	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_BYTECODE);
 	index8 constantsIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
 
-	Atom query[2];
-	query[bytecodeIndex] = bytecode;
+	TypedAtom query[2];
+	query[bytecodeIndex] = CreateTypedAtom(AT_ID, bytecode);
 	query[constantsIndex] = anonymousVariable;
 
-	Atom tuple[2];
+	TypedAtom tuple[2];
 	RelationBTreeQuerySingle(tree, query, tuple);
-	return tuple[constantsIndex];
+	return tuple[constantsIndex].atom;
 }
 
 
 // TODO: temporary solution to be able to locate
-//  and remove the service (+ + =) to avoid memory leaks.
-//  We need a systematic way of deallocating all services,
-//  and dismantling the system in general.
+// and remove the service (+ + =) to test for memory leaks.
+// In practise we would persist these services, not remove them.
 
-static Service additionService;
+static Atom additionService;
 
 
 /**
@@ -253,7 +253,7 @@ static void createAdditionService(void)
 
 	// create bytecode draft
 	BytecodeDraft bytecodeDraft;
-	BytecodeBegin(&bytecodeDraft, signature, registers);
+	BytecodeBegin(&bytecodeDraft, registers);
 	
 	// COPY @2 $1
 	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
@@ -268,12 +268,15 @@ static void createAdditionService(void)
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	Atom bytecode = BytecodeEnd(&bytecodeDraft);
-	ReleaseAtom(signature);
-	ReleaseAtom(registers);
+	IFactRelease(registers);
 
-	// NOTE: the form is now both a registry key and part of the bytecode definition
-	additionService = RegistryAddBytecodeService(bytecode);
-	ReleaseAtom(bytecode);
+	// TODO: create the service properly
+	additionService = RegistryAddBytecodeService(
+		signature,
+		bytecode
+	);
+	IFactRelease(signature);
+	IFactRelease(bytecode);
 }
 
 
@@ -281,7 +284,7 @@ static void createAdditionService(void)
  * TODO: This should become part of the "standard library" of services.
  * This is not "core" services in the sense of being required for the system to function.
  */
-void SetupCoreServices(void)
+void SetupServiceLibrary(void)
 {
 	createAdditionService();
 }
@@ -289,5 +292,12 @@ void SetupCoreServices(void)
 
 void TeardownCoreServices(void)
 {
-	RegistryRemoveService(additionService.form);
+	RegistryRemoveService(additionService);
+}
+
+
+void PrintBytecode(Atom bytecode)
+{	
+	Atom program = BytecodeGetProgram(bytecode);
+	PrintF("Bytecode[%u instructions]", ListLength(program));
 }

@@ -1,6 +1,5 @@
 /**
- * A bytecode program consists of a signature, registers,
- * constants, and an instruction list (program).
+ * A bytecode program consists of registers, constants, and an instruction list.
  */
 
 #ifndef BYTECODE_H
@@ -11,19 +10,17 @@
 
 
 typedef struct s_BytecodeDraft {
-	Atom signature;
 	Atom registers;
 	IFactDraft constantsDraft;
 	IFactDraft programDraft;
 	Instruction instructionDraft;
-	// size32 callCounter;
 } BytecodeDraft;
 
 /**
  * Initialize a bytecode block from a DT_FORMULA signature,
  * and an array of initial values for registers.
  */
-void BytecodeBegin(BytecodeDraft * draft, Atom signature, Atom registers);
+void BytecodeBegin(BytecodeDraft * draft, Atom registers);
 
 /**
  * Structure specifying a bytecode argument or operand
@@ -31,9 +28,9 @@ void BytecodeBegin(BytecodeDraft * draft, Atom signature, Atom registers);
 typedef struct {
 	enum {ARG_PARAMETER, ARG_REGISTER, ARG_CONSTANT} type;
 	union {
-		Atom parameter;
+		TypedAtom parameter;
 		index8 registerIndex;
-		Atom constant;
+		TypedAtom constant;
 	} value;
 } BytecodeArgument;
 
@@ -52,7 +49,7 @@ void BytecodeBeginInstruction(BytecodeDraft * draft, byte opcode);
 void BytecodeOperandParameter(BytecodeDraft * draft, Operand operand, index8 index);
 void BytecodeOperandRegister(BytecodeDraft * draft, Operand operand, index8 registerIndex);
 
-void BytecodeOperandConstant(BytecodeDraft * draft, Operand operand, Atom constant);
+void BytecodeOperandConstant(BytecodeDraft * draft, Operand operand, TypedAtom constant);
 
 void BytecodeOperandSetContext(BytecodeDraft * draft, Operand operand, index8 registerIndex);
 
@@ -60,13 +57,13 @@ void BytecodeEndInstruction(BytecodeDraft * draft);
 
 
 /**
- * Finalize bytecode and create IFact atom. This creates the relations
+ * Finalize bytecode and create a AT_ID atom. This creates the relations
  * 
- * (bytecode @b signature f) where f is a DT_FORMULA
+ * (bytecode @b signature f) where f is a formula
  * 
  * (bytecode @b registers r)
  * where r is a list of initial values for registers (atoms),
- * which also determines each register's datum type.
+ * which also determines each register's atom type.
  * 
  * (bytecode @b constants c)
  * where c is a list of constants (atoms).
@@ -85,17 +82,12 @@ bool IsBytecode(Atom atom);
 Atom BytecodeGetProgram(Atom bytecode);
 
 /**
- * Returns a formula
- */
-Atom BytecodeGetSignature(Atom bytecode);
-
-/**
- * Read a instruction from a bytecode block.
+ * Read a instruction (AT_INSTRUCTION) from a bytecode block.
  */
 Atom BytecodeGetInstruction(Atom bytecode, index32 pc);
 
 /**
- * Get a list of registers (initial values)
+ * Get the list of registers (initial values)
  */
 Atom BytecodeGetRegisters(Atom bytecode);
 
@@ -107,9 +99,12 @@ Atom BytecodeGetConstants(Atom bytecode);
 /**
  * Create core bytecode services, such as arithmetic operations.
  */
-void SetupCoreServices(void);
+void SetupServiceLibrary(void);
 
 void TeardownCoreServices(void);
+
+void PrintBytecode(Atom bytecode);
+
 
 #endif	// BYTECODE_H
 

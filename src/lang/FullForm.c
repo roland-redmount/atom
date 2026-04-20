@@ -13,18 +13,19 @@
  */
 Atom CreateFullForm(Atom const * clauseForms, size8 nClauseForms, index8 const * order)
 {
-	Atom uniqueClauseForms[nClauseForms];
+	TypedAtom uniqueClauseForms[nClauseForms];
 	for(index8 i = 0; i < nClauseForms; i++) {
 		index8 j = order ? order[i] : i;
-		uniqueClauseForms[i] = clauseForms[j];
+		uniqueClauseForms[i] = CreateTypedAtom(AT_ID, clauseForms[j]);
 	}
 	// reduce to unique roles
 	uint32 multiplicities[nClauseForms];
-	size8 nUniqueClauseForms = ReduceAtomArray(uniqueClauseForms, multiplicities, nClauseForms);
+	size8 nUniqueClauseForms = ReduceTypedAtomsArray(uniqueClauseForms, multiplicities, nClauseForms);
 
 	// create a multiset of clause forms
 	Atom conjunctionForm = CreateMultisetFromArrays(uniqueClauseForms, multiplicities, nUniqueClauseForms);
-	AssertFact(GetCorePredicateForm(FORM_CONJUNCTION_FORM), &conjunctionForm);
+	TypedAtom conjunctionFormAtom = CreateTypedAtom(AT_ID, conjunctionForm);
+	AssertFact(GetCorePredicateForm(FORM_CONJUNCTION_FORM), &conjunctionFormAtom);
 	return conjunctionForm;
 }
 
@@ -59,7 +60,7 @@ size8 FullFormArity(Atom form)
 	size8 arity = 0;
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
-		uint8 clauseArity = ClauseArity(elementMultiple.element);
+		uint8 clauseArity = ClauseArity(elementMultiple.element.atom);
 		arity += clauseArity * elementMultiple.multiple;
 		MultisetIteratorNext(&iterator);
 	}
@@ -79,7 +80,7 @@ void PrintFullForm(Atom form)
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
-			PrintClauseForm(elementMultiple.element);
+			PrintClauseForm(elementMultiple.element.atom);
 			PrintCString(" & ");
 		}
 		MultisetIteratorNext(&iterator);

@@ -16,7 +16,7 @@
 #define EXAMPLE_N_ATOMS		3
 
 typedef struct {
-	Atom atoms[EXAMPLE_N_ATOMS];
+	TypedAtom atoms[EXAMPLE_N_ATOMS];
 } AtomsFixture;
 
 
@@ -35,21 +35,23 @@ static AtomsFixture createAtomsFixture(void)
 static void testCreateList(void)
 {
 	AtomsFixture fixture = createAtomsFixture();
+	BTree * listLength = RegistryGetCoreTable(FORM_LIST_LENGTH);
+	BTree * listPositionElement = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
+	size32 listLengthNRowsInitial = RelationBTreeNRows(listLength);
+	size32 listPositionElementNRowsInitial = RelationBTreeNRows(listPositionElement);
 	
 	Atom list = CreateListFromArray(fixture.atoms, EXAMPLE_LIST_N_ELEMENTS);
-	
 	// test (list length) relation table
-	BTree * listLength = RegistryGetCoreTable(FORM_LIST_LENGTH);
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(listLength), 1)
-
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(listLength),listLengthNRowsInitial + 1)
 	// test (list position element) relation table
-	Atom listPositionElementForm = GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT);
-	BTree * listPositionElement = RegistryLookupTable(listPositionElementForm);
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(listPositionElement), EXAMPLE_LIST_N_ELEMENTS)
+	ASSERT_UINT32_EQUAL(
+		RelationBTreeNRows(listPositionElement),
+		listPositionElementNRowsInitial + EXAMPLE_LIST_N_ELEMENTS
+	)
 
 	// test elements are as expected
 	for(index8 i = 0; i < EXAMPLE_LIST_N_ELEMENTS; i++)
-		ASSERT_TRUE(SameAtoms(ListGetElement(list, i+1), fixture.atoms[i]))
+		ASSERT_TRUE(SameTypedAtoms(ListGetElement(list, i+1), fixture.atoms[i]))
 
 	// test list length
 	ASSERT_UINT32_EQUAL(ListLength(list), EXAMPLE_LIST_N_ELEMENTS)
@@ -59,8 +61,8 @@ static void testCreateList(void)
 	ListIterate(list, &iterator);
 	for(index8 i = 0; i < EXAMPLE_LIST_N_ELEMENTS; i++) {
 		ASSERT_TRUE(ListIteratorHasNext(&iterator))
-		Atom element = ListIteratorGetElement(&iterator);
-		ASSERT_TRUE(SameAtoms(element, fixture.atoms[i]))
+		TypedAtom element = ListIteratorGetElement(&iterator);
+		ASSERT_TRUE(SameTypedAtoms(element, fixture.atoms[i]))
 		ListIteratorNext(&iterator);
 	}
 	ASSERT_FALSE(ListIteratorHasNext(&iterator))
@@ -70,25 +72,25 @@ static void testCreateList(void)
 	for(index8 i = 0; i < EXAMPLE_LIST_N_ELEMENTS; i++)
 		ASSERT_UINT32_EQUAL(ListGetPosition(list, fixture.atoms[i]), i + 1)
 
-	Atom tuple[3];
+	TypedAtom tuple[3];
 
 	index8 listRoleIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST);
 	index8 positionRoleIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION);
 	index8 elementRoleIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT);
 
 	// attempt to add a tuple (list @string position 7 element 'Z') will violate the ifact
-	tuple[listRoleIndex] = list;
+	tuple[listRoleIndex] = CreateTypedAtom(AT_ID, list);
 	tuple[positionRoleIndex] = CreateUInt(7);
 	tuple[elementRoleIndex] = GetAlphabetLetter('Z');
 	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(listPositionElement, tuple), TUPLE_PROTECTED)
 
 	// attempt to remove any tuple (list @string position _ element _) will violate the ifact
-	tuple[listRoleIndex] = list;
+	tuple[listRoleIndex] = CreateTypedAtom(AT_ID, list);
 	tuple[positionRoleIndex] = CreateUInt(3);
 	tuple[elementRoleIndex] = GetAlphabetLetter('Y');
 	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuples(listPositionElement, tuple, REMOVE_NORMAL), 0)
 	
-	ReleaseAtom(list);
+	IFactRelease(list);
 }
 
 
@@ -97,7 +99,7 @@ typedef struct {
 	Atom list;
 } ExampleListFixture;
 
-// a list containing only "small" datums
+// a list containing only "small" atoms
 static ExampleListFixture setupExampleListFixture(void)
 {
 	ExampleListFixture fixture;
@@ -109,7 +111,7 @@ static ExampleListFixture setupExampleListFixture(void)
 
 static void teardownExampleListFixture(ExampleListFixture fixture)
 {
-	ReleaseAtom(fixture.list);
+	IFactRelease(fixture.list);
 }
 
 
@@ -120,22 +122,22 @@ static void testNestedList(void)
 	// arrange
 	ExampleListFixture fixture = setupExampleListFixture();
 
-	Atom nestedListAtoms[] = {
+	TypedAtom nestedListAtoms[] = {
 		GetAlphabetLetter('A'),
-		fixture.list
+		CreateTypedAtom(AT_ID, fixture.list)
 	};
 
 	Atom nestedList = CreateListFromArray(nestedListAtoms, NESTED_LIST_N_ELEMENTS);
 	
 	// test ListGetElement
 	for(index8 i = 0; i < NESTED_LIST_N_ELEMENTS; i++)
-		ASSERT_TRUE(SameAtoms(ListGetElement(nestedList, i+1), nestedListAtoms[i]))
+		ASSERT_TRUE(SameTypedAtoms(ListGetElement(nestedList, i+1), nestedListAtoms[i]))
 
 	// test ListGetPosition
-	index32 position = ListGetPosition(nestedList, fixture.list);
+	index32 position = ListGetPosition(nestedList, CreateTypedAtom(AT_ID, fixture.list));
 	ASSERT_UINT32_EQUAL(position, 2)
 
-	ReleaseAtom(nestedList);
+	IFactRelease(nestedList);
 
 	teardownExampleListFixture(fixture);
 }
@@ -152,7 +154,7 @@ static void testCreateEmptyList(void)
 	ASSERT_FALSE(ListIteratorHasNext(&iterator))
 	ListIteratorEnd(&iterator);
 
-	ReleaseAtom(emptyList);
+	IFactRelease(emptyList);
 }
 
 

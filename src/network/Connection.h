@@ -86,7 +86,7 @@ byte* ReceiveMessage(Connection* conn);
 // send a generic message, starting with a ComHeader 
 //void SendMessage(NetworkSocket s, byte* message);
 
-// send a datum array
+// send a atom array
 //void SendDatumArrayMessage(NetworkSocket s, uint32 messageId, byte64_t* datums, size_t nDatums);
 
 

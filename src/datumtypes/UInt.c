@@ -5,21 +5,21 @@
 /**
  * Create specific size atom
  */
-Atom CreateUInt(uint64 value)
+TypedAtom CreateUInt(uint64 value)
 {
-	return (Atom) {.type = DT_UINT, .datum = value};
+	return (TypedAtom) {.type = AT_UINT, .atom = value};
 }
 
 /**
  * Convert to C literal
  */
-uint64 GetUIntValue(Atom integer)
+uint64 GetUIntValue(TypedAtom integer)
 {
-	return (uint64) integer.datum;
+	return (uint64) integer.atom;
 }
 
 
-void PrintUInt(Atom integer)
+void PrintUInt(TypedAtom integer)
 {
 	PrintF("%llu", GetUIntValue(integer));
 }

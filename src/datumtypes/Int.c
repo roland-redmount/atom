@@ -3,21 +3,21 @@
 #include "datumtypes/UInt.h"		// for type conversion
 
 
-Atom CreateInt(int64 value)
+TypedAtom CreateInt(int64 value)
 {
-	return (Atom) {.type = DT_INT, .datum = value};
+	return (TypedAtom) {.type = AT_INT, .atom = value};
 }
 
 /**
  * Convert to C literal
  */
-int64 GetIntValue(Atom integer)
+int64 GetIntValue(TypedAtom integer)
 {
-	return (int64) integer.datum;
+	return (int64) integer.atom;
 }
 
 
-void PrintInt(Atom integer)
+void PrintInt(TypedAtom integer)
 {
 	PrintF("%lld", GetIntValue(integer));
 }

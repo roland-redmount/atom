@@ -1,5 +1,5 @@
 /**
- * The datum type DT_NAME
+ * The atom type AT_NAME
  * 
  * This should be a list (name n -> list n) but for bootstrapping purposes,
  * we implement this with a btree of C strings. We should implement services
@@ -9,7 +9,7 @@
 #ifndef NAME_H
 #define NAME_H
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 
 void InitializeNameStorage(void);
 void FreeNameStorage(void);
@@ -30,7 +30,7 @@ void NameAcquire(Atom name);
 void NameRelease(Atom name);
 uint32 NameTotalReferenceCount(void);
 
-bool IsName(Atom atom);
+bool IsName(TypedAtom atom);
 
 void PrintName(Atom name);
 

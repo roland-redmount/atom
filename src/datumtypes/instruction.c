@@ -3,14 +3,14 @@
 
 
 char const * mnemonics[] = {
-	// 0x00 - 0x0F general purpose instructions, any datum type
+	// 0x00 - 0x0F general purpose instructions, any atom type
 
 	"NOP", "COPY", "EQ", "NOP", "NOP", "NOP", "NOP", "NOP", 
 	"NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
 	
 	// 0x10 - 0x1F program control
-	"NOT", "MARK", "JUMP", "ENDIF", "YES", "YESIF", "EXEC", "RESUME", 
-	"YIELD", "END", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
+	"NOT", "MARK", "JUMP", "ENDIF", "YES", "YESIF", "BCTX", "CCTX",
+	"BCALL", "CCALL", "YIELD", "END", "NOP", "NOP", "NOP", "NOP",
 
 	// 0x20 - 0x2F integer arithmetic
 	"ADD", "SUB", "INC", "DEC", "MUL", "LESS", "LESSEQ", "NOP", 
@@ -59,14 +59,14 @@ void InstructionSetContext(Instruction * draft, Operand operand, index8 contextI
 
 Atom InstructionEnd(Instruction * draft)
 {
-	return (Atom) {DT_INSTRUCTION, 0, 0, 0, draft->value};
+	return (Atom) draft->value;
 }
 
 
 Instruction InstructionGetData(Atom instruction)
 {
 	Instruction inst;
-	inst.value = instruction.datum;
+	inst.value = instruction;
 	return inst;
 }
 

@@ -11,17 +11,17 @@ void testDispatch(void)
 
 	Atom query = CStringToPredicate("+ 3 + 4 = _");
 
-	Service service = DispatchQuery(query);
+	ServiceRecord service = DispatchQuery(query);
 	ASSERT(service.type == SERVICE_BYTECODE);
 	
-	ReleaseAtom(query);
+	IFactRelease(query);
 }
 
 
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	SetupCoreServices();
+	SetupServiceLibrary();
 
 	ExecuteTest(testDispatch);
 

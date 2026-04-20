@@ -1,12 +1,7 @@
 
 /**
  * The dispatcher accepts a query (formula) and finds a matching service
- * within the current process, which can be either a relation table or
- * a bytecode service. The service can then be called from within Imladris
- * using the CALL instruction, or from kernel code using CallService()
- * 
- * Queries dispatched to relation tables are handled by a built-in mechanism
- * that behaves in the same as bytecode services.
+ * within the current process.
  */
 
 #ifndef DISPATCH_H
@@ -16,11 +11,10 @@
 
 
 /**
- * Dispatch a query, return the first matching service, if any.
+ * Dispatch a query (formula), return the matching service, if any.
  */
-Service DispatchQuery(Atom query);
+ServiceRecord DispatchQuery(Atom query);
 
-void CallService(Service service, Atom * tuple);
 
 
 // generic tuple matching across formula permutations
@@ -51,7 +45,7 @@ void CallService(Service service, Atom * tuple);
  *
  * TODO: this does not handle unification properly! Generally, there may be
  *   more than one matching tuple, and we must select the most general unifier.
- *   We should probably replace this with unification followed by a datum type check
+ *   We should probably replace this with unification followed by a atom type check
  */
 
 // bool SignatureQueryMatch(const Signature* signature, Atom query, Atom * inputs, index8 * perm);

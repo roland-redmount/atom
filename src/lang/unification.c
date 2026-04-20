@@ -17,13 +17,13 @@
  * We represent an undirected graph as a list of 2*n atom pointers
  * such that the pair {2k, 2k+1} holds edge k.
  */
-static Atom graphGetNode(Atom const * edges, index8 edge, index8 node)
+static TypedAtom graphGetNode(TypedAtom const * edges, index8 edge, index8 node)
 {
 	return edges[2*edge + node];
 }
 
 
-static void graphSetNode(Atom * edges, index8 edge, index8 node, Atom newNode)
+static void graphSetNode(TypedAtom * edges, index8 edge, index8 node, TypedAtom newNode)
 {
 	edges[2*edge + node] = newNode;
 }
@@ -33,12 +33,12 @@ static void graphSetNode(Atom * edges, index8 edge, index8 node, Atom newNode)
  * Replace all occurences of source with dest in the given graph,
  * starting from a given edge
  */
-static void graphSubstitute(Atom source, Atom dest, Atom * edges, uint8 nEdges, uint8 startEdge)
+static void graphSubstitute(TypedAtom source, TypedAtom dest, TypedAtom * edges, uint8 nEdges, uint8 startEdge)
 {
 	for(index8 i = startEdge; i < nEdges; i++) {
-		if(SameAtoms(edges[2*i], source))
+		if(SameTypedAtoms(edges[2*i], source))
 			edges[2*i] = dest;
-		if(SameAtoms(edges[2*i + 1], source))
+		if(SameTypedAtoms(edges[2*i + 1], source))
 			edges[2*i + 1] = dest;
 	}
 }
@@ -46,15 +46,15 @@ static void graphSubstitute(Atom source, Atom dest, Atom * edges, uint8 nEdges, 
 /**
  * Check if an undirected edge {a1, a2} exists in the graph given by the edges list.
  */
-static bool findInUGraph(Atom a1, Atom a2, Atom const * edges, uint8 nEdges)
+static bool findInUGraph(TypedAtom a1, TypedAtom a2, TypedAtom const * edges, uint8 nEdges)
 {
 	for(index8 j = 0; j < nEdges; j++) {
-		Atom left = graphGetNode(edges, j, EDGE_LEFT_NODE);
-		Atom right = graphGetNode(edges, j, EDGE_RIGHT_NODE);
+		TypedAtom left = graphGetNode(edges, j, EDGE_LEFT_NODE);
+		TypedAtom right = graphGetNode(edges, j, EDGE_RIGHT_NODE);
 		// check for match in either direction
-		if(SameAtoms(left, a1) && SameAtoms(right, a2))
+		if(SameTypedAtoms(left, a1) && SameTypedAtoms(right, a2))
 			return true;
-		if(SameAtoms(left, a2) && SameAtoms(right, a1))
+		if(SameTypedAtoms(left, a2) && SameTypedAtoms(right, a1))
 			return true;
 	}
 	return false;
@@ -67,7 +67,7 @@ static bool findInUGraph(Atom a1, Atom a2, Atom const * edges, uint8 nEdges)
  * 
  * Returns the number of edges added
  */
-static uint8 CreateUnificationGraph(Atom list1, Atom list2, Atom * edges, size8 nAtoms)
+static uint8 CreateUnificationGraph(Atom list1, Atom list2, TypedAtom * edges, size8 nAtoms)
 {
 	PrintF("CreateUnificationGraph() nAtoms = %u\n", nAtoms);
 	uint8 nEdges = 0;
@@ -75,10 +75,10 @@ static uint8 CreateUnificationGraph(Atom list1, Atom list2, Atom * edges, size8 
 	// we assume both tuples are of the same length
 	for(index8 i = 0; i < nAtoms; i++) {
 		// TODO: would be more efficient to traverse the graph once
-		Atom a1 = ListGetElement(list1, i+1);
-		Atom a2 = ListGetElement(list2, i+1);
+		TypedAtom a1 = ListGetElement(list1, i+1);
+		TypedAtom a2 = ListGetElement(list2, i+1);
 		PrintF("Pair %u\n", i);
-		if(SameAtoms(a1, a2)) {
+		if(SameTypedAtoms(a1, a2)) {
 			// same atom, don't add self-edge
 			continue;
 		}
@@ -114,7 +114,7 @@ bool UnifyTuples(Atom list1, Atom list2, SubstitutionList * subst1, Substitution
 	PrintF("Found %u unique variables\n", subst1->nPairs);
 	
 	// create the unification graph with edges between pairs from t1, t2
-	Atom edges[2 * nAtoms];
+	TypedAtom edges[2 * nAtoms];
 	uint8 nEdges = CreateUnificationGraph(list1, list2, edges, nAtoms);
 	PrintF("U Graph has %u edges\n", nEdges);
 	
@@ -122,9 +122,9 @@ bool UnifyTuples(Atom list1, Atom list2, SubstitutionList * subst1, Substitution
 	for(index8 i = 0; i < nEdges; i++) {
 		PrintF("Checking edge %u\n", i);
 		// next edge
-		Atom a1 = graphGetNode(edges, i, EDGE_LEFT_NODE);
-		Atom a2 = graphGetNode(edges, i, EDGE_RIGHT_NODE);
-		if(SameAtoms(a1, a2)) {
+		TypedAtom a1 = graphGetNode(edges, i, EDGE_LEFT_NODE);
+		TypedAtom a2 = graphGetNode(edges, i, EDGE_RIGHT_NODE);
+		if(SameTypedAtoms(a1, a2)) {
 			// edge to self, nothing to substitute
 			// (these can be created by substitutions during graph traversal)
 		}
@@ -150,14 +150,14 @@ bool UnifyTuples(Atom list1, Atom list2, SubstitutionList * subst1, Substitution
 			return false;
 		} */
 
-		else if(a1.type == DT_VARIABLE) {
+		else if(a1.type == AT_VARIABLE) {
 			// always replace variable from t1 with atom *or* variable from t2
 			// this ensures all variables in result will derive from t2
 			// (this choice is arbitrary)
 			PrintCString("Replace ");
-			PrintAtom(a1);
+			PrintTypedAtom(a1);
 			PrintCString(" with ");
-			PrintAtom(a2);
+			PrintTypedAtom(a2);
 			PrintChar('\n');
 			graphSubstitute(a1, a2, edges, nEdges, i+1);
 			// set a1 -> a2 in each substitution list
@@ -165,12 +165,12 @@ bool UnifyTuples(Atom list1, Atom list2, SubstitutionList * subst1, Substitution
 			SetSubstValue(*subst2, a1, a2);
 		}
 		else {
-			if(a2.type == DT_VARIABLE) {
+			if(a2.type == AT_VARIABLE) {
 				// replace variable from t2 with atom from t1
 				PrintCString("Replace ");
-				PrintAtom(a2);
+				PrintTypedAtom(a2);
 				PrintCString(" with ");
-				PrintAtom(a1);
+				PrintTypedAtom(a1);
 				PrintChar('\n');
 				graphSubstitute(a2, a1, edges, nEdges, i+1);
 				SetSubstValue(*subst1, a2, a1);

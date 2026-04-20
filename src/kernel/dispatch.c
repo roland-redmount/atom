@@ -7,50 +7,30 @@
 #include "lang/Quote.h"
 
 
-/**
- * Dispatch a query, 
- * 
- */
-Service DispatchQuery(Atom query)
+ServiceRecord DispatchQuery(Atom query)
 {
-	// TODO:
-
-	// 1) Lookup matching bytecode by form from a service directory.
-	
-	Atom queryForm = FormulaGetForm(query);
-	Service service = RegistryFindService(queryForm);
-
-	// 2) Attempt to match candidate services to the query actors,
-	// accounting for permutations and variable types (if any)
-
-	// 3) Execute the service:
-	// For tables, run a table iterator. For services, do VM execution.
-
+	ASSERT(IsFormula(query))
 
 	/**
-	 * In the long run, we want to integrate the REPL into a top-level
-	 * VM execution context. That means we need a user input method callable
-	 * from the VM that yields a query formula q; this can be a hard-coded
-	 * service (user-query q) that blocks until a query is entered.
+	 * 1) Iterate over candidate services matching the query form.
+	 * 2) Test each for a candidate service using SignatureQueryMatch().
+	 *    There can be only 1 matching service per candidate.
 	 */
 
-	return service;
-}
+	Atom queryForm = FormulaGetForm(query);
+	// TODO: we must construct a list of parameters corresponding to
+	// the query, such that atoms map to input parameters and variables 
+	// to output parameters, with types.
+	ASSERT(false)
 
-
-void CallService(Service service, Atom * tuple)
-{
-	// TODO
-	// See VMExecute()
-
-	ASSERT(false);
+	return (ServiceRecord) {0};
 }
 
 
 /**
  * Test whether a query tuple matches a signature tuple, in the order given.
  * Non-variable atoms in the query must match signature input arguments,
- * respecting datum type; variables in the query must match output arguments.
+ * respecting atom type; variables in the query must match output arguments.
  * Writes the the tuple of matched, permuted arguments to *matches (possibly empty)
  * Return true if a match was found.
   */
@@ -94,14 +74,14 @@ bool PermutationMatch(Atom formula1, Atom formula2, Atom * args, index8 * perm, 
 {
 	// check if forms are identical
 	// NOTE: this can be done by dispatch before testing permutations,
-	// by doing lookup in a tree indexed by the form datum
+	// by doing lookup in a tree indexed by the form atom
 	Atom form = FormulaGetForm(formula1);
 	if(!SameAtoms(form, FormulaGetForm(formula2)))
 		return false;
 
 	// try all permutations of form2
 	// Atom actorsList1 = FormulaGetActors(formula1);
-	// Datum actorsList2 = FormulaGetActors(formula2);
+	// Atom actorsList2 = FormulaGetActors(formula2);
 	FormIterator * iter = CreateFormIterator(form);
 	size_t nPerm = 0;
 	do {

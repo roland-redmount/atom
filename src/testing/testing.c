@@ -36,7 +36,7 @@ static void printLocation(char const * functionName, char const * fileName, uint
 
 
 /**
- * NOTE: the below has a lot of repetition, but varying datum types
+ * NOTE: the below has a lot of repetition, but varying atom types
  * makes it difficult to extract out the pattern to a single function,
  * and I wanted to avoid macros as far as possible.
  */
@@ -280,11 +280,12 @@ static void executeCheckReferences(void (*function)(void), CheckType checkType)
 	if(IFactsInitialized()) {
 		initialRefCount = TotalIFactReferenceCount();
 		initialIFactCount = TotalIFactCount();
+		EnableFlagCreatedIFacts();
 	}
 	uint32 initialBytesAllocated = AllocatorNBytesAllocated();
 
 	function();
-	
+
 	if(IFactsInitialized()) {
 		int32 refCountDiff = TotalIFactReferenceCount() - initialRefCount;
 		if(checkType != CHECK_TEARDOWN && refCountDiff < 0)
@@ -295,8 +296,11 @@ static void executeCheckReferences(void (*function)(void), CheckType checkType)
 		int32 ifactDiff = TotalIFactCount() - initialIFactCount;
 		if(checkType != CHECK_TEARDOWN && ifactDiff < 0)
 			PrintF("%s: Lost %d IFacts.\n", checkTypeNames[checkType], ifactDiff);
-		if(checkType != CHECK_SETUP && ifactDiff > 0)
+		if(checkType != CHECK_SETUP && ifactDiff > 0) {
 			PrintF("%s: Failed to release %d IFacts.\n", checkTypeNames[checkType], ifactDiff);
+			DumpFlaggedIFacts();
+		}
+		DisableFlagCreatedIFacts();
 	}
 
 	int32 allocateDiff = AllocatorNBytesAllocated() - initialBytesAllocated;
@@ -304,6 +308,7 @@ static void executeCheckReferences(void (*function)(void), CheckType checkType)
 		PrintF("%s: Lost %d allocated bytes.\n", checkTypeNames[checkType], allocateDiff);
 	if(checkType != CHECK_SETUP && allocateDiff > 0)
 		PrintF("%s: Failed to free %d allocated bytes.\n", checkTypeNames[checkType], allocateDiff);
+
 }
 
 

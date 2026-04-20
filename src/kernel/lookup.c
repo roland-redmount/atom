@@ -11,7 +11,7 @@
 #include "btree/btree.h"
 #include "kernel/lookup.h"
 #include "kernel/multiset.h"
-#include "lang/Datum.h"
+#include "lang/Atom.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "util/ResizingArray.h"
@@ -34,13 +34,13 @@ struct s_Lookup {
  */
 static int8 compareRecords(LookupRecord const * record, LookupRecord const * recordOrKey)
 {
-	int8 atomOrder = CompareDatums(record->atom, recordOrKey->atom);
+	int8 atomOrder = CompareAtoms(record->atom, recordOrKey->atom);
 	if(atomOrder == 0) {
 		if(recordOrKey->predicateForm) {
-			int8 formOrder = CompareDatums(record->predicateForm, recordOrKey->predicateForm);
+			int8 formOrder = CompareAtoms(record->predicateForm, recordOrKey->predicateForm);
 			if(formOrder == 0) {
 				if(recordOrKey->role)
-					return CompareDatums(record->role, recordOrKey->role);
+					return CompareAtoms(record->role, recordOrKey->role);
 				else
 					return 0;
 			}
@@ -89,17 +89,10 @@ size32 LookupTotalCount(void)
 
 bool AtomHasRole(Atom atom, Atom predicateForm, Atom role)
 {
-	ASSERT(atom.type == DT_ID)
-	if(predicateForm.datum) {
-		ASSERT(predicateForm.type == DT_ID)
-		if(role.datum) {
-			ASSERT(role.type == DT_NAME)
-		}
-	}
 	LookupRecord record;
-	record.atom = atom.datum;
-	record.predicateForm = predicateForm.datum;
-	record.role = role.datum;
+	record.atom = atom;
+	record.predicateForm = predicateForm;
+	record.role = role;
 
 	return BTreeContainsItem(lookup.btree, &record);
 }
@@ -107,13 +100,10 @@ bool AtomHasRole(Atom atom, Atom predicateForm, Atom role)
 
 void AtomAddRole(Atom atom, Atom predicateForm, Atom role)
 {
-	ASSERT(atom.type == DT_ID)
-	ASSERT(predicateForm.type == DT_ID)
-	ASSERT(role.type == DT_NAME)
 	LookupRecord record;
-	record.atom = atom.datum;
-	record.predicateForm = predicateForm.datum;
-	record.role = role.datum;
+	record.atom = atom;
+	record.predicateForm = predicateForm;
+	record.role = role;
 
 	LookupRecord * existingRecord = BTreePeekItem(lookup.btree, &record);
 	if(existingRecord)
@@ -126,7 +116,7 @@ void AtomAddRole(Atom atom, Atom predicateForm, Atom role)
 }
 
 
-void LookupAddPredicateRoles(Atom predicateForm, Atom * actors)
+void LookupAddPredicateRoles(Atom predicateForm, TypedAtom * actors)
 {
 	// iterate over roles names in the predicate form
 	// and add entries to lookup table
@@ -136,8 +126,8 @@ void LookupAddPredicateRoles(Atom predicateForm, Atom * actors)
 	while(MultisetIteratorHasNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
 		for(index8 i = 0; i < em.multiple; i++) {
-			if(actors[index].type == DT_ID)
-				AtomAddRole(actors[index], predicateForm, em.element);
+			if(actors[index].type == AT_ID)
+				AtomAddRole(actors[index].atom, predicateForm, em.element.atom);
 			index++;
 		}
 		MultisetIteratorNext(&formIterator);
@@ -148,13 +138,10 @@ void LookupAddPredicateRoles(Atom predicateForm, Atom * actors)
 
 void AtomRemoveRole(Atom atom, Atom predicateForm, Atom role)
 {
-	ASSERT(atom.type == DT_ID)
-	ASSERT(predicateForm.type == DT_ID)
-	ASSERT(role.type == DT_NAME)
 	LookupRecord record;
-	record.atom = atom.datum;
-	record.predicateForm = predicateForm.datum;
-	record.role = role.datum;
+	record.atom = atom;
+	record.predicateForm = predicateForm;
+	record.role = role;
 
 	LookupRecord * existingRecord = BTreePeekItem(lookup.btree, &record);
 	ASSERT(existingRecord)
@@ -169,10 +156,8 @@ void AtomRemoveRole(Atom atom, Atom predicateForm, Atom role)
 
 void LookupRemoveAllRoles(Atom atom)
 {
-	ASSERT(atom.type == DT_ID);
-
 	LookupRecord record;
-	record.atom = atom.datum;
+	record.atom = atom;
 	record.predicateForm = 0;
 	record.role = 0;
 
@@ -186,7 +171,7 @@ void LookupRemoveAllRoles(Atom atom)
 }
 
 
-void LookupRemovePredicateRoles(Atom predicateForm, Atom * actors)
+void LookupRemovePredicateRoles(Atom predicateForm, TypedAtom * actors)
 {
 	MultisetIterator formIterator;
 	MultisetIterate(predicateForm, &formIterator);
@@ -194,8 +179,8 @@ void LookupRemovePredicateRoles(Atom predicateForm, Atom * actors)
 	while(MultisetIteratorHasNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
 		for(index8 i = 0; i < em.multiple; i++) {
-			if(actors[index].type == DT_ID)
-				AtomRemoveRole(actors[index], predicateForm, em.element);
+			if(actors[index].type == AT_ID)
+				AtomRemoveRole(actors[index].atom, predicateForm, em.element.atom);
 			index++;
 		}
 		MultisetIteratorNext(&formIterator);
@@ -211,14 +196,14 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm)
 
 	// Find all distinct atoms with a lookup entry for the given form.
 	ResizingArray datumArray;
-	CreateResizingArray(&datumArray, sizeof(Datum), 10);
+	CreateResizingArray(&datumArray, sizeof(Atom), 10);
 
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, lookup.btree, 0, 0);
-	Datum previousAtom = 0;
+	Atom previousAtom = 0;
 	while(BTreeIteratorHasItem(&iterator)) {
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
-		if(record->predicateForm == predicateForm.datum) {
+		if(record->predicateForm == predicateForm) {
 			// since lookup entries are ordered by atom,
 			// we can skip any entry with the same atom as previous
 			if(record->atom != previousAtom) {
@@ -231,10 +216,10 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm)
 	BTreeIteratorEnd(&iterator);
 
 	// Free all lookup entries for discovered atoms
-	Datum const * datums = ResizingArrayGetMemory(&datumArray);
+	Atom const * atoms = ResizingArrayGetMemory(&datumArray);
 	size32 nAtoms = ResizingArrayNElements(&datumArray);
 	for(index32 i = 0; i < nAtoms; i++)
-		LookupRemoveAllRoles((Atom) {DT_ID, 0, 0, 0, datums[i]});
+		LookupRemoveAllRoles(atoms[i]);
 		
 	FreeResizingArray(&datumArray);
 }
@@ -242,8 +227,7 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm)
 
 void LookupIterate(Atom atom, LookupIterator * iterator)
 {
-	ASSERT(atom.type == DT_ID)
-	iterator->query.atom = atom.datum;
+	iterator->query.atom = atom;
 	iterator->query.predicateForm = 0;
 	iterator->query.role = 0;
 
@@ -279,14 +263,14 @@ void LookupIteratorNext(LookupIterator * iterator)
 Atom LookupIteratorGetForm(LookupIterator const * iterator)
 {
 	LookupRecord const * record = BTreeIteratorPeekItem(&(iterator->treeIterator));
-	return (Atom) {DT_ID, 0, 0, 0, record->predicateForm};
+	return record->predicateForm;
 }
 
 
 Atom LookupIteratorGetRole(LookupIterator const * iterator)
 {
 	LookupRecord const * record = BTreeIteratorPeekItem(&(iterator->treeIterator));
-	return (Atom) {DT_NAME, 0, 0, 0, record->role};
+	return record->role;
 }
 
 
@@ -304,11 +288,11 @@ void LookupDump(void)
 	BTreeIterate(&iterator, lookup.btree, 0, 0);
 	while(BTreeIteratorHasItem(&iterator)) {
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
-		PrintAtom((Atom) {DT_ID, 0, 0, 0, record->atom});
+		PrintIFact(record->atom);
 		PrintChar(' ');
-		PrintPredicateForm((Atom) {DT_ID, 0, 0, 0, record->predicateForm});
+		PrintPredicateForm(record->predicateForm);
 		PrintChar(' ');
-		PrintName((Atom) {DT_NAME, 0, 0, 0, record->role});
+		PrintName(record->role);
 		PrintF(" %u\n", record->nFacts);
 		BTreeIteratorNext(&iterator);
 	}

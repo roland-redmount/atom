@@ -151,11 +151,11 @@ UTIL_FILES := $(addprefix util/, \
  LinkedList ResizingArray ResizingBuffer hashing sort resources utilities)
 
 LANG_FILES := $(addprefix lang/, \
- Atom ClauseForm Datum DatumType Form Formula FormPermutation FullForm name PredicateForm \
- Quote SubstitutionList unification TermForm)
+ Atom AtomType ClauseForm Form Formula FormPermutation FullForm name PredicateForm \
+ Quote SubstitutionList unification TermForm TypedAtom)
 
 DATUMTYPES_FILES := $(addprefix datumtypes/, \
- context FloatIEEE754 instruction Int Parameter UInt Unknown Variable)
+ FloatIEEE754 instruction Int Parameter UInt Variable)
 
 KERNEL_FILES := $(addprefix kernel/, \
  dispatch ifact kernel letter list lookup multiset pair RelationBTree string ServiceRegistry tuples)
@@ -167,7 +167,7 @@ NETWORK_FILES := $(addprefix network/, Connection Network)
 PARSER_FILES := $(addprefix parser/, Characters ClauseBuilder PartBuilder PredicateBuilder \
  StringBuffer TermBuilder Token Tokenizer)
 
-VM_FILES := $(addprefix vm/, bytecode vm)
+VM_FILES := $(addprefix vm/, bytecode bytecodecontext ccontext vm)
 
 GRAPHICS_FILES := $(addprefix graphics/, \
  Graphics Mesh Point Polygon TextBlock Triangle)
@@ -209,10 +209,9 @@ $(BINDIR)/opengltest : $(patsubst %, $(OBJDIR)/%.o, \
 #
 
 TESTS_EXE_FILES := $(addprefix $(BINDIR)/,\
- test_btree test_datumtypes test_dispatch test_language test_list test_lookup\
+ test_btree test_datumtypes test_dispatch test_kernel test_language test_list test_lookup\
  test_memory test_multiset test_pair test_parsing test_persistence\
- test_quote test_relation_btree test_string\
- test_table_registry test_tokenizer test_utilities test_vm)
+ test_relation_btree test_string test_table_registry test_tokenizer test_utilities test_vm)
 
 .PHONY: tests
 tests : $(TESTS_EXE_FILES)
@@ -242,10 +241,10 @@ test:
 	$(BINDIR)/test_datumtypes
 	$(BINDIR)/test_btree
 	$(BINDIR)/test_relation_btree
+	$(BINDIR)/test_kernel
 	$(BINDIR)/test_pair
 	$(BINDIR)/test_list
 	$(BINDIR)/test_multiset
-	$(BINDIR)/test_quote
 	$(BINDIR)/test_string
 	$(BINDIR)/test_lookup
 	$(BINDIR)/test_tokenizer

@@ -5,13 +5,21 @@
 #ifndef PREDICATEFORM_H
 #define PREDICATEFORM_H
 
-#include "Atom.h"
+#include "lang/TypedAtom.h"
 
 /**
- * Create a predicate form from a list of roles (DT_NAME),
+ * Create a predicate form from a list of roles (AT_NAME),
  * possibly containing duplicates.
  */
 Atom CreatePredicateForm(Atom const * roles, size8 nRoles);
+
+
+/**
+ * Create a predicate form from a list of roles (AT_NAME),
+ * with a custom assertFact function. This is used when bootstrapping the kernel.
+ */
+Atom CreatePredicateFormBootstrap(Atom const * roles, size8 nRoles, void (* assertFact)(Atom, TypedAtom *));
+
 
 bool IsPredicateForm(Atom form);
 
@@ -26,7 +34,7 @@ size8 PredicateNRoles(Atom predicateForm);
 size8 PredicateArity(Atom predicateForm);
 
 /**
- * 0-based index of the first occurence of the given role (a DT_NAME)
+ * 0-based index of the first occurence of the given role (a AT_NAME)
  * The role must exist in predicateForm, or an ASSERT occurs.
  */
 index8 PredicateRoleIndex(Atom predicateForm, Atom role);

@@ -3,14 +3,14 @@
 #define CLAUSEBUILDER_H
 
 
-#include "lang/Datum.h"
+#include "lang/Atom.h"
 #include "parser/TermBuilder.h"
 #include "util/ResizingArray.h"
 
 
 typedef struct s_ClauseBuilder {
 	TermBuilder termBuilder;
-	ResizingArray terms;			// array of DT_FORMULA terms
+	ResizingArray terms;			// array of AT_ID atoms
 	size8 arity;
 	bool isValid;
 } ClauseBuilder;

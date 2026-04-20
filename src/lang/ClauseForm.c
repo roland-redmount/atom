@@ -12,10 +12,12 @@
 Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
 {
 	// reduce to unique terms
-	Atom uniqueTermForms[nTermForms];
-	CopyMemory(termForms, uniqueTermForms, nTermForms * sizeof(Atom));
+	// here we need an array of atoms, since they will be stored in a multiset
+	TypedAtom uniqueTermForms[nTermForms];
+	for(index8 i = 0; i < nTermForms; i++)
+		uniqueTermForms[i] = (TypedAtom) {.type = AT_ID, .atom = termForms[i]};
 	uint32 multiplicities[nTermForms];
-	size8 nUniqueTermForms = ReduceAtomArray(uniqueTermForms, multiplicities, nTermForms);
+	size8 nUniqueTermForms = ReduceTypedAtomsArray(uniqueTermForms, multiplicities, nTermForms);
 
 	IFactDraft draft;
 	IFactBegin(&draft);
@@ -25,6 +27,7 @@ Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
 	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_CLAUSE_FORM),
+		RegistryGetCoreTable(FORM_CLAUSE_FORM),
 		0
 	);
 	IFactAddClause(&draft, &invalidAtom);
@@ -64,7 +67,7 @@ size8 ClauseArity(Atom clauseForm)
 	size8 arity = 0;
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
-		uint8 termArity = TermFormArity(elementMultiple.element);
+		uint8 termArity = TermFormArity(elementMultiple.element.atom);
 		arity += termArity * elementMultiple.multiple;
 		MultisetIteratorNext(&iterator);
 	}
@@ -81,7 +84,7 @@ void PrintClauseForm(Atom clauseForm)
 	while(MultisetIteratorHasNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
-			PrintTermForm(elementMultiple.element);
+			PrintTermForm(elementMultiple.element.atom);
 			PrintCString(" | ");
 		}
 		MultisetIteratorNext(&iterator);

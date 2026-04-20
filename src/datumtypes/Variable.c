@@ -12,24 +12,24 @@ typedef union
 } Variable;
 
 
-Atom anonymousVariable = {.type = DT_VARIABLE, .datum = 0};
+TypedAtom anonymousVariable = {.type = AT_VARIABLE, .atom = 0};
 
 
-Atom CreateVariable(char name)
+TypedAtom CreateVariable(char name)
 {
 	// for now we just store a single lowercase character _x, _y, ...
 	ASSERT(IsAlpha(name));
 	Variable var = {.value = 0};
 	var.fields.name = ToLower(name);
 	var.fields.quoteCount = 0;
-	return (Atom) {.type = DT_VARIABLE, .datum = var.value};
+	return (TypedAtom) {.type = AT_VARIABLE, .atom = var.value};
 }
 
 
-char GetVariableName(Atom variable)
+char GetVariableName(TypedAtom variable)
 {
 	Variable var;
-	var.value = variable.datum;
+	var.value = variable.atom;
 	if(var.fields.name)
 		return var.fields.name;
 	else
@@ -37,16 +37,16 @@ char GetVariableName(Atom variable)
 }
 
 
-bool IsVariable(Atom a)
+bool IsVariable(TypedAtom a)
 {
-	return a.type == DT_VARIABLE;
+	return a.type == AT_VARIABLE;
 }
 
 
-bool SameVariable(Atom variable1, Atom variable2)
+bool SameVariable(TypedAtom variable1, TypedAtom variable2)
 {
-	if(variable1.datum & variable2.datum)
-		return variable1.datum == variable2.datum;
+	if(variable1.atom & variable2.atom)
+		return variable1.atom == variable2.atom;
 	else {
 		// either variable is _
 		return 0;
@@ -54,40 +54,40 @@ bool SameVariable(Atom variable1, Atom variable2)
 }
 
 
-bool VariableIsQuoted(Atom variable)
+bool VariableIsQuoted(TypedAtom variable)
 {
 	Variable var;
-	var.value = variable.datum;
+	var.value = variable.atom;
 	return var.fields.quoteCount > 0;	
 }
 
-Atom QuoteVariable(Atom variable)
+TypedAtom QuoteVariable(TypedAtom variable)
 {
 	Variable var;
-	var.value = variable.datum;
+	var.value = variable.atom;
 	var.fields.quoteCount++;
 	// check for uint8 wraparound
 	ASSERT(var.fields.quoteCount > 0);
 
-	return (Atom) {.type = DT_VARIABLE, .datum = var.value};
+	return (TypedAtom) {.type = AT_VARIABLE, .atom = var.value};
 }
 
 
-Atom UnquoteVariable(Atom variable)
+TypedAtom UnquoteVariable(TypedAtom variable)
 {
 	
 	Variable var;
-	var.value = variable.datum;
+	var.value = variable.atom;
 	ASSERT(var.fields.quoteCount > 0);
 	var.fields.quoteCount--;
-	return (Atom) {.type = DT_VARIABLE, .datum = var.value};
+	return (TypedAtom) {.type = AT_VARIABLE, .atom = var.value};
 }
 
 
-void PrintVariable(Atom variable)
+void PrintVariable(TypedAtom variable)
 {
 	Variable var;
-	var.value = variable.datum;
+	var.value = variable.atom;
 	for(uint8 i = 0; i < var.fields.quoteCount; i++)
 		PrintChar('\'');
 	PrintChar(var.fields.name);

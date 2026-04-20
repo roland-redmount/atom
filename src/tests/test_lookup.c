@@ -1,4 +1,5 @@
 
+#include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/lookup.h"
 #include "kernel/ServiceRegistry.h"
@@ -19,8 +20,8 @@ void testLookup(void)
 	// add 1 occurence of role
 	AtomAddRole(string, stringForm, stringRole);
 	ASSERT_TRUE(AtomHasRole(string, stringForm, stringRole))
-	ASSERT_TRUE(AtomHasRole(string, stringForm, invalidAtom))
-	ASSERT_TRUE(AtomHasRole(string, invalidAtom, invalidAtom))
+	ASSERT_TRUE(AtomHasRole(string, stringForm, 0))
+	ASSERT_TRUE(AtomHasRole(string, 0, 0))
 	
 	AtomRemoveRole(string, stringForm, stringRole);
 	ASSERT_TRUE(AtomHasRole(string, stringForm, stringRole))
@@ -41,7 +42,7 @@ void testLookup(void)
 	LookupRemoveAllRoles(string);
 	ASSERT_FALSE(AtomHasRole(string, stringForm, stringRole))
 
-	ReleaseAtom(string);
+	IFactRelease(string);
 }
 
 
@@ -63,21 +64,21 @@ void testLookupIterator(void)
 		Atom role = LookupIteratorGetRole(&iterator);
 		// the role is either list or string
 		ASSERT_TRUE(
-			SameAtoms(role, GetCoreRoleName(ROLE_LIST)) ||
-			SameAtoms(role, GetCoreRoleName(ROLE_STRING))
+			(role == GetCoreRoleName(ROLE_LIST)) ||
+			(role == GetCoreRoleName(ROLE_STRING))
 		)
 		LookupIteratorNext(&iterator);
 	}
 	ASSERT_FALSE(LookupIteratorHasRecord(&iterator))
 	FreeLookupIterator(&iterator);
 
-	ReleaseAtom(string);
+	IFactRelease(string);
 }
 
 
 void testRemoveAllPredicateRoles(void)
 {
-	// create some DT_ID atoms
+	// create some AT_ID atoms
 	Atom foo = CreateStringFromCString("foo");
 	Atom bar = CreateStringFromCString("bar");
 	Atom baz = CreateStringFromCString("baz");
@@ -87,38 +88,41 @@ void testRemoveAllPredicateRoles(void)
 	Atom barf = CreateNameFromCString("barf");
 	Atom form = CreatePredicateForm((Atom []) {foobar, barf}, 2);
 	BTree * tree = CreateRelationBTree(2);
-	RegistryAddBTreeService(form, tree);
+	Atom service = RegistryAddBTreeService(form, tree);
 
-	AssertFact(form, (Atom[]) {foo, bar});
+	TypedAtom actors1[2] = {CreateTypedAtom(AT_ID, foo), CreateTypedAtom(AT_ID, bar)};
+	AssertFact(form, actors1);
 	ASSERT_TRUE(AtomHasRole(foo, form, foobar))
 	ASSERT_TRUE(AtomHasRole(bar, form, barf))
 
-	AssertFact(form, (Atom[]) {bar, baz});
+	TypedAtom actors2[2] = {CreateTypedAtom(AT_ID, bar), CreateTypedAtom(AT_ID, baz)};
+	AssertFact(form, actors2);
 	ASSERT_TRUE(AtomHasRole(bar, form, foobar))
 	ASSERT_TRUE(AtomHasRole(baz, form, barf))
 
-	AssertFact(form, (Atom[]) {foo, foo});
+	TypedAtom actors3[2] = {CreateTypedAtom(AT_ID, foo), CreateTypedAtom(AT_ID, foo)};
+	AssertFact(form, actors3);
 	ASSERT_TRUE(AtomHasRole(foo, form, barf))
 
 	LookupRemoveAllPredicateRoles(form);
 
 	// all associations with the form should now be removed.
-	ASSERT_FALSE(AtomHasRole(foo, form, invalidAtom))
-	ASSERT_FALSE(AtomHasRole(bar, form, invalidAtom))
-	ASSERT_FALSE(AtomHasRole(baz, form, invalidAtom))
+	ASSERT_FALSE(AtomHasRole(foo, form, 0))
+	ASSERT_FALSE(AtomHasRole(bar, form, 0))
+	ASSERT_FALSE(AtomHasRole(baz, form, 0))
 
 	// remove corresponding relation table rows
 	RelationBTreeRemoveTuples(tree, 0, REMOVE_NORMAL);
 
 	// drop the relation table
-	RegistryRemoveService(form);
+	RegistryRemoveService(service);
 
-	ReleaseAtom(form);
-	ReleaseAtom(foo);
-	ReleaseAtom(bar);
-	ReleaseAtom(baz);
-	ReleaseAtom(foobar);
-	ReleaseAtom(barf);
+	IFactRelease(form);
+	IFactRelease(foo);
+	IFactRelease(bar);
+	IFactRelease(baz);
+	NameRelease(foobar);
+	NameRelease(barf);
 }
 
 

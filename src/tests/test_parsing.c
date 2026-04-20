@@ -3,6 +3,7 @@
 #include "datumtypes/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
+#include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "lang/ClauseForm.h"
 #include "lang/Formula.h"
@@ -25,22 +26,40 @@ typedef struct {
 	Token nameTokens[EXAMPLE_N_PARTS];
 	Token actorTokens[EXAMPLE_N_PARTS];
 	Atom names[EXAMPLE_N_PARTS];
-	Atom actors[EXAMPLE_N_PARTS];
+	TypedAtom actors[EXAMPLE_N_PARTS];
 } TokensFixture;
 
 
 static void setupTokensFixture(TokensFixture * fixture)
 {
-	fixture->nameTokens[0] = (Token) {TOKEN_NAME, CreateNameFromCString("foo")};
-	fixture->nameTokens[1] = (Token) {TOKEN_NAME, CreateNameFromCString("bar")};
-	fixture->nameTokens[2] = (Token) {TOKEN_NAME, CreateNameFromCString("bax")};
+	fixture->nameTokens[0] = (Token) {
+		TOKEN_NAME,
+		CreateTypedAtom(AT_NAME, CreateNameFromCString("foo"))
+	};
+	fixture->nameTokens[1] = (Token) {
+		TOKEN_NAME,
+		CreateTypedAtom(AT_NAME, CreateNameFromCString("bar"))
+	};
+	fixture->nameTokens[2] = (Token) {
+		TOKEN_NAME,
+		CreateTypedAtom(AT_NAME, CreateNameFromCString("bax"))
+	};
 
-	fixture->actorTokens[0] = (Token) {TOKEN_VARIABLE, CreateVariable('x')};	
-	fixture->actorTokens[1] = CreateTokenFromCString("123.45");
-	fixture->actorTokens[2] = (Token) {TOKEN_STRING, CreateStringFromCString("foobar")};
+	fixture->actorTokens[0] = (Token) {
+		.type = TOKEN_VARIABLE,
+		.atom = CreateVariable('x')
+	};	
+	fixture->actorTokens[1] = (Token) {
+		.type = TOKEN_NUMBER,
+		.atom = CreateFloat32(123.45)
+	};
+	fixture->actorTokens[2] = (Token) {
+		.type = TOKEN_STRING,
+		.atom = CreateTypedAtom(AT_ID, CreateStringFromCString("foobar"))
+	};
 
 	for(index8 i = 0; i < EXAMPLE_N_PARTS; i++) {
-		fixture->names[i] = fixture->nameTokens[i].atom;
+		fixture->names[i] = fixture->nameTokens[i].atom.atom;
 		fixture->actors[i] = fixture->actorTokens[i].atom;
 	}
 
@@ -50,8 +69,8 @@ static void setupTokensFixture(TokensFixture * fixture)
 static void teardownTokensFixture(TokensFixture * fixture)
 {
 	for(index8 i = 0; i < EXAMPLE_N_PARTS; i++) {
-		ReleaseAtom(fixture->nameTokens[i].atom);
-		ReleaseAtom(fixture->actorTokens[i].atom);
+		ReleaseTypedAtom(fixture->nameTokens[i].atom);
+		ReleaseTypedAtom(fixture->actorTokens[i].atom);
 	}
 }
 
@@ -71,10 +90,10 @@ static void testPartBuilder(void)
 		ASSERT_TRUE(PartBuilderPush(&builder, fixture.actorTokens[i]))
 		ASSERT_TRUE(PartBuilderComplete(&builder))
 
-		ASSERT_TRUE(SameAtoms(PartBuilderGetRole(&builder), fixture.names[i]))
+		ASSERT_DATA64_EQUAL(PartBuilderGetRole(&builder), fixture.names[i])
 
-		Atom actor = PartBuilderGetActor(&builder);
-		ASSERT_TRUE(SameAtoms(actor, fixture.actors[i]))
+		TypedAtom actor = PartBuilderGetActor(&builder);
+		ASSERT_TRUE(SameTypedAtoms(actor, fixture.actors[i]))
 
 		PartBuilderReset(&builder);
 		ASSERT_TRUE(PartBuilderIsEmpty(&builder))
@@ -129,13 +148,13 @@ static void testPredicateBuilder(void)
 	}
 	Atom predicate = PredicateBuilderCreateFormula(&builder);
 
-	ASSERT_TRUE(SameAtoms(predicate, fixture.predicate))
+	ASSERT_DATA64_EQUAL(predicate, fixture.predicate)
 	// the forms are identical
-	ASSERT_TRUE(
-		SameAtoms(FormulaGetForm(predicate), FormulaGetForm(fixture.predicate))
+	ASSERT_DATA64_EQUAL(
+		FormulaGetForm(predicate), FormulaGetForm(fixture.predicate)
 	)
 	// the actor lists are identical
-	ASSERT_TRUE(SameAtoms(FormulaGetActors(predicate), FormulaGetActors(fixture.predicate)))
+	ASSERT_DATA64_EQUAL(FormulaGetActors(predicate), FormulaGetActors(fixture.predicate))
 
 	IFactRelease(predicate);
 	CleanupPredicateBuilder(&builder);
@@ -191,7 +210,7 @@ static void testTermBuilder(void)
 		Atom term = TermBuilderCreateFormula(&builder);
 
 		Atom fixtureTerm = sign ? fixture.term : fixture.negatedTerm;
-		ASSERT_TRUE(SameAtoms(term, fixtureTerm))
+		ASSERT_DATA64_EQUAL(term, fixtureTerm)
 
 		IFactRelease(term);
 		TermBuilderReset(&builder);
@@ -264,7 +283,7 @@ static void testClauseBuilder(void)
 	Atom clause = ClauseBuilderCreateFormula(&builder);
 	CleanupClauseBuilder(&builder);
 
-	ASSERT_TRUE(SameAtoms(clause, fixture.clause))
+	ASSERT_DATA64_EQUAL(clause, fixture.clause)
 
 	Atom actorsList = FormulaGetActors(clause);
 	ASSERT_UINT32_EQUAL(ListLength(actorsList), EXAMPLE_CLAUSE_ARITY)
@@ -277,8 +296,10 @@ static void testClauseBuilder(void)
 
 static void testCStringToPredicate(void)
 {
-	char const * exampleString = "foo 123 bar 456 bar 789 baz 0"; // "foo _x bar 123.45 bar 4567 baz \"foobar\"";
+	char const * exampleString = "foo 123 baz \"foobar\" bar 456 bar 789";
 	Atom predicate = CStringToPredicate(exampleString);
+	// PrintFormula(predicate);
+	// PrintChar('\n');
 
 	Atom predicateForm = FormulaGetForm(predicate);
 	ASSERT_UINT32_EQUAL(PredicateArity(predicateForm), 4)
@@ -286,20 +307,27 @@ static void testCStringToPredicate(void)
 	Atom actorsList = FormulaGetActors(predicate);
 	ASSERT_UINT32_EQUAL(ListLength(actorsList), 4)
 
+	Atom string = CreateStringFromCString("foobar");
+	ASSERT_TRUE(
+		SameTypedAtoms(
+			ListGetElement(actorsList, 2),
+			CreateTypedAtom(AT_ID, string)
+		)
+	)
+	IFactRelease(string);
+
 	IFactRelease(predicate);
 }
 
 
 static void testCStringToClause(void)
 {
+	
 	// NOTE: this string must be in canonical order
-	char const * exampleString = "foo _x bar 123.45  | aarf \"foobar\"";
+	char const * exampleString = "foo _x bar 123.45 | aarf \"foobar\"";
 	Atom clause = CStringToClause(exampleString, CStringLength(exampleString));
-
-	// TODO: more complex test cases, and conjunctions, e.g.
-	// foo 42 bar 3.4 | !string "baaz" & + 2 + 2 = 4 & foobar _x | foobar _y & + 3 + 4 = 8
-
 	// PrintFormula(clause);
+	// PrintChar('\n');
 
 	Atom clauseForm = FormulaGetForm(clause);
 	ASSERT_UINT32_EQUAL(ClauseArity(clauseForm), 3)
@@ -308,28 +336,29 @@ static void testCStringToClause(void)
 	ASSERT_UINT32_EQUAL(ListLength(actorsList), 3)
 
 	ASSERT_TRUE(
-		SameAtoms(
+		SameTypedAtoms(
 			ListGetElement(actorsList, 1),
 			CreateVariable('x')
 		)
 	)
 	ASSERT_TRUE(
-		SameAtoms(
+		SameTypedAtoms(
 			ListGetElement(actorsList, 2),
 			CreateFloat64(123.45)
 		)
 	)
-
 	Atom string = CreateStringFromCString("foobar");
 	ASSERT_TRUE(
-		SameAtoms(
+		SameTypedAtoms(
 			ListGetElement(actorsList, 3),
-			string
+			CreateTypedAtom(AT_ID, string)
 		)
 	)
 	IFactRelease(string);
-
 	IFactRelease(clause);
+
+	// TODO: more complex test cases, and conjunctions, e.g.
+	// foo 42 bar 3.4 | !string "baaz" & + 2 + 2 = 4 & foobar _x | foobar _y & + 3 + 4 = 8
 }
 
 

@@ -15,8 +15,8 @@
 typedef struct s_PredicateBuilder {
 	bool isValid;
 	PartBuilder partBuilder;
-	ResizingArray roles;
-	ResizingArray actors;
+	ResizingArray roles;		// array of AT_NAME atom
+	ResizingArray actors;		// array of atoms
 } PredicateBuilder;
 
 void InitializePredicateBuilder(PredicateBuilder * builder);

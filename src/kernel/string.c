@@ -10,7 +10,7 @@
 #include "kernel/ServiceRegistry.h"
 
 
-Atom stringElementGenerator(index32 index, void const * data)
+TypedAtom stringElementGenerator(index32 index, void const * data)
 {
 	char const * string = (char const *) data;
 	return GetAlphabetLetter(string[index]);
@@ -27,9 +27,10 @@ Atom CreateString(char const * chars, size32 length)
 	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_STRING),
+		RegistryGetCoreTable(FORM_STRING),
 		0
 	);
-	Atom string = invalidAtom;
+	TypedAtom string = invalidAtom;
 	IFactAddClause(&draft, &string);
 	IFactEndConjunction(&draft);
 
@@ -54,7 +55,9 @@ bool IsString(Atom atom)
 
 Atom StringGetLetter(Atom string, index32 position)
 {
-	return ListGetElement(string, position);
+	TypedAtom element = ListGetElement(string, position);
+	ASSERT(element.type == AT_LETTER)
+	return element.atom;
 }
 
 
@@ -71,7 +74,7 @@ void PrintString(Atom string)
 	ListIterator iterator;
 	ListIterate(string, &iterator);
 	while(ListIteratorHasNext(&iterator)) {
-		Atom letter = ListIteratorGetElement(&iterator);
+		TypedAtom letter = ListIteratorGetElement(&iterator);
 		PrintChar(LetterToChar(letter, LETTER_LOWERCASE));
 		ListIteratorNext(&iterator);
 	}

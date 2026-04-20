@@ -705,7 +705,7 @@ bool BTreeIteratorHasItem(BTreeIterator const * iterator)
 }
 
 
-void const * BTreeIteratorPeekItem(BTreeIterator const * iterator)
+void * BTreeIteratorPeekItem(BTreeIterator const * iterator)
 {
 	BTreePosition * position = &(iterator->stack[iterator->depth]);
 	return nodeGetItem(iterator->btree, position->node, position->index - 1);

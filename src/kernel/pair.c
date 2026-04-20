@@ -7,7 +7,7 @@
 #include "lang/PredicateForm.h"
 
 
-Atom CreatePair(Atom left, Atom right)
+Atom CreatePair(TypedAtom left, TypedAtom right)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
@@ -16,18 +16,21 @@ Atom CreatePair(Atom left, Atom right)
 }
 
 
-void AddPairToIFact(IFactDraft * draft, Atom left, Atom right)
+void AddPairToIFact(IFactDraft * draft, TypedAtom left, TypedAtom right)
 {
-	// assert (pair left right) fact
-	Atom form = GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT);
-
+	// assert (pair left right)
 	index8 pairIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_PAIR);
 	index8 leftIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT);
 	index8 rightIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_RIGHT);
 
-	IFactBeginConjunction(draft, form, pairIndex);
+	IFactBeginConjunction(
+		draft,
+		GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT),
+		RegistryGetCoreTable(FORM_PAIR_LEFT_RIGHT),
+		pairIndex
+	);
 	
-	Atom tuple[3];
+	TypedAtom tuple[3];
 	tuple[leftIndex] = left;
 	tuple[rightIndex] = right;
 	IFactAddClause(draft, tuple);
@@ -45,16 +48,16 @@ bool IsPair(Atom atom)
 }
 
 
-static void getPairTuple(Atom pair, Atom * tuple)
+static void getPairTuple(Atom pair, TypedAtom * tuple)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_PAIR_LEFT_RIGHT);
 
-	Atom query[3];
+	TypedAtom query[3];
 	index8 pairIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_PAIR);
 	index8 leftIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT);
 	index8 rightIndex = CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_RIGHT);
 
-	query[pairIndex] = pair;
+	query[pairIndex] = CreateTypedAtom(AT_ID, pair);
 	query[leftIndex] = anonymousVariable;
 	query[rightIndex] = anonymousVariable;
 
@@ -62,9 +65,9 @@ static void getPairTuple(Atom pair, Atom * tuple)
 }
 
 
-Atom PairGetElement(Atom pair, uint8 element)
+TypedAtom PairGetElement(Atom pair, uint8 element)
 {
-	Atom pairTuple[3];
+	TypedAtom pairTuple[3];
 	getPairTuple(pair, pairTuple);
 	switch(element) {
 	case PAIR_LEFT:
@@ -82,12 +85,12 @@ Atom PairGetElement(Atom pair, uint8 element)
 
 void PrintPair(Atom pair)
 {
-	Atom pairTuple[3];
+	TypedAtom pairTuple[3];
 	getPairTuple(pair, pairTuple);
 	PrintChar('[');
-	PrintAtom(pairTuple[CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT)]);
+	PrintTypedAtom(pairTuple[CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT)]);
 	PrintChar(' ');
-	PrintAtom(pairTuple[CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_RIGHT)]);
+	PrintTypedAtom(pairTuple[CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_RIGHT)]);
 	PrintChar(']');
 }
 

@@ -1,21 +1,19 @@
-
 #include "kernel/list.h"
+#include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
-#include "vm/bytecode.h"
+#include "datumtypes/instruction.h"
+#include "vm/bytecodecontext.h"
+#include "vm/ccontext.h"
 #include "vm/vm.h"
-
-
 
 
 /**
  * This structure describes a VM execution thread
+ * TODO: this must not be a global, perhaps local to VMExecute() ?
  */
 static struct {
 	bool trace;
-	// Here we can add VM "registers" as necessary.
-	// Or we just keep them on the VM stack
 	bool flag;
-	index8 argIndex;	// used by ARG and EXEC instructions
 } vm;
 
 
@@ -25,15 +23,8 @@ void VMInitialize(void * stack, size32 stackSize)
 }
 
 
-// TODO: this is very inefficient
-static Datum accessConstant(Atom bytecode, index8 opIndex)
-{
-	Atom constantsList = BytecodeGetConstants(bytecode);
-	return ListGetElement(constantsList, opIndex).datum;
-}
-
-
-static Datum readOperand(VMContext * context, Instruction inst, Operand operand)
+// TODO: this will be different for a CContext
+static Atom readOperand(Atom context, Instruction inst, Operand operand)
 {
 	index8 opIndex;
 	byte accessMode;
@@ -55,17 +46,17 @@ static Datum readOperand(VMContext * context, Instruction inst, Operand operand)
 	switch(accessMode) {
 	case ACCESS_PARAMETER: {
 		// parameters may be read from specific contexts
-		VMContext * operandContext = contextIndex ?
-			(VMContext *) ContextRegisters(context)[contextIndex - 1] :
+		Atom operandContext = contextIndex ?
+			BytecodeContextRegisters(context)[contextIndex - 1] :
 			context;
-		return ContextArguments(operandContext)[opIndex - 1];
+		return BytecodeContextArguments(operandContext)[opIndex - 1];
 	}
 	
 	case ACCESS_REGISTER:
-		return ContextRegisters(context)[opIndex - 1];
+		return BytecodeContextRegisters(context)[opIndex - 1];
 
 	case ACCESS_CONSTANT:
-		return accessConstant(context->bytecode, opIndex);
+		return BytecodeContextConstants(context)[opIndex - 1];
 
 	default:
 		ASSERT(false);
@@ -74,7 +65,7 @@ static Datum readOperand(VMContext * context, Instruction inst, Operand operand)
 }
 
 
-void writeOperand(VMContext * context, Instruction inst, index8 operand, Datum datum)
+void writeOperand(Atom context, Instruction inst, index8 operand, Atom atom)
 {
 	index8 opIndex;
 	byte accessMode;
@@ -97,15 +88,15 @@ void writeOperand(VMContext * context, Instruction inst, index8 operand, Datum d
 	switch(accessMode) {
 	case ACCESS_PARAMETER: {
 		// parameters may be written to specific contexts
-		VMContext * operandContext = contextIndex ?
-			(VMContext *) ContextRegisters(context)[contextIndex - 1] :
+		Atom operandContext = contextIndex ?
+			BytecodeContextRegisters(context)[contextIndex - 1] :
 			context;
-		ContextArguments(operandContext)[opIndex - 1] = datum;
+		BytecodeContextArguments(operandContext)[opIndex - 1] = atom;
 		break;
 	}
 	
 	case ACCESS_REGISTER:
-		ContextRegisters(context)[opIndex - 1] = datum;
+		BytecodeContextRegisters(context)[opIndex - 1] = atom;
 		break;
 
 	case ACCESS_CONSTANT:
@@ -117,27 +108,25 @@ void writeOperand(VMContext * context, Instruction inst, index8 operand, Datum d
 }
 
 
-VMContext * VMCreateRootContext(Atom bytecode, Datum * arguments)
+Atom VMCreateRootContext(ServiceRecord * service, Atom * arguments)
 {
- 	VMContext * context = CreateContext(bytecode, 0);
-
+ 	Atom context = CreateBytecodeContext(service, 0);
 	// copy arguments to context
-	size8 arity = FormulaArity(BytecodeGetSignature(bytecode));
-	for(index8 i = 0; i < arity; i++)
-		ContextArguments(context)[i] = arguments[i];
+	size8 nArguments = BytecodeContextNArguments(context);
+	for(index8 i = 0; i < nArguments; i++)
+		BytecodeContextArguments(context)[i] = arguments[i];
 
 	return context;
 }
 
 
-void VMExecute(VMContext * context)
+void VMExecute(Atom context)
 {
 	// Iterate through program
-iterate:
 	while(true) {
-		Instruction inst;
-		if(context->programCounter <= context->programLength) {
-			Atom instruction = ListGetElement(context->program, context->programCounter);
+		Atom instruction;
+		Instruction inst = {0};
+		if(BytecodeContextNextInstruction(context, &instruction)) {
 			if(vm.trace)
 				PrintInstruction(instruction);
 			inst = InstructionGetData(instruction);
@@ -147,7 +136,7 @@ iterate:
 			inst.fields.opcode = OP_END;
 		}
 
-		Datum left, right;
+		Atom left, right;
 		switch(inst.fields.opcode) {
 		case OP_COPY:
 			left = readOperand(context, inst, OPERAND_LEFT);
@@ -182,48 +171,82 @@ iterate:
 			writeOperand(context, inst, OPERAND_RIGHT, right);
 			break;
 		
-		case OP_EXEC: {
+		case OP_BCTX: {
 			/** 
-			 * EXEC <service> <operand>
-			 * Create a new context and store in the destination operand.
+			 * BCTX <service> <operand>
+			 * Create a bytecode context and store in the destination operand.
 			 */
-			Atom newBytecode = (Atom) {.type = DT_ID, .datum = readOperand(context, inst, OPERAND_LEFT)};
-			VMContext * newContext = CreateContext(newBytecode, context);
-			writeOperand(context, inst, OPERAND_RIGHT, (Datum) newContext);
+			Atom service = readOperand(context, inst, OPERAND_LEFT);
+			ServiceRecord record = RegistryGetServiceRecord(service);
+			ASSERT(record.type == SERVICE_BYTECODE);
+			Atom newContext = CreateBytecodeContext(&record, context);
+			writeOperand(context, inst, OPERAND_RIGHT, (Atom) newContext);
 			break;
 		}
 
-		case OP_RESUME: {
-			// RESUME <context>
-			// Give control to another execution context.
+		case OP_CCTX: {
+			/** 
+			 * CCTX <service> <operand>
+			 * Create a C context and store in the destination operand.
+			 */
+			Atom service = readOperand(context, inst, OPERAND_LEFT);
+			ServiceRecord record = RegistryGetServiceRecord(service);
+			// TODO: this should be a more generic "C code" service?
+			ASSERT(record.type == SERVICE_BTREE);
+			Atom newContext = CreateCContext(&record);
+			writeOperand(context, inst, OPERAND_RIGHT, (Atom) newContext);
+			break;
+		}
+
+		case OP_BCALL: {
+			/**
+			 * CALL <context>
+			 * Give control to another execution context.
+			 */
+
 			// Currently, contexts must be stored in registers.
 			ASSERT(inst.fields.accessMode.op1 == ACCESS_REGISTER)
 	
-			// The new context to switch to. Must have been initialized by EXEC
-			VMContext * newContext = (VMContext *) readOperand(context, inst, OPERAND_LEFT);
+			// The new context to switch to. Must have been initialized by BCTX
+			Atom newContext = readOperand(context, inst, OPERAND_LEFT);
 			ASSERT(newContext)
 			// NOTE: if the new context program counter is already at end,
 			// we can abort here
 
-			// upon return, parent will continue execution at the next instruction
-			newContext->parentContext = context;
+			// upon YIELD we will return to this context
+			// NOTE: since this can be modified between calls, it is possible
+			// to pass a context to another program as an argument ...
+			BytecodeContextSetParent(newContext, context);
 			// transfer control
 			context = newContext;
-			goto iterate;
+			break;
+		}
+
+		case OP_CCALL: {
+			/**
+			 * CCALL <context
+			 * Call a C service
+			 */
+
+			 // The new context to switch to. Must have been initialized by CCTX
+			Atom cContext = readOperand(context, inst, OPERAND_LEFT);
+			ASSERT(cContext)
+			CContextCall(cContext);
+			break;
 		}
 
 		case OP_YIELD: {
 			vm.flag = true;
-			// On RESUME we will continue at the instruction following this one
-			context->programCounter++;
-			if(context->parentContext) {
+			Atom parentContext = BytecodeContextGetParent(context);
+			if(parentContext) {
 				// continue parent context execution
-				context = context->parentContext;
+				// On next CALL, we continue at the instruction following this one
+				context = parentContext;
 				break;
 			}
 			else {
 				// YIELD from root context ends execution
-				FreeChildContexts(context);
+				BytecodeContextFreeChildContexts(context);
 				return;
 			}
 		}
@@ -231,10 +254,11 @@ iterate:
 		case OP_END: {
 			// END terminates the current context
 			vm.flag = false;
-			// NOTE: any register holding a reference-counted datum should be released?
-			// Deallocating child contexts seem like a special case of this ...
-			FreeChildContexts(context);	
-			VMContext * parentContext = context->parentContext;
+			// NOTE: any register holding a reference-counted atom should be released?
+			// Deallocating child contexts seem like a special case of this ... but we
+			// don't have reference counting for contexts.
+			BytecodeContextFreeChildContexts(context);	
+			Atom parentContext = BytecodeContextGetParent(context);
 			if(parentContext) {
 				// switch to parent context
 				context = parentContext;
@@ -251,7 +275,6 @@ iterate:
 			ASSERT(false)
 			break;
 		}
-		context->programCounter++;
 	}
 
 }

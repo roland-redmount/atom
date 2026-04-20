@@ -1,16 +1,16 @@
 /**
- * A bytecode instruction, DT_INSTRUCTION.
+ * A bytecode instruction, AT_INSTRUCTION.
  */
 
 #ifndef INSTRUCTION_H
 #define INSTRUCTION_H
 
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 
 /**
  * A bytecode instruction is coded as a one-byte opcode,
  * optionally an access mode byte, and one or two operand bytes,
- * for a maximum size fo 4 bytes. We store each instruction in a Datum.
+ * for a maximum size fo 4 bytes. We store each instruction in a Atom.
  * 
  * Instructions with zero operands (NOT, END, etc) use only the opcode byte.
  * For two-operand instructions, operand 1 is always the source, operand 2 is destination.
@@ -23,7 +23,7 @@
 
 typedef byte OpCode;
 
-// general purpose instructions, any datum type
+// general purpose instructions, any atom type
 #define OP_NOP			0
 #define	OP_COPY			0x01
 #define	OP_EQ			0x02
@@ -35,10 +35,12 @@ typedef byte OpCode;
 #define	OP_ENDIF		0x13
 #define	OP_YES			0x14
 #define	OP_YESIF		0x15
-#define OP_EXEC			0x16
-#define OP_RESUME		0x17
-#define OP_YIELD		0x18
-#define OP_END			0x19
+#define OP_BCTX			0x16		// create bytecode context
+#define OP_CCTX			0x17		// create C context
+#define OP_BCALL		0x18		// call bytecode context
+#define OP_CCALL		0x19		// call C service
+#define OP_YIELD		0x1A
+#define OP_END			0x1B
 
 // integer arithmetic
 #define	OP_ADD			0x20
@@ -62,7 +64,7 @@ typedef byte OpCode;
 
 
 /**
- * Structure stored in a 64-bit instruction datum.
+ * Structure stored in a 64-bit instruction atom.
  * Each operand is an argument, a register, or a constant.
  * We may prefix each argument with a register holding
  * a context object, from which the operand is read.

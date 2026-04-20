@@ -10,7 +10,7 @@
 typedef struct s_PartBuilder {
 	enum BuilderState {STATE_EMPTY, STATE_PARTIAL, STATE_COMPLETE} state;
 	Atom role;
-	Atom actor;
+	TypedAtom actor;
 } PartBuilder;
 
 
@@ -22,8 +22,15 @@ bool PartBuilderIsEmpty(PartBuilder const * builder);
 
 bool PartBuilderComplete(PartBuilder const * builder);
 
+/**
+ * Return the role name (AT_NAME)
+ */
 Atom PartBuilderGetRole(PartBuilder const * builder);
-Atom PartBuilderGetActor(PartBuilder const * builder);
+
+/**
+ * Return the actor (any atom type)
+ */
+TypedAtom PartBuilderGetActor(PartBuilder const * builder);
 
 void PartBuilderReset(PartBuilder * builder);
 

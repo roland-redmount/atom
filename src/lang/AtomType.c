@@ -1,29 +1,28 @@
 
-#include "lang/DatumType.h"
+#include "lang/AtomType.h"
 
 
 // this array specifies a printable name string for each of the N_DATUMTYPES
-char const * datumTypeNames[] = {
-	"INVALID",
-	"UNKNOWN",
-	"DATUMTYPE",
+char const * atomTypeNames[] = {
+	"NONE",
+	"NAME",
+	"ID",
 	"UINT",
 	"INT",
 	"FLOAT32",
 	"FLOAT64",
 	"LETTER",
 	"VARIABLE",
-	"NAME",
-	"ID",
 	"INSTRUCTION",
 	"PARAMETER",
-	"CONTEXT"
+	"CONTEXT",
+	"SERVICE"
 };
 
 
-char const * GetDatumTypeName(byte typeId)
+char const * GetAtomTypeName(byte type)
 {
-	return datumTypeNames[typeId];
+	return atomTypeNames[type];
 }
 
 
@@ -34,14 +33,12 @@ static bool equalStringToCString(char const * string, size32 length, char const 
 }
 
 
-
-byte DatumTypeIdFromString(char const * string, size32 length)
+byte AtomTypeFromString(char const * string, size32 length)
 {
-//	printf("DatumTypeIdFromString() string = %.*s length = %llu\n", (int) length, string, length);
 	ASSERT(length != 0);
 	// check known type strings
-	for(index8 i = 0; i < N_DATUMTYPES; i++) {
-		if(equalStringToCString(string, length, datumTypeNames[i]))
+	for(index8 i = 0; i < N_ATOMTYPES; i++) {
+		if(equalStringToCString(string, length, atomTypeNames[i]))
 			return i;
 	}
 	return 0;

@@ -182,7 +182,7 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		return false;
 
 	case TOKEN_PARAMETER:
-		// parse datum type name
+		// parse atom type name
 		// TODO: here we must ensure that the string
 		// is always a prefix of valid type name.
 		if(IsNameChar(c)) {
@@ -192,14 +192,14 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		if(IsWhiteSpace(c) || (c == 0)) {
 			// whitespace terminates parameter
 			if(tokenizer->buffer.stringLength > 0) {
-				tokenizer->data.parameter.datumType = DatumTypeIdFromString(
+				tokenizer->data.parameter.atomType = AtomTypeFromString(
 					tokenizer->buffer.buffer,
 					tokenizer->buffer.stringLength
 				);
-				ASSERT(tokenizer->data.parameter.datumType);
+				ASSERT(tokenizer->data.parameter.atomType);
 			}
 			else
-				tokenizer->data.parameter.datumType = 0;	// untyped parameter
+				tokenizer->data.parameter.atomType = 0;	// untyped parameter
 
 			tokenizer->isFull = true;
 			return true;
@@ -236,13 +236,13 @@ void TokenizerCleanup(Tokenizer * tokenizer)
 }
 
 
-static Atom parseFloat(char const * syntax, size32 length)
+static TypedAtom parseFloat(char const * syntax, size32 length)
 {
 	return CreateFloat64(StringToFloat64(syntax, length));
 }
 
 
-static Atom parseInteger(char const * syntax, size32 length)
+static TypedAtom parseInteger(char const * syntax, size32 length)
 {
 	return CreateInt(StringToInt64(syntax, length));
 }
@@ -260,7 +260,7 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 	switch(tokenizer->type) {
 	case TOKEN_STRING:
 		// strings entered in formulas are always immutable
-		token.atom = CreateString(string, stringLength);
+		token.atom = CreateTypedAtom(AT_ID, CreateString(string, stringLength));
 		break;
 
 	case TOKEN_NUMBER:
@@ -281,12 +281,12 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 	case TOKEN_PARAMETER:
 		token.atom = CreateParameter(
 			tokenizer->data.parameter.io,
-			tokenizer->data.parameter.datumType
+			tokenizer->data.parameter.atomType
 		);
 		break;
 				
 	case TOKEN_NAME:
-		token.atom = CreateName(string, stringLength);
+		token.atom = CreateTypedAtom(AT_NAME, CreateName(string, stringLength));
 		break;
 
 	default:

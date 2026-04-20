@@ -1,41 +1,42 @@
 
-#include "lang/Quote.h"
 #include "datumtypes/Variable.h"
+#include "lang/Quote.h"
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "kernel/ServiceRegistry.h"
-#include "lang/Atom.h"
+#include "lang/TypedAtom.h"
 #include "lang/Formula.h"
+
+
+
+static void quoteSetTuple(TypedAtom * tuple, TypedAtom quote, TypedAtom quoted)
+{
+	tuple[CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTE)] = quote;
+	tuple[CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED)] = quoted;
+}
 
 
 Atom CreateQuote(Atom quoted)
 {
-	ASSERT(quoted.type == DT_VARIABLE || IsFormula(quoted));
+	ASSERT(IsFormula(quoted));
 
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	Atom form = GetCorePredicateForm(FORM_QUOTE_QUOTED);
-
 	IFactBeginConjunction(
-		&draft, form,
+		&draft,
+		GetCorePredicateForm(FORM_QUOTE_QUOTED),
+		RegistryGetCoreTable(FORM_QUOTE_QUOTED),
 		CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTE)
 	);
 	
-	Atom tuple[2];
-	QuoteSetTuple(tuple, invalidAtom, quoted);
+	TypedAtom tuple[2];
+	quoteSetTuple(tuple, invalidAtom, CreateTypedAtom(AT_ID, quoted));
 	IFactAddClause(&draft, tuple);
 	IFactEndConjunction(&draft);
 	
 	return IFactEnd(&draft);
-}
-
-
-void QuoteSetTuple(Atom * tuple, Atom quote, Atom quoted)
-{
-	tuple[CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTE)] = quote;
-	tuple[CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED)] = quoted;
 }
 
 
@@ -53,17 +54,17 @@ Atom QuoteGetQuoted(Atom quote)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_QUOTE_QUOTED);
 
-	Atom query[2];
-	QuoteSetTuple(query, quote, anonymousVariable);
-	Atom tuple[2];
+	TypedAtom query[2];
+	quoteSetTuple(query, CreateTypedAtom(AT_ID, quote), anonymousVariable);
+	TypedAtom tuple[2];
 	RelationBTreeQuerySingle(tree, query, tuple);
 
-	return tuple[CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED)];
+	return tuple[CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED)].atom;
 }
 
 
 void PrintQuoted(Atom quoted)
 {
 	PrintChar('\'');
-	PrintAtom(QuoteGetQuoted(quoted));
+	PrintFormula(QuoteGetQuoted(quoted));
 }

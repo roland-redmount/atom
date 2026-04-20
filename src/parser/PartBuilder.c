@@ -19,7 +19,8 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 	case STATE_EMPTY:
 		if(token.type != TOKEN_NAME)
 			return false;
-		builder->role = token.atom;
+		ASSERT(token.atom.type == AT_NAME)
+		builder->role = token.atom.atom;
 		NameAcquire(builder->role);
 		builder->state = STATE_PARTIAL;
 		return true;	
@@ -28,7 +29,7 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 		if(!TokenIsLiteral(token))
 			return false;
 		builder->actor = token.atom;
-		AcquireAtom(builder->actor);
+		AcquireTypedAtom(builder->actor);
 		builder->state = STATE_COMPLETE;
 		return true;
 
@@ -61,7 +62,7 @@ Atom PartBuilderGetRole(PartBuilder const * builder)
 }
 
 
-Atom PartBuilderGetActor(PartBuilder const * builder)
+TypedAtom PartBuilderGetActor(PartBuilder const * builder)
 {
 	return builder->actor;
 }
@@ -74,7 +75,7 @@ void PartBuilderReset(PartBuilder * builder)
 	}
 	else if(builder->state == STATE_COMPLETE) {
 		NameRelease(builder->role);
-		ReleaseAtom(builder->actor);
+		ReleaseTypedAtom(builder->actor);
 	}
 	builder->state = STATE_EMPTY;
 }

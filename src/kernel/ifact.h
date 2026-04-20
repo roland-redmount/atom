@@ -1,6 +1,6 @@
-																					/**
- * Identifying facts are a set of tuples across one or more tables
- * that together identify an atom. To create an identifying fact,
+/**
+ * An identifying fact (ifact) is a conjunction across one or more relations
+ * that uniquely identify an atom. To create an identifying fact,
  * we must process a formula (conjunction), locate or create the
  * corresponding tuples across one or more tables, mark them as
  * protected from deletion, and compute a hash value of the formula.
@@ -25,6 +25,7 @@
  */
 typedef struct s_IFactConjunction {
 	Atom form;				// clause or predicate form for the relation
+	BTree * btree;			// B-tree storing the relation
 	index8 idColumn;		// these 3 fields total 4 bytes
 	size8 nColumns;
 	size16 nRows;
@@ -40,22 +41,23 @@ typedef struct s_IFactHeader IFactHeader;
 struct s_IFactHeader {
 	data64 hash;				// 8 bytes
 	size8 nConjunctions;
-	data8 reserved[3];			// pad to even 4-byte
+	data8 flags;
+	data8 reserved[2];			// pad to even 4-byte
 	uint32 refCount;
 	IFactConjunction * conjunctions;	// pointer, 8 bytes
 } __attribute__((packed)) ;
+
+#define IFACT_NEW		1
 
 
 /**
  * A "draft" ifact, used while building a ifact
  */
 typedef struct s_IFactDraft {
-	Atom * tupleStorage;
-	Atom * currentTuple;
-
+	TypedAtom * tupleStorage;
+	TypedAtom * currentTuple;
 	IFactHeader header;		// IFact being constructed
 	bool hasBegunConjunction;
-
 } IFactDraft;
 
 /**
@@ -83,14 +85,14 @@ void IFactBegin(IFactDraft * draft);
  * Begin a new conjunction for the IFact currently being created.
  * Each clause (row, fact) in the conjunction will have the given form.
  */
-void IFactBeginConjunction(IFactDraft * draft, Atom form, index8 idColumn);
+void IFactBeginConjunction(IFactDraft * draft, Atom form, BTree * btree, index8 idColumn);
 
 /**
  * Add a tuple that defines one clause of the current conjunction fact.
  * The atom in the column of the identified fact is ignored; it will
  * be computed by calling IFactEnd()
  */
-void IFactAddClause(IFactDraft * draft, Atom const * tuple);
+void IFactAddClause(IFactDraft * draft, TypedAtom const * tuple);
 
 /**
  * End the current conjunction. This function must be called before
@@ -105,15 +107,14 @@ size32 IFactEndConjunction(IFactDraft * draft);
 size32 IFactDraftCurrentNClauses(IFactDraft * draft);
 
 /**
- * Finish the IFact currently being created. Computes the IFact DT_ID atom's
- * datum as the hash of the identifying facts, creates the facts and
- * returns the DT_ID atom.
+ * Finish the IFact currently being created. Computes the IFact AT_ID atom's
+ * atom as the hash of the identifying facts, creates the facts and
+ * returns the AT_ID atom.
  */
 Atom IFactEnd(IFactDraft * draft);
 
 // This variant is only used during bootstrapping.
-Atom IFactEndCustom(IFactDraft * draft, data64 hash, void (* assertFact)(Atom predicateForm, Atom * actors));
-
+Atom IFactEndBootstrap(IFactDraft * draft, data64 hash, void (* assertFact)(Atom predicateForm, TypedAtom * actors));
 
 void IFactAcquire(Atom ifact);
 void IFactRelease(Atom ifact);
@@ -141,11 +142,21 @@ uint32 TotalIFactCount(void);
  */
 
 // TODO: this should take a form atom, not a tree pointer
-bool IFactCheckTuple(BTree const * tree, Atom const * tuple);
+bool IFactCheckTuple(BTree const * tree, TypedAtom const * tuple);
 
 void PrintIFact(Atom ifact);
 
 void DumpIFacts(void);
+
+/**
+ * Enable flagging of newly created ifacts, for debugging.
+ */
+void EnableFlagCreatedIFacts(void);
+
+void DumpFlaggedIFacts(void);
+
+void DisableFlagCreatedIFacts(void);
+
 
 
 #endif  // IFACT_H
