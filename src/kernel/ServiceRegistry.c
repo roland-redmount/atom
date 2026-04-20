@@ -241,11 +241,9 @@ Atom RegistryAddBTreeService(Atom form, BTree * btree)
 }
 
 
-Atom RegistryAddBytecodeService(Atom signature, Atom bytecode)
+Atom RegistryAddBytecodeService(Atom form, Atom bytecode)
 {
-	ASSERT(IsFormula(signature))
-	Atom form = FormulaGetForm(signature);
-	Atom parameters = FormulaGetActors(signature);
+	Atom parameters = BytecodeGetParameters(bytecode);
 	ServiceRecord record = {
 		.service = serviceRecordHash(form, parameters),
 		.form = form,

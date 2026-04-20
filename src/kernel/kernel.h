@@ -85,7 +85,7 @@ void RetractAllFacts(Atom predicateForm);
 
 #define ROLE_BYTECODE				21
 #define ROLE_PROGRAM				22
-#define ROLE_PARAMETER				23
+#define ROLE_PARAMETERS				23
 #define ROLE_REGISTERS				24
 #define ROLE_CONSTANTS				25
 
@@ -110,10 +110,11 @@ void RetractAllFacts(Atom predicateForm);
 #define FORM_QUOTE_QUOTED					10	// (quote quoted)
 #define FORM_STRING							11	// (string)
 #define FORM_BYTECODE_PROGRAM				12	// (bytecode program)
-#define FORM_BYTECODE_REGISTERS	    		13	// (bytecode registers)
-#define FORM_BYTECODE_CONSTANTS	    		14	// (bytecode registers)
+#define FORM_BYTECODE_PARAMETERS    		13	// (bytecode parameters)
+#define FORM_BYTECODE_REGISTERS	    		14	// (bytecode registers)
+#define FORM_BYTECODE_CONSTANTS	    		15	// (bytecode registers)
 
-#define N_CORE_PREDICATES					14
+#define N_CORE_PREDICATES					15
 
 /**
  * Lookup one of the "primitive" forms for core tables

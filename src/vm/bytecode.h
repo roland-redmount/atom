@@ -10,6 +10,7 @@
 
 
 typedef struct s_BytecodeDraft {
+	Atom parameters;
 	Atom registers;
 	IFactDraft constantsDraft;
 	IFactDraft programDraft;
@@ -17,10 +18,10 @@ typedef struct s_BytecodeDraft {
 } BytecodeDraft;
 
 /**
- * Initialize a bytecode block from a DT_FORMULA signature,
- * and an array of initial values for registers.
+ * Being creating a a bytecode block, staring from a list of a parameters
+ * and a list of register initial values.
  */
-void BytecodeBegin(BytecodeDraft * draft, Atom registers);
+void BytecodeBegin(BytecodeDraft * draft, Atom parameters, Atom registers);
 
 /**
  * Structure specifying a bytecode argument or operand
@@ -75,6 +76,11 @@ Atom BytecodeEnd(BytecodeDraft * draft);
 
 
 bool IsBytecode(Atom atom);
+
+/**
+ * Return the parameter list
+ */
+Atom BytecodeGetParameters(Atom bytecode);
 
 /**
  * Returns a list of instructions

@@ -42,15 +42,18 @@ BytecodeServiceFixture setupBytecodeFixture1(void)
 {
 	BytecodeServiceFixture fixture;
 
+	// Bytecode signature
+	// TODO: find some better way to initalize this
+	Atom signature = CStringToPredicate("number @INT triple $INT");
+
 	// list of registers with initial values
 	fixture.registers = CreateListFromArray(
 		(TypedAtom []) {CreateTypedAtom(AT_INT, 0)},
 		1
 	);
-
 	// create bytecode draft
 	BytecodeDraft bytecodeDraft;
-	BytecodeBegin(&bytecodeDraft, fixture.registers);
+	BytecodeBegin(&bytecodeDraft, FormulaGetActors(signature), fixture.registers);
 	
 	// add instructions
 	// COPY @1 $2
@@ -85,13 +88,9 @@ BytecodeServiceFixture setupBytecodeFixture1(void)
 	// finalize bytecode and create atom
 	fixture.bytecode = BytecodeEnd(&bytecodeDraft);
 
-	// Bytecode signature
-	// TODO: find some better way to initalize this
-	Atom signature = CStringToPredicate("number @INT triple $INT");
-
 	// create service
 	fixture.service = RegistryAddBytecodeService(
-		signature, fixture.bytecode
+		FormulaGetForm(signature), fixture.bytecode
 	);
 	IFactRelease(signature);
 	return fixture;
@@ -197,6 +196,8 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 	BytecodeServiceFixture2 fixture;
 	fixture.childFixture = setupBytecodeFixture1();
 
+	Atom signature = CStringToPredicate("number @INT quadruple $INT");
+
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
 	fixture.registers = CreateListFromArray(
@@ -206,10 +207,9 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 		},
 		2
 	);
-
 	// create bytecode draft
 	BytecodeDraft bytecodeDraft;
-	BytecodeBegin(&bytecodeDraft, fixture.registers);
+	BytecodeBegin(&bytecodeDraft, FormulaGetActors(signature), fixture.registers);
 
 	// COPY @1 $1
 	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
@@ -261,9 +261,8 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 	fixture.bytecode = BytecodeEnd(&bytecodeDraft);
 
 	// create service
-	Atom signature = CStringToPredicate("number @INT quadruple $INT");
 	fixture.service = RegistryAddBytecodeService(
-		signature,
+		FormulaGetForm(signature),
 		fixture.bytecode
 	);
 	IFactRelease(signature);
@@ -365,6 +364,8 @@ BytecodeServiceFixture setupBytecodeFixture3(void)
 	Atom tableService = setupTableService();
 	BytecodeServiceFixture fixture;
 
+	Atom signature = CStringToPredicate("foo @ID barbar $INT");
+
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
 	fixture.registers = CreateListFromArray(
@@ -377,7 +378,7 @@ BytecodeServiceFixture setupBytecodeFixture3(void)
 
 	// create bytecode draft
 	BytecodeDraft bytecodeDraft;
-	BytecodeBegin(&bytecodeDraft, fixture.registers);
+	BytecodeBegin(&bytecodeDraft, FormulaGetActors(signature), fixture.registers);
 
 	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
 	BytecodeOperandConstant(
@@ -420,9 +421,8 @@ BytecodeServiceFixture setupBytecodeFixture3(void)
 	fixture.bytecode = BytecodeEnd(&bytecodeDraft);
 
 	// create service
-	Atom signature = CStringToPredicate("foo @ID barbar $INT");
 	fixture.service = RegistryAddBytecodeService(
-		signature, fixture.bytecode
+		FormulaGetForm(signature), fixture.bytecode
 	);
 	return fixture;
 }

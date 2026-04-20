@@ -52,6 +52,7 @@ const index8 corePredicateArity[N_CORE_PREDICATES + 1] = {
 	2,	// (quote quoted)
 	1,	// (string)
 	2,	// (bytecode program)
+	2,	// (bytecode parameters)
 	2,	// (bytecode registers)
 	2,	// (bytecode constants)
 };
@@ -70,6 +71,7 @@ const index32 coreFormRoleIds[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY] = {
 	{ROLE_QUOTE, ROLE_QUOTED},
 	{ROLE_STRING},
 	{ROLE_BYTECODE, ROLE_PROGRAM},
+	{ROLE_BYTECODE, ROLE_PARAMETERS},
 	{ROLE_BYTECODE, ROLE_REGISTERS},
 	{ROLE_BYTECODE, ROLE_CONSTANTS},
 };
@@ -169,6 +171,7 @@ static void setupCoreRoleNames(void)
 
 	kernel.coreRoleNames[ROLE_BYTECODE] = CreateNameFromCString("bytecode");
 	kernel.coreRoleNames[ROLE_PROGRAM] = CreateNameFromCString("program");
+	kernel.coreRoleNames[ROLE_PARAMETERS] = CreateNameFromCString("parameters");
 	kernel.coreRoleNames[ROLE_REGISTERS] = CreateNameFromCString("registers");
 	kernel.coreRoleNames[ROLE_CONSTANTS] = CreateNameFromCString("constants");
 }

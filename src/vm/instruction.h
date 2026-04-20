@@ -21,8 +21,6 @@
  * Opcodes
  */
 
-typedef byte OpCode;
-
 // general purpose instructions, any atom type
 #define OP_NOP			0
 #define	OP_COPY			0x01
@@ -75,7 +73,7 @@ typedef byte OpCode;
  */
 typedef union {
 	struct {
-		OpCode opcode;
+		byte opcode;
 		struct {
 			byte op1 : 2;
 			byte op2 : 2;
@@ -101,7 +99,7 @@ typedef enum { OPERAND_LEFT, OPERAND_RIGHT } Operand;
  * Create an instruction, specifying operands with indices.
  * Operands not used by the opcode are ignored.
  */
-void InstructionBegin(Instruction * draft, OpCode opcode);
+void InstructionBegin(Instruction * draft, byte opcode);
 
 /**
  * Add an argument operand represented by an index into the
@@ -120,9 +118,10 @@ Atom InstructionEnd(Instruction * draft);
  */
 Instruction InstructionGetData(Atom instruction);
 
-
-// NOTE: this can be removed
-OpCode InstructionGetOpCode(Atom instruction);
+/**
+ * Return the instruction opcode.
+ */
+byte InstructionGetOpCode(Atom instruction);
 
 void PrintInstruction(Atom instruction);
 

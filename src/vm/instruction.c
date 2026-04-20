@@ -22,7 +22,7 @@ char const * mnemonics[] = {
 };
 
 
-void InstructionBegin(Instruction * draft, OpCode opcode)
+void InstructionBegin(Instruction * draft, byte opcode)
 {
 	SetMemory(draft, sizeof(Instruction), 0);
 	draft->fields.opcode = opcode;
@@ -71,8 +71,7 @@ Instruction InstructionGetData(Atom instruction)
 }
 
 
-
-OpCode InstructionGetOpCode(Atom instruction)
+byte InstructionGetOpCode(Atom instruction)
 {
 	Instruction inst = InstructionGetData(instruction);
 	return inst.fields.opcode;	

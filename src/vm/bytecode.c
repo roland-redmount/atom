@@ -33,6 +33,25 @@ static void setBytecodeProgram(IFactDraft * draft, Atom program)
 }
 
 
+// (bytecode parameters)
+static void setBytecodeParameters(IFactDraft * draft, Atom parametersList)
+{
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_PARAMETERS, ROLE_BYTECODE);
+	index8 parametersIndex = CorePredicateRoleIndex(FORM_BYTECODE_PARAMETERS, ROLE_PARAMETERS);
+
+	IFactBeginConjunction(
+		draft,
+		GetCorePredicateForm(FORM_BYTECODE_PARAMETERS),
+		RegistryGetCoreTable(FORM_BYTECODE_PARAMETERS),
+		bytecodeIndex
+	);
+	TypedAtom tuple[2];
+	tuple[parametersIndex] = CreateTypedAtom(AT_ID, parametersList);
+	IFactAddClause(draft, tuple);
+	IFactEndConjunction(draft);
+}
+
+
 // (bytecode registers)
 static void setBytecodeRegisters(IFactDraft * draft, Atom registersList)
 {
@@ -82,8 +101,10 @@ static void setBytecodeConstants(IFactDraft * draft, Atom constantsList)
  * For now we stick with the B-tree list implementation, but we should revisit this.
  */
 
-void BytecodeBegin(BytecodeDraft * draft, Atom registers)
+void BytecodeBegin(BytecodeDraft * draft, Atom parameters, Atom registers)
 {
+	ASSERT(IsList(parameters));
+	draft->parameters = parameters;
 	ASSERT(IsList(registers));
 	draft->registers = registers;
 
@@ -139,6 +160,9 @@ Atom BytecodeEnd(BytecodeDraft * draft)
 	IFactDraft bytecodeDraft;
 	IFactBegin(&bytecodeDraft);
 
+	// (bytecode parameters)
+	setBytecodeParameters(&bytecodeDraft, draft->parameters);
+
 	// (bytecode registers)
 	setBytecodeRegisters(&bytecodeDraft, draft->registers);
 
@@ -184,22 +208,21 @@ Atom BytecodeGetProgram(Atom bytecode)
 	return tuple[programIndex].atom;
 }
 
-/*
-Atom BytecodeGetSignature(Atom bytecode)
+
+Atom BytecodeGetParameters(Atom bytecode)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_SIGNATURE);
-	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_BYTECODE);
-	index8 signatureIndex = CorePredicateRoleIndex(FORM_BYTECODE_SIGNATURE, ROLE_SIGNATURE);
+	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_PARAMETERS);
+	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_PARAMETERS, ROLE_BYTECODE);
+	index8 parametersIndex = CorePredicateRoleIndex(FORM_BYTECODE_PARAMETERS, ROLE_PARAMETERS);
 
 	TypedAtom query[2];
 	query[bytecodeIndex] = CreateTypedAtom(AT_ID, bytecode);
-	query[signatureIndex] = anonymousVariable;
+	query[parametersIndex] = anonymousVariable;
 
 	TypedAtom tuple[2];
 	RelationBTreeQuerySingle(tree, query, tuple);
-	return tuple[signatureIndex].atom;
+	return tuple[parametersIndex].atom;
 }
-*/
 
 Atom BytecodeGetRegisters(Atom bytecode)
 {
@@ -248,12 +271,14 @@ static void createAdditionService(void)
 	Atom signature = CStringToPredicate("= $INT + @INT + @INT");
 	PrintFormula(signature);
 	PrintChar('\n');
+	Atom form = FormulaGetForm(signature);
+	Atom parameters = FormulaGetActors(signature);
 
 	Atom registers = CreateListFromArray(0, 0);		// the empty list
 
 	// create bytecode draft
 	BytecodeDraft bytecodeDraft;
-	BytecodeBegin(&bytecodeDraft, registers);
+	BytecodeBegin(&bytecodeDraft, parameters, registers);
 	
 	// COPY @2 $1
 	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
@@ -272,7 +297,7 @@ static void createAdditionService(void)
 
 	// TODO: create the service properly
 	additionService = RegistryAddBytecodeService(
-		signature,
+		FormulaGetForm(signature),
 		bytecode
 	);
 	IFactRelease(signature);
