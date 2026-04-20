@@ -14,7 +14,7 @@
  * For these reasons, at some point we should write our own B-tree implementation.
  */
 
-#include "datumtypes/Variable.h"
+#include "lang/Variable.h"
 #include "btree/btree.h"
 #include "kernel/ifact.h"
 #include "kernel/RelationBTree.h"

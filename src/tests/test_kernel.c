@@ -1,5 +1,5 @@
 
-#include "datumtypes/Int.h"
+#include "kernel/Int.h"
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
 #include "lang/name.h"

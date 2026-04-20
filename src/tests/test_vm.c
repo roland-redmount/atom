@@ -1,8 +1,8 @@
 
-#include "datumtypes/Parameter.h"
-#include "datumtypes/instruction.h"
-#include "datumtypes/Int.h"
-#include "datumtypes/Variable.h"
+#include "kernel/Parameter.h"
+#include "vm/instruction.h"
+#include "kernel/Int.h"
+#include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/string.h"

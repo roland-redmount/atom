@@ -1,10 +1,10 @@
 
-#include "datumtypes/FloatIEEE754.h"
-#include "datumtypes/Int.h"
-#include "datumtypes/instruction.h"
-#include "datumtypes/Parameter.h"
-#include "datumtypes/UInt.h"
-#include "datumtypes/Variable.h"
+#include "kernel/FloatIEEE754.h"
+#include "kernel/Int.h"
+#include "vm/instruction.h"
+#include "kernel/Parameter.h"
+#include "kernel/UInt.h"
+#include "lang/Variable.h"
 
 #include "lang/name.h"
 #include "lang/Quote.h"

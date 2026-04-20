@@ -1,7 +1,7 @@
 
-#include "datumtypes/Int.h"
-#include "datumtypes/FloatIEEE754.h"
-#include "datumtypes/Variable.h"
+#include "kernel/Int.h"
+#include "kernel/FloatIEEE754.h"
+#include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
 #include "kernel/RelationBTree.h"

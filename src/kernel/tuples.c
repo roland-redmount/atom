@@ -1,4 +1,4 @@
-#include "datumtypes/Variable.h"
+#include "lang/Variable.h"
 #include "kernel/tuples.h"
 #include "lang/TypedAtom.h"
 #include "util/sort.h"

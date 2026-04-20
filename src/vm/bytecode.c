@@ -1,7 +1,7 @@
 
-#include "datumtypes/Parameter.h"
-#include "datumtypes/Variable.h"
-#include "datumtypes/UInt.h"
+#include "kernel/Parameter.h"
+#include "lang/Variable.h"
+#include "kernel/UInt.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"

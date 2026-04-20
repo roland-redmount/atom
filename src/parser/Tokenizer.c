@@ -21,10 +21,10 @@
  * tokenizer with a "take back" functionality.
  */
 
-#include "datumtypes/FloatIEEE754.h"
-#include "datumtypes/Int.h"
-#include "datumtypes/Parameter.h"
-#include "datumtypes/Variable.h"
+#include "kernel/FloatIEEE754.h"
+#include "kernel/Int.h"
+#include "kernel/Parameter.h"
+#include "lang/Variable.h"
 #include "kernel/string.h"
 #include "lang/name.h"
 #include "parser/Characters.h"

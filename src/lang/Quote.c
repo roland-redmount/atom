@@ -1,5 +1,5 @@
 
-#include "datumtypes/Variable.h"
+#include "lang/Variable.h"
 #include "lang/Quote.h"
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"

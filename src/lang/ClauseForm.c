@@ -1,5 +1,5 @@
 
-#include "datumtypes/UInt.h"
+#include "kernel/UInt.h"
 #include "lang/ClauseForm.h"
 #include "lang/TermForm.h"
 #include "kernel/ifact.h"

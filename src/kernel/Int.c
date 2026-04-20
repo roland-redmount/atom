@@ -1,6 +1,5 @@
 
-#include "datumtypes/Int.h"
-#include "datumtypes/UInt.h"		// for type conversion
+#include "kernel/Int.h"
 
 
 TypedAtom CreateInt(int64 value)

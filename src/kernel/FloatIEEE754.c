@@ -1,6 +1,6 @@
 
 
-#include "datumtypes/FloatIEEE754.h"
+#include "kernel/FloatIEEE754.h"
 
 
 TypedAtom CreateFloat32(float value)

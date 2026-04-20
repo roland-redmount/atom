@@ -1,5 +1,5 @@
 
-#include "datumtypes/instruction.h"
+#include "vm/instruction.h"
 
 
 char const * mnemonics[] = {
@@ -116,6 +116,7 @@ static void printOperand(Operand operand, byte accessMode, index8 opIndex, index
 
 	default:
 		ASSERT(false)
+		;
 	}	
 }
 

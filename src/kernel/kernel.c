@@ -1,5 +1,5 @@
 
-#include "datumtypes/UInt.h"
+#include "kernel/UInt.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "kernel/ifact.h"

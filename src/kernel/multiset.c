@@ -1,6 +1,6 @@
 
-#include "datumtypes/UInt.h"
-#include "datumtypes/Variable.h"
+#include "kernel/UInt.h"
+#include "lang/Variable.h"
 #include "lang/TypedAtom.h"
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"

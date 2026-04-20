@@ -1,7 +1,7 @@
 #include "kernel/list.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
-#include "datumtypes/instruction.h"
+#include "vm/instruction.h"
 #include "vm/bytecodecontext.h"
 #include "vm/ccontext.h"
 #include "vm/vm.h"

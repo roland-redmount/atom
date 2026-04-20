@@ -1,6 +1,6 @@
 
-#include "datumtypes/FloatIEEE754.h"
-#include "datumtypes/Variable.h"
+#include "kernel/FloatIEEE754.h"
+#include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/ServiceRegistry.h"

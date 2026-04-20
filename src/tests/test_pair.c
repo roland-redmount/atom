@@ -1,5 +1,5 @@
 
-#include "datumtypes/UInt.h"
+#include "kernel/UInt.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
 #include "kernel/ServiceRegistry.h"

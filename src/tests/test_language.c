@@ -1,4 +1,4 @@
-#include "datumtypes/Int.h"
+#include "kernel/Int.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/multiset.h"
