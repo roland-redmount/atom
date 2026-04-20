@@ -182,9 +182,8 @@ iterate:
 			/** 
 			 * BCTX <service> <operand>
 			 * Create a bytecode context and store in the destination operand.
-			 * TODO: it would be more efficient to use at AT_SERVICE atom
-			 * encapsulating a pointer to the service. We would need the bytecode
-			 * to keep a reference to this atom so that the service cannot be deallocated.
+			 * 
+			 * TODO: handle B-tree services
 			 */
 			Atom service = readOperand(context, inst, OPERAND_LEFT);
 			ServiceRecord record = RegistryGetServiceRecord(service);

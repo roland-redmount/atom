@@ -47,6 +47,12 @@ void RetractFact(Atom form, TypedAtom * actors);
 
 
 /**
+ * Remove all facts of a given form
+ */
+void RetractAllFacts(Atom predicateForm);
+
+
+/**
  * Permanent identifiers for core role names (satisfying (name @name))
  * 
  * NOTE: we now identify a role as a pair (predicate, role name).

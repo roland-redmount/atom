@@ -486,8 +486,6 @@ void RetractFact(Atom predicateForm, TypedAtom * actors)
 
 void RetractAllFacts(Atom predicateForm)
 {
-	// iterate over all facts stored in relation tables
-	// and retract all.
 	ServiceRecord record = RegistryFindBTreeService(predicateForm);
 	ASSERT(record.type == SERVICE_BTREE)
 	RelationBTreeRemoveTuples(record.provider.tree, 0, REMOVE_NORMAL);

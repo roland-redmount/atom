@@ -8,9 +8,7 @@
  * The parameters list contains DT_PARAMETER atoms (see Parameter.h),
  * indicating the io mode (in/out) and atom type for each parameter.
  * 
- * NOTE: Service atoms are not reference counted!
- * 
- * A service s subsumes another service t iff (1) the forms are equal, and
+  * A service s subsumes another service t iff (1) the forms are equal, and
  * (2) there exists a valid form permutation such that, for each parameter p
  * of s and corresponding parameter q of t: (i) their io modes are equal,
  * or the io mode of p is in/out; and (ii) their datum types are requal, or
@@ -18,9 +16,16 @@
  * TODO: If service s subsumes service t, only one of them may be in the registry. 
  * 
  * For B-tree services are automatically removed by RetractFact() when
- * the last tuple in the relation table is removed. Bytecode services
- * must be removed manually, as removal amounts to retracting all facts
- * that are provided by the service.
+ * the last tuple in the relation table is removed. 
+ *
+ * TODO: AT_SERVICE atoms are currently not reference counted. It makes sense
+ * that Bytecode services should be removed manually, as removal amounts to
+ * retracting all facts that are provided by the service. BUT we must also
+ * know when a service depends on a calling "child" service, in which case
+ * the bytecode will store its AT_SERVICE atom as a constant; in this case we
+ * must not remove the child service before the "parent". Hence, we do need
+ * reference counting. We could prevent "garbage collection" of services by
+ * always keeping 1 reference to the AT_SERVICE atom in the stored ServiceRecord.
  */
 
 #ifndef SERVICEREGISTRY_H

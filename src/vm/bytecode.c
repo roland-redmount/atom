@@ -234,9 +234,8 @@ Atom BytecodeGetConstants(Atom bytecode)
 
 
 // TODO: temporary solution to be able to locate
-//  and remove the service (+ + =) to avoid memory leaks.
-//  We need a systematic way of deallocating all services,
-//  and dismantling the system in general.
+// and remove the service (+ + =) to test for memory leaks.
+// In practise we would persist these services, not remove them.
 
 static Atom additionService;
 
@@ -269,7 +268,6 @@ static void createAdditionService(void)
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	Atom bytecode = BytecodeEnd(&bytecodeDraft);
-	IFactRelease(signature);
 	IFactRelease(registers);
 
 	// TODO: create the service properly
@@ -277,6 +275,7 @@ static void createAdditionService(void)
 		signature,
 		bytecode
 	);
+	IFactRelease(signature);
 	IFactRelease(bytecode);
 }
 
@@ -285,7 +284,7 @@ static void createAdditionService(void)
  * TODO: This should become part of the "standard library" of services.
  * This is not "core" services in the sense of being required for the system to function.
  */
-void SetupCoreServices(void)
+void SetupServiceLibrary(void)
 {
 	createAdditionService();
 }

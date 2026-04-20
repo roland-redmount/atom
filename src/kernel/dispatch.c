@@ -21,12 +21,9 @@ ServiceRecord DispatchQuery(Atom query)
 	// TODO: we must construct a list of parameters corresponding to
 	// the query, such that atoms map to input parameters and variables 
 	// to output parameters, with types.
-	Atom parameters = 0;
-	Atom signature = CreateFormula(queryForm, parameters);
-	ServiceRecord service = RegistryGetServiceRecord(signature);
-	IFactRelease(signature);
+	ASSERT(false)
 
-	return service;
+	return (ServiceRecord) {0};
 }
 
 

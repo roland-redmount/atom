@@ -109,7 +109,7 @@ Atom BytecodeGetConstants(Atom bytecode);
 /**
  * Create core bytecode services, such as arithmetic operations.
  */
-void SetupCoreServices(void);
+void SetupServiceLibrary(void);
 
 void TeardownCoreServices(void);
 

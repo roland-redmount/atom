@@ -21,7 +21,7 @@ void testDispatch(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	SetupCoreServices();
+	SetupServiceLibrary();
 
 	ExecuteTest(testDispatch);
 

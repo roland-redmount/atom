@@ -218,8 +218,8 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 
 	// CTX <number triple> #2
 	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
-	// Here we store the service atom in a constant,
-	// which will trigger AcquireTypedAtom()
+	// TODO: the AT_SERVICE is not reference counted, so the ServiceRegistry
+	// has no way of knowing if there exist bytecode methods calling it ...
 	BytecodeOperandConstant(
 		&bytecodeDraft, OPERAND_LEFT,
 		CreateTypedAtom(AT_SERVICE, fixture.childFixture.service)
@@ -301,8 +301,7 @@ void testExecuteByteCode2(void)
 
 
 /**
- * Create a service 
- * TODO: the service needs atom types in order to interface with bytecode
+ * Create a relation table (B-tree) service 
  */
 Atom setupTableService(void)
 {
@@ -338,17 +337,14 @@ Atom setupTableService(void)
 void teardownTableService(Atom service)
 {
 	ServiceRecord record = RegistryGetServiceRecord(service);
-
 	ASSERT(record.type == SERVICE_BTREE)
-	
-	// TODO: need a way to retract all facts encoded by the service
-	ASSERT(false)
+	// Retracting the last fact of this form will remove the service
+	RetractAllFacts(record.form);
 }
 
 
 /**
  * Example program 3, calling a B-tree service (foo bar).
- * 
  * 
  * TODO
  * 
@@ -365,6 +361,7 @@ void teardownTableService(Atom service)
 BytecodeServiceFixture setupBytecodeFixture3(void)
 {
 	// setup bytecode fixture
+	Atom tableService = setupTableService();
 	BytecodeServiceFixture fixture;
 
 	// list of register with initial values
@@ -382,7 +379,10 @@ BytecodeServiceFixture setupBytecodeFixture3(void)
 	BytecodeBegin(&bytecodeDraft, fixture.registers);
 
 	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
-	// TODO: BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, );
+	BytecodeOperandConstant(
+		&bytecodeDraft, OPERAND_LEFT,
+		CreateTypedAtom(AT_SERVICE, tableService)
+	);
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
@@ -446,6 +446,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testBytecodeProgram1);
 	ExecuteTest(testExecuteByteCode1);
 	ExecuteTest(testExecuteByteCode2);
+	ExecuteTest(testExecuteBytecode3);
 
 	TestSummary();
 
