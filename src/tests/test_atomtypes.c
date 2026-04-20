@@ -31,11 +31,11 @@ void testAtomTypeFromString(void)
 void testFloat(void)
 {
 	double float64Value = 3.1415926535897932384;
-	TypedAtom float64 = CreateFloat64(float64Value);
+	Atom float64 = CreateFloat64(float64Value);
 	ASSERT_DOUBLE_EQUAL(GetFloat64Value(float64), float64Value)
 
 	float float32Value = 3.141592;
-	TypedAtom float32 = CreateFloat32((float) float32Value);
+	Atom float32 = CreateFloat32((float) float32Value);
 	ASSERT_FLOAT_EQUAL(GetFloat32Value(float32), float32Value)
 }
 

@@ -50,7 +50,7 @@ BINDIR := $(BUILDDIR)/bin
 # commands and flags
 # TODO: can we export the common flags to environment variables to avoid crazy long command lines ?
 CFLAGS_COMMON := -std=c99 -pedantic-errors\
- -Wall -Wstrict-prototypes -Werror\
+ -Wall -Wstrict-prototypes -Werror -fstrict-aliasing -Wstrict-aliasing=2\
  -Wno-error=unused-variable -Wno-error=unused-function -Wno-error=unused-but-set-variable -Wpointer-arith\
  -m64 -D$(PLATFORM)
 

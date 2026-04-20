@@ -106,19 +106,19 @@ static void testTokenizer(void)
 	token = tokenizeCString(&tokenizer, integerString);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_INT)
-	ASSERT_UINT32_EQUAL(token.typedAtom.atom, 12345);
+	ASSERT_DATA64_EQUAL(token.typedAtom.atom, 12345);
 
 	integerString = "0";
 	token = tokenizeCString(&tokenizer, integerString);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_INT)
-	ASSERT_UINT32_EQUAL(token.typedAtom.atom, 0);
+	ASSERT_DATA64_EQUAL(token.typedAtom.atom, 0);
 
 	char const * decimalString = "123.45";
 	token = tokenizeCString(&tokenizer, decimalString);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_FLOAT64)
-	ASSERT_UINT32_EQUAL(GetFloat64Value(token.typedAtom), 123.45);
+	ASSERT_DATA64_EQUAL(GetFloat64Value(token.typedAtom.atom), 123.45)
 
 	// the string "123.45." is not a legal number
 	pushCString(&tokenizer, decimalString);

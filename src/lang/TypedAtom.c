@@ -156,11 +156,11 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		break;
 
 	case AT_FLOAT32:
-		PrintFloat32(typedAtom);
+		PrintFloat32(typedAtom.atom);
 		break;
 
 	case AT_FLOAT64:
-		PrintFloat64(typedAtom);
+		PrintFloat64(typedAtom.atom);
 		break;
 
 	case AT_LETTER:
