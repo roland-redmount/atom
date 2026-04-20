@@ -112,18 +112,18 @@ void InstructionSetOperand(Instruction * draft, Operand operand, index8 opIndex,
 void InstructionSetContext(Instruction * draft, Operand operand, index8 registerIndex);
 
 
-TypedAtom InstructionEnd(Instruction * draft);
+Atom InstructionEnd(Instruction * draft);
 
 /**
  * View the instruction data structure
  */
-Instruction InstructionGetData(TypedAtom instruction);
+Instruction InstructionGetData(Atom instruction);
 
 
 // NOTE: this can be removed
-OpCode InstructionGetOpCode(TypedAtom instruction);
+OpCode InstructionGetOpCode(Atom instruction);
 
-void PrintInstruction(TypedAtom instruction);
+void PrintInstruction(Atom instruction);
 
 
 #endif	// INSTRUCTION_H

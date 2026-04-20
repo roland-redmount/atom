@@ -176,7 +176,7 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		break;
 
 	case AT_INSTRUCTION:
-		PrintInstruction(typedAtom);
+		PrintInstruction(typedAtom.atom);
 		break;
 
 	case AT_PARAMETER:

@@ -129,8 +129,8 @@ void BytecodeOperandSetContext(BytecodeDraft * draft, Operand operand, index8 re
 
 void BytecodeEndInstruction(BytecodeDraft * draft)
 {
-	TypedAtom instruction = InstructionEnd(&(draft->instructionDraft));
-	ListAddElement(&(draft->programDraft), instruction);
+	Atom instruction = InstructionEnd(&(draft->instructionDraft));
+	ListAddElement(&(draft->programDraft), CreateTypedAtom(AT_INSTRUCTION, instruction));
 }
 
 

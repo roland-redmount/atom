@@ -123,23 +123,23 @@ void testBytecodeProgram1(void)
 	ASSERT_UINT32_EQUAL(ListLength(program), 5)
 
 	ASSERT_UINT32_EQUAL(
-		InstructionGetOpCode(ListGetElement(program, 1)),
+		InstructionGetOpCode(ListGetElement(program, 1).atom),
 		OP_COPY
 	)
 	ASSERT_UINT32_EQUAL(
-		InstructionGetOpCode(ListGetElement(program, 2)),
+		InstructionGetOpCode(ListGetElement(program, 2).atom),
 		OP_COPY
 	)
 	ASSERT_UINT32_EQUAL(
-		InstructionGetOpCode(ListGetElement(program, 3)),
+		InstructionGetOpCode(ListGetElement(program, 3).atom),
 		OP_MUL
 	)
 	ASSERT_UINT32_EQUAL(
-		InstructionGetOpCode(ListGetElement(program, 4)),
+		InstructionGetOpCode(ListGetElement(program, 4).atom),
 		OP_ADD
 	)
 	ASSERT_UINT32_EQUAL(
-		InstructionGetOpCode(ListGetElement(program, 5)),
+		InstructionGetOpCode(ListGetElement(program, 5).atom),
 		OP_YIELD
 	)
 
@@ -156,7 +156,7 @@ void testExecuteByteCode1(void)
 	
 	// NOTE: arguments must be in canonical order
 	Atom arguments[2] = {CreateInt(3).atom,  CreateInt(0).atom};
-	BytecodeContext * rootContext = VMCreateRootContext(&record, arguments);
+	Atom rootContext = VMCreateRootContext(&record, arguments);
 	VMExecute(rootContext);
 	Atom * results = ContextArguments(rootContext);
 	// results should be 3 * 3 
@@ -288,7 +288,7 @@ void testExecuteByteCode2(void)
 	
 	// NOTE: arguments must be in canonical order
 	Atom arguments[2] = {CreateInt(3).atom,  CreateInt(0).atom};
-	BytecodeContext * rootContext = VMCreateRootContext(&record, arguments);
+	Atom rootContext = VMCreateRootContext(&record, arguments);
 
 	VMExecute(rootContext);
 	Atom * results = ContextArguments(rootContext);
@@ -308,8 +308,8 @@ Atom setupTableService(void)
 	// form (foo barbar)
 	Atom roles[2] = {CreateNameFromCString("foo"), CreateNameFromCString("bar")};
 	Atom form = CreatePredicateForm(roles, 2);
-	IFactRelease(roles[0]);
-	IFactRelease(roles[1]);
+	NameRelease(roles[0]);
+	NameRelease(roles[1]);
 	// create the service
 	BTree * btree = CreateRelationBTree(2);
 	Atom service = RegistryAddBTreeService(form, btree);

@@ -9,8 +9,8 @@ char const * mnemonics[] = {
 	"NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
 	
 	// 0x10 - 0x1F program control
-	"NOT", "MARK", "JUMP", "ENDIF", "YES", "YESIF", "CTX", "CALL", 
-	"YIELD", "END", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
+	"NOT", "MARK", "JUMP", "ENDIF", "YES", "YESIF", "BCTX", "CCTX",
+	"CALL", "YIELD", "END", "NOP", "NOP", "NOP", "NOP", "NOP",
 
 	// 0x20 - 0x2F integer arithmetic
 	"ADD", "SUB", "INC", "DEC", "MUL", "LESS", "LESSEQ", "NOP", 
@@ -57,22 +57,22 @@ void InstructionSetContext(Instruction * draft, Operand operand, index8 contextI
 }
 
 
-TypedAtom InstructionEnd(Instruction * draft)
+Atom InstructionEnd(Instruction * draft)
 {
-	return (TypedAtom) {AT_INSTRUCTION, 0, 0, 0, draft->value};
+	return (Atom) draft->value;
 }
 
 
-Instruction InstructionGetData(TypedAtom instruction)
+Instruction InstructionGetData(Atom instruction)
 {
 	Instruction inst;
-	inst.value = instruction.atom;
+	inst.value = instruction;
 	return inst;
 }
 
 
 
-OpCode InstructionGetOpCode(TypedAtom instruction)
+OpCode InstructionGetOpCode(Atom instruction)
 {
 	Instruction inst = InstructionGetData(instruction);
 	return inst.fields.opcode;	
@@ -120,7 +120,7 @@ static void printOperand(Operand operand, byte accessMode, index8 opIndex, index
 }
 
 
-void PrintInstruction(TypedAtom instruction)
+void PrintInstruction(Atom instruction)
 {
 	Instruction inst = InstructionGetData(instruction);
 	// opcode
