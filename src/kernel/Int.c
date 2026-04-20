@@ -2,8 +2,8 @@
 #include "kernel/Int.h"
 
 
-void PrintInt(TypedAtom integer)
+void PrintInt(Atom integer)
 {
-	PrintF("%lld", integer.atom);
+	PrintF("%lld", integer);
 }
 

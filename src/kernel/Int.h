@@ -8,7 +8,7 @@
 #define INT_H
 
 
-void PrintInt(TypedAtom integer);
+void PrintInt(Atom integer);
 
 
 #endif		// INT_H

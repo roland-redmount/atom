@@ -152,7 +152,7 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		break;
 
 	case AT_INT:
-		PrintInt(typedAtom);
+		PrintInt(typedAtom.atom);
 		break;
 
 	case AT_FLOAT32:
