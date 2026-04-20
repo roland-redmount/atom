@@ -209,7 +209,7 @@ static void testCreateClause(void)
 
 	TypedAtom actors[EXAMPLE_CLAUSE_ARITY];
 	for(index8 i = 0; i < EXAMPLE_CLAUSE_ARITY; i++)
-		actors[i] = CreateInt(i + 1);
+		actors[i] = CreateTypedAtom(AT_INT, i + 1);
 	Atom actorsList = CreateListFromArray(actors, EXAMPLE_CLAUSE_ARITY);
 
 	// act

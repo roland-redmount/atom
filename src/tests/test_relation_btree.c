@@ -29,7 +29,7 @@ static void setupFixture(void)
 {
 	fixture.tree = CreateRelationBTree(TEST_N_COLUMNS);
 
-	fixture.tuple1[0] = CreateInt(13);
+	fixture.tuple1[0] = CreateTypedAtom(AT_INT, 13);
 	fixture.tuple1[1] = CreateFloat64(123.456);
 	fixture.tuple1[2] = GetAlphabetLetter('A');
 
@@ -37,7 +37,7 @@ static void setupFixture(void)
 	fixture.tuple2[1] = fixture.tuple1[1];
 	fixture.tuple2[2] = GetAlphabetLetter('B');
 
-	fixture.tuple3[0] = CreateInt(14);
+	fixture.tuple3[0] = CreateTypedAtom(AT_INT, 14);
 	fixture.tuple3[1] = CreateFloat64(456.789);
 	fixture.tuple3[2] = GetAlphabetLetter('C');
 }
@@ -142,7 +142,7 @@ void testFindTuple(void)
 
 	// attempt to find non-matching tuple
 	{
-		queryTuple[0] = CreateInt(31);
+		queryTuple[0] = CreateTypedAtom(AT_INT, 31);
 		queryTuple[1] =	CreateFloat64(123.456);
 		queryTuple[2] =	tupleVariable1;
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);
@@ -169,7 +169,7 @@ void testFindTuple(void)
 
 	// repeated variables (equality constraint)
 	{
-		queryTuple[0] = CreateInt(13);
+		queryTuple[0] = CreateTypedAtom(AT_INT, 13);
 		queryTuple[1] =	tupleVariable1;
 		queryTuple[2] =	tupleVariable1;
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);

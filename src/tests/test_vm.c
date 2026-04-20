@@ -44,7 +44,7 @@ BytecodeServiceFixture setupBytecodeFixture1(void)
 
 	// list of registers with initial values
 	fixture.registers = CreateListFromArray(
-		(TypedAtom []) {CreateInt(0)},
+		(TypedAtom []) {CreateTypedAtom(AT_INT, 0)},
 		1
 	);
 
@@ -68,7 +68,7 @@ BytecodeServiceFixture setupBytecodeFixture1(void)
 	// MUL 2 #1
 	BytecodeBeginInstruction(&bytecodeDraft, OP_MUL);
 	// NOTE: do constants really need to be typed?
-	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, CreateInt(2));
+	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, CreateTypedAtom(AT_INT, 2));
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 1);
 	BytecodeEndInstruction(&bytecodeDraft);
 
@@ -156,7 +156,7 @@ void testExecuteByteCode1(void)
 	PrintChar('\n');
 	
 	// NOTE: arguments must be in canonical order
-	Atom arguments[2] = {CreateInt(3).atom,  CreateInt(0).atom};
+	Atom arguments[2] = {3, 0};
 	Atom rootContext = VMCreateRootContext(&record, arguments);
 	VMExecute(rootContext);
 	Atom * results = BytecodeContextArguments(rootContext);
@@ -201,7 +201,7 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 	// Registers storing contexts must be initially set to 0
 	fixture.registers = CreateListFromArray(
 		(TypedAtom []) {
-			CreateInt(0),
+			CreateTypedAtom(AT_INT, 0),
 			CreateTypedAtom(AT_CONTEXT, 0)
 		},
 		2
@@ -288,7 +288,7 @@ void testExecuteByteCode2(void)
 	PrintChar('\n');
 	
 	// NOTE: arguments must be in canonical order
-	Atom arguments[2] = {CreateInt(3).atom,  CreateInt(0).atom};
+	Atom arguments[2] = {3, 0};
 	Atom rootContext = VMCreateRootContext(&record, arguments);
 
 	VMExecute(rootContext);
@@ -318,14 +318,14 @@ Atom setupTableService(void)
 	// Assert facts
 	TypedAtom actors1[2] = {
 		CreateTypedAtom(AT_ID, CreateStringFromCString("baz")),
-		CreateInt(42)
+		CreateTypedAtom(AT_INT, 42)
 	};
 	AssertFact(form, actors1);
 	ReleaseTypedAtom(actors1[0]);
 
 	TypedAtom actors2[2]= {
 		CreateTypedAtom(AT_ID, CreateStringFromCString("zzz")),
-		CreateInt(-1)
+		CreateTypedAtom(AT_INT, -1)
 	};
 	AssertFact(form, actors2);
 	ReleaseTypedAtom(actors2[0]);
@@ -369,7 +369,7 @@ BytecodeServiceFixture setupBytecodeFixture3(void)
 	// Registers storing contexts must be initially set to 0
 	fixture.registers = CreateListFromArray(
 		(TypedAtom []) {
-			CreateInt(0),
+			CreateTypedAtom(AT_INT, 0),
 			CreateTypedAtom(AT_CONTEXT, 0)
 		},
 		2
@@ -408,7 +408,7 @@ BytecodeServiceFixture setupBytecodeFixture3(void)
 
 	// MUL 2 $2
 	BytecodeBeginInstruction(&bytecodeDraft, OP_MUL);
-	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, CreateInt(2));
+	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT, CreateTypedAtom(AT_INT, 2));
 	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 

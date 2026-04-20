@@ -24,7 +24,7 @@ void testAssertRetract(void)
 	// asserting the first fact should create the service
 	TypedAtom actors1[2] = {
 		CreateTypedAtom(AT_ID, CreateStringFromCString("barf")),
-		CreateInt(-1)
+		CreateTypedAtom(AT_INT, -1)
 	};
 	AssertFact(form, actors1);
 	record = RegistryFindBTreeService(form);
@@ -33,7 +33,7 @@ void testAssertRetract(void)
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 1)
 
 	TypedAtom actors2[] = {
-		CreateInt(42),
+		CreateTypedAtom(AT_INT, 42),
 		CreateTypedAtom(AT_ID, CreateStringFromCString("baz"))
 	};
 	AssertFact(form, actors2);

@@ -45,8 +45,8 @@ void testInt(void)
 	const int values[] = {42, 0, -7};
 	size32 n_values = sizeof(values) / sizeof(int);
 	for(index32 i = 0; i < n_values; i++) {
-		TypedAtom integer = CreateInt(values[i]);
-		ASSERT_INT64_EQUAL(GetIntValue(integer), values[i])
+		TypedAtom integer = CreateTypedAtom(AT_INT, values[i]);
+		ASSERT_INT64_EQUAL(integer.atom, values[i])
 	}
 }
 

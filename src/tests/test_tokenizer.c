@@ -81,7 +81,7 @@ static void testTokenizer(void)
 	char const * nameString = "foobar";
 	token = tokenizeCString(&tokenizer, nameString);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NAME)
-	ASSERT_UINT32_EQUAL(token.atom.type, AT_NAME)
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_NAME)
 	ReleaseToken(token);
 
 	// test string "foobar" enclosed in ""
@@ -92,8 +92,8 @@ static void testTokenizer(void)
 	token = TokenizerGetToken(&tokenizer);
 	TokenizerReset(&tokenizer);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_STRING)
-	ASSERT_UINT32_EQUAL(token.atom.type, AT_ID)
-	Atom tokenString = token.atom.atom;
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_ID)
+	Atom tokenString = token.typedAtom.atom;
 	ASSERT_UINT32_EQUAL(ListLength(tokenString), 6)
 	for(index32 i = 0; i < 6; i++) {
 		TypedAtom letter = ListGetElement(tokenString, i+1);
@@ -105,20 +105,20 @@ static void testTokenizer(void)
 	char const * integerString = "12345";
 	token = tokenizeCString(&tokenizer, integerString);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
-	ASSERT_UINT32_EQUAL(token.atom.type, AT_INT)
-	ASSERT_UINT32_EQUAL(GetIntValue(token.atom), 12345);
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_INT)
+	ASSERT_UINT32_EQUAL(token.typedAtom.atom, 12345);
 
 	integerString = "0";
 	token = tokenizeCString(&tokenizer, integerString);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
-	ASSERT_UINT32_EQUAL(token.atom.type, AT_INT)
-	ASSERT_UINT32_EQUAL(GetIntValue(token.atom), 0);
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_INT)
+	ASSERT_UINT32_EQUAL(token.typedAtom.atom, 0);
 
 	char const * decimalString = "123.45";
 	token = tokenizeCString(&tokenizer, decimalString);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
-	ASSERT_UINT32_EQUAL(token.atom.type, AT_FLOAT64)
-	ASSERT_UINT32_EQUAL(GetFloat64Value(token.atom), 123.45);
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_FLOAT64)
+	ASSERT_UINT32_EQUAL(GetFloat64Value(token.typedAtom), 123.45);
 
 	// the string "123.45." is not a legal number
 	pushCString(&tokenizer, decimalString);
@@ -132,8 +132,8 @@ static void testTokenizer(void)
 	token = TokenizerGetToken(&tokenizer);
 	TokenizerReset(&tokenizer);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_VARIABLE)
-	ASSERT_UINT32_EQUAL(token.atom.type, AT_VARIABLE)
-	ASSERT_CHAR_EQUAL(GetVariableName(token.atom), 'v');
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_VARIABLE)
+	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom), 'v');
 
 	TokenizerCleanup(&tokenizer);
 }
@@ -142,8 +142,8 @@ static void testTokenizer(void)
 static void testCreateTokenFromCString(void)
 {
 	Token token = CreateTokenFromCString("_x");
-	ASSERT_UINT32_EQUAL(token.atom.type, AT_VARIABLE)
-	ASSERT_CHAR_EQUAL(GetVariableName(token.atom), 'x');
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_VARIABLE)
+	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom), 'x');
 	ReleaseToken(token);
 }
 

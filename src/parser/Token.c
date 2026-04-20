@@ -17,12 +17,12 @@ bool TokenIsLiteral(Token token)
 void ReleaseToken(Token token)
 {
 	if(token.type == TOKEN_NAME) {
-		ASSERT(token.atom.type == AT_NAME)
-		NameRelease(token.atom.atom);
+		ASSERT(token.typedAtom.type == AT_NAME)
+		NameRelease(token.typedAtom.atom);
 	}
 	if(token.type == TOKEN_STRING) {
-		ASSERT(token.atom.type == AT_ID)
-		IFactRelease(token.atom.atom);
+		ASSERT(token.typedAtom.type == AT_ID)
+		IFactRelease(token.typedAtom.atom);
 	}
 	// other token types have nothing to release
 }
@@ -49,7 +49,7 @@ void PrintToken(Token token)
 	case TOKEN_NUMBER:
 	case TOKEN_VARIABLE:
 	case TOKEN_STRING:
-		PrintTypedAtom(token.atom);
+		PrintTypedAtom(token.typedAtom);
 
 	default:
 		PrintF("Token type %u", token.type);
