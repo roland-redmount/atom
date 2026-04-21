@@ -12,7 +12,7 @@
 #include "lang/PredicateForm.h"
 #include "parser/PredicateBuilder.h"
 #include "vm/bytecode.h"
-#include "vm/bytecodecontext.h"
+#include "vm/context.h"
 #include "vm/vm.h"
 
 #include "testing/testing.h"
@@ -157,12 +157,11 @@ void testExecuteByteCode1(void)
 	// NOTE: arguments must be in canonical order
 	Atom arguments[2] = {3, 0};
 	Atom rootContext = VMCreateRootContext(&record, arguments);
-	VMExecute(rootContext);
-	Atom * results = BytecodeContextArguments(rootContext);
+	VMExecute(rootContext);;
 	// results should be 3 * 3 
-	ASSERT_UINT32_EQUAL(results[1], 9);
+	ASSERT_DATA64_EQUAL(ContextGetParameter(rootContext, 1), 9);
 
-	FreeBytecodeContext(rootContext);
+	FreeContext(rootContext);
 
 	teardownBytecodeFixture1(fixture);
 }
@@ -291,10 +290,9 @@ void testExecuteByteCode2(void)
 	Atom rootContext = VMCreateRootContext(&record, arguments);
 
 	VMExecute(rootContext);
-	Atom * results = BytecodeContextArguments(rootContext);
-	ASSERT_UINT32_EQUAL(results[1], 3 * 4);
+	ASSERT_DATA64_EQUAL(ContextGetParameter(rootContext, 1), 3 * 4)
 
-	FreeBytecodeContext(rootContext);
+	FreeContext(rootContext);
 
 	teardownBytecodeFixture2(fixture);
 }
@@ -345,8 +343,9 @@ void teardownTableService(Atom service)
 
 /**
  * Example program 3, calling a B-tree service (foo bar).
- * 
- * TODO
+ * Here, we must provide datum types to the untyped (foo bar) service.
+ * These must come from the datum types associated with parameters,
+ * registers, or constants.
  * 
  * foo @ID barbar $INT
  * #1:INT #2:CONTEXT

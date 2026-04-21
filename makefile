@@ -165,7 +165,7 @@ NETWORK_FILES := $(addprefix network/, Connection Network)
 PARSER_FILES := $(addprefix parser/, Characters ClauseBuilder PartBuilder PredicateBuilder \
  StringBuffer TermBuilder Token Tokenizer)
 
-VM_FILES := $(addprefix vm/, bytecode bytecodecontext ccontext instruction vm)
+VM_FILES := $(addprefix vm/, bytecode context instruction vm)
 
 GRAPHICS_FILES := $(addprefix graphics/, \
  Graphics Mesh Point Polygon TextBlock Triangle)

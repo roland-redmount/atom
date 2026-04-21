@@ -1,5 +1,6 @@
 /**
- * A bytecode program consists of registers, constants, and an instruction list.
+ * A bytecode program consists of parameters, registers, constants,
+ * and an instruction list.
  */
 
 #ifndef BYTECODE_H
@@ -26,6 +27,7 @@ void BytecodeBegin(BytecodeDraft * draft, Atom parameters, Atom registers);
 /**
  * Structure specifying a bytecode argument or operand
  */
+/*
 typedef struct {
 	enum {ARG_PARAMETER, ARG_REGISTER, ARG_CONSTANT} type;
 	union {
@@ -34,7 +36,7 @@ typedef struct {
 		TypedAtom constant;
 	} value;
 } BytecodeArgument;
-
+*/
 
 
 /**
@@ -60,11 +62,11 @@ void BytecodeEndInstruction(BytecodeDraft * draft);
 /**
  * Finalize bytecode and create a AT_ID atom. This creates the relations
  * 
- * (bytecode @b signature f) where f is a formula
+ * (bytecode @b parameters f) where f is a list of AT_PARAMETER atoms
  * 
  * (bytecode @b registers r)
- * where r is a list of initial values for registers (atoms),
- * which also determines each register's atom type.
+ * where r is a list of initial values for registers (typed atoms),
+ * whose type also determines each register's type.
  * 
  * (bytecode @b constants c)
  * where c is a list of constants (atoms).

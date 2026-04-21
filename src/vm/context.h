@@ -4,64 +4,73 @@
  * A BytecodeContext * pointer is an AT_BCONTEXT atom, stored in VM registers;
  * since no two execution contexts are identical, the pointer identifies the atom.
  * 
- * TODO: rename this file to vm/bytecodecontext.h
+ * TODO: rename this file to vm/context.h
  */
 
-#ifndef BYTECODECONTEXT_H
-#define BYTECODECONTEXT_H
+#ifndef CONTEXT_H
+#define CONTEXT_H
 
 #include "kernel/ServiceRegistry.h"
 #include "lang/TypedAtom.h"
 
 
 /**
- * Create a new execution context (AT_BCONTEXT) for the given bytecode service.
+ * Create a new bytecode context (AT_BCONTEXT) for the given bytecode service.
  * The context contains pointers/references to the bytecode program,
  * and the arguments, registers and constands used by the program.
  * Arguments are read/written with VM instructions using context addressing.
  */
 Atom CreateBytecodeContext(ServiceRecord * service, Atom parentContext);
 
+/**
+ * Create a new compiled context
+ */
+Atom CreateCompiledContext(ServiceRecord * service);
+
 // void ContextAcquire(Atom context);
 
 // void ContextRelease(Atom context);
+
+
+/**
+ * Get a parameter value. The index is 0-based.
+ */
+Atom ContextGetParameter(Atom context, index8 i);
+
+/**
+ * Set a specific parameter to a given argument.  The index is 0-based.
+ * Used to initialize arguments for a root context.
+ */
+void ContextSetParameter(Atom context, index8 i, Atom argument);
+
+
+Atom ContextReadOperand(Atom context, Instruction inst, Operand operand);
+
+void ContextWriteOperand(Atom context, Instruction inst, index8 operand, Atom atom);
+
+
+/**
+ * Context size, including registers and child context pointers,
+ * but excluding actors
+ */
+// size32 BytecodeContextSize(size8 arity, size8 nRegisters);
 
 /**
  * Return the parent context. For the root context, returns 0
  */
 Atom BytecodeContextGetParent(Atom context);
 
-// could be done when creating?
 void BytecodeContextSetParent(Atom context, Atom parentContext);
-
-/**
- * Context size, including registers and child context pointers,
- * but excluding actors
- */
-size32 BytecodeContextSize(size8 arity, size8 nRegisters);
-
-/**
- * Return arguments array
- */
-Atom * BytecodeContextArguments(Atom context);
-
-size8 BytecodeContextNArguments(Atom context);
-
-/**
- * Return registers array
- */
-Atom * BytecodeContextRegisters(Atom context);
-
-/**
- * Return constants array
- */
-Atom * BytecodeContextConstants(Atom context);
 
 /**
  * Retrieve the next instruction, writing to the given atom.
  * If at end of program, returns false.
  */
 bool BytecodeContextNextInstruction(Atom context, Atom * instruction);
+
+
+bool CompiledContextCall(Atom context);
+
 
 /**
  * Check registers for allocated "child" contexts and free them if necessary.
@@ -70,7 +79,7 @@ bool BytecodeContextNextInstruction(Atom context, Atom * instruction);
  */
 void BytecodeContextFreeChildContexts(Atom context);
 
-void FreeBytecodeContext(Atom context);
+void FreeContext(Atom context);
 
 
-#endif	// BYTECODECONTEXT_H
+#endif	// CONTEXT_H
