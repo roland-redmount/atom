@@ -10,10 +10,18 @@
 
 
 
-static void quoteSetTuple(TypedAtom * tuple, TypedAtom quote, TypedAtom quoted)
+static void quoteSetTuple(Tuple * tuple, TypedAtom quote, TypedAtom quoted)
 {
-	tuple[CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTE)] = quote;
-	tuple[CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED)] = quoted;
+	TupleSetElement(
+		tuple,
+		CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTE),
+		 quote
+	);
+	TupleSetElement(
+		tuple,
+		CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED),
+		quoted
+	);
 }
 
 
@@ -31,11 +39,12 @@ Atom CreateQuote(Atom quoted)
 		CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTE)
 	);
 	
-	TypedAtom tuple[2];
+	Tuple * tuple = CreateTuple(2);
 	quoteSetTuple(tuple, invalidAtom, CreateTypedAtom(AT_ID, quoted));
 	IFactAddClause(&draft, tuple);
+	FreeTuple(tuple);
 	IFactEndConjunction(&draft);
-	
+
 	return IFactEnd(&draft);
 }
 
@@ -54,12 +63,14 @@ Atom QuoteGetQuoted(Atom quote)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_QUOTE_QUOTED);
 
-	TypedAtom query[2];
+	Tuple * query = CreateTuple(2);
 	quoteSetTuple(query, CreateTypedAtom(AT_ID, quote), anonymousVariable);
-	TypedAtom tuple[2];
-	RelationBTreeQuerySingle(tree, query, tuple);
-
-	return tuple[CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED)].atom;
+	TypedAtom quoted = RelationBTreeQuerySingleAtom(
+		tree, query,
+		CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED)
+	);
+	FreeTuple(query);
+	return quoted.atom;
 }
 
 

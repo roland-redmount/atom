@@ -15,11 +15,23 @@
 /**
  * Assign values to a tuple from the (list position element) relation
  */
-static void listSetTuple(TypedAtom * tuple, TypedAtom list, TypedAtom position, TypedAtom element)
+void ListSetTuple(Tuple * tuple, TypedAtom list, TypedAtom position, TypedAtom element)
 {
-	tuple[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST)] = list;
-	tuple[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION)] = position;
-	tuple[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)] = element;
+	TupleSetElement(
+		tuple,
+		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST),
+		list
+	);
+	TupleSetElement(
+		tuple,
+		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION),
+		position
+	);
+	TupleSetElement(
+		tuple,
+		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT),
+		element
+	);
 }
 
 
@@ -61,9 +73,10 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 		CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LIST)
 	);
 
-	TypedAtom listLengthTuple[2];
+	Tuple * listLengthTuple = CreateTuple(2);
 	ListLengthSetTuple(listLengthTuple, invalidAtom, CreateTypedAtom(AT_UINT, nElements));
 	IFactAddClause(draft, listLengthTuple);
+	FreeTuple(listLengthTuple);
 	IFactEndConjunction(draft);	
 }
 
@@ -79,11 +92,12 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 			CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST)
 		);
 
-		TypedAtom listElementTuple[3];
+		Tuple * listElementTuple = CreateTuple(3);
 		for(index32 i = 0; i < nElements; i++) {
-			listSetTuple(listElementTuple, invalidAtom, CreateTypedAtom(AT_UINT, i + 1), generator(i, data));
+			ListSetTuple(listElementTuple, invalidAtom, CreateTypedAtom(AT_UINT, i + 1), generator(i, data));
 			IFactAddClause(draft, listElementTuple);
 		}
+		FreeTuple(listElementTuple);
 		IFactEndConjunction(draft);
 	}
 	assertListLength(draft, nElements);
@@ -109,10 +123,11 @@ index32 ListAddElement(IFactDraft * draft, TypedAtom element)
 		);
 	}
 
-	TypedAtom listElementTuple[3];
+	Tuple * listElementTuple = CreateTuple(3);
 	index32 position = IFactDraftCurrentNClauses(draft) + 1;
-	listSetTuple(listElementTuple, invalidAtom, CreateTypedAtom(AT_UINT, position), element);
+	ListSetTuple(listElementTuple, invalidAtom, CreateTypedAtom(AT_UINT, position), element);
 	IFactAddClause(draft, listElementTuple);
+	FreeTuple(listElementTuple);
 	return position;
 }
 
@@ -134,10 +149,18 @@ Atom ListEnd(IFactDraft * draft)
 }
 
 
-void ListLengthSetTuple(TypedAtom * tuple, TypedAtom list, TypedAtom length)
+void ListLengthSetTuple(Tuple * tuple, TypedAtom list, TypedAtom length)
 {
-	tuple[CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LIST)] = list;
-	tuple[CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LENGTH)] = length;
+	TupleSetElement(
+		tuple,
+		CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LIST),
+		list
+	);
+	TupleSetElement(
+		tuple,
+		CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LENGTH),
+		length
+	);
 }
 
 
@@ -168,11 +191,13 @@ size32 ListLength(Atom list)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_LENGTH);
 
-	TypedAtom queryTuple[2];
+	Tuple * queryTuple = CreateTuple(2);
 	ListLengthSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), anonymousVariable);
-	TypedAtom resultTuple[2];
-	RelationBTreeQuerySingle(tree, queryTuple, resultTuple);
-	TypedAtom length = resultTuple[CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LENGTH)];
+	TypedAtom length = RelationBTreeQuerySingleAtom(
+		tree, queryTuple,
+		CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LENGTH)
+	);
+	FreeTuple(queryTuple);
 	return (size32) length.atom;
 }
 
@@ -181,11 +206,14 @@ TypedAtom ListGetElement(Atom list, index32 position)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
 
-	TypedAtom queryTuple[3];
-	listSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), CreateTypedAtom(AT_UINT, position), anonymousVariable);
-	TypedAtom resultTuple[3];
-	RelationBTreeQuerySingle(tree, queryTuple, resultTuple);
-	return resultTuple[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)];
+	Tuple * queryTuple = CreateTuple(3);
+	ListSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), CreateTypedAtom(AT_UINT, position), anonymousVariable);
+	TypedAtom element = RelationBTreeQuerySingleAtom(
+		tree, queryTuple,
+		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)
+	);
+	FreeTuple(queryTuple);
+	return element;
 }
 
 
@@ -208,8 +236,8 @@ index32 ListGetPosition(Atom list, TypedAtom element)
 	ASSERT(IsList(list))
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
 
-	TypedAtom queryTuple[3];
-	listSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), anonymousVariable, element);
+	Tuple * queryTuple = CreateTuple(3);
+	ListSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), anonymousVariable, element);
 
 	RelationBTreeIterator iterator;
 	RelationBTreeIterate(tree, queryTuple, &iterator);
@@ -223,6 +251,7 @@ index32 ListGetPosition(Atom list, TypedAtom element)
 		p = (index32) position.atom;
 	}
 	RelationBTreeIteratorEnd(&iterator);
+	FreeTuple(queryTuple);
 	return p;
 }
 
@@ -282,7 +311,8 @@ int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, Type
 void ListIterate(Atom list, ListIterator * iterator)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
-	listSetTuple(iterator->queryTuple, CreateTypedAtom(AT_ID, list), anonymousVariable, anonymousVariable);
+	iterator->queryTuple = CreateTuple(3);
+	ListSetTuple(iterator->queryTuple, CreateTypedAtom(AT_ID, list), anonymousVariable, anonymousVariable);
 	RelationBTreeIterate(tree, iterator->queryTuple, &(iterator->treeIterator));
 }
 
@@ -295,9 +325,8 @@ bool ListIteratorHasNext(ListIterator const * iterator)
 
 TypedAtom ListIteratorGetElement(ListIterator const * iterator)
 {
-	TypedAtom resultTuple[3];
-	RelationBTreeIteratorGetTuple(&(iterator->treeIterator), resultTuple);
-	return resultTuple[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)];
+	Tuple const * tuple = RelationBTreeIteratorPeekTuple(&(iterator->treeIterator));
+	return TupleGetElement(tuple, CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT));
 }
 
 
@@ -310,6 +339,7 @@ void ListIteratorNext(ListIterator * iterator)
 void ListIteratorEnd(ListIterator * iterator)
 {
 	RelationBTreeIteratorEnd(&(iterator->treeIterator));
+	FreeTuple(iterator->queryTuple);
 }
 
 

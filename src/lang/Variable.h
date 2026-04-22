@@ -14,6 +14,8 @@
  * NOTE: variables could internally be referred to 
  * by their index (order) in the formula in which they reside.
  * The character (or name) is for user readability only.
+ * 
+ * TODO: these functions should return Atom, not TypedAtom
  */
 TypedAtom CreateVariable(char name);
 

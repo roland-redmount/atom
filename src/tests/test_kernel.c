@@ -22,20 +22,29 @@ void testAssertRetract(void)
 	ASSERT(record.type == SERVICE_NONE)
 
 	// asserting the first fact should create the service
-	TypedAtom actors1[2] = {
-		CreateTypedAtom(AT_ID, CreateStringFromCString("barf")),
-		CreateTypedAtom(AT_INT, -1)
-	};
+	Atom barf = CreateStringFromCString("barf");
+	Tuple * actors1 = CreateTupleFromArray(
+		(TypedAtom[]) {
+			CreateTypedAtom(AT_ID, barf),
+			CreateTypedAtom(AT_INT, -1)
+		},
+		2
+	);
 	AssertFact(form, actors1);
 	record = RegistryFindBTreeService(form);
 	ASSERT(record.type == SERVICE_BTREE)
 	BTree * btree = record.provider.tree;
+
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 1)
 
-	TypedAtom actors2[] = {
-		CreateTypedAtom(AT_INT, 42),
-		CreateTypedAtom(AT_ID, CreateStringFromCString("baz"))
-	};
+	Atom baz = CreateStringFromCString("baz");
+	Tuple * actors2 = CreateTupleFromArray(
+		(TypedAtom[]) {
+			CreateTypedAtom(AT_INT, 42),
+			CreateTypedAtom(AT_ID, baz)
+		},
+		2
+	);
 	AssertFact(form, actors2);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 2)
 
@@ -47,8 +56,10 @@ void testAssertRetract(void)
 	record = RegistryFindBTreeService(form);
 	ASSERT(record.type == SERVICE_NONE)
 
-	ReleaseTypedAtom(actors1[0]);
-	ReleaseTypedAtom(actors2[1]);
+	FreeTuple(actors1);
+	FreeTuple(actors2);
+	IFactRelease(barf);
+	IFactRelease(baz);
 	IFactRelease(form);
 }
 

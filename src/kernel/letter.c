@@ -43,7 +43,7 @@ static char letterCodeToChar(uint8 letterCode, uint8 letterCase)
 
 TypedAtom GetAlphabetLetter(char c)
 {
-	return (TypedAtom) {AT_LETTER, 0, 0, 0, charToLetterCode(c)};
+	return CreateTypedAtom(AT_LETTER,charToLetterCode(c));
 }
 
 

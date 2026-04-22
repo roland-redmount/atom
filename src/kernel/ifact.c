@@ -6,7 +6,7 @@
 #include "kernel/lookup.h"
 #include "kernel/multiset.h"
 #include "kernel/ServiceRegistry.h"
-#include "kernel/tuples.h"
+#include "kernel/tuple.h"
 #include "lang/PredicateForm.h"
 #include "lang/Form.h"
 #include "lang/Formula.h"
@@ -151,24 +151,16 @@ void IFactAcquire(Atom ifact)
 }
 
 
-/**
- * When releasing an IFact atom we must retract the identifying facts.
- * Since there is no way to identify (reach/name/construct) the IFact atom anymore,
- * the atom is effectively "deleted" (or rather "forgotten"), and therefore
- * we cannot represent the facts involving the atom.
- */
-
 // create query tuple to match all tuples.
-static void createQueryTuple(TypedAtom * tuple, Atom ifact, size8 nColumns, index8 idColumn)
+static void setupQueryTuple(Tuple * tuple, Atom ifact, index8 idColumn)
 {
-	for(index8 j = 0; j < nColumns; j++) {
-		if(j == idColumn) {
-			// query with the ATOM_PROTECTED flag set
-			// to indicate a defining fact should be removed
-			tuple[j] = (TypedAtom) {.type = AT_ID, .flags = ATOM_PROTECTED, .atom = ifact};
-		}
+	ASSERT(idColumn < tuple->nAtoms)
+	tuple->protectedAtom = (idColumn + 1);
+	for(index8 j = 0; j < tuple->nAtoms; j++) {
+		if(j == idColumn)
+			TupleSetElement(tuple, j, CreateTypedAtom(AT_ID, ifact));
 		else
-			tuple[j] = anonymousVariable;
+			TupleSetElement(tuple, j, anonymousVariable);
 	}
 }
 
@@ -231,7 +223,7 @@ void IFactBeginConjunction(IFactDraft * draft, Atom form, BTree * btree, index8 
 }
 
 
-void IFactAddClause(IFactDraft * draft, TypedAtom const * tuple)
+void IFactAddClause(IFactDraft * draft, Tuple const * tuple)
 {
 	ASSERT(draft->hasBegunConjunction);
 	IFactConjunction * conjunction = lastConjunction(&(draft->header));
@@ -240,11 +232,12 @@ void IFactAddClause(IFactDraft * draft, TypedAtom const * tuple)
 	size32 tuplesSize = ((addr64) draft->currentTuple) - ((addr64) draft->tupleStorage);
 	ASSERT(tuplesSize + conjunction->nColumns * sizeof(TypedAtom) <= MEMORY_PAGE_SIZE);
 
-	CopyMemory(tuple, draft->currentTuple, conjunction->nColumns * sizeof(TypedAtom));
+	ASSERT(tuple->nAtoms == conjunction->nColumns)
+	SetupTuple((Tuple *) draft->currentTuple, conjunction->nColumns);
+	CopyTuples(tuple, (Tuple *)draft->currentTuple);
 	// ensure the identifying column is zero, to not affect hashCurrentIFact()
-	draft->currentTuple[conjunction->idColumn] = invalidAtom;
-
-	draft->currentTuple += conjunction->nColumns;
+	TupleSetElement((Tuple *) draft->currentTuple, conjunction->idColumn, invalidAtom);
+	draft->currentTuple += TupleNBytes(conjunction->nColumns);
 	conjunction->nRows++;
 }
 
@@ -275,15 +268,14 @@ static void sortIFactDraft(IFactDraft * draft)
 	// first sort the tuples for each conjunction
 	Atom forms[ifact->nConjunctions];
 	size32 tupleBlockSizes[ifact->nConjunctions];
-	TypedAtom * tuples = draft->tupleStorage;
+	byte * tuples = draft->tupleStorage;
 	for(index8 i = 0; i < ifact->nConjunctions; i++) {
 		IFactConjunction * conjunction = &(ifact->conjunctions[i]);
-		size32 nAtoms = conjunction->nRows * conjunction->nColumns;
-		tupleBlockSizes[i] = nAtoms * sizeof(TypedAtom);
+		tupleBlockSizes[i] = conjunction->nRows * TupleNBytes(conjunction->nColumns);
 		forms[i] = conjunction->form;
 
-		SortTuples(tuples, conjunction->nRows, conjunction->nColumns);
-		tuples += nAtoms;
+		SortTuples((Tuple *) tuples, conjunction->nRows);
+		tuples += conjunction->nRows * TupleNBytes(conjunction->nColumns);
 	}
 
 	// then sort the conjunctions by form
@@ -301,35 +293,37 @@ static void sortIFactDraft(IFactDraft * draft)
  * The assertFact() function is typically AssertFact()
  * but an alternative version is used during bootstrap.
  */
-static void createFacts(IFactDraft * draft, void (* assertFact)(Atom predicateForm, TypedAtom * actors))
+static void createFacts(IFactDraft * draft, void (* assertFact)(Atom predicateForm, Tuple const * actors))
 {
-	TypedAtom ifactAtom = CreateTypedAtom(AT_ID, draft->header.hash);
-	// NOTE: this should be handled by RelationBTree internally?
-	ifactAtom.flags |= ATOM_PROTECTED;
+	TypedAtom idAtom = CreateTypedAtom(AT_ID, draft->header.hash);
 
 	// walk through conjunctions and add to tuples corresponding relation table
 	IFactConjunction const * conjunction = draft->header.conjunctions;
-	TypedAtom * tuple = draft->tupleStorage;
+	byte * tuplePtr = draft->tupleStorage;
 	for(index8 i = 0; i < draft->header.nConjunctions; i++) {
 		for(index32 j = 0; j < conjunction->nRows; j++) {
-			// set the ifact atom
-			tuple[conjunction->idColumn] = ifactAtom;
+			Tuple * tuple = (Tuple *) tuplePtr;
+			// set the identified atom
+			TupleSetElement(tuple, conjunction->idColumn, idAtom);
+			// protect the identified atom
+			tuple->protectedAtom = (conjunction->idColumn + 1);
 			// TODO: we must verify that asserting the fact succeeds
 			assertFact(conjunction->form, tuple);
-			tuple += conjunction->nColumns;
+			tuplePtr += TupleNBytes(conjunction->nColumns);
 		}
 		conjunction++;
 	}
 }
 
 
-static data64 hashConjunction(IFactConjunction const * conjunction, TypedAtom const * tuples, data64 initialHash)
+static data64 hashConjunction(IFactConjunction const * conjunction, byte const * tuples, data64 initialHash)
 {
 	data64 hash = initialHash;
-	for(index32 i = 0, t = 0; i < conjunction->nRows; i++) {
+	for(index32 i = 0; i < conjunction->nRows; i++) {
 		// hash one formula, corresponding to one row of the conjunction
-		hash = FormulaHashFormActors(conjunction->form, &(tuples[t]), conjunction->nColumns, hash);
-		t += conjunction->nColumns;
+		hash = FormulaHashFormActors(
+			conjunction->form, (Tuple *) tuples, conjunction->nColumns, hash);
+		tuples += TupleNBytes(conjunction->nColumns);
 	}
 	return hash;
 }
@@ -342,29 +336,30 @@ static data64 hashConjunction(IFactConjunction const * conjunction, TypedAtom co
 static data64 hashIFact(IFactDraft * draft)
 {
 	data64 hash = djb2InitialHash;
-	TypedAtom * tuple = draft->tupleStorage;
+	byte const * tuplePtr = draft->tupleStorage;
 	for(index32 i = 0; i < draft->header.nConjunctions; i++) {
 		IFactConjunction * conjunction = &(draft->header.conjunctions[i]);
-		hash = hashConjunction(conjunction, tuple, hash);
-		tuple += conjunction->nRows * conjunction->nColumns;
+		hash = hashConjunction(conjunction, tuplePtr, hash);
+		tuplePtr += conjunction->nRows * TupleNBytes(conjunction->nColumns);
 	}
 	return hash;
 }
 
 
 /**
- * Test whether the draft IFact is the same as the given IFact
+ * Test whether the draft IFact is identical to an existing IFact
+ * by comparing the actual defining facts. This is needed to ensure
+ * we do not have a hash collision.
  */
 static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 {
-	// Check for hash collision by comparing the actual defining facts.
 	// We need to iterate over tuples from each relation involved,
-	// and compare to the (sorted) tuples in our temporary storage
+	// and compare to the sorted tuples in our temporary storage
 
 	if(draft->header.nConjunctions != existingIFact->nConjunctions)
 		return false;
 
-	TypedAtom const * currentTuple = draft->tupleStorage;	
+	byte const * tuplePtr = draft->tupleStorage;	
 	for(index32 i = 0; i < existingIFact->nConjunctions; i++) {
 		IFactConjunction * conjunction = &(draft->header.conjunctions[i]);
 		IFactConjunction * existingConjunction = &(existingIFact->conjunctions[i]);
@@ -375,35 +370,35 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 		// fetch tuples and compare
 		RelationBTreeIterator iterator;
 		// create query tuple
-		TypedAtom queryTuple[conjunction->nColumns];
 		// the identified atom must be identical in current and existing
-		TypedAtom idAtom = CreateTypedAtom(AT_ID, draft->header.hash);
-		for(index8 j = 0; j < conjunction->nColumns; j++) {
-			if(j == conjunction->idColumn)
-				queryTuple[j] = idAtom;
-			else
-				queryTuple[j] = anonymousVariable;
-		}
+		Tuple * queryTuple = CreateTuple(conjunction->nColumns);
+		setupQueryTuple(queryTuple, (Atom) draft->header.hash, conjunction->idColumn);
+
 		RelationBTreeIterate(conjunction->btree, queryTuple, &iterator);
-		TypedAtom resultTuple[conjunction->nColumns];
+		Tuple * existingTuple = CreateTuple(conjunction->nColumns);
 		while(RelationBTreeIteratorHasTuple(&iterator)) {
-			RelationBTreeIteratorGetTuple(&iterator, resultTuple);
-			// the id column must not affect the comparison
-			resultTuple[conjunction->idColumn] = currentTuple[conjunction->idColumn];
-			if(CompareTuples(resultTuple, currentTuple, conjunction->nColumns) != 0) {
+			Tuple * draftTuple = (Tuple *) tuplePtr;
+			RelationBTreeIteratorGetTuple(&iterator, existingTuple);
+			// the id column is still zero in the draft tuple
+			// and must not affect the comparison
+			// TODO: would be more efficient to just skip the atom when comparing
+			TupleSetElement(existingTuple, conjunction->idColumn,
+				TupleGetElement(draftTuple, conjunction->idColumn));
+			if(!SameTuples(existingTuple, draftTuple))
 				return false;
-			}
-			currentTuple += conjunction->nColumns;
+			tuplePtr += TupleNBytes(conjunction->nColumns);
 			RelationBTreeIteratorNext(&iterator);
 		}
 		RelationBTreeIteratorEnd(&iterator);
+		FreeTuple(queryTuple);
+		FreeTuple(existingTuple);
 		// currentTuple now points to the first tuple of the next conjuction
 	}
 	return true;
 }
 
 
-Atom IFactEndBootstrap(IFactDraft * draft, data64 hash, void (* assertFact)(Atom predicateForm, TypedAtom * actors))
+Atom IFactEndBootstrap(IFactDraft * draft, data64 hash, void (* assertFact)(Atom, Tuple const *))
 {
 	ASSERT(!draft->hasBegunConjunction);
 	ASSERT(draft->header.conjunctions);
@@ -490,23 +485,29 @@ Atom IFactEnd(IFactDraft * draft)
  * are fixed.
  */
 
-bool IFactCheckTuple(BTree const * tree, TypedAtom const * tuple)
+bool IFactCheckTuple(BTree const * tree, Tuple const * tuple)
 {
-	size8 nColumns = RelationBTreeNColumns(tree);
-	for(index8 i = 0; i < nColumns; i++) {
-		if(tuple[i].type != AT_ID)
+	ASSERT(tuple->nAtoms == RelationBTreeNColumns(tree))
+
+	index8 protectedIndex = tuple->protectedAtom - 1;
+	for(index8 i = 0; i < tuple->nAtoms; i++) {
+		if(i == protectedIndex) {
+			// atom is defined by an IFact currently being created, skip check
 			continue;
-		if(tuple[i].flags & ATOM_PROTECTED) // skip check for atoms being identified
+		}
+		TypedAtom typedAtom = TupleGetElement(tuple, i);
+		if(typedAtom.type != AT_ID)
 			continue;
-		IFactHeader * header = peekIFactHeader(tuple[i].atom);
+		// check this atom
+		IFactHeader * header = peekIFactHeader(typedAtom.atom);
+		ASSERT(header);
 		size8 nConjunctions = header->nConjunctions;
 		IFactConjunction * conjunctions = header->conjunctions;
-		ASSERT(header);
 		for(index32 j = 0; j < nConjunctions; j++) {
 			if((conjunctions[j].btree == tree) && (conjunctions[j].idColumn == i))
 				return false;
 		}
- 	}
+	}
  	return true;
 }
 
@@ -531,8 +532,8 @@ void IFactRelease(Atom ifact)
 		// don't actually need to store the conjunctions after IFactEnd()
 		for(index8 i = 0; i < headerCopy.nConjunctions; i++) {
 			IFactConjunction * conjunction = &(headerCopy.conjunctions[i]);
-			TypedAtom queryTuple[conjunction->nColumns];
-			createQueryTuple(queryTuple, ifact, conjunction->nColumns, conjunction->idColumn);
+			Tuple * queryTuple = CreateTuple(conjunction->nColumns);
+			setupQueryTuple(queryTuple, ifact, conjunction->idColumn);
 
 			// Delete protected tuples.
 			// This may result in recursive calls to IFactRelease()
@@ -542,6 +543,7 @@ void IFactRelease(Atom ifact)
 
 			// NOTE: this does not remove entries from the lookup table
 			RelationBTreeRemoveTuples(conjunction->btree, queryTuple, REMOVE_PROTECTED);
+			FreeTuple(queryTuple);
 		}
 		LookupRemoveAllRoles(ifact);
 

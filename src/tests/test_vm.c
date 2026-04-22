@@ -313,21 +313,31 @@ Atom setupTableService(void)
 	Atom service = RegistryAddBTreeService(form, btree);
 
 	// Assert facts
-	TypedAtom actors1[2] = {
-		CreateTypedAtom(AT_ID, CreateStringFromCString("baz")),
-		CreateTypedAtom(AT_INT, 42)
-	};
+	Atom baz = CreateStringFromCString("baz");
+	Tuple * actors1 = CreateTupleFromArray(
+		(TypedAtom[]) {
+			CreateTypedAtom(AT_ID, baz),
+			CreateTypedAtom(AT_INT, 42)
+		},
+		2
+	);
 	AssertFact(form, actors1);
-	ReleaseTypedAtom(actors1[0]);
+	FreeTuple(actors1);
+	IFactRelease(baz);
 
-	TypedAtom actors2[2]= {
-		CreateTypedAtom(AT_ID, CreateStringFromCString("zzz")),
-		CreateTypedAtom(AT_INT, -1)
-	};
+	Atom zzz = CreateStringFromCString("zzz");
+	Tuple * actors2 = CreateTupleFromArray(
+		(TypedAtom[]) {
+			CreateTypedAtom(AT_ID, zzz),
+			CreateTypedAtom(AT_INT, -1)
+		},
+		2
+	);
 	AssertFact(form, actors2);
-	ReleaseTypedAtom(actors2[0]);
+	FreeTuple(actors2);
+	IFactRelease(zzz);
+	
 	IFactRelease(form);
-
 	return service;
 }
 

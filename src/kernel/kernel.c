@@ -177,7 +177,7 @@ static void setupCoreRoleNames(void)
 #define MULTISET_MULTIPLE_COLUMN	0
 
 
-void bootstrapAssertFact(Atom predicateForm, TypedAtom * actors)
+void bootstrapAssertFact(Atom predicateForm, Tuple const * actors)
 {
 	ServiceRecord record = RegistryFindBTreeService(predicateForm);
 	ASSERT(record.type == SERVICE_BTREE)
@@ -254,39 +254,41 @@ static void setupCoreServices(void)
 	TypedAtom multisetFormAtom = CreateTypedAtom(AT_ID, multisetForm);
 	IFactDraft multisetDraft;
 	IFactBegin(&multisetDraft);
-	TypedAtom tuple[3];
+	Tuple * multisetTuple = CreateTuple(3);
 
 	// defining facts
 	// (multiset @multiset-form element "multiset" multiple 1)
 	IFactBeginConjunction(&multisetDraft,multisetForm, multisetBTree, MULTISET_MULTISET_COLUMN);
 	MultisetSetTuple(
-		tuple,
+		multisetTuple,
 		CreateTypedAtom(AT_ID, multisetForm),
 		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_MULTISET)),
 		CreateTypedAtom(AT_UINT, 1)
 	);
-	IFactAddClause(&multisetDraft, tuple);
+	IFactAddClause(&multisetDraft, multisetTuple);
 	// (multiset @multiset-form element "element" multiple 1)
 	MultisetSetTuple(
-		tuple,
+		multisetTuple,
 		CreateTypedAtom(AT_ID, multisetForm),
 		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_ELEMENT)),
 		CreateTypedAtom(AT_UINT, 1)
 	);
-	IFactAddClause(&multisetDraft, tuple);
+	IFactAddClause(&multisetDraft, multisetTuple);
 	// (multiset @multiset-form element "multiple" multiple 1)
 	MultisetSetTuple(
-		tuple,
+		multisetTuple,
 		CreateTypedAtom(AT_ID, multisetForm),
 		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_MULTIPLE)),
 		CreateTypedAtom(AT_UINT, 1)
 	);
-	IFactAddClause(&multisetDraft, tuple);
+	IFactAddClause(&multisetDraft, multisetTuple);
 	IFactEndConjunction(&multisetDraft);
 
 	// (predicate-form @multiset-form)
+	Tuple * predicateFormTuple = CreateTuple(1);
+	TupleSetElement(predicateFormTuple, 0, multisetFormAtom);
 	IFactBeginConjunction(&multisetDraft, predicateForm, predicateFormBTree, 0);
-	IFactAddClause(&multisetDraft, &multisetFormAtom);
+	IFactAddClause(&multisetDraft, predicateFormTuple);
 	IFactEndConjunction(&multisetDraft);
 
 	/**
@@ -312,16 +314,18 @@ static void setupCoreServices(void)
 	// (multiset @predicate-form element "predicate-form" multiple 1)
 	IFactBeginConjunction(&predicateFormDraft, multisetForm, multisetBTree, MULTISET_MULTISET_COLUMN);
 	MultisetSetTuple(
-		tuple,
+		multisetTuple,
 		predicateFormAtom,
 		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_PREDICATE_FORM)),
 		CreateTypedAtom(AT_UINT, 1)
 	);
-	IFactAddClause(&predicateFormDraft, tuple);
+	IFactAddClause(&predicateFormDraft, multisetTuple);
 	IFactEndConjunction(&predicateFormDraft);
+
 	// (predicate-form @predicate-form)
 	IFactBeginConjunction(&predicateFormDraft, predicateForm, predicateFormBTree, 0);
-	IFactAddClause(&predicateFormDraft, &predicateFormAtom);
+	TupleSetElement(predicateFormTuple, 0, predicateFormAtom);
+	IFactAddClause(&predicateFormDraft, predicateFormTuple);
 	IFactEndConjunction(&predicateFormDraft);
 
 	// This gives 1 reference to the predicateForm atom
@@ -330,6 +334,9 @@ static void setupCoreServices(void)
 	// add lookup
 	AtomAddRole(predicateForm, multisetForm, GetCoreRoleName(ROLE_MULTISET));
 	AtomAddRole(predicateForm, predicateForm, GetCoreRoleName(ROLE_PREDICATE_FORM));
+
+	FreeTuple(multisetTuple);
+	FreeTuple(predicateFormTuple);
 
 	// We can now use CreatePredicateForm() and AssertFact()
 
@@ -437,7 +444,7 @@ void KernelShutdown(void)
 
 // TODO: this should return a status code indicating whether the fact was created,
 // already existed, or if the assert failed due to logical inconsistency
-void AssertFact(Atom predicateForm, TypedAtom * actors)
+void AssertFact(Atom predicateForm, Tuple const * actors)
 {
 	// TODO: currently we only support creating predicates
 	ASSERT(IsPredicateForm(predicateForm));
@@ -460,7 +467,7 @@ void AssertFact(Atom predicateForm, TypedAtom * actors)
 }
 
 
-void RetractFact(Atom predicateForm, TypedAtom * actors)
+void RetractFact(Atom predicateForm, Tuple * actors)
 {
 	ServiceRecord record = RegistryFindBTreeService(predicateForm);
 	ASSERT(record.type == SERVICE_BTREE)

@@ -156,7 +156,7 @@ LANG_FILES := $(addprefix lang/, \
 
 KERNEL_FILES := $(addprefix kernel/, \
  dispatch ifact FloatIEEE754 Int kernel letter list lookup multiset pair \
- Parameter RelationBTree string ServiceRegistry tuples UInt)
+ Parameter RelationBTree string ServiceRegistry tuple UInt)
 
 MEMORY_FILES := $(addprefix memory/, allocator paging pool)
 
@@ -209,7 +209,7 @@ $(BINDIR)/opengltest : $(patsubst %, $(OBJDIR)/%.o, \
 TESTS_EXE_FILES := $(addprefix $(BINDIR)/,\
  test_btree test_atomtypes test_dispatch test_kernel test_language test_list test_lookup\
  test_memory test_multiset test_pair test_parsing test_persistence\
- test_relation_btree test_string test_table_registry test_tokenizer test_utilities test_vm)
+ test_relation_btree test_string test_table_registry test_tokenizer test_tuple test_utilities test_vm)
 
 .PHONY: tests
 tests : $(TESTS_EXE_FILES)
@@ -237,6 +237,7 @@ test:
 	$(BINDIR)/test_memory
 	$(BINDIR)/test_utilities
 	$(BINDIR)/test_atomtypes
+	$(BINDIR)/test_tuple
 	$(BINDIR)/test_btree
 	$(BINDIR)/test_relation_btree
 	$(BINDIR)/test_kernel

@@ -59,7 +59,7 @@ bool IsList(Atom atom);
 /**
  * Assign values to a tuple from the (list length) relation
  */
-void ListLengthSetTuple(TypedAtom * tuple, TypedAtom list, TypedAtom length);
+void ListLengthSetTuple(Tuple * tuple, TypedAtom list, TypedAtom length);
 
 
 /**
@@ -74,13 +74,16 @@ size32 ListLength(Atom list);
  */
 TypedAtom ListGetElement(Atom list, index32 position);
 
-
 /**
  * Copy all list elements into a given array
  * (assumed to be large enough to hold the eleements)
  */
 void ListGetElementsArray(Atom list, TypedAtom * elements);
 
+/**
+ * Set the elements of tuple according to the (list position element) form.
+ */
+void ListSetTuple(Tuple * tuple, TypedAtom list, TypedAtom position, TypedAtom element);
 
 /**
  * Return the first position p from the query
@@ -108,7 +111,7 @@ int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, Type
 
 typedef struct s_ListIterator
 {
-	TypedAtom queryTuple[3];
+	Tuple * queryTuple;
 	RelationBTreeIterator treeIterator;
 } ListIterator;
 

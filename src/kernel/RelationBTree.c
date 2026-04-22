@@ -1,38 +1,16 @@
 /**
- * A B-tree implementation of a relation table.
- * 
- * TODO: this currently relies on Josh Baker's btree.c implementation
- * https://github.com/tidwall/btree.c
- * This implementation is rather complex and hard to understand, and I'm
- * probably not using it efficiently. The RelationBTreeRemoveTuples()
- * function in particular is inefficient as I'm not sure how to implement
- * it in terms of btree.c internal functions.
- * Since we need to search based on variables, we're using a compare() function
- * that is not a complete ordering, and I don't know if that might cause
- * problems as some point.
- * 
- * For these reasons, at some point we should write our own B-tree implementation.
+ * A relation table based on a B-tree. Relies on btree.c for implemention.
  */
 
-#include "lang/Variable.h"
 #include "btree/btree.h"
 #include "kernel/ifact.h"
 #include "kernel/RelationBTree.h"
-#include "kernel/tuples.h"
+#include "kernel/tuple.h"
 #include "lang/TypedAtom.h"
+#include "lang/Variable.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
 #include "util/ResizingArray.h"
-
-
-// we store this in the btree->udata field
-typedef union s_BTreeUserData {
-	struct {
-		uint8 nColumns;
-		uint8 reserved[7];
-	} fields;
-	data64 value;
-} __attribute__((packed)) BTreeUserData;
 
 
 /**
@@ -75,10 +53,10 @@ typedef union s_BTreeUserData {
  * given by the form.
  */
 
-static int8 compareQuery(TypedAtom const * tuple, TypedAtom const * query, size8 nAtoms)
+static int8 compareQuery(Tuple const * tuple, Tuple const * query)
 {
-	for(index8 i = 0; i < nAtoms; i++) {
-		TypedAtom queryAtom = query[i];
+	for(index8 i = 0; i < tuple->nAtoms; i++) {
+		TypedAtom queryAtom = TupleGetElement(query, i);
 		if(queryAtom.type == AT_VARIABLE) {
 			if(VariableIsQuoted(queryAtom)) {
 				// If the query variable is quoted, we remove the (outermost) quote.
@@ -93,12 +71,14 @@ static int8 compareQuery(TypedAtom const * tuple, TypedAtom const * query, size8
 			}
 		}
 		else {
-			// all other atom types	
-			int atomOrdering = CompareTypedAtoms(tuple[i], queryAtom);
+			// all other atom types
+			TypedAtom tupleAtom = TupleGetElement(tuple, i);
+			int atomOrdering = CompareTypedAtoms(tupleAtom, queryAtom);
 			if(atomOrdering < 0)
 				return -1;
 			if(atomOrdering > 0)
 				return 1;
+			// else contiue
 		}
 	}
 	return 0;
@@ -107,8 +87,7 @@ static int8 compareQuery(TypedAtom const * tuple, TypedAtom const * query, size8
 
 static int8 btreeCompareItems(void const * item, void const * queryItem, size32 itemSize)
 {
-	size8 nColumns = itemSize / sizeof(TypedAtom);
-	return compareQuery((TypedAtom const *) item, (TypedAtom const *) queryItem, nColumns);
+	return compareQuery((Tuple const *) item, (Tuple const *) queryItem);
 }
 
 
@@ -116,7 +95,7 @@ BTree * CreateRelationBTree(size8 nColumns)
 {
 	// we create a btree where one item = one tuple
 	return BTreeCreate(
-		sizeof(TypedAtom) * nColumns,  // item size
+		TupleNBytes(nColumns),  // item size
 		btreeCompareItems,
 		0  // free()
 	);
@@ -131,7 +110,7 @@ void FreeRelationBTree(BTree * tree)
 
 size8 RelationBTreeNColumns(BTree const * tree)
 {
-	return tree->itemSize / sizeof(TypedAtom);
+	return TupleNAtoms(tree->itemSize);
 }
 
 
@@ -146,8 +125,8 @@ static void advanceIterator(RelationBTreeIterator * iterator)
 	// advance iterator to next matching tuple
 	if(iterator->queryTuple) {
 		while(BTreeIteratorHasItem(&(iterator->treeIterator))) {
-			TypedAtom const * tuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
-			if(TupleMatch(tuple, iterator->queryTuple, iterator->nColumns))
+			Tuple const * tuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
+			if(TupleMatch(tuple, iterator->queryTuple))
 				break;
 			BTreeIteratorNext(&(iterator->treeIterator));
 		}
@@ -156,7 +135,8 @@ static void advanceIterator(RelationBTreeIterator * iterator)
 	// else start from the first tuple
 }
 
-void RelationBTreeIterate(BTree * tree, TypedAtom const * queryTuple, RelationBTreeIterator * iterator)
+
+void RelationBTreeIterate(BTree * tree, Tuple const * queryTuple, RelationBTreeIterator * iterator)
 {
 	SetMemory(iterator, sizeof(RelationBTreeIterator), 0);
 	iterator->btree = tree;
@@ -181,27 +161,28 @@ void RelationBTreeIteratorNext(RelationBTreeIterator * iterator)
 
 
 /**
- * Accessor functions. These are needed to clear the ATOM_PROTECTED flag
- * in the case where tuples are part of a defining fact
+ * Accessor functions.
+ * 
+ * NOTE: these are no longer strictly necessary as ATOM_PROTECTED is no longer used
  */
 TypedAtom RelationBTreeIteratorGetAtom(RelationBTreeIterator const * iterator, index8 i)
 {
 	ASSERT(i < iterator->nColumns);
-	TypedAtom const * tuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
-	TypedAtom atom = tuple[i];
-	atom.flags &= (~ATOM_PROTECTED);
-	return atom;
+	Tuple const * tuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
+	return TupleGetElement(tuple, i);
 }
 
 
-void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, TypedAtom * tuple)
+void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, Tuple * tuple)
 {
-	TypedAtom const * btreeTuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
-	for(index8 i = 0; i < iterator->nColumns; i++) {
-		TypedAtom atom = btreeTuple[i];
-		atom.flags &= (~ATOM_PROTECTED);
-		tuple[i] = atom;
-	}
+	Tuple const * btreeTuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
+	CopyTuples(btreeTuple, tuple);
+}
+
+
+Tuple const * RelationBTreeIteratorPeekTuple(RelationBTreeIterator const * iterator)
+{
+	return BTreeIteratorPeekItem(&(iterator->treeIterator));
 }
 
 
@@ -212,7 +193,7 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator)
 }
 
 
-void RelationBTreeQuerySingle(BTree * tree, TypedAtom const * queryTuple, TypedAtom * resultTuple)
+void RelationBTreeQuerySingle(BTree * tree, Tuple const * queryTuple, Tuple * resultTuple)
  {
  	RelationBTreeIterator iterator;
  	RelationBTreeIterate(tree, queryTuple, &iterator);
@@ -225,17 +206,36 @@ void RelationBTreeQuerySingle(BTree * tree, TypedAtom const * queryTuple, TypedA
  }
 
 
-byte RelationBTreeAddTuple(BTree * tree, TypedAtom const * tuple)
+TypedAtom RelationBTreeQuerySingleAtom(BTree * tree, Tuple const * queryTuple, index8 index)
 {
+ 	RelationBTreeIterator iterator;
+ 	RelationBTreeIterate(tree, queryTuple, &iterator);
+ 	ASSERT(RelationBTreeIteratorHasTuple(&iterator));
+ 	TypedAtom atom = RelationBTreeIteratorGetAtom(&iterator, index);
+ 	// verify the relation has a single tuple only
+ 	RelationBTreeIteratorNext(&iterator);
+ 	ASSERT(!RelationBTreeIteratorHasTuple(&iterator));
+ 	RelationBTreeIteratorEnd(&iterator);
+	return atom;
+ }
+
+
+ /**
+  * To add a protected atom (for ifact) simply set the protectedAtom field of the tuple
+  */
+
+byte RelationBTreeAddTuple(BTree * tree, Tuple const * tuple)
+{
+	ASSERT(RelationBTreeNColumns(tree) == tuple->nAtoms)
+	
 	if(!IFactCheckTuple(tree, tuple))
 		return TUPLE_PROTECTED;
 
-	size8 nColumns = RelationBTreeNColumns(tree);
 	if(BTreeInsert(tree, tuple) == BTREE_INSERTED) {
 		// tuple was added, acquire atoms
-		for(index8 i = 0; i < nColumns; i++) {
-			if(!(tuple[i].flags & ATOM_PROTECTED))
-				AcquireTypedAtom(tuple[i]);
+		for(index8 i = 0; i < tuple->nAtoms; i++) {
+			if((i + 1) != tuple->protectedAtom)
+				AcquireTypedAtom(TupleGetElement(tuple, i));
 		}
 		return TUPLE_ADDED;
 	}
@@ -244,37 +244,25 @@ byte RelationBTreeAddTuple(BTree * tree, TypedAtom const * tuple)
 	
 }
 
-
-/**
- * A tuple is protected if any of its atoms is protected.
- */
-static bool tupleisProtected(TypedAtom const * tuple, size8 nAtoms)
-{
-	for(index8 i = 0; i < nAtoms; i++) {
-		if(tuple[i].flags & ATOM_PROTECTED)
-			return true;
-	}
-	return false;
-}
-
-
-size32 RelationBTreeRemoveTuples(BTree * tree, TypedAtom const * queryTuple, uint8 mode)
+size32 RelationBTreeRemoveTuples(BTree * tree, Tuple const * queryTuple, uint8 mode)
 {
 	ASSERT(!BTreeIsWriteLocked(tree));
 	size8 nColumns = RelationBTreeNColumns(tree);
+	if(queryTuple) {
+		ASSERT(nColumns == queryTuple->nAtoms)
+	}
 
 	// retrieve all matching tuples
-	ResizingArray tuples;
-	CreateResizingArray(&tuples, sizeof(TypedAtom) * nColumns, 10);
+	ResizingArray tuplesArray;
+	CreateResizingArray(&tuplesArray, TupleNBytes(nColumns), 10);
 
 	RelationBTreeIterator iterator;
 	size32 nTuplesToDelete = 0;
 	RelationBTreeIterate(tree, queryTuple, &iterator);
 	while(RelationBTreeIteratorHasTuple(&iterator)) {
-		// access the current tuple directly to see the ATOM_PROTECTED flag
-		TypedAtom const * tuple = BTreeIteratorPeekItem(&(iterator.treeIterator));
-		if((mode == REMOVE_PROTECTED) || !tupleisProtected(tuple, nColumns)) {
-			ResizingArrayAppend(&tuples, tuple);
+		Tuple const * tuple = BTreeIteratorPeekItem(&(iterator.treeIterator));
+		if((mode == REMOVE_PROTECTED) || !TupleIsProtected(tuple)) {
+			ResizingArrayAppend(&tuplesArray, tuple);
 			nTuplesToDelete++;
 		}
 		RelationBTreeIteratorNext(&iterator);
@@ -284,18 +272,23 @@ size32 RelationBTreeRemoveTuples(BTree * tree, TypedAtom const * queryTuple, uin
 	// Release all atoms references by tuples.
 	// NOTE: this cannot be done while iterating over the tree,
 	// as IFactRelease() calls RelationBTreeRemoveTuples()
-	TypedAtom * tupleAtoms = ResizingArrayGetMemory(&tuples);
-	for(index32 i = 0; i < nTuplesToDelete * nColumns; i++) {
-		// protected atoms can only be released by calling IFactRelease()
-		if(!(tupleAtoms[i].flags & ATOM_PROTECTED))
-			ReleaseTypedAtom(tupleAtoms[i]);
+	for(index32 i = 0; i < nTuplesToDelete; i++) {
+		Tuple * tuple = ResizingArrayGetElement(&tuplesArray, i);
+		for(index32 j = 0; j < nColumns; j++) {
+			// protected atoms can only be released by calling IFactRelease()
+			if((j+1) != tuple->protectedAtom) {
+				TypedAtom atom = TupleGetElement(tuple, j);
+				ReleaseTypedAtom(atom);
+			}
+		}
+	}
+	// delete tuples
+	for(index32 i = 0; i < nTuplesToDelete; i++) {
+		Tuple * tuple = ResizingArrayGetElement(&tuplesArray, i);
+		ASSERT(BTreeDelete(tree, tuple) == BTREE_DELETED);
 	}
 
-	// delete tuples
-	for(index32 i = 0; i < nTuplesToDelete; i++)
-		ASSERT(BTreeDelete(tree, &tupleAtoms[i * nColumns]) == BTREE_DELETED);
-
-	FreeResizingArray(&tuples);
+	FreeResizingArray(&tuplesArray);
 	return nTuplesToDelete;
 }
 
@@ -308,15 +301,12 @@ void RelationBTreeDump(BTree * tree)
 
 	RelationBTreeIterator iterator;
 	RelationBTreeIterate(tree, 0, &iterator);
-	TypedAtom tuple[nColumns];
 	size32 nTuples = 0;
 	while(RelationBTreeIteratorHasTuple(&iterator)) {
-		RelationBTreeIteratorGetTuple(&iterator, tuple);
-		PrintChar('{');
+		Tuple const * tuple = RelationBTreeIteratorPeekTuple(&iterator);
 		// TODO: we should probably not print the full representaiton
 		// of identified atoms, as it triggers repeated queries
-		PrintTuple(tuple, iterator.nColumns);
-		PrintChar('}');
+		PrintTuple(tuple);
 		PrintChar('\n');
 		RelationBTreeIteratorNext(&iterator);
 		nTuples++;

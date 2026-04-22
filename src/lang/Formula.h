@@ -55,6 +55,7 @@
 #ifndef FORMULA_H
 #define FORMULA_H
 
+#include "kernel/tuple.h"
 #include "lang/TypedAtom.h"
 
 
@@ -107,14 +108,15 @@ index32 FormulaRoleIndex(Atom formula, Atom name);
 /**
  * Store a list of the unique formula variables into the provided array,
  * in left-to-right canonical order, and return the number of variables.
+ * NOTE: currently not used
  */
-size8 FormulaUniqueVariables(Atom formula, TypedAtom * variables);
+// size8 FormulaUniqueVariables(Atom formula, TypedAtom * variables);
 
 void PrintFormula(Atom formula);
 
 /**
  * Compute hash of a formula from the form hash value and actors tuple
  */
-data64 FormulaHashFormActors(data64 formHash, TypedAtom const * actors, size32 nActors, data64 initialHash);
+data64 FormulaHashFormActors(data64 formHash, Tuple const * actors, size32 nActors, data64 initialHash);
 
 #endif	// FORMULA_H

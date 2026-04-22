@@ -26,9 +26,10 @@ static void setBytecodeProgram(IFactDraft * draft, Atom program)
 		RegistryGetCoreTable(FORM_BYTECODE_PROGRAM),
 		bytecodeIndex
 	);
-	TypedAtom tuple[2];
-	tuple[programIndex] = CreateTypedAtom(AT_ID, program);
+	Tuple * tuple = CreateTuple(2);
+	TupleSetElement(tuple, programIndex, CreateTypedAtom(AT_ID, program));
 	IFactAddClause(draft, tuple);
+	FreeTuple(tuple);
 	IFactEndConjunction(draft);
 }
 
@@ -45,9 +46,10 @@ static void setBytecodeParameters(IFactDraft * draft, Atom parametersList)
 		RegistryGetCoreTable(FORM_BYTECODE_PARAMETERS),
 		bytecodeIndex
 	);
-	TypedAtom tuple[2];
-	tuple[parametersIndex] = CreateTypedAtom(AT_ID, parametersList);
+	Tuple * tuple = CreateTuple(2);
+	TupleSetElement(tuple, parametersIndex, CreateTypedAtom(AT_ID, parametersList));
 	IFactAddClause(draft, tuple);
+	FreeTuple(tuple);
 	IFactEndConjunction(draft);
 }
 
@@ -64,9 +66,10 @@ static void setBytecodeRegisters(IFactDraft * draft, Atom registersList)
 		RegistryGetCoreTable(FORM_BYTECODE_REGISTERS),
 		bytecodeIndex
 	);
-	TypedAtom tuple[2];
-	tuple[registersIndex] = CreateTypedAtom(AT_ID, registersList);
+	Tuple * tuple = CreateTuple(2);
+	TupleSetElement(tuple, registersIndex, CreateTypedAtom(AT_ID, registersList));
 	IFactAddClause(draft, tuple);
+	FreeTuple(tuple);
 	IFactEndConjunction(draft);
 }
 
@@ -83,9 +86,10 @@ static void setBytecodeConstants(IFactDraft * draft, Atom constantsList)
 		RegistryGetCoreTable(FORM_BYTECODE_CONSTANTS),
 		bytecodeIndex
 	);
-	TypedAtom tuple[2];
-	tuple[constantsIndex] = CreateTypedAtom(AT_ID, constantsList);
+	Tuple * tuple = CreateTuple(2);
+	TupleSetElement(tuple, constantsIndex, CreateTypedAtom(AT_ID, constantsList));
 	IFactAddClause(draft, tuple);
+	FreeTuple(tuple);
 	IFactEndConjunction(draft);
 }
 
@@ -193,66 +197,44 @@ bool IsBytecode(Atom atom)
 }
 
 
+static Atom bytecodeGetProperty(
+	Atom bytecode, index32 formId, index32 propertyRoleId)
+{
+	BTree * tree = RegistryGetCoreTable(formId);
+	index8 bytecodeIndex = CorePredicateRoleIndex(formId, ROLE_BYTECODE);
+	index8 propertyIndex = CorePredicateRoleIndex(formId, propertyRoleId);
+
+	Tuple * query = CreateTuple(2);
+	TupleSetElement(query, bytecodeIndex, CreateTypedAtom(AT_ID, bytecode));
+	TupleSetElement(query, propertyIndex, anonymousVariable);
+
+	TypedAtom property = RelationBTreeQuerySingleAtom(tree, query, propertyIndex);
+	FreeTuple(query);
+	return property.atom;
+}
+
+
 Atom BytecodeGetProgram(Atom bytecode)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_PROGRAM);
-	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_BYTECODE);
-	index8 programIndex = CorePredicateRoleIndex(FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
-
-	TypedAtom query[2];
-	query[bytecodeIndex] = CreateTypedAtom(AT_ID, bytecode);
-	query[programIndex] = anonymousVariable;
-
-	TypedAtom tuple[2];
-	RelationBTreeQuerySingle(tree, query, tuple);
-	return tuple[programIndex].atom;
+	return bytecodeGetProperty(bytecode, FORM_BYTECODE_PROGRAM, ROLE_PROGRAM);
 }
 
 
 Atom BytecodeGetParameters(Atom bytecode)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_PARAMETERS);
-	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_PARAMETERS, ROLE_BYTECODE);
-	index8 parametersIndex = CorePredicateRoleIndex(FORM_BYTECODE_PARAMETERS, ROLE_PARAMETERS);
-
-	TypedAtom query[2];
-	query[bytecodeIndex] = CreateTypedAtom(AT_ID, bytecode);
-	query[parametersIndex] = anonymousVariable;
-
-	TypedAtom tuple[2];
-	RelationBTreeQuerySingle(tree, query, tuple);
-	return tuple[parametersIndex].atom;
+	return bytecodeGetProperty(bytecode, FORM_BYTECODE_PARAMETERS, ROLE_PARAMETERS);
 }
+
 
 Atom BytecodeGetRegisters(Atom bytecode)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_REGISTERS);
-	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_BYTECODE);
-	index8 registersIndex = CorePredicateRoleIndex(FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
-
-	TypedAtom query[2];
-	query[bytecodeIndex] = CreateTypedAtom(AT_ID, bytecode);
-	query[registersIndex] = anonymousVariable;
-
-	TypedAtom tuple[2];
-	RelationBTreeQuerySingle(tree, query, tuple);
-	return tuple[registersIndex].atom;
+	return bytecodeGetProperty(bytecode, FORM_BYTECODE_REGISTERS, ROLE_REGISTERS);
 }
 
 
 Atom BytecodeGetConstants(Atom bytecode)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_BYTECODE_CONSTANTS);
-	index8 bytecodeIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_BYTECODE);
-	index8 constantsIndex = CorePredicateRoleIndex(FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
-
-	TypedAtom query[2];
-	query[bytecodeIndex] = CreateTypedAtom(AT_ID, bytecode);
-	query[constantsIndex] = anonymousVariable;
-
-	TypedAtom tuple[2];
-	RelationBTreeQuerySingle(tree, query, tuple);
-	return tuple[constantsIndex].atom;
+	return bytecodeGetProperty(bytecode, FORM_BYTECODE_CONSTANTS, ROLE_CONSTANTS);
 }
 
 
@@ -296,10 +278,7 @@ static void createAdditionService(void)
 	IFactRelease(registers);
 
 	// TODO: create the service properly
-	additionService = RegistryAddBytecodeService(
-		FormulaGetForm(signature),
-		bytecode
-	);
+	additionService = RegistryAddBytecodeService(form, bytecode);
 	IFactRelease(signature);
 	IFactRelease(bytecode);
 }

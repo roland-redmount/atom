@@ -36,7 +36,7 @@ struct s_BytecodeContext {
 
 typedef struct s_CompiledContext {
 	BTree * btree;
-	TypedAtom * typedArguments;
+	Tuple * typedArguments;
 	RelationBTreeIterator iterator;
 	bool iterating;
 } CompiledContext;
@@ -73,9 +73,9 @@ static Context * createContext(ServiceRecord * service)
 		context->type = BYTECODE_CONTEXT;
 	else
 		context->type = COMPILED_CONTEXT;
-
 	context->nArguments = FormArity(service->form);
 	context->arguments = Allocate(context->nArguments * sizeof(Atom));
+
 	return context;
 }
 
@@ -124,15 +124,8 @@ Atom CreateCompiledContext(ServiceRecord * service)
 	
 	compiledContext->btree = service->provider.tree;
 	
-	// TODO: arguments should be set by copy operations,
-	// but how do we find the atom type? RelationBTreeIterator
-	// requires typed arguments, but bytecode is not typed.
-	// I think the types here must be inferred at compile time
-	// and stored in ... a typed COPY instruction? 
-	// A separate SETTYPE instruction?
-	// The types are specific to the CCTX / CCALL instructions,
-	// not to the service record (it is untyped).
-
+	// TODO: set atom types in the Tuple from parent (bytecode)
+	// context's parameter, registers, and constants
 	ASSERT(false)
 	return 0;
 }
@@ -148,9 +141,7 @@ bool CompiledContextCall(Atom context)
 		// first call, begin new iteration
 
 		// copy arguments to typed arguments array
-		// NOTE: this could be avoided with a layout where all Atoms are adjacent
-		for(index8 i = 0; i < _context->nArguments; i++)
-			compiledContext->typedArguments[i].atom = _context->arguments[i];
+		TupleSetAtoms(compiledContext->typedArguments, _context->arguments);
 
 		RelationBTreeIterate(
 			compiledContext->btree,
@@ -163,8 +154,7 @@ bool CompiledContextCall(Atom context)
 		RelationBTreeIteratorGetTuple(
 			&(compiledContext->iterator), compiledContext->typedArguments);
 
-		for(index8 i = 0; i < _context->nArguments; i++)
-			_context->arguments[i] = compiledContext->typedArguments[i].atom;
+		TupleGetAtoms(compiledContext->typedArguments, _context->arguments);
 		return true;
 	}
 	else {

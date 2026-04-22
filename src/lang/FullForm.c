@@ -25,7 +25,10 @@ Atom CreateFullForm(Atom const * clauseForms, size8 nClauseForms, index8 const *
 	// create a multiset of clause forms
 	Atom conjunctionForm = CreateMultisetFromArrays(uniqueClauseForms, multiplicities, nUniqueClauseForms);
 	TypedAtom conjunctionFormAtom = CreateTypedAtom(AT_ID, conjunctionForm);
-	AssertFact(GetCorePredicateForm(FORM_CONJUNCTION_FORM), &conjunctionFormAtom);
+	Tuple * tuple = CreateTuple(1);
+	TupleSetElement(tuple, 0, conjunctionFormAtom);
+	AssertFact(GetCorePredicateForm(FORM_CONJUNCTION_FORM), tuple);
+	FreeTuple(tuple);
 	return conjunctionForm;
 }
 

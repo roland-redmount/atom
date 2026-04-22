@@ -54,7 +54,7 @@ size32 MultisetGetElementMultiple(Atom multiset, TypedAtom element);
 /**
  * Assign values to a tuple of the (multiset element multiple) relation
  */
-void MultisetSetTuple(TypedAtom * tuple, TypedAtom multiset, TypedAtom element, TypedAtom multiple);
+void MultisetSetTuple(Tuple * tuple, TypedAtom multiset, TypedAtom element, TypedAtom multiple);
 
 /**
  * Find an order for a given array of elements consistent with
@@ -87,7 +87,7 @@ void MultisetIterationOrder(Atom multiset, TypedAtom const * elements, index8 * 
 
 typedef struct s_MultisetIterator
 {
-	TypedAtom queryTuple[3];
+	Tuple * queryTuple;
 	RelationBTreeIterator treeIterator;
 } MultisetIterator;
 

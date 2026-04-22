@@ -88,8 +88,15 @@ void PrintVariable(TypedAtom variable)
 {
 	Variable var;
 	var.value = variable.atom;
-	for(uint8 i = 0; i < var.fields.quoteCount; i++)
-		PrintChar('\'');
-	PrintChar(var.fields.name);
+	if(var.value) {
+		for(uint8 i = 0; i < var.fields.quoteCount; i++)
+			PrintChar('\'');
+		PrintChar(var.fields.name);
+	}
+	else {
+		// anonymous variable
+		PrintChar('_');
+	}
+
 }
 

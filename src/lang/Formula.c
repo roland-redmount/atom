@@ -6,7 +6,7 @@
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "kernel/ServiceRegistry.h"
-#include "kernel/tuples.h"
+#include "kernel/tuple.h"
 #include "lang/Form.h"
 #include "lang/Formula.h"
 #include "lang/name.h"
@@ -19,11 +19,23 @@
 #include "util/sort.h"
 
 
-void FormulaSetTuple(TypedAtom * tuple, TypedAtom formula, TypedAtom form, TypedAtom actorsList)
+void FormulaSetTuple(Tuple * tuple, TypedAtom formula, TypedAtom form, TypedAtom actorsList)
 {
-	tuple[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA)] = formula;
-	tuple[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM)] = form;
-	tuple[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS)] = actorsList;
+	TupleSetElement(
+		tuple,
+		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA),
+		formula
+	);
+	TupleSetElement(
+		tuple,
+		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM),
+		form
+	);
+	TupleSetElement(
+		tuple,
+		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS),
+		actorsList
+	);
 }
 
 
@@ -39,9 +51,10 @@ Atom CreateFormula(Atom form, Atom actorsList)
 		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA)
 	);
 
-	TypedAtom tuple[3];
+	Tuple * tuple = CreateTuple(3);
 	FormulaSetTuple(tuple, invalidAtom, CreateTypedAtom(AT_ID, form), CreateTypedAtom(AT_ID, actorsList));
 	IFactAddClause(&draft, tuple);
+	FreeTuple(tuple);
 	IFactEndConjunction(&draft);	
 
 	return IFactEnd(&draft);
@@ -200,12 +213,13 @@ uint8 FormulaArity(Atom formula)
 Atom FormulaGetForm(Atom formula)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_FORMULA_FORM_ACTORS);
-	TypedAtom query[3];
+	Tuple * query = CreateTuple(3);
 	FormulaSetTuple(query, CreateTypedAtom(AT_ID, formula), anonymousVariable, anonymousVariable);
-	TypedAtom result[3];
-	RelationBTreeQuerySingle(tree, query, result);
-	TypedAtom form = result[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM)];
-	ASSERT(form.type == AT_ID)
+	TypedAtom form = RelationBTreeQuerySingleAtom(
+		tree, query,
+		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM)
+	);
+	FreeTuple(query);
 	return form.atom;
 }
 
@@ -213,11 +227,14 @@ Atom FormulaGetForm(Atom formula)
 Atom FormulaGetActors(Atom formula)
 {
 	BTree * tree = RegistryGetCoreTable(FORM_FORMULA_FORM_ACTORS);
-	TypedAtom query[3];
+	Tuple * query = CreateTuple(3);
 	FormulaSetTuple(query, CreateTypedAtom(AT_ID, formula), anonymousVariable, anonymousVariable);
-	TypedAtom result[3];
-	RelationBTreeQuerySingle(tree, query, result);
-	return result[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS)].atom;
+	TypedAtom actorsList = RelationBTreeQuerySingleAtom(
+		tree, query,
+		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS)
+	);
+	FreeTuple(query);
+	return actorsList.atom;
 }
 
 
@@ -311,13 +328,13 @@ void PrintFormula(Atom formula)
 }
 
 
-data64 FormulaHashFormActors(data64 formHash, TypedAtom const * actors, size32 nActors, data64 initialHash)
+data64 FormulaHashFormActors(data64 formHash, Tuple const * actors, size32 nActors, data64 initialHash)
 {
 	data64 hash = DJB2DoubleHashAdd(&formHash, sizeof(data64), initialHash);
-	return DJB2DoubleHashAdd(actors, sizeof(TypedAtom) * nActors, hash);
+	return TupleHash(actors, hash);
 }
 
-
+/*
 size8 FormulaUniqueVariables(Atom formula, TypedAtom * variables)
 {
 	Atom actorsList = FormulaGetActors(formula);
@@ -333,4 +350,4 @@ size8 FormulaUniqueVariables(Atom formula, TypedAtom * variables)
 	ListIteratorEnd(&iterator);
 	return i;
 }
-
+*/

@@ -34,8 +34,10 @@ Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
 		RegistryGetCoreTable(FORM_PREDICATE_FORM),
 		0
 	);
-	TypedAtom form = invalidAtom;
-	IFactAddClause(&draft, &form);
+	Tuple * tuple = CreateTuple(1);
+	TupleSetElement(tuple, 0, invalidAtom);
+	IFactAddClause(&draft, tuple);
+	FreeTuple(tuple);
 	IFactEndConjunction(&draft);
 
 	return IFactEnd(&draft);
