@@ -159,7 +159,12 @@ void RegistryIteratorNext(RegistryIterator * iterator);
 
 void RegistryIteratorEnd(RegistryIterator * iterator);
 
+/**
+ * For debugging
+ */
+void PrintService(ServiceRecord const * service);
 
+void RegistryDump(void);
 
 
 #endif  // SERVICEREGISTRY_H

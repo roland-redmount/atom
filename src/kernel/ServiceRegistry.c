@@ -338,3 +338,38 @@ void RegistryIteratorEnd(RegistryIterator * iterator)
 	BTreeIteratorEnd(&(iterator->btreeIterator));
 }
 
+
+void PrintService(ServiceRecord const * service)
+{
+	Atom signature = CreateFormula(service->form, service->parameters);
+	PrintFormula(signature);
+	IFactRelease(signature);
+	PrintChar(' ');
+	switch(service->type) {
+		case SERVICE_BTREE:
+		PrintCString("SERVICE_BTREE");
+		break;
+
+		case SERVICE_BYTECODE:
+		PrintCString("SERVICE_BYTECODE");
+		break;
+
+		default:
+		ASSERT(false)
+		;
+	}
+}
+
+
+static void btreePrintCallback(void const * item)
+{
+	PrintService((ServiceRecord const *) item);
+	PrintChar('\n');
+}
+
+
+void RegistryDump(void)
+{
+	BTreeTraversal(registry.tree, &btreePrintCallback);
+}
+

@@ -308,6 +308,7 @@ Atom setupTableService(void)
 	Atom form = CreatePredicateForm(roles, 2);
 	NameRelease(roles[0]);
 	NameRelease(roles[1]);
+
 	// create the service
 	BTree * btree = CreateRelationBTree(2);
 	Atom service = RegistryAddBTreeService(form, btree);
@@ -351,6 +352,14 @@ void teardownTableService(Atom service)
 }
 
 
+typedef struct {
+	Atom tableService;
+	Atom bytecode;
+	Atom registers;		// a list
+	Atom service;
+} BytecodeServiceFixture3;
+
+
 /**
  * Example program 3, calling a B-tree service (foo bar).
  * Here, we must provide datum types to the untyped (foo bar) service.
@@ -367,11 +376,10 @@ void teardownTableService(Atom service)
  *   YIELD
 * ... 
  */
-BytecodeServiceFixture setupBytecodeFixture3(void)
+BytecodeServiceFixture3 setupBytecodeFixture3(void)
 {
-	// setup bytecode fixture
-	Atom tableService = setupTableService();
-	BytecodeServiceFixture fixture;
+	BytecodeServiceFixture3 fixture;
+	fixture.tableService = setupTableService();
 
 	Atom signature = CStringToPredicate("foo @ID barbar $INT");
 
@@ -392,7 +400,7 @@ BytecodeServiceFixture setupBytecodeFixture3(void)
 	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
 	BytecodeOperandConstant(
 		&bytecodeDraft, OPERAND_LEFT,
-		CreateTypedAtom(AT_SERVICE, tableService)
+		CreateTypedAtom(AT_SERVICE, fixture.tableService)
 	);
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
@@ -437,15 +445,22 @@ BytecodeServiceFixture setupBytecodeFixture3(void)
 }
 
 
+static void teardownBytecodeFixture3(BytecodeServiceFixture3 fixture)
+{
+	RegistryRemoveService(fixture.service);
+	IFactRelease(fixture.bytecode);
+	IFactRelease(fixture.registers);
+	teardownTableService(fixture.tableService);
+}
+
+
 void testExecuteBytecode3(void)
 {
-	Atom tableService = setupTableService();
-	BytecodeServiceFixture fixture = setupBytecodeFixture3();
+	BytecodeServiceFixture3 fixture = setupBytecodeFixture3();
 
 	// Do stuff
 
-	teardownTableService(tableService);
-	teardownBytecodeFixture1(fixture);
+	teardownBytecodeFixture3(fixture);
 }
 
 
