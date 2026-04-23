@@ -25,21 +25,6 @@ typedef struct s_BytecodeDraft {
 void BytecodeBegin(BytecodeDraft * draft, Atom parameters, Atom registers);
 
 /**
- * Structure specifying a bytecode argument or operand
- */
-/*
-typedef struct {
-	enum {ARG_PARAMETER, ARG_REGISTER, ARG_CONSTANT} type;
-	union {
-		TypedAtom parameter;
-		index8 registerIndex;
-		TypedAtom constant;
-	} value;
-} BytecodeArgument;
-*/
-
-
-/**
  * Being a new bytecode instruction, to be appended to the program
  */
 void BytecodeBeginInstruction(BytecodeDraft * draft, byte opcode);
