@@ -21,14 +21,15 @@ void VMInitialize()
 {
 	ASSERT(sizeof(Instruction) == 8)
 
-	vm.trace = true;
+	vm.trace = false;
 }
 
 /**
  * Execute a bytecode context. If a YIELD was executed, the VM flag
  * is set; if execution terminated, the flag is cleared.
  */
-static void executeContext(Atom context)
+
+bool VMCall(Atom context)
 {
 	// Iterate through program, starting at the current program counter
 	while(true) {
@@ -153,7 +154,7 @@ static void executeContext(Atom context)
 			else {
 				// YIELD from root context ends execution
 				// context must be free'd by caller
-				return;
+				return true;
 			}
 		}
 
@@ -170,7 +171,7 @@ static void executeContext(Atom context)
 			}
 			else {
 				// Root context
-				return;
+				return false;
 			}
 		}
 
@@ -231,9 +232,7 @@ bool VMExecuteService(ServiceRecord * service, Tuple * arguments)
  	Atom context = CreateBytecodeContext(service, 0);
 	ContextSetParameters(context, arguments);
 
-	executeContext(context);
-
-	if(vm.flag) {
+	if(VMCall(context)) {
 		// root context ended with YIELD
 		// NOTE: here we could resume the context, but for now
 		// we remove it and return only the first result tuple
@@ -244,3 +243,14 @@ bool VMExecuteService(ServiceRecord * service, Tuple * arguments)
 	else
 		return false;
 }
+
+
+Atom VMBeginService(ServiceRecord * service, Tuple * arguments)
+{
+	Atom context = CreateBytecodeContext(service, 0);
+	ContextSetParameters(context, arguments);
+	return context;
+}
+
+
+

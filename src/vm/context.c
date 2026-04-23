@@ -161,6 +161,9 @@ bool CompiledContextCall(Atom context)
 			&(compiledContext->iterator)
 		);
 	}
+	else {
+		RelationBTreeIteratorNext(&(compiledContext->iterator));
+	}
 	if(RelationBTreeIteratorHasTuple(&(compiledContext->iterator))) {
 		RelationBTreeIteratorGetTuple(
 			&(compiledContext->iterator), _context->arguments);
@@ -168,6 +171,7 @@ bool CompiledContextCall(Atom context)
 	}
 	else {
 		// this zeroes the iterator structure
+		// NOTE: caller may not resume iteration after this step
 		RelationBTreeIteratorEnd(&(compiledContext->iterator));
 		return false;
 	}

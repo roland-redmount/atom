@@ -647,8 +647,16 @@ void testExecuteBytecode4(void)
 		},
 		2
 	);
-	VMExecuteService(&record, arguments);
-	ASSERT_UINT32_EQUAL(TupleGetAtom(arguments, 1), -1 * 2);
+
+	Atom context = VMBeginService(&record, arguments);
+	// this service should yield once
+	ASSERT_TRUE(VMCall(context))
+	ContextGetParameters(context, arguments);
+	ASSERT_UINT32_EQUAL(TupleGetAtom(arguments, 1), -1 * -1);
+	// second time should terminate;
+	// context atom is now invalid
+	ASSERT_FALSE(VMCall(context))
+	
 	IFactRelease(zzz);
 	FreeTuple(arguments);
 
