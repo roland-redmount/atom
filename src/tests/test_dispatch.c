@@ -8,13 +8,18 @@
 
 void testDispatch(void)
 {
-
+	// this query matches with the identity permutation
 	Atom query = CStringToPredicate("+ 3 + 4 = _");
 
-	ServiceRecord service = DispatchQuery(query);
-	ASSERT(service.type == SERVICE_BYTECODE);
+	ServiceRecord service;
+	ASSERT_TRUE(DispatchQuery(query, &service));
+	ASSERT_UINT32_EQUAL(service.type, SERVICE_BYTECODE);
 	
 	IFactRelease(query);
+
+	// TODO: define a service s.t. matching requires form permutation,
+	// where parameters differ within the same role, e.g.
+	// e.g. (+ @INT + $OUT = @INT)
 }
 
 

@@ -28,6 +28,9 @@ bool IsParameter(TypedAtom atom);
 
 byte ParameterGetType(Atom parameter);
 
+byte ParameterGetIO(Atom parameter);
+
+
 /**
  * Comparison function for parameters, used to compare
  * parameter lists; see ServiceRegistry.c

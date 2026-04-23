@@ -13,7 +13,7 @@
 /**
  * Dispatch a query (formula), return the matching service, if any.
  */
-ServiceRecord DispatchQuery(Atom query);
+bool DispatchQuery(Atom query, ServiceRecord * record);
 
 
 
