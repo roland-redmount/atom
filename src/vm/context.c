@@ -237,6 +237,19 @@ bool BytecodeContextNextInstruction(Atom context, Atom * instruction)
 }
 
 
+void BytecodeContextJump(Atom context, uint32 instructionNr)
+{
+	Context * _context = (Context *) context;
+	ASSERT(_context->type == BYTECODE_CONTEXT)
+	BytecodeContext * bytecodeContext = &(_context->variant.bytecode);
+	ASSERT(instructionNr <= bytecodeContext->programLength)
+	ASSERT(instructionNr > 0)
+	// we set PC to the instruction before the jump destination,
+	// since BytecodeContextNextInstruction() will increment PC
+	bytecodeContext->programCounter = instructionNr - 1;
+}
+
+
 static void fetchOperand(
 	Instruction inst, Operand operand, index8 * opIndex, byte * accessMode, index8 * contextIndex)
 {

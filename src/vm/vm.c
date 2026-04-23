@@ -48,6 +48,9 @@ static void executeContext(Atom context)
 		TypedAtom typedAtom;
 		switch(inst.fields.opcode) {
 		case OP_COPY:
+			// NOTE: we could make this handle typed arguments too
+			// by checking if the destination is a COMPILED_CONTEXT parameter
+			// -- this should be the only case where types are used (?)
 			left = ContextReadOperand(context, inst, OPERAND_LEFT);
 			ContextWriteOperand(context, inst, OPERAND_RIGHT, left);
 			break;
@@ -57,37 +60,32 @@ static void executeContext(Atom context)
 			ContextWriteTypedOperand(context, inst, OPERAND_RIGHT, typedAtom);
 			break;
 
-		case OP_ADD:
-			left = ContextReadOperand(context, inst, OPERAND_LEFT);
-			right = ContextReadOperand(context, inst, OPERAND_RIGHT);
-			// TODO: INT vs UINT? Overflow?
-			right = ((uint64) left) + ((uint64) right);
-			ContextWriteOperand(context, inst, OPERAND_RIGHT, right);
-			break;
-
-		case OP_SUB:
-			left = ContextReadOperand(context, inst, OPERAND_LEFT);
-			right = ContextReadOperand(context, inst, OPERAND_RIGHT);
-			// TODO: INT vs UINT? Overflow?
-			right = ((uint64) right) - ((uint64) left);
-			ContextWriteOperand(context, inst, OPERAND_RIGHT, right);
-			break;
-
-		case OP_INC:
-			left = ContextReadOperand(context, inst, OPERAND_LEFT);
-			ContextWriteOperand(context, inst, OPERAND_LEFT, ((uint64) left) + 1);
-			break;
-
-		case OP_MUL:
-			left = ContextReadOperand(context, inst, OPERAND_LEFT);
-			right = ContextReadOperand(context, inst, OPERAND_RIGHT);
-			right = ((uint64) left) * ((uint64) right);
-			ContextWriteOperand(context, inst, OPERAND_RIGHT, right);
+		case OP_EQ:
+			// TODO
+			ASSERT(false);
 			break;
 		
+		case OP_NOT:
+			vm.flag = vm.flag ? false : true;
+			break;
+
+		case OP_JUMP:
+			// NOTE: operand must be a UINT
+			left = ContextReadOperand(context, inst, OPERAND_LEFT);
+			BytecodeContextJump(context, (uint32) left);
+			break;
+
+		case OP_JUMPIF:
+			// jump if the flag is true
+			if(vm.flag) {
+				left = ContextReadOperand(context, inst, OPERAND_LEFT);
+				BytecodeContextJump(context, (uint32) left);
+			}
+			break;
+
 		case OP_CTX: {
 			/** 
-			 * BCTX <service> <operand>
+			 * CTX <service> <operand>
 			 * Create a bytecode context and store in the destination operand.
 			 */
 			Atom service = ContextReadOperand(context, inst, OPERAND_LEFT);
@@ -175,6 +173,49 @@ static void executeContext(Atom context)
 				return;
 			}
 		}
+
+		case OP_ADD:
+			left = ContextReadOperand(context, inst, OPERAND_LEFT);
+			right = ContextReadOperand(context, inst, OPERAND_RIGHT);
+			// TODO: INT vs UINT? Overflow?
+			right = ((uint64) left) + ((uint64) right);
+			ContextWriteOperand(context, inst, OPERAND_RIGHT, right);
+			break;
+
+		case OP_SUB:
+			left = ContextReadOperand(context, inst, OPERAND_LEFT);
+			right = ContextReadOperand(context, inst, OPERAND_RIGHT);
+			// TODO: INT vs UINT? Overflow?
+			right = ((uint64) right) - ((uint64) left);
+			ContextWriteOperand(context, inst, OPERAND_RIGHT, right);
+			break;
+
+		case OP_INC:
+			left = ContextReadOperand(context, inst, OPERAND_LEFT);
+			ContextWriteOperand(context, inst, OPERAND_LEFT, ((uint64) left) + 1);
+			break;
+
+		case OP_DEC:
+			// TODO
+			ASSERT(false);
+			break;
+
+		case OP_MUL:
+			left = ContextReadOperand(context, inst, OPERAND_LEFT);
+			right = ContextReadOperand(context, inst, OPERAND_RIGHT);
+			right = ((uint64) left) * ((uint64) right);
+			ContextWriteOperand(context, inst, OPERAND_RIGHT, right);
+			break;
+
+		case OP_LESS:
+			// TODO
+			ASSERT(false);
+			break;
+
+		case OP_LESSEQ:
+			// TODO
+			ASSERT(false);
+			break;
 
 		default:
 			// instruction not implemented yet

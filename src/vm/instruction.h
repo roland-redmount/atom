@@ -26,18 +26,15 @@
 #define	OP_COPY			0x01
 #define	OP_TCOPY		0x02		// copy typed atom
 #define	OP_EQ			0x03
+#define OP_NOT			0x04
 
 // program control
-#define	OP_NOT			0x10
-#define	OP_MARK			0x11
-#define	OP_JUMP			0x12		// should we use an instruction offset?
-#define	OP_ENDIF		0x13
-#define	OP_YES			0x14
-#define	OP_YESIF		0x15
-#define OP_CTX			0x16		// create bytecode context
-#define OP_CALL			0x17		// call context
-#define OP_YIELD		0x18
-#define OP_END			0x19
+#define	OP_JUMP			0x10
+#define	OP_JUMPIF		0x11
+#define OP_CTX			0x12		// create bytecode context
+#define OP_CALL			0x13		// call context
+#define OP_YIELD		0x14
+#define OP_END			0x15
 
 // integer arithmetic
 #define	OP_ADD			0x20
