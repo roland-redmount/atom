@@ -228,24 +228,31 @@ bool TupleMatch(Tuple const * tuple, Tuple const * queryTuple)
 		TypedAtom queryAtom = TupleGetElement(queryTuple, i);
 		if(queryAtom.type == AT_VARIABLE) {
 			if(VariableIsQuoted(queryAtom)) {
-				// If the query variable is quoted, we remove the (outermost) quote.
-				// This allows querying for a variable _x stored in a relation (foo)
-				// using (foo '_x')
-				// TODO: review the semantics of this!
+				/**
+				 * If the query variable is quoted, we remove the outermost quote.
+				 * This allows querying for a variable _x stored in a relation (foo)
+				 * using (foo '_x)
+				 * TODO: review the semantics of this!
+				 */
 				queryAtom = UnquoteVariable(queryAtom);
 			}
 			else {
-				// A query variable matches any atom, but
-				// any repeats of this variable must correspond to the same atom
-				for(index8 j = i + 1; j < tuple->nAtoms; j++) {
-					TypedAtom nextQueryAtom = TupleGetElement(queryTuple, j);
-					if((nextQueryAtom.type == AT_VARIABLE) && SameVariable(queryAtom, nextQueryAtom)) {
-						TypedAtom nextAtom = TupleGetElement(tuple, j);
-						if(!SameTypedAtoms(atom, nextAtom))
-							return false;
+				if(VariableMatch(queryAtom.atom, atom)) {
+					// any repeats of this variable must correspond to the same atom
+					for(index8 j = i + 1; j < tuple->nAtoms; j++) {
+						TypedAtom nextQueryAtom = TupleGetElement(queryTuple, j);
+						if((nextQueryAtom.type == AT_VARIABLE) && SameVariable(queryAtom, nextQueryAtom)) {
+							TypedAtom nextAtom = TupleGetElement(tuple, j);
+							if(!SameTypedAtoms(atom, nextAtom))
+								return false;
+						}
 					}
+					continue;
 				}
-				continue;
+				else {
+					// variable does not match (wrong type)
+					return false;
+				}
 			}
 		}
 		else {

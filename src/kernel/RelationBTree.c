@@ -57,6 +57,7 @@ static int8 compareQuery(Tuple const * tuple, Tuple const * query)
 {
 	for(index8 i = 0; i < tuple->nAtoms; i++) {
 		TypedAtom queryAtom = TupleGetElement(query, i);
+		TypedAtom tupleAtom = TupleGetElement(tuple, i);
 		if(queryAtom.type == AT_VARIABLE) {
 			if(VariableIsQuoted(queryAtom)) {
 				// If the query variable is quoted, we remove the (outermost) quote.
@@ -65,14 +66,11 @@ static int8 compareQuery(Tuple const * tuple, Tuple const * query)
 				// TODO: review the semantics of this!
 				queryAtom = UnquoteVariable(queryAtom);
 			}
-			else {
-				// Unquoted query variable matches any atom
+			else if(VariableMatch(queryAtom.type, tupleAtom))
 				break;
-			}
 		}
 		else {
 			// all other atom types
-			TypedAtom tupleAtom = TupleGetElement(tuple, i);
 			int atomOrdering = CompareTypedAtoms(tupleAtom, queryAtom);
 			if(atomOrdering < 0)
 				return -1;

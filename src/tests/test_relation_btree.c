@@ -47,7 +47,7 @@ static void setupFixture(void)
 	);
 	fixture.tuple3 = CreateTupleFromArray(
 		(TypedAtom[]) {
-			CreateTypedAtom(AT_INT, 14),
+			CreateTypedAtom(AT_UINT, 14),
 			CreateTypedAtom(AT_FLOAT64, CreateFloat64(456.789)),
 			GetAlphabetLetter('C'),
 		},
@@ -133,7 +133,7 @@ void testFindTuple(void)
 		RelationBTreeIteratorEnd(&iterator);
 	}
 
-	// find tuples 1 and 2
+	// query matching tuples 1 and 2
 	{
 		Tuple * queryTuple = CreateTuple(3);
 		CopyTuples(fixture.tuple1, queryTuple);
@@ -155,7 +155,7 @@ void testFindTuple(void)
 		FreeTuple(queryTuple);
 	}
 
-	// attempt to find non-matching tuple
+	// query with no matching tuple
 	{
 		Tuple * queryTuple = CreateTupleFromArray(
 			(TypedAtom[]) {
@@ -171,7 +171,7 @@ void testFindTuple(void)
 		FreeTuple(queryTuple);
 	}
 
-	// two variables, find tuple 3
+	// query with two variables, find tuple 3
 	{
 		Tuple * queryTuple = CreateTupleFromArray(
 			(TypedAtom[]) {
@@ -193,7 +193,7 @@ void testFindTuple(void)
 		FreeTuple(queryTuple);
 	}
 
-	// repeated variables (equality constraint)
+	// query with repeated variable (equality constraint)
 	{
 		Tuple * queryTuple = CreateTupleFromArray(
 			(TypedAtom[]) {
@@ -208,6 +208,29 @@ void testFindTuple(void)
 		RelationBTreeIteratorEnd(&iterator);
 		FreeTuple(queryTuple);
 	}
+	
+	// query with typed variable
+	{
+		Tuple * queryTuple = CreateTupleFromArray(
+			(TypedAtom[]) {
+				CreateTypedVariable('x', AT_UINT),
+				anonymousVariable,
+				anonymousVariable,
+			},
+			TEST_N_COLUMNS
+		);
+		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);
+		
+		ASSERT_TRUE(RelationBTreeIteratorHasTuple(&iterator))
+		Tuple const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
+		ASSERT_TRUE(SameTuples(resultTuple, fixture.tuple3))
+		RelationBTreeIteratorNext(&iterator);
+		
+		ASSERT_FALSE(RelationBTreeIteratorHasTuple(&iterator))
+		RelationBTreeIteratorEnd(&iterator);
+		FreeTuple(queryTuple);
+	}
+
 	teardownFixture();
 }
 
