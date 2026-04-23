@@ -107,11 +107,22 @@ TypedAtom TupleGetElement(Tuple const * tuple, index8 index)
 	return CreateTypedAtom(type, atom);
 }
 
+Atom TupleGetAtom(Tuple const * tuple, index8 index)
+{
+	return tupleAtomArray((Tuple *) tuple)[index];
+}
+
 
 void TupleSetElement(Tuple * tuple, index8 index, TypedAtom element)
 {
 	tupleTypeArray(tuple)[index] = element.type;
 	tupleAtomArray(tuple)[index] = element.atom;
+}
+
+
+void TupleSetAtom(Tuple * tuple, index8 index, Atom atom)
+{
+	tupleAtomArray(tuple)[index] = atom;
 }
 
 

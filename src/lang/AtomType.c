@@ -7,12 +7,15 @@ char const * atomTypeNames[] = {
 	"NONE",
 	"NAME",
 	"ID",
+
 	"UINT",
 	"INT",
 	"FLOAT32",
 	"FLOAT64",
+
 	"LETTER",
 	"VARIABLE",
+	
 	"INSTRUCTION",
 	"PARAMETER",
 	"CONTEXT",

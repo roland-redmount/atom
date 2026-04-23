@@ -7,15 +7,16 @@
 #include "vm/context.h"
 
 
-static void copyListDatums(Atom list, Atom * atoms)
+static void copyListDatums(Atom list, Tuple * tuple)
 {
-	Atom * rp = atoms;
 	ListIterator iterator;
 	ListIterate(list, &iterator);
+	index8 index = 0;
 	while(ListIteratorHasNext(&iterator)) {
-		TypedAtom a = ListIteratorGetElement(&iterator);
-		*rp++ = a.atom;
+		TypedAtom typedAtom = ListIteratorGetElement(&iterator);
+		TupleSetElement(tuple, index, typedAtom);
 		ListIteratorNext(&iterator);
+		index++;
 	}
 	ListIteratorEnd(&iterator);
 }
@@ -29,31 +30,23 @@ struct s_BytecodeContext {
 	Atom program;				// list of instructions
 	size32 programLength;
 	index32 programCounter;
-	size8 nRegisters;
-	Atom * registers;
-	Atom * constants;
+	Tuple * registers;
+	Tuple * constants;
 };
 
 typedef struct s_CompiledContext {
 	BTree * btree;
-	Tuple * typedArguments;
 	RelationBTreeIterator iterator;
-	bool iterating;
 } CompiledContext;
 
 
 /**
  * A generic context, with bytecode and compiled variants
 */
-enum ContextType {
-	BYTECODE_CONTEXT = 1,
-	COMPILED_CONTEXT = 2
-};
 
 typedef struct s_Context {
 	enum ContextType type;
-	size8 nArguments;
-	Atom * arguments;
+	Tuple * arguments;
 	union {
 		BytecodeContext bytecode;
 		CompiledContext compiled;
@@ -73,8 +66,8 @@ static Context * createContext(ServiceRecord * service)
 		context->type = BYTECODE_CONTEXT;
 	else
 		context->type = COMPILED_CONTEXT;
-	context->nArguments = FormArity(service->form);
-	context->arguments = Allocate(context->nArguments * sizeof(Atom));
+	size8 nArguments = FormArity(service->form);
+	context->arguments = CreateTuple(nArguments);
 
 	return context;
 }
@@ -93,8 +86,8 @@ Atom CreateBytecodeContext(ServiceRecord * service, Atom parentContext)
 
 	// Copy registers (initial values).
 	Atom registersList = BytecodeGetRegisters(bytecodeContext->bytecode);
-	bytecodeContext->nRegisters = ListLength(registersList);
-	bytecodeContext->registers = Allocate(bytecodeContext->nRegisters * sizeof(Atom));
+	size8 nRegisters = ListLength(registersList);
+	bytecodeContext->registers = CreateTuple(nRegisters);
 	copyListDatums(registersList, bytecodeContext->registers);
 
 	// Program length and counter
@@ -107,7 +100,7 @@ Atom CreateBytecodeContext(ServiceRecord * service, Atom parentContext)
 	// Copy constants. Not strictly necessary, but allows faster access
 	Atom constantsList = BytecodeGetConstants(bytecodeContext->bytecode);
 	size32 nConstants = ListLength(constantsList);
-	bytecodeContext->constants = Allocate(nConstants * sizeof(Atom));
+	bytecodeContext->constants = CreateTuple(nConstants);
 	copyListDatums(constantsList, bytecodeContext->constants);
 	
 	return (Atom) context;
@@ -123,11 +116,16 @@ Atom CreateCompiledContext(ServiceRecord * service)
 	CompiledContext * compiledContext = &(context->variant.compiled);
 	
 	compiledContext->btree = service->provider.tree;
-	
-	// TODO: set atom types in the Tuple from parent (bytecode)
-	// context's parameter, registers, and constants
+
 	ASSERT(false)
 	return 0;
+}
+
+
+enum ContextType ContextGetType(Atom context)
+{
+	Context * _context = (Context *) context;
+	return _context->type;
 }
 
 
@@ -137,27 +135,25 @@ bool CompiledContextCall(Atom context)
 	ASSERT(_context->type == COMPILED_CONTEXT)
 	CompiledContext * compiledContext = &(_context->variant.compiled);
 
-	if(!compiledContext->iterating) {
+	// TODO: we must ensure that the results tuple matches
+	// the atom type of the operand that they are copied to.
+	// This involves (1) filtering out any  
+
+	if(!compiledContext->iterator.btree) {
 		// first call, begin new iteration
-
-		// copy arguments to typed arguments array
-		TupleSetAtoms(compiledContext->typedArguments, _context->arguments);
-
 		RelationBTreeIterate(
 			compiledContext->btree,
-			compiledContext->typedArguments,
+			_context->arguments,
 			&(compiledContext->iterator)
 		);
-		compiledContext->iterating = true;
 	}
 	if(RelationBTreeIteratorHasTuple(&(compiledContext->iterator))) {
 		RelationBTreeIteratorGetTuple(
-			&(compiledContext->iterator), compiledContext->typedArguments);
-
-		TupleGetAtoms(compiledContext->typedArguments, _context->arguments);
+			&(compiledContext->iterator), _context->arguments);
 		return true;
 	}
 	else {
+		// this zeroes the iterator structure
 		RelationBTreeIteratorEnd(&(compiledContext->iterator));
 		return false;
 	}
@@ -183,38 +179,16 @@ void BytecodeContextSetParent(Atom context, Atom parentContext)
 Atom ContextGetParameter(Atom context, index8 i)
 {
 	Context * _context = (Context *) context;
-	return _context->arguments[i];
+	return TupleGetAtom(_context->arguments, i);
 }
 
 
 void ContextSetParameter(Atom context, index8 i, Atom argument)
 {
 	Context * _context = (Context *) context;
-	_context->arguments[i] = argument;
+	TupleSetAtom(_context->arguments, i, argument);
 }
 
-/*  Reference handling -- not sure if this is a good idea,
-    Only needed if context are ever references from more than
-	one parent context, and I don't think that will happen.
-
-void ContextAcquire(Atom context)
-{
-	BytecodeContext * _context = (BytecodeContext *) context;
-	_context->nReferences++;
-}
-
-
-void ContextRelease(Atom context)
-{
-	BytecodeContext * _context = (BytecodeContext *) context;
-	ASSERT(_context->nReferences > 0);
-	_context->nReferences--;
-	if(_context->nReferences == 0) {
-		FreeChildContexts(context);
-		Free((BytecodeContext *) context);
-	}
-}
-*/
 
 bool BytecodeContextNextInstruction(Atom context, Atom * instruction)
 {
@@ -250,7 +224,6 @@ static void fetchOperand(
 }
 
 
-// this only applies to a bytecode context
 Atom ContextReadOperand(Atom context, Instruction inst, Operand operand)
 {
 	Context * _context = (Context *) context;
@@ -264,22 +237,52 @@ Atom ContextReadOperand(Atom context, Instruction inst, Operand operand)
 
 	switch(accessMode) {
 	case ACCESS_PARAMETER: {
-		// parameters may be read from a context in a register
+		// parameters may be read from a bytecode context in a register
 		Context * operandContext = contextIndex ?
-			(Context *) bytecodeContext->registers[contextIndex - 1] :
+			(Context *) TupleGetAtom(bytecodeContext->registers, contextIndex - 1) :
 			_context;
-		return operandContext->arguments[opIndex - 1];
+		return TupleGetAtom(operandContext->arguments, opIndex - 1);
 	}
 	
 	case ACCESS_REGISTER:
-		return bytecodeContext->registers[opIndex - 1];
+		return TupleGetAtom(bytecodeContext->registers, opIndex - 1);
 
 	case ACCESS_CONSTANT:
-		return bytecodeContext->constants[opIndex - 1];
+		return TupleGetAtom(bytecodeContext->constants, opIndex - 1);
 
 	default:
 		ASSERT(false);
 		return 0;
+	}
+}
+
+TypedAtom ContextReadTypedOperand(Atom context, Instruction inst, Operand operand)
+{
+	Context * _context = (Context *) context;
+	ASSERT(_context->type == BYTECODE_CONTEXT)
+	BytecodeContext * bytecodeContext = &(_context->variant.bytecode);
+	
+	index8 opIndex;
+	byte accessMode;
+	index8 contextIndex;
+	fetchOperand(inst, operand, &opIndex, &accessMode, &contextIndex);
+
+	switch(accessMode) {
+	case ACCESS_PARAMETER: {
+		Context * operandContext = contextIndex ?
+			(Context *) TupleGetAtom(bytecodeContext->registers, contextIndex - 1) :
+			_context;
+		return TupleGetElement(operandContext->arguments, opIndex - 1);
+	}
+	case ACCESS_REGISTER:
+		return TupleGetElement(bytecodeContext->registers, opIndex - 1);
+
+	case ACCESS_CONSTANT:
+		return TupleGetElement(bytecodeContext->constants, opIndex - 1);
+
+	default:
+		ASSERT(false);
+		return (TypedAtom) {0};
 	}
 }
 
@@ -297,16 +300,17 @@ void ContextWriteOperand(Atom context, Instruction inst, index8 operand, Atom at
 
 	switch(accessMode) {
 	case ACCESS_PARAMETER: {
-		// parameters may be written to specific contexts
+		// parameters may be written to specific bytecode contexts
 		Context * operandContext = contextIndex ?
-			(Context *) bytecodeContext->registers[contextIndex - 1] :
+			(Context *) TupleGetAtom(bytecodeContext->registers, contextIndex - 1) :
 			_context;
-		operandContext->arguments[opIndex - 1] = atom;
+		
+		TupleSetAtom(operandContext->arguments, opIndex - 1, atom);
 		break;
 	}
 	
 	case ACCESS_REGISTER:
-		bytecodeContext->registers[opIndex - 1] = atom;
+		TupleSetAtom(bytecodeContext->registers, opIndex - 1, atom);
 		break;
 
 	case ACCESS_CONSTANT:
@@ -318,26 +322,69 @@ void ContextWriteOperand(Atom context, Instruction inst, index8 operand, Atom at
 }
 
 
+/**
+ * Write to a tuple element but require the atom type to match
+ */
+static void tupleWriteChecked(Tuple * tuple, index8 index, TypedAtom typedAtom)
+{
+	TypedAtom previous = TupleGetElement(tuple, index);
+	ASSERT(previous.type == typedAtom.type)
+	TupleSetAtom(tuple, index, typedAtom.type);
+}
+
+
+void ContextWriteTypedOperand(Atom context, Instruction inst, Operand operand, TypedAtom typedAtom)
+{
+	Context * _context = (Context *) context;
+	BytecodeContext * bytecodeContext = &(_context->variant.bytecode);
+	
+	index8 opIndex;
+	byte accessMode;
+	index8 contextIndex;
+	fetchOperand(inst, operand, &opIndex, &accessMode, &contextIndex);
+
+	switch(accessMode) {
+	case ACCESS_PARAMETER: {
+		if(contextIndex) {
+			Context * operandContext = (Context *) TupleGetAtom(
+				bytecodeContext->registers, contextIndex - 1);
+			if(operandContext->type == COMPILED_CONTEXT)
+				TupleSetElement(operandContext->arguments, opIndex - 1, typedAtom);
+			else
+				tupleWriteChecked(operandContext->arguments, opIndex - 1, typedAtom);
+		}
+		else
+			tupleWriteChecked(_context->arguments, opIndex - 1, typedAtom);
+		break;
+	}
+	case ACCESS_REGISTER:
+		tupleWriteChecked(bytecodeContext->registers, opIndex - 1, typedAtom);
+		break;
+
+	case ACCESS_CONSTANT:
+		ASSERT(false)
+		break;
+
+	default:
+		ASSERT(false)
+		break;
+	}
+}
+
+
+
 void BytecodeContextFreeChildContexts(Atom context)
 {
 	Context * _context = (Context *) context;
 	ASSERT(_context->type == BYTECODE_CONTEXT)
+
 	BytecodeContext * bytecodeContext = &(_context->variant.bytecode);
-	// To locate registers containing AT_CONTEXT atoms we need
-	// to retrieve the register list from the bytecode again ...
-	Atom registersList = BytecodeGetRegisters(bytecodeContext->bytecode);
-	Atom * rp = bytecodeContext->registers;
-	
-	ListIterator iterator;
-	ListIterate(registersList, &iterator);
-	while(ListIteratorHasNext(&iterator)) {
-		TypedAtom _register = ListIteratorGetElement(&iterator);
-		if(_register.type == AT_BCONTEXT && *rp)
-			FreeContext(*rp);
-		ListIteratorNext(&iterator);
-		*rp++ = 0;
+	// locate registers containing AT_CONTEXT atoms
+	for(index8 i = 0; i < bytecodeContext->registers->nAtoms; i++) {
+		TypedAtom _register = TupleGetElement(bytecodeContext->registers, i);
+		if((_register.type == AT_CONTEXT) && _register.atom)
+			FreeContext(_register.atom);
 	}
-	ListIteratorEnd(&iterator);
 }
 
 
@@ -348,17 +395,20 @@ void FreeContext(Atom context)
 		case BYTECODE_CONTEXT: {
 			BytecodeContext * bytecodeContext = &(_context->variant.bytecode);
 			BytecodeContextFreeChildContexts(context);
-			Free(bytecodeContext->registers);
-			Free(bytecodeContext->constants);
+			FreeTuple(bytecodeContext->registers);
+			FreeTuple(bytecodeContext->constants);
 			break;
 		}
 
 		case COMPILED_CONTEXT: {
 			CompiledContext * compiledContext = &(_context->variant.compiled);
-			Free(compiledContext->typedArguments);
+			if(compiledContext->iterator.btree) {
+				// iteration was not terminated
+				RelationBTreeIteratorEnd(&(compiledContext->iterator));
+			}
 			break;
 		}
 	}
-	Free(_context->arguments);
+	FreeTuple(_context->arguments);
 	Free((BytecodeContext *) context);
 }

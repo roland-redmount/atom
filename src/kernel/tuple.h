@@ -50,9 +50,20 @@ void FreeTuple(Tuple * tuple);
 TypedAtom TupleGetElement(Tuple const * tuple, index8 index);
 
 /**
+ * Get the (untyped) Atom at the given index, 0-based
+ */
+Atom TupleGetAtom(Tuple const * tuple, index8 index);
+
+/**
  * Set the TypedAtom at the given index, 0-based
  */
 void TupleSetElement(Tuple * tuple, index8 index, TypedAtom element);
+
+/**
+ * Set the (untyped) Atom at the given index, 0-based.
+ * The type of the atom is unchanged.
+ */
+void TupleSetAtom(Tuple * tuple, index8 index, Atom atom);
 
 /**
  * Copy the tuple's atoms into the given atom array

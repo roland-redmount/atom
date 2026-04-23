@@ -399,7 +399,7 @@ void KernelShutdown(void)
 	ASSERT(ifactCount >= kernel.nCoreIFacts)
 	if(ifactCount > kernel.nCoreIFacts) {
 		PrintF("Failed to remove %u ifacts\n", ifactCount - kernel.nCoreIFacts);
-		DumpIFacts();
+		// DumpIFacts();
 		ASSERT(false);
 	}
 	// check for dangling references
@@ -491,7 +491,10 @@ void RetractAllFacts(Atom predicateForm)
 	ServiceRecord record = RegistryFindBTreeService(predicateForm);
 	ASSERT(record.type == SERVICE_BTREE)
 	RelationBTreeRemoveTuples(record.provider.tree, 0, REMOVE_NORMAL);
-
+	// remove btree if empty
+	if(RelationBTreeNRows(record.provider.tree) == 0) {
+		RegistryRemoveService(record.service);
+	}
 	LookupRemoveAllPredicateRoles(predicateForm);
 }
 

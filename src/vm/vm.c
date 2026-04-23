@@ -25,19 +25,7 @@ void VMInitialize()
 }
 
 
-Atom VMCreateRootContext(ServiceRecord * service, Atom * arguments)
-{
- 	Atom context = CreateBytecodeContext(service, 0);
-	// copy arguments to context
-	size8 nArguments = FormArity(service->form);
-	for(index8 i = 0; i < nArguments; i++)
-		ContextSetParameter(context, i, arguments[i]);
-
-	return context;
-}
-
-
-void VMExecute(Atom context)
+static void executeContext(Atom context)
 {
 	// Iterate through program
 	while(true) {
@@ -88,34 +76,32 @@ void VMExecute(Atom context)
 			ContextWriteOperand(context, inst, OPERAND_RIGHT, right);
 			break;
 		
-		case OP_BCTX: {
+		case OP_CTX: {
 			/** 
 			 * BCTX <service> <operand>
 			 * Create a bytecode context and store in the destination operand.
 			 */
 			Atom service = ContextReadOperand(context, inst, OPERAND_LEFT);
 			ServiceRecord record = RegistryGetServiceRecord(service);
-			ASSERT(record.type == SERVICE_BYTECODE);
-			Atom newContext = CreateBytecodeContext(&record, context);
+			Atom newContext;
+			switch(record.type) {
+			case SERVICE_BYTECODE:
+				newContext = CreateBytecodeContext(&record, context);
+				break;
+
+			case SERVICE_BTREE:	// should be general compiiled service ...
+				newContext = CreateCompiledContext(&record);
+				break;
+			
+			default:
+				ASSERT(false);
+				break;
+			}  
 			ContextWriteOperand(context, inst, OPERAND_RIGHT, (Atom) newContext);
 			break;
 		}
 
-		case OP_CCTX: {
-			/** 
-			 * CCTX <service> <operand>
-			 * Create a C context and store in the destination operand.
-			 */
-			Atom service = ContextReadOperand(context, inst, OPERAND_LEFT);
-			ServiceRecord record = RegistryGetServiceRecord(service);
-			// TODO: this should be a more generic "C code" service?
-			ASSERT(record.type == SERVICE_BTREE);
-			Atom newContext = CreateCompiledContext(&record);
-			ContextWriteOperand(context, inst, OPERAND_RIGHT, (Atom) newContext);
-			break;
-		}
-
-		case OP_BCALL: {
+		case OP_CALL: {
 			/**
 			 * CALL <context>
 			 * Give control to another execution context.
@@ -124,31 +110,27 @@ void VMExecute(Atom context)
 			// Currently, contexts must be stored in registers.
 			ASSERT(inst.fields.accessMode.op1 == ACCESS_REGISTER)
 	
-			// The new context to switch to. Must have been initialized by BCTX
-			Atom newContext = ContextReadOperand(context, inst, OPERAND_LEFT);
-			ASSERT(newContext)
-			// NOTE: if the new context program counter is already at end,
-			// we can abort here
+			// The child context to switch to. Must have been initialized by BCTX
+			Atom childContext = ContextReadOperand(context, inst, OPERAND_LEFT);
+			ASSERT(childContext)
+			switch(ContextGetType(childContext)) {
+				case BYTECODE_CONTEXT: {
+					// NOTE: if the child context program counter is already at end,
+					// we can abort here
 
-			// upon YIELD we will return to this context
-			// NOTE: since this can be modified between calls, it is possible
-			// to pass a context to another program as an argument ...
-			BytecodeContextSetParent(newContext, context);
-			// transfer control
-			context = newContext;
-			break;
-		}
-
-		case OP_CCALL: {
-			/**
-			 * CCALL <context
-			 * Call a C service
-			 */
-
-			 // The new context to switch to. Must have been initialized by CCTX
-			Atom cContext = ContextReadOperand(context, inst, OPERAND_LEFT);
-			ASSERT(cContext)
-			CompiledContextCall(cContext);
+					// upon YIELD we will return to this context
+					// NOTE: since this can be modified between calls, it is possible
+					// to pass a context to another program as an argument ...
+					BytecodeContextSetParent(childContext, context);
+					// transfer control
+					context = childContext;
+					break;
+				}
+				case COMPILED_CONTEXT: {
+					CompiledContextCall(childContext);
+					break;
+				}
+			}
 			break;
 		}
 
@@ -163,7 +145,7 @@ void VMExecute(Atom context)
 			}
 			else {
 				// YIELD from root context ends execution
-				BytecodeContextFreeChildContexts(context);
+				// context must be free'd by caller
 				return;
 			}
 		}
@@ -193,5 +175,27 @@ void VMExecute(Atom context)
 			break;
 		}
 	}
+}
 
+
+bool VMExecuteService(ServiceRecord * service, Atom * arguments)
+{
+ 	Atom context = CreateBytecodeContext(service, 0);
+	// copy arguments to context
+	size8 nArguments = FormArity(service->form);
+	for(index8 i = 0; i < nArguments; i++)
+		ContextSetParameter(context, i, arguments[i]);
+
+	executeContext(context);
+
+	if(vm.flag) {
+		// root context ended with YIELD
+		// copy arguments back to provide outputs
+		for(index8 i = 0; i < nArguments; i++)
+			arguments[i] = ContextGetParameter(context, i);
+		FreeContext(context);
+		return true;
+	}
+	else
+		return false;
 }

@@ -9,8 +9,8 @@ char const * mnemonics[] = {
 	"NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
 	
 	// 0x10 - 0x1F program control
-	"NOT", "MARK", "JUMP", "ENDIF", "YES", "YESIF", "BCTX", "CCTX",
-	"BCALL", "CCALL", "YIELD", "END", "NOP", "NOP", "NOP", "NOP",
+	"NOT", "MARK", "JUMP", "ENDIF", "YES", "YESIF", "CTX", "CALL",
+	"YIELD", "END", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP",
 
 	// 0x20 - 0x2F integer arithmetic
 	"ADD", "SUB", "INC", "DEC", "MUL", "LESS", "LESSEQ", "NOP", 

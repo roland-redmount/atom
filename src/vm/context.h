@@ -1,10 +1,9 @@
 /**
  * A bytecode execution context (a continuation), representing the state of a
  * running bytecode program. This structure is created by the VM CTX instruction.
- * A BytecodeContext * pointer is an AT_BCONTEXT atom, stored in VM registers;
+ * A BytecodeContext * pointer is an AT_CONTEXT atom, stored in VM registers;
  * since no two execution contexts are identical, the pointer identifies the atom.
- * 
- * TODO: rename this file to vm/context.h
+
  */
 
 #ifndef CONTEXT_H
@@ -15,7 +14,7 @@
 
 
 /**
- * Create a new bytecode context (AT_BCONTEXT) for the given bytecode service.
+ * Create a new bytecode context (AT_CONTEXT) for the given bytecode service.
  * The context contains pointers/references to the bytecode program,
  * and the arguments, registers and constands used by the program.
  * Arguments are read/written with VM instructions using context addressing.
@@ -27,10 +26,13 @@ Atom CreateBytecodeContext(ServiceRecord * service, Atom parentContext);
  */
 Atom CreateCompiledContext(ServiceRecord * service);
 
-// void ContextAcquire(Atom context);
 
-// void ContextRelease(Atom context);
+enum ContextType {
+	BYTECODE_CONTEXT = 1,
+	COMPILED_CONTEXT = 2
+};
 
+enum ContextType ContextGetType(Atom context);
 
 /**
  * Get a parameter value. The index is 0-based.
@@ -43,10 +45,28 @@ Atom ContextGetParameter(Atom context, index8 i);
  */
 void ContextSetParameter(Atom context, index8 i, Atom argument);
 
-
+/**
+ * Read an operand from a bytecode context, as indicated by the instruction.
+ */
 Atom ContextReadOperand(Atom context, Instruction inst, Operand operand);
 
+
+/**
+ * Read a typed operand from a bytecode context, as indicated by the instruction.
+ */
+TypedAtom ContextReadTypedOperand(Atom context, Instruction inst, Operand operand);
+
+
+/**
+ * Write an operand from a bytecode context, as indicated by the instruction.
+ */
 void ContextWriteOperand(Atom context, Instruction inst, index8 operand, Atom atom);
+
+/**
+ * Writing a typed operand is legal only if the destination type matches,
+ * except for writes to COMPILED_CONTEXT arguments, which determines their type.
+ */
+void ContextWriteTypedOperand(Atom context, Instruction inst, Operand operand, TypedAtom typedAtom);
 
 
 /**
@@ -75,7 +95,7 @@ bool CompiledContextCall(Atom context);
 /**
  * Check registers for allocated "child" contexts and free them if necessary.
  * This is used when terminating context execution.
- * NOTE: Having reference-counted AT_BCONTEXT atoms would render this unnecessary.
+ * NOTE: Having reference-counted AT_CONTEXT atoms would render this unnecessary.
  */
 void BytecodeContextFreeChildContexts(Atom context);
 

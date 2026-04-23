@@ -156,12 +156,8 @@ void testExecuteByteCode1(void)
 	
 	// NOTE: arguments must be in canonical order
 	Atom arguments[2] = {3, 0};
-	Atom rootContext = VMCreateRootContext(&record, arguments);
-	VMExecute(rootContext);;
-	// results should be 3 * 3 
-	ASSERT_DATA64_EQUAL(ContextGetParameter(rootContext, 1), 9);
-
-	FreeContext(rootContext);
+	VMExecuteService(&record, arguments);
+	ASSERT_DATA64_EQUAL(arguments[1], 3 * 3);
 
 	teardownBytecodeFixture1(fixture);
 }
@@ -202,7 +198,7 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 	fixture.registers = CreateListFromArray(
 		(TypedAtom []) {
 			CreateTypedAtom(AT_INT, 0),
-			CreateTypedAtom(AT_BCONTEXT, 0)
+			CreateTypedAtom(AT_CONTEXT, 0)
 		},
 		2
 	);
@@ -217,7 +213,7 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	// CTX <number triple> #2
-	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
+	BytecodeBeginInstruction(&bytecodeDraft, OP_CTX);
 	// TODO: the AT_SERVICE is not reference counted, so the ServiceRegistry
 	// has no way of knowing if there exist bytecode methods calling it ...
 	BytecodeOperandConstant(
@@ -235,7 +231,7 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	// CALL #2
-	BytecodeBeginInstruction(&bytecodeDraft, OP_BCALL);
+	BytecodeBeginInstruction(&bytecodeDraft, OP_CALL);
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_LEFT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
@@ -287,25 +283,25 @@ void testExecuteByteCode2(void)
 	
 	// NOTE: arguments must be in canonical order
 	Atom arguments[2] = {3, 0};
-	Atom rootContext = VMCreateRootContext(&record, arguments);
-
-	VMExecute(rootContext);
-	ASSERT_DATA64_EQUAL(ContextGetParameter(rootContext, 1), 3 * 4)
-
-	FreeContext(rootContext);
+	VMExecuteService(&record, arguments);
+	ASSERT_UINT32_EQUAL(arguments[1], 3 * 4);
 
 	teardownBytecodeFixture2(fixture);
 }
 
 
 /**
- * Create a relation table (B-tree) service 
+ * Create a relation table (B-tree) service (foo bar) holding the tuples
+ *  {"baz", 42}
+ *  {"zzz", -1}
  */
 Atom setupTableService(void)
 {
 	// form (foo barbar)
 	Atom roles[2] = {CreateNameFromCString("foo"), CreateNameFromCString("bar")};
 	Atom form = CreatePredicateForm(roles, 2);
+	PrintPredicateForm(form);
+	PrintChar('\n');
 	NameRelease(roles[0]);
 	NameRelease(roles[1]);
 
@@ -361,17 +357,17 @@ typedef struct {
 
 
 /**
- * Example program 3, calling a B-tree service (foo bar).
- * Here, we must provide datum types to the untyped (foo bar) service.
- * These must come from the datum types associated with parameters,
- * registers, or constants.
+ * Example program 3, calling a B-tree service (foo bar) to retrieve values.
+ * Because B-tree services are untyped, we must filter any records found
+ * so that outputs are of a single type; then, 
  * 
  * foo @ID barbar $INT
  * #1:INT #2:CONTEXT
  *   CTX    <foo bar> #2			// (number @1 triple #1)
- *   COPY	@1 #2@1					// set @1 in context #2
+ *   TCOPY	@1 #2@1					// set 'foo' to @1 in context #2, typed
+ *   TCOPY	?? #2$2					// set 'bar' to a typed variable??
  *   CALL   #2
- *   COPY	#2$2 $2					// copy output $2 from context #2
+ *   TCOPY	#2$2 $2					// copy $2 from context #2; this must be an INT
  *   MUL    2 $2
  *   YIELD
 * ... 
@@ -388,7 +384,7 @@ BytecodeServiceFixture3 setupBytecodeFixture3(void)
 	fixture.registers = CreateListFromArray(
 		(TypedAtom []) {
 			CreateTypedAtom(AT_INT, 0),
-			CreateTypedAtom(AT_BCONTEXT, 0)
+			CreateTypedAtom(AT_CONTEXT, 0)
 		},
 		2
 	);
@@ -397,7 +393,7 @@ BytecodeServiceFixture3 setupBytecodeFixture3(void)
 	BytecodeDraft bytecodeDraft;
 	BytecodeBegin(&bytecodeDraft, FormulaGetActors(signature), fixture.registers);
 
-	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
+	BytecodeBeginInstruction(&bytecodeDraft, OP_CTX);
 	BytecodeOperandConstant(
 		&bytecodeDraft, OPERAND_LEFT,
 		CreateTypedAtom(AT_SERVICE, fixture.tableService)
@@ -413,7 +409,7 @@ BytecodeServiceFixture3 setupBytecodeFixture3(void)
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	// CALL #2
-	BytecodeBeginInstruction(&bytecodeDraft, OP_BCALL);
+	BytecodeBeginInstruction(&bytecodeDraft, OP_CALL);
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_LEFT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
@@ -441,6 +437,7 @@ BytecodeServiceFixture3 setupBytecodeFixture3(void)
 	fixture.service = RegistryAddBytecodeService(
 		FormulaGetForm(signature), fixture.bytecode
 	);
+	IFactRelease(signature);
 	return fixture;
 }
 
@@ -458,7 +455,7 @@ void testExecuteBytecode3(void)
 {
 	BytecodeServiceFixture3 fixture = setupBytecodeFixture3();
 
-	// Do stuff
+	// call service
 
 	teardownBytecodeFixture3(fixture);
 }
