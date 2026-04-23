@@ -1,5 +1,6 @@
 /**
- * A bytecode program consists of registers, constants, and an instruction list.
+ * A bytecode program consists of parameters, registers, constants,
+ * and an instruction list.
  */
 
 #ifndef BYTECODE_H
@@ -10,6 +11,7 @@
 
 
 typedef struct s_BytecodeDraft {
+	Atom parameters;
 	Atom registers;
 	IFactDraft constantsDraft;
 	IFactDraft programDraft;
@@ -17,24 +19,10 @@ typedef struct s_BytecodeDraft {
 } BytecodeDraft;
 
 /**
- * Initialize a bytecode block from a DT_FORMULA signature,
- * and an array of initial values for registers.
+ * Being creating a a bytecode block, staring from a list of a parameters
+ * and a list of register initial values.
  */
-void BytecodeBegin(BytecodeDraft * draft, Atom registers);
-
-/**
- * Structure specifying a bytecode argument or operand
- */
-typedef struct {
-	enum {ARG_PARAMETER, ARG_REGISTER, ARG_CONSTANT} type;
-	union {
-		TypedAtom parameter;
-		index8 registerIndex;
-		TypedAtom constant;
-	} value;
-} BytecodeArgument;
-
-
+void BytecodeBegin(BytecodeDraft * draft, Atom parameters, Atom registers);
 
 /**
  * Being a new bytecode instruction, to be appended to the program
@@ -59,11 +47,11 @@ void BytecodeEndInstruction(BytecodeDraft * draft);
 /**
  * Finalize bytecode and create a AT_ID atom. This creates the relations
  * 
- * (bytecode @b signature f) where f is a formula
+ * (bytecode @b parameters f) where f is a list of AT_PARAMETER atoms
  * 
  * (bytecode @b registers r)
- * where r is a list of initial values for registers (atoms),
- * which also determines each register's atom type.
+ * where r is a list of initial values for registers (typed atoms),
+ * whose type also determines each register's type.
  * 
  * (bytecode @b constants c)
  * where c is a list of constants (atoms).
@@ -75,6 +63,11 @@ Atom BytecodeEnd(BytecodeDraft * draft);
 
 
 bool IsBytecode(Atom atom);
+
+/**
+ * Return the parameter list
+ */
+Atom BytecodeGetParameters(Atom bytecode);
 
 /**
  * Returns a list of instructions

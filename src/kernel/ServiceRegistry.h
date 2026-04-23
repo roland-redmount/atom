@@ -114,7 +114,7 @@ Atom RegistryAddBTreeService(Atom form, BTree * btree);
  * Add a bytecode service to the registry.
  * Returns an AT_SERVICE atom.
  */
-Atom RegistryAddBytecodeService(Atom signature, Atom bytecode);
+Atom RegistryAddBytecodeService(Atom form, Atom bytecode);
 
 /**
  * Remove the given service from the registry.
@@ -159,7 +159,12 @@ void RegistryIteratorNext(RegistryIterator * iterator);
 
 void RegistryIteratorEnd(RegistryIterator * iterator);
 
+/**
+ * For debugging
+ */
+void PrintService(ServiceRecord const * service);
 
+void RegistryDump(void);
 
 
 #endif  // SERVICEREGISTRY_H

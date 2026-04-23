@@ -21,12 +21,11 @@
  * Opcodes
  */
 
-typedef byte OpCode;
-
 // general purpose instructions, any atom type
 #define OP_NOP			0
 #define	OP_COPY			0x01
-#define	OP_EQ			0x02
+#define	OP_TCOPY		0x02		// copy typed atom
+#define	OP_EQ			0x03
 
 // program control
 #define	OP_NOT			0x10
@@ -35,12 +34,10 @@ typedef byte OpCode;
 #define	OP_ENDIF		0x13
 #define	OP_YES			0x14
 #define	OP_YESIF		0x15
-#define OP_BCTX			0x16		// create bytecode context
-#define OP_CCTX			0x17		// create C context
-#define OP_BCALL		0x18		// call bytecode context
-#define OP_CCALL		0x19		// call C service
-#define OP_YIELD		0x1A
-#define OP_END			0x1B
+#define OP_CTX			0x16		// create bytecode context
+#define OP_CALL			0x17		// call context
+#define OP_YIELD		0x18
+#define OP_END			0x19
 
 // integer arithmetic
 #define	OP_ADD			0x20
@@ -75,7 +72,7 @@ typedef byte OpCode;
  */
 typedef union {
 	struct {
-		OpCode opcode;
+		byte opcode;
 		struct {
 			byte op1 : 2;
 			byte op2 : 2;
@@ -101,7 +98,7 @@ typedef enum { OPERAND_LEFT, OPERAND_RIGHT } Operand;
  * Create an instruction, specifying operands with indices.
  * Operands not used by the opcode are ignored.
  */
-void InstructionBegin(Instruction * draft, OpCode opcode);
+void InstructionBegin(Instruction * draft, byte opcode);
 
 /**
  * Add an argument operand represented by an index into the
@@ -109,7 +106,9 @@ void InstructionBegin(Instruction * draft, OpCode opcode);
  */
 void InstructionSetOperand(Instruction * draft, Operand operand, index8 opIndex, byte accessMode);
 
-
+/**
+ * Set the context to be use for the given operand.
+ */
 void InstructionSetContext(Instruction * draft, Operand operand, index8 registerIndex);
 
 
@@ -120,9 +119,10 @@ Atom InstructionEnd(Instruction * draft);
  */
 Instruction InstructionGetData(Atom instruction);
 
-
-// NOTE: this can be removed
-OpCode InstructionGetOpCode(Atom instruction);
+/**
+ * Return the instruction opcode.
+ */
+byte InstructionGetOpCode(Atom instruction);
 
 void PrintInstruction(Atom instruction);
 

@@ -12,7 +12,7 @@
 #include "lang/PredicateForm.h"
 #include "parser/PredicateBuilder.h"
 #include "vm/bytecode.h"
-#include "vm/bytecodecontext.h"
+#include "vm/context.h"
 #include "vm/vm.h"
 
 #include "testing/testing.h"
@@ -42,15 +42,18 @@ BytecodeServiceFixture setupBytecodeFixture1(void)
 {
 	BytecodeServiceFixture fixture;
 
+	// Bytecode signature
+	// TODO: find some better way to initalize this
+	Atom signature = CStringToPredicate("number @INT triple $INT");
+
 	// list of registers with initial values
 	fixture.registers = CreateListFromArray(
 		(TypedAtom []) {CreateTypedAtom(AT_INT, 0)},
 		1
 	);
-
 	// create bytecode draft
 	BytecodeDraft bytecodeDraft;
-	BytecodeBegin(&bytecodeDraft, fixture.registers);
+	BytecodeBegin(&bytecodeDraft, FormulaGetActors(signature), fixture.registers);
 	
 	// add instructions
 	// COPY @1 $2
@@ -85,13 +88,9 @@ BytecodeServiceFixture setupBytecodeFixture1(void)
 	// finalize bytecode and create atom
 	fixture.bytecode = BytecodeEnd(&bytecodeDraft);
 
-	// Bytecode signature
-	// TODO: find some better way to initalize this
-	Atom signature = CStringToPredicate("number @INT triple $INT");
-
 	// create service
 	fixture.service = RegistryAddBytecodeService(
-		signature, fixture.bytecode
+		FormulaGetForm(signature), fixture.bytecode
 	);
 	IFactRelease(signature);
 	return fixture;
@@ -156,14 +155,16 @@ void testExecuteByteCode1(void)
 	PrintChar('\n');
 	
 	// NOTE: arguments must be in canonical order
-	Atom arguments[2] = {3, 0};
-	Atom rootContext = VMCreateRootContext(&record, arguments);
-	VMExecute(rootContext);
-	Atom * results = BytecodeContextArguments(rootContext);
-	// results should be 3 * 3 
-	ASSERT_UINT32_EQUAL(results[1], 9);
-
-	FreeBytecodeContext(rootContext);
+	Tuple * arguments = CreateTupleFromArray(
+		(TypedAtom[]) {
+			CreateTypedAtom(AT_INT, 3),
+			CreateTypedAtom(AT_INT, 0),
+		},
+		2
+	);
+	VMExecuteService(&record, arguments);
+	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 1), 3 * 3);
+	FreeTuple(arguments);
 
 	teardownBytecodeFixture1(fixture);
 }
@@ -197,6 +198,8 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 	BytecodeServiceFixture2 fixture;
 	fixture.childFixture = setupBytecodeFixture1();
 
+	Atom signature = CStringToPredicate("number @INT quadruple $INT");
+
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
 	fixture.registers = CreateListFromArray(
@@ -206,10 +209,9 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 		},
 		2
 	);
-
 	// create bytecode draft
 	BytecodeDraft bytecodeDraft;
-	BytecodeBegin(&bytecodeDraft, fixture.registers);
+	BytecodeBegin(&bytecodeDraft, FormulaGetActors(signature), fixture.registers);
 
 	// COPY @1 $1
 	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
@@ -218,7 +220,7 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	// CTX <number triple> #2
-	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
+	BytecodeBeginInstruction(&bytecodeDraft, OP_CTX);
 	// TODO: the AT_SERVICE is not reference counted, so the ServiceRegistry
 	// has no way of knowing if there exist bytecode methods calling it ...
 	BytecodeOperandConstant(
@@ -236,7 +238,7 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	// CALL #2
-	BytecodeBeginInstruction(&bytecodeDraft, OP_BCALL);
+	BytecodeBeginInstruction(&bytecodeDraft, OP_CALL);
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_LEFT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
@@ -261,9 +263,8 @@ BytecodeServiceFixture2 setupBytecodeFixture2(void)
 	fixture.bytecode = BytecodeEnd(&bytecodeDraft);
 
 	// create service
-	Atom signature = CStringToPredicate("number @INT quadruple $INT");
 	fixture.service = RegistryAddBytecodeService(
-		signature,
+		FormulaGetForm(signature),
 		fixture.bytecode
 	);
 	IFactRelease(signature);
@@ -287,50 +288,66 @@ void testExecuteByteCode2(void)
 	PrintPredicateForm(record.form);
 	PrintChar('\n');
 	
-	// NOTE: arguments must be in canonical order
-	Atom arguments[2] = {3, 0};
-	Atom rootContext = VMCreateRootContext(&record, arguments);
-
-	VMExecute(rootContext);
-	Atom * results = BytecodeContextArguments(rootContext);
-	ASSERT_UINT32_EQUAL(results[1], 3 * 4);
-
-	FreeBytecodeContext(rootContext);
+	Tuple * arguments = CreateTupleFromArray(
+		(TypedAtom[]) {
+			CreateTypedAtom(AT_INT, 3),
+			CreateTypedAtom(AT_INT, 0),
+		},
+		2
+	);
+	VMExecuteService(&record, arguments);
+	ASSERT_UINT32_EQUAL(TupleGetAtom(arguments, 1), 3 * 4);
+	FreeTuple(arguments);
 
 	teardownBytecodeFixture2(fixture);
 }
 
 
 /**
- * Create a relation table (B-tree) service 
+ * Create a relation table (B-tree) service (foo bar) holding the tuples
+ *  {"baz", 42}
+ *  {"zzz", -1}
  */
 Atom setupTableService(void)
 {
 	// form (foo barbar)
 	Atom roles[2] = {CreateNameFromCString("foo"), CreateNameFromCString("bar")};
 	Atom form = CreatePredicateForm(roles, 2);
+	PrintPredicateForm(form);
+	PrintChar('\n');
 	NameRelease(roles[0]);
 	NameRelease(roles[1]);
+
 	// create the service
 	BTree * btree = CreateRelationBTree(2);
 	Atom service = RegistryAddBTreeService(form, btree);
 
 	// Assert facts
-	TypedAtom actors1[2] = {
-		CreateTypedAtom(AT_ID, CreateStringFromCString("baz")),
-		CreateTypedAtom(AT_INT, 42)
-	};
+	Atom baz = CreateStringFromCString("baz");
+	Tuple * actors1 = CreateTupleFromArray(
+		(TypedAtom[]) {
+			CreateTypedAtom(AT_ID, baz),
+			CreateTypedAtom(AT_INT, 42)
+		},
+		2
+	);
 	AssertFact(form, actors1);
-	ReleaseTypedAtom(actors1[0]);
+	FreeTuple(actors1);
+	IFactRelease(baz);
 
-	TypedAtom actors2[2]= {
-		CreateTypedAtom(AT_ID, CreateStringFromCString("zzz")),
-		CreateTypedAtom(AT_INT, -1)
-	};
+	Atom zzz = CreateStringFromCString("zzz");
+	Tuple * actors2 = CreateTupleFromArray(
+		(TypedAtom[]) {
+			CreateTypedAtom(AT_ID, zzz),
+			CreateTypedAtom(AT_INT, -1)
+		},
+		2
+	);
 	AssertFact(form, actors2);
-	ReleaseTypedAtom(actors2[0]);
+	FreeTuple(actors2);
+	IFactRelease(zzz);
+	
 	IFactRelease(form);
-
 	return service;
 }
 
@@ -344,26 +361,36 @@ void teardownTableService(Atom service)
 }
 
 
+typedef struct {
+	Atom tableService;
+	Atom bytecode;
+	Atom registers;		// a list
+	Atom service;
+} BytecodeServiceFixture3;
+
+
 /**
- * Example program 3, calling a B-tree service (foo bar).
- * 
- * TODO
+ * Example program 3, calling a B-tree service (foo bar) to retrieve values.
+ * Because B-tree services are untyped, we must filter any records found
+ * so that outputs are of a single type; then, 
  * 
  * foo @ID barbar $INT
  * #1:INT #2:CONTEXT
  *   CTX    <foo bar> #2			// (number @1 triple #1)
- *   COPY	@1 #2@1					// set @1 in context #2
+ *   TCOPY	@1 #2@1					// set 'foo' to @1 in context #2, typed
+ *   TCOPY	x:INT #2$2				// set 'bar' to a typed variable
  *   CALL   #2
- *   COPY	#2$2 $2					// copy output $2 from context #2
+ *   TCOPY	#2$2 $2					// copy $2 from context #2; this must be an INT
  *   MUL    2 $2
  *   YIELD
 * ... 
  */
-BytecodeServiceFixture setupBytecodeFixture3(void)
+BytecodeServiceFixture3 setupBytecodeFixture3(void)
 {
-	// setup bytecode fixture
-	Atom tableService = setupTableService();
-	BytecodeServiceFixture fixture;
+	BytecodeServiceFixture3 fixture;
+	fixture.tableService = setupTableService();
+
+	Atom signature = CStringToPredicate("foo @ID barbar $INT");
 
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
@@ -377,25 +404,35 @@ BytecodeServiceFixture setupBytecodeFixture3(void)
 
 	// create bytecode draft
 	BytecodeDraft bytecodeDraft;
-	BytecodeBegin(&bytecodeDraft, fixture.registers);
+	BytecodeBegin(&bytecodeDraft, FormulaGetActors(signature), fixture.registers);
 
-	BytecodeBeginInstruction(&bytecodeDraft, OP_BCTX);
+	BytecodeBeginInstruction(&bytecodeDraft, OP_CTX);
 	BytecodeOperandConstant(
 		&bytecodeDraft, OPERAND_LEFT,
-		CreateTypedAtom(AT_SERVICE, tableService)
+		CreateTypedAtom(AT_SERVICE, fixture.tableService)
 	);
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
-	// COPY	@1 #2@1
-	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
+	// TCOPY @1 #2@1
+	BytecodeBeginInstruction(&bytecodeDraft, OP_TCOPY);
 	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 1);
 	BytecodeOperandSetContext(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 1);
 	BytecodeEndInstruction(&bytecodeDraft);
 
+	// TCOPY x:INT #2$2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_TCOPY);
+	BytecodeOperandConstant(
+		&bytecodeDraft, OPERAND_LEFT,
+		CreateTypedVariable('x', AT_INT)
+	);
+	BytecodeOperandSetContext(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeEndInstruction(&bytecodeDraft);
+
 	// CALL #2
-	BytecodeBeginInstruction(&bytecodeDraft, OP_BCALL);
+	BytecodeBeginInstruction(&bytecodeDraft, OP_CALL);
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_LEFT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
@@ -420,23 +457,44 @@ BytecodeServiceFixture setupBytecodeFixture3(void)
 	fixture.bytecode = BytecodeEnd(&bytecodeDraft);
 
 	// create service
-	Atom signature = CStringToPredicate("foo @ID barbar $INT");
 	fixture.service = RegistryAddBytecodeService(
-		signature, fixture.bytecode
+		FormulaGetForm(signature), fixture.bytecode
 	);
+	IFactRelease(signature);
 	return fixture;
+}
+
+
+static void teardownBytecodeFixture3(BytecodeServiceFixture3 fixture)
+{
+	RegistryRemoveService(fixture.service);
+	IFactRelease(fixture.bytecode);
+	IFactRelease(fixture.registers);
+	teardownTableService(fixture.tableService);
 }
 
 
 void testExecuteBytecode3(void)
 {
-	Atom tableService = setupTableService();
-	BytecodeServiceFixture fixture = setupBytecodeFixture3();
+	BytecodeServiceFixture3 fixture = setupBytecodeFixture3();
+	ServiceRecord record = RegistryGetServiceRecord(fixture.service);
+	PrintPredicateForm(record.form);
+	PrintChar('\n');
 
-	// Do stuff
+	Atom zzz = CreateStringFromCString("zzz");
+	Tuple * arguments = CreateTupleFromArray(
+		(TypedAtom[]) {
+			CreateTypedAtom(AT_ID, zzz),
+			CreateTypedAtom(AT_INT, 0),
+		},
+		2
+	);
+	VMExecuteService(&record, arguments);
+	ASSERT_UINT32_EQUAL(TupleGetAtom(arguments, 1), -1 * 2);
+	IFactRelease(zzz);
+	FreeTuple(arguments);
 
-	teardownTableService(tableService);
-	teardownBytecodeFixture1(fixture);
+	teardownBytecodeFixture3(fixture);
 }
 
 

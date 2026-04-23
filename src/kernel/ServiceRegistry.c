@@ -161,7 +161,7 @@ void FreeRegistry(void)
 
 TypedAtom btreeParameterGenerator(index32 index, void const * data)
 {
-	return CreateParameter(PARAMETER_IN_OUT, AT_NONE);
+	return CreateTypedAtom(AT_PARAMETER, CreateParameter(PARAMETER_IN_OUT, AT_NONE));
 }
 
 
@@ -241,11 +241,9 @@ Atom RegistryAddBTreeService(Atom form, BTree * btree)
 }
 
 
-Atom RegistryAddBytecodeService(Atom signature, Atom bytecode)
+Atom RegistryAddBytecodeService(Atom form, Atom bytecode)
 {
-	ASSERT(IsFormula(signature))
-	Atom form = FormulaGetForm(signature);
-	Atom parameters = FormulaGetActors(signature);
+	Atom parameters = BytecodeGetParameters(bytecode);
 	ServiceRecord record = {
 		.service = serviceRecordHash(form, parameters),
 		.form = form,
@@ -338,5 +336,40 @@ void RegistryIteratorNext(RegistryIterator * iterator)
 void RegistryIteratorEnd(RegistryIterator * iterator)
 {
 	BTreeIteratorEnd(&(iterator->btreeIterator));
+}
+
+
+void PrintService(ServiceRecord const * service)
+{
+	Atom signature = CreateFormula(service->form, service->parameters);
+	PrintFormula(signature);
+	IFactRelease(signature);
+	PrintChar(' ');
+	switch(service->type) {
+		case SERVICE_BTREE:
+		PrintCString("SERVICE_BTREE");
+		break;
+
+		case SERVICE_BYTECODE:
+		PrintCString("SERVICE_BYTECODE");
+		break;
+
+		default:
+		ASSERT(false)
+		;
+	}
+}
+
+
+static void btreePrintCallback(void const * item)
+{
+	PrintService((ServiceRecord const *) item);
+	PrintChar('\n');
+}
+
+
+void RegistryDump(void)
+{
+	BTreeTraversal(registry.tree, &btreePrintCallback);
 }
 

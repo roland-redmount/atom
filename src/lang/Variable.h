@@ -1,5 +1,19 @@
 /**
  * Variables are used in queries to indicate "any" atom.
+ * They are identified by a single letter, case-insensitive.
+ * For context-free syntax, we prefix variables with _ 
+ * When a variable occurs only once in a formula so that its
+ * identity is irrelevant, an "anonymous" variable _ can be used.
+ * 
+ * Variables can specify a datum type; such typed variables
+ * are only used internally by the VM to call untyped services
+ * from typed (bytecode) services. When typed variables occur
+ * in a formula, any two variables with the same name must have
+ * the same type.
+ * 
+ * Currently, typed variables cannot be anonymous.
+ * We should perhaps rework this so that a variable is anonymous
+ * iff its name field is 0, but can still be typed and/or quoted.
  */
 
 #ifndef	VARIABLE_H
@@ -14,8 +28,17 @@
  * NOTE: variables could internally be referred to 
  * by their index (order) in the formula in which they reside.
  * The character (or name) is for user readability only.
+ * 
+ * TODO: these functions should return Atom, not TypedAtom
  */
 TypedAtom CreateVariable(char name);
+
+/**
+ * Create a typed variable
+ */
+TypedAtom CreateTypedVariable(char name, byte type);
+
+byte VariableGetType(Atom variable);
 
 /**
  * The anonymous variable _
@@ -40,6 +63,11 @@ bool SameVariable(TypedAtom variable1, TypedAtom variable2);
  */
 char GetVariableName(TypedAtom variable);
 
+/**
+ * Determine if a variable matches an atom,
+ * considering type if the variable is typed.
+ */
+bool VariableMatch(Atom variable, TypedAtom typedAtom);
 
 /**
  * Handle quoted variables

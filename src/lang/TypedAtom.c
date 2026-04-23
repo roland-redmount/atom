@@ -180,7 +180,7 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		break;
 
 	case AT_PARAMETER:
-		PrintParameter(typedAtom);
+		PrintParameter(typedAtom.atom);
 		break;
 
 	case AT_ID:

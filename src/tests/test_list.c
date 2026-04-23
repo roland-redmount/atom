@@ -72,24 +72,20 @@ static void testCreateList(void)
 	for(index8 i = 0; i < EXAMPLE_LIST_N_ELEMENTS; i++)
 		ASSERT_UINT32_EQUAL(ListGetPosition(list, fixture.atoms[i]), i + 1)
 
-	TypedAtom tuple[3];
-
-	index8 listRoleIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST);
-	index8 positionRoleIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION);
-	index8 elementRoleIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT);
-
 	// attempt to add a tuple (list @string position 7 element 'Z') will violate the ifact
-	tuple[listRoleIndex] = CreateTypedAtom(AT_ID, list);
-	tuple[positionRoleIndex] = CreateTypedAtom(AT_UINT, 7);
-	tuple[elementRoleIndex] = GetAlphabetLetter('Z');
+	Tuple * tuple = CreateTuple(3);
+	ListSetTuple(tuple,
+		CreateTypedAtom(AT_ID, list), CreateTypedAtom(AT_UINT, 7), GetAlphabetLetter('Z')
+	);
 	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(listPositionElement, tuple), TUPLE_PROTECTED)
 
 	// attempt to remove any tuple (list @string position _ element _) will violate the ifact
-	tuple[listRoleIndex] = CreateTypedAtom(AT_ID, list);
-	tuple[positionRoleIndex] = CreateTypedAtom(AT_UINT, 3);
-	tuple[elementRoleIndex] = GetAlphabetLetter('Y');
+	ListSetTuple(tuple,
+		CreateTypedAtom(AT_ID, list), CreateTypedAtom(AT_UINT, 3), GetAlphabetLetter('Y')
+	);
 	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuples(listPositionElement, tuple, REMOVE_NORMAL), 0)
-	
+	FreeTuple(tuple);
+
 	IFactRelease(list);
 }
 

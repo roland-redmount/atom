@@ -116,18 +116,19 @@ void AtomAddRole(Atom atom, Atom predicateForm, Atom role)
 }
 
 
-void LookupAddPredicateRoles(Atom predicateForm, TypedAtom * actors)
+void LookupAddPredicateRoles(Atom predicateForm, Tuple const * actors)
 {
 	// iterate over roles names in the predicate form
-	// and add entries to lookup table
+	// and add corresponding actors to lookup table
 	MultisetIterator formIterator;
 	MultisetIterate(predicateForm, &formIterator);
 	index8 index = 0;
 	while(MultisetIteratorHasNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
 		for(index8 i = 0; i < em.multiple; i++) {
-			if(actors[index].type == AT_ID)
-				AtomAddRole(actors[index].atom, predicateForm, em.element.atom);
+			TypedAtom actor = TupleGetElement(actors, index);
+			if(actor.type == AT_ID)
+				AtomAddRole(actor.atom, predicateForm, em.element.atom);
 			index++;
 		}
 		MultisetIteratorNext(&formIterator);
@@ -171,7 +172,7 @@ void LookupRemoveAllRoles(Atom atom)
 }
 
 
-void LookupRemovePredicateRoles(Atom predicateForm, TypedAtom * actors)
+void LookupRemovePredicateRoles(Atom predicateForm, Tuple const * actors)
 {
 	MultisetIterator formIterator;
 	MultisetIterate(predicateForm, &formIterator);
@@ -179,8 +180,9 @@ void LookupRemovePredicateRoles(Atom predicateForm, TypedAtom * actors)
 	while(MultisetIteratorHasNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
 		for(index8 i = 0; i < em.multiple; i++) {
-			if(actors[index].type == AT_ID)
-				AtomRemoveRole(actors[index].atom, predicateForm, em.element.atom);
+			TypedAtom actor = TupleGetElement(actors, index);
+			if(actor.type == AT_ID)
+				AtomRemoveRole(actor.atom, predicateForm, em.element.atom);
 			index++;
 		}
 		MultisetIteratorNext(&formIterator);

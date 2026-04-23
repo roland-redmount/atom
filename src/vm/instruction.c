@@ -5,12 +5,12 @@
 char const * mnemonics[] = {
 	// 0x00 - 0x0F general purpose instructions, any atom type
 
-	"NOP", "COPY", "EQ", "NOP", "NOP", "NOP", "NOP", "NOP", 
+	"NOP",  "COPY", "TCOPY", "EQ", "NOP", "NOP", "NOP", "NOP",
 	"NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
 	
 	// 0x10 - 0x1F program control
-	"NOT", "MARK", "JUMP", "ENDIF", "YES", "YESIF", "BCTX", "CCTX",
-	"BCALL", "CCALL", "YIELD", "END", "NOP", "NOP", "NOP", "NOP",
+	"NOT", "MARK", "JUMP", "ENDIF", "YES", "YESIF", "CTX", "CALL",
+	"YIELD", "END", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP",
 
 	// 0x20 - 0x2F integer arithmetic
 	"ADD", "SUB", "INC", "DEC", "MUL", "LESS", "LESSEQ", "NOP", 
@@ -22,7 +22,7 @@ char const * mnemonics[] = {
 };
 
 
-void InstructionBegin(Instruction * draft, OpCode opcode)
+void InstructionBegin(Instruction * draft, byte opcode)
 {
 	SetMemory(draft, sizeof(Instruction), 0);
 	draft->fields.opcode = opcode;
@@ -71,8 +71,7 @@ Instruction InstructionGetData(Atom instruction)
 }
 
 
-
-OpCode InstructionGetOpCode(Atom instruction)
+byte InstructionGetOpCode(Atom instruction)
 {
 	Instruction inst = InstructionGetData(instruction);
 	return inst.fields.opcode;	

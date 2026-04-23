@@ -12,17 +12,10 @@
 typedef struct s_TypedAtom
 {
 	byte type;
-	byte flags;		// TODO: this only holds the ATOM_PROTECTED flag, should be moved
-	byte reserved1;
-	byte reserved2;
+	byte reserved[3];
 	Atom atom;
 } __attribute__((packed)) TypedAtom;
 
-
-// flags
-#define ATOM_PROTECTED		1	// used in tuples storing ifacts to mark the identified atom
-								// NOTE: this should be internal to RelationBTree,
-								// as it only affect btree/ifact storage logic
 
 // the invalid atom, only used internally to signal errors
 extern TypedAtom invalidAtom;

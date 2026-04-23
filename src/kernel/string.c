@@ -30,8 +30,10 @@ Atom CreateString(char const * chars, size32 length)
 		RegistryGetCoreTable(FORM_STRING),
 		0
 	);
-	TypedAtom string = invalidAtom;
-	IFactAddClause(&draft, &string);
+	Tuple * tuple = CreateTuple(1);
+	TupleSetElement(tuple, 0, (TypedAtom) {0});
+	IFactAddClause(&draft, tuple);
+	FreeTuple(tuple);
 	IFactEndConjunction(&draft);
 
 	return IFactEnd(&draft);

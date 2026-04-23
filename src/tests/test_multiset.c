@@ -67,20 +67,22 @@ static void testMultiset(void)
 
 	// adding a tuple (multiset @multiset element 'D' multiple 1) should fail
 	// since @multiset is an ifact
-	TypedAtom tuple1[3];
+	Tuple * tuple1 = CreateTuple(3);
 	MultisetSetTuple(
 		tuple1,
 		CreateTypedAtom(AT_ID, multiset), GetAlphabetLetter('D'), CreateTypedAtom(AT_UINT, 1)
 	);
 	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(table, tuple1), TUPLE_PROTECTED)
+	FreeTuple(tuple1);
 
 	// attempt to remove any tuple (list @string position _ element _) should fail
-	TypedAtom tuple2[3];
+	Tuple * tuple2 = CreateTuple(3);
 	MultisetSetTuple(
 		tuple2,
 		CreateTypedAtom(AT_ID, multiset), GetAlphabetLetter('B'), CreateTypedAtom(AT_UINT, 2)
 	);
 	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuples(table, tuple2, REMOVE_NORMAL), 0)
+	FreeTuple(tuple2);
 
 	IFactRelease(multiset);
 }

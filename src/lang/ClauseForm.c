@@ -30,7 +30,10 @@ Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
 		RegistryGetCoreTable(FORM_CLAUSE_FORM),
 		0
 	);
-	IFactAddClause(&draft, &invalidAtom);
+	Tuple * tuple = CreateTuple(1);
+	TupleSetElement(tuple, 0, invalidAtom);
+	IFactAddClause(&draft, tuple);
+	FreeTuple(tuple);
 	IFactEndConjunction(&draft);	
 
 	return IFactEnd(&draft);

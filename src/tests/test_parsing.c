@@ -324,7 +324,7 @@ static void testCStringToClause(void)
 {
 	
 	// NOTE: this string must be in canonical order
-	char const * exampleString = "foo _x bar 123.45 | aarf \"foobar\"";
+	char const * exampleString = "aarf \"foobar\" | foo _x bar 123.45";
 	Atom clause = CStringToClause(exampleString, CStringLength(exampleString));
 	// PrintFormula(clause);
 	// PrintChar('\n');
@@ -335,26 +335,27 @@ static void testCStringToClause(void)
 	Atom actorsList = FormulaGetActors(clause);
 	ASSERT_UINT32_EQUAL(ListLength(actorsList), 3)
 
+	Atom string = CreateStringFromCString("foobar");
 	ASSERT_TRUE(
 		SameTypedAtoms(
 			ListGetElement(actorsList, 1),
+			CreateTypedAtom(AT_ID, string)
+		)
+	)
+	IFactRelease(string);
+	ASSERT_TRUE(
+		SameTypedAtoms(
+			ListGetElement(actorsList, 2),
 			CreateVariable('x')
 		)
 	)
 	ASSERT_TRUE(
 		SameTypedAtoms(
-			ListGetElement(actorsList, 2),
+			ListGetElement(actorsList, 3),
 			CreateTypedAtom(AT_FLOAT64, CreateFloat64(123.45))
 		)
 	)
-	Atom string = CreateStringFromCString("foobar");
-	ASSERT_TRUE(
-		SameTypedAtoms(
-			ListGetElement(actorsList, 3),
-			CreateTypedAtom(AT_ID, string)
-		)
-	)
-	IFactRelease(string);
+
 	IFactRelease(clause);
 
 	// TODO: more complex test cases, and conjunctions, e.g.

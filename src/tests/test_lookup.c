@@ -90,18 +90,30 @@ void testRemoveAllPredicateRoles(void)
 	BTree * tree = CreateRelationBTree(2);
 	Atom service = RegistryAddBTreeService(form, tree);
 
-	TypedAtom actors1[2] = {CreateTypedAtom(AT_ID, foo), CreateTypedAtom(AT_ID, bar)};
+	Tuple * actors1 = CreateTupleFromArray(
+		(TypedAtom[]) {CreateTypedAtom(AT_ID, foo), CreateTypedAtom(AT_ID, bar)},
+		2
+	);
 	AssertFact(form, actors1);
+	FreeTuple(actors1);
 	ASSERT_TRUE(AtomHasRole(foo, form, foobar))
 	ASSERT_TRUE(AtomHasRole(bar, form, barf))
 
-	TypedAtom actors2[2] = {CreateTypedAtom(AT_ID, bar), CreateTypedAtom(AT_ID, baz)};
+	Tuple * actors2 = CreateTupleFromArray(
+		(TypedAtom[]) {CreateTypedAtom(AT_ID, bar), CreateTypedAtom(AT_ID, baz)},
+		2
+	);
 	AssertFact(form, actors2);
+	FreeTuple(actors2);
 	ASSERT_TRUE(AtomHasRole(bar, form, foobar))
 	ASSERT_TRUE(AtomHasRole(baz, form, barf))
 
-	TypedAtom actors3[2] = {CreateTypedAtom(AT_ID, foo), CreateTypedAtom(AT_ID, foo)};
+	Tuple * actors3 = CreateTupleFromArray(
+		(TypedAtom[]) {CreateTypedAtom(AT_ID, foo), CreateTypedAtom(AT_ID, foo)},
+		2
+	);
 	AssertFact(form, actors3);
+	FreeTuple(actors3);
 	ASSERT_TRUE(AtomHasRole(foo, form, barf))
 
 	LookupRemoveAllPredicateRoles(form);
