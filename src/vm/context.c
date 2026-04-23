@@ -404,8 +404,10 @@ void ContextWriteTypedOperand(Atom context, Instruction inst, Operand operand, T
 }
 
 
-
-void BytecodeContextFreeChildContexts(Atom context)
+/**
+ * Check registers for allocated "child" contexts and free them if necessary.
+ */
+static void freeChildContexts(Atom context)
 {
 	Context * _context = (Context *) context;
 	ASSERT(_context->type == BYTECODE_CONTEXT)
@@ -426,7 +428,7 @@ void FreeContext(Atom context)
 	switch(_context->type) {
 		case BYTECODE_CONTEXT: {
 			BytecodeContext * bytecodeContext = &(_context->variant.bytecode);
-			BytecodeContextFreeChildContexts(context);
+			freeChildContexts(context);
 			FreeTuple(bytecodeContext->registers);
 			FreeTuple(bytecodeContext->constants);
 			break;

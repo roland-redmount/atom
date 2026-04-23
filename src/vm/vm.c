@@ -24,10 +24,13 @@ void VMInitialize()
 	vm.trace = true;
 }
 
-
+/**
+ * Execute a bytecode context. If a YIELD was executed, the VM flag
+ * is set; if execution terminated, the flag is cleared.
+ */
 static void executeContext(Atom context)
 {
-	// Iterate through program
+	// Iterate through program, starting at the current program counter
 	while(true) {
 		Atom instruction;
 		Instruction inst = {0};
@@ -133,7 +136,7 @@ static void executeContext(Atom context)
 					break;
 				}
 				case COMPILED_CONTEXT: {
-					CompiledContextCall(childContext);
+					vm.flag = CompiledContextCall(childContext);
 					break;
 				}
 			}
@@ -159,11 +162,9 @@ static void executeContext(Atom context)
 		case OP_END: {
 			// END terminates the current context
 			vm.flag = false;
-			// NOTE: any register holding a reference-counted atom should be released?
-			// Deallocating child contexts seem like a special case of this ... but we
-			// don't have reference counting for contexts.
-			BytecodeContextFreeChildContexts(context);	
+			// TODO: this needs testing
 			Atom parentContext = BytecodeContextGetParent(context);
+			FreeContext(context);	
 			if(parentContext) {
 				// switch to parent context
 				context = parentContext;
@@ -193,6 +194,8 @@ bool VMExecuteService(ServiceRecord * service, Tuple * arguments)
 
 	if(vm.flag) {
 		// root context ended with YIELD
+		// NOTE: here we could resume the context, but for now
+		// we remove it and return only the first result tuple
 		ContextGetParameters(context, arguments);
 		FreeContext(context);
 		return true;

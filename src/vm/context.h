@@ -69,13 +69,6 @@ void ContextWriteOperand(Atom context, Instruction inst, index8 operand, Atom at
  */
 void ContextWriteTypedOperand(Atom context, Instruction inst, Operand operand, TypedAtom typedAtom);
 
-
-/**
- * Context size, including registers and child context pointers,
- * but excluding actors
- */
-// size32 BytecodeContextSize(size8 arity, size8 nRegisters);
-
 /**
  * Return the parent context. For the root context, returns 0
  */
@@ -89,17 +82,15 @@ void BytecodeContextSetParent(Atom context, Atom parentContext);
  */
 bool BytecodeContextNextInstruction(Atom context, Atom * instruction);
 
-
+/**
+ * Call a compiled context. Returns true if execution yielded,
+ * false if terminated.
+ */
 bool CompiledContextCall(Atom context);
 
-
 /**
- * Check registers for allocated "child" contexts and free them if necessary.
- * This is used when terminating context execution.
- * NOTE: Having reference-counted AT_CONTEXT atoms would render this unnecessary.
+ * Deallocate a context, and recursively free all child contexts.
  */
-void BytecodeContextFreeChildContexts(Atom context);
-
 void FreeContext(Atom context);
 
 
