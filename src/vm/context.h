@@ -81,12 +81,6 @@ void BytecodeContextSetParent(Atom context, Atom parentContext);
 bool BytecodeContextNextInstruction(Atom context, Atom * instruction);
 
 /**
- * Make a relative jump by adding a value (positive or negative)
- * to the program counter
- */
-// void BytecodeContextJumpRelative(Atom context, int32 difference);
-
-/**
  * Jump to a specific instruction (line) number
  */
 void BytecodeContextJump(Atom context, uint32 instructionNr);
