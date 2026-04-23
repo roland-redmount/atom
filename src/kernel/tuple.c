@@ -138,6 +138,12 @@ void TupleSetAtoms(Tuple * tuple, Atom const * atoms)
 }
 
 
+byte TupleGetAtomType(Tuple const * tuple, index8 index)
+{
+	return tupleTypeArray((Tuple *) tuple)[index];
+}
+
+
 bool TupleIsProtected(Tuple const * tuple)
 {
 	return tuple->protectedAtom > 0;

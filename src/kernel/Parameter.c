@@ -12,13 +12,14 @@ typedef union
 } Parameter;
 
 
-TypedAtom CreateParameter(byte io, byte type)
+Atom CreateParameter(byte io, byte type)
 {
 	Parameter param = {0};
 	param.fields.io = io;
 	param.fields.atomType = type;
-	return (TypedAtom) {.type = AT_PARAMETER, .atom = param.value};
+	return param.value;
 }
+
 
 bool IsParameter(TypedAtom a)
 {
@@ -26,10 +27,18 @@ bool IsParameter(TypedAtom a)
 }
 
 
-void PrintParameter(TypedAtom parameter)
+byte ParameterGetType(Atom parameter)
 {
 	Parameter param;
-	param.value = parameter.atom;
+	param.value = parameter;
+	return param.fields.atomType;
+}
+
+
+void PrintParameter(Atom parameter)
+{
+	Parameter param;
+	param.value = parameter;
 	if(param.fields.io == PARAMETER_IN)
 		PrintChar('@');
 	else

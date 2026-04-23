@@ -10,6 +10,10 @@
  * from typed (bytecode) services. When typed variables occur
  * in a formula, any two variables with the same name must have
  * the same type.
+ * 
+ * Currently, typed variables cannot be anonymous.
+ * We should perhaps rework this so that a variable is anonymous
+ * iff its name field is 0, but can still be typed and/or quoted.
  */
 
 #ifndef	VARIABLE_H

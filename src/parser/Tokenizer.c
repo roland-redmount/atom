@@ -279,9 +279,12 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 		break;
 
 	case TOKEN_PARAMETER:
-		token.typedAtom = CreateParameter(
-			tokenizer->data.parameter.io,
-			tokenizer->data.parameter.atomType
+		token.typedAtom = CreateTypedAtom(
+			AT_PARAMETER,
+			CreateParameter(
+				tokenizer->data.parameter.io,
+				tokenizer->data.parameter.atomType
+			)
 		);
 		break;
 				

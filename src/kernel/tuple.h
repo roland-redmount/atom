@@ -76,6 +76,12 @@ void TupleGetAtoms(Tuple const * tuple, Atom * atoms);
  */
 void TupleSetAtoms(Tuple * tuple, Atom const* atoms);
 
+/**
+ * Get the atom type of a tuple element
+ */
+byte TupleGetAtomType(Tuple const * tuple, index8 index);
+
+
 bool TupleIsProtected(Tuple const * tuple);
 
 /**

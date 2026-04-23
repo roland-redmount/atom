@@ -2,6 +2,7 @@
 #include "lang/Form.h"
 #include "lang/Formula.h"
 #include "kernel/list.h"
+#include "kernel/Parameter.h"
 #include "memory/allocator.h"
 #include "vm/bytecode.h"
 #include "vm/context.h"
@@ -84,6 +85,21 @@ Atom CreateBytecodeContext(ServiceRecord * service, Atom parentContext)
 	bytecodeContext->bytecode = service->provider.bytecode;
 	bytecodeContext->parentContext = (BytecodeContext *) parentContext;
 
+	// Set argument types from the service parameter list.
+	ListIterator iterator;
+	ListIterate(service->parameters, &iterator);
+	index8 index = 0;
+	while(ListIteratorHasNext(&iterator)) {
+		Atom parameter = ListIteratorGetElement(&iterator).atom;
+		TupleSetElement(
+			context->arguments, index,
+			CreateTypedAtom(ParameterGetType(parameter), 0)
+		);
+		ListIteratorNext(&iterator);
+		index++;
+	}
+	ListIteratorEnd(&iterator);
+
 	// Copy registers (initial values).
 	Atom registersList = BytecodeGetRegisters(bytecodeContext->bytecode);
 	size8 nRegisters = ListLength(registersList);
@@ -116,9 +132,7 @@ Atom CreateCompiledContext(ServiceRecord * service)
 	CompiledContext * compiledContext = &(context->variant.compiled);
 	
 	compiledContext->btree = service->provider.tree;
-
-	ASSERT(false)
-	return 0;
+	return (Atom) context;
 }
 
 
@@ -176,17 +190,35 @@ void BytecodeContextSetParent(Atom context, Atom parentContext)
 }
 
 
-Atom ContextGetParameter(Atom context, index8 i)
+void ContextGetParameters(Atom context, Tuple * tuple)
 {
 	Context * _context = (Context *) context;
-	return TupleGetAtom(_context->arguments, i);
+	CopyTuples(_context->arguments, tuple);
 }
 
 
-void ContextSetParameter(Atom context, index8 i, Atom argument)
+void ContextSetParameters(Atom context, Tuple const * arguments)
 {
 	Context * _context = (Context *) context;
-	TupleSetAtom(_context->arguments, i, argument);
+	ASSERT(arguments->nAtoms == _context->arguments->nAtoms)
+		
+	switch(_context->type) {
+	case BYTECODE_CONTEXT: {
+		// argument types must match those of the context
+		for(index8 i = 0; i < arguments->nAtoms; i++) {
+			ASSERT(TupleGetAtomType(arguments, i) == TupleGetAtomType(_context->arguments, i))
+			TupleSetAtom(_context->arguments, i, TupleGetAtom(arguments, i));
+		}
+		break;
+	}	
+
+	case COMPILED_CONTEXT:
+		// argument types are defined by the given argument
+		// currently not used
+		ASSERT(false)
+		break;
+	}
+	CopyTuples(arguments, _context->arguments);
 }
 
 

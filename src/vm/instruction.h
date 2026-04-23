@@ -24,7 +24,8 @@
 // general purpose instructions, any atom type
 #define OP_NOP			0
 #define	OP_COPY			0x01
-#define	OP_EQ			0x02
+#define	OP_TCOPY		0x02		// copy typed atom
+#define	OP_EQ			0x03
 
 // program control
 #define	OP_NOT			0x10

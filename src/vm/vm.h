@@ -15,7 +15,7 @@ void VMInitialize(void);
  * Returns true of the service executed YIELD, in which case
  * output parameters are written to the argument array.
  */
-bool VMExecuteService(ServiceRecord * service, Atom * arguments);
+bool VMExecuteService(ServiceRecord * service, Tuple * arguments);
 
 /**
  * Create a root context from the given bytecode, with given arguments.

@@ -42,10 +42,16 @@ static void executeContext(Atom context)
 		}
 
 		Atom left, right;
+		TypedAtom typedAtom;
 		switch(inst.fields.opcode) {
 		case OP_COPY:
 			left = ContextReadOperand(context, inst, OPERAND_LEFT);
 			ContextWriteOperand(context, inst, OPERAND_RIGHT, left);
+			break;
+
+		case OP_TCOPY:
+			typedAtom = ContextReadTypedOperand(context, inst, OPERAND_LEFT);
+			ContextWriteTypedOperand(context, inst, OPERAND_RIGHT, typedAtom);
 			break;
 
 		case OP_ADD:
@@ -178,21 +184,16 @@ static void executeContext(Atom context)
 }
 
 
-bool VMExecuteService(ServiceRecord * service, Atom * arguments)
+bool VMExecuteService(ServiceRecord * service, Tuple * arguments)
 {
  	Atom context = CreateBytecodeContext(service, 0);
-	// copy arguments to context
-	size8 nArguments = FormArity(service->form);
-	for(index8 i = 0; i < nArguments; i++)
-		ContextSetParameter(context, i, arguments[i]);
+	ContextSetParameters(context, arguments);
 
 	executeContext(context);
 
 	if(vm.flag) {
 		// root context ended with YIELD
-		// copy arguments back to provide outputs
-		for(index8 i = 0; i < nArguments; i++)
-			arguments[i] = ContextGetParameter(context, i);
+		ContextGetParameters(context, arguments);
 		FreeContext(context);
 		return true;
 	}

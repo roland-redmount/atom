@@ -35,15 +35,16 @@ enum ContextType {
 enum ContextType ContextGetType(Atom context);
 
 /**
- * Get a parameter value. The index is 0-based.
+ * Copy all context parameters to the given tuple.
+ * Used to fetch results from a root context after YIELD.
  */
-Atom ContextGetParameter(Atom context, index8 i);
+void ContextGetParameters(Atom context, Tuple * tuple);
 
 /**
- * Set a specific parameter to a given argument.  The index is 0-based.
+ * Copy the arguments tuple to the context parameters.
  * Used to initialize arguments for a root context.
  */
-void ContextSetParameter(Atom context, index8 i, Atom argument);
+void ContextSetParameters(Atom context, Tuple const * arguments);
 
 /**
  * Read an operand from a bytecode context, as indicated by the instruction.

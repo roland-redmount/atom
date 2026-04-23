@@ -161,7 +161,7 @@ void FreeRegistry(void)
 
 TypedAtom btreeParameterGenerator(index32 index, void const * data)
 {
-	return CreateParameter(PARAMETER_IN_OUT, AT_NONE);
+	return CreateTypedAtom(AT_PARAMETER, CreateParameter(PARAMETER_IN_OUT, AT_NONE));
 }
 
 

@@ -5,7 +5,7 @@
 char const * mnemonics[] = {
 	// 0x00 - 0x0F general purpose instructions, any atom type
 
-	"NOP", "COPY", "EQ", "NOP", "NOP", "NOP", "NOP", "NOP", 
+	"NOP",  "COPY", "TCOPY", "EQ", "NOP", "NOP", "NOP", "NOP",
 	"NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
 	
 	// 0x10 - 0x1F program control

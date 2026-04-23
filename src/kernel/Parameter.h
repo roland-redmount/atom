@@ -22,9 +22,11 @@
 /**
  * Create an parameter. For untyped parameters, set type to 0.
  */
-TypedAtom CreateParameter(byte io, byte type);
+Atom CreateParameter(byte io, byte type);
 
-bool IsParameter(TypedAtom a);
+bool IsParameter(TypedAtom atom);
+
+byte ParameterGetType(Atom parameter);
 
 /**
  * Comparison function for parameters, used to compare
@@ -36,7 +38,7 @@ bool IsParameter(TypedAtom a);
  */
 int8 CompareParameters(Atom parameter1, Atom parameter2);
 
-void PrintParameter(TypedAtom parameter);
+void PrintParameter(Atom parameter);
 
 
 #endif	// PARAMETER_H

@@ -155,9 +155,16 @@ void testExecuteByteCode1(void)
 	PrintChar('\n');
 	
 	// NOTE: arguments must be in canonical order
-	Atom arguments[2] = {3, 0};
+	Tuple * arguments = CreateTupleFromArray(
+		(TypedAtom[]) {
+			CreateTypedAtom(AT_INT, 3),
+			CreateTypedAtom(AT_INT, 0),
+		},
+		2
+	);
 	VMExecuteService(&record, arguments);
-	ASSERT_DATA64_EQUAL(arguments[1], 3 * 3);
+	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 1), 3 * 3);
+	FreeTuple(arguments);
 
 	teardownBytecodeFixture1(fixture);
 }
@@ -281,10 +288,16 @@ void testExecuteByteCode2(void)
 	PrintPredicateForm(record.form);
 	PrintChar('\n');
 	
-	// NOTE: arguments must be in canonical order
-	Atom arguments[2] = {3, 0};
+	Tuple * arguments = CreateTupleFromArray(
+		(TypedAtom[]) {
+			CreateTypedAtom(AT_INT, 3),
+			CreateTypedAtom(AT_INT, 0),
+		},
+		2
+	);
 	VMExecuteService(&record, arguments);
-	ASSERT_UINT32_EQUAL(arguments[1], 3 * 4);
+	ASSERT_UINT32_EQUAL(TupleGetAtom(arguments, 1), 3 * 4);
+	FreeTuple(arguments);
 
 	teardownBytecodeFixture2(fixture);
 }
@@ -365,7 +378,7 @@ typedef struct {
  * #1:INT #2:CONTEXT
  *   CTX    <foo bar> #2			// (number @1 triple #1)
  *   TCOPY	@1 #2@1					// set 'foo' to @1 in context #2, typed
- *   TCOPY	?? #2$2					// set 'bar' to a typed variable??
+ *   TCOPY	x:INT #2$2				// set 'bar' to a typed variable
  *   CALL   #2
  *   TCOPY	#2$2 $2					// copy $2 from context #2; this must be an INT
  *   MUL    2 $2
@@ -401,11 +414,21 @@ BytecodeServiceFixture3 setupBytecodeFixture3(void)
 	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
-	// COPY	@1 #2@1
-	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
+	// TCOPY @1 #2@1
+	BytecodeBeginInstruction(&bytecodeDraft, OP_TCOPY);
 	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 1);
 	BytecodeOperandSetContext(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 1);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// TCOPY x:INT #2$2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_TCOPY);
+	BytecodeOperandConstant(
+		&bytecodeDraft, OPERAND_LEFT,
+		CreateTypedVariable('x', AT_INT)
+	);
+	BytecodeOperandSetContext(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);
 	BytecodeEndInstruction(&bytecodeDraft);
 
 	// CALL #2
@@ -454,8 +477,22 @@ static void teardownBytecodeFixture3(BytecodeServiceFixture3 fixture)
 void testExecuteBytecode3(void)
 {
 	BytecodeServiceFixture3 fixture = setupBytecodeFixture3();
+	ServiceRecord record = RegistryGetServiceRecord(fixture.service);
+	PrintPredicateForm(record.form);
+	PrintChar('\n');
 
-	// call service
+	Atom zzz = CreateStringFromCString("zzz");
+	Tuple * arguments = CreateTupleFromArray(
+		(TypedAtom[]) {
+			CreateTypedAtom(AT_ID, zzz),
+			CreateTypedAtom(AT_INT, 0),
+		},
+		2
+	);
+	VMExecuteService(&record, arguments);
+	ASSERT_UINT32_EQUAL(TupleGetAtom(arguments, 1), -1 * 2);
+	IFactRelease(zzz);
+	FreeTuple(arguments);
 
 	teardownBytecodeFixture3(fixture);
 }
