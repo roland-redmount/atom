@@ -11,23 +11,26 @@ void VMInitialize(void);
 
 
 /**
- * Execute a bytecode service with the given arguments.
+ * Execute a bytecode service with the given arguments,
+ * returing at most one tuple.
  * Returns true of the service executed YIELD, in which case
  * output parameters are written to the argument array.
  */
 bool VMExecuteService(ServiceRecord * service, Tuple * arguments);
 
 /**
- * Create a root context from the given bytecode, with given arguments.
- * Arguments are given as an array of pointers to atoms to allow
- * writing data into output arguments of the given bytecode.
+ * Initialize a VM context for iteration.
+ * Returns an AT_CONTEXT
  */
-// Atom VMCreateRootContext(ServiceRecord * service, Atom * arguments);
+Atom VMBeginService(ServiceRecord * service, Tuple * arguments);
 
 /**
- * Start VM execution with the given context as root context.
+ * Call a VM service. Returns true if the service yielded,
+ * in which case the result tuple can be access with ContextGetParameters().
+ * Returns false if the service terminated, in which case the context
+ * is deallocated.
  */
-// void VMExecute(Atom context);
+bool VMCall(Atom context);
 
 
 #endif	// VM_H

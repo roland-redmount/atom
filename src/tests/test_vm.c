@@ -304,14 +304,14 @@ void testExecuteByteCode2(void)
 
 
 /**
- * Create a relation table (B-tree) service (foo bar) holding the tuples
+ * Create a relation table (B-tree) service (label number) holding the tuples
  *  {"baz", 42}
  *  {"zzz", -1}
  */
 Atom setupTableService(void)
 {
-	// form (foo barbar)
-	Atom roles[2] = {CreateNameFromCString("foo"), CreateNameFromCString("bar")};
+	// form (label number)
+	Atom roles[2] = {CreateNameFromCString("label"), CreateNameFromCString("number")};
 	Atom form = CreatePredicateForm(roles, 2);
 	PrintPredicateForm(form);
 	PrintChar('\n');
@@ -327,7 +327,7 @@ Atom setupTableService(void)
 	Tuple * actors1 = CreateTupleFromArray(
 		(TypedAtom[]) {
 			CreateTypedAtom(AT_ID, baz),
-			CreateTypedAtom(AT_INT, 42)
+			CreateTypedAtom(AT_UINT, 5)
 		},
 		2
 	);
@@ -370,15 +370,15 @@ typedef struct {
 
 
 /**
- * Example program 3, calling a B-tree service (foo bar) to retrieve values.
+ * Example program 3, calling a B-tree service (label number) to retrieve numbers.
  * Because B-tree services are untyped, we must filter any records found
  * so that outputs are of a single type; then, 
  * 
- * foo @ID barbar $INT
+ * label @ID double $INT
  * #1:INT #2:CONTEXT
- *   CTX    <foo bar> #2			// (number @1 triple #1)
- *   TCOPY	@1 #2@1					// set 'foo' to @1 in context #2, typed
- *   TCOPY	x:INT #2$2				// set 'bar' to a typed variable
+ *   CTX    <label number> #2
+ *   TCOPY	@1 #2@1					// set @1 (label) in context #2, typed
+ *   TCOPY	x:INT #2$2				// set #2$2 (number) to a typed variable
  *   CALL   #2
  *   TCOPY	#2$2 $2					// copy $2 from context #2; this must be an INT
  *   MUL    2 $2
@@ -390,7 +390,7 @@ BytecodeServiceFixture3 setupBytecodeFixture3(void)
 	BytecodeServiceFixture3 fixture;
 	fixture.tableService = setupTableService();
 
-	Atom signature = CStringToPredicate("foo @ID barbar $INT");
+	Atom signature = CStringToPredicate("label @ID double $INT");
 
 	// list of register with initial values
 	// Registers storing contexts must be initially set to 0
@@ -498,6 +498,172 @@ void testExecuteBytecode3(void)
 }
 
 
+/**
+ * Example program 4, calling a B-tree service (label square) to retrieve multiple
+ * values, squaring them and reporting the results. This program will return
+ * multiple times to the caller as it iterates of the (label square) relation.
+ * Here we the JUMP instruction uses a UINT constant to refer to a line number.
+ * 
+ * label @ID square $INT
+ * #1:CONTEXT
+ * 1   CTX   	<label squares> #1
+ * 2   TCOPY	@1 #1@1					// set 'foo' to @1 in context #2, typed
+ * 3   TCOPY	x:INT #1$2				// set 'bar' to a typed variable
+ * 4   CALL		#1
+ * 5   JUMPIF	7						// continue if (label square) yielded
+ * 6   END								// otherwise end
+ * 7   COPY		#1$2 $2					// copy $2 from context #2; this must be an INT
+ * 8   MUL   	#1$2 $2					// square it
+ * 9   YIELD
+ * 10  JUMP		4						// loop to CALL instruction
+ */
+
+ typedef struct {
+	Atom tableService;
+	Atom bytecode;
+	Atom registers;		// a list
+	Atom service;
+} BytecodeServiceFixture4;
+
+
+BytecodeServiceFixture4 setupBytecodeFixture4(void)
+{
+	BytecodeServiceFixture4 fixture;
+	fixture.tableService = setupTableService();
+
+	Atom signature = CStringToPredicate("label @ID square $INT");
+
+	fixture.registers = CreateListFromArray(
+		(TypedAtom []) {
+			CreateTypedAtom(AT_CONTEXT, 0)
+		},
+		1
+	);
+
+	// create bytecode draft
+	BytecodeDraft bytecodeDraft;
+	BytecodeBegin(&bytecodeDraft, FormulaGetActors(signature), fixture.registers);
+
+	// CTX <label squares> #1
+	BytecodeBeginInstruction(&bytecodeDraft, OP_CTX);
+	BytecodeOperandConstant(
+		&bytecodeDraft, OPERAND_LEFT,
+		CreateTypedAtom(AT_SERVICE, fixture.tableService)
+	);
+	BytecodeOperandRegister(&bytecodeDraft, OPERAND_RIGHT, 1);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// TCOPY @1 #1@1
+	BytecodeBeginInstruction(&bytecodeDraft, OP_TCOPY);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 1);
+	BytecodeOperandSetContext(&bytecodeDraft, OPERAND_RIGHT, 1);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 1);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// TCOPY x:INT #1$2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_TCOPY);
+	BytecodeOperandConstant(
+		&bytecodeDraft, OPERAND_LEFT,
+		CreateTypedVariable('x', AT_INT)
+	);
+	BytecodeOperandSetContext(&bytecodeDraft, OPERAND_RIGHT, 1);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// CALL #1
+	BytecodeBeginInstruction(&bytecodeDraft, OP_CALL);
+	BytecodeOperandRegister(&bytecodeDraft, OPERAND_LEFT, 1);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// JUMPIF 7
+	BytecodeBeginInstruction(&bytecodeDraft, OP_JUMPIF);
+	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT,
+		CreateTypedAtom(AT_UINT, 7)
+	);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// END
+	BytecodeBeginInstruction(&bytecodeDraft, OP_END);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// COPY #1$2 $2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
+	BytecodeOperandSetContext(&bytecodeDraft, OPERAND_LEFT, 1);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 2);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// MUL #1$2 $2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_MUL);
+	BytecodeOperandSetContext(&bytecodeDraft, OPERAND_LEFT, 1);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 2);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// YIELD
+	BytecodeBeginInstruction(&bytecodeDraft, OP_YIELD);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// JUMP 4
+	BytecodeBeginInstruction(&bytecodeDraft, OP_JUMP);
+	BytecodeOperandConstant(&bytecodeDraft, OPERAND_LEFT,
+		CreateTypedAtom(AT_UINT, 4)
+	);
+	BytecodeEndInstruction(&bytecodeDraft);
+	
+	// finalize bytecode and create atom
+	fixture.bytecode = BytecodeEnd(&bytecodeDraft);
+
+	// create service
+	fixture.service = RegistryAddBytecodeService(
+		FormulaGetForm(signature), fixture.bytecode
+	);
+	IFactRelease(signature);
+	return fixture;
+}
+
+
+static void teardownBytecodeFixture4(BytecodeServiceFixture4 fixture)
+{
+	RegistryRemoveService(fixture.service);
+	IFactRelease(fixture.bytecode);
+	IFactRelease(fixture.registers);
+	teardownTableService(fixture.tableService);
+}
+
+
+void testExecuteBytecode4(void)
+{
+	BytecodeServiceFixture4 fixture = setupBytecodeFixture4();
+	ServiceRecord record = RegistryGetServiceRecord(fixture.service);
+	PrintPredicateForm(record.form);
+	PrintChar('\n');
+
+	Atom zzz = CreateStringFromCString("zzz");
+	Tuple * arguments = CreateTupleFromArray(
+		(TypedAtom[]) {
+			CreateTypedAtom(AT_ID, zzz),
+			CreateTypedAtom(AT_INT, 0),
+		},
+		2
+	);
+
+	Atom context = VMBeginService(&record, arguments);
+	// this service should yield once
+	ASSERT_TRUE(VMCall(context))
+	ContextGetParameters(context, arguments);
+	ASSERT_UINT32_EQUAL(TupleGetAtom(arguments, 1), -1 * -1);
+	// second time should terminate;
+	// context atom is now invalid
+	ASSERT_FALSE(VMCall(context))
+	
+	IFactRelease(zzz);
+	FreeTuple(arguments);
+
+	teardownBytecodeFixture4(fixture);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -506,6 +672,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testExecuteByteCode1);
 	ExecuteTest(testExecuteByteCode2);
 	ExecuteTest(testExecuteBytecode3);
+	ExecuteTest(testExecuteBytecode4);
 
 	TestSummary();
 

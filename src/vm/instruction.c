@@ -5,12 +5,12 @@
 char const * mnemonics[] = {
 	// 0x00 - 0x0F general purpose instructions, any atom type
 
-	"NOP",  "COPY", "TCOPY", "EQ", "NOP", "NOP", "NOP", "NOP",
+	"NOP",  "COPY", "TCOPY", "EQ", "NOT", "NOP", "NOP", "NOP",
 	"NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", 
 	
 	// 0x10 - 0x1F program control
-	"NOT", "MARK", "JUMP", "ENDIF", "YES", "YESIF", "CTX", "CALL",
-	"YIELD", "END", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP",
+	"JUMP", "JUMPIF", "CTX", "CALL", "YIELD", "END", "NOP", "NOP",
+	"NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP", "NOP",
 
 	// 0x20 - 0x2F integer arithmetic
 	"ADD", "SUB", "INC", "DEC", "MUL", "LESS", "LESSEQ", "NOP", 

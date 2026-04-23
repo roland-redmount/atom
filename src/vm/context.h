@@ -51,12 +51,10 @@ void ContextSetParameters(Atom context, Tuple const * arguments);
  */
 Atom ContextReadOperand(Atom context, Instruction inst, Operand operand);
 
-
 /**
  * Read a typed operand from a bytecode context, as indicated by the instruction.
  */
 TypedAtom ContextReadTypedOperand(Atom context, Instruction inst, Operand operand);
-
 
 /**
  * Write an operand from a bytecode context, as indicated by the instruction.
@@ -81,6 +79,11 @@ void BytecodeContextSetParent(Atom context, Atom parentContext);
  * If at end of program, returns false.
  */
 bool BytecodeContextNextInstruction(Atom context, Atom * instruction);
+
+/**
+ * Jump to a specific instruction (line) number
+ */
+void BytecodeContextJump(Atom context, uint32 instructionNr);
 
 /**
  * Call a compiled context. Returns true if execution yielded,

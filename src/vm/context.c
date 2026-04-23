@@ -161,6 +161,9 @@ bool CompiledContextCall(Atom context)
 			&(compiledContext->iterator)
 		);
 	}
+	else {
+		RelationBTreeIteratorNext(&(compiledContext->iterator));
+	}
 	if(RelationBTreeIteratorHasTuple(&(compiledContext->iterator))) {
 		RelationBTreeIteratorGetTuple(
 			&(compiledContext->iterator), _context->arguments);
@@ -168,6 +171,7 @@ bool CompiledContextCall(Atom context)
 	}
 	else {
 		// this zeroes the iterator structure
+		// NOTE: caller may not resume iteration after this step
 		RelationBTreeIteratorEnd(&(compiledContext->iterator));
 		return false;
 	}
@@ -234,6 +238,19 @@ bool BytecodeContextNextInstruction(Atom context, Atom * instruction)
 	}
 	else
 		return false;
+}
+
+
+void BytecodeContextJump(Atom context, uint32 instructionNr)
+{
+	Context * _context = (Context *) context;
+	ASSERT(_context->type == BYTECODE_CONTEXT)
+	BytecodeContext * bytecodeContext = &(_context->variant.bytecode);
+	ASSERT(instructionNr <= bytecodeContext->programLength)
+	ASSERT(instructionNr > 0)
+	// we set PC to the instruction before the jump destination,
+	// since BytecodeContextNextInstruction() will increment PC
+	bytecodeContext->programCounter = instructionNr - 1;
 }
 
 
