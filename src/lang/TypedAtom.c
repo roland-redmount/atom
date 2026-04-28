@@ -209,13 +209,13 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		else if(IsMultiset(typedAtom.atom)) {
 			if(IsPredicateForm(typedAtom.atom))
 				PrintPredicateForm(typedAtom.atom);
-			else if(IsTermForm(typedAtom.atom))
-				PrintTermForm(typedAtom.atom);
 			else if(IsClauseForm(typedAtom.atom))
 				PrintClauseForm(typedAtom.atom);
 			else
 				PrintMultiset(typedAtom.atom);
 		}
+		else if(IsTermForm(typedAtom.atom))
+			PrintTermForm(typedAtom.atom);
 		else if(IsBytecode(typedAtom.atom))
 			PrintBytecode(typedAtom.atom);
 		else

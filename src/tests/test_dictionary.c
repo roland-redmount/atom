@@ -17,6 +17,7 @@ void testDictionary(void)
 
 	DictionaryAddClause(rule);
 
+	// test iteration
 	DictionaryIterator iterator;
 	DictionaryIterate(FormulaGetForm(rule), &iterator);
 	ASSERT_TRUE(DictionaryIteratorHasRecord(&iterator))
@@ -34,17 +35,10 @@ void testDictionary(void)
 	ASSERT_FALSE(DictionaryIteratorHasRecord(&iterator))
 	DictionaryIteratorEnd(&iterator);
 
+	// test remove tuple
 	DictionaryRemoveClause(rule);
 
 	IFactRelease(rule);
-}
-
-
-void testDictionaryIterator(void)
-{
-	// create a form
-
-	// iterate over matching rules
 }
 
 

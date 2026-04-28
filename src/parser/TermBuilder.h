@@ -25,5 +25,7 @@ Atom TermBuilderCreateFormula(TermBuilder const * builder);
 void TermBuilderReset(TermBuilder * builder);
 void CleanupTermBuilder(TermBuilder * builder);
 
+Atom CStringToTerm(char const * cString);
+
 
 #endif	// TERMBUILDER_H

@@ -1,12 +1,16 @@
 
+#include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
 #include "kernel/kernel.h"
 #include "lang/Formula.h"
-#include "parser/PredicateBuilder.h"
 #include "parser/ClauseBuilder.h"
 #include "testing/testing.h"
 #include "vm/bytecode.h"
 
+#include "kernel/multiset.h"
+#include "kernel/RelationBTree.h"
+#include "lang/Variable.h"
+#include "lang/ClauseForm.h"
 
 void testDispatchToService(void)
 {
@@ -44,27 +48,9 @@ void testDispatchToRule(void)
 	 * This is quite complex, so we should implement it in steps.
 	 */
 
-	/**
-	 *  Create the rule
-	 * 
-	 *   number x square s <- * x * x = s
-     *
-	 * AssertFact() expects facts to come from a service, but a rule
-	 * is not a service. So we need something else, say AssertRule().
-	 * 
-	 * Since we expect each clause form to contain only a few rules,
-	 * but we will have many forms, it might make sense to store all rules
-	 * in a single B-tree indexed by form and then actors, similar to
-	 * ServiceRegistry (but here actors are not parameter lists).
-	 * Or, we might store all rules of the same arity in one tree,
-	 * so that the tuple size is constant.
-	 * 
-	 * To search find rules (clauses) c that contain a given @term-form,
-	 * we first query (clause-form c) & (multiset c element @term_form multiple _)
-	 * We then search for tuples
-	 */
-	Atom rule = CStringToClause("!number x square s | * x * x = s");
-	// AssertRule(rule);
+
+	Atom rule = CStringToClause("!root _r square _s | * _r * _r = _s");
+	DictionaryAddClause(rule);
 
 	/**
 	 * To match a predicate to a rule, we need to
@@ -87,7 +73,55 @@ void testDispatchToRule(void)
 	 * (number @INT square $INT). This can be compiled and then
 	 */
 
-	Atom query = CStringToPredicate("number 3 square s");
+	// This is the negated form
+	Atom queryTerm = CStringToTerm("!root 3 square _s");
+	Atom queryTermForm = FormulaGetForm(queryTerm);
+	ASSERT(IsTermForm(queryTermForm))
+	/**
+	 * To search find rules (clauses) c that contain a given @term-form,
+	 * we first query (clause-form c) & (multiset c element @term_form multiple _)
+	 * We then search for tuples
+	 */
+
+	RelationBTreeIterator iterator;
+	BTree * btree = RegistryGetCoreTable(FORM_MULTISET_ELEMENT_MULTIPLE);
+
+	Tuple * queryTuple = CreateTuple(3);
+	MultisetSetTuple(
+		queryTuple,
+		anonymousVariable,
+		(TypedAtom) {.type = AT_ID, .atom = queryTermForm},
+		anonymousVariable
+	);
+
+	RelationBTreeIterate(btree, queryTuple, &iterator);
+	while(RelationBTreeIteratorHasTuple(&iterator)) {
+		TypedAtom clauseForm = RelationBTreeIteratorGetAtom(
+			&iterator,
+			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
+		);
+		if(clauseForm.type == AT_ID && IsClauseForm(clauseForm.atom)) {
+			PrintClauseForm(clauseForm.atom);
+			PrintChar('\n');
+
+			DictionaryIterator dictIterator;
+			DictionaryIterate(clauseForm.atom, &dictIterator);
+			while(DictionaryIteratorHasRecord(&dictIterator)) {
+				Tuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
+				PrintTuple(clauseActors);
+				PrintChar('\n');
+				DictionaryIteratorNext(&dictIterator);
+			}
+			DictionaryIteratorEnd(&dictIterator);
+		}
+		RelationBTreeIteratorNext(&iterator);
+	}
+	RelationBTreeIteratorEnd(&iterator);
+	FreeTuple(queryTuple);
+	IFactRelease(queryTerm);
+
+	DictionaryRemoveClause(rule);
+	IFactRelease(rule);
 }
 
 
@@ -97,6 +131,7 @@ int main(int argc, char * argv[])
 	SetupServiceLibrary();
 
 	ExecuteTest(testDispatchToService);
+	ExecuteTest(testDispatchToRule);
 
 	TeardownServiceLibrary();
 	KernelShutdown();
