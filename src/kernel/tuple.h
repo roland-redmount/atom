@@ -39,6 +39,9 @@ Tuple * CreateTupleFromArray(TypedAtom * typedAtoms, size8 nAtoms);
  */
 Tuple * CreateTupleFromtuple(Tuple const * otherTuple);
 
+/**
+ * Initialize a given memory block as a tuple of zero atoms
+ */
 void SetupTuple(Tuple * tuple, size8 nAtoms);
 
 

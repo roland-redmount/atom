@@ -467,6 +467,7 @@ static BTreeDeleteResult btreeDeleteRecursive(BTree * btree, BTreeNode * node, S
 			pivotIndex = searchNodeItems(btree, node, item);
 			if(pivotIndex < node->nItems) {
 				void * pivotItem = nodeGetItem(btree, node, pivotIndex);
+				// TODO: do we really need to compare the item here?
 				match = btree->compareItems(item, pivotItem, btree->itemSize) == 0;
 			}
 			else

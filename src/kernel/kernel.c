@@ -2,6 +2,7 @@
 #include "kernel/UInt.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
+#include "kernel/dictionary.h"
 #include "kernel/ifact.h"
 #include "kernel/letter.h"
 #include "kernel/lookup.h"
@@ -379,6 +380,7 @@ void KernelInitialize(void)
 	SetupRegistry();
 	InitializeLookup();
 	InitializeIFacts();
+	SetupDictionary();
 
 	setupCoreRoleNames();
 	setupCoreServices();

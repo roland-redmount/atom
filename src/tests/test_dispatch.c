@@ -56,10 +56,12 @@ void testDispatchToRule(void)
 	 * but we will have many forms, it might make sense to store all rules
 	 * in a single B-tree indexed by form and then actors, similar to
 	 * ServiceRegistry (but here actors are not parameter lists).
+	 * Or, we might store all rules of the same arity in one tree,
+	 * so that the tuple size is constant.
 	 * 
-	 * To search find rules (clauses) that contain a given predicate form,
-	 * we will need an index. This is analogous to lookup, but here we
-	 * map predicate forms to clauses, while lookup maps roles to predicates.
+	 * To search find rules (clauses) c that contain a given @term-form,
+	 * we first query (clause-form c) & (multiset c element @term_form multiple _)
+	 * We then search for tuples
 	 */
 	Atom rule = CStringToClause("!number x square s | * x * x = s");
 	// AssertRule(rule);
