@@ -5,6 +5,7 @@
 #ifndef DICTIONARY_H
 #define DICTIONARY_H
 
+#include "kernel/tuple.h"
 #include "lang/Atom.h"
 #include "btree/btree.h"
 
@@ -26,7 +27,7 @@ void DictionaryRemoveClause(Atom clause);
 
 
 typedef struct {
-	Atom clauseForm;
+	byte * keyRecord;
 	BTreeIterator btreeIterator;
 } DictionaryIterator;
 
@@ -35,6 +36,13 @@ typedef struct {
  */
 void DictionaryIterate(Atom clauseForm, DictionaryIterator * iterator);
 
+bool DictionaryIteratorHasRecord(DictionaryIterator * iterator);
+
+Tuple const * DictionaryIteratorPeekActors(DictionaryIterator * iterator);
+
+void DictionaryIteratorNext(DictionaryIterator * iterator);
+
+void DictionaryIteratorEnd(DictionaryIterator * iterator);
 
 
 #endif	// DICTIONARY_H
