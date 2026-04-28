@@ -24,8 +24,8 @@ static bool signatureQueryTupleMatch(Atom parameterList, Atom queryList, index8 
 	ASSERT(nAtoms == ListLength(parameterList));
 	// iterate over query tuple
 	for(index8 i = 0, k = 0; i < nAtoms; i++) {
-		TypedAtom queryAtom = ListGetElement(queryList, i + 1);
-		Atom parameter = ListGetElement(parameterList, i+1).atom;
+		TypedAtom queryAtom = ListGetElement(queryList, permutation[i] + 1);
+		Atom parameter = ListGetElement(parameterList, i + 1).atom;
 		switch(ParameterGetIO(parameter)) {
 		case PARAMETER_IN:
 			//  query atom type must match
@@ -35,12 +35,12 @@ static bool signatureQueryTupleMatch(Atom parameterList, Atom queryList, index8 
 		
 		case PARAMETER_OUT:
 			// output, query atom must be a variable
-			if(queryAtom.type == AT_VARIABLE) {
-				byte variableType = VariableGetType(queryAtom.atom);
-				if(variableType && (variableType != ParameterGetType(parameter)))
-					return false;
-				// else untyped variable
-			}
+			if(queryAtom.type != AT_VARIABLE)
+				return false;
+			// if variable is typed, the type must match
+			byte variableType = VariableGetType(queryAtom.atom);
+			if(variableType && (variableType != ParameterGetType(parameter)))
+				return false;
 			break;
 		
 		case PARAMETER_IN_OUT:
