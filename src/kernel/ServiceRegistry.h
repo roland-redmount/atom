@@ -142,7 +142,7 @@ ServiceRecord RegistryFindBTreeService(Atom form);
  * Iterating over services
  */
 typedef struct {
-	Atom form;
+	ServiceRecord keyRecord;
 	BTreeIterator btreeIterator;
 } RegistryIterator;
 

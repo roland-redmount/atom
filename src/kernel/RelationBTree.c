@@ -140,7 +140,9 @@ void RelationBTreeIterate(BTree * tree, Tuple const * queryTuple, RelationBTreeI
 	iterator->btree = tree;
 	iterator->nColumns = RelationBTreeNColumns(tree);
 	iterator->queryTuple = queryTuple;
-	BTreeIterate(&(iterator->treeIterator), tree, queryTuple, 0);
+	BTreeIterate(&(iterator->treeIterator), tree);
+	if(queryTuple)
+		BTreeIteratorSeek(&(iterator->treeIterator), queryTuple);
 	advanceIterator(iterator);
 }
 

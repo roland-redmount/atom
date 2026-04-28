@@ -563,7 +563,7 @@ void PrintIFact(Atom atom)
 void DumpIFacts(void)
 {
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, ifactStorage.btree, 0, 0);
+	BTreeIterate(&iterator, ifactStorage.btree);
 	while(BTreeIteratorHasItem(&iterator)) {
 		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
 		PrintIFact((Atom) header->hash);
@@ -582,7 +582,7 @@ void EnableFlagCreatedIFacts(void)
 void DumpFlaggedIFacts(void)
 {
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, ifactStorage.btree, 0, 0);
+	BTreeIterate(&iterator, ifactStorage.btree);
 	while(BTreeIteratorHasItem(&iterator)) {
 		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
 		if(header->flags & IFACT_NEW) {
@@ -600,7 +600,7 @@ void DisableFlagCreatedIFacts(void)
 	// clear all flags
 	byte mask = ~((byte) IFACT_NEW);
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, ifactStorage.btree, 0, 0);
+	BTreeIterate(&iterator, ifactStorage.btree);
 	while(BTreeIteratorHasItem(&iterator)) {
 		IFactHeader * header = BTreeIteratorPeekItem(&iterator);
 		header->flags &= mask;

@@ -306,18 +306,24 @@ ServiceRecord RegistryFindBTreeService(Atom form)
 
 void RegistryIterate(Atom form, RegistryIterator * iterator)
 {
-	ServiceRecord key = {
+	iterator->keyRecord = (ServiceRecord) {
 		// setting parameters = 0 to match any parameter vector
 		// NOTE: here .service is not a valid AT_SERVICE atom
 		.service = serviceRecordHash(form, 0)
 	};
-	BTreeIterate(&(iterator->btreeIterator), registry.tree, &key, 0);
+	BTreeIterate(&(iterator->btreeIterator), registry.tree);
+	BTreeIteratorSeek(&(iterator->btreeIterator), &(iterator->keyRecord));
 }
 
 
 bool RegistryIteratorHasService(RegistryIterator const * iterator)
 {
-	return BTreeIteratorHasItem(&(iterator->btreeIterator));
+	if(BTreeIteratorHasItem(&(iterator->btreeIterator))) {
+		ServiceRecord const * btreeRecord = BTreeIteratorPeekItem(&(iterator->btreeIterator));
+		if(compareServiceRecords(btreeRecord, &(iterator->keyRecord)) == 0)
+			return true;
+	}
+	return false;
 }
 
 

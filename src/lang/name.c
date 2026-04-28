@@ -165,7 +165,7 @@ void NameDump(void)
 	PrintF("Name table %u names:\n", NumberOfNames());
 
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, nameStorage.tree, 0, 0);
+	BTreeIterate(&iterator, nameStorage.tree);
 	while(BTreeIteratorHasItem(&iterator)) {
 		NameRecord const * nameRecord = BTreeIteratorPeekItem(&iterator);
 		PrintF("%llx: ", nameRecord->hash);

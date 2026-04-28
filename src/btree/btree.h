@@ -134,20 +134,6 @@ BTreeDeleteResult BTreeDelete(BTree * btree, void * item);
  */
 void BTreeClear(BTree * btree);
 
-/**
- * Iterate over items in a B-tree, starting from the first item
- * that compare equal to the given key according to the 
- * function compareItemToKey(item. key). compareItemToKey() must be compatible
- * with the B-tree's compareItems() function in the sense that
- * item1 > key and item2 > item2 implies item2 > key. This ensures
- * that we can search the B-tree using compareItemToKey() without
- * missing any items that compare equal to the key.
- * 
- * If compareItemToKey is 0, the B-tree's compareItems() function
- * is used. If key is 0, the iteration is over all items in the tree. 
- *
- * Locks the B-tree for writing.
- */
 
 typedef struct s_BTreePosition {
 	BTreeNode const * node;
@@ -156,16 +142,20 @@ typedef struct s_BTreePosition {
 
 typedef struct s_BTreeIterator {
 	BTree * btree;
-	void const * keyItem;
 	BTreePosition * stack;
 	size32 depth;	// between 0 and btree->height - 1
 } BTreeIterator;
 
 
-void BTreeIterate(
-	BTreeIterator * iterator, BTree * btree, void const * keyItem,
-	ItemComparator compareItemToKey);
+/**
+ * Create an iterator over items in a B-tree and position it at the 
+ * first item in the tree, if one exists. Locks the B-tree for writing.
+ */
+void BTreeIterate(BTreeIterator * iterator, BTree * btree);
 
+/**
+ * Return true if an item is available at current iterator position.
+ */
 bool BTreeIteratorHasItem(BTreeIterator const * iterator);
 
 /**
@@ -174,8 +164,21 @@ bool BTreeIteratorHasItem(BTreeIterator const * iterator);
  */
 void * BTreeIteratorPeekItem(BTreeIterator const * iterator);
 
+/**
+ * Advance the iterator to the next item in the tree.
+ */
 void BTreeIteratorNext(BTreeIterator * iterator);
 
+/**
+ * Reposition the iterator at the first item matching keyItem,
+ * if one exists.
+ */ 
+void BTreeIteratorSeek(BTreeIterator * iterator, const void * keyItem);
+
+/**
+ * End iteration and release the write lock.
+ * Any pointers returned from the iterator are invalid after this call.
+ */
 void BTreeIteratorEnd(BTreeIterator * iterator);
 
 
