@@ -23,7 +23,7 @@ static bool signatureQueryTupleMatch(Atom parameterList, Atom queryList, index8 
 	ASSERT(nAtoms <= 255);
 	ASSERT(nAtoms == ListLength(parameterList));
 	// iterate over query tuple
-	for(index8 i = 0, k = 0; i < nAtoms; i++) {
+	for(index8 i = 0; i < nAtoms; i++) {
 		TypedAtom queryAtom = ListGetElement(queryList, permutation[i] + 1);
 		Atom parameter = ListGetElement(parameterList, i + 1).atom;
 		switch(ParameterGetIO(parameter)) {
@@ -52,6 +52,11 @@ static bool signatureQueryTupleMatch(Atom parameterList, Atom queryList, index8 
 }
 
 
+/**
+ * Enumerate all possible argument permutations for the given form
+ * and test each for a match against parametersList.
+ * Returns true if a match is found.
+ */
 bool PermutationMatch(Atom form, Atom parametersList, Atom queryList, index8 * permutation)
 {
 	// iterate over all permutations of the form
@@ -69,17 +74,11 @@ bool PermutationMatch(Atom form, Atom parametersList, Atom queryList, index8 * p
 }
 
 
-bool SignatureQueryMatch(Atom form, Atom parametersList, Atom queryList, index8 * permutation)
-{
-	return PermutationMatch(form, parametersList, queryList, permutation);
-}
-
-
-bool DispatchQuery(Atom query, ServiceRecord * record)
+bool DispatchQuery(Atom query, ServiceRecord * record, Tuple * arguments)
 {
 	ASSERT(IsFormula(query))
 
-	// Test each for a candidate service using SignatureQueryMatch().
+	// Test each candidate services using SignatureQueryMatch().
 	// There can be only 1 matching service per candidate.
 
 	Atom queryForm = FormulaGetForm(query);
@@ -93,11 +92,16 @@ bool DispatchQuery(Atom query, ServiceRecord * record)
 	bool match = false;
 	while(RegistryIteratorHasService(&iterator)) {
 		*record = RegistryIteratorGetService(&iterator);
-		if(SignatureQueryMatch(queryForm, record->parameters, queryActors, permutation)) {
+		if(PermutationMatch(queryForm, record->parameters, queryActors, permutation)) {
 			match = true;
 			break;
 		}
 		RegistryIteratorNext(&iterator);
+	}
+	// copy permuted actors list to argument tuple
+	for(index8 i = 0; i < arity; i++) {
+		TupleSetElement(arguments, i,
+			ListGetElement(queryActors, permutation[i] + 1));
 	}
 	RegistryIteratorEnd(&iterator);
 	return match;

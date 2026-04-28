@@ -12,23 +12,26 @@ void testDispatchToService(void)
 {
 	ServiceRecord service;
 	Atom query;
+	Tuple * arguments = CreateTuple(3);
 	
 	// this query matches with the identity permutation
 	query = CStringToPredicate("+ 3 + 4 = _");
-	ASSERT_TRUE(DispatchQuery(query, &service));
+	ASSERT_TRUE(DispatchQuery(query, &service, arguments));
 	ASSERT_UINT32_EQUAL(service.type, SERVICE_BYTECODE);
 	IFactRelease(query);
 
 	// one the following two  queries requires form permutation to match
 	query = CStringToPredicate("+ 3 + _ = 7");
-	ASSERT_TRUE(DispatchQuery(query, &service));
+	ASSERT_TRUE(DispatchQuery(query, &service, arguments));
 	ASSERT_UINT32_EQUAL(service.type, SERVICE_BYTECODE);
 	IFactRelease(query);
 
 	query = CStringToPredicate("+ _ + 3 = 7");
-	ASSERT_TRUE(DispatchQuery(query, &service));
+	ASSERT_TRUE(DispatchQuery(query, &service, arguments));
 	ASSERT_UINT32_EQUAL(service.type, SERVICE_BYTECODE);
 	IFactRelease(query);
+
+	FreeTuple(arguments);
 }
 
 
