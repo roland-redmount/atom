@@ -63,8 +63,10 @@ static int8 compareServiceRecords(ServiceRecord const * record, ServiceRecord co
 		return 1;
 	else {
 		// extract the 32 bit partial hashes for parameter lists
-		data32 recordParameters32 = record->service && 0xFFFFFFFF;
-		data32 recordOrKeyParameters32 = recordOrKey->service && 0xFFFFFFFF;
+		data32 recordParameters32 = record->service & 0xFFFFFFFF;
+		data32 recordOrKeyParameters32 = recordOrKey->service & 0xFFFFFFFF;
+		if(!recordOrKeyParameters32)
+			return 0;
 		if(recordParameters32 < recordOrKeyParameters32)
 			return -1;
 		else if(recordParameters32 > recordOrKeyParameters32)
@@ -225,6 +227,7 @@ void RegistryTeardownCoreServices(void)
 
 Atom RegistryAddBTreeService(Atom form, BTree * btree)
 {
+	ASSERT(IsPredicateForm(form))
 	size8 arity = FormArity(form);
 	Atom parameters = createBTreeParameterList(arity);
 	ServiceRecord record = {
@@ -243,6 +246,7 @@ Atom RegistryAddBTreeService(Atom form, BTree * btree)
 
 Atom RegistryAddBytecodeService(Atom form, Atom bytecode)
 {
+	ASSERT(IsPredicateForm(form))
 	Atom parameters = BytecodeGetParameters(bytecode);
 	ServiceRecord record = {
 		.service = serviceRecordHash(form, parameters),
@@ -304,18 +308,24 @@ ServiceRecord RegistryFindBTreeService(Atom form)
 
 void RegistryIterate(Atom form, RegistryIterator * iterator)
 {
-	ServiceRecord key = {
+	iterator->keyRecord = (ServiceRecord) {
 		// setting parameters = 0 to match any parameter vector
 		// NOTE: here .service is not a valid AT_SERVICE atom
 		.service = serviceRecordHash(form, 0)
 	};
-	BTreeIterate(&(iterator->btreeIterator), registry.tree, &key, 0);
+	BTreeIterate(&(iterator->btreeIterator), registry.tree);
+	BTreeIteratorSeek(&(iterator->btreeIterator), &(iterator->keyRecord));
 }
 
 
 bool RegistryIteratorHasService(RegistryIterator const * iterator)
 {
-	return BTreeIteratorHasItem(&(iterator->btreeIterator));
+	if(BTreeIteratorHasItem(&(iterator->btreeIterator))) {
+		ServiceRecord const * btreeRecord = BTreeIteratorPeekItem(&(iterator->btreeIterator));
+		if(compareServiceRecords(btreeRecord, &(iterator->keyRecord)) == 0)
+			return true;
+	}
+	return false;
 }
 
 

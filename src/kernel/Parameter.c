@@ -35,6 +35,14 @@ byte ParameterGetType(Atom parameter)
 }
 
 
+byte ParameterGetIO(Atom parameter)
+{
+	Parameter param;
+	param.value = parameter;
+	return param.fields.io;
+}
+
+
 void PrintParameter(Atom parameter)
 {
 	Parameter param;

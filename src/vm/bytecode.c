@@ -238,21 +238,29 @@ Atom BytecodeGetConstants(Atom bytecode)
 }
 
 
-// TODO: temporary solution to be able to locate
-// and remove the service (+ + =) to test for memory leaks.
-// In practise we would persist these services, not remove them.
+/**
+ * TODO: temporary solution to be able to locate
+ * and remove services to test for memory leaks.
+ * In practise we would persist these services, not remove them.
+ */
 
-static Atom additionService;
+#define LIBRARY_N_SERVICES	2
+
+static Atom serviceLibrary[LIBRARY_N_SERVICES];
 
 
 /**
- * The service (+ x>INT + y>INT = z<INT)
+ * The service
+ * 
+ * = $INT + @INT + @INT
+ *   COPY   @2 $1
+ *   ADD    @3 $1
+ *   YIELD
  */
 static void createAdditionService(void)
 {
+	// NOTE: this must be in canonical order
 	Atom signature = CStringToPredicate("= $INT + @INT + @INT");
-	PrintFormula(signature);
-	PrintChar('\n');
 	Atom form = FormulaGetForm(signature);
 	Atom parameters = FormulaGetActors(signature);
 
@@ -274,11 +282,63 @@ static void createAdditionService(void)
 	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 1);
 	BytecodeEndInstruction(&bytecodeDraft);
 
+	// YIELD
+	BytecodeBeginInstruction(&bytecodeDraft, OP_YIELD);
+	BytecodeEndInstruction(&bytecodeDraft);
+
 	Atom bytecode = BytecodeEnd(&bytecodeDraft);
 	IFactRelease(registers);
 
-	// TODO: create the service properly
-	additionService = RegistryAddBytecodeService(form, bytecode);
+	serviceLibrary[0] = RegistryAddBytecodeService(form, bytecode);
+	IFactRelease(signature);
+	IFactRelease(bytecode);
+}
+
+
+/**
+ * The service
+ * 
+ * = @INT + $INT + @INT
+ *   COPY   @1 $2
+ *   SUB    @3 $2
+ *   YIELD
+ * This is an example where argument permutation is needed for dispatch.
+ */
+static void createAdditionService2(void)
+{
+	// NOTE: this must be in canonical order
+	Atom signature = CStringToPredicate("= @INT + $INT + @INT");
+	PrintFormula(signature);
+	PrintChar('\n');
+	Atom form = FormulaGetForm(signature);
+	Atom parameters = FormulaGetActors(signature);
+
+	Atom registers = CreateListFromArray(0, 0);		// the empty list
+
+	// create bytecode draft
+	BytecodeDraft bytecodeDraft;
+	BytecodeBegin(&bytecodeDraft, parameters, registers);
+	
+	// COPY @1 $2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_COPY);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 1);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// SUB @3 $2
+	BytecodeBeginInstruction(&bytecodeDraft, OP_SUB);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_LEFT, 3);
+	BytecodeOperandParameter(&bytecodeDraft, OPERAND_RIGHT, 2);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	// YIELD
+	BytecodeBeginInstruction(&bytecodeDraft, OP_YIELD);
+	BytecodeEndInstruction(&bytecodeDraft);
+
+	Atom bytecode = BytecodeEnd(&bytecodeDraft);
+	IFactRelease(registers);
+
+	serviceLibrary[1] = RegistryAddBytecodeService(form, bytecode);
 	IFactRelease(signature);
 	IFactRelease(bytecode);
 }
@@ -291,12 +351,14 @@ static void createAdditionService(void)
 void SetupServiceLibrary(void)
 {
 	createAdditionService();
+	createAdditionService2();
 }
 
 
-void TeardownCoreServices(void)
+void TeardownServiceLibrary(void)
 {
-	RegistryRemoveService(additionService);
+	for(index32 i = 0; i < LIBRARY_N_SERVICES; i++)
+		RegistryRemoveService(serviceLibrary[i]);
 }
 
 

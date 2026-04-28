@@ -337,7 +337,7 @@ void DumpAllocatedBlocks(void)
 void DumpAllocateLog(void)
 {
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, allocateLog, 0, 0);
+	BTreeIterate(&iterator, allocateLog);
 	while(BTreeIteratorHasItem(&iterator)) {
 		AllocateRecord const * record = BTreeIteratorPeekItem(&iterator);
 		PrintF("%x %s line %u\n",

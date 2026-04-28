@@ -201,7 +201,7 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm)
 	CreateResizingArray(&datumArray, sizeof(Atom), 10);
 
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, lookup.btree, 0, 0);
+	BTreeIterate(&iterator, lookup.btree);
 	Atom previousAtom = 0;
 	while(BTreeIteratorHasItem(&iterator)) {
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
@@ -233,7 +233,8 @@ void LookupIterate(Atom atom, LookupIterator * iterator)
 	iterator->query.predicateForm = 0;
 	iterator->query.role = 0;
 
-	BTreeIterate(&(iterator->treeIterator), lookup.btree, &(iterator->query), 0);
+	BTreeIterate(&(iterator->treeIterator), lookup.btree);
+	BTreeIteratorSeek(&(iterator->treeIterator), &(iterator->query));
 }
 
 
@@ -287,7 +288,7 @@ void LookupDump(void)
 {
 	PrintF("Lookup table %u records:\n", BTreeNItems(lookup.btree));
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, lookup.btree, 0, 0);
+	BTreeIterate(&iterator, lookup.btree);
 	while(BTreeIteratorHasItem(&iterator)) {
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
 		PrintIFact(record->atom);

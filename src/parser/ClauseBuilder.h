@@ -25,7 +25,7 @@ void ClauseBuilderReset(ClauseBuilder * builder);
 void CleanupClauseBuilder(ClauseBuilder * builder);
 
 // convenience method for testing
-Atom CStringToClause(char const * string, size32 length);
+Atom CStringToClause(char const * cString);
 
 
 #endif	// CLAUSEBUILDER_H
