@@ -227,6 +227,7 @@ void RegistryTeardownCoreServices(void)
 
 Atom RegistryAddBTreeService(Atom form, BTree * btree)
 {
+	ASSERT(IsPredicateForm(form))
 	size8 arity = FormArity(form);
 	Atom parameters = createBTreeParameterList(arity);
 	ServiceRecord record = {
@@ -245,6 +246,7 @@ Atom RegistryAddBTreeService(Atom form, BTree * btree)
 
 Atom RegistryAddBytecodeService(Atom form, Atom bytecode)
 {
+	ASSERT(IsPredicateForm(form))
 	Atom parameters = BytecodeGetParameters(bytecode);
 	ServiceRecord record = {
 		.service = serviceRecordHash(form, parameters),

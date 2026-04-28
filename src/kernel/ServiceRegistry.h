@@ -26,6 +26,12 @@
  * must not remove the child service before the "parent". Hence, we do need
  * reference counting. We could prevent "garbage collection" of services by
  * always keeping 1 reference to the AT_SERVICE atom in the stored ServiceRecord.
+ *
+ * NOTE: Currently, the services form must be a predicate form.
+ * In principle is possible for services to have a clause form,
+ * such as (foo @x | bar @x) stating that either (foo @x) OR (bar @x)
+ * is true for the atom @x, but we don't known which. We don't implement
+ * this yet.
  */
 
 #ifndef SERVICEREGISTRY_H

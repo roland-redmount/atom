@@ -1,12 +1,12 @@
 /**
  * Lookup maintains a table of all roles associatd with  AT_ID atoms (ONLY AT_ID atoms)
- * across all relation tables. Each lookup entry is a triple [atom form role-name]
- * since both the form and role name are needed to uniquely identify a role.
+ * across all relation tables. Each lookup entry is a triple [atom predicate-form role-name]
+ * since both the predicate form and role name are needed to uniquely identify a role.
  * This is information is redundant with the corresponding relation table,
  * but serves to efficient locate roles from atoms, rather than scanning all
  * relations tables in the system. So lookup is basically an index.
  * 
- * When creating a fact with AssertFact(), entries for all DT_IF atoms
+ * When creating a fact with AssertFact(), entries for all DT_ID atoms
  * are added to the lookup table. For example, when creating the fact
  * 
  * (list @x element @e position @p)

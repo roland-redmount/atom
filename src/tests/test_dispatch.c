@@ -44,11 +44,25 @@ void testDispatchToRule(void)
 	 * This is quite complex, so we should implement it in steps.
 	 */
 
-	// Create the rule
-	//   number x square s <- * x * x = s
-	// This requires AssertFact() to handle clauses.
+	/**
+	 *  Create the rule
+	 * 
+	 *   number x square s <- * x * x = s
+     *
+	 * AssertFact() expects facts to come from a service, but a rule
+	 * is not a service. So we need something else, say AssertRule().
+	 * 
+	 * Since we expect each clause form to contain only a few rules,
+	 * but we will have many forms, it might make sense to store all rules
+	 * in a single B-tree indexed by form and then actors, similar to
+	 * ServiceRegistry (but here actors are not parameter lists).
+	 * 
+	 * To search find rules (clauses) that contain a given predicate form,
+	 * we will need an index. This is analogous to lookup, but here we
+	 * map predicate forms to clauses, while lookup maps roles to predicates.
+	 */
 	Atom rule = CStringToClause("!number x square s | * x * x = s");
-	// AssertFact(FormulaGetForm(rule), FormulaGetActors(rule));
+	// AssertRule(rule);
 
 	/**
 	 * To match a predicate to a rule, we need to
