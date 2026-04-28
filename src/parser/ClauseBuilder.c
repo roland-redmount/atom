@@ -102,14 +102,15 @@ void CleanupClauseBuilder(ClauseBuilder * builder)
 }
 
 
-Atom CStringToClause(char const * string, size32 length)
+Atom CStringToClause(char const * cString)
 {
+	size32 length = CStringLength(cString);
 	Tokenizer tokenizer;
 	TokenizerInit(&tokenizer);
 	ClauseBuilder builder;
 	InitializeClauseBuilder(&builder);
 	for(index32 i = 0; i <= length; i++) {
-		TokenizerPush(&tokenizer, string[i]);
+		TokenizerPush(&tokenizer, cString[i]);
 		if(TokenizerComplete(&tokenizer)) {
 			Token token = TokenizerGetToken(&tokenizer);
 			ASSERT(ClauseBuilderPush(&builder, token));

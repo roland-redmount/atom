@@ -324,8 +324,7 @@ static void testCStringToClause(void)
 {
 	
 	// NOTE: this string must be in canonical order
-	char const * exampleString = "aarf \"foobar\" | foo _x bar 123.45";
-	Atom clause = CStringToClause(exampleString, CStringLength(exampleString));
+	Atom clause = CStringToClause("aarf \"foobar\" | foo _x bar 123.45");
 	// PrintFormula(clause);
 	// PrintChar('\n');
 

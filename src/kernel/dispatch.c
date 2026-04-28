@@ -79,10 +79,8 @@ bool DispatchQuery(Atom query, ServiceRecord * record)
 {
 	ASSERT(IsFormula(query))
 
-	/**
-	 * 2) Test each for a candidate service using SignatureQueryMatch().
-	 *    There can be only 1 matching service per candidate.
-	 */
+	// Test each for a candidate service using SignatureQueryMatch().
+	// There can be only 1 matching service per candidate.
 
 	Atom queryForm = FormulaGetForm(query);
 	Atom queryActors = FormulaGetActors(query);
@@ -99,6 +97,7 @@ bool DispatchQuery(Atom query, ServiceRecord * record)
 			match = true;
 			break;
 		}
+		RegistryIteratorNext(&iterator);
 	}
 	RegistryIteratorEnd(&iterator);
 	return match;

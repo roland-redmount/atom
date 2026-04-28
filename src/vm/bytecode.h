@@ -90,11 +90,12 @@ Atom BytecodeGetRegisters(Atom bytecode);
 Atom BytecodeGetConstants(Atom bytecode);
 
 /**
- * Create core bytecode services, such as arithmetic operations.
+ * Create as set of useful bytecode services, such as arithmetic operations.
+ * TODO: this should be an optional component, loaded at runtime somehow
  */
 void SetupServiceLibrary(void);
 
-void TeardownCoreServices(void);
+void TeardownServiceLibrary(void);
 
 void PrintBytecode(Atom bytecode);
 
