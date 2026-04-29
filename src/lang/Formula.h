@@ -79,6 +79,14 @@ Atom CreateTerm(Atom predicate, bool negated);
 Atom CreateClause(Atom const * terms, size8 nTerms);
 
 /**
+ * Extract the actors from the clauseActors tuple that correspond to
+ * the k'th occurence (k = 1, 2 ... ) of the termForm in the clauseForm, and write
+ * them to the termActors tuple.
+ */
+void ClauseGetTermActors(
+	Atom clauseForm, Tuple const * clauseActors, Atom termForm, Tuple * termActors, index8 k);
+	
+/**
  * Test if the atom is a formula
  */
 bool IsFormula(Atom atom);

@@ -1,29 +1,33 @@
+/**
+ * A substitution list is a list of (variable -> atom) pairs
+ * used for variable substitution, similar to a python dict.
+ */
 
 #ifndef SUBSTITUTIONLIST_H
 #define SUBSTITUTIONLIST_H
 
 #include "lang/TypedAtom.h"
 
-/**
- * A list of (variable -> value) pairs used for variable substitution
- */
 
 typedef struct s_SubstitutionList {
-	uint8 nPairs;
+	uint8 nPairs;	// number of substitutions = no. unique variables
 	TypedAtom * variables;
 	TypedAtom * values;
 } SubstitutionList;
 
 
-
-// create an array of the unique variables in tuple
-SubstitutionList CreateSubstFromVars(Atom list);
+/**
+ * Create a substitution list from the unique variables of a tuple,
+ * such that each variable x maps to itself (x -> x)
+ */
+void SetupSubstitutionList(Tuple const * tuple, SubstitutionList * subst);
 
 // Find the value corresponding to a given variable
-TypedAtom FindSubstValue(SubstitutionList subst, TypedAtom variable);
-// Replace a substitution value for a given variable (if it exists)
-void SetSubstValue(SubstitutionList subst, TypedAtom variable, TypedAtom value); 
+TypedAtom FindSubstValue(SubstitutionList const * subst, TypedAtom variable);
 
-void FreeSubstitutionList(SubstitutionList subst);
+// Replace a substitution value for a given variable (if it exists)
+void SetSubstValue(SubstitutionList * subst, TypedAtom variable, TypedAtom value); 
+
+void FreeSubstitutionList(SubstitutionList * subst);
 
 #endif	// SUBSTITUTIONLIST_H

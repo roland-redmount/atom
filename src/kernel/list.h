@@ -99,6 +99,12 @@ void ListSetTuple(Tuple * tuple, TypedAtom list, TypedAtom position, TypedAtom e
  */
 index32 ListGetPosition(Atom list, TypedAtom element);
 
+/**
+ * Copy the elements of a list to a Tuple.
+ * The Tuple must have the same number of elements.
+ */
+void CopyListToTuple(Atom list, Tuple * tuple);
+
 void PrintList(Atom list);
 
 int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, TypedAtom));
