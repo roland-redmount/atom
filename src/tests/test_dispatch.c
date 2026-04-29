@@ -1,8 +1,8 @@
 
+#include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
 #include "kernel/kernel.h"
 #include "lang/Formula.h"
-#include "parser/PredicateBuilder.h"
 #include "parser/ClauseBuilder.h"
 #include "testing/testing.h"
 #include "vm/bytecode.h"
@@ -15,6 +15,7 @@ void testDispatchToService(void)
 	Tuple * arguments = CreateTuple(3);
 	
 	// this query matches with the identity permutation
+	// NOTE: dispatch should probably take a term, not a predicate?
 	query = CStringToPredicate("+ 3 + 4 = _");
 	ASSERT_TRUE(DispatchQuery(query, &service, arguments));
 	ASSERT_UINT32_EQUAL(service.type, SERVICE_BYTECODE);
@@ -44,48 +45,20 @@ void testDispatchToRule(void)
 	 * This is quite complex, so we should implement it in steps.
 	 */
 
-	/**
-	 *  Create the rule
-	 * 
-	 *   number x square s <- * x * x = s
-     *
-	 * AssertFact() expects facts to come from a service, but a rule
-	 * is not a service. So we need something else, say AssertRule().
-	 * 
-	 * Since we expect each clause form to contain only a few rules,
-	 * but we will have many forms, it might make sense to store all rules
-	 * in a single B-tree indexed by form and then actors, similar to
-	 * ServiceRegistry (but here actors are not parameter lists).
-	 * 
-	 * To search find rules (clauses) that contain a given predicate form,
-	 * we will need an index. This is analogous to lookup, but here we
-	 * map predicate forms to clauses, while lookup maps roles to predicates.
-	 */
-	Atom rule = CStringToClause("!number x square s | * x * x = s");
-	// AssertRule(rule);
+	// the rule (root r square s <- * r * r = s)
+	Atom rule = CStringToClause("! * _r * _r = _s | root _r square _s");
+	DictionaryAddClause(rule);
 
-	/**
-	 * To match a predicate to a rule, we need to
-	 * (1) find a clause form where its form occurs negated
-	 * (2) find rules (facts) of that clause form where the 
-	 *     corresponding predicate unifies with the query predicate
-	 * (3) take the remainder of the clause (unified) and repeat from 1
-	 *     until we reach resolution or there are no more matches
-	 * Lookup can be used for (1) and (2)
-	 * 
-	 * The result should be an equivalent formula. For the case
-	 * (number 3 square s), we should find (* 3 * 3 = s), which maps
-	 * to the service (* @INT * @INT = $INT)
-	 * 
-	 * Because services are valid for any parameter values that match
-	 * the specified atom types, we can immediately generalize this by
-	 * substiting constants for the corresponding parameter:
-	 * (number @INT square $) --> (* @INT * @INT = s) which unifies
-	 * with the service (* @INT * @INT = $INT) to yield a new service
-	 * (number @INT square $INT). This can be compiled and then
-	 */
+	// When dispatch is fully implemented with just-in-time compilation,
+	// this should yields newly compiled service via the above rule
+	Atom queryTerm = CStringToTerm("root 3 square _s");
+	
+	ServiceRecord service;
+	Tuple * arguments = CreateTuple(3);
+	DispatchQuery(queryTerm, &service, arguments);
 
-	Atom query = CStringToPredicate("number 3 square s");
+	DictionaryRemoveClause(rule);
+	IFactRelease(rule);
 }
 
 
@@ -95,6 +68,7 @@ int main(int argc, char * argv[])
 	SetupServiceLibrary();
 
 	ExecuteTest(testDispatchToService);
+	// ExecuteTest(testDispatchToRule);
 
 	TeardownServiceLibrary();
 	KernelShutdown();

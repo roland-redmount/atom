@@ -1,75 +1,49 @@
 
-#include <stdlib.h>
-
 #include "kernel/list.h"
 #include "lang/SubstitutionList.h"
+#include "memory/allocator.h"
 
-/**
- * Allocate pointer arrays for a substitution list
- * Pointers are not set!
- * 
- * TODO: can we use just an array of Atoms for this,
- * and avoid using malloc() ?
- */
-static SubstitutionList allocateSubstList(uint8 nPairs)
-{
-	SubstitutionList subst;
-	subst.nPairs = nPairs;
-	subst.variables = malloc(sizeof(TypedAtom*) * nPairs);
-	subst.values = malloc(sizeof(TypedAtom*) * nPairs);
-	return subst;
-}
 
-/**
- * Create a substitution list from the unique variables of a tuple,
- * such that each variable maps to itself, var -> var
- */
-SubstitutionList CreateSubstFromVars(Atom list)
+void SetupSubstitutionList(Tuple const * tuple, SubstitutionList * subst)
 {
-	size32 nElements = ListLength(list);
-	ASSERT(nElements <= 255);
-	PrintF("CreateSubstFromVars() nAtoms = %u\n", nElements);
 	// over-allocate the variable and atom lists
 	// to avoid parsing the tuple twice
-	SubstitutionList subst = allocateSubstList(nElements);
+	subst->variables = Allocate(sizeof(TypedAtom) * tuple->nAtoms);
+	subst->values = Allocate(sizeof(TypedAtom) * tuple->nAtoms);
 
 	// count number of unique variables = no. pairs
-	subst.nPairs = 0;
-	for(index8 i = 0; i < nElements; i++) {
-		TypedAtom a = ListGetElement(list, i+1);
-		PrintF("atom %u ", i);
+	subst->nPairs = 0;
+	for(index8 i = 0; i < tuple->nAtoms; i++) {
+		TypedAtom a = TupleGetElement(tuple, i);
 		if(a.type == AT_VARIABLE)
 		{
 			// check if variable was already found
 			bool newVariable = true;
-			for(index8 j = 0; j < subst.nPairs; j++) {
-				if(SameTypedAtoms(subst.variables[i], a)) {
-					PrintF("variable exists\n");
+			for(index8 j = 0; j < subst->nPairs; j++) {
+				if(SameTypedAtoms(subst->variables[i], a)) {
 					newVariable = false;
 					break;
 				}
 			}
 			if(newVariable) {
-				PrintF("new variable\n");
 				// add to substitution list
-				subst.variables[i] = a;
-				subst.values[i] = a;
-				subst.nPairs++;
+				subst->variables[i] = a;
+				subst->values[i] = a;
+				subst->nPairs++;
 			}
 		}
 	}
-	return subst;
 }
 
 
 /**
  * Find the value corresponding to a given variable
  */
-TypedAtom FindSubstValue(SubstitutionList subst, TypedAtom variable)
+TypedAtom FindSubstValue(SubstitutionList const * subst, TypedAtom variable)
 {
-	for(index8 i = 0; i < subst.nPairs; i++) {
-		if(SameTypedAtoms(subst.variables[i], variable))
-			return subst.values[i];
+	for(index8 i = 0; i < subst->nPairs; i++) {
+		if(SameTypedAtoms(subst->variables[i], variable))
+			return subst->values[i];
 	}
 	// variable not found
 	return invalidAtom;	
@@ -78,12 +52,12 @@ TypedAtom FindSubstValue(SubstitutionList subst, TypedAtom variable)
 /**
  * Replace a substitution value for a given variable (if it exists)
  */
-void SetSubstValue(SubstitutionList subst, TypedAtom variable, TypedAtom value)
+void SetSubstValue(SubstitutionList * subst, TypedAtom variable, TypedAtom value)
 {
-	for(index8 i = 0; i < subst.nPairs; i++) {
-		if(SameTypedAtoms(subst.variables[i], variable)) {
+	for(index8 i = 0; i < subst->nPairs; i++) {
+		if(SameTypedAtoms(subst->variables[i], variable)) {
 			// variable found, change value
-			subst.values[i] = value;
+			subst->values[i] = value;
 			return;
  		}
 	}
@@ -92,9 +66,9 @@ void SetSubstValue(SubstitutionList subst, TypedAtom variable, TypedAtom value)
 /**
  * Deallocate a substitution list
  */
-void FreeSubstitutionList(SubstitutionList subst)
+void FreeSubstitutionList(SubstitutionList * subst)
 {
 	// free atom arrays
-	free(subst.variables);
-	free(subst.values);
+	Free(subst->variables);
+	Free(subst->values);
 }

@@ -4,6 +4,7 @@
 #include "lang/TermForm.h"
 #include "parser/PredicateBuilder.h"
 #include "parser/TermBuilder.h"
+#include "parser/Tokenizer.h"
 
 
 void InitializeTermBuilder(TermBuilder * builder)
@@ -74,4 +75,29 @@ void TermBuilderReset(TermBuilder * builder)
 void CleanupTermBuilder(TermBuilder * builder)
 {
 	CleanupPredicateBuilder(&(builder->predicateBuilder));
+}
+
+
+Atom CStringToTerm(char const * cString)
+{
+	size32 length = CStringLength(cString);
+	Tokenizer tokenizer;
+	TokenizerInit(&tokenizer);
+	TermBuilder builder;
+	InitializeTermBuilder(&builder);
+	for(index32 i = 0; i <= length; i++) {
+		TokenizerPush(&tokenizer, cString[i]);
+		if(TokenizerComplete(&tokenizer)) {
+			Token token = TokenizerGetToken(&tokenizer);
+			ASSERT(TermBuilderPush(&builder, token));
+			ReleaseToken(token);
+			TokenizerReset(&tokenizer);
+		}
+	}
+	ASSERT(TermBuilderIsValid(&builder));
+	Atom term = TermBuilderCreateFormula(&builder);
+	
+	CleanupTermBuilder(&builder);
+	TokenizerCleanup(&tokenizer);
+	return term;
 }

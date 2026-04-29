@@ -25,10 +25,8 @@ struct s_Lookup {
 
 
 /**
- * Comparison function for btree, used for both queries and item ordering. For queries,
- * record1 is the query key.
- * 
- * TODO: if the record1->role is NULL, any item matching the atom is considered a match,
+ * Comparison function for lookup records, used for both queries and item ordering.
+ * If the recordOrKey->predicateForm is 0, any item matching the atom is considered a match,
  * so a key with NULL role can be passed as first argument to match all roles
  * associated with a given atom.
  */

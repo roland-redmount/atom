@@ -302,6 +302,22 @@ int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, Type
 }
 
 
+void CopyListToTuple(Atom list, Tuple * tuple)
+{
+	ASSERT(ListLength(list) == tuple->nAtoms)
+
+	ListIterator iterator;
+	ListIterate(list, &iterator);
+	index8 i = 0;
+	while(ListIteratorHasNext(&iterator)) {
+		TupleSetElement(tuple, i, ListIteratorGetElement(&iterator));
+		ListIteratorNext(&iterator);
+		i++;
+	}
+	ListIteratorEnd(&iterator);
+}
+
+
 /**
  * List iterator
  * 
@@ -348,7 +364,7 @@ void PrintList(Atom list)
 	PrintCString("LIST{");
 
 	ListIterator iterator;
-	ListIterate(list, & iterator);
+	ListIterate(list, &iterator);
 
 	while(ListIteratorHasNext(&iterator)) {
 		TypedAtom element = ListIteratorGetElement(&iterator);

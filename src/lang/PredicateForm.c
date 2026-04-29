@@ -70,7 +70,6 @@ size8 PredicateArity(Atom predicateForm)
 }
 
 
-// TODO: this could use MultisetIterationOrder() instead
 index8 PredicateRoleIndex(Atom predicateForm, Atom role)
 {
 	ASSERT(IsPredicateForm(predicateForm));

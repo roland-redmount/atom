@@ -204,6 +204,38 @@ Atom CreateClause(Atom const * terms, size8 nTerms)
 }
 
 
+void ClauseGetTermActors(
+	Atom clauseForm, Tuple const * clauseActors, Atom termForm, Tuple * termActors, index8 k)
+{
+	// iterate over terms in the clause
+	MultisetIterator iterator;
+	MultisetIterate(clauseForm, &iterator);
+
+	index8 index = 0;
+	bool found = false;
+	ElementMultiple elementMultiple;
+	while(MultisetIteratorHasNext(&iterator)) {
+		elementMultiple = MultisetIteratorGetElement(&iterator);
+		if(elementMultiple.element.atom == termForm) {
+			found = true;
+			break;
+		}
+		index += elementMultiple.multiple;
+		MultisetIteratorNext(&iterator);
+	}
+	MultisetIteratorEnd(&iterator);
+	ASSERT(found);
+	// select the k'th occurence of the term form
+	// (they must be contiguous in the clause form)
+	ASSERT(k <= elementMultiple.multiple)
+	size8 termArity = FormArity(termForm);
+	ASSERT(termActors->nAtoms == termArity)
+	index += (k - 1) * termArity;
+	for(index8 i = 0; i < termArity; i++)
+		TupleSetElement(termActors, i, TupleGetElement(clauseActors, index + i));
+}
+
+
 uint8 FormulaArity(Atom formula)
 {
 	return FormArity(FormulaGetForm(formula));
