@@ -17,19 +17,20 @@ void testDispatchToService(void)
 	// this query matches with the identity permutation
 	// NOTE: dispatch should probably take a term, not a predicate?
 	query = CStringToPredicate("+ 3 + 4 = _");
-	ASSERT_TRUE(DispatchQuery(query, &service, arguments));
-	ASSERT_UINT32_EQUAL(service.type, SERVICE_BYTECODE);
+	index8 permutation[3];
+	ASSERT_TRUE(DispatchQuery(query, &service, arguments, permutation))
+	ASSERT_UINT32_EQUAL(service.type, SERVICE_BYTECODE)
 	IFactRelease(query);
 
 	// one the following two  queries requires form permutation to match
 	query = CStringToPredicate("+ 3 + _ = 7");
-	ASSERT_TRUE(DispatchQuery(query, &service, arguments));
-	ASSERT_UINT32_EQUAL(service.type, SERVICE_BYTECODE);
+	ASSERT_TRUE(DispatchQuery(query, &service, arguments, permutation))
+	ASSERT_UINT32_EQUAL(service.type, SERVICE_BYTECODE)
 	IFactRelease(query);
 
 	query = CStringToPredicate("+ _ + 3 = 7");
-	ASSERT_TRUE(DispatchQuery(query, &service, arguments));
-	ASSERT_UINT32_EQUAL(service.type, SERVICE_BYTECODE);
+	ASSERT_TRUE(DispatchQuery(query, &service, arguments, permutation))
+	ASSERT_UINT32_EQUAL(service.type, SERVICE_BYTECODE)
 	IFactRelease(query);
 
 	FreeTuple(arguments);
@@ -55,7 +56,8 @@ void testDispatchToRule(void)
 	
 	ServiceRecord service;
 	Tuple * arguments = CreateTuple(3);
-	DispatchQuery(queryTerm, &service, arguments);
+	index8 permutation[3];
+	DispatchQuery(queryTerm, &service, arguments, permutation);
 
 	DictionaryRemoveClause(rule);
 	IFactRelease(rule);

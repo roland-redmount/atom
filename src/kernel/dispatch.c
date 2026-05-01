@@ -1,6 +1,7 @@
 
 #include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
+#include "kernel/expression.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/multiset.h"
@@ -157,12 +158,74 @@ static bool dispatchToService(Atom queryForm, Atom queryActors, ServiceRecord * 
  * 
  * Note that we might follow several rules before we find a service to call.
  */
-static bool compileService(Atom queryTerm)
+
+
+static Expression compileCallExpression(Atom queryForm, Tuple * parameters)
+{
+	// Iterate over candidate services matching the query form
+	RegistryIterator iterator;
+	RegistryIterate(queryForm, &iterator);
+	bool match = false;
+	ServiceRecord record;
+	// TODO: rewrite the ServiceRegistry to store service indexed by
+	// term forms, not predicate forms; and matching should take with a parameter tuple,
+	// not a query tuple. The translation query tuple -> parameters happens in the compiler.
+/*
+	while(RegistryIteratorHasService(&iterator)) {
+		record = RegistryIteratorGetService(&iterator);
+		// TODO: this should take a Tuple, not a list 
+		if(PermutationMatch(queryForm, record.parameters, parameters, permutation)) {
+			match = true;
+			break;
+		}
+		RegistryIteratorNext(&iterator);
+	}
+	RegistryIteratorEnd(&iterator);
+
+	Expression expression = {0};
+	if(match) {
+		expression.type = CALL_EXPRESSION;
+		expression.fields.record = record;
+
+	}
+*/
+	ASSERT(false)
+	return (Expression) {0};
+}
+
+
+static Expression compileJoinExpression(Atom const * terms)
+{
+	ASSERT(false);
+	return (Expression) {0};
+}
+
+
+/**
+ * Compile a query (a term) to an Expression.
+ */
+static Expression compileService(Atom queryTerm)
 {
 	Atom queryTermForm = FormulaGetForm(queryTerm);
 	ASSERT(IsTermForm(queryTermForm))
-	Tuple * queryTermActors = CreateTuple(2);
+	size8 arity = TermFormArity(queryTermForm);
+	Tuple * queryTermActors = CreateTuple(arity);
 	CopyListToTuple(FormulaGetActors(queryTerm), queryTermActors);
+	/**
+	 * TODO: the query actors can be generalized to parameters as:
+	 *   atom -> in parameter, of same type
+	 *   variable -> out parameter (any type)
+	 */
+	Tuple * parameters;
+
+	// first try locating an existing service, resulting in a CALL_EXPRESSION
+	Expression expression = {0};
+	expression = compileCallExpression(queryTermForm, queryTermActors);
+	if(expression.type == CALL_EXPRESSION)
+		return expression;
+
+	// if no service found, we look to rules ...
+
 	/**
 	 * To search find rules (clauses) c that contain a given @term-form,
 	 * we first query (clause-form c) & (multiset c element @term_form multiple _)
@@ -180,21 +243,23 @@ static bool compileService(Atom queryTerm)
 	RelationBTreeIterate(multisetBTree, multisetQueryTuple, &btreeIterator);
 	while(RelationBTreeIteratorHasTuple(&btreeIterator)) {
 		// a clause form where the term form occurs
-		// NOTE: the term form may occur more than once in the clause form
 		TypedAtom clauseForm = RelationBTreeIteratorGetAtom(
 			&btreeIterator,
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 		);
-		// number of times the term form occurs in this clause form
+		// NOTE: the term form may occur multiple times in the clause form ?
 		size8 multiple = RelationBTreeIteratorGetAtom(
 			&btreeIterator,
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)
 		).atom;
+		ASSERT(multiple == 1)		// for now
+
 		if(clauseForm.type == AT_ID && IsClauseForm(clauseForm.atom)) {
 			PrintClauseForm(clauseForm.atom);
 			PrintChar('\n');
 
-			// we may have multiple rules with this clause form
+			// We may have multiple rules (clauses) with this clause form,
+			// resulting in a UNION_EXPRESSION
 			DictionaryIterator dictIterator;
 			DictionaryIterate(clauseForm.atom, &dictIterator);
 			while(DictionaryIteratorHasRecord(&dictIterator)) {
@@ -202,23 +267,27 @@ static bool compileService(Atom queryTerm)
 				PrintTuple(clauseActors);
 				PrintChar('\n');
 
-				// extract the actor list for a matching term in the clause
-				// here we take the first occurence; when there are more than one occurence,
-				// each gives rise to a separate unification
+				// extract the actor list for the matching term in the clause
+				// (assuming multiplicity == 1)
 				Tuple * clauseTermActors = CreateTuple(2);
 				ClauseGetTermActors(clauseForm.atom, clauseActors, queryTermForm, clauseTermActors, 1);
 				
-				// unify the matched term with the query term
+				// unify the matched term with the query term to get a substitution list
 				SubstitutionList querySubstitution;
 				SubstitutionList clauseSubstitution;
 				UnifyTuples(queryTermActors, clauseTermActors, &querySubstitution, &clauseSubstitution);
-				
+
 				// apply the substitution to the clause
+				Tuple * substitutedClause;
+				// ...
 
-				// drop the matched term
+				// drop the matched term from the clauseForm
+				size8 nTerms = ClauseNTermsTotal(clauseForm.atom) - 1;
+				Atom conjunctionTerms[nTerms];
+				// copy the non-matched terms ...
 
-				// recursively dispatch on the negation of the remaining clause
-				// (a conjunction)
+				// 
+				Expression expr = compileJoinExpression(conjunctionTerms);
 
 				DictionaryIteratorNext(&dictIterator);
 			}
@@ -230,11 +299,11 @@ static bool compileService(Atom queryTerm)
 	FreeTuple(multisetQueryTuple);
 
 	// TODO
-	return false;
+	return expression;
 }
 
 
-bool DispatchQuery(Atom query, ServiceRecord * record, Tuple * arguments)
+bool DispatchQuery(Atom query, ServiceRecord * record, Tuple const * arguments, index8 * permutation)
 {
 	ASSERT(IsFormula(query))
 
@@ -245,20 +314,15 @@ bool DispatchQuery(Atom query, ServiceRecord * record, Tuple * arguments)
 	Atom queryActors = FormulaGetActors(query);
 	size8 arity = FormulaArity(query);
 
-	index8 permutation[arity];
 	// first try dispatching to an existing service
 	bool match = dispatchToService(queryForm, queryActors, record, permutation);
 	if(!match) {
 		// if no service exists, attempt to compile one
 
 		// TODO: this needs a term, not a predicate
-		match = compileService(query);
-	}
-
-	// copy permuted actors list to argument tuple
-	for(index8 i = 0; i < arity; i++) {
-		TupleSetElement(arguments, i,
-			ListGetElement(queryActors, permutation[i] + 1));
+		// match = compileService(query);
+		ASSERT(false)
+		;
 	}
 	return match;
 }

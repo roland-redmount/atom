@@ -52,7 +52,21 @@ enum ServiceType {
 	SERVICE_BTREE,
 };
 
-typedef struct s_Service {
+/**
+ * This will subsume B-tree services.
+ */
+typedef struct s_MachineService MachineService;
+
+struct s_MachineService {
+	size32 contextSize;
+	void (*initialize)(MachineService *);
+	bool (*call)(MachineService *);
+	void (*cleanup)(MachineService *);
+};
+
+
+
+typedef struct s_ServiceRecord {
 	Atom service;
 	// we store the form and parameters lists of the signature separately
 	// to allow iterating across all services matching a given form
@@ -65,6 +79,11 @@ typedef struct s_Service {
 	} provider;
 } ServiceRecord;
 
+
+/**
+ * Create a service record ID atom from a formula consisting 
+ */
+Atom CreateServiceRecordID(Atom form, Atom parameters);
 
 /**
  * Setup an empty service registry. Called during bootstrapping only.
@@ -83,9 +102,10 @@ void FreeRegistry(void);
 size32 RegistryNServices(void);
 
 /**
-* Core services are created during bootstrap when a new "world" is initialized.
-* Core services are accessible using RegistryGetServiceRecord() &c like all
-* other services, can also be retrieved with an integer index. 
+ * Core services are created during bootstrap.
+ * They are accessible using RegistryGetServiceRecord() like all
+ * other services, but can also be retrieved with an integer index
+ * corresponding to the core predicate indices in kernel.h
  */
 
 /**
