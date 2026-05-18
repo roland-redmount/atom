@@ -24,8 +24,7 @@
 
 enum ServiceType {
 	SERVICE_NONE = 0,
-	SERVICE_BYTECODE,
-	// SERVICE_BTREE,		// TODO: remove this
+	// SERVICE_BYTECODE,
 	SERVICE_MACHINE,
 	SERVICE_JOIN,
 	SERVICE_UNION,
@@ -38,7 +37,6 @@ typedef struct s_ServiceRecord ServiceRecord;
 /**
  * For "machine" services like B-tree, arrays, basic arithmetic,
  * we need a record storing pointers to the C code.
- * 
   */
 struct s_MachineService {
 	size32 contextSize;
@@ -51,7 +49,7 @@ struct s_MachineService {
 	 * e.g. B-Tree that holds the function pointers, and (2) service information, which
 	 * holds the specific BTree * pointer. (And (3) execution context, which holds the arguments)
 	 * We should separate out the service provider part so we don't repeatedly store
-	 * the same function pointers over and over ...
+	 * the same function pointers over and over.
 	 */
 	data64 serviceParameter;
 

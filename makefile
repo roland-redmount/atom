@@ -209,7 +209,7 @@ $(BINDIR)/opengltest : $(patsubst %, $(OBJDIR)/%.o, \
 TESTS_EXE_FILES := $(addprefix $(BINDIR)/,\
  test_btree test_atomtypes test_dispatch test_dictionary test_kernel test_language\
  test_list test_lookup test_memory test_multiset test_pair test_parsing test_persistence\
- test_relation_btree test_string test_table_registry test_tokenizer test_tuple test_utilities)
+ test_relation_btree test_string test_service_registry test_tokenizer test_tuple test_utilities)
 
 .PHONY: tests
 tests : $(TESTS_EXE_FILES)
@@ -250,7 +250,7 @@ test:
 	$(BINDIR)/test_language
 	$(BINDIR)/test_parsing
 	$(BINDIR)/test_dictionary
-	$(BINDIR)/test_table_registry
+	$(BINDIR)/test_service_registry
 	$(BINDIR)/test_persistence
 # 	$(BINDIR)/test_vm
 	$(BINDIR)/test_dispatch

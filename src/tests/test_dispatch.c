@@ -15,22 +15,23 @@ void testDispatchToService(void)
 	Tuple * arguments = CreateTuple(3);
 	
 	// this query matches with the identity permutation
-	// NOTE: dispatch should probably take a term, not a predicate?
+	// TODO: dispatch should probably take a term, not a predicate
+	// TODO: we need to replace this with a machine servide
 	query = CStringToPredicate("+ 3 + 4 = _");
 	index8 permutation[3];
 	ASSERT_TRUE(DispatchQuery(query, &service, arguments, permutation))
-	ASSERT_UINT32_EQUAL(service.type, SERVICE_BYTECODE)
+	ASSERT_UINT32_EQUAL(service.type, SERVICE_MACHINE)
 	IFactRelease(query);
 
 	// one the following two  queries requires form permutation to match
 	query = CStringToPredicate("+ 3 + _ = 7");
 	ASSERT_TRUE(DispatchQuery(query, &service, arguments, permutation))
-	ASSERT_UINT32_EQUAL(service.type, SERVICE_BYTECODE)
+	ASSERT_UINT32_EQUAL(service.type, SERVICE_MACHINE)
 	IFactRelease(query);
 
 	query = CStringToPredicate("+ _ + 3 = 7");
 	ASSERT_TRUE(DispatchQuery(query, &service, arguments, permutation))
-	ASSERT_UINT32_EQUAL(service.type, SERVICE_BYTECODE)
+	ASSERT_UINT32_EQUAL(service.type, SERVICE_MACHINE)
 	IFactRelease(query);
 
 	FreeTuple(arguments);

@@ -102,9 +102,9 @@ static void btreeFreeService(void * item, size32 itemSize)
 			machineService->teardown(machineService);
 			break;
 		}
-		case SERVICE_BYTECODE:
-		IFactRelease(record->provider.bytecode);
-		break;
+		// case SERVICE_BYTECODE:
+		// IFactRelease(record->provider.bytecode);
+		// break;
 
 		default:
 		ASSERT(false)
@@ -369,9 +369,9 @@ void PrintService(ServiceRecord const * service)
 		PrintCString("SERVICE_MACHINE");
 		break;
 
-		case SERVICE_BYTECODE:
-		PrintCString("SERVICE_BYTECODE");
-		break;
+		// case SERVICE_BYTECODE:
+		// PrintCString("SERVICE_BYTECODE");
+		// break;
 
 		default:
 		ASSERT(false)
