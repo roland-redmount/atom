@@ -123,9 +123,8 @@ typedef struct s_ListIterator
 
 
 void ListIterate(Atom list, ListIterator * iterator);
-bool ListIteratorHasNext(ListIterator const * iterator);
+bool ListIteratorNext(ListIterator * iterator);
 TypedAtom ListIteratorGetElement(ListIterator const * iterator);
-void ListIteratorNext(ListIterator * iterator);
 void ListIteratorEnd(ListIterator * iterator);
 
 #endif  // LIST_H

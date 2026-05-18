@@ -61,11 +61,10 @@ size8 FullFormArity(Atom form)
 	MultisetIterator iterator;
 	MultisetIterate(form, &iterator);
 	size8 arity = 0;
-	while(MultisetIteratorHasNext(&iterator)) {
+	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		uint8 clauseArity = ClauseArity(elementMultiple.element.atom);
 		arity += clauseArity * elementMultiple.multiple;
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 	return arity;
@@ -80,13 +79,12 @@ void PrintFullForm(Atom form)
 	MultisetIterate(form, &iterator);
 
 	PrintChar('(');
-	while(MultisetIteratorHasNext(&iterator)) {
+	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
 			PrintClauseForm(elementMultiple.element.atom);
 			PrintCString(" & ");
 		}
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 	PrintChar(')');

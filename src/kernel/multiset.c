@@ -125,15 +125,9 @@ void MultisetIterate(Atom multiset, MultisetIterator * iterator)
 }
 
 
-bool MultisetIteratorHasNext(MultisetIterator const * iterator)
+bool MultisetIteratorNext(MultisetIterator * iterator)
 {
-	return RelationBTreeIteratorHasTuple(&(iterator->treeIterator));
-}
-
-
-void MultisetIteratorNext(MultisetIterator * iterator)
-{
-	RelationBTreeIteratorNext(&(iterator->treeIterator));
+	return RelationBTreeIteratorNext(&(iterator->treeIterator));
 }
 
 
@@ -166,9 +160,8 @@ size32 MultisetNUniqueElements(Atom multiset)
 	MultisetIterator iterator;
 	MultisetIterate(multiset, &iterator);
 	size32 nElements = 0;
-	while(MultisetIteratorHasNext(&iterator)) {
+	while(MultisetIteratorNext(&iterator)) {
 		nElements++;
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 	return nElements;
@@ -180,10 +173,9 @@ size32 MultisetSize(Atom multiset)
 	MultisetIterator iterator;
 	MultisetIterate(multiset, &iterator);
 	size32 size = 0;
-	while(MultisetIteratorHasNext(&iterator)) {
+	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		size += em.multiple;
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 	return size;
@@ -195,13 +187,11 @@ void PrintMultiset(Atom multiset)
 	PrintChar('{');
 	MultisetIterator iterator;
 	MultisetIterate(multiset, &iterator);
-	while(MultisetIteratorHasNext(&iterator)) {
+	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		PrintTypedAtom(em.element);
 		PrintF("(%u)", em.multiple);
 		MultisetIteratorNext(&iterator);
-		if(MultisetIteratorHasNext(&iterator))
-			PrintChar(' ');
 	}
 	MultisetIteratorEnd(&iterator);
 	PrintChar('}');
@@ -213,7 +203,7 @@ void MultisetIterationOrder(Atom multiset, TypedAtom const * elements, index8 * 
 	MultisetIterator iterator;
 	MultisetIterate(multiset, &iterator);
 	size8 i = 0;
-	while(MultisetIteratorHasNext(&iterator)) {
+	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		index8 m = 0;
 		// find corresponding element in the elements array
@@ -226,7 +216,6 @@ void MultisetIterationOrder(Atom multiset, TypedAtom const * elements, index8 * 
 		// verify that we found all multiples in array
 		ASSERT(m == em.multiple);
 		i += m;
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 }

@@ -68,11 +68,10 @@ size8 ClauseArity(Atom clauseForm)
 	MultisetIterator iterator;
 	MultisetIterate(clauseForm, &iterator);
 	size8 arity = 0;
-	while(MultisetIteratorHasNext(&iterator)) {
+	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		uint8 termArity = TermFormArity(elementMultiple.element.atom);
 		arity += termArity * elementMultiple.multiple;
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 	return arity;
@@ -84,13 +83,12 @@ void PrintClauseForm(Atom clauseForm)
 	MultisetIterator iterator;
 	MultisetIterate(clauseForm, &iterator);
 
-	while(MultisetIteratorHasNext(&iterator)) {
+	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
 			PrintTermForm(elementMultiple.element.atom);
 			PrintCString(" | ");
 		}
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 }

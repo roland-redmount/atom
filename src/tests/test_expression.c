@@ -21,10 +21,10 @@ void testCallExpression(void)
 	index8 argumentMap[3];
 	ASSERT(DispatchQuery(query, &record, arguments, argumentMap))
 
-	Expression callExpression = {
-		.type = CALL_EXPRESSION,
-		.fields.record = record
-	};
+	// Expression callExpression = {
+	// 	.type = CALL_EXPRESSION,
+	// 	.fields.record = record
+	// };
 	
 	// TODO
 /*

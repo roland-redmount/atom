@@ -67,12 +67,14 @@ void testDispatchToRule(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	SetupServiceLibrary();
 
-	ExecuteTest(testDispatchToService);
+	// TODO: without bytecode, we have no functions to test
+	// SetupServiceLibrary();
+
+	// ExecuteTest(testDispatchToService);
 	// ExecuteTest(testDispatchToRule);
 
-	TeardownServiceLibrary();
+	// TeardownServiceLibrary();
 	KernelShutdown();
 
 	TestSummary();

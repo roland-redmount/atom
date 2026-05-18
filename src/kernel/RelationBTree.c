@@ -118,22 +118,6 @@ size32 RelationBTreeNRows(BTree const * tree)
 }
 
 
-static void advanceIterator(RelationBTreeIterator * iterator)
-{
-	// advance iterator to next matching tuple
-	if(iterator->queryTuple) {
-		while(BTreeIteratorHasItem(&(iterator->treeIterator))) {
-			Tuple const * tuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
-			if(TupleMatch(tuple, iterator->queryTuple))
-				break;
-			BTreeIteratorNext(&(iterator->treeIterator));
-		}
-		// else no matching item in btree
-	}
-	// else start from the first tuple
-}
-
-
 void RelationBTreeIterate(BTree * tree, Tuple const * queryTuple, RelationBTreeIterator * iterator)
 {
 	SetMemory(iterator, sizeof(RelationBTreeIterator), 0);
@@ -141,22 +125,32 @@ void RelationBTreeIterate(BTree * tree, Tuple const * queryTuple, RelationBTreeI
 	iterator->nColumns = RelationBTreeNColumns(tree);
 	iterator->queryTuple = queryTuple;
 	BTreeIterate(&(iterator->treeIterator), tree);
-	if(queryTuple)
-		BTreeIteratorSeek(&(iterator->treeIterator), queryTuple);
-	advanceIterator(iterator);
 }
 
 
-bool RelationBTreeIteratorHasTuple(RelationBTreeIterator const * iterator)
+bool RelationBTreeIteratorNext(RelationBTreeIterator * iterator)
 {
-	return BTreeIteratorHasItem(&(iterator->treeIterator));
-}
-
-
-void RelationBTreeIteratorNext(RelationBTreeIterator * iterator)
-{
-	BTreeIteratorNext(&(iterator->treeIterator));
-	advanceIterator(iterator);
+	if(!iterator->queryTuple)
+		return BTreeIteratorNext(&(iterator->treeIterator));
+	// else we have a query tuple
+	bool foundItem;
+	if(BTreeIteratorBeforeFirst(&iterator->treeIterator)) {
+		// new iterator, seek to first match
+		foundItem = BTreeIteratorSeek(&(iterator->treeIterator), iterator->queryTuple);
+	}
+	else
+		foundItem = BTreeIteratorNext(&(iterator->treeIterator));
+	if(!foundItem)
+		return false;
+	// advance iterator to next matching tuple
+	do {
+		Tuple const * tuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
+		if(TupleMatch(tuple, iterator->queryTuple))
+			return true;
+		;
+	} while(BTreeIteratorNext(&(iterator->treeIterator)));
+	// else no matching item in btree
+	return false;
 }
 
 
@@ -197,11 +191,10 @@ void RelationBTreeQuerySingle(BTree * tree, Tuple const * queryTuple, Tuple * re
  {
  	RelationBTreeIterator iterator;
  	RelationBTreeIterate(tree, queryTuple, &iterator);
- 	ASSERT(RelationBTreeIteratorHasTuple(&iterator));
+ 	ASSERT(RelationBTreeIteratorNext(&iterator));
  	RelationBTreeIteratorGetTuple(&iterator, resultTuple);
  	// verify the relation has a single tuple only
- 	RelationBTreeIteratorNext(&iterator);
- 	ASSERT(!RelationBTreeIteratorHasTuple(&iterator));
+ 	ASSERT(!RelationBTreeIteratorNext(&iterator));
  	RelationBTreeIteratorEnd(&iterator);
  }
 
@@ -210,11 +203,10 @@ TypedAtom RelationBTreeQuerySingleAtom(BTree * tree, Tuple const * queryTuple, i
 {
  	RelationBTreeIterator iterator;
  	RelationBTreeIterate(tree, queryTuple, &iterator);
- 	ASSERT(RelationBTreeIteratorHasTuple(&iterator));
+ 	ASSERT(RelationBTreeIteratorNext(&iterator));
  	TypedAtom atom = RelationBTreeIteratorGetAtom(&iterator, index);
  	// verify the relation has a single tuple only
- 	RelationBTreeIteratorNext(&iterator);
- 	ASSERT(!RelationBTreeIteratorHasTuple(&iterator));
+ 	ASSERT(!RelationBTreeIteratorNext(&iterator));
  	RelationBTreeIteratorEnd(&iterator);
 	return atom;
  }
@@ -259,13 +251,12 @@ size32 RelationBTreeRemoveTuples(BTree * tree, Tuple const * queryTuple, uint8 m
 	RelationBTreeIterator iterator;
 	size32 nTuplesToDelete = 0;
 	RelationBTreeIterate(tree, queryTuple, &iterator);
-	while(RelationBTreeIteratorHasTuple(&iterator)) {
+	while(RelationBTreeIteratorNext(&iterator)) {
 		Tuple const * tuple = BTreeIteratorPeekItem(&(iterator.treeIterator));
 		if((mode == REMOVE_PROTECTED) || !TupleIsProtected(tuple)) {
 			ResizingArrayAppend(&tuplesArray, tuple);
 			nTuplesToDelete++;
 		}
-		RelationBTreeIteratorNext(&iterator);
 	}
 	RelationBTreeIteratorEnd(&iterator);
 
@@ -302,15 +293,77 @@ void RelationBTreeDump(BTree * tree)
 	RelationBTreeIterator iterator;
 	RelationBTreeIterate(tree, 0, &iterator);
 	size32 nTuples = 0;
-	while(RelationBTreeIteratorHasTuple(&iterator)) {
+	while(RelationBTreeIteratorNext(&iterator)) {
 		Tuple const * tuple = RelationBTreeIteratorPeekTuple(&iterator);
 		// TODO: we should probably not print the full representaiton
 		// of identified atoms, as it triggers repeated queries
 		PrintTuple(tuple);
 		PrintChar('\n');
-		RelationBTreeIteratorNext(&iterator);
 		nTuples++;
 	}
 	RelationBTreeIteratorEnd(&iterator);
 	PrintF("%u tuples\n", nTuples);
+}
+
+/**
+ * Stubs for using a B-tree as a service
+ */
+static void serviceSetupContext(MachineService * service, void * context, Tuple * arguments)
+{
+	BTree * btree = (BTree *) service->serviceParameter;
+	RelationBTreeIterate(btree, arguments, (RelationBTreeIterator *) context);
+}
+
+
+static bool serviceCall(void * context)
+{
+	RelationBTreeIterator * iterator = context;
+	return RelationBTreeIteratorNext(iterator);
+}
+
+
+static void serviceFinalizeContext(void * context)
+{
+	RelationBTreeIteratorEnd((RelationBTreeIterator *) context);
+}
+
+
+void serviceAddTuple(MachineService * service, Tuple const * arguments)
+{
+	RelationBTreeAddTuple((BTree *) service->serviceParameter, arguments);
+}
+
+
+void serviceRemoveTuples(MachineService * service, Tuple const * arguments)
+{
+	RelationBTreeRemoveTuples((BTree *) service->serviceParameter, arguments, REMOVE_NORMAL);
+}
+
+
+bool serviceIsEmpty(MachineService const * service)
+{
+	return BTreeNItems((BTree *) service->serviceParameter) == 0;
+}
+
+
+void serviceTeardown(MachineService * service)
+{
+	FreeRelationBTree((BTree *) service->serviceParameter);
+}
+
+
+// naming: create record?
+MachineService RelationBTreeCreateRecord(BTree * btree)
+{
+	return (MachineService) {
+		.contextSize = sizeof(RelationBTreeIterator),
+		.serviceParameter = (data64) btree,
+		.setupContext = &serviceSetupContext,
+		.call = &serviceCall,
+		.finalizeContext = &serviceFinalizeContext,
+		.addTuple = &serviceAddTuple,
+		.removeTuples = &serviceRemoveTuples,
+		.isEmpty = &serviceIsEmpty,
+		.teardown = &serviceTeardown,
+	};
 }

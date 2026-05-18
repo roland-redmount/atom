@@ -20,7 +20,7 @@ void testDictionary(void)
 	// test iteration
 	DictionaryIterator iterator;
 	DictionaryIterate(FormulaGetForm(rule), &iterator);
-	ASSERT_TRUE(DictionaryIteratorHasRecord(&iterator))
+	ASSERT_TRUE(DictionaryIteratorNext(&iterator))
 	// test that actors tuple is identical to the formula
 	Tuple const * actorsTuple = DictionaryIteratorPeekActors(&iterator);
 	for(index8 i = 0; i < arity; i++) {
@@ -31,8 +31,7 @@ void testDictionary(void)
 			)
 		)
 	}
-	DictionaryIteratorNext(&iterator);
-	ASSERT_FALSE(DictionaryIteratorHasRecord(&iterator))
+	ASSERT_FALSE(DictionaryIteratorNext(&iterator))
 	DictionaryIteratorEnd(&iterator);
 
 	// test remove tuple

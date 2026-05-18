@@ -75,10 +75,9 @@ void PrintString(Atom string)
 	PrintChar('"');
 	ListIterator iterator;
 	ListIterate(string, &iterator);
-	while(ListIteratorHasNext(&iterator)) {
+	while(ListIteratorNext(&iterator)) {
 		TypedAtom letter = ListIteratorGetElement(&iterator);
 		PrintChar(LetterToChar(letter, LETTER_LOWERCASE));
-		ListIteratorNext(&iterator);
 	}
 	ListIteratorEnd(&iterator);
 	PrintChar('"');

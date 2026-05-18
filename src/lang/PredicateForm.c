@@ -78,14 +78,13 @@ index8 PredicateRoleIndex(Atom predicateForm, Atom role)
 
 	index8 index = 0;
 	bool found = false;
-	while(MultisetIteratorHasNext(&iterator)) {
+	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		if(elementMultiple.element.atom == role) {
 			found = true;
 			break;
 		}
 		index += elementMultiple.multiple;
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 	ASSERT(found);
@@ -100,13 +99,12 @@ void PrintPredicateForm(Atom predicateForm)
 	MultisetIterate(predicateForm, &iterator);
 
 	PrintChar('(');
-	while(MultisetIteratorHasNext(&iterator)) {
+	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
 			PrintName(elementMultiple.element.atom);
 			PrintChar(' ');
 		}
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 	PrintChar(')');

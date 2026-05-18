@@ -27,8 +27,9 @@
  * reference counting. We could prevent "garbage collection" of services by
  * always keeping 1 reference to the AT_SERVICE atom in the stored ServiceRecord.
  *
- * NOTE: Currently, the services form must be a predicate form.
- * In principle is possible for services to have a clause form,
+ * TODO: Currently, the services form must be a predicate form, we should
+ * change that to term form.
+ * In principle is possible for a service singature in clause form,
  * such as (foo @x | bar @x) stating that either (foo @x) OR (bar @x)
  * is true for the atom @x, but we don't known which. We don't implement
  * this yet.
@@ -38,50 +39,13 @@
 #define SERVICEREGISTRY_H
 
 #include "kernel/RelationBTree.h"
+#include "kernel/service.h"
 
-/**
- * TODO: for bytecode to be able to create contexts from services
- * (instrution CTX), this structure must be represented as an Atom.
- * Currently we use AT_BYTECODE but this must be generalized
- * to cover native services.
- */
-
-enum ServiceType {
-	SERVICE_NONE = 0,
-	SERVICE_BYTECODE,
-	SERVICE_BTREE,
-};
-
-/**
- * This will subsume B-tree services.
- */
-typedef struct s_MachineService MachineService;
-
-struct s_MachineService {
-	size32 contextSize;
-	void (*initialize)(MachineService *);
-	bool (*call)(MachineService *);
-	void (*cleanup)(MachineService *);
-};
-
-
-
-typedef struct s_ServiceRecord {
-	Atom service;
-	// we store the form and parameters lists of the signature separately
-	// to allow iterating across all services matching a given form
-	Atom form;
-	Atom parameters;
-	enum ServiceType type;
-	union {
-		BTree * tree;
-		Atom bytecode;
-	} provider;
-} ServiceRecord;
 
 
 /**
- * Create a service record ID atom from a formula consisting 
+ * Create a service record ID atom from a formula consisting
+ * of a form and a parameter list
  */
 Atom CreateServiceRecordID(Atom form, Atom parameters);
 
@@ -109,16 +73,16 @@ size32 RegistryNServices(void);
  */
 
 /**
-* Create a core B-tree service. During bootstrap we cannot call FormArity()
-* so the arity must be specified. Returns the created B-tree.
+* Create a core B-tree service during bootstrap.
 */
-BTree * RegistryAddCoreBTreeService(index32 index, Atom form, size8 arity);
+void RegistryAddCoreBTreeService(index32 index, Atom form, BTree * btree);
 
 /**
  * Must be called during bootstrap, after all core services have been installed
  * and we are able to create parameter lists.
  */
 void RegistryFinalizeCoreServices(void);
+
 /**
  * Get the relation table corresponding to a core predicate.
  */
@@ -129,8 +93,15 @@ BTree * RegistryGetCoreTable(index32 index);
  */
 void RegistryTeardownCoreServices(void);
 
+
 /**
- * Add a B-tree backed service the registry.
+ * Add machine service to the registry.
+ * Returns an AT_SERVICE atom.
+ */
+Atom RegistryAddMachineService(Atom form, Atom parameters, MachineService const * machineService);
+
+/**
+ * Convenience function add a B-tree machine service the registry.
  * The registry takes ownership of btree, will deallocate it.
  * Returns an AT_SERVICE atom.
  */
@@ -140,7 +111,7 @@ Atom RegistryAddBTreeService(Atom form, BTree * btree);
  * Add a bytecode service to the registry.
  * Returns an AT_SERVICE atom.
  */
-Atom RegistryAddBytecodeService(Atom form, Atom bytecode);
+// Atom RegistryAddBytecodeService(Atom form, Atom bytecode);
 
 /**
  * Remove the given service from the registry.
@@ -157,11 +128,11 @@ void RegistryRemoveService(Atom service);
 ServiceRecord RegistryGetServiceRecord(Atom service);
 
 /**
- * Special case for B-tree services, where parameters are always in/out untyped.
- * If a matching B-tree service does not exist, returns a zero record.
+ * Special case for services where parameters are always in/out untyped.
+ * If a matching service does not exist, returns a zero record.
  * (Convenience function, keeping it for now)
  */
-ServiceRecord RegistryFindBTreeService(Atom form);
+ServiceRecord RegistryFindUntypedService(Atom form);
 
 
 /**
@@ -177,11 +148,9 @@ typedef struct {
  */
 void RegistryIterate(Atom form, RegistryIterator * iterator);
 
-bool RegistryIteratorHasService(RegistryIterator const * iterator);
+bool RegistryIteratorNext(RegistryIterator * iterator);
 
 ServiceRecord RegistryIteratorGetService(RegistryIterator * iterator);
-
-void RegistryIteratorNext(RegistryIterator * iterator);
 
 void RegistryIteratorEnd(RegistryIterator * iterator);
 

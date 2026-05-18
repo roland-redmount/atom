@@ -68,12 +68,11 @@ static void testPredicateForm(void)
 	MultisetIterate(predicateForm, &roleIterator);
 	ElementMultiple em;
 	for(index32 i = 0; i < EXAMPLE_PREDICATE_N_ROLES; i++) {
-		ASSERT_TRUE(MultisetIteratorHasNext(&roleIterator))
+		ASSERT_TRUE(MultisetIteratorNext(&roleIterator))
 		em = MultisetIteratorGetElement(&roleIterator);
 		ASSERT_UINT32_EQUAL(em.element.type, AT_NAME)
-		MultisetIteratorNext(&roleIterator);
 	}
-	ASSERT_FALSE(MultisetIteratorHasNext(&roleIterator))
+	ASSERT_FALSE(MultisetIteratorNext(&roleIterator))
 	MultisetIteratorEnd(&roleIterator);
 
 	IFactRelease(predicateForm);
@@ -158,7 +157,7 @@ static void testClauseForm(void)
 	MultisetIterator termFormIterator;
 	MultisetIterate(clauseForm, &termFormIterator);
 	for(index8 i = 0; i < EXAMPLE_CLAUSE_N_UNIQUE_TERMS; i++) {
-		ASSERT_TRUE(MultisetIteratorHasNext(&termFormIterator))
+		ASSERT_TRUE(MultisetIteratorNext(&termFormIterator))
 		ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
 		ASSERT_UINT32_EQUAL(em.element.type, AT_ID)
 		// order of term forms is arbitrary
@@ -168,9 +167,8 @@ static void testClauseForm(void)
 			ASSERT_DATA64_EQUAL(em.element.atom, termFormsFixture.negatedTermForm)
 			ASSERT_UINT32_EQUAL(em.multiple, 1)
 		}
-		MultisetIteratorNext(&termFormIterator);
 	}
-	ASSERT_FALSE(MultisetIteratorHasNext(&termFormIterator))
+	ASSERT_FALSE(MultisetIteratorNext(&termFormIterator))
 	MultisetIteratorEnd(&termFormIterator);
 
 	IFactRelease(clauseForm);

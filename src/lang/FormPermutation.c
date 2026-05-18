@@ -107,11 +107,10 @@ PredicateIterator * CreatePredicateIterator(Atom predicateForm)
 	MultisetIterate(predicateForm, &iterator);
 	iter->arity = 0;
 	for(index8 i = 0; i < iter->nUniqueRoles; i++) {
-		ASSERT(MultisetIteratorHasNext(&iterator));
+		ASSERT(MultisetIteratorNext(&iterator));
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		iter->rolePerm[i] = CreatePermutation(em.multiple);
 		iter->arity += em.multiple;
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 	return iter;
@@ -186,7 +185,7 @@ ClauseIterator * CreateClauseIterator(Atom clauseForm)
 	MultisetIterate(clauseForm, &iterator);
 	iter->arity = 0;
 	for(index8 i = 0; i < iter->nUniqueTerms; i++) {
-		ASSERT(MultisetIteratorHasNext(&iterator));
+		ASSERT(MultisetIteratorNext(&iterator));
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 	
 		iter->predFormPerm[i] = CreatePermutation(em.multiple);
@@ -294,7 +293,7 @@ ConjunctionIterator * CreateConjunctionIterator(Atom form)
 	MultisetIterator iterator;
 	MultisetIterate(form, &iterator);
 	for(index8 i = 0; i < iter->nClauses; i++) {
-		ASSERT(MultisetIteratorHasNext(&iterator));
+		ASSERT(MultisetIteratorNext(&iterator));
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 	
 		iter->clauseFormPerm[i] = CreatePermutation(em.multiple);

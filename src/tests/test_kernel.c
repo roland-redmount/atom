@@ -18,7 +18,7 @@ void testAssertRetract(void)
 	NameRelease(roles[1]);
 	
 	// check that service does not already exist
-	ServiceRecord record = RegistryFindBTreeService(form);
+	ServiceRecord record = RegistryFindUntypedService(form);
 	ASSERT(record.type == SERVICE_NONE)
 
 	// asserting the first fact should create the service
@@ -31,9 +31,9 @@ void testAssertRetract(void)
 		2
 	);
 	AssertFact(form, actors1);
-	record = RegistryFindBTreeService(form);
-	ASSERT(record.type == SERVICE_BTREE)
-	BTree * btree = record.provider.tree;
+	record = RegistryFindUntypedService(form);
+	ASSERT(record.type == SERVICE_MACHINE)
+	BTree * btree = (BTree *) record.provider.machineService.serviceParameter;
 
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 1)
 
@@ -53,7 +53,7 @@ void testAssertRetract(void)
 
 	// retracting the last fact should remove the service
 	RetractFact(form, actors1);
-	record = RegistryFindBTreeService(form);
+	record = RegistryFindUntypedService(form);
 	ASSERT(record.type == SERVICE_NONE)
 
 	FreeTuple(actors1);

@@ -223,9 +223,8 @@ void ListGetElementsArray(Atom list, TypedAtom * elements)
 	ListIterator iterator;
 	ListIterate(list, &iterator);
 	
-	for(index32 i = 0; ListIteratorHasNext(&iterator); i++) {
+	for(index32 i = 0; ListIteratorNext(&iterator); i++) {
 		elements[i] = ListIteratorGetElement(&iterator);
-		ListIteratorNext(&iterator);
 	}
 	ListIteratorEnd(&iterator);
 }
@@ -243,7 +242,7 @@ index32 ListGetPosition(Atom list, TypedAtom element)
 	RelationBTreeIterate(tree, queryTuple, &iterator);
 	
 	index32 p = 0;
-	if(RelationBTreeIteratorHasTuple(&iterator)) {
+	if(RelationBTreeIteratorNext(&iterator)) {
 		TypedAtom position = RelationBTreeIteratorGetAtom(
 			&iterator,
 			CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION)
@@ -274,8 +273,8 @@ int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, Type
 
 	int8 listOrder = 0;
 	while(true) {
-		bool hasNext1 = ListIteratorHasNext(&iterator1);
-		bool hasNext2 = ListIteratorHasNext(&iterator2);
+		bool hasNext1 = ListIteratorNext(&iterator1);
+		bool hasNext2 = ListIteratorNext(&iterator2);
 		if(!hasNext1 && hasNext2) {
 			listOrder = -1;  // list1 is a prefix of list2
 			break;
@@ -292,8 +291,6 @@ int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, Type
 			listOrder = atomOrder;
 			break;
 		}
-		ListIteratorNext(&iterator1);
-		ListIteratorNext(&iterator2);
 	}
 	ListIteratorEnd(&iterator1);
 	ListIteratorEnd(&iterator2);
@@ -309,9 +306,8 @@ void CopyListToTuple(Atom list, Tuple * tuple)
 	ListIterator iterator;
 	ListIterate(list, &iterator);
 	index8 i = 0;
-	while(ListIteratorHasNext(&iterator)) {
+	while(ListIteratorNext(&iterator)) {
 		TupleSetElement(tuple, i, ListIteratorGetElement(&iterator));
-		ListIteratorNext(&iterator);
 		i++;
 	}
 	ListIteratorEnd(&iterator);
@@ -333,9 +329,9 @@ void ListIterate(Atom list, ListIterator * iterator)
 }
 
 
-bool ListIteratorHasNext(ListIterator const * iterator)
+bool ListIteratorNext(ListIterator * iterator)
 {
-	return RelationBTreeIteratorHasTuple(&(iterator->treeIterator));
+	return RelationBTreeIteratorNext(&(iterator->treeIterator));
 }
 
 
@@ -343,12 +339,6 @@ TypedAtom ListIteratorGetElement(ListIterator const * iterator)
 {
 	Tuple const * tuple = RelationBTreeIteratorPeekTuple(&(iterator->treeIterator));
 	return TupleGetElement(tuple, CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT));
-}
-
-
-void ListIteratorNext(ListIterator * iterator)
-{
-	RelationBTreeIteratorNext(&(iterator->treeIterator));
 }
 
 
@@ -366,11 +356,10 @@ void PrintList(Atom list)
 	ListIterator iterator;
 	ListIterate(list, &iterator);
 
-	while(ListIteratorHasNext(&iterator)) {
+	while(ListIteratorNext(&iterator)) {
 		TypedAtom element = ListIteratorGetElement(&iterator);
 		PrintTypedAtom(element);
 		PrintChar(' ');
-		ListIteratorNext(&iterator);
 	}
 	ListIteratorEnd(&iterator);
 

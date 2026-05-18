@@ -60,12 +60,11 @@ static void testCreateList(void)
 	ListIterator iterator;
 	ListIterate(list, &iterator);
 	for(index8 i = 0; i < EXAMPLE_LIST_N_ELEMENTS; i++) {
-		ASSERT_TRUE(ListIteratorHasNext(&iterator))
+		ASSERT_TRUE(ListIteratorNext(&iterator))
 		TypedAtom element = ListIteratorGetElement(&iterator);
 		ASSERT_TRUE(SameTypedAtoms(element, fixture.atoms[i]))
-		ListIteratorNext(&iterator);
 	}
-	ASSERT_FALSE(ListIteratorHasNext(&iterator))
+	ASSERT_FALSE(ListIteratorNext(&iterator))
 	ListIteratorEnd(&iterator);
 
 	// test ListGetPosition
@@ -147,7 +146,7 @@ static void testCreateEmptyList(void)
 
 	ListIterator iterator;
 	ListIterate(emptyList, &iterator);
-	ASSERT_FALSE(ListIteratorHasNext(&iterator))
+	ASSERT_FALSE(ListIteratorNext(&iterator))
 	ListIteratorEnd(&iterator);
 
 	IFactRelease(emptyList);

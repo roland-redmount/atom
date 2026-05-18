@@ -93,13 +93,13 @@ static void btreeFreeService(void * item, size32 itemSize)
 	if(record->parameters)
 		IFactRelease(record->parameters);
 	switch(record->type) {
-		case SERVICE_BTREE: {
-			size32 nRows = RelationBTreeNRows(record->provider.tree);
-			if(nRows > 0) {
-				;
-				ASSERT(false)
+		case SERVICE_MACHINE: {
+			// machine services that can store tuples must be empty
+			MachineService * machineService = &(record->provider.machineService);
+			if(machineService->isEmpty) {
+				ASSERT(machineService->isEmpty(machineService))
 			}
-			FreeRelationBTree(record->provider.tree);
+			machineService->teardown(machineService);
 			break;
 		}
 		case SERVICE_BYTECODE:
@@ -107,6 +107,7 @@ static void btreeFreeService(void * item, size32 itemSize)
 		break;
 
 		default:
+		ASSERT(false)
 		break;
 	}
 }
@@ -130,7 +131,6 @@ static void addService(ServiceRecord const * service)
 }
 
 
-
 void SetupRegistry(void)
 {
 	registry.tree = BTreeCreate(
@@ -148,9 +148,12 @@ size32 RegistryNServices(void)
 }
 
 
+// TODO: this should return a MachineService record
+// so that we can generalize from B-Tree to other storage types.
 BTree * RegistryGetCoreTable(index32 index)
 {
-	return registry.coreServices[index].provider.tree;
+	// TODO: this is hack, assuming the service is a B-Tree
+	return (BTree *) registry.coreServices[index].provider.machineService.serviceParameter;
 }
 
 
@@ -173,18 +176,18 @@ static Atom createBTreeParameterList(size8 arity)
 }
 
 
-BTree * RegistryAddCoreBTreeService(index32 index, Atom form, size8 arity)
+void RegistryAddCoreBTreeService(index32 index, Atom form, BTree * btree)
 {
 	ASSERT(index >= 1);
 	ASSERT(index <= N_CORE_PREDICATES)
 
 	// store ServiceRecord in the core services array
 	ServiceRecord * record = &(registry.coreServices[index]);
-	record->type = SERVICE_BTREE;
+	record->type = SERVICE_MACHINE;
 	record->form = form;
-	record->provider.tree = CreateRelationBTree(arity);
-	// see RegistryFixCoreServiceParameters() for remaining setup
-	return record->provider.tree;
+	record->provider.machineService = RelationBTreeCreateRecord(btree);
+	
+	// see RegistryFinalizeCoreServices() for remaining setup
 }
 
 
@@ -225,17 +228,15 @@ void RegistryTeardownCoreServices(void)
 }
 
 
-Atom RegistryAddBTreeService(Atom form, BTree * btree)
+Atom RegistryAddMachineService(Atom form,  Atom parameters, MachineService const * machineService)
 {
 	ASSERT(IsPredicateForm(form))
-	size8 arity = FormArity(form);
-	Atom parameters = createBTreeParameterList(arity);
 	ServiceRecord record = {
 		.service = serviceRecordHash(form, parameters),
-		.type = SERVICE_BTREE,
+		.type = SERVICE_MACHINE,
 		.form = form,
 		.parameters = parameters,
-		.provider.tree = btree
+		.provider.machineService = *machineService,
 	};
 	addService(&record);
 	IFactAcquire(form);
@@ -244,6 +245,16 @@ Atom RegistryAddBTreeService(Atom form, BTree * btree)
 }
 
 
+Atom RegistryAddBTreeService(Atom form, BTree * btree)
+{
+	ASSERT(IsPredicateForm(form))
+	size8 arity = FormArity(form);
+	Atom parameters = createBTreeParameterList(arity);
+	MachineService machineService = RelationBTreeCreateRecord(btree);
+	return RegistryAddMachineService(form, parameters, &machineService);
+}
+
+/*
 Atom RegistryAddBytecodeService(Atom form, Atom bytecode)
 {
 	ASSERT(IsPredicateForm(form))
@@ -263,7 +274,7 @@ Atom RegistryAddBytecodeService(Atom form, Atom bytecode)
 	IFactAcquire(record.provider.bytecode);
 	return record.service;
 }
-
+*/
 
 void RegistryRemoveService(Atom service)
 {
@@ -284,8 +295,12 @@ ServiceRecord RegistryGetServiceRecord(Atom service)
 	return record;
 }
 
-
-ServiceRecord RegistryFindBTreeService(Atom form)
+/**
+ * TODO: which services are always untyped? Currently B-Tree,
+ * but possibly also "composite" services (JOIN, UNION) ?
+ * We might remove this until the architecture is settled ...
+ */
+ServiceRecord RegistryFindUntypedService(Atom form)
 {
 	// TODO: this should probably be done via RegistryIterate()
 
@@ -301,7 +316,7 @@ ServiceRecord RegistryFindBTreeService(Atom form)
 	Atom service = serviceRecordHash(form, parameters);
 	ServiceRecord record = RegistryGetServiceRecord(service);
 	IFactRelease(parameters);
-	ASSERT(record.type == SERVICE_BTREE || record.type == SERVICE_NONE)
+	// TODO: how to verify the service is untyped? probably need a flag
 	return record;
 }
 
@@ -318,17 +333,6 @@ void RegistryIterate(Atom form, RegistryIterator * iterator)
 }
 
 
-bool RegistryIteratorHasService(RegistryIterator const * iterator)
-{
-	if(BTreeIteratorHasItem(&(iterator->btreeIterator))) {
-		ServiceRecord const * btreeRecord = BTreeIteratorPeekItem(&(iterator->btreeIterator));
-		if(compareServiceRecords(btreeRecord, &(iterator->keyRecord)) == 0)
-			return true;
-	}
-	return false;
-}
-
-
 ServiceRecord RegistryIteratorGetService(RegistryIterator * iterator)
 {
 	ServiceRecord const * btreeRecord = BTreeIteratorPeekItem(&(iterator->btreeIterator));
@@ -337,9 +341,14 @@ ServiceRecord RegistryIteratorGetService(RegistryIterator * iterator)
 }
 
 
-void RegistryIteratorNext(RegistryIterator * iterator)
+bool RegistryIteratorNext(RegistryIterator * iterator)
 {
-	BTreeIteratorNext(&(iterator->btreeIterator));
+	if(BTreeIteratorNext(&(iterator->btreeIterator))) {
+		ServiceRecord const * btreeRecord = BTreeIteratorPeekItem(&(iterator->btreeIterator));
+		if(compareServiceRecords(btreeRecord, &(iterator->keyRecord)) == 0)
+			return true;		
+	}
+	return false;
 }
 
 
@@ -356,8 +365,8 @@ void PrintService(ServiceRecord const * service)
 	IFactRelease(signature);
 	PrintChar(' ');
 	switch(service->type) {
-		case SERVICE_BTREE:
-		PrintCString("SERVICE_BTREE");
+		case SERVICE_MACHINE:
+		PrintCString("SERVICE_MACHINE");
 		break;
 
 		case SERVICE_BYTECODE:

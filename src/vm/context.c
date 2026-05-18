@@ -13,10 +13,9 @@ static void copyListDatums(Atom list, Tuple * tuple)
 	ListIterator iterator;
 	ListIterate(list, &iterator);
 	index8 index = 0;
-	while(ListIteratorHasNext(&iterator)) {
+	while(ListIteratorNext(&iterator)) {
 		TypedAtom typedAtom = ListIteratorGetElement(&iterator);
 		TupleSetElement(tuple, index, typedAtom);
-		ListIteratorNext(&iterator);
 		index++;
 	}
 	ListIteratorEnd(&iterator);
@@ -89,13 +88,12 @@ Atom CreateBytecodeContext(ServiceRecord * service, Atom parentContext)
 	ListIterator iterator;
 	ListIterate(service->parameters, &iterator);
 	index8 index = 0;
-	while(ListIteratorHasNext(&iterator)) {
+	while(ListIteratorNext(&iterator)) {
 		Atom parameter = ListIteratorGetElement(&iterator).atom;
 		TupleSetElement(
 			context->arguments, index,
 			CreateTypedAtom(ParameterGetType(parameter), 0)
 		);
-		ListIteratorNext(&iterator);
 		index++;
 	}
 	ListIteratorEnd(&iterator);
@@ -132,6 +130,11 @@ Atom CreateCompiledContext(ServiceRecord * service)
 	CompiledContext * compiledContext = &(context->variant.compiled);
 	
 	compiledContext->btree = service->provider.tree;
+	RelationBTreeIterate(
+		compiledContext->btree,
+		context->arguments,
+		&(compiledContext->iterator)
+	);
 	return (Atom) context;
 }
 
@@ -151,20 +154,7 @@ bool CompiledContextCall(Atom context)
 
 	// TODO: we must ensure that the results tuple matches
 	// the atom type of the operand that they are copied to.
-	// This involves (1) filtering out any  
-
-	if(!compiledContext->iterator.btree) {
-		// first call, begin new iteration
-		RelationBTreeIterate(
-			compiledContext->btree,
-			_context->arguments,
-			&(compiledContext->iterator)
-		);
-	}
-	else {
-		RelationBTreeIteratorNext(&(compiledContext->iterator));
-	}
-	if(RelationBTreeIteratorHasTuple(&(compiledContext->iterator))) {
+	if(RelationBTreeIteratorNext(&(compiledContext->iterator))) {
 		RelationBTreeIteratorGetTuple(
 			&(compiledContext->iterator), _context->arguments);
 		return true;

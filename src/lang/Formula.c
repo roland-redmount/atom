@@ -214,14 +214,13 @@ void ClauseGetTermActors(
 	index8 index = 0;
 	bool found = false;
 	ElementMultiple elementMultiple;
-	while(MultisetIteratorHasNext(&iterator)) {
+	while(MultisetIteratorNext(&iterator)) {
 		elementMultiple = MultisetIteratorGetElement(&iterator);
 		if(elementMultiple.element.atom == termForm) {
 			found = true;
 			break;
 		}
 		index += elementMultiple.multiple;
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 	ASSERT(found);
@@ -277,7 +276,7 @@ static void printPredicate(Atom predicateForm, Atom atomsList, index8 * atomInde
 {	
 	MultisetIterator iterator;
 	MultisetIterate(predicateForm, &iterator);
-	while(MultisetIteratorHasNext(&iterator)) {	
+	while(MultisetIteratorNext(&iterator)) {	
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
 			PrintName(em.element.atom);
@@ -286,7 +285,6 @@ static void printPredicate(Atom predicateForm, Atom atomsList, index8 * atomInde
 			PrintChar(' ');
 			(*atomIndex)++;
 		}
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 }
@@ -306,12 +304,11 @@ static void printClause(Atom clauseForm, Atom atomsList, index8 * atomIndex)
 	MultisetIterator iterator;
 	MultisetIterate(clauseForm, &iterator);
 
-	while(MultisetIteratorHasNext(&iterator)) {	
+	while(MultisetIteratorNext(&iterator)) {	
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
-		MultisetIteratorNext(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
 			printTerm(em.element.atom, atomsList, atomIndex);
-			if((j < em.multiple - 1) | MultisetIteratorHasNext(&iterator))
+			if(j < em.multiple - 1)
 				PrintCString(" | ");
 		}
 	}
@@ -324,12 +321,11 @@ static void printConjunction(Atom form, Atom atomsList, index8* atomIndex)
 	MultisetIterator iterator;
 	MultisetIterate(form, &iterator);
 
-	while(MultisetIteratorHasNext(&iterator)) {	
+	while(MultisetIteratorNext(&iterator)) {	
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
-		MultisetIteratorNext(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
 			printClause(em.element.atom, atomsList, atomIndex);
-			if((j < em.multiple - 1) | MultisetIteratorHasNext(&iterator))
+			if(j < em.multiple - 1)
 				PrintCString(" & ");
 		}
 	}

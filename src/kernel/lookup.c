@@ -121,7 +121,7 @@ void LookupAddPredicateRoles(Atom predicateForm, Tuple const * actors)
 	MultisetIterator formIterator;
 	MultisetIterate(predicateForm, &formIterator);
 	index8 index = 0;
-	while(MultisetIteratorHasNext(&formIterator)) {
+	while(MultisetIteratorNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
 		for(index8 i = 0; i < em.multiple; i++) {
 			TypedAtom actor = TupleGetElement(actors, index);
@@ -129,7 +129,6 @@ void LookupAddPredicateRoles(Atom predicateForm, Tuple const * actors)
 				AtomAddRole(actor.atom, predicateForm, em.element.atom);
 			index++;
 		}
-		MultisetIteratorNext(&formIterator);
 	}
 	MultisetIteratorEnd(&formIterator);
 }
@@ -175,7 +174,7 @@ void LookupRemovePredicateRoles(Atom predicateForm, Tuple const * actors)
 	MultisetIterator formIterator;
 	MultisetIterate(predicateForm, &formIterator);
 	index8 index = 0;
-	while(MultisetIteratorHasNext(&formIterator)) {
+	while(MultisetIteratorNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
 		for(index8 i = 0; i < em.multiple; i++) {
 			TypedAtom actor = TupleGetElement(actors, index);
@@ -183,7 +182,6 @@ void LookupRemovePredicateRoles(Atom predicateForm, Tuple const * actors)
 				AtomRemoveRole(actor.atom, predicateForm, em.element.atom);
 			index++;
 		}
-		MultisetIteratorNext(&formIterator);
 	}
 	MultisetIteratorEnd(&formIterator);
 }
@@ -201,7 +199,7 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm)
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, lookup.btree);
 	Atom previousAtom = 0;
-	while(BTreeIteratorHasItem(&iterator)) {
+	while(BTreeIteratorNext(&iterator)) {
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
 		if(record->predicateForm == predicateForm) {
 			// since lookup entries are ordered by atom,
@@ -211,7 +209,6 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm)
 				previousAtom = record->atom;
 			}
 		}
-		BTreeIteratorNext(&iterator);
 	}
 	BTreeIteratorEnd(&iterator);
 
@@ -232,32 +229,27 @@ void LookupIterate(Atom atom, LookupIterator * iterator)
 	iterator->query.role = 0;
 
 	BTreeIterate(&(iterator->treeIterator), lookup.btree);
-	BTreeIteratorSeek(&(iterator->treeIterator), &(iterator->query));
-}
-
-
-/**
- * Test if the iterator has a next element.
- * If this function returns true, the tuple can be accessed by 
- * RelationBTreeIteratorGetTuple(). 
- */
-bool LookupIteratorHasRecord(LookupIterator const * iterator)
-{
-	if(BTreeIteratorHasItem(&(iterator->treeIterator))) {
-		LookupRecord const * record = BTreeIteratorPeekItem(&(iterator->treeIterator));
-		if(compareRecords(record, &(iterator->query)) == 0)
-			return true;
-	}
-	return false;
 }
 
 
 /**
  * Advance the iterator to the next record matching the query, if any
+ * If this function returns true, the tuple can be accessed by 
+ * RelationBTreeIteratorGetTuple(). 
  */
-void LookupIteratorNext(LookupIterator * iterator)
+bool LookupIteratorNext(LookupIterator * iterator)
 {
-	BTreeIteratorNext(&(iterator->treeIterator));
+	bool foundItem;
+	if(BTreeIteratorBeforeFirst(&(iterator->treeIterator)))
+		foundItem = BTreeIteratorSeek(&(iterator->treeIterator), &(iterator->query));
+	else
+		foundItem = BTreeIteratorNext(&(iterator->treeIterator));
+	if(foundItem) {
+		LookupRecord const * record = BTreeIteratorPeekItem(&(iterator->treeIterator));
+		if(compareRecords(record, &(iterator->query)) == 0)
+			return true;
+	}
+	return false;
 }
 
 
@@ -287,7 +279,7 @@ void LookupDump(void)
 	PrintF("Lookup table %u records:\n", BTreeNItems(lookup.btree));
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, lookup.btree);
-	while(BTreeIteratorHasItem(&iterator)) {
+	while(BTreeIteratorNext(&iterator)) {
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
 		PrintIFact(record->atom);
 		PrintChar(' ');
@@ -295,7 +287,6 @@ void LookupDump(void)
 		PrintChar(' ');
 		PrintName(record->role);
 		PrintF(" %u\n", record->nFacts);
-		BTreeIteratorNext(&iterator);
 	}
 	BTreeIteratorEnd(&iterator);
 }

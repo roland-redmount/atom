@@ -163,17 +163,21 @@ void DictionaryIterate(Atom clauseForm, DictionaryIterator * iterator)
 	}
 	else {
 		BTreeIterate(&(iterator->btreeIterator), dictionary.btrees[arity]);
-		BTreeIteratorSeek(&(iterator->btreeIterator), iterator->keyRecord);
 	}
 }
 
 
-bool DictionaryIteratorHasRecord(DictionaryIterator * iterator)
+bool DictionaryIteratorNext(DictionaryIterator * iterator)
 {
 	if(!iterator->btreeIterator.btree)
 		return false;
-		
-	if(BTreeIteratorHasItem(&(iterator->btreeIterator))) {
+	bool foundItem;
+	if(BTreeIteratorBeforeFirst(&(iterator->btreeIterator)))
+		foundItem = BTreeIteratorSeek(&(iterator->btreeIterator), iterator->keyRecord);
+	else
+		foundItem = BTreeIteratorNext(&(iterator->btreeIterator));
+
+	if(foundItem) {
 		byte const * btreeRecord = BTreeIteratorPeekItem(&(iterator->btreeIterator));
 		if(compareRecords(btreeRecord, iterator->keyRecord) == 0)
 			return true;
@@ -186,12 +190,6 @@ Tuple const * DictionaryIteratorPeekActors(DictionaryIterator * iterator)
 {
 	byte const * record = BTreeIteratorPeekItem(&(iterator->btreeIterator));
 	return recordPeekTuple((byte *) record);
-}
-
-
-void DictionaryIteratorNext(DictionaryIterator * iterator)
-{
-	BTreeIteratorNext(&(iterator->btreeIterator));
 }
 
 

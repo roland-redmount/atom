@@ -271,7 +271,8 @@ void testBTreeIterator(void)
     BTreeIterator iterator;
 	BTreeIterate(&iterator, btree);
 	ASSERT_TRUE(BTreeIsWriteLocked(btree))
-	ASSERT_FALSE(BTreeIteratorHasItem(&iterator))
+
+	ASSERT_FALSE(BTreeIteratorNext(&iterator))
 	BTreeIteratorEnd(&iterator);
 	ASSERT_FALSE(BTreeIsWriteLocked(btree))
 	
@@ -286,12 +287,11 @@ void testBTreeIterator(void)
 	BTreeIterate(&iterator, btree);
 	ASSERT_TRUE(BTreeIsWriteLocked(btree))
 	for(index32 i = 0; i < nTestItems; i++) {
-		ASSERT_TRUE(BTreeIteratorHasItem(&iterator));
+		ASSERT_TRUE(BTreeIteratorNext(&iterator));
 		TestItem const * item = BTreeIteratorPeekItem(&iterator);
 		ASSERT_TRUE(testItemsEqual(&items[i], item))
-		BTreeIteratorNext(&iterator);
 	}
-	ASSERT_FALSE(BTreeIteratorHasItem(&iterator))
+	ASSERT_FALSE(BTreeIteratorNext(&iterator))
 	BTreeIteratorEnd(&iterator);
 	ASSERT_FALSE(BTreeIsWriteLocked(btree))
 
@@ -300,15 +300,14 @@ void testBTreeIterator(void)
 	for(index32 k = 0; k < 100; k++) {
 		// seek to a randomly chosen item
 		index32 i = RandomInteger(0, nTestItems - 1);
-		BTreeIteratorSeek(&iterator, &items[i]);
+		ASSERT_TRUE(BTreeIteratorSeek(&iterator, &items[i]))
 		// iterate to end
 		for(index32 j = i; j < nTestItems; j++) {
-			ASSERT_TRUE(BTreeIteratorHasItem(&iterator));
 			TestItem const * item = BTreeIteratorPeekItem(&iterator);
 			ASSERT_TRUE(testItemsEqual(&items[j], item))
-			BTreeIteratorNext(&iterator);
+			// all but the last item has a next item
+			ASSERT_TRUE(BTreeIteratorNext(&iterator) == (j < nTestItems - 1))
 		}
-		ASSERT_FALSE(BTreeIteratorHasItem(&iterator))
 	}
 	BTreeIteratorEnd(&iterator);
 

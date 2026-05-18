@@ -180,9 +180,9 @@ static void setupCoreRoleNames(void)
 
 void bootstrapAssertFact(Atom predicateForm, Tuple const * actors)
 {
-	ServiceRecord record = RegistryFindBTreeService(predicateForm);
-	ASSERT(record.type == SERVICE_BTREE)
-	RelationBTreeAddTuple(record.provider.tree, actors);
+	ServiceRecord record = RegistryFindUntypedService(predicateForm);
+	ASSERT(record.type == SERVICE_MACHINE)
+	record.provider.machineService.addTuple(&record.provider.machineService, actors);
 }
 
 
@@ -234,20 +234,22 @@ static void setupCoreServices(void)
 	kernel.corePredicateForms[FORM_PREDICATE_FORM] = predicateForm;
 
 	// create services and set role index arrays
-	BTree * multisetBTree = RegistryAddCoreBTreeService(
+	BTree * multisetBTree = CreateRelationBTree(corePredicateArity[FORM_MULTISET_ELEMENT_MULTIPLE]);
+	RegistryAddCoreBTreeService(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
 		multisetForm,
-		corePredicateArity[FORM_MULTISET_ELEMENT_MULTIPLE]
+		multisetBTree
 	);
 
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][0] = MULTISET_MULTISET_COLUMN;
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][1] = MULTISET_ELEMENT_COLUMN;
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][2] = MULTISET_MULTIPLE_COLUMN;
 
-	BTree * predicateFormBTree = RegistryAddCoreBTreeService(
+	BTree * predicateFormBTree = CreateRelationBTree(corePredicateArity[FORM_PREDICATE_FORM]);
+	RegistryAddCoreBTreeService(
 		FORM_PREDICATE_FORM,
 		predicateForm,
-		corePredicateArity[FORM_PREDICATE_FORM]
+		predicateFormBTree
 	);
 	kernel.corePredicateRoleIndex[FORM_PREDICATE_FORM][0] = 0;
 	
@@ -348,16 +350,14 @@ static void setupCoreServices(void)
 			roles[j] = kernel.coreRoleNames[coreFormRoleIds[i][j]];
 
 		Atom form = CreatePredicateForm(roles, corePredicateArity[i]);
-
 		kernel.corePredicateForms[i] = form;
-		RegistryAddCoreBTreeService(i, form, corePredicateArity[i]);
+
+		BTree * btree = CreateRelationBTree(corePredicateArity[i]);
+		RegistryAddCoreBTreeService(i, form, btree);
 
 		// precompute role indices (relation columns) for GetPredicateRoleIndex()
-		for(index8 j = 0; j < corePredicateArity[i]; j++) {
-			kernel.corePredicateRoleIndex[i][j] = PredicateRoleIndex(
-				kernel.corePredicateForms[i], kernel.coreRoleNames[coreFormRoleIds[i][j]]
-			);
-		}
+		for(index8 j = 0; j < corePredicateArity[i]; j++)
+			kernel.corePredicateRoleIndex[i][j] = PredicateRoleIndex(form, roles[j]);
 	}
 	// NOTE: we now hold 1 reference to each of the core predicate forms.
 
@@ -385,7 +385,7 @@ void KernelInitialize(void)
 	setupCoreRoleNames();
 	setupCoreServices();
 
-	VMInitialize();
+	// VMInitialize();
 
 	kernel.nCoreIFacts = TotalIFactCount();
 	kernel.nCoreIFactRefs = TotalIFactReferenceCount();
@@ -451,9 +451,9 @@ void AssertFact(Atom predicateForm, Tuple const * actors)
 	// TODO: currently we only support creating predicates
 	ASSERT(IsPredicateForm(predicateForm));
 	// add tuple to relation table
-	ServiceRecord record = RegistryFindBTreeService(predicateForm);
-	if(record.type == SERVICE_BTREE) {
-		RelationBTreeAddTuple(record.provider.tree, actors);
+	ServiceRecord record = RegistryFindUntypedService(predicateForm);
+	if(record.type == SERVICE_MACHINE) {
+		record.provider.machineService.addTuple(&record.provider.machineService, actors);
 	}
 	else if(record.type == SERVICE_NONE) {
 		// create new relation table
@@ -471,15 +471,14 @@ void AssertFact(Atom predicateForm, Tuple const * actors)
 
 void RetractFact(Atom predicateForm, Tuple * actors)
 {
-	ServiceRecord record = RegistryFindBTreeService(predicateForm);
-	ASSERT(record.type == SERVICE_BTREE)
-	BTree * btree = record.provider.tree;
-	ASSERT(btree)
+	ServiceRecord record = RegistryFindUntypedService(predicateForm);
+	ASSERT(record.type == SERVICE_MACHINE)
 	// NOTE: this can cause IFacts to be removed if the tuple
 	// being removed holds the last reference to an IFact
-	RelationBTreeRemoveTuples(btree, actors, REMOVE_NORMAL);
+	record.provider.machineService.removeTuples(&record.provider.machineService, actors);
 	// remove btree if empty
-	if(RelationBTreeNRows(btree) == 0) {
+	// NOTE: I think this should be an explicit function in ServiceRegistry, purgeEmptyService() or such
+	if(record.provider.machineService.isEmpty(&record.provider.machineService)) {
 		RegistryRemoveService(record.service);
 	}
 
@@ -490,11 +489,11 @@ void RetractFact(Atom predicateForm, Tuple * actors)
 
 void RetractAllFacts(Atom predicateForm)
 {
-	ServiceRecord record = RegistryFindBTreeService(predicateForm);
-	ASSERT(record.type == SERVICE_BTREE)
-	RelationBTreeRemoveTuples(record.provider.tree, 0, REMOVE_NORMAL);
+	ServiceRecord record = RegistryFindUntypedService(predicateForm);
+	ASSERT(record.type == SERVICE_MACHINE)
+	record.provider.machineService.removeTuples(&record.provider.machineService, 0);
 	// remove btree if empty
-	if(RelationBTreeNRows(record.provider.tree) == 0) {
+	if(record.provider.machineService.isEmpty(&record.provider.machineService)) {
 		RegistryRemoveService(record.service);
 	}
 	LookupRemoveAllPredicateRoles(predicateForm);
