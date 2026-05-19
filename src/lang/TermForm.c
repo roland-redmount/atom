@@ -41,7 +41,7 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 	IFactBeginConjunction(
 		&draft,
 		termForm,
-		RegistryGetCoreTable(FORM_TERM_FORM),
+		RegistryGetCoreBTreeService(FORM_TERM_FORM),
 		CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM)
 	);
 	Tuple * tuple = CreateTuple(3);
@@ -70,7 +70,7 @@ bool IsTermForm(Atom atom)
 
 Atom GetPredicateForm(Atom termForm)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_TERM_FORM);
+	BTree * tree = RegistryGetCoreBTreeService(FORM_TERM_FORM);
 
 	Tuple * query = CreateTuple(3);
 	TermFormSetTuple(query,
@@ -85,7 +85,7 @@ Atom GetPredicateForm(Atom termForm)
 
 bool TermFormGetSign(Atom termForm)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_TERM_FORM);
+	BTree * tree = RegistryGetCoreBTreeService(FORM_TERM_FORM);
 
 	Tuple * query = CreateTuple(3);
 	TermFormSetTuple(query, CreateTypedAtom(AT_ID, termForm), anonymousVariable, anonymousVariable);

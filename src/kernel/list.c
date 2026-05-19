@@ -69,7 +69,7 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 	IFactBeginConjunction(
 		draft,
 		listLengthForm, 
-		RegistryGetCoreTable(FORM_LIST_LENGTH),
+		RegistryGetCoreBTreeService(FORM_LIST_LENGTH),
 		CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LIST)
 	);
 
@@ -88,7 +88,7 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 		IFactBeginConjunction(
 			draft,
 			GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT),
-			RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT),
+			RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT),
 			CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST)
 		);
 
@@ -118,7 +118,7 @@ index32 ListAddElement(IFactDraft * draft, TypedAtom element)
 		IFactBeginConjunction(
 			draft,
 			GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT),
-			RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT),
+			RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT),
 			CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST)
 		);
 	}
@@ -189,7 +189,7 @@ bool IsList(Atom atom)
 
 size32 ListLength(Atom list)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_LIST_LENGTH);
+	BTree * tree = RegistryGetCoreBTreeService(FORM_LIST_LENGTH);
 
 	Tuple * queryTuple = CreateTuple(2);
 	ListLengthSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), anonymousVariable);
@@ -204,7 +204,7 @@ size32 ListLength(Atom list)
 
 TypedAtom ListGetElement(Atom list, index32 position)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
+	BTree * tree = RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT);
 
 	Tuple * queryTuple = CreateTuple(3);
 	ListSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), CreateTypedAtom(AT_UINT, position), anonymousVariable);
@@ -233,7 +233,7 @@ void ListGetElementsArray(Atom list, TypedAtom * elements)
 index32 ListGetPosition(Atom list, TypedAtom element)
 {
 	ASSERT(IsList(list))
-	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
+	BTree * tree = RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT);
 
 	Tuple * queryTuple = CreateTuple(3);
 	ListSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), anonymousVariable, element);
@@ -322,7 +322,7 @@ void CopyListToTuple(Atom list, Tuple * tuple)
 
 void ListIterate(Atom list, ListIterator * iterator)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
+	BTree * tree = RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT);
 	iterator->queryTuple = CreateTuple(3);
 	ListSetTuple(iterator->queryTuple, CreateTypedAtom(AT_ID, list), anonymousVariable, anonymousVariable);
 	RelationBTreeIterate(tree, iterator->queryTuple, &(iterator->treeIterator));

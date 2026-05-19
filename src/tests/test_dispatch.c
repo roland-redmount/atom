@@ -76,6 +76,7 @@ int main(int argc, char * argv[])
 	// ExecuteTest(testDispatchToRule);
 
 	// TeardownServiceLibrary();
+	
 	KernelShutdown();
 
 	TestSummary();

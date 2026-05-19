@@ -35,8 +35,8 @@ static AtomsFixture createAtomsFixture(void)
 static void testCreateList(void)
 {
 	AtomsFixture fixture = createAtomsFixture();
-	BTree * listLength = RegistryGetCoreTable(FORM_LIST_LENGTH);
-	BTree * listPositionElement = RegistryGetCoreTable(FORM_LIST_POSITION_ELEMENT);
+	BTree * listLength = RegistryGetCoreBTreeService(FORM_LIST_LENGTH);
+	BTree * listPositionElement = RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT);
 	size32 listLengthNRowsInitial = RelationBTreeNRows(listLength);
 	size32 listPositionElementNRowsInitial = RelationBTreeNRows(listPositionElement);
 	

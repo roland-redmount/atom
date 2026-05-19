@@ -12,7 +12,7 @@
 
 static void testMultiset(void)
 {
-	BTree * table = RegistryGetCoreTable(FORM_MULTISET_ELEMENT_MULTIPLE);
+	BTree * table = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
 	uint32 initialNRows = RelationBTreeNRows(table);
 	
 	TypedAtom elements[] = {

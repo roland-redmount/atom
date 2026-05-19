@@ -33,6 +33,9 @@
  * such as (foo @x | bar @x) stating that either (foo @x) OR (bar @x)
  * is true for the atom @x, but we don't known which. We don't implement
  * this yet.
+ * 
+ * NOTE: since service records are fixed size, we could store them in a pool.
+ * This would allow us to directly refer to services by pointers.
  */
 
 #ifndef SERVICEREGISTRY_H
@@ -83,10 +86,16 @@ void RegistryAddCoreBTreeService(index32 index, Atom form, BTree * btree);
  */
 void RegistryFinalizeCoreServices(void);
 
+
+/**
+ * Get the service record corresponding to a core predicate.
+ */
+ServiceRecord RegistryGetCoreServiceRecord(index32 index);
+
 /**
  * Get the relation table corresponding to a core predicate.
  */
-BTree * RegistryGetCoreTable(index32 index);
+BTree * RegistryGetCoreBTreeService(index32 index);
 
 /**
  * Remove all core services.

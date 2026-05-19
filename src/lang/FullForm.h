@@ -22,6 +22,7 @@ size8 FullFormArity(Atom form);
 // uint8 ClauseMultiplicity(Atom form, uint8 index);
 // Atom GetClauseForm(Atom form, index8 index);
 
+// TODO: implement this
 void PrintForm(Atom form);
 
 

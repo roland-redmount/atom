@@ -49,7 +49,7 @@
  * for indexing. For example, for the form (position list element) the
  * "indexing" column order should be (list position element) to achieve
  * efficient searcher for quey tuples (@list _ _) and (@list @position _).
- * We therefore need to store tuples in a different atom order than that
+ * We therefore need to index tuples in a different atom order than that
  * given by the form.
  */
 
@@ -123,7 +123,8 @@ void RelationBTreeIterate(BTree * tree, Tuple const * queryTuple, RelationBTreeI
 	SetMemory(iterator, sizeof(RelationBTreeIterator), 0);
 	iterator->btree = tree;
 	iterator->nColumns = RelationBTreeNColumns(tree);
-	iterator->queryTuple = queryTuple;
+	iterator->queryTuple = CreateTuple(queryTuple->nAtoms);
+	CopyTuples(queryTuple, iterator->queryTuple);
 	BTreeIterate(&(iterator->treeIterator), tree);
 }
 
@@ -183,6 +184,7 @@ Tuple const * RelationBTreeIteratorPeekTuple(RelationBTreeIterator const * itera
 void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator)
 {
 	BTreeIteratorEnd(&(iterator->treeIterator));
+	FreeTuple(iterator->queryTuple);
 	SetMemory(iterator, sizeof(RelationBTreeIterator), 0);
 }
 
@@ -308,23 +310,32 @@ void RelationBTreeDump(BTree * tree)
 /**
  * Stubs for using a B-tree as a service
  */
-static void serviceSetupContext(MachineService * service, void * context, Tuple * arguments)
+static void * serviceSetupContext(MachineService * service, Tuple const * arguments)
 {
 	BTree * btree = (BTree *) service->serviceParameter;
-	RelationBTreeIterate(btree, arguments, (RelationBTreeIterator *) context);
+	RelationBTreeIterator * iterator = Allocate(sizeof(RelationBTreeIterator));
+	RelationBTreeIterate(btree, arguments, iterator);
+	return iterator;
 }
 
 
-static bool serviceCall(void * context)
+static bool serviceCall(void * context, Tuple * result)
 {
 	RelationBTreeIterator * iterator = context;
-	return RelationBTreeIteratorNext(iterator);
+	bool hasTuple = RelationBTreeIteratorNext(iterator);
+	if(hasTuple) {
+		Tuple const * tuple = RelationBTreeIteratorPeekTuple(iterator);
+		CopyTuples(tuple, result);
+	}
+	return hasTuple;
 }
 
 
 static void serviceFinalizeContext(void * context)
 {
-	RelationBTreeIteratorEnd((RelationBTreeIterator *) context);
+	RelationBTreeIterator * iterator = context;
+	RelationBTreeIteratorEnd(iterator);
+	Free(iterator);
 }
 
 
@@ -356,7 +367,6 @@ void serviceTeardown(MachineService * service)
 MachineService RelationBTreeCreateRecord(BTree * btree)
 {
 	return (MachineService) {
-		.contextSize = sizeof(RelationBTreeIterator),
 		.serviceParameter = (data64) btree,
 		.setupContext = &serviceSetupContext,
 		.call = &serviceCall,

@@ -9,7 +9,7 @@
 
 static void testPair(void)
 {
-	BTree * pairTable = RegistryGetCoreTable(FORM_PAIR_LEFT_RIGHT);
+	BTree * pairTable = RegistryGetCoreBTreeService(FORM_PAIR_LEFT_RIGHT);
 	uint32 initialNRows = RelationBTreeNRows(pairTable);
 
 	// create a pair

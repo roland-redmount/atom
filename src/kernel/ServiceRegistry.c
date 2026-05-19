@@ -148,9 +148,15 @@ size32 RegistryNServices(void)
 }
 
 
+ServiceRecord RegistryGetCoreServiceRecord(index32 index)
+{
+	return registry.coreServices[index];
+}
+
+
 // TODO: this should return a MachineService record
 // so that we can generalize from B-Tree to other storage types.
-BTree * RegistryGetCoreTable(index32 index)
+BTree * RegistryGetCoreBTreeService(index32 index)
 {
 	// TODO: this is hack, assuming the service is a B-Tree
 	return (BTree *) registry.coreServices[index].provider.machineService.serviceParameter;

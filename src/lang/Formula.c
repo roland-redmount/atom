@@ -47,7 +47,7 @@ Atom CreateFormula(Atom form, Atom actorsList)
 	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_FORMULA_FORM_ACTORS),
-		RegistryGetCoreTable(FORM_FORMULA_FORM_ACTORS),
+		RegistryGetCoreBTreeService(FORM_FORMULA_FORM_ACTORS),
 		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA)
 	);
 
@@ -243,7 +243,7 @@ uint8 FormulaArity(Atom formula)
 
 Atom FormulaGetForm(Atom formula)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_FORMULA_FORM_ACTORS);
+	BTree * tree = RegistryGetCoreBTreeService(FORM_FORMULA_FORM_ACTORS);
 	Tuple * query = CreateTuple(3);
 	FormulaSetTuple(query, CreateTypedAtom(AT_ID, formula), anonymousVariable, anonymousVariable);
 	TypedAtom form = RelationBTreeQuerySingleAtom(
@@ -257,7 +257,7 @@ Atom FormulaGetForm(Atom formula)
 
 Atom FormulaGetActors(Atom formula)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_FORMULA_FORM_ACTORS);
+	BTree * tree = RegistryGetCoreBTreeService(FORM_FORMULA_FORM_ACTORS);
 	Tuple * query = CreateTuple(3);
 	FormulaSetTuple(query, CreateTypedAtom(AT_ID, formula), anonymousVariable, anonymousVariable);
 	TypedAtom actorsList = RelationBTreeQuerySingleAtom(

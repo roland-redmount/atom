@@ -23,7 +23,7 @@ static void setBytecodeProgram(IFactDraft * draft, Atom program)
 	IFactBeginConjunction(
 		draft,
 		GetCorePredicateForm(FORM_BYTECODE_PROGRAM),
-		RegistryGetCoreTable(FORM_BYTECODE_PROGRAM),
+		RegistryGetCoreBTreeService(FORM_BYTECODE_PROGRAM),
 		bytecodeIndex
 	);
 	Tuple * tuple = CreateTuple(2);
@@ -43,7 +43,7 @@ static void setBytecodeParameters(IFactDraft * draft, Atom parametersList)
 	IFactBeginConjunction(
 		draft,
 		GetCorePredicateForm(FORM_BYTECODE_PARAMETERS),
-		RegistryGetCoreTable(FORM_BYTECODE_PARAMETERS),
+		RegistryGetCoreBTreeService(FORM_BYTECODE_PARAMETERS),
 		bytecodeIndex
 	);
 	Tuple * tuple = CreateTuple(2);
@@ -63,7 +63,7 @@ static void setBytecodeRegisters(IFactDraft * draft, Atom registersList)
 	IFactBeginConjunction(
 		draft,
 		GetCorePredicateForm(FORM_BYTECODE_REGISTERS),
-		RegistryGetCoreTable(FORM_BYTECODE_REGISTERS),
+		RegistryGetCoreBTreeService(FORM_BYTECODE_REGISTERS),
 		bytecodeIndex
 	);
 	Tuple * tuple = CreateTuple(2);
@@ -83,7 +83,7 @@ static void setBytecodeConstants(IFactDraft * draft, Atom constantsList)
 	IFactBeginConjunction(
 		draft,
 		GetCorePredicateForm(FORM_BYTECODE_CONSTANTS),
-		RegistryGetCoreTable(FORM_BYTECODE_CONSTANTS),
+		RegistryGetCoreBTreeService(FORM_BYTECODE_CONSTANTS),
 		bytecodeIndex
 	);
 	Tuple * tuple = CreateTuple(2);
@@ -200,7 +200,7 @@ bool IsBytecode(Atom atom)
 static Atom bytecodeGetProperty(
 	Atom bytecode, index32 formId, index32 propertyRoleId)
 {
-	BTree * tree = RegistryGetCoreTable(formId);
+	BTree * tree = RegistryGetCoreBTreeService(formId);
 	index8 bytecodeIndex = CorePredicateRoleIndex(formId, ROLE_BYTECODE);
 	index8 propertyIndex = CorePredicateRoleIndex(formId, propertyRoleId);
 

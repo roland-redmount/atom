@@ -40,7 +40,7 @@ void AddPairToIFact(IFactDraft * draft, TypedAtom left, TypedAtom right)
 	IFactBeginConjunction(
 		draft,
 		GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT),
-		RegistryGetCoreTable(FORM_PAIR_LEFT_RIGHT),
+		RegistryGetCoreBTreeService(FORM_PAIR_LEFT_RIGHT),
 		CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_PAIR)
 	);
 	
@@ -64,7 +64,7 @@ bool IsPair(Atom atom)
 
 static void getPairTuple(Atom pair, Tuple * tuple)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_PAIR_LEFT_RIGHT);
+	BTree * tree = RegistryGetCoreBTreeService(FORM_PAIR_LEFT_RIGHT);
 
 	Tuple * query = CreateTuple(3);
 	pairSetTuple(

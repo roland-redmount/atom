@@ -39,7 +39,6 @@ typedef struct s_ServiceRecord ServiceRecord;
  * we need a record storing pointers to the C code.
   */
 struct s_MachineService {
-	size32 contextSize;
 	/**
 	 * For data storage services like B-trees, the setup/call/free functions
 	 * are always the same, but parameterized by the specific B-tree used -- a kind of
@@ -53,18 +52,19 @@ struct s_MachineService {
 	 */
 	data64 serviceParameter;
 
-	//------------ execution context specific functions -----------------
+	//-------------------- execution context functions -----------------
 	/**
 	 * Initialize service-specific context information, such as an iterator structure.
-	 * The context pointer will be set to a memory block of contextSize bytes.
+	 * This method must return a pointer to its context (or 0 if none).
+	 * This context pointer will then be supplied to call() and finalizeContext().
 	 */
-	void (*setupContext)(MachineService * service, void * context, Tuple * arguments);
+	void * (*setupContext)(MachineService * service, Tuple const * arguments);
 
 	/**
-	 * Resume evaluating the expression, return true if a tuple was produced,
-	 * false if evaluation terminated.
+	 * Call (resume) an executing service, return true if a tuple was produced,
+	 * false if evaluation terminated. Writes to the given tuple.
 	 */
-	bool (*call)(void * context);
+	bool (*call)(void * context, Tuple * result);
 
 	/**
 	 * Any code that needs to run to finalize the service after termination
@@ -91,18 +91,20 @@ struct s_MachineService {
 };
 
 /**
- * A "composite" service is a JOIN or UNION expression,
- * evaluated by iterating over the parts that make up the service.
- * TODO: this must be stored persistently; not a good idea to Allocate()
- * arrays ... ?
+ * A "composite" service is a JOIN or UNION expression across two services.
+ * TODO: this must be stored persistently, should not use Allocate()
+ * for long-term storage.
  * When executed, the execution context should cache pointers to the 
  * sub-service contexts.
  */
 typedef struct s_CompositeService {
 	// Mapping between arguments of this service
 	// and parameters of each sub-service.
-	index8 ** argumentMap;
-	Atom * subServices;
+	// TODO: for now we use a fixed maximum number of arguments
+	index8 leftArgumentMap[8];
+	index8 rightArgumentMap[8];
+	Atom leftService;
+	Atom rightService;
 } CompositeService;
 
 /**

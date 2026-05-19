@@ -35,7 +35,7 @@ Atom CreateQuote(Atom quoted)
 	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_QUOTE_QUOTED),
-		RegistryGetCoreTable(FORM_QUOTE_QUOTED),
+		RegistryGetCoreBTreeService(FORM_QUOTE_QUOTED),
 		CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTE)
 	);
 	
@@ -61,7 +61,7 @@ bool IsQuote(Atom atom)
 
 Atom QuoteGetQuoted(Atom quote)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_QUOTE_QUOTED);
+	BTree * tree = RegistryGetCoreBTreeService(FORM_QUOTE_QUOTED);
 
 	Tuple * query = CreateTuple(2);
 	quoteSetTuple(query, CreateTypedAtom(AT_ID, quote), anonymousVariable);

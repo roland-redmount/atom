@@ -46,7 +46,7 @@ void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, 
 	IFactBeginConjunction(
 		draft, 
 		GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE),
-		RegistryGetCoreTable(FORM_MULTISET_ELEMENT_MULTIPLE),
+		RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE),
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 	);
 	Tuple * tuple = CreateTuple(3);
@@ -118,7 +118,7 @@ size32 MultisetGetElementMultiple(Atom multiset, TypedAtom element)
 
 void MultisetIterate(Atom multiset, MultisetIterator * iterator)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_MULTISET_ELEMENT_MULTIPLE);
+	BTree * tree = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
 	iterator->queryTuple = CreateTuple(3);
 	MultisetSetTuple(iterator->queryTuple, CreateTypedAtom(AT_ID, multiset), anonymousVariable, anonymousVariable);
 	RelationBTreeIterate(tree, iterator->queryTuple, &(iterator->treeIterator));

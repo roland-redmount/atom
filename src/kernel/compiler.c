@@ -76,7 +76,7 @@ static ServiceRecord compileService(Atom queryTerm)
 	 * we first query (clause-form c) & (multiset c element @term_form multiple _)
 	 */
 	RelationBTreeIterator btreeIterator;
-	BTree * multisetBTree = RegistryGetCoreTable(FORM_MULTISET_ELEMENT_MULTIPLE);
+	BTree * multisetBTree = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
 
 	Tuple * multisetQueryTuple = CreateTuple(3);
 	MultisetSetTuple(

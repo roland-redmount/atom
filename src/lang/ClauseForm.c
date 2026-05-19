@@ -27,7 +27,7 @@ Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
 	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_CLAUSE_FORM),
-		RegistryGetCoreTable(FORM_CLAUSE_FORM),
+		RegistryGetCoreBTreeService(FORM_CLAUSE_FORM),
 		0
 	);
 	Tuple * tuple = CreateTuple(1);

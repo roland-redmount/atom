@@ -15,7 +15,7 @@
 typedef struct s_RelationBTreeIterator {
 	BTree * btree;
 	BTreeIterator treeIterator;
-	Tuple const * queryTuple;
+	Tuple * queryTuple;
 	size8 nColumns;
 } RelationBTreeIterator;
 
@@ -33,9 +33,6 @@ size32 RelationBTreeNRows(BTree const * tree);
  * The iterator will be positioned before the first item, and 
  * RelationBTreeIteratorNext() must be called before RelationBTreeIteratorHasTuple().
  * The tree is write-locked to prevent modification while iterating.
- * 
- * NOTE: the iterator does not keep a copy of queryTuple,
- * so it must remain unchanged during the iteration.
  */
 void RelationBTreeIterate(BTree * tree, Tuple const * queryTuple, RelationBTreeIterator * iterator);
 

@@ -27,7 +27,7 @@ Atom CreateString(char const * chars, size32 length)
 	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_STRING),
-		RegistryGetCoreTable(FORM_STRING),
+		RegistryGetCoreBTreeService(FORM_STRING),
 		0
 	);
 	Tuple * tuple = CreateTuple(1);

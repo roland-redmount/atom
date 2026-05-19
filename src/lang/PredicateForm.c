@@ -31,7 +31,7 @@ Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
 	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_PREDICATE_FORM),
-		RegistryGetCoreTable(FORM_PREDICATE_FORM),
+		RegistryGetCoreBTreeService(FORM_PREDICATE_FORM),
 		0
 	);
 	Tuple * tuple = CreateTuple(1);
