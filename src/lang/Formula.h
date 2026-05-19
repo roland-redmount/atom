@@ -79,6 +79,12 @@ Atom CreateTerm(Atom predicate, bool negated);
 Atom CreateClause(Atom const * terms, size8 nTerms);
 
 /**
+ * Create a conjunction from a list of terms, in any order.
+ */
+Atom CreateConjunction(Atom const * clauses, size8 nClauses);
+
+
+/**
  * Extract the actors from the clauseActors tuple that correspond to
  * the k'th occurence (k = 1, 2 ... ) of the termForm in the clauseForm, and write
  * them to the termActors tuple.

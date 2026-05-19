@@ -123,8 +123,12 @@ void RelationBTreeIterate(BTree * tree, Tuple const * queryTuple, RelationBTreeI
 	SetMemory(iterator, sizeof(RelationBTreeIterator), 0);
 	iterator->btree = tree;
 	iterator->nColumns = RelationBTreeNColumns(tree);
-	iterator->queryTuple = CreateTuple(queryTuple->nAtoms);
-	CopyTuples(queryTuple, iterator->queryTuple);
+	if(queryTuple) {
+		iterator->queryTuple = CreateTuple(queryTuple->nAtoms);
+		CopyTuples(queryTuple, iterator->queryTuple);
+	}
+	else
+		iterator->queryTuple = 0;
 	BTreeIterate(&(iterator->treeIterator), tree);
 }
 
@@ -184,7 +188,8 @@ Tuple const * RelationBTreeIteratorPeekTuple(RelationBTreeIterator const * itera
 void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator)
 {
 	BTreeIteratorEnd(&(iterator->treeIterator));
-	FreeTuple(iterator->queryTuple);
+	if(iterator->queryTuple)
+		FreeTuple(iterator->queryTuple);
 	SetMemory(iterator, sizeof(RelationBTreeIterator), 0);
 }
 

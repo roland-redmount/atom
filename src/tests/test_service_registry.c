@@ -4,7 +4,7 @@
 #include "kernel/multiset.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
-#include "lang/FullForm.h"
+#include "lang/ConjunctionForm.h"
 #include "lang/Variable.h"
 #include "parser/PredicateBuilder.h"
 #include "testing/testing.h"
@@ -102,12 +102,11 @@ void testJoinService(void)
 	PrintChar('\n');
 
 	// TODO: Parse this into a conjunction form
-	char const * formSyntax = "(predicate-form _p) & (multiset _p element _e multiple _m)";
+	// char const * formSyntax = "(predicate-form _p) & (multiset _p element _e multiple _m)";
 
-	
+
 	// Create the join service
 	ServiceRecord left = RegistryGetCoreServiceRecord(FORM_PREDICATE_FORM);
-
 	ServiceRecord right = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
 
 }

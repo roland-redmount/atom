@@ -6,11 +6,13 @@
 #include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "lang/ClauseForm.h"
+#include "lang/ConjunctionForm.h"
 #include "lang/Formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
 #include "parser/ClauseBuilder.h"
+#include "parser/ConjunctionBuilder.h"
 #include "parser/PredicateBuilder.h"
 #include "parser/PartBuilder.h"
 #include "parser/TermBuilder.h"
@@ -258,6 +260,7 @@ static void testClauseBuilder(void)
 	ClauseBuilder builder;
 	InitializeClauseBuilder(&builder);
 	ASSERT_FALSE(ClauseBuilderIsValid(&builder))
+	ASSERT_TRUE(ClauseBuilderIsEmpty(&builder))
 
 	for(index8 i = 0; i < EXAMPLE_CLAUSE_N_TERMS; i++) {
 		size8 termArity = FormulaArity(fixture.terms[i]);
@@ -279,6 +282,7 @@ static void testClauseBuilder(void)
 				ClauseBuilderPush(&builder, (Token) {TOKEN_OR, invalidAtom}))
 			ASSERT_FALSE(ClauseBuilderIsValid(&builder))
 		}
+		ASSERT_FALSE(ClauseBuilderIsEmpty(&builder))
 	}
 	Atom clause = ClauseBuilderCreateFormula(&builder);
 	CleanupClauseBuilder(&builder);
@@ -322,7 +326,6 @@ static void testCStringToPredicate(void)
 
 static void testCStringToClause(void)
 {
-	
 	// NOTE: this string must be in canonical order
 	Atom clause = CStringToClause("aarf \"foobar\" | foo _x bar 123.45");
 	// PrintFormula(clause);
@@ -362,6 +365,23 @@ static void testCStringToClause(void)
 }
 
 
+static void testCStringToConjunction(void)
+{
+	// NOTE: this string must be in canonical order
+	Atom conjunction = CStringToConjunction("aarf \"foobar\" | foo _x bar 123.45 & barf 42 frob _y");
+	PrintFormula(conjunction);
+	PrintChar('\n');
+
+	Atom conjunctionForm = FormulaGetForm(conjunction);
+	ASSERT_UINT32_EQUAL(ConjunctionFormArity(conjunctionForm), 5)
+
+	Atom actorsList = FormulaGetActors(conjunction);
+	ASSERT_UINT32_EQUAL(ListLength(actorsList), 5)
+
+	IFactRelease(conjunction);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -372,6 +392,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testClauseBuilder);
 	ExecuteTest(testCStringToPredicate);
 	ExecuteTest(testCStringToClause);
+	ExecuteTest(testCStringToConjunction);
 
 	KernelShutdown();
 

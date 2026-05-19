@@ -151,7 +151,7 @@ UTIL_FILES := $(addprefix util/, \
  LinkedList ResizingArray ResizingBuffer hashing sort resources utilities)
 
 LANG_FILES := $(addprefix lang/, \
- Atom AtomType ClauseForm Form Formula FormPermutation FullForm name PredicateForm \
+ Atom AtomType ClauseForm ConjunctionForm Form Formula FormPermutation name PredicateForm \
  Quote SubstitutionList TermForm TypedAtom unification Variable)
 
 KERNEL_FILES := $(addprefix kernel/, \
@@ -162,8 +162,8 @@ MEMORY_FILES := $(addprefix memory/, allocator paging pool)
 
 NETWORK_FILES := $(addprefix network/, Connection Network)
 
-PARSER_FILES := $(addprefix parser/, Characters ClauseBuilder PartBuilder PredicateBuilder \
- StringBuffer TermBuilder Token Tokenizer)
+PARSER_FILES := $(addprefix parser/, Characters ClauseBuilder ConjunctionBuilder PartBuilder \
+ PredicateBuilder StringBuffer TermBuilder Token Tokenizer)
 
 # VM_FILES := $(addprefix vm/, bytecode context instruction vm)
 

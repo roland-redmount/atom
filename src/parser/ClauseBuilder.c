@@ -9,14 +9,15 @@
 #include "util/sort.h"
 
 
-#define INITIAL_N_TERMS 3
+#define INITIAL_N_CLAUSES 3
 
 
 void InitializeClauseBuilder(ClauseBuilder * builder)
 {
 	InitializeTermBuilder(&(builder->termBuilder));
-	CreateResizingArray(&(builder->terms), sizeof(Atom), INITIAL_N_TERMS);
+	CreateResizingArray(&(builder->terms), sizeof(Atom), INITIAL_N_CLAUSES);
 	builder->arity = 0;
+	builder->isEmpty = true;
 	builder->isValid = false;
 }
 
@@ -47,12 +48,19 @@ bool ClauseBuilderPush(ClauseBuilder * builder, Token token)
 	}
 	else {
 		if(TermBuilderPush(&(builder->termBuilder), token)) {
+			builder->isEmpty = false;
 			builder->isValid = TermBuilderIsValid(&(builder->termBuilder));
 			return true;
 		}
 		else
 			return false;
 	}
+}
+
+
+bool ClauseBuilderIsEmpty(ClauseBuilder const * builder)
+{
+	return builder->isEmpty;
 }
 
 

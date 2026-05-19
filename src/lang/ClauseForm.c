@@ -24,6 +24,7 @@ Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
 
 	AddMultisetToIFactFromArrays(&draft, uniqueTermForms, multiplicities, nUniqueTermForms);
 
+	// (clause-form @form)
 	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_CLAUSE_FORM),
@@ -31,7 +32,6 @@ Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
 		0
 	);
 	Tuple * tuple = CreateTuple(1);
-	TupleSetElement(tuple, 0, invalidAtom);
 	IFactAddClause(&draft, tuple);
 	FreeTuple(tuple);
 	IFactEndConjunction(&draft);	

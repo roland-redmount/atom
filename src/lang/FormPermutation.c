@@ -4,7 +4,7 @@
 #include "kernel/multiset.h"
 #include "lang/ClauseForm.h"
 #include "lang/AtomType.h"
-#include "lang/FullForm.h"
+#include "lang/ConjunctionForm.h"
 #include "lang/Form.h"
 #include "lang/FormPermutation.h"
 #include "lang/PredicateForm.h"
@@ -284,7 +284,7 @@ void FreeClauseIterator(ClauseIterator * iter)
 ConjunctionIterator * CreateConjunctionIterator(Atom form)
 {
 	ConjunctionIterator* iter = malloc(sizeof(ConjunctionIterator));
-	iter->nClauses = FullFormNUniqueClauseForms(form);
+	iter->nClauses = ConjunctionFormNUniqueClauseForms(form);
 
 	// allocate arrays
 	iter->clauseFormPerm = malloc(iter->nClauses * sizeof(Permutation *));

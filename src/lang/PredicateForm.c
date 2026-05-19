@@ -35,7 +35,6 @@ Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
 		0
 	);
 	Tuple * tuple = CreateTuple(1);
-	TupleSetElement(tuple, 0, invalidAtom);
 	IFactAddClause(&draft, tuple);
 	FreeTuple(tuple);
 	IFactEndConjunction(&draft);

@@ -12,19 +12,33 @@ typedef struct s_ClauseBuilder {
 	TermBuilder termBuilder;
 	ResizingArray terms;			// array of AT_ID atoms
 	size8 arity;
+	bool isEmpty;
 	bool isValid;
 } ClauseBuilder;
 
 void InitializeClauseBuilder(ClauseBuilder * builder);
 
 bool ClauseBuilderPush(ClauseBuilder * builder, Token token);
+
+/**
+ * Returns true if no tokens have been accepted by the builder.
+ */
+bool ClauseBuilderIsEmpty(ClauseBuilder const * builder);
+
+/**
+ * If true, ClauseBuilderCreateFormula() will yield a valid formula.
+ */
 bool ClauseBuilderIsValid(ClauseBuilder const * builder);
+
 Atom ClauseBuilderCreateFormula(ClauseBuilder * builder);
+
 void ClauseBuilderReset(ClauseBuilder * builder);
 
 void CleanupClauseBuilder(ClauseBuilder * builder);
 
-// convenience method for testing
+/**
+ * Parse a C string to a clause
+ */
 Atom CStringToClause(char const * cString);
 
 
