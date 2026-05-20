@@ -155,8 +155,8 @@ LANG_FILES := $(addprefix lang/, \
  Quote SubstitutionList TermForm TypedAtom unification Variable)
 
 KERNEL_FILES := $(addprefix kernel/, \
- dictionary dispatch ifact FloatIEEE754 Int kernel letter list lookup multiset pair \
- Parameter RelationBTree service ServiceRegistry string tuple UInt)
+ dictionary dispatch expression ifact FloatIEEE754 Int kernel letter list lookup multiset pair \
+ Parameter RelationBTree ServiceRegistry string tuple UInt)
 
 MEMORY_FILES := $(addprefix memory/, allocator paging pool)
 

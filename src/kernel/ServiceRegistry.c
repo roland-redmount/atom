@@ -1,10 +1,11 @@
 
-#include "kernel/Parameter.h"
-#include "kernel/UInt.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/lookup.h"
+#include "kernel/Parameter.h"
+#include "kernel/RelationBTree.h"
 #include "kernel/ServiceRegistry.h"
+#include "kernel/UInt.h"
 #include "lang/TypedAtom.h"
 #include "lang/Form.h"
 #include "lang/Formula.h"
@@ -92,23 +93,17 @@ static void btreeFreeService(void * item, size32 itemSize)
 	// parameters is set to zero in RegistryTeardownCoreServices()
 	if(record->parameters)
 		IFactRelease(record->parameters);
-	switch(record->type) {
-		case SERVICE_MACHINE: {
-			// machine services that can store tuples must be empty
-			MachineService * machineService = &(record->provider.machineService);
-			if(machineService->isEmpty) {
-				ASSERT(machineService->isEmpty(machineService))
-			}
-			machineService->teardown(machineService);
-			break;
-		}
-		// case SERVICE_BYTECODE:
-		// IFactRelease(record->provider.bytecode);
-		// break;
-
-		default:
-		ASSERT(false)
-		break;
+	
+/* TODO: Deallocating tables should no longer be the responsibility of the ServiceRegistry,
+   as it does not add/remove facts; see agents. */
+   
+	if(record->expression.type == EXPRESSION_MACHINE) {
+ 		// machine services that can store tuples must be empty
+		MachineService * machineService = &(record->expression.value.machineService);
+		ASSERT(machineService->provider == &bTreeServiceProvider)
+		BTree * btree = machineService->providerData;
+		ASSERT(RelationBTreeNRows(btree) == 0)
+		BTreeFree(btree);
 	}
 }
 
@@ -154,12 +149,13 @@ ServiceRecord RegistryGetCoreServiceRecord(index32 index)
 }
 
 
-// TODO: this should return a MachineService record
-// so that we can generalize from B-Tree to other storage types.
 BTree * RegistryGetCoreBTreeService(index32 index)
 {
-	// TODO: this is hack, assuming the service is a B-Tree
-	return (BTree *) registry.coreServices[index].provider.machineService.serviceParameter;
+	Expression * expression = &(registry.coreServices[index].expression);
+	ASSERT(expression->type == EXPRESSION_MACHINE)
+	MachineService * service = &(expression->value.machineService);
+	ASSERT(service->provider == &(bTreeServiceProvider))
+	return (BTree *) service->providerData;
 }
 
 
@@ -189,11 +185,16 @@ void RegistryAddCoreBTreeService(index32 index, Atom form, BTree * btree)
 
 	// store ServiceRecord in the core services array
 	ServiceRecord * record = &(registry.coreServices[index]);
-	record->type = SERVICE_MACHINE;
 	record->form = form;
-	record->provider.machineService = RelationBTreeCreateRecord(btree);
+	record->service = 1;	// any non-zero value will do for now
+	MachineService service = {
+		.provider = &bTreeServiceProvider,
+		.providerData = btree
+	};
+	CreateMachineExpression(&(record->expression), &service);
 	
-	// see RegistryFinalizeCoreServices() for remaining setup
+	// The parameters and service fields will be initialized later
+	// by RegistryFinalizeCoreServices()
 }
 
 
@@ -234,15 +235,13 @@ void RegistryTeardownCoreServices(void)
 }
 
 
-Atom RegistryAddMachineService(Atom form,  Atom parameters, MachineService const * machineService)
+Atom RegistryAddService(Atom form,  Atom parameters, Expression const * expression)
 {
-	ASSERT(IsPredicateForm(form))
 	ServiceRecord record = {
 		.service = serviceRecordHash(form, parameters),
-		.type = SERVICE_MACHINE,
 		.form = form,
 		.parameters = parameters,
-		.provider.machineService = *machineService,
+		.expression = *expression
 	};
 	addService(&record);
 	IFactAcquire(form);
@@ -253,11 +252,16 @@ Atom RegistryAddMachineService(Atom form,  Atom parameters, MachineService const
 
 Atom RegistryAddBTreeService(Atom form, BTree * btree)
 {
-	ASSERT(IsPredicateForm(form))
 	size8 arity = FormArity(form);
 	Atom parameters = createBTreeParameterList(arity);
-	MachineService machineService = RelationBTreeCreateRecord(btree);
-	return RegistryAddMachineService(form, parameters, &machineService);
+	MachineService btreeService = {
+		.provider = &bTreeServiceProvider,
+		.providerData = btree
+	};
+	Expression btreeExpression;
+	CreateMachineExpression(&btreeExpression, &btreeService);
+	
+	return RegistryAddService(form, parameters, &btreeExpression);
 }
 
 /*
@@ -369,20 +373,8 @@ void PrintService(ServiceRecord const * service)
 	Atom signature = CreateFormula(service->form, service->parameters);
 	PrintFormula(signature);
 	IFactRelease(signature);
-	PrintChar(' ');
-	switch(service->type) {
-		case SERVICE_MACHINE:
-		PrintCString("SERVICE_MACHINE");
-		break;
-
-		// case SERVICE_BYTECODE:
-		// PrintCString("SERVICE_BYTECODE");
-		// break;
-
-		default:
-		ASSERT(false)
-		;
-	}
+	PrintChar(':');
+	PrintExpression(&(service->expression));
 }
 
 

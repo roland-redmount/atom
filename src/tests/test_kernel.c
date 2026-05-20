@@ -18,8 +18,8 @@ void testAssertRetract(void)
 	NameRelease(roles[1]);
 	
 	// check that service does not already exist
-	ServiceRecord record = RegistryFindUntypedService(form);
-	ASSERT(record.type == SERVICE_NONE)
+	ServiceRecord record = RegistryGetServiceRecord(form);
+	ASSERT(!record.service)
 
 	// asserting the first fact should create the service
 	Atom barf = CreateStringFromCString("barf");
@@ -32,8 +32,9 @@ void testAssertRetract(void)
 	);
 	AssertFact(form, actors1);
 	record = RegistryFindUntypedService(form);
-	ASSERT(record.type == SERVICE_MACHINE)
-	BTree * btree = (BTree *) record.provider.machineService.serviceParameter;
+	ASSERT(record.service)
+	ASSERT(record.expression.type == EXPRESSION_MACHINE)
+	BTree * btree = (BTree *) record.expression.value.machineService.providerData;
 
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 1)
 
@@ -53,8 +54,8 @@ void testAssertRetract(void)
 
 	// retracting the last fact should remove the service
 	RetractFact(form, actors1);
-	record = RegistryFindUntypedService(form);
-	ASSERT(record.type == SERVICE_NONE)
+	record = RegistryGetServiceRecord(form);
+	ASSERT(!record.service)
 
 	FreeTuple(actors1);
 	FreeTuple(actors2);

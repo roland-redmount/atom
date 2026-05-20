@@ -1,5 +1,5 @@
 #include "kernel/kernel.h"
-#include "kernel/service.h"
+#include "kernel/expression.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/Variable.h"
 

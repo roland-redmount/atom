@@ -313,11 +313,11 @@ void RelationBTreeDump(BTree * tree)
 }
 
 /**
- * Stubs for using a B-tree as a service
+ * Stubs for using the B-tree service provider
  */
-static void * serviceSetupContext(MachineService * service, Tuple const * arguments)
+static void * serviceSetupContext(void * providerData, Tuple const * arguments)
 {
-	BTree * btree = (BTree *) service->serviceParameter;
+	BTree * btree = (BTree *) providerData;
 	RelationBTreeIterator * iterator = Allocate(sizeof(RelationBTreeIterator));
 	RelationBTreeIterate(btree, arguments, iterator);
 	return iterator;
@@ -343,42 +343,46 @@ static void serviceFinalizeContext(void * context)
 	Free(iterator);
 }
 
-
-void serviceAddTuple(MachineService * service, Tuple const * arguments)
+/**
+ * Stubs for the B-tree agent provider
+ */
+void agentAddTuple(void * agentData, Tuple const * arguments)
 {
-	RelationBTreeAddTuple((BTree *) service->serviceParameter, arguments);
+	RelationBTreeAddTuple((BTree *) agentData, arguments);
 }
 
 
-void serviceRemoveTuples(MachineService * service, Tuple const * arguments)
+void agentRemoveTuples(void * agentData, Tuple const * arguments)
 {
-	RelationBTreeRemoveTuples((BTree *) service->serviceParameter, arguments, REMOVE_NORMAL);
+	RelationBTreeRemoveTuples((BTree *) agentData, arguments, REMOVE_NORMAL);
 }
 
 
-bool serviceIsEmpty(MachineService const * service)
+bool agentIsEmpty(void * agentData)
 {
-	return BTreeNItems((BTree *) service->serviceParameter) == 0;
+	return BTreeNItems((BTree *) agentData) == 0;
 }
 
 
-void serviceTeardown(MachineService * service)
+void agentTeardown(void * agentData)
 {
-	FreeRelationBTree((BTree *) service->serviceParameter);
+	FreeRelationBTree((BTree *) agentData);
 }
 
 
-// naming: create record?
-MachineService RelationBTreeCreateRecord(BTree * btree)
-{
-	return (MachineService) {
-		.serviceParameter = (data64) btree,
-		.setupContext = &serviceSetupContext,
-		.call = &serviceCall,
-		.finalizeContext = &serviceFinalizeContext,
-		.addTuple = &serviceAddTuple,
-		.removeTuples = &serviceRemoveTuples,
-		.isEmpty = &serviceIsEmpty,
-		.teardown = &serviceTeardown,
-	};
-}
+MachineServiceProvider bTreeServiceProvider = {
+	.setupContext = &serviceSetupContext,
+	.call = &serviceCall,
+	.finalizeContext = &serviceFinalizeContext,
+};
+
+/**
+ * TODO: create AgentHandler
+ */
+
+ /*
+	.addTuple = &serviceAddTuple,
+	.removeTuples = &serviceRemoveTuples,
+	.isEmpty = &serviceIsEmpty,
+	.teardown = &serviceTeardown,
+ */

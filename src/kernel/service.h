@@ -6,11 +6,24 @@
  * converting conjunction to JOINs &c.
  * Service records could be used to generate bytecode, serving as an intermediate
  * representation.
+ * 
+ * NOTE: a key architecture decision is whether intermediate representation (IR) of
+ * rules, such as JOIN(A(x,y), PROJECT(B(x,y,z), {x,y})) should be stored as services or
+ * in a separate form. To use the IR for execution, it should be optimized and
+ * probably not stored natively as atoms. On the other hand it must be persistent.
+ * The top expression for an IR is a compiled service, and must be entered into
+ * the service registry, but sub-expression such as PROJECT(B(x,y,z), {x,y}) in the above
+ * should probably not be entered as services in their own right. So an IR can be
+ * used as a service, but not all IRs are services. The "leaf" expression in an IR
+ * are machine services, so the IR must "contiain" services as well.
+ * IR must be separate from the rule dictionary since one rule may yield multiple IR
+ * when compiled with different arguments.
  */
 
 #ifndef SERVICE_H
 #define SERVICE_H
 
+#include "kernel/expression.h"
 #include "kernel/tuple.h"
 #include "btree/btree.h"
 
@@ -20,110 +33,22 @@
  * (instrution CTX), this structure must be represented as an Atom.
  * Currently we use AT_BYTECODE but this must be generalized
  * to cover native services.
+ * 
+ * NOTE: SERVICE_JOIN or SERVICE_UNION is also implied by the service form
+ * being a clause form or 
  */
 
 enum ServiceType {
 	SERVICE_NONE = 0,
 	// SERVICE_BYTECODE,
 	SERVICE_MACHINE,
-	SERVICE_JOIN,
-	SERVICE_UNION,
+	SERVICE_EXPRESSION,	// compiled rule, intermediate representation
 };
 
 typedef struct s_MachineService MachineService;
 typedef struct s_ServiceRecord ServiceRecord;
 // typedef struct s_ServiceContext ServiceContext;
 
-/**
- * For "machine" services like B-tree, arrays, basic arithmetic,
- * we need a record storing pointers to the C code.
-  */
-struct s_MachineService {
-	/**
-	 * For data storage services like B-trees, the setup/call/free functions
-	 * are always the same, but parameterized by the specific B-tree used -- a kind of
- 	 * "hyperparameter".
-	 * 
-	 * TODO: there is really two levels of information: (1) service provider information,
-	 * e.g. B-Tree that holds the function pointers, and (2) service information, which
-	 * holds the specific BTree * pointer. (And (3) execution context, which holds the arguments)
-	 * We should separate out the service provider part so we don't repeatedly store
-	 * the same function pointers over and over.
-	 */
-	data64 serviceParameter;
-
-	//-------------------- execution context functions -----------------
-	/**
-	 * Initialize service-specific context information, such as an iterator structure.
-	 * This method must return a pointer to its context (or 0 if none).
-	 * This context pointer will then be supplied to call() and finalizeContext().
-	 */
-	void * (*setupContext)(MachineService * service, Tuple const * arguments);
-
-	/**
-	 * Call (resume) an executing service, return true if a tuple was produced,
-	 * false if evaluation terminated. Writes to the given tuple.
-	 */
-	bool (*call)(void * context, Tuple * result);
-
-	/**
-	 * Any code that needs to run to finalize the service after termination
-	 */
-	void (*finalizeContext)(void * context);
-
-	//------------ functions for tuple-storing services -----------------
-	
-	/**
-	 * Function for adding a tuple to the service, or 0 if not supported.
-	 */
-	void (*addTuple)(MachineService * service, Tuple const * arguments);
-
-	/**
-	 * Function for removing tuples to the service, or 0 if not supported.
-	 * The arguments tuple may contain variables.
-	 */
-	void (*removeTuples)(MachineService * service, Tuple const * arguments);
-
-	bool (*isEmpty)(MachineService const * service);
-
-	void (*teardown)(MachineService * service);
-
-};
-
-/**
- * A "composite" service is a JOIN or UNION expression across two services.
- * TODO: this must be stored persistently, should not use Allocate()
- * for long-term storage.
- * When executed, the execution context should cache pointers to the 
- * sub-service contexts.
- */
-typedef struct s_CompositeService {
-	// Mapping between arguments of this service
-	// and parameters of each sub-service.
-	// TODO: for now we use a fixed maximum number of arguments
-	index8 leftArgumentMap[8];
-	index8 rightArgumentMap[8];
-	Atom leftService;
-	Atom rightService;
-} CompositeService;
-
-/**
- * This should perhaps be internal to ServiceRegistry?
- */
-struct s_ServiceRecord {
-	// service hash value
-	Atom service;
-	// we store the form and parameters lists of the signature separately
-	// to allow iterating across all services matching a given form
-	Atom form;
-	Atom parameters;
-	enum ServiceType type;
-	union {
-		MachineService machineService;
-		CompositeService compositeService;
-		Atom bytecode;
-	} provider;
-};
 
 
 /**

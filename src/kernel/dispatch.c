@@ -6,7 +6,6 @@
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
 #include "kernel/RelationBTree.h"
-#include "kernel/service.h"
 #include "lang/ClauseForm.h"
 #include "lang/Form.h"
 #include "lang/FormPermutation.h"

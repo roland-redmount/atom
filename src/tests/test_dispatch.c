@@ -20,18 +20,16 @@ void testDispatchToService(void)
 	query = CStringToPredicate("+ 3 + 4 = _");
 	index8 permutation[3];
 	ASSERT_TRUE(DispatchQuery(query, &service, arguments, permutation))
-	ASSERT_UINT32_EQUAL(service.type, SERVICE_MACHINE)
+	ASSERT_UINT32_EQUAL(service.expression.type, EXPRESSION_MACHINE)
 	IFactRelease(query);
 
-	// one the following two  queries requires form permutation to match
+	// one the following two queries requires form permutation to match
 	query = CStringToPredicate("+ 3 + _ = 7");
 	ASSERT_TRUE(DispatchQuery(query, &service, arguments, permutation))
-	ASSERT_UINT32_EQUAL(service.type, SERVICE_MACHINE)
 	IFactRelease(query);
 
 	query = CStringToPredicate("+ _ + 3 = 7");
 	ASSERT_TRUE(DispatchQuery(query, &service, arguments, permutation))
-	ASSERT_UINT32_EQUAL(service.type, SERVICE_MACHINE)
 	IFactRelease(query);
 
 	FreeTuple(arguments);

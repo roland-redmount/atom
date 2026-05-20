@@ -178,11 +178,26 @@ static void setupCoreRoleNames(void)
 #define MULTISET_MULTIPLE_COLUMN	0
 
 
+static index32 getCorePredicateIndex(Atom predicateForm)
+{
+	index32 formIndex = 0;
+	while(formIndex < N_CORE_PREDICATES) {
+		if(kernel.corePredicateForms[++formIndex] == predicateForm)
+			break;
+	}
+	ASSERT(formIndex <= N_CORE_PREDICATES)
+	return formIndex;	
+}
+
+
 void bootstrapAssertFact(Atom predicateForm, Tuple const * actors)
 {
-	ServiceRecord record = RegistryFindUntypedService(predicateForm);
-	ASSERT(record.type == SERVICE_MACHINE)
-	record.provider.machineService.addTuple(&record.provider.machineService, actors);
+	// TODO: this now needs to retrieve an agent, not a service ...
+	// This is a quick hack to get the BTree * pointer)
+	index32 formIndex = getCorePredicateIndex(predicateForm);
+	ServiceRecord record = RegistryGetCoreServiceRecord(formIndex);
+	BTree * btree = (BTree *) record.expression.value.machineService.providerData;
+	RelationBTreeAddTuple(btree, actors);
 }
 
 
@@ -423,6 +438,7 @@ void KernelShutdown(void)
 	 * back to initial state. This is rather complicated due to special
 	 * bootstrap considerations, and it is unnecessary in practise, as
 	 * we would typically never completely destroy the "world" anyway.
+	 * But it is useful to ensure we have no memory leaks.
 	 */
 	RegistryTeardownCoreServices();
 
@@ -443,6 +459,7 @@ void KernelShutdown(void)
 	CleanupMemory();
 }
 
+// TODO: move assert / retract to agent
 
 // TODO: this should return a status code indicating whether the fact was created,
 // already existed, or if the assert failed due to logical inconsistency
@@ -451,51 +468,53 @@ void AssertFact(Atom predicateForm, Tuple const * actors)
 	// TODO: currently we only support creating predicates
 	ASSERT(IsPredicateForm(predicateForm));
 	// add tuple to relation table
+	// quick hack, assume B-tree service provider
 	ServiceRecord record = RegistryFindUntypedService(predicateForm);
-	if(record.type == SERVICE_MACHINE) {
-		record.provider.machineService.addTuple(&record.provider.machineService, actors);
+	if(record.service) {
+		ASSERT(record.expression.type == EXPRESSION_MACHINE)
+		ASSERT(record.expression.value.machineService.provider == &bTreeServiceProvider)
+		BTree * btree = (BTree *) record.expression.value.machineService.providerData;
+		RelationBTreeAddTuple(btree, actors);
 	}
-	else if(record.type == SERVICE_NONE) {
+	else {
 		// create new relation table
 		size8 arity = PredicateArity(predicateForm);
 		BTree * btree = CreateRelationBTree(arity);
 		RegistryAddBTreeService(predicateForm, btree);
 		RelationBTreeAddTuple(btree, actors);
 	}
-	else {
-		ASSERT(false)
-	}
 	LookupAddPredicateRoles(predicateForm, actors);
 }
 
 
-void RetractFact(Atom predicateForm, Tuple * actors)
+static void removeBTreeTuples(Atom predicateForm, Tuple * actors)
 {
 	ServiceRecord record = RegistryFindUntypedService(predicateForm);
-	ASSERT(record.type == SERVICE_MACHINE)
+	ASSERT(record.service)
+	ASSERT(record.expression.type == EXPRESSION_MACHINE)
+	ASSERT(record.expression.value.machineService.provider == &bTreeServiceProvider)
+	BTree * btree = (BTree *) record.expression.value.machineService.providerData;
+	
 	// NOTE: this can cause IFacts to be removed if the tuple
 	// being removed holds the last reference to an IFact
-	record.provider.machineService.removeTuples(&record.provider.machineService, actors);
+	RelationBTreeRemoveTuples(btree, actors, REMOVE_NORMAL);
 	// remove btree if empty
 	// NOTE: I think this should be an explicit function in ServiceRegistry, purgeEmptyService() or such
-	if(record.provider.machineService.isEmpty(&record.provider.machineService)) {
+	if(RelationBTreeNRows(btree) == 0) {
 		RegistryRemoveService(record.service);
 	}
+}
 
-	// remove lookup entries for each role in the predicate form
+void RetractFact(Atom predicateForm, Tuple * actors)
+{
+	removeBTreeTuples(predicateForm, actors);
 	LookupRemovePredicateRoles(predicateForm, actors);
 }
 
 
 void RetractAllFacts(Atom predicateForm)
 {
-	ServiceRecord record = RegistryFindUntypedService(predicateForm);
-	ASSERT(record.type == SERVICE_MACHINE)
-	record.provider.machineService.removeTuples(&record.provider.machineService, 0);
-	// remove btree if empty
-	if(record.provider.machineService.isEmpty(&record.provider.machineService)) {
-		RegistryRemoveService(record.service);
-	}
+	removeBTreeTuples(predicateForm, 0);
 	LookupRemoveAllPredicateRoles(predicateForm);
 }
 

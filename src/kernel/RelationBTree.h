@@ -1,7 +1,8 @@
 /**
  * Implementation of a relation table using the btree data structure.
- * This implements both services (fetching tuples for various relations)
- * and a mechanism for asserting facts.
+ * This implements both a MachineServiceProvider (queries for various relations)
+ * and an AgentProvider
+ * and a mechanism for asserting facts. 
  */
 
 #ifndef RELATION_B_TREE_H
@@ -9,8 +10,10 @@
 
 #include "btree/btree.h"
 #include "kernel/tuple.h"
-#include "kernel/service.h"
+#include "kernel/machineservice.h"
 
+// TODO: replace this with a service provider registry ...
+extern MachineServiceProvider bTreeServiceProvider;
 
 typedef struct s_RelationBTreeIterator {
 	BTree * btree;

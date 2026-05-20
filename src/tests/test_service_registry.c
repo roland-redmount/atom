@@ -7,6 +7,7 @@
 #include "lang/ConjunctionForm.h"
 #include "lang/Variable.h"
 #include "parser/PredicateBuilder.h"
+#include "parser/ConjunctionBuilder.h"
 #include "testing/testing.h"
 
 
@@ -40,8 +41,9 @@ void testAddDropTable(void)
 	ASSERT_UINT32_EQUAL(RelationBTreeNColumns(createdTable), 4)
 
 	ServiceRecord record = RegistryFindUntypedService(fixture.form);
-	ASSERT(record.type == SERVICE_MACHINE)
-	BTree * foundTable = (BTree *) record.provider.machineService.serviceParameter;
+	ASSERT(record.service)
+	ASSERT(record.expression.type == EXPRESSION_MACHINE)
+	BTree * foundTable = (BTree *) record.expression.value.machineService.providerData;
 	ASSERT_PTR_NOT_EQUAL(foundTable, 0)
 	ASSERT_PTR_EQUAL(foundTable, createdTable)
 
@@ -57,10 +59,11 @@ void testCallBTreeService(void)
 	// Test calling 
 	// (multiset @list-predicate-form element _ position _)
 	ServiceRecord record = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
-	ASSERT(record.type == SERVICE_MACHINE)
+	ASSERT(record.service)
+	ASSERT(record.expression.type == EXPRESSION_MACHINE)
 
 	// Create execution context
-	MachineService * machineService = &(record.provider.machineService);
+	MachineService * machineService = &(record.expression.value.machineService);
 
 	Tuple * arguments = CreateTuple(3);
 	MultisetSetTuple(arguments,
@@ -68,16 +71,17 @@ void testCallBTreeService(void)
 		anonymousVariable,
 		anonymousVariable
 	);
-	
-	void * context = machineService->setupContext(machineService, arguments);
+
+	// TODO: should encapsulate this as MachineServiceCall(...)
+	void * context = machineService->provider->setupContext(machineService->providerData, arguments);
 
 	// this should yields 3 elements corresponding to the 3 roles of (list position element)
 	size32 nElements = 0;
-	while(machineService->call(context, arguments))
+	while(machineService->provider->call(context, arguments))
 		nElements++;
 	ASSERT_INT32_EQUAL(nElements, 3);
 
-	machineService->finalizeContext(context);
+	machineService->provider->finalizeContext(context);
 	FreeTuple(arguments);
 }
 
@@ -85,9 +89,27 @@ void testCallBTreeService(void)
 void testJoinService(void)
 {
 	/**
-	 * As an example, consider the query
+	 * As an example, consider the rule
 	 * 
-	 *  (predicate-form p) & (multiset p element e multiple m)
+	 * predicate-form p role r multiple m <-
+	 *   predicate-form p & multiset p element r multiple m
+	 * 
+	 * The LHS will compile to a SERVICE_JOIN over the two machine services
+	 * for (predicate-form) and (multiset element multiple). Essentially,
+	 * (predicate-form p role r multiple m) becomes a synonym for the query
+	 * (predicate-form p & multiset p element r multiple m). This suggests we
+	 * should store the SERVICE_JOIN service once and make an n:1 mapping
+	 * between forms and services.
+	 * 
+	 * As another example, consider
+	 *
+	 * predicate-form p role r <-
+	 *   predicate-form p & multiset p element r multiple _
+	 *  
+	 * Here we are dropping the "multiset" role from the (multiset element multiple)
+	 * relation; this is another service, say SERVICE_PROJECT, that applies the
+	 * projection operator from relational algebra (remove columns and take the
+	 * resulting unique tuples).
 	 * 
 	 * This has actors (p, p, e, m) which must be mapped to
 	 * the arguments of (predicate-form p) and (multiset p element e multiple m).
@@ -101,14 +123,20 @@ void testJoinService(void)
 	PrintPredicateForm(rightForm);
 	PrintChar('\n');
 
-	// TODO: Parse this into a conjunction form
-	// char const * formSyntax = "(predicate-form _p) & (multiset _p element _e multiple _m)";
-
+	// NOTE: this must be in canonical order
+	Atom conjunction = CStringToConjunction(
+		"(multiset _p element _e multiple _m) & (predicate-form _p)"
+	);
+	PrintFormula(conjunction);
+	PrintChar('\n');
 
 	// Create the join service
 	ServiceRecord left = RegistryGetCoreServiceRecord(FORM_PREDICATE_FORM);
 	ServiceRecord right = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
 
+	// TODO ...
+
+	IFactRelease(conjunction);
 }
 
 

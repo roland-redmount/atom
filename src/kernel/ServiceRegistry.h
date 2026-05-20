@@ -1,19 +1,8 @@
 /**
- * The service registry maps signatures to services, so that dispatch
- * can efficiently match services to queries. A service can either
- * be a bytecode service or a machine code (C) service.
- * 
- * A service is represented by an AT_SERVICE atom, which is a special hash
- * of the service's signature, which consists of a form and a parameter list.
- * The parameters list contains DT_PARAMETER atoms (see Parameter.h),
- * indicating the io mode (in/out) and atom type for each parameter.
- * 
-  * A service s subsumes another service t iff (1) the forms are equal, and
- * (2) there exists a valid form permutation such that, for each parameter p
- * of s and corresponding parameter q of t: (i) their io modes are equal,
- * or the io mode of p is in/out; and (ii) their datum types are requal, or
- * the datum type of p is AT_NONE. 
- * TODO: If service s subsumes service t, only one of them may be in the registry. 
+ * A service is a procedure that can evaluate queries of a particular
+ * form. The service registry maps signatures to expression that can be
+ * evaluated by the interpreter. Dispatch uses the registry to
+ * match services to queries.
  * 
  * For B-tree services are automatically removed by RetractFact() when
  * the last tuple in the relation table is removed. 
@@ -26,24 +15,49 @@
  * must not remove the child service before the "parent". Hence, we do need
  * reference counting. We could prevent "garbage collection" of services by
  * always keeping 1 reference to the AT_SERVICE atom in the stored ServiceRecord.
- *
- * TODO: Currently, the services form must be a predicate form, we should
- * change that to term form.
- * In principle is possible for a service singature in clause form,
- * such as (foo @x | bar @x) stating that either (foo @x) OR (bar @x)
- * is true for the atom @x, but we don't known which. We don't implement
- * this yet.
- * 
- * NOTE: since service records are fixed size, we could store them in a pool.
- * This would allow us to directly refer to services by pointers.
  */
 
 #ifndef SERVICEREGISTRY_H
 #define SERVICEREGISTRY_H
 
+#include "kernel/expression.h"
+#include "kernel/machineservice.h"
 #include "kernel/RelationBTree.h"
-#include "kernel/service.h"
 
+
+enum ServiceType {
+	SERVICE_NONE,
+	SERVICE_EXPRESSION,
+	SERVICE_MACHINE
+};
+
+
+/**
+ * A service is represented by an AT_SERVICE atom, which is a special hash
+ * of the service's signature, which consists of a form and a parameter list.
+ * The parameters list contains DT_PARAMETER atoms (see Parameter.h),
+ * indicating the io mode (in/out) and atom type for each parameter.
+ * 
+ * A service s subsumes another service t iff (1) the forms are equal, and
+ * (2) there exists a valid form permutation such that, for each parameter p
+ * of s and corresponding parameter q of t: (i) their io modes are equal,
+ * or the io mode of p is in/out; and (ii) their datum types are requal, or
+ * the datum type of p is AT_NONE. 
+ * TODO: If service s subsumes service t, only one of them may be in the registry. 
+ * 
+ * NOTE: provided service records are fixed size, we could store them in a pool.
+ * This would allow us to directly refer to services by pointers and perhaps
+ * get rid of the AT_SERVICE atom type.
+ */
+typedef struct s_ServiceRecord {
+	// service hash value
+	Atom service;
+	// we store the form and parameters lists of the signature separately
+	// to allow iterating across all services matching a given form
+	Atom form;
+	Atom parameters;
+	Expression expression;
+} ServiceRecord;
 
 
 /**
@@ -102,12 +116,11 @@ BTree * RegistryGetCoreBTreeService(index32 index);
  */
 void RegistryTeardownCoreServices(void);
 
-
 /**
- * Add machine service to the registry.
+ * Add service to the registry.
  * Returns an AT_SERVICE atom.
  */
-Atom RegistryAddMachineService(Atom form, Atom parameters, MachineService const * machineService);
+Atom RegistryAddService(Atom form,  Atom parameters, Expression const * expression);
 
 /**
  * Convenience function add a B-tree machine service the registry.
