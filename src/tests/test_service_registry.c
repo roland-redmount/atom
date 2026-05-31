@@ -73,7 +73,7 @@ void testCallBTreeService(void)
 
 	// this should yields 3 elements corresponding to the 3 roles of (list position element)
 	size32 nElements = 0;
-	while(ExpressionCall(expression, context, arguments))
+	while(ExpressionCall(expression, context))
 		nElements++;
 	ASSERT_INT32_EQUAL(nElements, 3);
 

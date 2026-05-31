@@ -313,24 +313,24 @@ void RelationBTreeDump(BTree * tree)
 }
 
 /**
- * Stubs for using the B-tree service provider
+ * Stubs for using the B-tree service provider.
+ * The service context consists of a RelationBTreeIterator * pointer.
  */
-static void * serviceSetupContext(void * providerData, Tuple const * arguments)
+static void serviceSetupContext(void * context, void * providerData, Tuple * arguments)
 {
 	BTree * btree = (BTree *) providerData;
-	RelationBTreeIterator * iterator = Allocate(sizeof(RelationBTreeIterator));
+	RelationBTreeIterator * iterator = context;
 	RelationBTreeIterate(btree, arguments, iterator);
-	return iterator;
 }
 
 
-static bool serviceCall(void * context, Tuple * result)
+static bool serviceCall(void * context, Tuple * arguments)
 {
 	RelationBTreeIterator * iterator = context;
 	bool hasTuple = RelationBTreeIteratorNext(iterator);
 	if(hasTuple) {
 		Tuple const * tuple = RelationBTreeIteratorPeekTuple(iterator);
-		CopyTuples(tuple, result);
+		CopyTuples(tuple, arguments);
 	}
 	return hasTuple;
 }
@@ -340,7 +340,6 @@ static void serviceFinalizeContext(void * context)
 {
 	RelationBTreeIterator * iterator = context;
 	RelationBTreeIteratorEnd(iterator);
-	Free(iterator);
 }
 
 /**
@@ -371,7 +370,7 @@ void agentTeardown(void * agentData)
 
 
 MachineServiceProvider bTreeServiceProvider = {
-	.createContext = &serviceSetupContext,
+	.setupContext = &serviceSetupContext,
 	.call = &serviceCall,
 	.freeContext = &serviceFinalizeContext,
 };

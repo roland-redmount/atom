@@ -82,9 +82,9 @@ void testJoinExpression1(void)
 	// Call the expression
 	// this should yields 3 elements corresponding to the 3 roles of (list position element)
 	size32 nElements = 0;
-	while(ExpressionCall(&joinExpression, context, arguments)) {
-		// PrintTuple(arguments);
-		// PrintChar('\n');
+	while(ExpressionCall(&joinExpression, context)) {
+		PrintTuple(arguments);
+		PrintChar('\n');
 		nElements++;
 	}
 	ExpressionFreeContext(&joinExpression, context);
@@ -126,11 +126,10 @@ void testJoinExpression2(void)
 	void * context = ExpressionCreateContext(&joinExpression, arguments);
 
 	// Call the expression
-	// this should yields 3 elements corresponding to the 3 roles of (list position element)
 	size32 nElements = 0;
-	while(ExpressionCall(&joinExpression, context, arguments)) {
-		// PrintTuple(arguments);
-		// PrintChar('\n');
+	while(ExpressionCall(&joinExpression, context)) {
+		PrintTuple(arguments);
+		PrintChar('\n');
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 6)

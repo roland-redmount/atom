@@ -189,6 +189,7 @@ void RegistryAddCoreBTreeService(index32 index, Atom form, BTree * btree)
 	record->service = 1;	// any non-zero value will do for now
 	MachineService service = {
 		.provider = &bTreeServiceProvider,
+		.contextSize = sizeof(BTreeIterator),
 		.providerData = btree
 	};
 	size8 arity = RelationBTreeNColumns(btree);
@@ -236,7 +237,7 @@ void RegistryTeardownCoreServices(void)
 }
 
 
-Atom RegistryAddService(Atom form,  Atom parameters, Expression const * expression)
+Atom RegistryAddService(Atom form, Atom parameters, Expression const * expression)
 {
 	ServiceRecord record = {
 		.service = serviceRecordHash(form, parameters),
@@ -250,13 +251,16 @@ Atom RegistryAddService(Atom form,  Atom parameters, Expression const * expressi
 	return record.service;
 }
 
-
+/**
+ * TODO: This is specific to the B-tree service provider, should move to RelationBTree
+ */
 Atom RegistryAddBTreeService(Atom form, BTree * btree)
 {
 	size8 arity = FormArity(form);
 	Atom parameters = createBTreeParameterList(arity);
 	MachineService btreeService = {
 		.provider = &bTreeServiceProvider,
+		.contextSize = sizeof(BTreeIterator),
 		.providerData = btree
 	};
 	Expression btreeExpression;

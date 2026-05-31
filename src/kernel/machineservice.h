@@ -14,21 +14,25 @@
  * A machine service provider is an implementation of a particular type
  * of machine services, such as B-Tree relations or arithmetic functions.
  * One MachineServiceProvider can host multiple MachineService for
- * specific relations.
+ * various relations.
  */
 typedef struct s_MachineServiceProvider {
 	/**
 	 * Initialize service-specific context information, such as an iterator structure.
+	 * context will point to an allocate block of at least 
 	 * This method must return a pointer to its context (or 0 if none).
 	 * This context pointer will then be supplied to call() and finalizeContext().
 	 */
-	void * (*createContext)(void * providerData, Tuple const * arguments);
+	void (*setupContext)(void * context, void * providerData, Tuple * arguments);
 
 	/**
 	 * Call (resume) an executing service, return true if a tuple was produced,
-	 * false if evaluation terminated. Writes to the given tuple.
+	 * false if evaluation terminated. The call() function must write to the 
+	 * arguments tuple, so the context must keep a pointer to this tuple.
+	 * If the various services provided need different entry points, this function
+	 * is responsible for calling the relevant one.
 	 */
-	bool (*call)(void * context, Tuple * result);
+	bool (*call)(void * context, Tuple * arguments);
 
 	/**
 	 * Any code that needs to run to finalize the service after termination
@@ -44,18 +48,9 @@ typedef struct s_MachineServiceProvider {
  */
 typedef struct s_MachineService {
 	MachineServiceProvider * provider;
+	size32 contextSize;
 	void * providerData;
 } MachineService;
-
-
-/**
- * Interface functions for convenien
- */
-void * MachineServiceCreateContext(MachineService const * service, Tuple const * arguments);
-
-bool MachineServiceCall(MachineService const * service, void * context, Tuple * result);
-
-void MachineServiceFreeContext(MachineService const * service, void * context);
 
 
 #endif	// SERVICE_PROVIDER_H

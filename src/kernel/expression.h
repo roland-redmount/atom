@@ -28,15 +28,20 @@ typedef struct s_Expression Expression;
 
 struct s_Expression {
 	enum ExpressionType type;
-	size8 nArguments;
+	struct {
+		size32 nArguments:8;
+		size32 contextSize:24;
+	} dimensions;
 	union {
+		// for EXPRESSION_JOIN, _UNION, _PROJECT (internal nodes)
 		struct {
 			Expression const * left;
 			index8 leftArgumentMap[8];		// fixes size for now; need to figure out allocation
 			Expression const * right; 
 			index8 rightArgumentMap[8];
-		} children;		// for JOIN, UNION, PROJECT
-		MachineService machineService;		// for leaves
+		} children;
+		// for EXPRESSION_MACHINE (leaves)
+		MachineService machineService;
 	} value;
 };
 
@@ -60,11 +65,22 @@ void CreateJoinExpression(Expression * expression, size8 nArguments,
  * as necessary.
  */
 
-void * ExpressionCreateContext(Expression const * expression, Tuple * arguments);
+typedef struct s_ExpressionContext {
+	Tuple * arguments;
+	byte data[];
+} ExpressionContext;
 
-bool ExpressionCall(Expression const * expression, void * context,  Tuple * result);
 
-void ExpressionFreeContext(Expression const * expression, void * context);
+ /**
+  * Create and return an execution context for evaluating an expression
+  * with the given argument tuple. Each ExpressionCall() to this context
+  * will yield result into the given tuple.
+  */
+ExpressionContext * ExpressionCreateContext(Expression const * expression, Tuple * arguments);
+
+bool ExpressionCall(Expression const * expression, ExpressionContext * context);
+
+void ExpressionFreeContext(Expression const * expression, ExpressionContext * context);
 
 void PrintExpression(Expression const * expression);
 
