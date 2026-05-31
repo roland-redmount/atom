@@ -95,7 +95,7 @@ static void btreeFreeService(void * item, size32 itemSize)
 		IFactRelease(record->parameters);
 	
 /* TODO: Deallocating tables should no longer be the responsibility of the ServiceRegistry,
-   as it does not add/remove facts; see agents. */
+   as services do not add/remove facts; see agents. */
    
 	if(record->expression.type == EXPRESSION_MACHINE) {
  		// machine services that can store tuples must be empty
@@ -191,7 +191,8 @@ void RegistryAddCoreBTreeService(index32 index, Atom form, BTree * btree)
 		.provider = &bTreeServiceProvider,
 		.providerData = btree
 	};
-	CreateMachineExpression(&(record->expression), &service);
+	size8 arity = RelationBTreeNColumns(btree);
+	CreateMachineExpression(&(record->expression), arity, &service);
 	
 	// The parameters and service fields will be initialized later
 	// by RegistryFinalizeCoreServices()
@@ -259,7 +260,7 @@ Atom RegistryAddBTreeService(Atom form, BTree * btree)
 		.providerData = btree
 	};
 	Expression btreeExpression;
-	CreateMachineExpression(&btreeExpression, &btreeService);
+	CreateMachineExpression(&btreeExpression, arity, &btreeService);
 	
 	return RegistryAddService(form, parameters, &btreeExpression);
 }

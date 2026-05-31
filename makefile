@@ -155,8 +155,8 @@ LANG_FILES := $(addprefix lang/, \
  Quote SubstitutionList TermForm TypedAtom unification Variable)
 
 KERNEL_FILES := $(addprefix kernel/, \
- dictionary dispatch expression ifact FloatIEEE754 Int kernel letter list lookup multiset pair \
- Parameter RelationBTree ServiceRegistry string tuple UInt)
+ dictionary dispatch expression ifact FloatIEEE754 Int kernel letter list lookup machineservice \
+ multiset pair Parameter RelationBTree ServiceRegistry string tuple UInt)
 
 MEMORY_FILES := $(addprefix memory/, allocator paging pool)
 
@@ -207,7 +207,7 @@ $(BINDIR)/opengltest : $(patsubst %, $(OBJDIR)/%.o, \
 #
 
 TESTS_EXE_FILES := $(addprefix $(BINDIR)/,\
- test_btree test_atomtypes test_dispatch test_dictionary test_kernel test_language\
+ test_btree test_atomtypes test_dispatch test_dictionary test_expression test_kernel test_language\
  test_list test_lookup test_memory test_multiset test_pair test_parsing test_persistence\
  test_relation_btree test_string test_service_registry test_tokenizer test_tuple test_utilities)
 
@@ -249,6 +249,7 @@ test:
 	$(BINDIR)/test_tokenizer
 	$(BINDIR)/test_language
 	$(BINDIR)/test_parsing
+	$(BINDIR)/test_expression
 	$(BINDIR)/test_dictionary
 	$(BINDIR)/test_service_registry
 	$(BINDIR)/test_persistence

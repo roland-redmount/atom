@@ -22,7 +22,7 @@ typedef struct s_MachineServiceProvider {
 	 * This method must return a pointer to its context (or 0 if none).
 	 * This context pointer will then be supplied to call() and finalizeContext().
 	 */
-	void * (*setupContext)(void * providerData, Tuple const * arguments);
+	void * (*createContext)(void * providerData, Tuple const * arguments);
 
 	/**
 	 * Call (resume) an executing service, return true if a tuple was produced,
@@ -33,7 +33,7 @@ typedef struct s_MachineServiceProvider {
 	/**
 	 * Any code that needs to run to finalize the service after termination
 	 */
-	void (*finalizeContext)(void * context);
+	void (*freeContext)(void * context);
 
 } MachineServiceProvider;
 
@@ -46,6 +46,16 @@ typedef struct s_MachineService {
 	MachineServiceProvider * provider;
 	void * providerData;
 } MachineService;
+
+
+/**
+ * Interface functions for convenien
+ */
+void * MachineServiceCreateContext(MachineService const * service, Tuple const * arguments);
+
+bool MachineServiceCall(MachineService const * service, void * context, Tuple * result);
+
+void MachineServiceFreeContext(MachineService const * service, void * context);
 
 
 #endif	// SERVICE_PROVIDER_H

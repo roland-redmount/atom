@@ -61,9 +61,7 @@ void testCallBTreeService(void)
 	ServiceRecord record = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
 	ASSERT(record.service)
 	ASSERT(record.expression.type == EXPRESSION_MACHINE)
-
-	// Create execution context
-	MachineService * machineService = &(record.expression.value.machineService);
+	Expression const * expression = &(record.expression);
 
 	Tuple * arguments = CreateTuple(3);
 	MultisetSetTuple(arguments,
@@ -71,17 +69,15 @@ void testCallBTreeService(void)
 		anonymousVariable,
 		anonymousVariable
 	);
-
-	// TODO: should encapsulate this as MachineServiceCall(...)
-	void * context = machineService->provider->setupContext(machineService->providerData, arguments);
+	void * context = ExpressionCreateContext(expression, arguments);
 
 	// this should yields 3 elements corresponding to the 3 roles of (list position element)
 	size32 nElements = 0;
-	while(machineService->provider->call(context, arguments))
+	while(ExpressionCall(expression, context, arguments))
 		nElements++;
 	ASSERT_INT32_EQUAL(nElements, 3);
 
-	machineService->provider->finalizeContext(context);
+	ExpressionFreeContext(expression, context);
 	FreeTuple(arguments);
 }
 
@@ -115,28 +111,6 @@ void testJoinService(void)
 	 * the arguments of (predicate-form p) and (multiset p element e multiple m).
 	 */
 
-	// Conjunction form 
-	Atom leftForm = GetCorePredicateForm(FORM_PREDICATE_FORM);
-	PrintPredicateForm(leftForm);
-	PrintChar('\n');
-	Atom rightForm = GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE);
-	PrintPredicateForm(rightForm);
-	PrintChar('\n');
-
-	// NOTE: this must be in canonical order
-	Atom conjunction = CStringToConjunction(
-		"(multiset _p element _e multiple _m) & (predicate-form _p)"
-	);
-	PrintFormula(conjunction);
-	PrintChar('\n');
-
-	// Create the join service
-	ServiceRecord left = RegistryGetCoreServiceRecord(FORM_PREDICATE_FORM);
-	ServiceRecord right = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
-
-	// TODO ...
-
-	IFactRelease(conjunction);
 }
 
 

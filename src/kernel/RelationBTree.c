@@ -371,9 +371,9 @@ void agentTeardown(void * agentData)
 
 
 MachineServiceProvider bTreeServiceProvider = {
-	.setupContext = &serviceSetupContext,
+	.createContext = &serviceSetupContext,
 	.call = &serviceCall,
-	.finalizeContext = &serviceFinalizeContext,
+	.freeContext = &serviceFinalizeContext,
 };
 
 /**
