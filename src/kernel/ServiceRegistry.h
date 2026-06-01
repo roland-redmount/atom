@@ -1,12 +1,9 @@
 /**
  * A service is a procedure that can evaluate queries of a particular
- * form. The service registry maps signatures to expression that can be
- * evaluated by the interpreter. Dispatch uses the registry to
+ * form. The service registry maps (form, parameters) signatures to expressions
+ * that can be evaluated by the interpreter. Dispatch uses the registry to
  * match services to queries.
  * 
- * For B-tree services are automatically removed by RetractFact() when
- * the last tuple in the relation table is removed. 
- *
  * TODO: Service records are currently not reference counted, but we should
  * keep track of services that appear in Expression leaves; in this case we
  * must not remove the child service before the "parent". Hence, we do need
@@ -21,13 +18,6 @@
 #include "kernel/RelationBTree.h"
 
 
-enum ServiceType {
-	SERVICE_NONE,
-	SERVICE_EXPRESSION,
-	SERVICE_MACHINE
-};
-
-
 /**
  * A service is identified by a form and a parameter list.
  * The parameters list contains DT_PARAMETER atoms (see Parameter.h),
@@ -40,11 +30,6 @@ enum ServiceType {
  * the datum type of p is AT_NONE. 
  * 
  * TODO: If service s subsumes service t, only one of them may be in the registry. 
- * 
- * NOTE: the service records are fixed size -- store them in a pool?
- * This would allow us to directly refer to services by pointers, as
- * we can guarantee a stable address (unlike BTree nodes).
- * The BTree would then store these pointers (a "T-tree")
  */
 typedef struct s_ServiceRecord {
 	// we store the form and parameters lists of the signature separately
@@ -139,7 +124,7 @@ void RegistryIterate(Atom form, RegistryIterator * iterator);
 
 bool RegistryIteratorNext(RegistryIterator * iterator);
 
-ServiceRecord const * RegistryIteratorGetService(RegistryIterator * iterator);
+ServiceRecord const * RegistryIteratorPeekService(RegistryIterator * iterator);
 
 void RegistryIteratorEnd(RegistryIterator * iterator);
 

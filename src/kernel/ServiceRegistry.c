@@ -309,7 +309,7 @@ void RegistryIterate(Atom form, RegistryIterator * iterator)
 }
 
 
-ServiceRecord const * RegistryIteratorGetService(RegistryIterator * iterator)
+ServiceRecord const * RegistryIteratorPeekService(RegistryIterator * iterator)
 {
 	return BTreeIteratorPeekItem(&(iterator->btreeIterator));
 }

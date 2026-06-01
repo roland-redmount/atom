@@ -88,7 +88,7 @@ static bool dispatchToService(Atom queryForm, Atom queryActors, ServiceRecord * 
 	RegistryIterate(queryForm, &iterator);
 	bool match = false;
 	while(RegistryIteratorNext(&iterator)) {
-		ServiceRecord const * currentRecord = RegistryIteratorGetService(&iterator);
+		ServiceRecord const * currentRecord = RegistryIteratorPeekService(&iterator);
 		if(PermutationMatch(queryForm, currentRecord->parameters, queryActors, permutation)) {
 			match = true;
 			// copy the record to the caller
