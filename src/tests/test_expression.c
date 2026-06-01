@@ -10,7 +10,6 @@
 #include "lang/Variable.h"
 #include "parser/PredicateBuilder.h"
 #include "testing/testing.h"
-#include "vm/bytecode.h"		// for service library (should be moved)
 
 
 void testMachineExpression(void)

@@ -11,7 +11,6 @@
 #include "kernel/ServiceRegistry.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
-#include "vm/vm.h"
 
 
 static void checkTypeSizes(void)

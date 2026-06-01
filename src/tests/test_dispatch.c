@@ -2,11 +2,11 @@
 #include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
 #include "kernel/kernel.h"
+#include "kernel/ifact.h"
 #include "lang/Formula.h"
 #include "library/math.h"
 #include "parser/ClauseBuilder.h"
 #include "testing/testing.h"
-#include "vm/bytecode.h"
 
 
 /**

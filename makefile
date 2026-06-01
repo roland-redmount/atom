@@ -167,8 +167,6 @@ NETWORK_FILES := $(addprefix network/, Connection Network)
 PARSER_FILES := $(addprefix parser/, Characters ClauseBuilder ConjunctionBuilder PartBuilder \
  PredicateBuilder StringBuffer TermBuilder Token Tokenizer)
 
-# VM_FILES := $(addprefix vm/, bytecode context instruction vm)
-
 GRAPHICS_FILES := $(addprefix graphics/, \
  Graphics Mesh Point Polygon TextBlock Triangle)
 
@@ -256,7 +254,6 @@ test:
 	$(BINDIR)/test_service_registry
 	$(BINDIR)/test_math
 	$(BINDIR)/test_dictionary
-# 	$(BINDIR)/test_vm
 	$(BINDIR)/test_dispatch
 
 

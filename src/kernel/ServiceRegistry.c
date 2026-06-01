@@ -12,7 +12,7 @@
 #include "lang/PredicateForm.h"
 #include "memory/pool.h"
 #include "util/hashing.h"
-#include "vm/bytecode.h"
+
 
 /**
  * The registry stores all ServiceRecord entries in a BTree, indexed by form.
