@@ -502,6 +502,7 @@ static void removeBTreeTuples(Atom predicateForm, Tuple * actors)
 	// NOTE: I think this should be an explicit function in ServiceRegistry, purgeEmptyService() or such
 	if(RelationBTreeNRows(btree) == 0) {
 		RegistryRemoveService(record.service);
+		FreeRelationBTree(btree);
 	}
 }
 

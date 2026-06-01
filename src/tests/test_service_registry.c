@@ -48,6 +48,7 @@ void testAddDropTable(void)
 	ASSERT_PTR_EQUAL(foundTable, createdTable)
 
 	RegistryRemoveService(service);
+	FreeRelationBTree(createdTable);
 	ASSERT_UINT32_EQUAL(RegistryNServices(), nTablesInitial)
 	
 	teardownFixture();

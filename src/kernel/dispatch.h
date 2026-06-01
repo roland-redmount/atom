@@ -15,7 +15,7 @@
  * The argument permutation required to match the service is written
  * to the given permutation array.
  */
-bool DispatchQuery(Atom query, ServiceRecord * record, Tuple const * arguments, index8 * permutation);
+bool DispatchQuery(Atom query, ServiceRecord * record, index8 * permutation);
 
 
 #endif	// DISPATCH_H

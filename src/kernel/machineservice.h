@@ -16,6 +16,9 @@
  * One MachineServiceProvider can host multiple MachineService for
  * various relations.
  */
+
+typedef bool (*MachineServiceCall)(void * context, Tuple * arguments);
+
 typedef struct s_MachineServiceProvider {
 	/**
 	 * Initialize service-specific context information, such as an iterator structure.
@@ -32,7 +35,7 @@ typedef struct s_MachineServiceProvider {
 	 * If the various services provided need different entry points, this function
 	 * is responsible for calling the relevant one.
 	 */
-	bool (*call)(void * context, Tuple * arguments);
+	MachineServiceCall call;
 
 	/**
 	 * Any code that needs to run to finalize the service after termination

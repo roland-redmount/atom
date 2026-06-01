@@ -123,9 +123,8 @@ void RegistryTeardownCoreServices(void);
 Atom RegistryAddService(Atom form,  Atom parameters, Expression const * expression);
 
 /**
- * Convenience function add a B-tree machine service the registry.
- * The registry takes ownership of btree, will deallocate it.
- * Returns an AT_SERVICE atom.
+ * Convenience function add a B-tree machine service the registry,
+ * generating a list of untyped parameters. Returns an AT_SERVICE atom.
  */
 Atom RegistryAddBTreeService(Atom form, BTree * btree);
 
@@ -137,9 +136,6 @@ Atom RegistryAddBTreeService(Atom form, BTree * btree);
 
 /**
  * Remove the given service from the registry.
- * 
- * If the service is a relation table, all facts must have been retracted
- * so that table is empty; the B-tree will be deallocated.
  */
 void RegistryRemoveService(Atom service);
 
@@ -148,13 +144,6 @@ void RegistryRemoveService(Atom service);
  * For matching services to queries, see dispatch.c
  */
 ServiceRecord RegistryGetServiceRecord(Atom service);
-
-/**
- * Special case for services where parameters are always in/out untyped.
- * If a matching service does not exist, returns a zero record.
- * (Convenience function, keeping it for now)
- */
-ServiceRecord RegistryFindUntypedService(Atom form);
 
 
 /**
@@ -175,6 +164,19 @@ bool RegistryIteratorNext(RegistryIterator * iterator);
 ServiceRecord RegistryIteratorGetService(RegistryIterator * iterator);
 
 void RegistryIteratorEnd(RegistryIterator * iterator);
+
+/**
+ * Retrieve the service with the given form and parameters list.
+ * If a matching service does not exist, returns a zero record.
+ */
+ServiceRecord RegistryFindService(Atom form, Atom parameters);
+
+/**
+ * Retrieve the service of the given form with all parameters in/out untyped.
+ * If a matching service does not exist, returns a zero record.
+ */
+ServiceRecord RegistryFindUntypedService(Atom form);
+
 
 /**
  * For debugging

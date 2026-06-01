@@ -21,9 +21,8 @@ void testMachineExpression(void)
 
 	Atom query = CStringToPredicate("+ 3 + _ = 7");
 	ServiceRecord record;
-	Tuple * arguments = CreateTuple(3);
 	index8 argumentMap[3];
-	ASSERT(DispatchQuery(query, &record, arguments, argumentMap))
+	ASSERT(DispatchQuery(query, &record, argumentMap))
 
 	// Expression callExpression = {
 	// 	.type = CALL_EXPRESSION,
@@ -43,7 +42,7 @@ void testMachineExpression(void)
 
 	ExpressionEnd(&context);
 */
-	FreeTuple(arguments);
+
 	IFactRelease(query);	
 }
 

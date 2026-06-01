@@ -27,7 +27,7 @@ $(info PLATFORM = $(PLATFORM))
 
 # source directories
 SRCDIRS := $(patsubst %, src/%,\
- btree graphics kernel lang memory network parser testing tests util vm)
+ btree graphics kernel lang library memory network parser testing tests util vm)
 
 # source directories for FreeType
 # FREETYPE_BASEDIR := third-party/$(FREETYPE)/src
@@ -158,6 +158,8 @@ KERNEL_FILES := $(addprefix kernel/, \
  dictionary dispatch expression ifact FloatIEEE754 Int kernel letter list lookup \
  multiset pair Parameter RelationBTree ServiceRegistry string tuple UInt)
 
+LIBRARY_FILES := $(addprefix library/, math)
+
 MEMORY_FILES := $(addprefix memory/, allocator paging pool)
 
 NETWORK_FILES := $(addprefix network/, Connection Network)
@@ -172,7 +174,7 @@ GRAPHICS_FILES := $(addprefix graphics/, \
 
 TESTING_FILES := $(addprefix testing/, testing)
 
-ALL_CORE_FILES := $(LANG_FILES) $(DATUMTYPES_FILES) $(KERNEL_FILES) $(MEMORY_FILES) $(NETWORK_FILES) \
+ALL_CORE_FILES := $(LANG_FILES) $(DATUMTYPES_FILES) $(KERNEL_FILES) $(LIBRARY_FILES) $(MEMORY_FILES) $(NETWORK_FILES) \
  $(UNITY_FILES) $(PARSER_FILES) $(UTIL_FILES) $(BTREE_FILES) $(PLATFORM_FILE) $(VM_FILES) $(TESTING_FILES)
 
 #
@@ -208,7 +210,7 @@ $(BINDIR)/opengltest : $(patsubst %, $(OBJDIR)/%.o, \
 
 TESTS_EXE_FILES := $(addprefix $(BINDIR)/,\
  test_btree test_atomtypes test_dispatch test_dictionary test_expression test_kernel test_language\
- test_list test_lookup test_memory test_multiset test_pair test_parsing test_persistence\
+ test_list test_lookup test_math test_memory test_multiset test_pair test_parsing test_persistence\
  test_relation_btree test_string test_service_registry test_tokenizer test_tuple test_utilities)
 
 .PHONY: tests
@@ -235,6 +237,7 @@ $(OBJDIR)/%.o : src/%.c $(DEPDIR)/%.d
 test:
 	find $(OBJDIR) -name '*.gcda' -delete
 	$(BINDIR)/test_memory
+	$(BINDIR)/test_persistence
 	$(BINDIR)/test_utilities
 	$(BINDIR)/test_atomtypes
 	$(BINDIR)/test_tuple
@@ -250,11 +253,12 @@ test:
 	$(BINDIR)/test_language
 	$(BINDIR)/test_parsing
 	$(BINDIR)/test_expression
-	$(BINDIR)/test_dictionary
 	$(BINDIR)/test_service_registry
-	$(BINDIR)/test_persistence
+	$(BINDIR)/test_math
+	$(BINDIR)/test_dictionary
 # 	$(BINDIR)/test_vm
 	$(BINDIR)/test_dispatch
+
 
 #
 # code coverage

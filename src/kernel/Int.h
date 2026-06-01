@@ -1,5 +1,6 @@
 /**
  * Atom types for signed integers, two's complement, little endian
+ * The atom is an int64.
  */
 
 #include "lang/TypedAtom.h"

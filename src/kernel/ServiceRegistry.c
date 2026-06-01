@@ -93,18 +93,6 @@ static void btreeFreeService(void * item, size32 itemSize)
 	// parameters is set to zero in RegistryTeardownCoreServices()
 	if(record->parameters)
 		IFactRelease(record->parameters);
-	
-/* TODO: Deallocating tables should no longer be the responsibility of the ServiceRegistry,
-   as services do not add/remove facts; see agents. */
-   
-	if(record->expression.type == EXPRESSION_MACHINE) {
- 		// machine services that can store tuples must be empty
-		MachineService * machineService = &(record->expression.value.machineService);
-		ASSERT(machineService->provider == &bTreeServiceProvider)
-		BTree * btree = machineService->providerData;
-		ASSERT(RelationBTreeNRows(btree) == 0)
-		BTreeFree(btree);
-	}
 }
 
 
@@ -227,12 +215,29 @@ void RegistryTeardownCoreServices(void)
 	for(index32 i = N_CORE_PREDICATES; i > 2; i--) {
 		ServiceRecord * record = &(registry.coreServices[i]);
 		ASSERT(BTreeDelete(registry.tree, record) == BTREE_DELETED)
+
+		ASSERT(record->expression.type == EXPRESSION_MACHINE)
+ 		MachineService * machineService = &(record->expression.value.machineService);
+		ASSERT(machineService->provider == &bTreeServiceProvider)
+		BTree * btree = machineService->providerData;
+		ASSERT(RelationBTreeNRows(btree) == 0)
+		FreeRelationBTree(btree);
 	}
-	// remove (multiset element multiple) and (predicate-form)
+	// Remove (multiset element multiple) and (predicate-form)
+	// This must be interleaved since the forms are mutually dependent.
 	IFactRelease(GetCorePredicateForm(2));
 	IFactRelease(GetCorePredicateForm(1));
+	
 	ASSERT(BTreeDelete(registry.tree, &(registry.coreServices[2])) == BTREE_DELETED)
+	BTree * predicateFormBTree = registry.coreServices[2].expression.value.machineService.providerData;
+	ASSERT(RelationBTreeNRows(predicateFormBTree) == 0)
+	FreeRelationBTree(predicateFormBTree);
+
 	ASSERT(BTreeDelete(registry.tree, &(registry.coreServices[1])) == BTREE_DELETED)
+	BTree * multisetBTree = registry.coreServices[1].expression.value.machineService.providerData;
+	ASSERT(RelationBTreeNRows(multisetBTree) == 0)
+	FreeRelationBTree(multisetBTree);
+
 	SetMemory(registry.coreServices, (N_CORE_PREDICATES + 1) * sizeof(ServiceRecord), 0);
 }
 
@@ -247,7 +252,7 @@ Atom RegistryAddService(Atom form, Atom parameters, Expression const * expressio
 	};
 	addService(&record);
 	IFactAcquire(form);
-	// we hold a reference to created parameters already
+	IFactAcquire(parameters);
 	return record.service;
 }
 
@@ -265,8 +270,9 @@ Atom RegistryAddBTreeService(Atom form, BTree * btree)
 	};
 	Expression btreeExpression;
 	CreateMachineExpression(&btreeExpression, arity, &btreeService);
-	
-	return RegistryAddService(form, parameters, &btreeExpression);
+	Atom service = RegistryAddService(form, parameters, &btreeExpression);
+	IFactRelease(parameters);
+	return service;
 }
 
 /*
@@ -321,6 +327,7 @@ ServiceRecord RegistryFindUntypedService(Atom form)
 
 	// First try core tables. This is necessary during bootstrap,
 	// before we can use createBTreeParameterList()
+	// NOTE: this should perhaps be a dedicated bootstrap function
 	index32 coreServiceIndex = findCoreService(form);
 	if(coreServiceIndex)
 		return registry.coreServices[coreServiceIndex];
@@ -344,7 +351,6 @@ void RegistryIterate(Atom form, RegistryIterator * iterator)
 		.service = serviceRecordHash(form, 0)
 	};
 	BTreeIterate(&(iterator->btreeIterator), registry.tree);
-	BTreeIteratorSeek(&(iterator->btreeIterator), &(iterator->keyRecord));
 }
 
 
@@ -358,7 +364,13 @@ ServiceRecord RegistryIteratorGetService(RegistryIterator * iterator)
 
 bool RegistryIteratorNext(RegistryIterator * iterator)
 {
-	if(BTreeIteratorNext(&(iterator->btreeIterator))) {
+	bool foundItem;
+	if(BTreeIteratorBeforeFirst(&iterator->btreeIterator))
+		foundItem = BTreeIteratorSeek(&(iterator->btreeIterator), &(iterator->keyRecord));
+	else
+		foundItem = BTreeIteratorNext(&(iterator->btreeIterator));
+
+	if(foundItem) {
 		ServiceRecord const * btreeRecord = BTreeIteratorPeekItem(&(iterator->btreeIterator));
 		if(compareServiceRecords(btreeRecord, &(iterator->keyRecord)) == 0)
 			return true;		
@@ -370,6 +382,14 @@ bool RegistryIteratorNext(RegistryIterator * iterator)
 void RegistryIteratorEnd(RegistryIterator * iterator)
 {
 	BTreeIteratorEnd(&(iterator->btreeIterator));
+}
+
+
+ServiceRecord RegistryFindService(Atom form, Atom parameters)
+{
+	Atom service = serviceRecordHash(form, parameters);
+	ServiceRecord record = RegistryGetServiceRecord(service);
+	return record;
 }
 
 

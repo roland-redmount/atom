@@ -3,6 +3,8 @@
 
 #include "platform.h"
 
+// TODO: this might be better defined as a union {uint64, int64, void *}
+// or similar to avoid intepreting casts
 typedef data64 Atom;
 
 uint8 ReduceAtomsArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms);

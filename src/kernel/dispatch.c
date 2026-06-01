@@ -157,7 +157,7 @@ static bool dispatchToService(Atom queryForm, Atom queryActors, ServiceRecord * 
  * Note that we might follow several rules before we find a service to call.
  */
 
-bool DispatchQuery(Atom query, ServiceRecord * record, Tuple const * arguments, index8 * permutation)
+bool DispatchQuery(Atom query, ServiceRecord * record, index8 * permutation)
 {
 	ASSERT(IsFormula(query))
 

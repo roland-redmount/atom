@@ -127,6 +127,7 @@ void testRemoveAllPredicateRoles(void)
 
 	// drop the relation table
 	RegistryRemoveService(service);
+	FreeRelationBTree(tree);
 
 	IFactRelease(form);
 	IFactRelease(foo);
