@@ -112,9 +112,7 @@ typedef struct s_LookupIterator {
  */
 void LookupIterate(Atom atom, LookupIterator * iterator);
 
-bool LookupIteratorHasRecord(LookupIterator const * iterator);
-
-void LookupIteratorNext(LookupIterator * iterator);
+bool LookupIteratorNext(LookupIterator * iterator);
 
 Atom LookupIteratorGetForm(LookupIterator const * iterator);
 

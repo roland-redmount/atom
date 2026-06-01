@@ -44,8 +44,12 @@ Tuple * CreateTupleFromtuple(Tuple const * otherTuple);
  */
 void SetupTuple(Tuple * tuple, size8 nAtoms);
 
-
 void FreeTuple(Tuple * tuple);
+
+/**
+ * Set all atoms to zero
+ */
+void TupleClear(Tuple * tuple);
 
 /**
  * Get the TypedAtom at the given index, 0-based

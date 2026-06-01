@@ -11,7 +11,6 @@
 #include "kernel/ServiceRegistry.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
-#include "vm/vm.h"
 
 
 static void checkTypeSizes(void)
@@ -52,10 +51,6 @@ const index8 corePredicateArity[N_CORE_PREDICATES + 1] = {
 	3,	// (formula form actors)
 	2,	// (quote quoted)
 	1,	// (string)
-	2,	// (bytecode program)
-	2,	// (bytecode parameters)
-	2,	// (bytecode registers)
-	2,	// (bytecode constants)
 };
 
 const index32 coreFormRoleIds[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY] = {
@@ -71,10 +66,6 @@ const index32 coreFormRoleIds[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY] = {
 	{ROLE_FORMULA, ROLE_FORM, ROLE_ACTORS},
 	{ROLE_QUOTE, ROLE_QUOTED},
 	{ROLE_STRING},
-	{ROLE_BYTECODE, ROLE_PROGRAM},
-	{ROLE_BYTECODE, ROLE_PARAMETERS},
-	{ROLE_BYTECODE, ROLE_REGISTERS},
-	{ROLE_BYTECODE, ROLE_CONSTANTS},
 };
 
 // TODO: this structure must be persistent
@@ -161,12 +152,6 @@ static void setupCoreRoleNames(void)
 	kernel.coreRoleNames[ROLE_SIGN] = CreateNameFromCString("sign");
 	kernel.coreRoleNames[ROLE_FORM] = CreateNameFromCString("form");
 	kernel.coreRoleNames[ROLE_ACTORS] = CreateNameFromCString("actors");
-
-	kernel.coreRoleNames[ROLE_BYTECODE] = CreateNameFromCString("bytecode");
-	kernel.coreRoleNames[ROLE_PROGRAM] = CreateNameFromCString("program");
-	kernel.coreRoleNames[ROLE_PARAMETERS] = CreateNameFromCString("parameters");
-	kernel.coreRoleNames[ROLE_REGISTERS] = CreateNameFromCString("registers");
-	kernel.coreRoleNames[ROLE_CONSTANTS] = CreateNameFromCString("constants");
 }
 
 
@@ -178,11 +163,26 @@ static void setupCoreRoleNames(void)
 #define MULTISET_MULTIPLE_COLUMN	0
 
 
+static index32 getCorePredicateIndex(Atom predicateForm)
+{
+	index32 formIndex = 0;
+	while(formIndex < N_CORE_PREDICATES) {
+		if(kernel.corePredicateForms[++formIndex] == predicateForm)
+			break;
+	}
+	ASSERT(formIndex <= N_CORE_PREDICATES)
+	return formIndex;	
+}
+
+
 void bootstrapAssertFact(Atom predicateForm, Tuple const * actors)
 {
-	ServiceRecord record = RegistryFindBTreeService(predicateForm);
-	ASSERT(record.type == SERVICE_BTREE)
-	RelationBTreeAddTuple(record.provider.tree, actors);
+	// TODO: this now needs to retrieve an agent, not a service ...
+	// This is a quick hack to get the BTree * pointer)
+	index32 formIndex = getCorePredicateIndex(predicateForm);
+	ServiceRecord record = RegistryGetCoreServiceRecord(formIndex);
+	BTree * btree = (BTree *) record.expression.value.machineService.providerData;
+	RelationBTreeAddTuple(btree, actors);
 }
 
 
@@ -234,20 +234,22 @@ static void setupCoreServices(void)
 	kernel.corePredicateForms[FORM_PREDICATE_FORM] = predicateForm;
 
 	// create services and set role index arrays
-	BTree * multisetBTree = RegistryAddCoreBTreeService(
+	BTree * multisetBTree = CreateRelationBTree(corePredicateArity[FORM_MULTISET_ELEMENT_MULTIPLE]);
+	RegistryAddCoreBTreeService(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
 		multisetForm,
-		corePredicateArity[FORM_MULTISET_ELEMENT_MULTIPLE]
+		multisetBTree
 	);
 
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][0] = MULTISET_MULTISET_COLUMN;
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][1] = MULTISET_ELEMENT_COLUMN;
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][2] = MULTISET_MULTIPLE_COLUMN;
 
-	BTree * predicateFormBTree = RegistryAddCoreBTreeService(
+	BTree * predicateFormBTree = CreateRelationBTree(corePredicateArity[FORM_PREDICATE_FORM]);
+	RegistryAddCoreBTreeService(
 		FORM_PREDICATE_FORM,
 		predicateForm,
-		corePredicateArity[FORM_PREDICATE_FORM]
+		predicateFormBTree
 	);
 	kernel.corePredicateRoleIndex[FORM_PREDICATE_FORM][0] = 0;
 	
@@ -348,16 +350,14 @@ static void setupCoreServices(void)
 			roles[j] = kernel.coreRoleNames[coreFormRoleIds[i][j]];
 
 		Atom form = CreatePredicateForm(roles, corePredicateArity[i]);
-
 		kernel.corePredicateForms[i] = form;
-		RegistryAddCoreBTreeService(i, form, corePredicateArity[i]);
+
+		BTree * btree = CreateRelationBTree(corePredicateArity[i]);
+		RegistryAddCoreBTreeService(i, form, btree);
 
 		// precompute role indices (relation columns) for GetPredicateRoleIndex()
-		for(index8 j = 0; j < corePredicateArity[i]; j++) {
-			kernel.corePredicateRoleIndex[i][j] = PredicateRoleIndex(
-				kernel.corePredicateForms[i], kernel.coreRoleNames[coreFormRoleIds[i][j]]
-			);
-		}
+		for(index8 j = 0; j < corePredicateArity[i]; j++)
+			kernel.corePredicateRoleIndex[i][j] = PredicateRoleIndex(form, roles[j]);
 	}
 	// NOTE: we now hold 1 reference to each of the core predicate forms.
 
@@ -384,8 +384,6 @@ void KernelInitialize(void)
 
 	setupCoreRoleNames();
 	setupCoreServices();
-
-	VMInitialize();
 
 	kernel.nCoreIFacts = TotalIFactCount();
 	kernel.nCoreIFactRefs = TotalIFactReferenceCount();
@@ -423,6 +421,7 @@ void KernelShutdown(void)
 	 * back to initial state. This is rather complicated due to special
 	 * bootstrap considerations, and it is unnecessary in practise, as
 	 * we would typically never completely destroy the "world" anyway.
+	 * But it is useful to ensure we have no memory leaks.
 	 */
 	RegistryTeardownCoreServices();
 
@@ -443,6 +442,7 @@ void KernelShutdown(void)
 	CleanupMemory();
 }
 
+// TODO: move assert / retract to agent
 
 // TODO: this should return a status code indicating whether the fact was created,
 // already existed, or if the assert failed due to logical inconsistency
@@ -451,52 +451,54 @@ void AssertFact(Atom predicateForm, Tuple const * actors)
 	// TODO: currently we only support creating predicates
 	ASSERT(IsPredicateForm(predicateForm));
 	// add tuple to relation table
-	ServiceRecord record = RegistryFindBTreeService(predicateForm);
-	if(record.type == SERVICE_BTREE) {
-		RelationBTreeAddTuple(record.provider.tree, actors);
+	// quick hack, assume B-tree service provider
+	ServiceRecord record = RegistryFindUntypedService(predicateForm);
+	if(record.service) {
+		ASSERT(record.expression.type == EXPRESSION_MACHINE)
+		ASSERT(record.expression.value.machineService.provider == &bTreeServiceProvider)
+		BTree * btree = (BTree *) record.expression.value.machineService.providerData;
+		RelationBTreeAddTuple(btree, actors);
 	}
-	else if(record.type == SERVICE_NONE) {
+	else {
 		// create new relation table
 		size8 arity = PredicateArity(predicateForm);
 		BTree * btree = CreateRelationBTree(arity);
 		RegistryAddBTreeService(predicateForm, btree);
 		RelationBTreeAddTuple(btree, actors);
 	}
-	else {
-		ASSERT(false)
-	}
 	LookupAddPredicateRoles(predicateForm, actors);
 }
 
 
-void RetractFact(Atom predicateForm, Tuple * actors)
+static void removeBTreeTuples(Atom predicateForm, Tuple * actors)
 {
-	ServiceRecord record = RegistryFindBTreeService(predicateForm);
-	ASSERT(record.type == SERVICE_BTREE)
-	BTree * btree = record.provider.tree;
-	ASSERT(btree)
+	ServiceRecord record = RegistryFindUntypedService(predicateForm);
+	ASSERT(record.service)
+	ASSERT(record.expression.type == EXPRESSION_MACHINE)
+	ASSERT(record.expression.value.machineService.provider == &bTreeServiceProvider)
+	BTree * btree = (BTree *) record.expression.value.machineService.providerData;
+	
 	// NOTE: this can cause IFacts to be removed if the tuple
 	// being removed holds the last reference to an IFact
 	RelationBTreeRemoveTuples(btree, actors, REMOVE_NORMAL);
 	// remove btree if empty
+	// NOTE: I think this should be an explicit function in ServiceRegistry, purgeEmptyService() or such
 	if(RelationBTreeNRows(btree) == 0) {
 		RegistryRemoveService(record.service);
+		FreeRelationBTree(btree);
 	}
+}
 
-	// remove lookup entries for each role in the predicate form
+void RetractFact(Atom predicateForm, Tuple * actors)
+{
+	removeBTreeTuples(predicateForm, actors);
 	LookupRemovePredicateRoles(predicateForm, actors);
 }
 
 
 void RetractAllFacts(Atom predicateForm)
 {
-	ServiceRecord record = RegistryFindBTreeService(predicateForm);
-	ASSERT(record.type == SERVICE_BTREE)
-	RelationBTreeRemoveTuples(record.provider.tree, 0, REMOVE_NORMAL);
-	// remove btree if empty
-	if(RelationBTreeNRows(record.provider.tree) == 0) {
-		RegistryRemoveService(record.service);
-	}
+	removeBTreeTuples(predicateForm, 0);
 	LookupRemoveAllPredicateRoles(predicateForm);
 }
 

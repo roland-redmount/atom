@@ -100,6 +100,12 @@ void FreeTuple(Tuple * tuple)
 }
 
 
+void TupleClear(Tuple * tuple)
+{
+	SetMemory(tupleAtomArray(tuple), tuple->nAtoms * sizeof(Atom), 0);
+}
+
+
 TypedAtom TupleGetElement(Tuple const * tuple, index8 index)
 {
 	byte type = tupleTypeArray((Tuple *) tuple)[index];

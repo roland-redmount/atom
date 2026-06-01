@@ -579,7 +579,6 @@ void BTreeClear(BTree * btree)
  * Advance the iterator to the next item in the tree, if one exists.
  * Returns true if a next item was available, in which case iteratorAtEnd()
  * will return false when next called.
- * NOTE: Does NOT test the item for match against the iteration key.
  */
 static bool advanceIterator(BTreeIterator * iterator)
 {
@@ -619,6 +618,7 @@ static bool advanceIterator(BTreeIterator * iterator)
 	}
 }
 
+
 /**
  * Position the iterator at the beginning, before the first item
  */
@@ -627,6 +627,12 @@ static void setIteratorBeforeFirst(BTreeIterator * iterator)
 	iterator->depth = 0;
 	iterator->stack[0].node = iterator->btree->root;
 	iterator->stack[0].index = 0;
+}
+
+
+bool BTreeIteratorBeforeFirst(BTreeIterator * iterator)
+{
+	return (iterator->depth == 0) && (iterator->stack[0].index == 0);	
 }
 
 
@@ -648,7 +654,7 @@ static bool iteratorAtEnd(BTreeIterator const * iterator)
 }
 
 
-void BTreeIteratorSeek(BTreeIterator * iterator, const void * keyItem)
+bool BTreeIteratorSeek(BTreeIterator * iterator, const void * keyItem)
 {
 	ASSERT(keyItem)
 	setIteratorBeforeFirst(iterator);
@@ -656,7 +662,7 @@ void BTreeIteratorSeek(BTreeIterator * iterator, const void * keyItem)
 	if(iterator->btree->nItemsTotal == 0) {
 		// iterator has no items, set position to end
 		position->index = 1;
-		return;
+		return false;
 	}
 	while(true) {
 		position->index = searchNodeItems(iterator->btree, position->node, keyItem);
@@ -665,17 +671,17 @@ void BTreeIteratorSeek(BTreeIterator * iterator, const void * keyItem)
 			if(iterator->btree->compareItems(item, keyItem, iterator->btree->itemSize) == 0) {
 				// iterator index must be after the matching item
 				position->index++;
-				return;
+				return true;
 			}
 		}
 		// else no match in this node
 		if(isLeaf(position->node)) {
-			// at leaf node and no match, so  no matching item in the tree
+			// at leaf node and no match, so no matching item in the tree
 			setIteratorAtEnd(iterator);
-			return;
+			return false;
 		}
 		else {
-			// advance to next level
+			// descend to next level
 			BTreeNode * child = position->node->children[position->index];
 			position = &(iterator->stack[++iterator->depth]);
 			position->node = child;
@@ -693,12 +699,12 @@ void BTreeIterate(BTreeIterator * iterator, BTree * btree)
 	iterator->stack = btreeAllocate(sizeof(BTreePosition) * btree->height);
 	SetMemory(iterator->stack, sizeof(BTreePosition) * btree->height, 0);
 	setIteratorBeforeFirst(iterator);
-	advanceIterator(iterator);
 }
 
 
-bool BTreeIteratorHasItem(BTreeIterator const * iterator)
+bool BTreeIteratorNext(BTreeIterator * iterator)
 {
+	advanceIterator(iterator);
 	return !iteratorAtEnd(iterator);
 }
 
@@ -707,12 +713,6 @@ void * BTreeIteratorPeekItem(BTreeIterator const * iterator)
 {
 	BTreePosition * position = &(iterator->stack[iterator->depth]);
 	return nodeGetItem(iterator->btree, position->node, position->index - 1);
-}
-
-
-void BTreeIteratorNext(BTreeIterator * iterator)
-{
-	advanceIterator(iterator);
 }
 
 

@@ -10,7 +10,7 @@
 #include "lang/Atom.h"
 
 /**
- * For bytecode programs, each parameter is either input or output.
+ * Service parameters can be input, output, or bidirectional.
  * Machine level program such as table services may have
  * parameters than allow both input and output; these can be used 
  * to represent multiple input/output combination compactly.

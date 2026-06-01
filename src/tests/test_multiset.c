@@ -12,7 +12,7 @@
 
 static void testMultiset(void)
 {
-	BTree * table = RegistryGetCoreTable(FORM_MULTISET_ELEMENT_MULTIPLE);
+	BTree * table = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
 	uint32 initialNRows = RelationBTreeNRows(table);
 	
 	TypedAtom elements[] = {
@@ -38,13 +38,12 @@ static void testMultiset(void)
 	MultisetIterate(multiset, &iterator);
 	
 	for(index32 i = 0; i < TEST_MULTISET_N_UNIQUE; i++) {
-		ASSERT_TRUE(MultisetIteratorHasNext(&iterator))
+		ASSERT_TRUE(MultisetIteratorNext(&iterator))
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		ASSERT_TRUE(SameTypedAtoms(em.element, elements[i]))
 		ASSERT_UINT32_EQUAL(em.multiple, multiples[i])
-		MultisetIteratorNext(&iterator);
 	}
-	ASSERT_FALSE(MultisetIteratorHasNext(&iterator))
+	ASSERT_FALSE(MultisetIteratorNext(&iterator))
 	MultisetIteratorEnd(&iterator);
  
 	// creating again from the same elements should yield the same atom, with one additional reference

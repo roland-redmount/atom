@@ -1,7 +1,6 @@
 
 #include "kernel/FloatIEEE754.h"
 #include "kernel/Int.h"
-#include "vm/instruction.h"
 #include "kernel/Parameter.h"
 #include "kernel/UInt.h"
 #include "lang/Variable.h"
@@ -26,7 +25,6 @@
 
 #include "util/hashing.h"
 #include "util/sort.h"
-#include "vm/bytecode.h"
 
 
 // global constant invalid atom
@@ -175,10 +173,6 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		PrintName(typedAtom.atom);
 		break;
 
-	case AT_INSTRUCTION:
-		PrintInstruction(typedAtom.atom);
-		break;
-
 	case AT_PARAMETER:
 		PrintParameter(typedAtom.atom);
 		break;
@@ -216,8 +210,6 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		}
 		else if(IsTermForm(typedAtom.atom))
 			PrintTermForm(typedAtom.atom);
-		else if(IsBytecode(typedAtom.atom))
-			PrintBytecode(typedAtom.atom);
 		else
 			PrintIFact(typedAtom.atom);
 		break;

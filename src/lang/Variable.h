@@ -6,8 +6,8 @@
  * identity is irrelevant, an "anonymous" variable _ can be used.
  * 
  * Variables can specify a datum type; such typed variables
- * are only used internally by the VM to call untyped services
- * from typed (bytecode) services. When typed variables occur
+ * are only used internally to call untyped services
+ * from typed services. When typed variables occur
  * in a formula, any two variables with the same name must have
  * the same type.
  * 

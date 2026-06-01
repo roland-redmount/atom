@@ -1,5 +1,8 @@
 /**
  * Implementation of a relation table using the btree data structure.
+ * This implements both a MachineServiceProvider (queries for various relations)
+ * and an AgentProvider
+ * and a mechanism for asserting facts. 
  */
 
 #ifndef RELATION_B_TREE_H
@@ -7,12 +10,15 @@
 
 #include "btree/btree.h"
 #include "kernel/tuple.h"
+#include "kernel/machineservice.h"
 
+// TODO: replace this with a service provider registry ...
+extern MachineServiceProvider bTreeServiceProvider;
 
 typedef struct s_RelationBTreeIterator {
 	BTree * btree;
 	BTreeIterator treeIterator;
-	Tuple const * queryTuple;
+	Tuple * queryTuple;
 	size8 nColumns;
 } RelationBTreeIterator;
 
@@ -27,26 +33,23 @@ size32 RelationBTreeNRows(BTree const * tree);
 /**
  * Initialize an iterator returning all tuples matching queryTuple
  * according to TupleMatch();  or, if queryTuple is 0, returning all tuples in the B-tree.
- * After this call, the iterator will be positioned at the first tuple
- * matching the query, if any, and RelationBTreeIteratorHasTuple() may be called.
+ * The iterator will be positioned before the first item, and 
+ * RelationBTreeIteratorNext() must be called before RelationBTreeIteratorHasTuple().
  * The tree is write-locked to prevent modification while iterating.
- * 
- * NOTE: the iterator does not keep a copy of queryTuple,
- * so it must remain unchanged during the iteration.
  */
 void RelationBTreeIterate(BTree * tree, Tuple const * queryTuple, RelationBTreeIterator * iterator);
 
 /**
- * Test if the iterator has a next element.
- * If this function returns true, the tuple can be accessed by 
- * RelationBTreeIteratorGetTuple() or RelationBTreeIteratorGetAtom().
+ * Advance the iterator to the next tuple matching the query, if any.
+ * Returns true if an tuple was found, corresponding to a B-Tree service
+ * yielding a fact.
  */
-bool RelationBTreeIteratorHasTuple(RelationBTreeIterator const * iterator);
+bool RelationBTreeIteratorNext(RelationBTreeIterator * iterator);
 
 /**
- * Advance the iterator to the next tuple matching the query, if any
+ * Returns true if RelationBTreeIteratorNext() has not been called.
  */
-void RelationBTreeIteratorNext(RelationBTreeIterator * iterator);
+bool BTreeIteratorBeforeFirst(BTreeIterator * iterator);
 
 TypedAtom RelationBTreeIteratorGetAtom(RelationBTreeIterator const * iterator, index8 i);
 
@@ -59,7 +62,6 @@ void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, Tuple
  * View the iterator's current tuple
  */
 Tuple const * RelationBTreeIteratorPeekTuple(RelationBTreeIterator const * iterator);
-
 
 /**
  * Terminate the iterator, releasing lock from the tree.
@@ -80,7 +82,7 @@ TypedAtom RelationBTreeQuerySingleAtom(BTree * tree, Tuple const * queryTuple, i
 
 
 /**
- * Add a aingle tuple to the relation, acquiring each atom in the tuple.
+ * Add a single tuple to the relation, acquiring each atom in the tuple.
  * Does not add entries to lookup; see AssertFact()
  */
 byte RelationBTreeAddTuple(BTree * tree, Tuple const * tuple);
@@ -105,6 +107,10 @@ size32 RelationBTreeRemoveTuples(BTree * tree, Tuple const * queryTuple, uint8 m
 #define REMOVE_NORMAL		0
 #define REMOVE_PROTECTED	1
 
+/**
+ * Create a machine service record from a B-tree for use with ServiceRegistry
+ */
+MachineService RelationBTreeCreateRecord(BTree * btree);
 
 /**
  * Print out an entire relation table, for debugging

@@ -93,8 +93,7 @@ typedef struct s_MultisetIterator
 
 
 void MultisetIterate(Atom multiset, MultisetIterator * iterator);
-bool MultisetIteratorHasNext(MultisetIterator const * iterator);
-void MultisetIteratorNext(MultisetIterator * iterator);
+bool MultisetIteratorNext(MultisetIterator * iterator);
 ElementMultiple MultisetIteratorGetElement(MultisetIterator const * iterator);
 void MultisetIteratorEnd(MultisetIterator * iterator);
 

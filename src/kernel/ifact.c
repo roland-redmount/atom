@@ -374,9 +374,11 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 		Tuple * queryTuple = CreateTuple(conjunction->nColumns);
 		setupQueryTuple(queryTuple, (Atom) draft->header.hash, conjunction->idColumn);
 
+		// TODO: this should use a Service instead, so as to not directly
+		// depend on the B-tree implementation
 		RelationBTreeIterate(conjunction->btree, queryTuple, &iterator);
 		Tuple * existingTuple = CreateTuple(conjunction->nColumns);
-		while(RelationBTreeIteratorHasTuple(&iterator)) {
+		while(RelationBTreeIteratorNext(&iterator)) {
 			Tuple * draftTuple = (Tuple *) tuplePtr;
 			RelationBTreeIteratorGetTuple(&iterator, existingTuple);
 			// the id column is still zero in the draft tuple
@@ -387,7 +389,6 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 			if(!SameTuples(existingTuple, draftTuple))
 				return false;
 			tuplePtr += TupleNBytes(conjunction->nColumns);
-			RelationBTreeIteratorNext(&iterator);
 		}
 		RelationBTreeIteratorEnd(&iterator);
 		FreeTuple(queryTuple);
@@ -537,11 +538,11 @@ void IFactRelease(Atom ifact)
 
 			// Delete protected tuples.
 			// This may result in recursive calls to IFactRelease()
-			// on atoms in the deleted tuple. The underlying relation table
-			// delete() method must therefore be re-entrant.
-			// Unfortunately btree_delete() as currently used is not.
+			// on atoms in the deleted tuple.
 
 			// NOTE: this does not remove entries from the lookup table
+			// NOTE: RetractFact() cannot be used for this purpose as it does REMOVE_NORMAL,
+			// but we should have an Btree-independent method
 			RelationBTreeRemoveTuples(conjunction->btree, queryTuple, REMOVE_PROTECTED);
 			FreeTuple(queryTuple);
 		}
@@ -564,11 +565,10 @@ void DumpIFacts(void)
 {
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, ifactStorage.btree);
-	while(BTreeIteratorHasItem(&iterator)) {
+	while(BTreeIteratorNext(&iterator)) {
 		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
 		PrintIFact((Atom) header->hash);
 		PrintChar('\n');
-		BTreeIteratorNext(&iterator);
 	}
 	BTreeIteratorEnd(&iterator);
 }
@@ -583,13 +583,12 @@ void DumpFlaggedIFacts(void)
 {
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, ifactStorage.btree);
-	while(BTreeIteratorHasItem(&iterator)) {
+	while(BTreeIteratorNext(&iterator)) {
 		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
 		if(header->flags & IFACT_NEW) {
 			PrintTypedAtom(CreateTypedAtom(AT_ID, header->hash));
 			PrintChar('\n');
 		}
-		BTreeIteratorNext(&iterator);
 	}
 	BTreeIteratorEnd(&iterator);
 }
@@ -601,10 +600,9 @@ void DisableFlagCreatedIFacts(void)
 	byte mask = ~((byte) IFACT_NEW);
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, ifactStorage.btree);
-	while(BTreeIteratorHasItem(&iterator)) {
+	while(BTreeIteratorNext(&iterator)) {
 		IFactHeader * header = BTreeIteratorPeekItem(&iterator);
 		header->flags &= mask;
-		BTreeIteratorNext(&iterator);
 	}
 	BTreeIteratorEnd(&iterator);
 }

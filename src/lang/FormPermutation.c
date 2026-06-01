@@ -4,7 +4,7 @@
 #include "kernel/multiset.h"
 #include "lang/ClauseForm.h"
 #include "lang/AtomType.h"
-#include "lang/FullForm.h"
+#include "lang/ConjunctionForm.h"
 #include "lang/Form.h"
 #include "lang/FormPermutation.h"
 #include "lang/PredicateForm.h"
@@ -107,11 +107,10 @@ PredicateIterator * CreatePredicateIterator(Atom predicateForm)
 	MultisetIterate(predicateForm, &iterator);
 	iter->arity = 0;
 	for(index8 i = 0; i < iter->nUniqueRoles; i++) {
-		ASSERT(MultisetIteratorHasNext(&iterator));
+		ASSERT(MultisetIteratorNext(&iterator));
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		iter->rolePerm[i] = CreatePermutation(em.multiple);
 		iter->arity += em.multiple;
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 	return iter;
@@ -186,7 +185,7 @@ ClauseIterator * CreateClauseIterator(Atom clauseForm)
 	MultisetIterate(clauseForm, &iterator);
 	iter->arity = 0;
 	for(index8 i = 0; i < iter->nUniqueTerms; i++) {
-		ASSERT(MultisetIteratorHasNext(&iterator));
+		ASSERT(MultisetIteratorNext(&iterator));
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 	
 		iter->predFormPerm[i] = CreatePermutation(em.multiple);
@@ -285,7 +284,7 @@ void FreeClauseIterator(ClauseIterator * iter)
 ConjunctionIterator * CreateConjunctionIterator(Atom form)
 {
 	ConjunctionIterator* iter = malloc(sizeof(ConjunctionIterator));
-	iter->nClauses = FullFormNUniqueClauseForms(form);
+	iter->nClauses = ConjunctionFormNUniqueClauseForms(form);
 
 	// allocate arrays
 	iter->clauseFormPerm = malloc(iter->nClauses * sizeof(Permutation *));
@@ -294,7 +293,7 @@ ConjunctionIterator * CreateConjunctionIterator(Atom form)
 	MultisetIterator iterator;
 	MultisetIterate(form, &iterator);
 	for(index8 i = 0; i < iter->nClauses; i++) {
-		ASSERT(MultisetIteratorHasNext(&iterator));
+		ASSERT(MultisetIteratorNext(&iterator));
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 	
 		iter->clauseFormPerm[i] = CreatePermutation(em.multiple);

@@ -111,12 +111,11 @@ void testFindTuple(void)
 		CopyTuples(fixture.tuple1, queryTuple);
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);
 
-		ASSERT_TRUE(RelationBTreeIteratorHasTuple(&iterator))
+		ASSERT_TRUE(RelationBTreeIteratorNext(&iterator))
 		Tuple const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
 		ASSERT_TRUE(SameTuples(resultTuple, fixture.tuple1))
-		RelationBTreeIteratorNext(&iterator);
 		
-		ASSERT_FALSE(RelationBTreeIteratorHasTuple(&iterator))
+		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
 		RelationBTreeIteratorEnd(&iterator);
 		FreeTuple(queryTuple);
 	}
@@ -125,9 +124,8 @@ void testFindTuple(void)
 	{
 		RelationBTreeIterate(fixture.tree, 0, &iterator);
 		size32 tupleCount = 0;
-		while(RelationBTreeIteratorHasTuple(&iterator)) {
+		while(RelationBTreeIteratorNext(&iterator)) {
 			tupleCount++;
-			RelationBTreeIteratorNext(&iterator);
 		}
 		ASSERT_UINT32_EQUAL(tupleCount, 3)
 		RelationBTreeIteratorEnd(&iterator);
@@ -140,17 +138,15 @@ void testFindTuple(void)
 		TupleSetElement(queryTuple, 2, CreateVariable('x'));
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);
 
-		ASSERT_TRUE(RelationBTreeIteratorHasTuple(&iterator))
+		ASSERT_TRUE(RelationBTreeIteratorNext(&iterator))
 		Tuple const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
 		ASSERT_TRUE(SameTuples(resultTuple, fixture.tuple1))
-		RelationBTreeIteratorNext(&iterator);
 		
-		ASSERT_TRUE(RelationBTreeIteratorHasTuple(&iterator))
+		ASSERT_TRUE(RelationBTreeIteratorNext(&iterator))
 		resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
 		ASSERT_TRUE(SameTuples(resultTuple, fixture.tuple2))
-		RelationBTreeIteratorNext(&iterator);
 		
-		ASSERT_FALSE(RelationBTreeIteratorHasTuple(&iterator))
+		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
 		RelationBTreeIteratorEnd(&iterator);
 		FreeTuple(queryTuple);
 	}
@@ -166,7 +162,7 @@ void testFindTuple(void)
 			TEST_N_COLUMNS
 		);
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);
-		ASSERT_FALSE(RelationBTreeIteratorHasTuple(&iterator))
+		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
 		RelationBTreeIteratorEnd(&iterator);
 		FreeTuple(queryTuple);
 	}
@@ -183,12 +179,11 @@ void testFindTuple(void)
 		);
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);
 		
-		ASSERT_TRUE(RelationBTreeIteratorHasTuple(&iterator))
+		ASSERT_TRUE(RelationBTreeIteratorNext(&iterator))
 		Tuple const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
 		ASSERT_TRUE(SameTuples(resultTuple, fixture.tuple3))
-		RelationBTreeIteratorNext(&iterator);
 		
-		ASSERT_FALSE(RelationBTreeIteratorHasTuple(&iterator))
+		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
 		RelationBTreeIteratorEnd(&iterator);
 		FreeTuple(queryTuple);
 	}
@@ -204,7 +199,7 @@ void testFindTuple(void)
 			TEST_N_COLUMNS
 		);
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);	
-		ASSERT_FALSE(RelationBTreeIteratorHasTuple(&iterator))
+		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
 		RelationBTreeIteratorEnd(&iterator);
 		FreeTuple(queryTuple);
 	}
@@ -221,12 +216,11 @@ void testFindTuple(void)
 		);
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);
 		
-		ASSERT_TRUE(RelationBTreeIteratorHasTuple(&iterator))
+		ASSERT_TRUE(RelationBTreeIteratorNext(&iterator))
 		Tuple const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
 		ASSERT_TRUE(SameTuples(resultTuple, fixture.tuple3))
-		RelationBTreeIteratorNext(&iterator);
 		
-		ASSERT_FALSE(RelationBTreeIteratorHasTuple(&iterator))
+		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
 		RelationBTreeIteratorEnd(&iterator);
 		FreeTuple(queryTuple);
 	}

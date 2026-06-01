@@ -20,7 +20,7 @@
  * 
  * has form ((+^2 =)^2 | odd) and actor multilist ({ ({2 3} 5) ({2 4} 5) } 3).
  * 
- * For bytecode services, arguments bound to roles with multiplicity must be exchangable:
+ * For services, arguments bound to roles with multiplicity must be exchangable:
  * for example the service with signature
  * 
  * + 'x 'y = z
@@ -35,10 +35,9 @@
  * 
  * (where y is now the output) will match (+ _ 3 = 5) if variables are always sorted
  * after integers, so the query multilist is ({3 _ } 5) and the service is ({x' y} 'z').
- 
  * 
  * This is essentially the same as storing arguments
- * in a tuple/array but always keeping them sorted, so that x in the above bytecode
+ * in a tuple/array but always keeping them sorted, so that x in the above service
  * always binds to the first argument (by iteration order) in the set for role '+'
  * 
  * Note that the multilist representaton does not solve the more general unification problem,
@@ -77,6 +76,12 @@ Atom CreateTerm(Atom predicate, bool negated);
  * Create a clause from a list of terms, in any order.
  */
 Atom CreateClause(Atom const * terms, size8 nTerms);
+
+/**
+ * Create a conjunction from a list of terms, in any order.
+ */
+Atom CreateConjunction(Atom const * clauses, size8 nClauses);
+
 
 /**
  * Extract the actors from the clauseActors tuple that correspond to

@@ -36,11 +36,9 @@ typedef struct {
  */
 void DictionaryIterate(Atom clauseForm, DictionaryIterator * iterator);
 
-bool DictionaryIteratorHasRecord(DictionaryIterator * iterator);
+bool DictionaryIteratorNext(DictionaryIterator * iterator);
 
 Tuple const * DictionaryIteratorPeekActors(DictionaryIterator * iterator);
-
-void DictionaryIteratorNext(DictionaryIterator * iterator);
 
 void DictionaryIteratorEnd(DictionaryIterator * iterator);
 

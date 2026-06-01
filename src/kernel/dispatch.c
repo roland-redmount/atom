@@ -87,13 +87,12 @@ static bool dispatchToService(Atom queryForm, Atom queryActors, ServiceRecord * 
 	RegistryIterator iterator;
 	RegistryIterate(queryForm, &iterator);
 	bool match = false;
-	while(RegistryIteratorHasService(&iterator)) {
+	while(RegistryIteratorNext(&iterator)) {
 		*record = RegistryIteratorGetService(&iterator);
 		if(PermutationMatch(queryForm, record->parameters, queryActors, permutation)) {
 			match = true;
 			break;
 		}
-		RegistryIteratorNext(&iterator);
 	}
 	RegistryIteratorEnd(&iterator);
 	return match;
@@ -157,84 +156,8 @@ static bool dispatchToService(Atom queryForm, Atom queryActors, ServiceRecord * 
  * 
  * Note that we might follow several rules before we find a service to call.
  */
-static bool compileService(Atom queryTerm)
-{
-	Atom queryTermForm = FormulaGetForm(queryTerm);
-	ASSERT(IsTermForm(queryTermForm))
-	Tuple * queryTermActors = CreateTuple(2);
-	CopyListToTuple(FormulaGetActors(queryTerm), queryTermActors);
-	/**
-	 * To search find rules (clauses) c that contain a given @term-form,
-	 * we first query (clause-form c) & (multiset c element @term_form multiple _)
-	 */
-	RelationBTreeIterator btreeIterator;
-	BTree * multisetBTree = RegistryGetCoreTable(FORM_MULTISET_ELEMENT_MULTIPLE);
 
-	Tuple * multisetQueryTuple = CreateTuple(3);
-	MultisetSetTuple(
-		multisetQueryTuple,
-		anonymousVariable,
-		(TypedAtom) {.type = AT_ID, .atom = queryTermForm},
-		anonymousVariable
-	);
-	RelationBTreeIterate(multisetBTree, multisetQueryTuple, &btreeIterator);
-	while(RelationBTreeIteratorHasTuple(&btreeIterator)) {
-		// a clause form where the term form occurs
-		// NOTE: the term form may occur more than once in the clause form
-		TypedAtom clauseForm = RelationBTreeIteratorGetAtom(
-			&btreeIterator,
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
-		);
-		// number of times the term form occurs in this clause form
-		size8 multiple = RelationBTreeIteratorGetAtom(
-			&btreeIterator,
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)
-		).atom;
-		if(clauseForm.type == AT_ID && IsClauseForm(clauseForm.atom)) {
-			PrintClauseForm(clauseForm.atom);
-			PrintChar('\n');
-
-			// we may have multiple rules with this clause form
-			DictionaryIterator dictIterator;
-			DictionaryIterate(clauseForm.atom, &dictIterator);
-			while(DictionaryIteratorHasRecord(&dictIterator)) {
-				Tuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
-				PrintTuple(clauseActors);
-				PrintChar('\n');
-
-				// extract the actor list for a matching term in the clause
-				// here we take the first occurence; when there are more than one occurence,
-				// each gives rise to a separate unification
-				Tuple * clauseTermActors = CreateTuple(2);
-				ClauseGetTermActors(clauseForm.atom, clauseActors, queryTermForm, clauseTermActors, 1);
-				
-				// unify the matched term with the query term
-				SubstitutionList querySubstitution;
-				SubstitutionList clauseSubstitution;
-				UnifyTuples(queryTermActors, clauseTermActors, &querySubstitution, &clauseSubstitution);
-				
-				// apply the substitution to the clause
-
-				// drop the matched term
-
-				// recursively dispatch on the negation of the remaining clause
-				// (a conjunction)
-
-				DictionaryIteratorNext(&dictIterator);
-			}
-			DictionaryIteratorEnd(&dictIterator);
-		}
-		RelationBTreeIteratorNext(&btreeIterator);
-	}
-	RelationBTreeIteratorEnd(&btreeIterator);
-	FreeTuple(multisetQueryTuple);
-
-	// TODO
-	return false;
-}
-
-
-bool DispatchQuery(Atom query, ServiceRecord * record, Tuple * arguments)
+bool DispatchQuery(Atom query, ServiceRecord * record, index8 * permutation)
 {
 	ASSERT(IsFormula(query))
 
@@ -245,20 +168,15 @@ bool DispatchQuery(Atom query, ServiceRecord * record, Tuple * arguments)
 	Atom queryActors = FormulaGetActors(query);
 	size8 arity = FormulaArity(query);
 
-	index8 permutation[arity];
 	// first try dispatching to an existing service
 	bool match = dispatchToService(queryForm, queryActors, record, permutation);
 	if(!match) {
-		// if no service exists, attempt to compile one
+		// if no service exists, call the compiler to attempt to compile one
 
 		// TODO: this needs a term, not a predicate
-		match = compileService(query);
-	}
-
-	// copy permuted actors list to argument tuple
-	for(index8 i = 0; i < arity; i++) {
-		TupleSetElement(arguments, i,
-			ListGetElement(queryActors, permutation[i] + 1));
+		// match = compileService(query);
+		ASSERT(false)
+		;
 	}
 	return match;
 }

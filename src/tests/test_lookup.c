@@ -60,16 +60,15 @@ void testLookupIterator(void)
 	LookupIterator iterator;
 	LookupIterate(string, &iterator);
 	for(index32 i = 0; i < 3; i++) {
-		ASSERT_TRUE(LookupIteratorHasRecord(&iterator))
+		ASSERT_TRUE(LookupIteratorNext(&iterator))
 		Atom role = LookupIteratorGetRole(&iterator);
 		// the role is either list or string
 		ASSERT_TRUE(
 			(role == GetCoreRoleName(ROLE_LIST)) ||
 			(role == GetCoreRoleName(ROLE_STRING))
 		)
-		LookupIteratorNext(&iterator);
 	}
-	ASSERT_FALSE(LookupIteratorHasRecord(&iterator))
+	ASSERT_FALSE(LookupIteratorNext(&iterator))
 	FreeLookupIterator(&iterator);
 
 	IFactRelease(string);
@@ -128,6 +127,7 @@ void testRemoveAllPredicateRoles(void)
 
 	// drop the relation table
 	RegistryRemoveService(service);
+	FreeRelationBTree(tree);
 
 	IFactRelease(form);
 	IFactRelease(foo);

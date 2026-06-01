@@ -11,7 +11,7 @@
 #include "lang/Formula.h"
 #include "lang/name.h"
 #include "lang/ClauseForm.h"
-#include "lang/FullForm.h"
+#include "lang/ConjunctionForm.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
 
@@ -47,7 +47,7 @@ Atom CreateFormula(Atom form, Atom actorsList)
 	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_FORMULA_FORM_ACTORS),
-		RegistryGetCoreTable(FORM_FORMULA_FORM_ACTORS),
+		RegistryGetCoreBTreeService(FORM_FORMULA_FORM_ACTORS),
 		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA)
 	);
 
@@ -104,7 +104,7 @@ bool FormulaIsClause(Atom formula)
 
 bool FormulaIsConjunction(Atom formula)
 {
-	return IsPredicateForm(FormulaGetForm(formula));
+	return IsConjunctionForm(FormulaGetForm(formula));
 }
 
 
@@ -187,11 +187,11 @@ Atom CreateClause(Atom const * terms, size8 nTerms)
 	// reorder actors to match the name order of clauseForm
 	index8 termOrder[nTerms]; 
 	// need term forms as typed atoms for MultisetIterationOrder()
-	TypedAtom termFormAtoms[nTerms];
+	TypedAtom termFormsTyped[nTerms];
 	for(index8 i = 0; i < nTerms; i++)
-		termFormAtoms[i] = CreateTypedAtom(AT_ID, termForms[i]);
+		termFormsTyped[i] = CreateTypedAtom(AT_ID, termForms[i]);
 	// find ordering
-	MultisetIterationOrder(clauseForm, termFormAtoms, termOrder, nTerms);
+	MultisetIterationOrder(clauseForm, termFormsTyped, termOrder, nTerms);
 	// reorder actors
 	size32 blockSizes[nTerms];
 	for(index8 i = 0; i < nTerms; i++)
@@ -201,6 +201,49 @@ Atom CreateClause(Atom const * terms, size8 nTerms)
 	Atom clause = CreateFormulaFromArray(clauseForm, actors);
 	IFactRelease(clauseForm);
 	return clause;
+}
+
+
+// NOTE: this is very similar to CreateClause, could be refactored
+Atom CreateConjunction(Atom const * clauses, size8 nClauses)
+{
+	// collect clause forms and their arities
+	Atom clauseForms[nClauses];
+	size8 clauseArities[nClauses];
+	size8 conjunctionArity = 0;
+	for(index8 i = 0; i < nClauses; i++) {
+		clauseForms[i] = FormulaGetForm(clauses[i]);
+		clauseArities[i] = ClauseArity(clauseForms[i]);
+		ASSERT(conjunctionArity < 255 - clauseArities[i]);
+		conjunctionArity += clauseArities[i];
+	}
+	Atom conjunctionForm = CreateConjunctionForm(clauseForms, nClauses);
+
+	// collect actors from terms into a single array
+	TypedAtom actors[conjunctionArity];
+	for(index8 i = 0, k = 0; i < nClauses; i++) {
+		Atom actorsList = FormulaGetActors(clauses[i]);
+		for(index8 j = 0; j < clauseArities[i]; j++)
+			actors[k++] = ListGetElement(actorsList, j + 1);
+	}
+
+	// reorder actors to match the name order of clauseForm
+	index8 clauseOrder[nClauses]; 
+	// need clause forms as typed atoms for MultisetIterationOrder()
+	TypedAtom clauseFormsTyped[nClauses];
+	for(index8 i = 0; i < nClauses; i++)
+		clauseFormsTyped[i] = CreateTypedAtom(AT_ID, clauseForms[i]);
+	// find ordering
+	MultisetIterationOrder(conjunctionForm, clauseFormsTyped, clauseOrder, nClauses);
+	// reorder actors
+	size32 blockSizes[nClauses];
+	for(index8 i = 0; i < nClauses; i++)
+		blockSizes[i] = clauseArities[i] * sizeof(TypedAtom);
+	ReorderRaggedArray(actors, clauseOrder, blockSizes, nClauses);
+
+	Atom conjunction = CreateFormulaFromArray(conjunctionForm, actors);
+	IFactRelease(conjunctionForm);
+	return conjunction;
 }
 
 
@@ -214,14 +257,13 @@ void ClauseGetTermActors(
 	index8 index = 0;
 	bool found = false;
 	ElementMultiple elementMultiple;
-	while(MultisetIteratorHasNext(&iterator)) {
+	while(MultisetIteratorNext(&iterator)) {
 		elementMultiple = MultisetIteratorGetElement(&iterator);
 		if(elementMultiple.element.atom == termForm) {
 			found = true;
 			break;
 		}
 		index += elementMultiple.multiple;
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 	ASSERT(found);
@@ -244,7 +286,7 @@ uint8 FormulaArity(Atom formula)
 
 Atom FormulaGetForm(Atom formula)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_FORMULA_FORM_ACTORS);
+	BTree * tree = RegistryGetCoreBTreeService(FORM_FORMULA_FORM_ACTORS);
 	Tuple * query = CreateTuple(3);
 	FormulaSetTuple(query, CreateTypedAtom(AT_ID, formula), anonymousVariable, anonymousVariable);
 	TypedAtom form = RelationBTreeQuerySingleAtom(
@@ -258,7 +300,7 @@ Atom FormulaGetForm(Atom formula)
 
 Atom FormulaGetActors(Atom formula)
 {
-	BTree * tree = RegistryGetCoreTable(FORM_FORMULA_FORM_ACTORS);
+	BTree * tree = RegistryGetCoreBTreeService(FORM_FORMULA_FORM_ACTORS);
 	Tuple * query = CreateTuple(3);
 	FormulaSetTuple(query, CreateTypedAtom(AT_ID, formula), anonymousVariable, anonymousVariable);
 	TypedAtom actorsList = RelationBTreeQuerySingleAtom(
@@ -277,16 +319,19 @@ static void printPredicate(Atom predicateForm, Atom atomsList, index8 * atomInde
 {	
 	MultisetIterator iterator;
 	MultisetIterate(predicateForm, &iterator);
-	while(MultisetIteratorHasNext(&iterator)) {	
+
+	size8 nRoles = PredicateNRoles(predicateForm);
+	for(index8 i = 0; i < nRoles; i++) {	
+		ASSERT(MultisetIteratorNext(&iterator))
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
 			PrintName(em.element.atom);
 			PrintChar(' ');
 			PrintTypedAtom(ListGetElement(atomsList, *atomIndex + 1));
-			PrintChar(' ');
+			if((i < nRoles - 1) || (j < em.multiple - 1))
+				PrintChar(' ');
 			(*atomIndex)++;
 		}
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 }
@@ -306,12 +351,13 @@ static void printClause(Atom clauseForm, Atom atomsList, index8 * atomIndex)
 	MultisetIterator iterator;
 	MultisetIterate(clauseForm, &iterator);
 
-	while(MultisetIteratorHasNext(&iterator)) {	
+	size8 nTermForms = ClauseNUniqueTerms(clauseForm);
+	for(index8 i = 0; i < nTermForms; i++) {	
+		ASSERT(MultisetIteratorNext(&iterator))
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
-		MultisetIteratorNext(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
 			printTerm(em.element.atom, atomsList, atomIndex);
-			if((j < em.multiple - 1) | MultisetIteratorHasNext(&iterator))
+			if((j == em.multiple - 1) && (i < nTermForms - 1))
 				PrintCString(" | ");
 		}
 	}
@@ -319,17 +365,18 @@ static void printClause(Atom clauseForm, Atom atomsList, index8 * atomIndex)
 }
 
 
-static void printConjunction(Atom form, Atom atomsList, index8* atomIndex)
+static void printConjunction(Atom conjunctionForm, Atom atomsList, index8* atomIndex)
 {
 	MultisetIterator iterator;
-	MultisetIterate(form, &iterator);
+	MultisetIterate(conjunctionForm, &iterator);
 
-	while(MultisetIteratorHasNext(&iterator)) {	
+	size8 nClauseForms = ConjunctionFormNUniqueClauseForms(conjunctionForm);
+	for(index8 i = 0; i < nClauseForms; i++) {	
+		ASSERT(MultisetIteratorNext(&iterator))
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
-		MultisetIteratorNext(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
 			printClause(em.element.atom, atomsList, atomIndex);
-			if((j < em.multiple - 1) | MultisetIteratorHasNext(&iterator))
+			if((j == em.multiple - 1) && (i < nClauseForms - 1))
 				PrintCString(" & ");
 		}
 	}

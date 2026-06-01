@@ -134,12 +134,20 @@ BTreeDeleteResult BTreeDelete(BTree * btree, void * item);
  */
 void BTreeClear(BTree * btree);
 
-
+/**
+ * The position of an item in the BTree is uniquely determined by
+ * a node pointer and an index to the item in that node.
+ */
 typedef struct s_BTreePosition {
 	BTreeNode const * node;
 	index32 index;
 } BTreePosition;
 
+/**
+ * The state of an iterator is given by a stack of positions
+ * identifying the current node at each level that has been
+ * traversed, down to a given depth. 
+ */
 typedef struct s_BTreeIterator {
 	BTree * btree;
 	BTreePosition * stack;
@@ -148,15 +156,19 @@ typedef struct s_BTreeIterator {
 
 
 /**
- * Create an iterator over items in a B-tree and position it at the 
- * first item in the tree, if one exists. Locks the B-tree for writing.
+ * Create an iterator over items in a B-tree and position it before the 
+ * first item in the tree. Locks the B-tree for writing.
+ * This function corresponds to creating an execution context
+ * for a B-Tree based service.
  */
 void BTreeIterate(BTreeIterator * iterator, BTree * btree);
 
 /**
- * Return true if an item is available at current iterator position.
+ * Advance the iterator to the next item in the tree, if on exists.
+ * Returns true if an item was found, corresponding to a service
+ * yielding a fact.
  */
-bool BTreeIteratorHasItem(BTreeIterator const * iterator);
+bool BTreeIteratorNext(BTreeIterator * iterator);
 
 /**
  * Return a pointer to the current item.
@@ -164,16 +176,17 @@ bool BTreeIteratorHasItem(BTreeIterator const * iterator);
  */
 void * BTreeIteratorPeekItem(BTreeIterator const * iterator);
 
-/**
- * Advance the iterator to the next item in the tree.
- */
-void BTreeIteratorNext(BTreeIterator * iterator);
 
 /**
  * Reposition the iterator at the first item matching keyItem,
- * if one exists.
+ * if one exists. Return true if an item was found.
+ * 
+ * NOTE: it might be cleaner to position the iteratore _before_ the
+ * found item, so that BTreeIteratorNext() can be called to advance to the item.
+ * This would make BTreeIteratorSeek() behave as BTreeIterate() which should
+ * reduce number of corner cases.
  */ 
-void BTreeIteratorSeek(BTreeIterator * iterator, const void * keyItem);
+bool BTreeIteratorSeek(BTreeIterator * iterator, const void * keyItem);
 
 /**
  * End iteration and release the write lock.

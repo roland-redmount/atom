@@ -27,7 +27,7 @@ $(info PLATFORM = $(PLATFORM))
 
 # source directories
 SRCDIRS := $(patsubst %, src/%,\
- btree graphics kernel lang memory network parser testing tests util vm)
+ btree graphics kernel lang library memory network parser testing tests util)
 
 # source directories for FreeType
 # FREETYPE_BASEDIR := third-party/$(FREETYPE)/src
@@ -151,29 +151,29 @@ UTIL_FILES := $(addprefix util/, \
  LinkedList ResizingArray ResizingBuffer hashing sort resources utilities)
 
 LANG_FILES := $(addprefix lang/, \
- Atom AtomType ClauseForm Form Formula FormPermutation FullForm name PredicateForm \
+ Atom AtomType ClauseForm ConjunctionForm Form Formula FormPermutation name PredicateForm \
  Quote SubstitutionList TermForm TypedAtom unification Variable)
 
 KERNEL_FILES := $(addprefix kernel/, \
- dictionary dispatch ifact FloatIEEE754 Int kernel letter list lookup multiset pair \
- Parameter RelationBTree string ServiceRegistry tuple UInt)
+ dictionary dispatch expression ifact FloatIEEE754 Int kernel letter list lookup \
+ multiset pair Parameter RelationBTree ServiceRegistry string tuple UInt)
+
+LIBRARY_FILES := $(addprefix library/, math)
 
 MEMORY_FILES := $(addprefix memory/, allocator paging pool)
 
 NETWORK_FILES := $(addprefix network/, Connection Network)
 
-PARSER_FILES := $(addprefix parser/, Characters ClauseBuilder PartBuilder PredicateBuilder \
- StringBuffer TermBuilder Token Tokenizer)
-
-VM_FILES := $(addprefix vm/, bytecode context instruction vm)
+PARSER_FILES := $(addprefix parser/, Characters ClauseBuilder ConjunctionBuilder PartBuilder \
+ PredicateBuilder StringBuffer TermBuilder Token Tokenizer)
 
 GRAPHICS_FILES := $(addprefix graphics/, \
  Graphics Mesh Point Polygon TextBlock Triangle)
 
 TESTING_FILES := $(addprefix testing/, testing)
 
-ALL_CORE_FILES := $(LANG_FILES) $(DATUMTYPES_FILES) $(KERNEL_FILES) $(MEMORY_FILES) $(NETWORK_FILES) \
- $(UNITY_FILES) $(PARSER_FILES) $(UTIL_FILES) $(BTREE_FILES) $(PLATFORM_FILE) $(VM_FILES) $(TESTING_FILES)
+ALL_CORE_FILES := $(LANG_FILES) $(DATUMTYPES_FILES) $(KERNEL_FILES) $(LIBRARY_FILES) $(MEMORY_FILES) $(NETWORK_FILES) \
+ $(UNITY_FILES) $(PARSER_FILES) $(UTIL_FILES) $(BTREE_FILES) $(PLATFORM_FILE) $(TESTING_FILES)
 
 #
 # core language
@@ -207,9 +207,9 @@ $(BINDIR)/opengltest : $(patsubst %, $(OBJDIR)/%.o, \
 #
 
 TESTS_EXE_FILES := $(addprefix $(BINDIR)/,\
- test_btree test_atomtypes test_dispatch test_dictionary test_kernel test_language test_list\
- test_lookup test_memory test_multiset test_pair test_parsing test_persistence\
- test_relation_btree test_string test_table_registry test_tokenizer test_tuple test_utilities test_vm)
+ test_btree test_atomtypes test_dispatch test_dictionary test_expression test_kernel test_language\
+ test_list test_lookup test_math test_memory test_multiset test_pair test_parsing test_persistence\
+ test_relation_btree test_string test_service_registry test_tokenizer test_tuple test_utilities)
 
 .PHONY: tests
 tests : $(TESTS_EXE_FILES)
@@ -235,6 +235,7 @@ $(OBJDIR)/%.o : src/%.c $(DEPDIR)/%.d
 test:
 	find $(OBJDIR) -name '*.gcda' -delete
 	$(BINDIR)/test_memory
+	$(BINDIR)/test_persistence
 	$(BINDIR)/test_utilities
 	$(BINDIR)/test_atomtypes
 	$(BINDIR)/test_tuple
@@ -249,11 +250,12 @@ test:
 	$(BINDIR)/test_tokenizer
 	$(BINDIR)/test_language
 	$(BINDIR)/test_parsing
+	$(BINDIR)/test_expression
+	$(BINDIR)/test_service_registry
+	$(BINDIR)/test_math
 	$(BINDIR)/test_dictionary
-	$(BINDIR)/test_table_registry
-	$(BINDIR)/test_persistence
-	$(BINDIR)/test_vm
 	$(BINDIR)/test_dispatch
+
 
 #
 # code coverage

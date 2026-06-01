@@ -166,11 +166,10 @@ void NameDump(void)
 
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, nameStorage.tree);
-	while(BTreeIteratorHasItem(&iterator)) {
+	while(BTreeIteratorNext(&iterator)) {
 		NameRecord const * nameRecord = BTreeIteratorPeekItem(&iterator);
 		PrintF("%llx: ", nameRecord->hash);
 		PrintCharString(nameRecord->string, nameRecord->length);
 		PrintF(" %u references\n", nameRecord->nReferences);
-		BTreeIteratorNext(&iterator);
 	};
 }

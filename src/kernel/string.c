@@ -27,7 +27,7 @@ Atom CreateString(char const * chars, size32 length)
 	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_STRING),
-		RegistryGetCoreTable(FORM_STRING),
+		RegistryGetCoreBTreeService(FORM_STRING),
 		0
 	);
 	Tuple * tuple = CreateTuple(1);
@@ -75,10 +75,9 @@ void PrintString(Atom string)
 	PrintChar('"');
 	ListIterator iterator;
 	ListIterate(string, &iterator);
-	while(ListIteratorHasNext(&iterator)) {
+	while(ListIteratorNext(&iterator)) {
 		TypedAtom letter = ListIteratorGetElement(&iterator);
 		PrintChar(LetterToChar(letter, LETTER_LOWERCASE));
-		ListIteratorNext(&iterator);
 	}
 	ListIteratorEnd(&iterator);
 	PrintChar('"');

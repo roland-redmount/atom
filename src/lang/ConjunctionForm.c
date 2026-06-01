@@ -1,35 +1,42 @@
 
-#include "lang/FullForm.h"
+#include "lang/ConjunctionForm.h"
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
+#include "kernel/ServiceRegistry.h"
 
 
 /**
  * A conjunction form is a multiset of clause forms
- * 
- * TODO: this should determine order of clauses from multiset iteration order
  */
-Atom CreateFullForm(Atom const * clauseForms, size8 nClauseForms, index8 const * order)
+Atom CreateConjunctionForm(Atom const * clauseForms, size8 nClauseForms)
 {
 	TypedAtom uniqueClauseForms[nClauseForms];
-	for(index8 i = 0; i < nClauseForms; i++) {
-		index8 j = order ? order[i] : i;
-		uniqueClauseForms[i] = CreateTypedAtom(AT_ID, clauseForms[j]);
-	}
+	for(index8 i = 0; i < nClauseForms; i++) 
+		uniqueClauseForms[i] = CreateTypedAtom(AT_ID, clauseForms[i]);
 	// reduce to unique roles
 	uint32 multiplicities[nClauseForms];
 	size8 nUniqueClauseForms = ReduceTypedAtomsArray(uniqueClauseForms, multiplicities, nClauseForms);
 
-	// create a multiset of clause forms
-	Atom conjunctionForm = CreateMultisetFromArrays(uniqueClauseForms, multiplicities, nUniqueClauseForms);
-	TypedAtom conjunctionFormAtom = CreateTypedAtom(AT_ID, conjunctionForm);
+	IFactDraft draft;
+	IFactBegin(&draft);
+
+	AddMultisetToIFactFromArrays(&draft, uniqueClauseForms, multiplicities, nUniqueClauseForms);
+
+	// (clause-form @form)
+	IFactBeginConjunction(
+		&draft,
+		GetCorePredicateForm(FORM_CONJUNCTION_FORM),
+		RegistryGetCoreBTreeService(FORM_CONJUNCTION_FORM),
+		0
+	);
 	Tuple * tuple = CreateTuple(1);
-	TupleSetElement(tuple, 0, conjunctionFormAtom);
-	AssertFact(GetCorePredicateForm(FORM_CONJUNCTION_FORM), tuple);
+	IFactAddClause(&draft, tuple);
 	FreeTuple(tuple);
-	return conjunctionForm;
+	IFactEndConjunction(&draft);	
+
+	return IFactEnd(&draft);
 }
 
 
@@ -43,29 +50,28 @@ bool IsConjunctionForm(Atom atom)
 }
 
 
-size8 FullFormNUniqueClauseForms(Atom form)
+size8 ConjunctionFormNUniqueClauseForms(Atom form)
 {
 	return MultisetNUniqueElements(form);
 }
 
 
-size8 FullFormNClauseFormsTotal(Atom form)
+size8 ConjunctionFormNClauseFormsTotal(Atom form)
 {
 	return MultisetSize(form);
 }
 
 
-size8 FullFormArity(Atom form)
+size8 ConjunctionFormArity(Atom form)
 {
 	// the arity of a cojunction is the sum of unique terms arity * multiple
 	MultisetIterator iterator;
 	MultisetIterate(form, &iterator);
 	size8 arity = 0;
-	while(MultisetIteratorHasNext(&iterator)) {
+	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		uint8 clauseArity = ClauseArity(elementMultiple.element.atom);
 		arity += clauseArity * elementMultiple.multiple;
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 	return arity;
@@ -74,19 +80,18 @@ size8 FullFormArity(Atom form)
 /**
  * Traverse and print a form to stdout
  */
-void PrintFullForm(Atom form)
+void PrintConjunctionForm(Atom form)
 {
 	MultisetIterator iterator;
 	MultisetIterate(form, &iterator);
 
 	PrintChar('(');
-	while(MultisetIteratorHasNext(&iterator)) {
+	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
 			PrintClauseForm(elementMultiple.element.atom);
 			PrintCString(" & ");
 		}
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 	PrintChar(')');

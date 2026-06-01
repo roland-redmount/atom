@@ -1,6 +1,5 @@
 /**
- * The atom type determines how to interpret a atom,
- * and is used to determine how to dispatch calls to bytecode programs
+ * The atom type determines how to interpret a atom.
  */
 
 #ifndef ATOMTYPE_H
@@ -25,12 +24,10 @@
 #define AT_LETTER				7		// a letter of the English alphabet
 #define AT_VARIABLE             8		// variable with a letter identifier
 
-#define AT_INSTRUCTION			9		// a bytecode instruction
-#define AT_PARAMETER			10		// a parameter in a bytecode service
-#define AT_CONTEXT				11		// a vm execution context
-#define AT_SERVICE				12		// a service record
+#define AT_PARAMETER			9		// a parameter in a service
+#define AT_SERVICE				10		// a service record
 
-#define N_ATOMTYPES			12
+#define N_ATOMTYPES			10
 
 
 /**
