@@ -369,8 +369,8 @@ static void testCStringToConjunction(void)
 {
 	// NOTE: this string must be in canonical order
 	Atom conjunction = CStringToConjunction("aarf \"foobar\" | foo _x bar 123.45 & barf 42 frob _y");
-	PrintFormula(conjunction);
-	PrintChar('\n');
+	// PrintFormula(conjunction);
+	// PrintChar('\n');
 
 	Atom conjunctionForm = FormulaGetForm(conjunction);
 	ASSERT_UINT32_EQUAL(ConjunctionFormArity(conjunctionForm), 5)

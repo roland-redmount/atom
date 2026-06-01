@@ -699,7 +699,6 @@ void BTreeIterate(BTreeIterator * iterator, BTree * btree)
 	iterator->stack = btreeAllocate(sizeof(BTreePosition) * btree->height);
 	SetMemory(iterator->stack, sizeof(BTreePosition) * btree->height, 0);
 	setIteratorBeforeFirst(iterator);
-	// advanceIterator(iterator);
 }
 
 

@@ -171,11 +171,6 @@ void BTreeIterate(BTreeIterator * iterator, BTree * btree);
 bool BTreeIteratorNext(BTreeIterator * iterator);
 
 /**
- * Return true if an item is available at current iterator position.
- */
-// bool BTreeIteratorHasItem(BTreeIterator const * iterator);
-
-/**
  * Return a pointer to the current item.
  * This pointer is valid until BTreeIteratorEnd() is called.
  */

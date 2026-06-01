@@ -9,13 +9,13 @@
 #include "util/sort.h"
 
 
-#define INITIAL_N_CLAUSES 3
+#define INITIAL_N_TERMS 3
 
 
 void InitializeClauseBuilder(ClauseBuilder * builder)
 {
 	InitializeTermBuilder(&(builder->termBuilder));
-	CreateResizingArray(&(builder->terms), sizeof(Atom), INITIAL_N_CLAUSES);
+	CreateResizingArray(&(builder->terms), sizeof(Atom), INITIAL_N_TERMS);
 	builder->arity = 0;
 	builder->isEmpty = true;
 	builder->isValid = false;

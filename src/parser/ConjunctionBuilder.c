@@ -7,13 +7,13 @@
 #include "util/sort.h"
 
 
-#define INITIAL_N_CLAUSES 3
+#define INITIAL_N_TERMS 3
 
 
 void InitializeConjunctionBuilder(ConjunctionBuilder * builder)
 {
 	InitializeClauseBuilder(&(builder->clauseBuilder));
-	CreateResizingArray(&(builder->clauses), sizeof(Atom), INITIAL_N_CLAUSES);
+	CreateResizingArray(&(builder->clauses), sizeof(Atom), INITIAL_N_TERMS);
 	builder->arity = 0;
 	builder->isValid = false;
 }
