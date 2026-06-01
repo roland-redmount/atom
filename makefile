@@ -27,7 +27,7 @@ $(info PLATFORM = $(PLATFORM))
 
 # source directories
 SRCDIRS := $(patsubst %, src/%,\
- btree graphics kernel lang library memory network parser testing tests util vm)
+ btree graphics kernel lang library memory network parser testing tests util)
 
 # source directories for FreeType
 # FREETYPE_BASEDIR := third-party/$(FREETYPE)/src
@@ -173,7 +173,7 @@ GRAPHICS_FILES := $(addprefix graphics/, \
 TESTING_FILES := $(addprefix testing/, testing)
 
 ALL_CORE_FILES := $(LANG_FILES) $(DATUMTYPES_FILES) $(KERNEL_FILES) $(LIBRARY_FILES) $(MEMORY_FILES) $(NETWORK_FILES) \
- $(UNITY_FILES) $(PARSER_FILES) $(UTIL_FILES) $(BTREE_FILES) $(PLATFORM_FILE) $(VM_FILES) $(TESTING_FILES)
+ $(UNITY_FILES) $(PARSER_FILES) $(UTIL_FILES) $(BTREE_FILES) $(PLATFORM_FILE) $(TESTING_FILES)
 
 #
 # core language

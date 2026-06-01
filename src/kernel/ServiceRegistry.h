@@ -7,11 +7,8 @@
  * For B-tree services are automatically removed by RetractFact() when
  * the last tuple in the relation table is removed. 
  *
- * TODO: AT_SERVICE atoms are currently not reference counted. It makes sense
- * that Bytecode services should be removed manually, as removal amounts to
- * retracting all facts that are provided by the service. BUT we must also
- * know when a service depends on a calling "child" service, in which case
- * the bytecode will store its AT_SERVICE atom as a constant; in this case we
+ * TODO: AT_SERVICE atoms are currently not reference counted, but we should
+ * keep track of services that appear in Expression leaves; in this case we
  * must not remove the child service before the "parent". Hence, we do need
  * reference counting. We could prevent "garbage collection" of services by
  * always keeping 1 reference to the AT_SERVICE atom in the stored ServiceRecord.
@@ -127,12 +124,6 @@ Atom RegistryAddService(Atom form,  Atom parameters, Expression const * expressi
  * generating a list of untyped parameters. Returns an AT_SERVICE atom.
  */
 Atom RegistryAddBTreeService(Atom form, BTree * btree);
-
-/**
- * Add a bytecode service to the registry.
- * Returns an AT_SERVICE atom.
- */
-// Atom RegistryAddBytecodeService(Atom form, Atom bytecode);
 
 /**
  * Remove the given service from the registry.

@@ -275,27 +275,6 @@ Atom RegistryAddBTreeService(Atom form, BTree * btree)
 	return service;
 }
 
-/*
-Atom RegistryAddBytecodeService(Atom form, Atom bytecode)
-{
-	ASSERT(IsPredicateForm(form))
-	Atom parameters = BytecodeGetParameters(bytecode);
-	ServiceRecord record = {
-		.service = serviceRecordHash(form, parameters),
-		.form = form,
-		.parameters = parameters,
-		.type = SERVICE_BYTECODE,
-		.provider.bytecode = bytecode
-	};
-	// TODO: here we must ensure that no other service exists
-	// that can "overlap" with this one during dispatch
-	addService(&record);
-	IFactAcquire(record.form);
-	IFactAcquire(record.parameters);
-	IFactAcquire(record.provider.bytecode);
-	return record.service;
-}
-*/
 
 void RegistryRemoveService(Atom service)
 {

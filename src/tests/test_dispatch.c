@@ -41,7 +41,7 @@ void testDispatchToRule(void)
 	/**
 	 * If we don't have a matching service, but we have a rule
 	 * that can define a new service, then we need to compile
-	 * a new bytecode service for the query formula and execute it.
+	 * a new service for the query formula and execute it.
 	 * This is quite complex, so we should implement it in steps.
 	 */
 

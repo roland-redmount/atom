@@ -3,7 +3,7 @@
 
 
 // this array specifies a printable name string for each of the N_DATUMTYPES
-char const * atomTypeNames[] = {
+char const * atomTypeNames[N_ATOMTYPES + 1] = {
 	"NONE",
 	"NAME",
 	"ID",
@@ -16,9 +16,7 @@ char const * atomTypeNames[] = {
 	"LETTER",
 	"VARIABLE",
 	
-	"INSTRUCTION",
 	"PARAMETER",
-	"CONTEXT",
 	"SERVICE"
 };
 

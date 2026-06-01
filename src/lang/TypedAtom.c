@@ -210,8 +210,6 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		}
 		else if(IsTermForm(typedAtom.atom))
 			PrintTermForm(typedAtom.atom);
-		// else if(IsBytecode(typedAtom.atom))
-		// 	PrintBytecode(typedAtom.atom);
 		else
 			PrintIFact(typedAtom.atom);
 		break;
