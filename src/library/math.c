@@ -49,15 +49,16 @@ MathFunction functionTable[N_SERVICES] = {
 	&add2,
 };
 
-// List of corresponding service atoms (hash identifiers)
-Atom mathServices[N_SERVICES];
+// List of corresponding service record (keys)
+// These are needed by MathTeardown()
+ServiceRecord mathServices[N_SERVICES];
 
 
 /**
- * Argument index table, initialized during setup 
+ * TODO: Argument index table, initialized during setup 
  */
 #define MAX_N_ARGUMENTS 3
-index8 argumentIndexTable[N_SERVICES][MAX_N_ARGUMENTS];
+// index8 argumentIndexTable[N_SERVICES][MAX_N_ARGUMENTS];
 
 typedef struct s_MathContext {
 	MathFunction function;
@@ -113,16 +114,13 @@ static void setupAdd1(void)
 		.provider = &mathServiceProvider,
 		.providerData = ADD1_INDEX,
 	};
-
-	Expression addExpression;
-	CreateMachineExpression(&addExpression, 3, &service);
-
-	mathServices[ADD1_INDEX] = RegistryAddService(
-		FormulaGetForm(formula),
-		FormulaGetActors(formula),
-		&addExpression
-	);
-
+	ServiceRecord record = {
+		.form = FormulaGetForm(formula),
+		.parameters = FormulaGetActors(formula),
+	};
+	CreateMachineExpression(&record.expression, 3, &service);
+	RegistryAddService(&record);
+	mathServices[ADD1_INDEX] = record;
 	IFactRelease(formula);
 }
 
@@ -135,16 +133,13 @@ static void setupAdd2(void)
 		.provider = &mathServiceProvider,
 		.providerData = (void *) ADD2_INDEX,
 	};
-
-	Expression addExpression;
-	CreateMachineExpression(&addExpression, 3, &service);
-
-	mathServices[ADD2_INDEX] = RegistryAddService(
-		FormulaGetForm(formula),
-		FormulaGetActors(formula),
-		&addExpression
-	);
-
+	ServiceRecord record = {
+		.form = FormulaGetForm(formula),
+		.parameters = FormulaGetActors(formula),
+	};
+	CreateMachineExpression(&record.expression, 3, &service);
+	RegistryAddService(&record);
+	mathServices[ADD2_INDEX] = record;
 	IFactRelease(formula);
 }
 
@@ -159,5 +154,5 @@ void MathSetup(void)
 void MathTeardown(void)
 {
 	for(index32 i = 0; i < N_SERVICES; i++)
-		RegistryRemoveService(mathServices[i]);
+		RegistryRemoveService(&mathServices[i]);
 }

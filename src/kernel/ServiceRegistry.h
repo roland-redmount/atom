@@ -7,11 +7,10 @@
  * For B-tree services are automatically removed by RetractFact() when
  * the last tuple in the relation table is removed. 
  *
- * TODO: AT_SERVICE atoms are currently not reference counted, but we should
+ * TODO: Service records are currently not reference counted, but we should
  * keep track of services that appear in Expression leaves; in this case we
  * must not remove the child service before the "parent". Hence, we do need
- * reference counting. We could prevent "garbage collection" of services by
- * always keeping 1 reference to the AT_SERVICE atom in the stored ServiceRecord.
+ * some form of reference counting.
  */
 
 #ifndef SERVICEREGISTRY_H
@@ -30,8 +29,7 @@ enum ServiceType {
 
 
 /**
- * A service is represented by an AT_SERVICE atom, which is a special hash
- * of the service's signature, which consists of a form and a parameter list.
+ * A service is identified by a form and a parameter list.
  * The parameters list contains DT_PARAMETER atoms (see Parameter.h),
  * indicating the io mode (in/out) and atom type for each parameter.
  * 
@@ -40,15 +38,15 @@ enum ServiceType {
  * of s and corresponding parameter q of t: (i) their io modes are equal,
  * or the io mode of p is in/out; and (ii) their datum types are requal, or
  * the datum type of p is AT_NONE. 
+ * 
  * TODO: If service s subsumes service t, only one of them may be in the registry. 
  * 
- * NOTE: provided service records are fixed size, we could store them in a pool.
- * This would allow us to directly refer to services by pointers and perhaps
- * get rid of the AT_SERVICE atom type.
+ * NOTE: the service records are fixed size -- store them in a pool?
+ * This would allow us to directly refer to services by pointers, as
+ * we can guarantee a stable address (unlike BTree nodes).
+ * The BTree would then store these pointers (a "T-tree")
  */
 typedef struct s_ServiceRecord {
-	// service hash value
-	Atom service;
 	// we store the form and parameters lists of the signature separately
 	// to allow iterating across all services matching a given form
 	Atom form;
@@ -56,12 +54,6 @@ typedef struct s_ServiceRecord {
 	Expression expression;
 } ServiceRecord;
 
-
-/**
- * Create a service record ID atom from a formula consisting
- * of a form and a parameter list
- */
-Atom CreateServiceRecordID(Atom form, Atom parameters);
 
 /**
  * Setup an empty service registry. Called during bootstrapping only.
@@ -81,9 +73,8 @@ size32 RegistryNServices(void);
 
 /**
  * Core services are created during bootstrap.
- * They are accessible using RegistryGetServiceRecord() like all
- * other services, but can also be retrieved with an integer index
- * corresponding to the core predicate indices in kernel.h
+ * They are accessible by iteration but can also be retrieved
+ * with an integer index corresponding to the core predicate indices in kernel.h
  */
 
 /**
@@ -97,11 +88,11 @@ void RegistryAddCoreBTreeService(index32 index, Atom form, BTree * btree);
  */
 void RegistryFinalizeCoreServices(void);
 
-
 /**
  * Get the service record corresponding to a core predicate.
+ * The index is the form index used by kernel.h
  */
-ServiceRecord RegistryGetCoreServiceRecord(index32 index);
+ServiceRecord const * RegistryGetCoreServiceRecord(index32 index);
 
 /**
  * Get the relation table corresponding to a core predicate.
@@ -114,27 +105,23 @@ BTree * RegistryGetCoreBTreeService(index32 index);
 void RegistryTeardownCoreServices(void);
 
 /**
- * Add service to the registry.
- * Returns an AT_SERVICE atom.
+ * Add a service to the registry.
+ * NOTE: currently this method will ASSERT(false) if the (form, parameters) pair already
+ * exists in the registry.
  */
-Atom RegistryAddService(Atom form,  Atom parameters, Expression const * expression);
+void RegistryAddService(ServiceRecord const * record);
 
 /**
  * Convenience function add a B-tree machine service the registry,
- * generating a list of untyped parameters. Returns an AT_SERVICE atom.
+ * generating a list of untyped parameters.
  */
-Atom RegistryAddBTreeService(Atom form, BTree * btree);
+void RegistryAddBTreeService(Atom form, BTree * btree);
 
 /**
- * Remove the given service from the registry.
+ * Remove the given service (key) from the registry.
+ * The removed record is written to the given service record.
  */
-void RegistryRemoveService(Atom service);
-
-/**
- * Retrieve the service record for the given service atom (AT_SERVICE).
- * For matching services to queries, see dispatch.c
- */
-ServiceRecord RegistryGetServiceRecord(Atom service);
+void RegistryRemoveService(ServiceRecord * record);
 
 
 /**
@@ -146,18 +133,18 @@ typedef struct {
 } RegistryIterator;
 
 /**
- * Create iterator over services matching the given form.
+ * Create iterator over all services matching the given form.
  */
 void RegistryIterate(Atom form, RegistryIterator * iterator);
 
 bool RegistryIteratorNext(RegistryIterator * iterator);
 
-ServiceRecord RegistryIteratorGetService(RegistryIterator * iterator);
+ServiceRecord const * RegistryIteratorGetService(RegistryIterator * iterator);
 
 void RegistryIteratorEnd(RegistryIterator * iterator);
 
 /**
- * Retrieve the service with the given form and parameters list.
+ * Retrieve the service record with the given form and parameters list.
  * If a matching service does not exist, returns a zero record.
  */
 ServiceRecord RegistryFindService(Atom form, Atom parameters);

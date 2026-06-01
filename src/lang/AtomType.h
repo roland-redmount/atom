@@ -25,9 +25,8 @@
 #define AT_VARIABLE             8		// variable with a letter identifier
 
 #define AT_PARAMETER			9		// a parameter in a service
-#define AT_SERVICE				10		// a service record
 
-#define N_ATOMTYPES			10
+#define N_ATOMTYPES				9
 
 
 /**

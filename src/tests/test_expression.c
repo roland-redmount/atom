@@ -52,8 +52,8 @@ void testMachineExpression(void)
  */
 void testJoinExpression1(void)
 {
-	ServiceRecord left = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
-	ServiceRecord right = RegistryGetCoreServiceRecord(FORM_PREDICATE_FORM);
+	ServiceRecord const * left = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
+	ServiceRecord const * right = RegistryGetCoreServiceRecord(FORM_PREDICATE_FORM);
 	
 	// Crete the join expression (multiple m element e multiset p) & (predicate-form p)
 	// with argument mapping (m e p) <- (m e p) & (p).
@@ -61,8 +61,8 @@ void testJoinExpression1(void)
 	Expression joinExpression;
 	CreateJoinExpression(
 		&joinExpression, 3,
-		&(left.expression), (index8[]) {0, 1, 2},
-		&(right.expression), (index8[]) {2}
+		&(left->expression), (index8[]) {0, 1, 2},
+		&(right->expression), (index8[]) {2}
 	);
 
 	// Argument list
@@ -101,7 +101,7 @@ void testJoinExpression2(void)
 	TypedAtom string2 = CreateTypedAtom(AT_ID, CreateStringFromCString("bar"));
 	TypedAtom stringList = CreateTypedAtom(AT_ID, CreateListFromArray((TypedAtom[]) {string1, string2}, 2));
 
-	ServiceRecord listRecord = RegistryGetCoreServiceRecord(FORM_LIST_POSITION_ELEMENT);
+	ServiceRecord const * listRecord = RegistryGetCoreServiceRecord(FORM_LIST_POSITION_ELEMENT);
 	
 	// Crete the join expression 
 	// (position p list l element s) & (position q list s element e)
@@ -109,8 +109,8 @@ void testJoinExpression2(void)
 	Expression joinExpression;
 	CreateJoinExpression(
 		&joinExpression, 5,
-		&(listRecord.expression), (index8[]) {0, 1, 2},
-		&(listRecord.expression), (index8[]) {3, 2, 4}
+		&(listRecord->expression), (index8[]) {0, 1, 2},
+		&(listRecord->expression), (index8[]) {3, 2, 4}
 	);
 
 	// Arguments (_ @stringList _  _ _)
