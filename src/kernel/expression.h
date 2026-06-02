@@ -1,6 +1,11 @@
 /**
  * An expression, intermediate representation.
  * This is essentially relation algebra operators.
+ * An expression is evaluated stepwise, at each call
+ * yielding one tuple, similar to a co-routine.
+ * 
+ * NOTE: this should perhaps be renamed "operator" as it encodes
+ * stepwise operations to be executed by the interpreter?
  */
 
  #ifndef EXPRESSION_H
@@ -19,9 +24,7 @@
 /**
  * An expression can be executed by the interpreter to provide
  * a service. An expression can consist of sub-expressions, forming
- * a tree. The top level expression is associated with service of
- * type SERVICE_EXPRESSION. The leaves of an expression tree refer to
- * a machine service.
+ * a tree. The "leaves" of this tree are always EXPRESSION_MACHINE.
  */
 
 typedef struct s_Expression Expression;
@@ -33,10 +36,10 @@ struct s_Expression {
 		size32 contextSize:24;
 	} dimensions;
 	union {
-		// for EXPRESSION_JOIN, _UNION, _PROJECT (internal nodes)
+		// for EXPRESSION_JOIN
 		struct {
 			Expression const * left;
-			index8 leftArgumentMap[8];		// fixes size for now; need to figure out allocation
+			index8 leftArgumentMap[8];		// fixed size for now; need to figure out allocation
 			Expression const * right; 
 			index8 rightArgumentMap[8];
 		} children;
@@ -51,7 +54,7 @@ struct s_Expression {
 void CreateMachineExpression(Expression * expression, size8 nArguments, MachineService * machineService);
 
 /**
- * Create a join expression from two existing expression.
+ * Create a join expression from two existing expressions
  */
 void CreateJoinExpression(Expression * expression, size8 nArguments,
 	Expression const * leftChild, index8 * leftArgumentMap,
@@ -78,20 +81,14 @@ typedef struct s_ExpressionContext {
   */
 ExpressionContext * ExpressionCreateContext(Expression const * expression, Tuple * arguments);
 
+/**
+ * Evaluate an expression with a given context. This is the interpreter.
+ */
 bool ExpressionCall(Expression const * expression, ExpressionContext * context);
 
 void ExpressionFreeContext(Expression const * expression, ExpressionContext * context);
 
 void PrintExpression(Expression const * expression);
 
-/*
-	// Mapping between arguments of this service
-	// and parameters of each sub-service.
-	// TODO: for now we use a fixed maximum number of arguments
-	index8 leftArgumentMap[8];
-	index8 rightArgumentMap[8];
-	Atom leftService;
-	Atom rightService;
-*/
 
 #endif	// EXPRESSION_H

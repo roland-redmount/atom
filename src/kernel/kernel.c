@@ -180,8 +180,8 @@ void bootstrapAssertFact(Atom predicateForm, Tuple const * actors)
 	// TODO: this now needs to retrieve an agent, not a service ...
 	// This is a quick hack to get the BTree * pointer)
 	index32 formIndex = getCorePredicateIndex(predicateForm);
-	ServiceRecord record = RegistryGetCoreServiceRecord(formIndex);
-	BTree * btree = (BTree *) record.expression.value.machineService.providerData;
+	ServiceRecord const * record = RegistryGetCoreServiceRecord(formIndex);
+	BTree * btree = (BTree *) record->expression.value.machineService.providerData;
 	RelationBTreeAddTuple(btree, actors);
 }
 
@@ -453,14 +453,14 @@ void AssertFact(Atom predicateForm, Tuple const * actors)
 	// add tuple to relation table
 	// quick hack, assume B-tree service provider
 	ServiceRecord record = RegistryFindUntypedService(predicateForm);
-	if(record.service) {
+	if(record.form) {
 		ASSERT(record.expression.type == EXPRESSION_MACHINE)
 		ASSERT(record.expression.value.machineService.provider == &bTreeServiceProvider)
 		BTree * btree = (BTree *) record.expression.value.machineService.providerData;
 		RelationBTreeAddTuple(btree, actors);
 	}
 	else {
-		// create new relation table
+		// No record found; create new relation table
 		size8 arity = PredicateArity(predicateForm);
 		BTree * btree = CreateRelationBTree(arity);
 		RegistryAddBTreeService(predicateForm, btree);
@@ -473,7 +473,7 @@ void AssertFact(Atom predicateForm, Tuple const * actors)
 static void removeBTreeTuples(Atom predicateForm, Tuple * actors)
 {
 	ServiceRecord record = RegistryFindUntypedService(predicateForm);
-	ASSERT(record.service)
+	ASSERT(record.form)
 	ASSERT(record.expression.type == EXPRESSION_MACHINE)
 	ASSERT(record.expression.value.machineService.provider == &bTreeServiceProvider)
 	BTree * btree = (BTree *) record.expression.value.machineService.providerData;
@@ -484,7 +484,7 @@ static void removeBTreeTuples(Atom predicateForm, Tuple * actors)
 	// remove btree if empty
 	// NOTE: I think this should be an explicit function in ServiceRegistry, purgeEmptyService() or such
 	if(RelationBTreeNRows(btree) == 0) {
-		RegistryRemoveService(record.service);
+		RegistryRemoveService(&record);
 		FreeRelationBTree(btree);
 	}
 }

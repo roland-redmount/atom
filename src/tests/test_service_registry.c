@@ -15,6 +15,7 @@ struct {
 	Atom form;		// a form
 } fixture;
 
+
 static void setupFixture(void)
 {
 	// TODO: we should have a way to parse a form from a C string.
@@ -23,6 +24,7 @@ static void setupFixture(void)
 	IFactAcquire(fixture.form);
 	IFactRelease(formula);
 }
+
 
 static void teardownFixture(void)
 {
@@ -36,18 +38,18 @@ void testAddDropTable(void)
 	size32 nTablesInitial = RegistryNServices();
 
 	BTree * createdTable = CreateRelationBTree(4);
-	Atom service = RegistryAddBTreeService(fixture.form, createdTable);
+	RegistryAddBTreeService(fixture.form, createdTable);
 	ASSERT_UINT32_EQUAL(RegistryNServices(), nTablesInitial + 1)
 	ASSERT_UINT32_EQUAL(RelationBTreeNColumns(createdTable), 4)
 
 	ServiceRecord record = RegistryFindUntypedService(fixture.form);
-	ASSERT(record.service)
+	ASSERT(record.form)
 	ASSERT(record.expression.type == EXPRESSION_MACHINE)
 	BTree * foundTable = (BTree *) record.expression.value.machineService.providerData;
 	ASSERT_PTR_NOT_EQUAL(foundTable, 0)
 	ASSERT_PTR_EQUAL(foundTable, createdTable)
 
-	RegistryRemoveService(service);
+	RegistryRemoveService(&record);
 	FreeRelationBTree(createdTable);
 	ASSERT_UINT32_EQUAL(RegistryNServices(), nTablesInitial)
 	
@@ -59,10 +61,10 @@ void testCallBTreeService(void)
 {
 	// Test calling 
 	// (multiset @list-predicate-form element _ position _)
-	ServiceRecord record = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
-	ASSERT(record.service)
-	ASSERT(record.expression.type == EXPRESSION_MACHINE)
-	Expression const * expression = &(record.expression);
+	ServiceRecord const * record = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
+	ASSERT(record)
+	ASSERT(record->expression.type == EXPRESSION_MACHINE)
+	Expression const * expression = &(record->expression);
 
 	Tuple * arguments = CreateTuple(3);
 	MultisetSetTuple(arguments,

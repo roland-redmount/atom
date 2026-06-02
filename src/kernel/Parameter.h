@@ -1,6 +1,14 @@
 /**
- * A AT_PARAMETER aton is used in service signatures to mark a position
- * in the actor list where a parameter is a expected.
+ * An AT_PARAMETER aton is used in service signatures to mark a position
+ * in the actor list where a parameter is a expected. Parameters are
+ * different from variables: while a variable indicates "any atom"
+ * and has no particular input/output direction, an parameter
+ * indicates one specific atom, although its identity is unknown.
+ * 
+ * Output parameters may superfically seem similar to variables as we can
+ * use variables in place of "outputs" in queries, but they are not
+ * the same: a variable can during compilation be mapped to either an
+ * input or output parameter, depending on the service signatures.
  */
 
 #ifndef	PARAMETER_H
@@ -11,7 +19,11 @@
 
 /**
  * Service parameters can be input, output, or bidirectional.
- * Machine level program such as table services may have
+ * In syntax, we denote input parameters by @, output by $.
+ * (Maybe < and > are more intuitive after all? Output feel
+ *  like going right-to-left so should be >, consistent with
+ *  Unix pipes.)
+ * Machine level programs such as table services may have
  * parameters than allow both input and output; these can be used 
  * to represent multiple input/output combination compactly.
  */

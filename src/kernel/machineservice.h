@@ -15,6 +15,10 @@
  * of machine services, such as B-Tree relations or arithmetic functions.
  * One MachineServiceProvider can host multiple MachineService for
  * various relations.
+ * 
+ * NOTE: this is only used as a kind of Expression; the service registry
+ * maps all (form, parameter) pairs to expression. So should perhaps be
+ * renamed MachineExpression ?
  */
 
 typedef bool (*MachineServiceCall)(void * context, Tuple * arguments);
