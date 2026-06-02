@@ -15,6 +15,7 @@ struct {
 	Atom form;		// a form
 } fixture;
 
+
 static void setupFixture(void)
 {
 	// TODO: we should have a way to parse a form from a C string.
@@ -23,6 +24,7 @@ static void setupFixture(void)
 	IFactAcquire(fixture.form);
 	IFactRelease(formula);
 }
+
 
 static void teardownFixture(void)
 {

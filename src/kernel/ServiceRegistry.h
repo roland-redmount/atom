@@ -14,7 +14,6 @@
 #define SERVICEREGISTRY_H
 
 #include "kernel/expression.h"
-#include "kernel/machineservice.h"
 #include "kernel/RelationBTree.h"
 
 

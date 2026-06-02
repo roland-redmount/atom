@@ -5,7 +5,7 @@
  * yielding one tuple, similar to a co-routine.
  * 
  * NOTE: this should perhaps be renamed "operator" as it encodes
- * stepwise operations to be executed by the interpreter.
+ * stepwise operations to be executed by the interpreter?
  */
 
  #ifndef EXPRESSION_H
@@ -36,10 +36,10 @@ struct s_Expression {
 		size32 contextSize:24;
 	} dimensions;
 	union {
-		// for EXPRESSION_JOIN, _UNION, _PROJECT (internal nodes)
+		// for EXPRESSION_JOIN
 		struct {
 			Expression const * left;
-			index8 leftArgumentMap[8];		// fixes size for now; need to figure out allocation
+			index8 leftArgumentMap[8];		// fixed size for now; need to figure out allocation
 			Expression const * right; 
 			index8 rightArgumentMap[8];
 		} children;
@@ -54,7 +54,7 @@ struct s_Expression {
 void CreateMachineExpression(Expression * expression, size8 nArguments, MachineService * machineService);
 
 /**
- * Create a join expression from two existing expression.
+ * Create a join expression from two existing expressions
  */
 void CreateJoinExpression(Expression * expression, size8 nArguments,
 	Expression const * leftChild, index8 * leftArgumentMap,
