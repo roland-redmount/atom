@@ -20,7 +20,8 @@
 
 /**
  * A service is identified by a form and a parameter list.
- * The parameters list contains DT_PARAMETER atoms (see Parameter.h),
+ * The form must be a term form.
+ * The parameters list contains AT_PARAMETER atoms (see Parameter.h),
  * indicating the io mode (in/out) and atom type for each parameter.
  * 
  * A service s subsumes another service t iff (1) the forms are equal, and

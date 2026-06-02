@@ -100,64 +100,6 @@ static bool dispatchToService(Atom queryForm, Atom queryActors, ServiceRecord * 
 	return match;
 }
 
-/**
- * To match a predicate to a rule, we need to
- * (1) find a clause form where its form occurs
- * (2) find clauses of that clause form (rules) where the 
- *     corresponding predicate unifies with the query predicate
- * (3) take the remainder of the clause (unified) and repeat from 1
- *     until we reach resolution or there are no more matches
- * 
- * The query (root 3 square s) has form (root square) which occurs
- * in the clause form (! r r s | root square). Iterating over matching
- * clauses, gives the clause
- *
- *   ! * r * r = s | root r square s
- * 
- * Unifying the matching predicate (root r square s) with (root 3 square s)
- * yields the substitution { r-> 3 }. We then negate the remainder of the
- * clause, which in this case yields the single predicate
- * 
- *   * 3 * 3 = s
- * 
- * (In general this becomes a conjunction of predicates.) We then recurse
- * by dispatching the query (* 3 * 3 = s).
- */
-
-/**
- * Compiling the service: for the query (root 3 square s), we will construct
- * a service (root @INT square $) but the output parameter type is not yet known.
- * We replace the constant 3 with a typed variable _r:INT.
- * In the first round of dispatch, we match to the above rule, and unification
- * yields
- * 
- *  * _r:INT * _r:INT = s --> root _r:INT square s
- * 
- * but we still don't know if there is a matching service to call.
- * In the second round of dispatch, (* _r:INT * _r:INT = s) matches the
- * service (* @INT * @INT = $INT), with substition {_r:INT -> @INT, s -> $INT}
- * which yields
- * 
- *  * _r:INT * _r:INT = s --> root _r:INT square s
- * 
- * As we only have a single term, there is no join iteration, and we can generate
- * 
- * root @INT square $INT
- * 1  COPY   <* * = > #1
- * 2  COPY   @1 #1.@1
- * 3  COPY   @1 #1.@2
- * 4  CALL   #1
- * 5  JUMPIF 7
- * 6  END
- * 7  YIELD
- * 8  JMP 4
- * 
- * where on line 1 we insert the found service, and on lines 2--3 we copy parameters
- * according to the found substitution. Lines 4--8 is the same for all services.
- * (If we know in advance that a service returns exactly once, we can simplify.)
- * 
- * Note that we might follow several rules before we find a service to call.
- */
 
 bool DispatchQuery(Atom query, ServiceRecord * record, index8 * permutation)
 {

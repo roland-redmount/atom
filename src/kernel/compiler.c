@@ -3,33 +3,155 @@
 #include "kernel/ServiceRegistry.h"
 #include "lang/Variable.h"
 
-/**
- * As an example, consider compiling the rule
+/*
  * 
- * predicate-form p role r multiple m <-
- *   predicate-form p & multiset p element r multiple m
+ * Dictionary: To match the predicate to a rule, we need to
  * 
- * The LHS will compile to a SERVICE_JOIN over the two machine services
- * for (predicate-form) and (multiset element multiple). Essentially,
- * (predicate-form p role r multiple m) becomes a synonym for the query
- * (predicate-form p & multiset p element r multiple m). This suggests we
- * should store the SERVICE_JOIN service once and make an n:1 mapping
- * between forms and services.
- * 
- * As another example, consider
- *
- * predicate-form p role r <-
- *   predicate-form p & multiset p element r multiple _
- *  
- * Here we are dropping the "multiset" role from the (multiset element multiple)
- * relation; this is another service, say SERVICE_PROJECT, that applies the
- * projection operator from relational algebra (remove columns and take the
- * resulting unique tuples).
- * 
- * This has actors (p, p, e, m) which must be mapped to
- * the arguments of (predicate-form p) and (multiset p element e multiple m).
+ * (1) find a clause form where its form occurs
+ * (2) find clauses of that clause form (rules) where the 
+ *     corresponding predicate unifies with the query predicate
+ * (3) take the remainder of the clause (unified) and repeat from 1
+ *     until we reach resolution or there are no more matches
  */
 
+
+/*
+ * A compilation example: say the dictionary contains the rule
+ * 
+ *   ! + x + y = z | + z - x = y             (1)
+ * 
+ * and we have a service (+ 1<INT + 2>INT = 3<INT). The query
+ * 
+ *   + 7 - 4 = d                             (2)
+ * 
+ * does not match any service, so we need to compile a new service.
+ * 
+ * To compile a service, we first replace any non-variables in the query
+ * with typed, numbered input parameters, so that (2) becomes
+ * 
+ *   + 1<INT - 2<INT = d                    (3)
+ * 
+ * This has form (+ - =) which is found in the clause form (! + + = | + - =).
+ * Iterating over matching clauses gives the clause (1).
+ * Unifying the matched predicate (+ z - x = y) with (+ 1<INT - 2<INT = d)
+ * yields the substitution { z -> 1<INT, x -> 2<INT, y -> d }. We then drop the matched
+ * predicate, apply this substitution to the remainder of the clause and negate it,
+ * which in this case yields
+ * 
+ *   + 2<INT + d = 1<INT                    (4)
+ * 
+ * (In general, negating yields a conjunction of predicates.) We then recurse
+ * by dispatching the query (4). During dispatch, parameters behave as any atom
+ * of the given type, so this query matches the service (+ 1<INT + 2>INT = 3<INT)
+ * which points to an EXPRESSION_MACHINE. Unifying the service signature with (3)
+ * and renumbering parameters yields the substitution { d -> 3>INT }, and applying
+ * this to (3) yields
+ * 
+ *  + 1<INT - 2<INT = 3>INT                 (5)
+ *
+ * which becomes the signature of the new service. As we have no more clauses, the
+ * found EXPRESSION_MACHINE is the final compilation result, and we create a new
+ * service mapping (5) to this expression, which essentally becomes a synonym for
+ * the service (+ 1<INT + 2>INT = 3<INT).
+ */
+
+/**
+ * Compiling a join expression: dictionary contains the rule
+ * 
+ *   number x plusone y plustwo z <- + x + 1 = y & + y + 1 = z 
+ * 
+ * or, in CNF
+ * 
+ *   ! + x + 1 = y | ! + y + 1 = z | number x plusone y plustwo z  (1)
+ * 
+ * and we have the query (number 3 plusone a plustwo b). We first replace the atom
+ * 3 with a parameter 1<INT to give the query
+ * 
+ *   number 1<INT plusone a plustwo b           (2)
+ * 
+ * The first round of matching gives the substitution
+ * {x -> 1<INT, y -> a, z -> b} and the conjunction
+ * 
+ *   + 1<INT + 1 = a & + a + 1 = b              (3)
+ * 
+ * A conjunction will always compile to a JOIN expression. We initialize the join
+ * expression with two terms from (3),
+ * 
+ *   JOIN(+ 1<INT + 1 = a, + a + 1 = b)         (4)
+ * 
+ * The JOIN expression will compute sequentially from left to right, To find the left and
+ * right sub-expressions of the join, we must dispatch the two terms of (4) separaterly.
+ * (If we have > 2 terms we can do a series of joins.) Starting (arbitrarily) with
+ * the left term, dispatch matches the service (+ 1<INT + 2<INT = 3>INT) which maps
+ * to a MACHINE_EXPRESSION. After renumbering we obtain the substitution { a -> 2>INT }
+ * that we apply to the _left_ term; for the right term, the output parameter 2 must
+ * become an input. So that our JOIN expression is now
+ * 
+ *   JOIN(+ 1<INT + 1 = 2>INT, + 2<INT + 1 = b)       (5)
+ * 
+ * When later interpreting this compiled expression, we will evaluate the left sub-expression
+ * to obtain values for parameter 2, which will then be copied to input parameter 2 in
+ * the right sub-expression.
+ * 
+ * (If we would have started with the right term, dispatch would not match the service
+ * since the variable a does not match the input parameter 2<INT; in this case we
+ * would have to postpone this term.)
+ * 
+ * Continuing with the right term, dispatch again matches (+ 1<INT + 2<INT = 3>INT)
+ * yielding the substitution { b -> 3>INT}, and our JOIN expression becomes
+ * 
+ *   JOIN(+ 1<INT + 1 = 2>INT, + 2<INT + 1 = 3>INT)     (6)
+ *
+ * Which is now complete as both sub-expressions have been resolved. 
+ * Backsubstituting to (2) gives the compiled service signature
+ * 
+ *   number 1<INT plusone 2>INT plustwo 3>INT           (7)
+ * 
+ */
+
+
+ /**
+  * In the previous example all variables in the rule were present in the query.
+  * On the other hand, with the rule
+  * 
+  *   number x plustwo z <- + x + 1 = y & + y + 1 = z 
+  *
+  * and query (number 1 plustwo a) the variable y must be discarded, and then
+  * some tuples may become identical. This needs a PROJECT operation in addition
+  * to the JOIN,
+  * 
+  *   PROJECT(JOIN(+ x + 1 = y, + y + 1 = z), {x z})
+  * 
+  * The PROJECT(expression, variables) operation requires checking for duplicate
+  * tuples (unless the variables are known to be a unique key for ther relation).
+  * This is problematic since we want the expression to yield one tuple at a time.
+  * To enable efficient duplicate removal, the sub-expression must yield tuples in
+  * sorted order w.r.t. {x z}. 
+  */
+
+
+ /**
+  * Compiling a recursive expression: consider the classic
+  * 
+  *   integer n factorial f <-
+  *     + m + 1 = n & integer m factorial e & * n * e = f
+  * 
+  * Together with the fact (integer 0 factorial 1) terminating the recursion.
+  * (We will need a precondition ? < n > 0: to ensure unique dispatch, but we
+  * ignore this for now.) When compiling this expression, the sub-expression
+  * (integer m factorial e) will require the service we are currently compiling,
+  * so it must be considered by dispatch somehow.
+  * 
+  * We will compile the query (integer 1<INT factorial f). To construct the first 
+  * JOIN expression we will need two resolved terms. The first term (+ m + 1 = n)
+  * matches service (+ 1>INT + 2<INT = 3<INT) and we obtain
+  * 
+  *   JOIN(+ 2>INT + 1 = $1>INT, ...)
+  * 
+  * the second term is then (integer 2<INT factorial e). We cannot match this to
+  * the current service however, since we do not yet know the type of the 
+  * 
+  */
 
 static ServiceRecord compileCallExpression(Atom queryForm, Tuple * parameters)
 {
