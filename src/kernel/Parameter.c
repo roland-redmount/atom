@@ -5,6 +5,7 @@
 typedef union
 {
 	struct {
+		uint8 number;
 		byte io;
 		byte atomType;
 	} fields;
@@ -12,9 +13,11 @@ typedef union
 } Parameter;
 
 
-Atom CreateParameter(byte io, byte type)
+Atom CreateParameter(uint8 number, byte io, byte type)
 {
+	ASSERT(number > 0)
 	Parameter param = {0};
+	param.fields.number = number;
 	param.fields.io = io;
 	param.fields.atomType = type;
 	return param.value;
@@ -24,6 +27,14 @@ Atom CreateParameter(byte io, byte type)
 bool IsParameter(TypedAtom a)
 {
 	return a.type == AT_PARAMETER;
+}
+
+
+uint8 ParameterGetNumber(Atom parameter)
+{
+	Parameter param;
+	param.value = parameter;
+	return param.fields.number;
 }
 
 
@@ -47,16 +58,17 @@ void PrintParameter(Atom parameter)
 {
 	Parameter param;
 	param.value = parameter;
+	PrintF("@%u", param.fields.number);
 	if(param.fields.io == PARAMETER_IN)
-		PrintChar('@');
+		PrintChar('<');
 	else
-		PrintChar('$');
+		PrintChar('>');
 	if(param.fields.atomType) {
 		PrintCString(GetAtomTypeName(param.fields.atomType));
 	}
 }
 
-
+/*
 int8 CompareParameters(Atom parameter1, Atom parameter2)
 {
 	Parameter param1;
@@ -78,4 +90,4 @@ int8 CompareParameters(Atom parameter1, Atom parameter2)
 			return 1;
 	}
 }
-
+*/

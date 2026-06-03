@@ -22,12 +22,31 @@ typedef struct s_SubstitutionList {
  */
 void SetupSubstitutionList(Tuple const * tuple, SubstitutionList * subst);
 
-// Find the value corresponding to a given variable
+/**
+ * Find the value corresponding to a given variable
+ */
 TypedAtom FindSubstValue(SubstitutionList const * subst, TypedAtom variable);
 
-// Replace a substitution value for a given variable (if it exists)
+/**
+ * Replace a substitution value for a given variable (if it exists)
+ */
 void SetSubstValue(SubstitutionList * subst, TypedAtom variable, TypedAtom value); 
 
+/**
+ * Substitute value in the source tuple according to the given substitution list
+ * and write corresponding values to the destination tuple. Atoms in the source
+ * tuple that are not present in the substitution list will be copied unchanged
+ * to the destination.
+ * The source and destination may be the same to substitute in-place.
+ */
+void SubstituteTuple(SubstitutionList const * subst, Tuple const * source, Tuple * destination);
+
+/**
+ * Deallocate a substitution list
+ */
 void FreeSubstitutionList(SubstitutionList * subst);
+
+void PrintSubstitutionList(SubstitutionList * subst);
+
 
 #endif	// SUBSTITUTIONLIST_H

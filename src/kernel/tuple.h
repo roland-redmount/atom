@@ -99,6 +99,13 @@ bool TupleIsProtected(Tuple const * tuple);
 void CopyTuples(Tuple const * source, Tuple * destination);
 
 /**
+ * Copy destination->nAtoms from the source tuple into the destination,
+ * starting at the given offset (0-based index to first element).
+ */
+
+void CopyTuplesOffset(Tuple const * source, index8 sourceOffset, Tuple * destination);
+
+/**
  * Compare two tuples for equality.
  * The protectedAtom field is ignored for the comparison.
  */

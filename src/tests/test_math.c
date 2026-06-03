@@ -7,18 +7,18 @@
 #include "kernel/tuple.h"
 #include "lang/Formula.h"
 #include "library/math.h"
-#include "parser/PredicateBuilder.h"
+#include "parser/TermBuilder.h"
 #include "testing/testing.h"
 
 
 void testAdd1(void)
 {
-	Atom query = CStringToPredicate("= _ + 2 + 3");
+	Atom query = CStringToTerm("= _ + 2 + 3");
 	Atom actors = FormulaGetActors(query);
 
 	ServiceRecord record;
 	index8 permutation[3];
-	DispatchQuery(query, &record, permutation);
+	ASSERT(DispatchQueryFormula(query, &record, permutation))
 
 	Expression const * expression = &(record.expression);
 	Tuple * arguments = CreateTuple(3);
@@ -39,12 +39,12 @@ void testAdd1(void)
 
 void testAdd2(void)
 {
-	Atom query = CStringToPredicate("= 7 + 4 + _");
+	Atom query = CStringToTerm("= 7 + 4 + _");
 	Atom actors = FormulaGetActors(query);
 
 	ServiceRecord record;
 	index8 permutation[3];
-	DispatchQuery(query, &record, permutation);
+	ASSERT(DispatchQueryFormula(query, &record, permutation))
 
 	Expression const * expression = &(record.expression);
 	Tuple * arguments = CreateTuple(3);

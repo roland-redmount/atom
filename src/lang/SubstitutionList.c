@@ -20,15 +20,15 @@ void SetupSubstitutionList(Tuple const * tuple, SubstitutionList * subst)
 			// check if variable was already found
 			bool newVariable = true;
 			for(index8 j = 0; j < subst->nPairs; j++) {
-				if(SameTypedAtoms(subst->variables[i], a)) {
+				if(SameTypedAtoms(subst->variables[j], a)) {
 					newVariable = false;
 					break;
 				}
 			}
 			if(newVariable) {
-				// add to substitution list
-				subst->variables[i] = a;
-				subst->values[i] = a;
+				// add self-substitution a -> a to list
+				subst->variables[subst->nPairs] = a;
+				subst->values[subst->nPairs] = a;
 				subst->nPairs++;
 			}
 		}
@@ -36,9 +36,6 @@ void SetupSubstitutionList(Tuple const * tuple, SubstitutionList * subst)
 }
 
 
-/**
- * Find the value corresponding to a given variable
- */
 TypedAtom FindSubstValue(SubstitutionList const * subst, TypedAtom variable)
 {
 	for(index8 i = 0; i < subst->nPairs; i++) {
@@ -49,9 +46,7 @@ TypedAtom FindSubstValue(SubstitutionList const * subst, TypedAtom variable)
 	return invalidAtom;	
 }
 
-/**
- * Replace a substitution value for a given variable (if it exists)
- */
+
 void SetSubstValue(SubstitutionList * subst, TypedAtom variable, TypedAtom value)
 {
 	for(index8 i = 0; i < subst->nPairs; i++) {
@@ -63,12 +58,37 @@ void SetSubstValue(SubstitutionList * subst, TypedAtom variable, TypedAtom value
 	}
 }
 
-/**
- * Deallocate a substitution list
- */
+
+void SubstituteTuple(SubstitutionList const * subst, Tuple const * source, Tuple * destination)
+{
+	ASSERT(source->nAtoms == destination->nAtoms)
+	for(index8 i = 0; i < source->nAtoms; i++) {
+		TypedAtom sourceValue = TupleGetElement(source, i);
+		TypedAtom substValue = FindSubstValue(subst, sourceValue);
+		if(substValue.atom)
+			TupleSetElement(destination, i, substValue);
+		else
+			TupleSetElement(destination, i, sourceValue);
+	}
+}
+
+
 void FreeSubstitutionList(SubstitutionList * subst)
 {
 	// free atom arrays
 	Free(subst->variables);
 	Free(subst->values);
+}
+
+
+void PrintSubstitutionList(SubstitutionList * subst)
+{
+	PrintChar('{');
+	for(index8 i = 0; i < subst->nPairs; i++) {
+		PrintTypedAtom(subst->variables[i]);
+		PrintCString(" -> ");
+		PrintTypedAtom(subst->values[i]);
+		PrintChar(' ');
+	}
+	PrintChar('}');
 }

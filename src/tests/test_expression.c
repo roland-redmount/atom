@@ -21,7 +21,7 @@ void testMachineExpression(void)
 	Atom query = CStringToPredicate("+ 3 + _ = 7");
 	ServiceRecord record;
 	index8 argumentMap[3];
-	ASSERT(DispatchQuery(query, &record, argumentMap))
+	ASSERT(DispatchQueryFormula(query, &record, argumentMap))
 
 	// Expression callExpression = {
 	// 	.type = CALL_EXPRESSION,
@@ -47,7 +47,8 @@ void testMachineExpression(void)
 
 
 /**
- * Test evaluatiing the join expression (multiple m element e multiset p) & (predicate-form p)
+ * Test evaluating the join expression
+ * (multiple m element e multiset p) & (predicate-form p)
  * Here the right hand expression (predicate-form p) has only a single tuple
  */
 void testJoinExpression1(void)
@@ -91,7 +92,7 @@ void testJoinExpression1(void)
 
 
 /**
- * Test evaluatiing the join expression
+ * Test evaluating the join expression
  * (position p list l element s) & (position q list s element e)
  */
 void testJoinExpression2(void)

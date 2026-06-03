@@ -174,7 +174,7 @@ void FreePredicateIterator(PredicateIterator * iter)
 ClauseIterator * CreateClauseIterator(Atom clauseForm)
 {
 	ClauseIterator* iter = malloc(sizeof(ClauseIterator));
-	iter->nUniqueTerms = ClauseNUniqueTerms(clauseForm);
+	iter->nUniqueTerms = ClauseFormNTermForms(clauseForm);
 	
 	// allocate arrays
 	iter->predFormPerm = malloc(iter->nUniqueTerms * sizeof(Permutation *));
@@ -192,7 +192,7 @@ ClauseIterator * CreateClauseIterator(Atom clauseForm)
 
 		// create a predicate iterator for each multiple of each term form
 		iter->predIter[i] = malloc(em.multiple * sizeof(PredicateIterator *));
-		Atom predicateForm = GetPredicateForm(em.element.atom);
+		Atom predicateForm = TermFormGetPredicateForm(em.element.atom);
 		for(index8 j = 0; j < em.multiple; j++) {
 			iter->predIter[i][j] = CreatePredicateIterator(predicateForm);
 		}

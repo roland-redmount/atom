@@ -28,9 +28,7 @@ void TermFormSetTuple(Tuple * tuple, TypedAtom termForm, TypedAtom predicateForm
 	);
 }
 
-/**
- * The term form is negated if sign is false
- */
+
 Atom CreateTermForm(Atom predicateForm, bool sign)
 {
 	IFactDraft draft;
@@ -68,7 +66,7 @@ bool IsTermForm(Atom atom)
 }
 
 
-Atom GetPredicateForm(Atom termForm)
+Atom TermFormGetPredicateForm(Atom termForm)
 {
 	BTree * tree = RegistryGetCoreBTreeService(FORM_TERM_FORM);
 
@@ -100,11 +98,11 @@ void PrintTermForm(Atom termForm)
 {	
 	if(!TermFormGetSign(termForm))
 		PrintChar('!');
-	PrintPredicateForm(GetPredicateForm(termForm));
+	PrintPredicateForm(TermFormGetPredicateForm(termForm));
 }
 
 
 size8 TermFormArity(Atom termForm)
 {
-	return PredicateArity(GetPredicateForm(termForm));
+	return PredicateArity(TermFormGetPredicateForm(termForm));
 }

@@ -1,9 +1,10 @@
 /**
- * An AT_PARAMETER aton is used in service signatures to mark a position
+ * An AT_PARAMETER atom is used in service signatures to mark a position
  * in the actor list where a parameter is a expected. Parameters are
  * different from variables: while a variable indicates "any atom"
  * and has no particular input/output direction, an parameter
  * indicates one specific atom, although its identity is unknown.
+ * Parameters are identified within a formula by a unique number.
  * 
  * Output parameters may superfically seem similar to variables as we can
  * use variables in place of "outputs" in queries, but they are not
@@ -18,25 +19,30 @@
 #include "lang/Atom.h"
 
 /**
- * Service parameters can be input, output, or bidirectional.
+ * Service parameters can be input, output.
  * In syntax, we denote input parameters by @, output by $.
  * (Maybe < and > are more intuitive after all? Output feel
  *  like going right-to-left so should be >, consistent with
  *  Unix pipes.)
- * Machine level programs such as table services may have
- * parameters than allow both input and output; these can be used 
- * to represent multiple input/output combination compactly.
+ * 
+ * OARAMETER_IN_OUT can be used to represent input/output combinations
+ * compactly for services that can act on either inputs or outputs,
+ * such as table lookup with / without variables.
  */
+#define PARAMETER_IN_OUT	0
 #define PARAMETER_IN		1
 #define PARAMETER_OUT		2
-#define PARAMETER_IN_OUT	3
+
 
 /**
- * Create an parameter. For untyped parameters, set type to 0.
+ * Create an parameter. The number must be positive and < 255.
+ * For untyped parameters, set type to 0.
  */
-Atom CreateParameter(byte io, byte type);
+Atom CreateParameter(uint8 number, byte io, byte type);
 
 bool IsParameter(TypedAtom atom);
+
+uint8 ParameterGetNumber(Atom parameter);
 
 byte ParameterGetType(Atom parameter);
 
@@ -51,7 +57,7 @@ byte ParameterGetIO(Atom parameter);
  * wildcards, matching any other value.  Therefore, distinct parameter
  * atoms can compare equal by this function.
  */
-int8 CompareParameters(Atom parameter1, Atom parameter2);
+// int8 CompareParameters(Atom parameter1, Atom parameter2);
 
 void PrintParameter(Atom parameter);
 

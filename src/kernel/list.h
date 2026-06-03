@@ -14,6 +14,7 @@
 
 /**
  * Create a list from a callback function generating list element atoms.
+ * The ListElementGenerator will be called with a 0-based index into the list.
  */
 typedef TypedAtom (*ListElementGenerator)(index32 index, void const * data);
 

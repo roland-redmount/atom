@@ -78,6 +78,19 @@ Atom CreateTerm(Atom predicate, bool negated);
 Atom CreateClause(Atom const * terms, size8 nTerms);
 
 /**
+ * Find the index into a clauseForm tuple of the first actor corresponding
+ * to the m'th multiple of the term form actors.
+ */
+index8 ClauseGetTermActorsIndex(Atom clauseForm, Atom termForm, uint8 m);
+
+/**
+ * Find the indices into a clauseForm tuple of the first actor in each term,
+ * including multiples. The termIndices array must have at least as many elements
+ * as the clause arity + 1; the last element will be set to the total clause arity.
+ */
+void ClauseGetTermActorsIndices(Atom clauseForm, index8 * termActorsIndices);
+
+/**
  * Create a conjunction from a list of terms, in any order.
  */
 Atom CreateConjunction(Atom const * clauses, size8 nClauses);
@@ -88,8 +101,8 @@ Atom CreateConjunction(Atom const * clauses, size8 nClauses);
  * the k'th occurence (k = 1, 2 ... ) of the termForm in the clauseForm, and write
  * them to the termActors tuple.
  */
-void ClauseGetTermActors(
-	Atom clauseForm, Tuple const * clauseActors, Atom termForm, Tuple * termActors, index8 k);
+// void ClauseGetTermActors(
+// 	Atom clauseForm, Tuple const * clauseActors, Atom termForm, Tuple * termActors, index8 k);
 	
 /**
  * Test if the atom is a formula
@@ -126,6 +139,8 @@ index32 FormulaRoleIndex(Atom formula, Atom name);
 // size8 FormulaUniqueVariables(Atom formula, TypedAtom * variables);
 
 void PrintFormula(Atom formula);
+
+void PrintFormActorsAsFormula(Atom form, Tuple const * actors);
 
 /**
  * Compute hash of a formula from the form hash value and actors tuple

@@ -1,7 +1,17 @@
+#include "kernel/dictionary.h"
+#include "kernel/dispatch.h"
 #include "kernel/kernel.h"
+#include "kernel/list.h"
+#include "kernel/multiset.h"
 #include "kernel/expression.h"
+#include "kernel/Parameter.h"
 #include "kernel/ServiceRegistry.h"
+#include "lang/ClauseForm.h"
+#include "lang/Formula.h"
+#include "lang/SubstitutionList.h"
+#include "lang/TermForm.h"
 #include "lang/Variable.h"
+#include "lang/unification.h"
 
 /*
  * 
@@ -193,36 +203,41 @@ static ServiceRecord compileJoinExpression(Atom const * terms)
 	return (ServiceRecord) {0};
 }
 
+/**
+ * Replace atoms in the actors tuple with typed input parameters,
+ * leave variables unchanged.
+ */
+static void atomsToParameters(Tuple const * actors, Tuple * replacedActors)
+{
+	uint8 parameterNumber = 1;
+	for(index8 i = 0; i < actors->nAtoms; i++) {
+		TypedAtom a = TupleGetElement(actors, i);
+		if(a.type == AT_VARIABLE) {
+			TupleSetElement(replacedActors, i, a);
+		}
+		else {
+			Atom parameter = CreateParameter(parameterNumber++, PARAMETER_IN, a.type);
+			TupleSetElement(replacedActors, i, CreateTypedAtom(AT_PARAMETER, parameter));
+		}
+	}
+}
+
 
 /**
- * Compile a query (a term) to create a new service.
+ * 
  */
-static ServiceRecord compileService(Atom queryTerm)
+static bool compileService(Atom queryTermForm, Tuple const * queryActors, ServiceRecord * record)
 {
-	Atom queryTermForm = FormulaGetForm(queryTerm);
-	ASSERT(IsTermForm(queryTermForm))
-	size8 arity = TermFormArity(queryTermForm);
-	Tuple * queryTermActors = CreateTuple(arity);
-	CopyListToTuple(FormulaGetActors(queryTerm), queryTermActors);
-	/**
-	 * TODO: the query actors can be generalized to parameters as:
-	 *   atom -> in parameter, of same type
-	 *   variable -> out parameter (any type)
-	 */
-	Tuple * parameters = CreateTuple(arity);
-	ActorsToParameters(queryTermActors, parameters);
-
-	// first try locating an existing service
-/*
-	ServiceRecord service = {0};
-	service = compileCallExpression(queryTermForm, queryTermActors);
-	if(service.type == SERVICE_MACHINE)
-		return expression;
-*/
+	// Generalize atoms in the query to parameters
+	Tuple * generalQueryActors = CreateTuple(queryActors->nAtoms);
+	atomsToParameters(queryActors, generalQueryActors);
+	PrintFormActorsAsFormula(queryTermForm, generalQueryActors);
+	PrintChar('\n');
 
 	/**
-	 * To find rules (clauses) c that contain a given @term-form,
-	 * we first query (clause-form c) & (multiset c element @term_form multiple _)
+	 * To find rules (clauses) c that contain a term of the given @term-form,
+	 * we first query (multiset c element @term-form multiple _)
+	 * and then 
 	 */
 	RelationBTreeIterator btreeIterator;
 	BTree * multisetBTree = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
@@ -231,18 +246,23 @@ static ServiceRecord compileService(Atom queryTerm)
 	MultisetSetTuple(
 		multisetQueryTuple,
 		anonymousVariable,
-		(TypedAtom) {.type = AT_ID, .atom = queryTermForm},
+		CreateTypedAtom(AT_ID, queryTermForm),
 		anonymousVariable
 	);
 	RelationBTreeIterate(multisetBTree, multisetQueryTuple, &btreeIterator);
-	while(RelationBTreeIteratorHasTuple(&btreeIterator)) {
-		// a clause form where the term form occurs
+	bool haveService = false;		
+	while(RelationBTreeIteratorNext(&btreeIterator)) {
+		// found a multiset where the term form occurs
 		TypedAtom clauseForm = RelationBTreeIteratorGetAtom(
 			&btreeIterator,
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 		);
+		// ensure the multiset is a clause form
 		if(!IsClauseForm(clauseForm.atom))
 			continue;
+		// the clause must have at least 2 terms
+		uint8 clauseNTerms = ClauseFormNTerms(clauseForm.atom);
+		ASSERT(clauseNTerms >= 2);
 
 		// NOTE: the term form may occur multiple times in the clause form ?
 		size8 multiple = RelationBTreeIteratorGetAtom(
@@ -251,51 +271,132 @@ static ServiceRecord compileService(Atom queryTerm)
 		).atom;
 		ASSERT(multiple == 1)		// for now
 
-		if(clauseForm.type == AT_ID && IsClauseForm(clauseForm.atom)) {
-			PrintClauseForm(clauseForm.atom);
+		// We may have multiple rules (clauses) with this clause form,
+		// resulting in a UNION_EXPRESSION (?)
+		DictionaryIterator dictIterator;
+		DictionaryIterate(clauseForm.atom, &dictIterator);
+		Tuple * matchedTermActors = CreateTuple(queryActors->nAtoms);
+		Tuple * substQueryActors = CreateTuple(queryActors->nAtoms);
+		while(DictionaryIteratorNext(&dictIterator)) {
+			// TODO: handle multiple matching clauses
+			ASSERT(!haveService)
+
+			Tuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
+			PrintFormActorsAsFormula(clauseForm.atom, clauseActors);
 			PrintChar('\n');
 
-			// We may have multiple rules (clauses) with this clause form,
-			// resulting in a UNION_EXPRESSION
-			DictionaryIterator dictIterator;
-			DictionaryIterate(clauseForm.atom, &dictIterator);
-			while(DictionaryIteratorHasRecord(&dictIterator)) {
-				Tuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
-				PrintTuple(clauseActors);
-				PrintChar('\n');
+			// extract the actor list for the matching term in the clause
+			// (assuming multiplicity == 1)
+			index8 matchedTermActorsIndex = ClauseGetTermActorsIndex(clauseForm.atom, queryTermForm, 1);
+			CopyTuplesOffset(clauseActors, matchedTermActorsIndex, matchedTermActors);
 
-				// extract the actor list for the matching term in the clause
-				// (assuming multiplicity == 1)
-				Tuple * clauseTermActors = CreateTuple(2);
-				ClauseGetTermActors(clauseForm.atom, clauseActors, queryTermForm, clauseTermActors, 1);
-				
-				// unify the matched term with the query term to get a substitution list
-				SubstitutionList querySubstitution;
-				SubstitutionList clauseSubstitution;
-				UnifyTuples(queryTermActors, clauseTermActors, &querySubstitution, &clauseSubstitution);
+			// unify the matched term with the generalized query term to get a substitution list
+			SubstitutionList querySubstitution;
+			SubstitutionList clauseSubstitution;
+			UnifyTuples(generalQueryActors, matchedTermActors, &querySubstitution, &clauseSubstitution);
+			
+			PrintSubstitutionList(&querySubstitution);
+			PrintChar('\n');
+			PrintSubstitutionList(&clauseSubstitution);
+			PrintChar('\n');
 
-				// apply the substitution to the clause
-				Tuple * substitutedClause;
-				// ...
+			// apply the substitutions 
+			SubstituteTuple(&querySubstitution, generalQueryActors, substQueryActors);
+			PrintFormActorsAsFormula(queryTermForm, substQueryActors);
+			PrintChar('\n');
+			Tuple * substClauseActors = CreateTuple(clauseActors->nAtoms);
+			SubstituteTuple(&clauseSubstitution, clauseActors, substClauseActors);
+			PrintFormActorsAsFormula(clauseForm.atom, substClauseActors);
+			PrintChar('\n');
 
-				// drop the matched term from the clauseForm
-				size8 nTerms = ClauseNTermsTotal(clauseForm.atom) - 1;
-				Atom conjunctionTerms[nTerms];
-				// copy the non-matched terms ...
+			// Find indexes to actors for all terms
+			index8 termActorsIndices[clauseNTerms + 1];
+			// ClauseGetTermActorsIndices(clauseForm.atom, termActorsIndices);
 
-				// 
-				Expression expr = compileJoinExpression(conjunctionTerms);
-
-				DictionaryIteratorNext(&dictIterator);
+			/**
+			 * Iterate over the remaining terms. 
+			 * If we have only 1 term remaining, we compile it directly;
+			 * otherwise we must compile a join expression.
+			 */
+			MultisetIterator termFormIterator;
+			MultisetIterate(clauseForm.atom, &termFormIterator);
+			size8 nTermsRemaining = clauseNTerms - 1;
+			size8 termIndex = 0;
+			termActorsIndices[0] = 0;
+			while(nTermsRemaining >= 1) {
+				ASSERT(MultisetIteratorNext(&termFormIterator))
+				ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
+				Atom termForm = em.element.atom;
+				size8 termArity = TermFormArity(termForm);
+				Atom negatedTermForm = CreateTermForm(
+					TermFormGetPredicateForm(termForm),
+					!TermFormGetSign(termForm)
+				);
+				// iterate over all terms of this form
+				Tuple * termActors = CreateTuple(termArity);
+				for(index8 k = 0; k < em.multiple; k++, termIndex++) {
+					termActorsIndices[termIndex + 1] = termActorsIndices[termIndex] + termArity;
+					if(termActorsIndices[termIndex] == matchedTermActorsIndex) {
+						// skip the matched term
+						continue;
+					}
+					// Extract term actors
+					CopyTuplesOffset(substClauseActors, termActorsIndices[termIndex], termActors);
+					PrintFormActorsAsFormula(negatedTermForm, termActors);
+					PrintChar('\n');
+					if(nTermsRemaining == 1) {
+						// attempt to locate an service existing service
+						index8 permutation[3];
+						ServiceRecord termServiceRecord;
+						if(DispatchQuery(negatedTermForm, termActors, &termServiceRecord, permutation)) {
+							// TODO: we must create a new service record with the generalized query
+							// as parameters. For the general case we can collect the expressions
+							// of all located services and then create a UNION of them as the final
+							// service (if there are > 1 matching services)
+							*record = termServiceRecord;
+							haveService = true;
+						}
+					}
+					else {
+						/**
+						 * TODO: 
+						 * As long as we have >= 2 terms remaining, we must compile a join expression;
+						 * we must then find two terms that can be evaluated with the current
+						 * substitution list. Terms that cannot be evaluated must be postponed. 
+						 */
+						bool termPostponed[clauseNTerms];
+						ASSERT(false);
+					}
+					nTermsRemaining--;
+				}
+				IFactRelease(negatedTermForm);
+				FreeTuple(termActors);
 			}
-			DictionaryIteratorEnd(&dictIterator);
+			MultisetIteratorEnd(&termFormIterator);
+			FreeTuple(substClauseActors);
+			FreeSubstitutionList(&querySubstitution);
+			FreeSubstitutionList(&clauseSubstitution);
 		}
-		RelationBTreeIteratorNext(&btreeIterator);	// TODO: this should change now
+		DictionaryIteratorEnd(&dictIterator);
+		FreeTuple(matchedTermActors);
+		FreeTuple(substQueryActors);
 	}
 	RelationBTreeIteratorEnd(&btreeIterator);
 	FreeTuple(multisetQueryTuple);
-
-	// TODO
-	return expression;
+	FreeTuple(generalQueryActors);
+	return haveService;
 }
 
+
+bool CompileService(Atom queryTerm, ServiceRecord * record)
+{
+	Atom queryTermForm = FormulaGetForm(queryTerm);
+	ASSERT(IsTermForm(queryTermForm))
+	size8 arity = TermFormArity(queryTermForm);
+	Tuple * queryActors = CreateTuple(arity);
+	CopyListToTuple(FormulaGetActors(queryTerm), queryActors);
+
+	compileService(queryTermForm, queryActors, record);
+	FreeTuple(queryActors);
+	return record;
+}

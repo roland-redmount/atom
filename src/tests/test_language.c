@@ -87,7 +87,7 @@ static void testTermForm(void)
 	Atom termForm = CreateTermForm(predicateForm, false);
 
 	ASSERT_TRUE(IsTermForm(termForm))
-	ASSERT_DATA64_EQUAL(GetPredicateForm(termForm), predicateForm)
+	ASSERT_DATA64_EQUAL(TermFormGetPredicateForm(termForm), predicateForm)
 	ASSERT_FALSE(TermFormGetSign(termForm))
 	ASSERT_UINT32_EQUAL(TermFormArity(termForm), PredicateArity(predicateForm))
 
@@ -150,8 +150,8 @@ static void testClauseForm(void)
 	// RelationBTreeDump(RegistryGetCoreTable(FORM_PAIR_LEFT_RIGHT));
 
 	// assert
-	ASSERT_UINT32_EQUAL(ClauseNUniqueTerms(clauseForm), EXAMPLE_CLAUSE_N_UNIQUE_TERMS)
-	ASSERT_UINT32_EQUAL(ClauseNTermsTotal(clauseForm), EXAMPLE_CLAUSE_N_TERMS)
+	ASSERT_UINT32_EQUAL(ClauseFormNTermForms(clauseForm), EXAMPLE_CLAUSE_N_UNIQUE_TERMS)
+	ASSERT_UINT32_EQUAL(ClauseFormNTerms(clauseForm), EXAMPLE_CLAUSE_N_TERMS)
 	ASSERT_UINT32_EQUAL(ClauseArity(clauseForm), EXAMPLE_CLAUSE_ARITY)
 
 	MultisetIterator termFormIterator;

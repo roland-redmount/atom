@@ -105,7 +105,7 @@ MachineServiceProvider mathServiceProvider = {
 static void setupAdd1(void)
 {
 	// NOTE: this must be in canonical order and arguments numbered accordingly
-	Atom formula = CStringToPredicate("= $INT + @INT + @INT");
+	Atom formula = CStringToPredicate("= @1>INT + @2<INT + @3<INT");
 	// PrintFormula(formula);
 	// PrintChar('\n');
 	// PredicateRoleIndex(form, roles[j]);
@@ -127,7 +127,7 @@ static void setupAdd1(void)
 
 static void setupAdd2(void)
 {
-	Atom formula = CStringToPredicate("= @INT + @INT + $INT");
+	Atom formula = CStringToPredicate("= @1<INT + @2<INT + @3>INT");
 
 	MachineService service = {
 		.provider = &mathServiceProvider,

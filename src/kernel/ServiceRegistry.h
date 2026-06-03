@@ -19,14 +19,17 @@
 
 /**
  * A service is identified by a form and a parameter list.
- * The form must be a term form.
  * The parameters list contains AT_PARAMETER atoms (see Parameter.h),
  * indicating the io mode (in/out) and atom type for each parameter.
+ * 
+ * NOTE: the form is currently always a predicate form, which means we
+ * cannot have services for negated predicates like (! odd x). 
+ * It's not clear to me yet if this is a major limitation.
  * 
  * A service s subsumes another service t iff (1) the forms are equal, and
  * (2) there exists a valid form permutation such that, for each parameter p
  * of s and corresponding parameter q of t: (i) their io modes are equal,
- * or the io mode of p is in/out; and (ii) their datum types are requal, or
+ * or the io mode of p is in/out; and (ii) their datum types are equal, or
  * the datum type of p is AT_NONE. 
  * 
  * TODO: If service s subsumes service t, only one of them may be in the registry. 
@@ -36,6 +39,9 @@ typedef struct s_ServiceRecord {
 	// to allow iterating across all services matching a given form
 	Atom form;
 	Atom parameters;
+	// NOTE: I feel the "expression" here is what I originally meant by "service".
+	// The record maps signatures to services; the record is not a service, just
+	// a storage device. It should probably not be public!
 	Expression expression;
 } ServiceRecord;
 

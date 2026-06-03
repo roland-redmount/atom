@@ -155,7 +155,7 @@ LANG_FILES := $(addprefix lang/, \
  Quote SubstitutionList TermForm TypedAtom unification Variable)
 
 KERNEL_FILES := $(addprefix kernel/, \
- dictionary dispatch expression ifact FloatIEEE754 Int kernel letter list lookup \
+ compiler dictionary dispatch expression ifact FloatIEEE754 Int kernel letter list lookup \
  multiset pair Parameter RelationBTree ServiceRegistry string tuple UInt)
 
 LIBRARY_FILES := $(addprefix library/, math)
@@ -207,9 +207,9 @@ $(BINDIR)/opengltest : $(patsubst %, $(OBJDIR)/%.o, \
 #
 
 TESTS_EXE_FILES := $(addprefix $(BINDIR)/,\
- test_btree test_atomtypes test_dispatch test_dictionary test_expression test_kernel test_language\
+ test_atomtypes test_btree test_compiler test_dispatch test_dictionary test_expression test_kernel test_language\
  test_list test_lookup test_math test_memory test_multiset test_pair test_parsing test_persistence\
- test_relation_btree test_string test_service_registry test_tokenizer test_tuple test_utilities)
+ test_relation_btree test_string test_service_registry test_tokenizer test_tuple test_unification test_utilities)
 
 .PHONY: tests
 tests : $(TESTS_EXE_FILES)
@@ -255,6 +255,8 @@ test:
 	$(BINDIR)/test_math
 	$(BINDIR)/test_dictionary
 	$(BINDIR)/test_dispatch
+	$(BINDIR)/test_unification
+	$(BINDIR)/test_compiler
 
 
 #
