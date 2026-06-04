@@ -351,8 +351,10 @@ static bool compileService(Atom serviceTermForm, Tuple const * serviceParameters
 	 * To find rules (clauses) c that contains a matching term form,
 	 * we query (multiset c element @term-form multiple _),
 	 * If multiple rules match and yield a sub-expression, we must
-	 * generate a UNION expression.
+	 * generate a UNION over the resulting expressions
 	 */
+	Expression joinExpression;	// single sub-expression for now
+
 	RelationBTreeIterator btreeIterator;
 	BTree * multisetBTree = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
 	Tuple * multisetQueryTuple = CreateTuple(3);
@@ -419,7 +421,6 @@ static bool compileService(Atom serviceTermForm, Tuple const * serviceParameters
 			PrintFormActorsAsFormula(clauseForm.atom, substClauseActors);
 			PrintChar('\n');
 
-			Expression joinExpression;
 			index8 matchedTermIndex = ClauseGetTermIndex(clauseForm.atom, serviceTermForm, 1);
 			haveService = compileConjunction(clauseForm.atom, substClauseActors, matchedTermIndex, &joinExpression);
 		}
@@ -430,6 +431,8 @@ static bool compileService(Atom serviceTermForm, Tuple const * serviceParameters
 	}
 	RelationBTreeIteratorEnd(&btreeIterator);
 	FreeTuple(multisetQueryTuple);
+
+	*expression = joinExpression;
 	return haveService;
 }
 

@@ -291,12 +291,19 @@ void PrintExpression(Expression const * expression)
 	switch(expression->type) {
 	case EXPRESSION_JOIN:
 		PrintCString("JOIN");
+		break;
 	case EXPRESSION_UNION:
 		PrintCString("UNION");
+		break;
 	case EXPRESSION_PROJECT:
 		PrintCString("PROJECT");
+		break;
 	case EXPRESSION_MACHINE:
 		PrintCString("MACHINE");
+		break;
+	default:
+		ASSERT(false);
+		break;
 	}
 }
 

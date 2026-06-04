@@ -3,6 +3,7 @@
 #include "kernel/dictionary.h"
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
+#include "kernel/list.h"
 #include "lang/Formula.h"
 #include "library/math.h"
 #include "parser/ClauseBuilder.h"
@@ -24,8 +25,28 @@ void testCompile1(void)
 	// This will yield a new service from the existing (+ + =) service
 	ServiceRecord record;
 	ASSERT_TRUE(CompileService(queryTerm, &record))
+	PrintCString("Service record: ");
+	PrintService(&record);
+	PrintChar('\n');
 
 	// TODO: call the compiled service
+
+	// Argument list
+	Tuple * arguments = CreateTuple(3);
+	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
+	
+	void * context = ExpressionCreateContext(&record.expression, arguments);
+
+	// Call the expression
+	// this should yields 3 elements corresponding to the 3 roles of (list position element)
+	size32 nElements = 0;
+	while(ExpressionCall(&record.expression, context)) {
+		PrintTuple(arguments);
+		PrintChar('\n');
+		nElements++;
+	}
+	ExpressionFreeContext(&record.expression, context);
+	FreeTuple(arguments);
 
 	RegistryRemoveService(&record);
 	IFactRelease(queryTerm);
