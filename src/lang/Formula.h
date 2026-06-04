@@ -78,8 +78,15 @@ Atom CreateTerm(Atom predicate, bool negated);
 Atom CreateClause(Atom const * terms, size8 nTerms);
 
 /**
- * Find the index into a clauseForm tuple of the first actor corresponding
- * to the m'th multiple of the term form actors.
+ * Find the index into the list of terms corresponding the given clause form
+ * of the m'th multiple of the given term form.
+ */
+
+index8 ClauseGetTermIndex(Atom clauseForm, Atom termForm, uint8 m);
+
+/**
+ * Find the index into a clauseForm actors tuple of the first actor in
+ * the m'th multiple of the term form.
  */
 index8 ClauseGetTermActorsIndex(Atom clauseForm, Atom termForm, uint8 m);
 

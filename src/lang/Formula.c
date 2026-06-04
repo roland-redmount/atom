@@ -247,6 +247,34 @@ Atom CreateConjunction(Atom const * clauses, size8 nClauses)
 }
 
 
+index8 ClauseGetTermIndex(Atom clauseForm, Atom termForm, uint8 m)
+{
+	// iterate over terms in the clause to compoute the index
+	MultisetIterator iterator;
+	MultisetIterate(clauseForm, &iterator);
+
+	index8 index = 0;
+	bool found = false;
+	ElementMultiple elementMultiple;
+	while(MultisetIteratorNext(&iterator)) {
+		elementMultiple = MultisetIteratorGetElement(&iterator);
+		if(elementMultiple.element.atom == termForm) {
+			found = true;
+			break;
+		}
+		size8 termArity = TermFormArity(elementMultiple.element.atom);
+		index += elementMultiple.multiple;
+	}
+	MultisetIteratorEnd(&iterator);
+	ASSERT(found);
+	// Select the k'th occurence of the term form
+	// (all terms of the same form must be contiguous in the clause form)
+	ASSERT((m > 0) && (m <= elementMultiple.multiple))
+	index += m - 1;
+	return index;	
+}
+
+
 index8 ClauseGetTermActorsIndex(Atom clauseForm, Atom termForm, uint8 m)
 {
 	// iterate over terms in the clause to compoute the index

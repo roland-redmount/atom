@@ -298,6 +298,7 @@ static void executeCheckReferences(void (*function)(void), CheckType checkType)
 			PrintF("%s: Lost %d IFacts.\n", checkTypeNames[checkType], ifactDiff);
 		if(checkType != CHECK_SETUP && ifactDiff > 0) {
 			PrintF("%s: Failed to release %d IFacts.\n", checkTypeNames[checkType], ifactDiff);
+			PrintCString("Flagged IFacts:\n");
 			DumpFlaggedIFacts();
 		}
 		DisableFlagCreatedIFacts();

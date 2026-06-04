@@ -90,16 +90,16 @@ bool DispatchQuery(Atom queryTermForm, Tuple const * queryActors, ServiceRecord 
 	// TODO: currently, the service registry only supports non-negated predicates
 	ASSERT(TermFormGetSign(queryTermForm))
 	Atom predicateForm = TermFormGetPredicateForm(queryTermForm);
-	PrintPredicateForm(predicateForm);
-	PrintChar('\n');
+	// PrintPredicateForm(predicateForm);
+	// PrintChar('\n');
 	// Iterate over candidate services matching the predicate form
 	RegistryIterator iterator;
 	RegistryIterate(predicateForm, &iterator);
 	bool match = false;
 	while(RegistryIteratorNext(&iterator)) {
 		ServiceRecord const * currentRecord = RegistryIteratorPeekService(&iterator);
-		PrintList(currentRecord->parameters);
-		PrintChar('\n');
+		// PrintList(currentRecord->parameters);
+		// PrintChar('\n');
 		if(PermutationMatch(predicateForm, currentRecord->parameters, queryActors, permutation)) {
 			match = true;
 			// copy the record to the caller

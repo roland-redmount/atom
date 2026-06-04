@@ -164,7 +164,7 @@ void ListLengthSetTuple(Tuple * tuple, TypedAtom list, TypedAtom length)
 }
 
 
-TypedAtom arrayElementGenerator(index32 index, void const * data)
+static TypedAtom arrayElementGenerator(index32 index, void const * data)
 {
 	TypedAtom const * atoms = (TypedAtom const *) data;
 	return atoms[index];
@@ -174,6 +174,19 @@ TypedAtom arrayElementGenerator(index32 index, void const * data)
 Atom CreateListFromArray(TypedAtom const * atoms, size8 nAtoms)
 {
 	return CreateList(arrayElementGenerator, atoms, nAtoms);
+}
+
+
+static TypedAtom tupleElementGenerator(index32 index, void const * data)
+{
+	Tuple const * tuple = (Tuple const *) data;
+	return TupleGetElement(tuple, index);
+}
+
+
+Atom CreateListFromTuple(Tuple const * tuple)
+{
+	return CreateList(tupleElementGenerator, tuple, tuple->nAtoms);
 }
 
 
