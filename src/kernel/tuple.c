@@ -96,7 +96,7 @@ Tuple * CreateTupleFromArray(TypedAtom * typedAtoms, size8 nAtoms)
 }
 
 
-Tuple * CreateTupleFromtuple(Tuple const * otherTuple)
+Tuple * CreateTupleFromTuple(Tuple const * otherTuple)
 {
 	Tuple * tuple = CreateTuple(otherTuple->nAtoms);
 	CopyTuples(otherTuple, tuple);

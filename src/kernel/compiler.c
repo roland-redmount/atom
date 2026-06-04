@@ -223,6 +223,27 @@ static void atomsToParameters(Tuple const * actors, Tuple * replacedActors)
 }
 
 
+static bool unifyAndSubstitute(
+	Tuple const * tuple1, Tuple const * tuple2, Tuple * substTuple1, Tuple * substTuple2)
+{
+	// unify the matched term with the generalized query term to get a substitution list
+	SubstitutionList substitution1;
+	SubstitutionList substitution2;
+	bool success = UnifyTuples(tuple1, tuple2, &substitution1, &substitution2);
+	// PrintSubstitutionList(&substitution1);
+	// PrintChar('\n');
+	// PrintSubstitutionList(&substitution2);
+	// PrintChar('\n');
+
+	// apply the substitutions in-place
+	SubstituteTuple(&substitution1, substTuple1, substTuple1);
+	SubstituteTuple(&substitution2, substTuple2, substTuple2);
+
+	FreeSubstitutionList(&substitution1);
+	FreeSubstitutionList(&substitution2);
+	return success;
+}
+
 /**
  * 
  */
@@ -235,9 +256,10 @@ static bool compileService(Atom queryTermForm, Tuple const * queryActors, Servic
 	PrintChar('\n');
 
 	/**
-	 * To find rules (clauses) c that contain a term of the given @term-form,
-	 * we first query (multiset c element @term-form multiple _)
-	 * and then 
+	 * To find rules (clauses) c that contains a matching term form,
+	 * we query (multiset c element @term-form multiple _),
+	 * If multiple rules match and yield a sub-expression, we must
+	 * generate a UNION expression.
 	 */
 	RelationBTreeIterator btreeIterator;
 	BTree * multisetBTree = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
@@ -252,77 +274,70 @@ static bool compileService(Atom queryTermForm, Tuple const * queryActors, Servic
 	RelationBTreeIterate(multisetBTree, multisetQueryTuple, &btreeIterator);
 	bool haveService = false;		
 	while(RelationBTreeIteratorNext(&btreeIterator)) {
-		// found a multiset where the term form occurs
+		// Found a multiset where the term form occurs
 		TypedAtom clauseForm = RelationBTreeIteratorGetAtom(
 			&btreeIterator,
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 		);
-		// ensure the multiset is a clause form
+		// Ensure the multiset is a clause form
 		if(!IsClauseForm(clauseForm.atom))
 			continue;
-		// the clause must have at least 2 terms
+		// The clause must have at least 2 terms
 		uint8 clauseNTerms = ClauseFormNTerms(clauseForm.atom);
 		ASSERT(clauseNTerms >= 2);
 
-		// NOTE: the term form may occur multiple times in the clause form ?
 		size8 multiple = RelationBTreeIteratorGetAtom(
 			&btreeIterator,
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)
 		).atom;
-		ASSERT(multiple == 1)		// for now
 
-		// We may have multiple rules (clauses) with this clause form,
-		// resulting in a UNION_EXPRESSION (?)
+		// We may have multiple rules (clauses) with this clause form.
 		DictionaryIterator dictIterator;
 		DictionaryIterate(clauseForm.atom, &dictIterator);
 		Tuple * matchedTermActors = CreateTuple(queryActors->nAtoms);
-		Tuple * substQueryActors = CreateTuple(queryActors->nAtoms);
+		Tuple * substQueryActors = CreateTupleFromTuple(generalQueryActors);
+		Tuple * substClauseActors = CreateTuple(ClauseArity(clauseForm.atom));
 		while(DictionaryIteratorNext(&dictIterator)) {
-			// TODO: handle multiple matching clauses
+			// TODO: we need UNION expression to handle multiple matching clauses
 			ASSERT(!haveService)
 
 			Tuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
 			PrintFormActorsAsFormula(clauseForm.atom, clauseActors);
 			PrintChar('\n');
 
-			// extract the actor list for the matching term in the clause
-			// (assuming multiplicity == 1)
-			index8 matchedTermActorsIndex = ClauseGetTermActorsIndex(clauseForm.atom, queryTermForm, 1);
-			CopyTuplesOffset(clauseActors, matchedTermActorsIndex, matchedTermActors);
+			// Iterate over all occurences of the query term in the matched clause form
+			// and find one that unifies, if any
+			bool unified = false;
+			index8 matchedTermActorsIndex;
+			for(index8 k = 1; k <= multiple; k++) {
+				// extract the actor list for the matching term in the clause
+				matchedTermActorsIndex = ClauseGetTermActorsIndex(clauseForm.atom, queryTermForm, k);
+				CopyTuplesOffset(clauseActors, matchedTermActorsIndex, matchedTermActors);
+				CopyTuples(clauseActors, substClauseActors);
+				if(unifyAndSubstitute(generalQueryActors, matchedTermActors, substQueryActors, substClauseActors)) {
+					ASSERT(!unified)	// only one term may unify (?)
+					unified = true;
+				}
+			}
+			if(!unified)
+				continue;
 
-			// unify the matched term with the generalized query term to get a substitution list
-			SubstitutionList querySubstitution;
-			SubstitutionList clauseSubstitution;
-			UnifyTuples(generalQueryActors, matchedTermActors, &querySubstitution, &clauseSubstitution);
-			
-			PrintSubstitutionList(&querySubstitution);
-			PrintChar('\n');
-			PrintSubstitutionList(&clauseSubstitution);
-			PrintChar('\n');
-
-			// apply the substitutions 
-			SubstituteTuple(&querySubstitution, generalQueryActors, substQueryActors);
 			PrintFormActorsAsFormula(queryTermForm, substQueryActors);
 			PrintChar('\n');
-			Tuple * substClauseActors = CreateTuple(clauseActors->nAtoms);
-			SubstituteTuple(&clauseSubstitution, clauseActors, substClauseActors);
 			PrintFormActorsAsFormula(clauseForm.atom, substClauseActors);
 			PrintChar('\n');
 
-			// Find indexes to actors for all terms
-			index8 termActorsIndices[clauseNTerms + 1];
-			// ClauseGetTermActorsIndices(clauseForm.atom, termActorsIndices);
-
 			/**
-			 * Iterate over the remaining terms. 
+			 * Create a join expression over the remaining terms. 
 			 * If we have only 1 term remaining, we compile it directly;
 			 * otherwise we must compile a join expression.
 			 */
 			MultisetIterator termFormIterator;
 			MultisetIterate(clauseForm.atom, &termFormIterator);
 			size8 nTermsRemaining = clauseNTerms - 1;
-			size8 termIndex = 0;
+			index8 termActorsIndices[clauseNTerms + 1];
 			termActorsIndices[0] = 0;
+			size8 termIndex = 0;
 			while(nTermsRemaining >= 1) {
 				ASSERT(MultisetIteratorNext(&termFormIterator))
 				ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
@@ -373,11 +388,9 @@ static bool compileService(Atom queryTermForm, Tuple const * queryActors, Servic
 				FreeTuple(termActors);
 			}
 			MultisetIteratorEnd(&termFormIterator);
-			FreeTuple(substClauseActors);
-			FreeSubstitutionList(&querySubstitution);
-			FreeSubstitutionList(&clauseSubstitution);
 		}
 		DictionaryIteratorEnd(&dictIterator);
+		FreeTuple(substClauseActors);
 		FreeTuple(matchedTermActors);
 		FreeTuple(substQueryActors);
 	}
