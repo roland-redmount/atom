@@ -61,12 +61,12 @@
  *
  * which becomes the signature of the new service. As we have no more clauses, the
  * found EXPRESSION_MACHINE is the final compilation result, and we create a new
- * service mapping (5) to this expression, which essentally becomes a synonym for
- * the service (+ 1<INT + 2>INT = 3<INT).
+ * service record mapping (5) to this service, which essentally becomes a synonym for
+ * (+ 1<INT + 2>INT = 3<INT).
  */
 
 /**
- * Compiling a join expression: dictionary contains the rule
+ * Compiling a join service: dictionary contains the rule
  * 
  *   number x plusone y plustwo z <- + x + 1 = y & + y + 1 = z 
  * 
@@ -84,35 +84,35 @@
  * 
  *   + 1<INT + 1 = a & + a + 1 = b              (3)
  * 
- * A conjunction will always compile to a JOIN expression. We initialize the join
- * expression with two terms from (3),
+ * A conjunction will always compile to a JOIN service. We initialize the join
+ * service with two terms from (3),
  * 
  *   JOIN(+ 1<INT + 1 = a, + a + 1 = b)         (4)
  * 
- * The JOIN expression will compute sequentially from left to right, To find the left and
- * right sub-expressions of the join, we must dispatch the two terms of (4) separaterly.
+ * The JOIN service will compute sequentially from left to right, To find the left and
+ * right child services of the join, we must dispatch the two terms of (4) separaterly.
  * (If we have > 2 terms we can do a series of joins.) Starting (arbitrarily) with
  * the left term, dispatch matches the service (+ 1<INT + 2<INT = 3>INT) which maps
  * to a MACHINE_EXPRESSION. After renumbering we obtain the substitution { a -> 2>INT }
  * that we apply to the _left_ term; for the right term, the output parameter 2 must
- * become an input. So that our JOIN expression is now
+ * become an input. So that our JOIN service is now
  * 
  *   JOIN(+ 1<INT + 1 = 2>INT, + 2<INT + 1 = b)       (5)
  * 
- * When later interpreting this compiled expression, we will evaluate the left sub-expression
+ * When later executing this compiled service, we will evaluate the left child service
  * to obtain values for parameter 2, which will then be copied to input parameter 2 in
- * the right sub-expression.
+ * the right child service.
  * 
  * (If we would have started with the right term, dispatch would not match the service
  * since the variable a does not match the input parameter 2<INT; in this case we
  * would have to postpone this term.)
  * 
  * Continuing with the right term, dispatch again matches (+ 1<INT + 2<INT = 3>INT)
- * yielding the substitution { b -> 3>INT}, and our JOIN expression becomes
+ * yielding the substitution { b -> 3>INT}, and our JOIN service becomes
  * 
  *   JOIN(+ 1<INT + 1 = 2>INT, + 2<INT + 1 = 3>INT)     (6)
  *
- * Which is now complete as both sub-expressions have been resolved. 
+ * Which is now complete as both child services have been resolved. 
  * Backsubstituting to (2) gives the compiled service signature
  * 
  *   number 1<INT plusone 2>INT plustwo 3>INT           (7)
@@ -132,28 +132,28 @@
   * 
   *   PROJECT(JOIN(+ x + 1 = y, + y + 1 = z), {x z})
   * 
-  * The PROJECT(expression, variables) operation requires checking for duplicate
+  * The PROJECT(service, variables) operation requires checking for duplicate
   * tuples (unless the variables are known to be a unique key for ther relation).
-  * This is problematic since we want the expression to yield one tuple at a time.
-  * To enable efficient duplicate removal, the sub-expression must yield tuples in
+  * This is problematic since we want the service to yield one tuple at a time.
+  * To enable efficient duplicate removal, the child service must yield tuples in
   * sorted order w.r.t. {x z}. 
   */
 
 
  /**
-  * Compiling a recursive expression: consider the classic
+  * Compiling a recursive service: consider the classic
   * 
   *   integer n factorial f <-
   *     + m + 1 = n & integer m factorial e & * n * e = f
   * 
   * Together with the fact (integer 0 factorial 1) terminating the recursion.
   * (We will need a precondition ? < n > 0: to ensure unique dispatch, but we
-  * ignore this for now.) When compiling this expression, the sub-expression
+  * ignore this for now.) When compiling this service, the child service
   * (integer m factorial e) will require the service we are currently compiling,
   * so it must be considered by dispatch somehow.
   * 
   * We will compile the query (integer 1<INT factorial f). To construct the first 
-  * JOIN expression we will need two resolved terms. The first term (+ m + 1 = n)
+  * JOIN service we will need two resolved terms. The first term (+ m + 1 = n)
   * matches service (+ 1>INT + 2<INT = 3<INT) and we obtain
   * 
   *   JOIN(+ 2>INT + 1 = $1>INT, ...)
@@ -163,38 +163,6 @@
   * 
   */
 
-static ServiceRecord compileCallExpression(Atom queryForm, Tuple * parameters)
-{
-	// Iterate over candidate services matching the query form
-	RegistryIterator iterator;
-	RegistryIterate(queryForm, &iterator);
-	bool match = false;
-	ServiceRecord record;
-	// TODO: rewrite the ServiceRegistry to store service indexed by
-	// term forms, not predicate forms; and matching should take with a parameter tuple,
-	// not a query tuple. The translation query tuple -> parameters happens in the compiler.
-/*
-	while(RegistryIteratorHasService(&iterator)) {
-		record = RegistryIteratorGetService(&iterator);
-		// TODO: this should take a Tuple, not a list 
-		if(PermutationMatch(queryForm, record.parameters, parameters, permutation)) {
-			match = true;
-			break;
-		}
-		RegistryIteratorNext(&iterator);
-	}
-	RegistryIteratorEnd(&iterator);
-
-	Expression expression = {0};
-	if(match) {
-		expression.type = CALL_EXPRESSION;
-		expression.fields.record = record;
-
-	}
-*/
-	ASSERT(false)
-	return (ServiceRecord) {0};
-}
 
 /**
  * Replace atoms in the actors tuple with typed input parameters,
@@ -239,17 +207,17 @@ static bool unifyAndSubstitute(
 
 
 /**
- * Compile an expression from the conjuction obtained by negating
+ * Compile a JOIN service from the conjuction obtained by negating
  * the given clause. We iterate over all negated terms until we find
  * a terms that resolve to a known service; we then create a JOIN
- * expression between this term, and the expression obtained by
- * recursing on the remaining terms. If there is only 1 term to consider,
- * we emit its expression directly without a JOIN, terminating recursion.
+ * between this service and the service obtained by recursively
+ * compilin the remaining terms. If there is only 1 term to consider,
+ * we emit its service directly without a JOIN, terminating recursion.
  */
 
 static bool compileConjunctionRecursive(
 	Atom clauseForm, Tuple const * clauseActors, bool * termExcluded, uint8 nTermsExcluded,
-	index8 const * termActorsIndices, Service * expression)
+	index8 const * termActorsIndices, Service * service)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	bool success = false;
@@ -288,8 +256,8 @@ static bool compileConjunctionRecursive(
 				termExcluded[termIndex] = true;
 
 				if(nTermsExcluded + 1 == clauseNTerms) {
-					// No more terms to consider, return the service expression
-					*expression = termServiceRecord.service;
+					// No more terms to consider, return the service
+					*service = termServiceRecord.service;
 					success = true;
 				}
 				else {
@@ -304,7 +272,7 @@ static bool compileConjunctionRecursive(
 						size8 nArguments = termArity + rightNArguments;
 						index8 argumentMap[nArguments];
 						SetupJoinService(
-							expression, nArguments, argumentMap,
+							service, nArguments, argumentMap,
 							&termServiceRecord.service, &rightExpression);
 						success = true;
 					}
@@ -322,7 +290,7 @@ static bool compileConjunctionRecursive(
 
 
 static bool compileConjunction(
-	Atom clauseForm, Tuple const * clauseActors, index8 matchedTermIndex, Service * expression)
+	Atom clauseForm, Tuple const * clauseActors, index8 matchedTermIndex, Service * service)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	index8 termActorsIndices[clauseNTerms + 1];
@@ -333,7 +301,7 @@ static bool compileConjunction(
 		termExcluded[i] = (i == matchedTermIndex);
 
 	return compileConjunctionRecursive(
-		clauseForm, clauseActors, termExcluded, 1, termActorsIndices, expression);
+		clauseForm, clauseActors, termExcluded, 1, termActorsIndices, service);
 }
 
 
@@ -341,16 +309,16 @@ static bool compileConjunction(
  * Attempt to compile a service with the given form and parameters.
  * If compilation succeeds, write the resulting Expression to the given pointer.
  */
-static bool compileService(Atom serviceTermForm, Tuple const * serviceParameters, Service * expression)
+static bool compileService(Atom serviceTermForm, Tuple const * serviceParameters, Service * service)
 {
 	size8 termArity = TermFormArity(serviceTermForm);
 	/**
 	 * To find rules (clauses) c that contains a matching term form,
 	 * we query (multiset c element @term-form multiple _),
-	 * If multiple rules match and yield a sub-expression, we must
-	 * generate a UNION over the resulting expressions
+	 * If multiple rules match, we must generate a UNION over
+	 * the resulting services
 	 */
-	Service joinExpression;	// single sub-expression for now
+	Service joinService;	// for now we will return a single service
 
 	RelationBTreeIterator btreeIterator;
 	BTree * multisetBTree = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
@@ -388,7 +356,7 @@ static bool compileService(Atom serviceTermForm, Tuple const * serviceParameters
 		Tuple * substQueryActors = CreateTupleFromTuple(serviceParameters);
 		Tuple * substClauseActors = CreateTuple(ClauseArity(clauseForm.atom));
 		while(DictionaryIteratorNext(&dictIterator)) {
-			// TODO: we need UNION expression to handle multiple matching clauses
+			// TODO: we need UNION to handle multiple matching clauses
 			ASSERT(!haveService)
 
 			Tuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
@@ -419,7 +387,7 @@ static bool compileService(Atom serviceTermForm, Tuple const * serviceParameters
 			PrintChar('\n');
 
 			index8 matchedTermIndex = ClauseGetTermIndex(clauseForm.atom, serviceTermForm, 1);
-			haveService = compileConjunction(clauseForm.atom, substClauseActors, matchedTermIndex, &joinExpression);
+			haveService = compileConjunction(clauseForm.atom, substClauseActors, matchedTermIndex, &joinService);
 		}
 		DictionaryIteratorEnd(&dictIterator);
 		FreeTuple(substClauseActors);
@@ -429,7 +397,7 @@ static bool compileService(Atom serviceTermForm, Tuple const * serviceParameters
 	RelationBTreeIteratorEnd(&btreeIterator);
 	FreeTuple(multisetQueryTuple);
 
-	*expression = joinExpression;
+	*service = joinService;
 	return haveService;
 }
 
