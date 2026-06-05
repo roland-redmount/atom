@@ -3,7 +3,7 @@
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/multiset.h"
-#include "kernel/expression.h"
+#include "kernel/service.h"
 #include "kernel/Parameter.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/ClauseForm.h"
@@ -249,7 +249,7 @@ static bool unifyAndSubstitute(
 
 static bool compileConjunctionRecursive(
 	Atom clauseForm, Tuple const * clauseActors, bool * termExcluded, uint8 nTermsExcluded,
-	index8 const * termActorsIndices, Expression * expression)
+	index8 const * termActorsIndices, Service * expression)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	bool success = false;
@@ -289,12 +289,12 @@ static bool compileConjunctionRecursive(
 
 				if(nTermsExcluded + 1 == clauseNTerms) {
 					// No more terms to consider, return the service expression
-					*expression = termServiceRecord.expression;
+					*expression = termServiceRecord.service;
 					success = true;
 				}
 				else {
 					// Recurse on remaining terms
-					Expression rightExpression;
+					Service rightExpression;
 					if(compileConjunctionRecursive(
 						clauseForm, clauseActors, termExcluded, nTermsExcluded + 1,
 						termActorsIndices, &rightExpression)
@@ -303,9 +303,9 @@ static bool compileConjunctionRecursive(
 						size8 rightNArguments = rightExpression.dimensions.nArguments;
 						size8 nArguments = termArity + rightNArguments;
 						index8 argumentMap[nArguments];
-						SetupJoinExpression(
+						SetupJoinService(
 							expression, nArguments, argumentMap,
-							&termServiceRecord.expression, &rightExpression);
+							&termServiceRecord.service, &rightExpression);
 						success = true;
 					}
 				}
@@ -322,7 +322,7 @@ static bool compileConjunctionRecursive(
 
 
 static bool compileConjunction(
-	Atom clauseForm, Tuple const * clauseActors, index8 matchedTermIndex, Expression * expression)
+	Atom clauseForm, Tuple const * clauseActors, index8 matchedTermIndex, Service * expression)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	index8 termActorsIndices[clauseNTerms + 1];
@@ -341,7 +341,7 @@ static bool compileConjunction(
  * Attempt to compile a service with the given form and parameters.
  * If compilation succeeds, write the resulting Expression to the given pointer.
  */
-static bool compileService(Atom serviceTermForm, Tuple const * serviceParameters, Expression * expression)
+static bool compileService(Atom serviceTermForm, Tuple const * serviceParameters, Service * expression)
 {
 	size8 termArity = TermFormArity(serviceTermForm);
 	/**
@@ -350,7 +350,7 @@ static bool compileService(Atom serviceTermForm, Tuple const * serviceParameters
 	 * If multiple rules match and yield a sub-expression, we must
 	 * generate a UNION over the resulting expressions
 	 */
-	Expression joinExpression;	// single sub-expression for now
+	Service joinExpression;	// single sub-expression for now
 
 	RelationBTreeIterator btreeIterator;
 	BTree * multisetBTree = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
@@ -452,7 +452,7 @@ bool CompileService(Atom queryTerm, ServiceRecord * record)
 	PrintFormActorsAsFormula(queryTermForm, serviceParameters);
 	PrintChar('\n');
 
-	bool success = compileService(queryTermForm, serviceParameters, &record->expression);
+	bool success = compileService(queryTermForm, serviceParameters, &record->service);
 	if(success) {
 		record->parameters = CreateListFromTuple(serviceParameters);
 		record->form = queryTermForm;

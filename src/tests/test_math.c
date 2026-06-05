@@ -1,5 +1,5 @@
 #include "kernel/dispatch.h"
-#include "kernel/expression.h"
+#include "kernel/service.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
@@ -20,17 +20,17 @@ void testAdd1(void)
 	index8 permutation[3];
 	ASSERT(DispatchQueryFormula(query, &record, permutation))
 
-	Expression const * expression = &(record.expression);
+	Service const * service = &(record.service);
 	Tuple * arguments = CreateTuple(3);
 	CopyListToTuple(actors, arguments);
 	
-	void * context = ExpressionCreateContext(expression, arguments);
-	ASSERT_TRUE(ExpressionCall(context))
+	void * context = ServiceCreateContext(service, arguments);
+	ASSERT_TRUE(ServiceCall(context))
 	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 0), 2 + 3);
 
-	ASSERT_FALSE(ExpressionCall(context))
+	ASSERT_FALSE(ServiceCall(context))
 	
-	ExpressionFreeContext(context);
+	ServiceFreeContext(context);
 	FreeTuple(arguments);
 
 	IFactRelease(query);
@@ -46,17 +46,17 @@ void testAdd2(void)
 	index8 permutation[3];
 	ASSERT(DispatchQueryFormula(query, &record, permutation))
 
-	Expression const * expression = &(record.expression);
+	Service const * service = &(record.service);
 	Tuple * arguments = CreateTuple(3);
 	CopyListToTuple(actors, arguments);
 	
-	void * context = ExpressionCreateContext(expression, arguments);
-	ASSERT_TRUE(ExpressionCall(context))
+	void * context = ServiceCreateContext(service, arguments);
+	ASSERT_TRUE(ServiceCall(context))
 	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 2), 7 - 4);
 
-	ASSERT_FALSE(ExpressionCall(context))
+	ASSERT_FALSE(ServiceCall(context))
 	
-	ExpressionFreeContext(context);
+	ServiceFreeContext(context);
 	FreeTuple(arguments);
 
 	IFactRelease(query);

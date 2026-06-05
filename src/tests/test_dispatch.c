@@ -21,7 +21,7 @@ void testDispatchToService(void)
 	query = CStringToTerm("+ 3 + 4 = _");
 	index8 permutation[3];
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	ASSERT_UINT32_EQUAL(service.expression.type, EXPRESSION_MACHINE)
+	ASSERT_UINT32_EQUAL(service.service.type, SERVICE_MACHINE)
 	IFactRelease(query);
 
 	// one the following two queries requires form permutation to match

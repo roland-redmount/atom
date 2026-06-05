@@ -1,4 +1,4 @@
-#include "kernel/expression.h"
+#include "kernel/service.h"
 #include "kernel/ifact.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
@@ -10,13 +10,13 @@
 /**
  * The service (= z$INT + x@INT + y@INT)
  */
-static void add1(ExpressionContext * context)
+static void add1(ServiceContext * context)
 {
 	// TODO: how to index into the tuple reliably?
 	// Currently we are hardcoding canonical positions of the x, y, z roles
-	int64 x = (int64) ExpressionContextReadArgument(context, 1).atom;
-	int64 y = (int64) ExpressionContextReadArgument(context, 2).atom;;
-	ExpressionContextWriteArgument(context, 0, CreateTypedAtom(AT_INT, x + y));
+	int64 x = (int64) ServiceContextReadArgument(context, 1).atom;
+	int64 y = (int64) ServiceContextReadArgument(context, 2).atom;;
+	ServiceContextWriteArgument(context, 0, CreateTypedAtom(AT_INT, x + y));
 }
 
 /**
@@ -24,11 +24,11 @@ static void add1(ExpressionContext * context)
  * This implements subtraction by solving the equation
  * z = x + y  <->  y = z - x
  */
-static void add2(ExpressionContext * context)
+static void add2(ServiceContext * context)
 {
-	int64 x = (int64) ExpressionContextReadArgument(context, 1).atom;
-	int64 z = (int64) ExpressionContextReadArgument(context, 0).atom;
-	ExpressionContextWriteArgument(context, 2, CreateTypedAtom(AT_INT, z - x));
+	int64 x = (int64) ServiceContextReadArgument(context, 1).atom;
+	int64 z = (int64) ServiceContextReadArgument(context, 0).atom;
+	ServiceContextWriteArgument(context, 2, CreateTypedAtom(AT_INT, z - x));
 }
 
 /**
@@ -42,7 +42,7 @@ static void add2(ExpressionContext * context)
 
 #define N_SERVICES 		2
 
-typedef void (*MathFunction)(ExpressionContext * context);
+typedef void (*MathFunction)(ServiceContext * context);
 
 MathFunction functionTable[N_SERVICES] = {
 	&add1,
@@ -69,7 +69,7 @@ typedef struct s_MathContext {
 /**
  * Stubs for the service provider
  */
-static void serviceSetupContext(ExpressionContext * context, void * providerData)
+static void serviceSetupContext(ServiceContext * context, void * providerData)
 {
 	MathContext * mathContext = (MathContext *) &context->data;
 	index32 functionIndex = (data64) providerData;
@@ -78,7 +78,7 @@ static void serviceSetupContext(ExpressionContext * context, void * providerData
 }
 
 
-static bool serviceCall(ExpressionContext * context)
+static bool serviceCall(ServiceContext * context)
 {
 	MathContext * mathContext = (MathContext *) &context->data;
 	if(mathContext->hasBeenCalled)
@@ -89,7 +89,7 @@ static bool serviceCall(ExpressionContext * context)
 }
 
 
-static void serviceFinalizeContext(ExpressionContext * context)
+static void serviceFinalizeContext(ServiceContext * context)
 {
 	// Nothing to do
 }
@@ -118,7 +118,7 @@ static void setupAdd1(void)
 		.form = FormulaGetForm(formula),
 		.parameters = FormulaGetActors(formula),
 	};
-	SetupMachineExpression(&record.expression, 3, 0, &service);
+	SetupMachineService(&record.service, 3, 0, &service);
 	RegistryAddService(&record);
 	mathServices[ADD1_INDEX] = record;
 	IFactRelease(formula);
@@ -137,7 +137,7 @@ static void setupAdd2(void)
 		.form = FormulaGetForm(formula),
 		.parameters = FormulaGetActors(formula),
 	};
-	SetupMachineExpression(&record.expression, 3, 0, &service);
+	SetupMachineService(&record.service, 3, 0, &service);
 	RegistryAddService(&record);
 	mathServices[ADD2_INDEX] = record;
 	IFactRelease(formula);

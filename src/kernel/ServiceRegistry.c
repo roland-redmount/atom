@@ -119,11 +119,11 @@ ServiceRecord const * RegistryGetCoreServiceRecord(index32 index)
 
 BTree * RegistryGetCoreBTreeService(index32 index)
 {
-	Expression const * expression = &(registry.coreServices[index].expression);
-	ASSERT(expression->type == EXPRESSION_MACHINE)
-	MachineService const * service = &(expression->value.machineService);
-	ASSERT(service->provider == &(bTreeServiceProvider))
-	return (BTree *) service->providerData;
+	Service const * service = &(registry.coreServices[index].service);
+	ASSERT(service->type == SERVICE_MACHINE)
+	MachineService const * machineService = &(service->value.machineService);
+	ASSERT(machineService->provider == &(bTreeServiceProvider))
+	return (BTree *) machineService->providerData;
 }
 
 
@@ -154,14 +154,13 @@ void RegistryAddCoreBTreeService(index32 index, Atom form, BTree * btree)
 	ServiceRecord * record = &registry.coreServices[index];
 	
 	record->form = form;
-	// Create a machine expression
 	MachineService service = {
 		.provider = &bTreeServiceProvider,
 		.contextSize = sizeof(RelationBTreeIterator),
 		.providerData = btree
 	};
 	size8 arity = RelationBTreeNColumns(btree);
-	SetupMachineExpression(&(record->expression), arity, 0, &service);
+	SetupMachineService(&(record->service), arity, 0, &service);
 
 	// The parameters field will be initialized later
 	// by RegistryFinalizeCoreServices() as it requires a list
@@ -197,8 +196,8 @@ void RegistryTeardownCoreServices(void)
 		record->parameters = 0;
 		ASSERT(BTreeDelete(registry.tree, record) == BTREE_DELETED)
 
-		ASSERT(record->expression.type == EXPRESSION_MACHINE)
- 		MachineService * machineService = &(record->expression.value.machineService);
+		ASSERT(record->service.type == SERVICE_MACHINE)
+ 		MachineService * machineService = &(record->service.value.machineService);
 		ASSERT(machineService->provider == &bTreeServiceProvider)
 		BTree * btree = machineService->providerData;
 		ASSERT(RelationBTreeNRows(btree) == 0)
@@ -211,14 +210,14 @@ void RegistryTeardownCoreServices(void)
 	record = &(registry.coreServices[2]);
 	record->parameters = 0;
 	ASSERT(BTreeDelete(registry.tree, record) == BTREE_DELETED)
-	BTree * predicateFormBTree = record->expression.value.machineService.providerData;
+	BTree * predicateFormBTree = record->service.value.machineService.providerData;
 	ASSERT(RelationBTreeNRows(predicateFormBTree) == 0)
 	FreeRelationBTree(predicateFormBTree);
 
 	record = &(registry.coreServices[1]);
 	record->parameters = 0;
 	ASSERT(BTreeDelete(registry.tree, record) == BTREE_DELETED)
-	BTree * multisetBTree = record->expression.value.machineService.providerData;
+	BTree * multisetBTree = record->service.value.machineService.providerData;
 	ASSERT(RelationBTreeNRows(multisetBTree) == 0)
 	FreeRelationBTree(multisetBTree);
 
@@ -249,7 +248,7 @@ void RegistryAddBTreeService(Atom form, BTree * btree)
 		.form = form,
 		.parameters = parameters,
 	};
-	SetupMachineExpression(&record.expression, arity, 0, &btreeService);
+	SetupMachineService(&record.service, arity, 0, &btreeService);
 	RegistryAddService(&record);
 	IFactRelease(parameters);
 }
@@ -344,19 +343,19 @@ ServiceRecord RegistryFindService(Atom form, Atom parameters)
 }
 
 
-void PrintService(ServiceRecord const * service)
+void PrintServiceRecord(ServiceRecord const * service)
 {
 	Atom signature = CreateFormula(service->form, service->parameters);
 	PrintFormula(signature);
 	IFactRelease(signature);
 	PrintChar(':');
-	PrintExpression(&(service->expression));
+	PrintService(&(service->service));
 }
 
 
 static void btreePrintCallback(void const * item)
 {
-	PrintService((ServiceRecord const *) item);
+	PrintServiceRecord((ServiceRecord const *) item);
 	PrintChar('\n');
 }
 

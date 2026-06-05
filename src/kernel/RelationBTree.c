@@ -3,7 +3,7 @@
  */
 
 #include "btree/btree.h"
-#include "kernel/expression.h"
+#include "kernel/service.h"
 #include "kernel/ifact.h"
 #include "kernel/RelationBTree.h"
 #include "kernel/tuple.h"
@@ -319,29 +319,29 @@ void RelationBTreeDump(BTree * tree)
  * 
  * The service context consists of a RelationBTreeIterator * pointer.
  */
-static void serviceSetupContext(ExpressionContext * context, void * providerData)
+static void serviceSetupContext(ServiceContext * context, void * providerData)
 {
 	BTree * btree = (BTree *) providerData;
 	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
 	// Reorder arguments
-	Tuple * query = CreateTuple(context->expression->dimensions.nArguments);
+	Tuple * query = CreateTuple(context->service->dimensions.nArguments);
 	for(index8 i = 0; i < query->nAtoms; i++) {
 		TupleSetElement(query, i,
-			TupleGetElement(context->arguments, context->expression->argumentMap[i]));
+			TupleGetElement(context->arguments, context->service->argumentMap[i]));
 	}
 	RelationBTreeIterate(btree, query, iterator);
 	FreeTuple(query);
 }
 
 
-static bool serviceCall(ExpressionContext * context)
+static bool serviceCall(ServiceContext * context)
 {
 	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
 	bool hasTuple = RelationBTreeIteratorNext(iterator);
 	if(hasTuple) {
 		Tuple const * tuple = RelationBTreeIteratorPeekTuple(iterator);
 		for(index8 i = 0; i < tuple->nAtoms; i++) {
-			TupleSetElement(context->arguments, context->expression->argumentMap[i],
+			TupleSetElement(context->arguments, context->service->argumentMap[i],
 				TupleGetElement(tuple, i));
 		}
 	}
@@ -349,7 +349,7 @@ static bool serviceCall(ExpressionContext * context)
 }
 
 
-static void serviceFinalizeContext(ExpressionContext * context)
+static void serviceFinalizeContext(ServiceContext * context)
 {
 	RelationBTreeIterator * iterator = (RelationBTreeIterator *) context->data;
 	RelationBTreeIteratorEnd(iterator);

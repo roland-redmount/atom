@@ -1,6 +1,6 @@
 
 #include "kernel/dispatch.h"
-#include "kernel/expression.h"
+#include "kernel/service.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/multiset.h"
@@ -30,38 +30,36 @@ void testMachineExpression(void)
 
 
 /**
- * Test creating and evaluating the JOIN expression
+ * Test creating and executing the JOIN service
  * (multiple m element e multiset p) & (predicate-form p)
  * with arguments (p, e, m)
  */
 void testJoinExpression1(void)
 {
-	ServiceRecord const * leftService = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
-	// Left expression: (multiple m element e multiset p)
-	Expression leftExpression;
-	SetupMachineExpression(
-		&leftExpression, 3,
+	ServiceRecord const * leftServiceRecord = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
+	// Left service: (multiple m element e multiset p)
+	// This is the same machine service found in the registry,
+	// but with a different argument map
+	Service leftService;
+	SetupMachineService(
+		&leftService, 3,
 		(index8[]) {2, 1, 0},
-		&leftService->expression.value.machineService
+		&leftServiceRecord->service.value.machineService
 	);
 
 	// Right expression: (predicate-form p)
-	ServiceRecord const * rightService = RegistryGetCoreServiceRecord(FORM_PREDICATE_FORM);
-	Expression rightExpression;
-	SetupMachineExpression(
-		&rightExpression, 1,
+	// NOTE: this should be identical to the registry service
+	ServiceRecord const * rightServiceRecord = RegistryGetCoreServiceRecord(FORM_PREDICATE_FORM);
+	Service rightService;
+	SetupMachineService(
+		&rightService, 1,
 		(index8[]) {0},
-		&rightService->expression.value.machineService
+		&rightServiceRecord->service.value.machineService
 	);
 	
-	// Create the join expression, default argument map
-	Expression joinExpression;
-	SetupJoinExpression(
-		&joinExpression, 3,
-		0,
-		&leftExpression,
-		&rightExpression
-	);
+	// Create the JOIN service, with default argument map
+	Service joinService;
+	SetupJoinService(&joinService, 3, 0,	&leftService,&rightService);
 
 	// Evaluate with arguments (@multiset-form, _ , _)
 	Tuple * arguments = CreateTupleFromArray(
@@ -75,51 +73,50 @@ void testJoinExpression1(void)
 	// PrintTuple(arguments);
 	// PrintChar('\n');
 	// Setup execution context
-	void * context = ExpressionCreateContext(&joinExpression, arguments);
+	void * context = ServiceCreateContext(&joinService, arguments);
 
-	// Call the expression.
+	// Call the service.
 	// This should yield 3 tuples corresponding to the 3 roles of (list position element),
- 	// since the right expression (predicate-form @multiset-form) matches a single tuple.
+ 	// since the right child service (predicate-form @multiset-form) matches a single tuple.
 	size32 nElements = 0;
-	while(ExpressionCall(context)) {
+	while(ServiceCall(context)) {
 		PrintTuple(arguments);
 		PrintChar('\n');
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 3);
-	ExpressionFreeContext(context);
+	ServiceFreeContext(context);
 	FreeTuple(arguments);
 }
 
 
 /**
- * Test evaluating the join expression
+ * Test evaluating the JOIN service
  * (position p list l element s) & (position q list s element e)
  * with arguments (l p s q e)
  */
 void testJoinExpression2(void)
 {
-	ServiceRecord const * listRecord = RegistryGetCoreServiceRecord(FORM_LIST_POSITION_ELEMENT);
+	ServiceRecord const * listServiceRecord = RegistryGetCoreServiceRecord(FORM_LIST_POSITION_ELEMENT);
 	
-	// The left and right expressions call the same service,
-	// but with different argument mapping.
-	// 
-	Expression leftExpression;
-	SetupMachineExpression(
-		&leftExpression, 3,
+	// The left and right child services call the same machine service,
+	// but with different argument maps.
+	Service leftService;
+	SetupMachineService(
+		&leftService, 3,
 		(index8[]) {1, 0, 2},
-		&listRecord->expression.value.machineService
+		&listServiceRecord->service.value.machineService
 	);
-	Expression rightExpression;
-	SetupMachineExpression(
-		&rightExpression, 3,
+	Service rightService;
+	SetupMachineService(
+		&rightService, 3,
 		(index8[]) {3, 2, 4},
-		&listRecord->expression.value.machineService
+		&listServiceRecord->service.value.machineService
 	);
 
-	// Create the join expression 
-	Expression joinExpression;
-	SetupJoinExpression(&joinExpression, 5, 0, &leftExpression, &rightExpression);
+	// Create the join service
+	Service joinService;
+	SetupJoinService(&joinService, 5, 0, &leftService, &rightService);
 
 	// Arguments tuple (@stringList _  _ _ _)
 	TypedAtom string1 = CreateTypedAtom(AT_ID, CreateStringFromCString("foo"));
@@ -133,16 +130,16 @@ void testJoinExpression2(void)
 	PrintChar('\n');
 
 	// Setup execution context
-	void * context = ExpressionCreateContext(&joinExpression, arguments);
-	// Call the expression
+	void * context = ServiceCreateContext(&joinService, arguments);
+	// Call the join service
 	size32 nElements = 0;
-	while(ExpressionCall(context)) {
+	while(ServiceCall(context)) {
 		PrintTuple(arguments);
 		PrintChar('\n');
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 6)
-	ExpressionFreeContext(context);
+	ServiceFreeContext(context);
 	FreeTuple(arguments);
 	ReleaseTypedAtom(stringList);
 	ReleaseTypedAtom(string1);
@@ -153,13 +150,11 @@ void testJoinExpression2(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	// SetupServiceLibrary();
 
 	// ExecuteTest(testMachineExpression);
 	ExecuteTest(testJoinExpression1);
 	ExecuteTest(testJoinExpression2);
 
-	// TeardownServiceLibrary();	
 	KernelShutdown();
 
 	TestSummary();

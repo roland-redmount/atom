@@ -16,9 +16,9 @@
  * various relations.
  */
  
-struct s_ExpressionContext;
+struct s_ServiceContext;
 
-typedef bool (*MachineServiceCall)(struct s_ExpressionContext * context);
+typedef bool (*MachineServiceCall)(struct s_ServiceContext * context);
 
 typedef struct s_MachineServiceProvider {
 	/**
@@ -27,7 +27,7 @@ typedef struct s_MachineServiceProvider {
 	 * This method must return a pointer to its context (or 0 if none).
 	 * This context pointer will then be supplied to call() and finalizeContext().
 	 */
-	void (*setupContext)(struct s_ExpressionContext * context, void * providerData);
+	void (*setupContext)(struct s_ServiceContext * context, void * providerData);
 
 	/**
 	 * Call (resume) an executing service, return true if a tuple was produced,
@@ -41,7 +41,7 @@ typedef struct s_MachineServiceProvider {
 	/**
 	 * Any code that needs to run to finalize the service after termination
 	 */
-	void (*finalizeContext)(struct s_ExpressionContext * context);
+	void (*finalizeContext)(struct s_ServiceContext * context);
 
 } MachineServiceProvider;
 
@@ -49,10 +49,6 @@ typedef struct s_MachineServiceProvider {
 /**
  * A specific machine service, implemented by a provider, such as a particular B-tree,
  * or a particular arithmetic function.
- * 
- * NOTE: this is only used as a kind of Expression; the service registry
- * maps all (form, parameter) pairs to expression. So should perhaps be
- * renamed MachineExpression ?
  */
 typedef struct s_MachineService {
 	MachineServiceProvider * provider;
