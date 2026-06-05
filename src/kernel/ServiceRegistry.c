@@ -157,11 +157,11 @@ void RegistryAddCoreBTreeService(index32 index, Atom form, BTree * btree)
 	// Create a machine expression
 	MachineService service = {
 		.provider = &bTreeServiceProvider,
-		.contextSize = sizeof(BTreeIterator),
+		.contextSize = sizeof(RelationBTreeIterator),
 		.providerData = btree
 	};
 	size8 arity = RelationBTreeNColumns(btree);
-	CreateMachineExpression(&(record->expression), arity, &service);
+	SetupMachineExpression(&(record->expression), arity, 0, &service);
 
 	// The parameters field will be initialized later
 	// by RegistryFinalizeCoreServices() as it requires a list
@@ -249,7 +249,7 @@ void RegistryAddBTreeService(Atom form, BTree * btree)
 		.form = form,
 		.parameters = parameters,
 	};
-	CreateMachineExpression(&record.expression, arity, &btreeService);
+	SetupMachineExpression(&record.expression, arity, 0, &btreeService);
 	RegistryAddService(&record);
 	IFactRelease(parameters);
 }

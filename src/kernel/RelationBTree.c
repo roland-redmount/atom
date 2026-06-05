@@ -3,6 +3,7 @@
  */
 
 #include "btree/btree.h"
+#include "kernel/expression.h"
 #include "kernel/ifact.h"
 #include "kernel/RelationBTree.h"
 #include "kernel/tuple.h"
@@ -312,33 +313,45 @@ void RelationBTreeDump(BTree * tree)
 	PrintF("%u tuples\n", nTuples);
 }
 
-/**
+/***************************************************************************************************
  * Stubs for using the B-tree service provider.
+ * NOTE: this could go to a separate compilation unit
+ * 
  * The service context consists of a RelationBTreeIterator * pointer.
  */
-static void serviceSetupContext(void * context, void * providerData, Tuple * arguments)
+static void serviceSetupContext(ExpressionContext * context, void * providerData)
 {
 	BTree * btree = (BTree *) providerData;
-	RelationBTreeIterator * iterator = context;
-	RelationBTreeIterate(btree, arguments, iterator);
+	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
+	// Reorder arguments
+	Tuple * query = CreateTuple(context->expression->dimensions.nArguments);
+	for(index8 i = 0; i < query->nAtoms; i++) {
+		TupleSetElement(query, i,
+			TupleGetElement(context->arguments, context->expression->argumentMap[i]));
+	}
+	RelationBTreeIterate(btree, query, iterator);
+	FreeTuple(query);
 }
 
 
-static bool serviceCall(void * context, Tuple * arguments)
+static bool serviceCall(ExpressionContext * context)
 {
-	RelationBTreeIterator * iterator = context;
+	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
 	bool hasTuple = RelationBTreeIteratorNext(iterator);
 	if(hasTuple) {
 		Tuple const * tuple = RelationBTreeIteratorPeekTuple(iterator);
-		CopyTuples(tuple, arguments);
+		for(index8 i = 0; i < tuple->nAtoms; i++) {
+			TupleSetElement(context->arguments, context->expression->argumentMap[i],
+				TupleGetElement(tuple, i));
+		}
 	}
 	return hasTuple;
 }
 
 
-static void serviceFinalizeContext(void * context)
+static void serviceFinalizeContext(ExpressionContext * context)
 {
-	RelationBTreeIterator * iterator = context;
+	RelationBTreeIterator * iterator = (RelationBTreeIterator *) context->data;
 	RelationBTreeIteratorEnd(iterator);
 }
 
@@ -372,7 +385,7 @@ void agentTeardown(void * agentData)
 MachineServiceProvider bTreeServiceProvider = {
 	.setupContext = &serviceSetupContext,
 	.call = &serviceCall,
-	.freeContext = &serviceFinalizeContext,
+	.finalizeContext = &serviceFinalizeContext,
 };
 
 /**

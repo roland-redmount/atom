@@ -40,12 +40,12 @@ void testCompile1(void)
 	// Call the expression
 	// this should yields 3 elements corresponding to the 3 roles of (list position element)
 	size32 nElements = 0;
-	while(ExpressionCall(&record.expression, context)) {
+	while(ExpressionCall(context)) {
 		PrintTuple(arguments);
 		PrintChar('\n');
 		nElements++;
 	}
-	ExpressionFreeContext(&record.expression, context);
+	ExpressionFreeContext(context);
 	FreeTuple(arguments);
 
 	RegistryRemoveService(&record);

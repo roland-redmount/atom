@@ -11,8 +11,9 @@
  #ifndef EXPRESSION_H
  #define EXPRESSION_H
 
-#include "kernel/machineservice.h"
+ #include "kernel/machineservice.h"
  
+
  enum ExpressionType {
 	EXPRESSION_JOIN,
 	EXPRESSION_UNION,
@@ -20,28 +21,29 @@
 	EXPRESSION_MACHINE,
 };
 
-
 /**
  * An expression can be executed by the interpreter to provide
  * a service. An expression can consist of sub-expressions, forming
  * a tree. The "leaves" of this tree are always EXPRESSION_MACHINE.
  */
-
 typedef struct s_Expression Expression;
 
 struct s_Expression {
 	enum ExpressionType type;
 	struct {
+		// Length of arguments tuple for this expression
 		size32 nArguments:8;
+		// Context size, in addition to sizeof(ExpressionContext)
 		size32 contextSize:24;
 	} dimensions;
+	// Indices into argument tuple
+	// Fixed size for now; need to figure out allocation
+	index8 argumentMap[8];
 	union {
 		// for EXPRESSION_JOIN
 		struct {
 			Expression const * left;
-			index8 leftArgumentMap[8];		// fixed size for now; need to figure out allocation
 			Expression const * right; 
-			index8 rightArgumentMap[8];
 		} children;
 		// for EXPRESSION_MACHINE (leaves)
 		MachineService machineService;
@@ -51,14 +53,15 @@ struct s_Expression {
 /**
  * Create a "leaf" expression representing a machine service call
  */
-void CreateMachineExpression(Expression * expression, size8 nArguments, MachineService * machineService);
+void SetupMachineExpression(
+	Expression * expression, size8 nArguments, index8 const * argumentMap, MachineService const * machineService);
 
 /**
  * Create a join expression from two existing expressions
  */
-void CreateJoinExpression(Expression * expression, size8 nArguments,
-	Expression const * leftChild, index8 * leftArgumentMap,
-	Expression const * rightChild, index8 * rightArgumentMap);
+void SetupJoinExpression(
+	Expression * expression, size8 nArguments, index8 const * argumentMap,
+	Expression const * leftChild, Expression const * rightChild);
 
 
 /**
@@ -69,6 +72,7 @@ void CreateJoinExpression(Expression * expression, size8 nArguments,
  */
 
 typedef struct s_ExpressionContext {
+	Expression const * expression;
 	Tuple * arguments;
 	byte data[];
 } ExpressionContext;
@@ -84,9 +88,20 @@ ExpressionContext * ExpressionCreateContext(Expression const * expression, Tuple
 /**
  * Evaluate an expression with a given context. This is the interpreter.
  */
-bool ExpressionCall(Expression const * expression, ExpressionContext * context);
+bool ExpressionCall(ExpressionContext * context);
 
-void ExpressionFreeContext(Expression const * expression, ExpressionContext * context);
+/**
+ * Finalize an expression context, releasing any allocated resources.
+ */
+void ExpressionFreeContext(ExpressionContext * context);
+
+/**
+ * Read and write context arguments
+ */
+TypedAtom ExpressionContextReadArgument(ExpressionContext * context, index8 index);
+
+void ExpressionContextWriteArgument(ExpressionContext * context, index8 index, TypedAtom argument);
+
 
 void PrintExpression(Expression const * expression);
 

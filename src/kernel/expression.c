@@ -3,44 +3,49 @@
 #include "memory/allocator.h"
 
 
-void CreateMachineExpression(Expression * expression, size8 nArguments, MachineService * machineService)
+/**
+ * Setup the common part of an Expression
+ */
+static void setupExpression(
+	Expression * expression, enum ExpressionType type, size8 nArguments, index8 const * argumentMap)
 {
 	SetMemory(expression, sizeof(Expression), 0);
-	expression->type = EXPRESSION_MACHINE;
+	expression->type = type;
+	ASSERT(nArguments <= 8);	// due to fixed argument map array size
 	expression->dimensions.nArguments = nArguments;
+	if(argumentMap)
+		CopyMemory(argumentMap, &(expression->argumentMap), nArguments);
+	else {
+		for(index8 i = 0; i < nArguments; i++)
+			expression->argumentMap[i] = i;
+	}
+}
+
+
+void SetupMachineExpression(
+	Expression * expression, size8 nArguments, index8 const * argumentMap, MachineService const * machineService)
+{
+	setupExpression(expression, EXPRESSION_MACHINE, nArguments, argumentMap);
 	expression->dimensions.contextSize = machineService->contextSize;
 	expression->value.machineService = *machineService;
 }
 
 
 typedef struct s_JoinContext {
-	Tuple * arguments;
-	void * leftContext;
-	Tuple * leftArguments;
-	Tuple * rightQuery;
-	void * rightContext;
-	Tuple * rightArguments;
+	Tuple * argumentsCopy;
+	ExpressionContext * leftContext;
+	ExpressionContext * rightContext;
 } JoinContext;
 
 
-void CreateJoinExpression(Expression * expression, size8 nArguments,
-	Expression const * leftChild, index8 * leftArgumentMap,
-	Expression const * rightChild, index8 * rightArgumentMap)
+void SetupJoinExpression(
+	Expression * expression, size8 nArguments, index8 const * argumentMap,
+	Expression const * leftChild, Expression const * rightChild)
 {
-	expression->type = EXPRESSION_JOIN;
-	expression->dimensions.nArguments = nArguments;
+	setupExpression(expression, EXPRESSION_JOIN, nArguments, argumentMap);
 	expression->dimensions.contextSize = sizeof(JoinContext);
 	expression->value.children.left = leftChild;
 	expression->value.children.right = rightChild;
-	CopyMemory(
-		leftArgumentMap,
-		&(expression->value.children.leftArgumentMap),
-		leftChild->dimensions.nArguments);
-	CopyMemory(
-		rightArgumentMap,
-		&(expression->value.children.rightArgumentMap),
-		rightChild->dimensions.nArguments
-	);
 }
 
 
@@ -48,80 +53,43 @@ void CreateJoinExpression(Expression * expression, size8 nArguments,
  * Obtain a tuple from the left child expression of a join expression
  * and setup the right child expression context for evaluation.
  */
-static bool joinExpressionEvaluateLeft(Expression const * expression, ExpressionContext * context)
+static bool joinExpressionEvaluateLeft(ExpressionContext * context)
 {
 	JoinContext * joinContext = (JoinContext *) &context->data;
-	TupleClear(context->arguments);
+	// restore arguments tuple
+	CopyTuples(joinContext->argumentsCopy, context->arguments);
 
-	// obtain next tuple from left expression (if any)
-	Expression const * left = expression->value.children.left;
+	// Obtain next tuple from left expression, if any.
+	// This will write directly to the context->arguments tuple
 	ASSERT(joinContext->leftContext)
-	if(!ExpressionCall(left, joinContext->leftContext)) {
-		ExpressionFreeContext(expression->value.children.left, joinContext->leftContext);
+	if(!ExpressionCall(joinContext->leftContext)) {
+		// no more tuples, free child context
+		ExpressionFreeContext(joinContext->leftContext);
 		joinContext->leftContext = 0;
 		joinContext->rightContext = 0;
 		return false;
 	}
-	// copy values from left expression to join expression arguments
-	for(index8 i = 0; i < left->dimensions.nArguments; i++) {
-		TupleSetElement(
-			context->arguments,
-			expression->value.children.leftArgumentMap[i],
-			TupleGetElement(joinContext->leftArguments, i)
-		);
-	}
-	// copy determined values to right expression arguments
-	Expression const * right = expression->value.children.right;
-	for(index8 i = 0; i < right->dimensions.nArguments; i++) {
-		TypedAtom typedAtom = TupleGetElement(
-			context->arguments, expression->value.children.rightArgumentMap[i]);
-		if(typedAtom.atom) {
-			// atom was determined from the left expression, substitute it
-			// into the right expression arguments (equality constraint)
-			TupleSetElement(joinContext->rightArguments, i, typedAtom);
-		}
-		else {
-			// use the user-supplied argument 
-			TupleSetElement(joinContext->rightArguments, i,
-				TupleGetElement(joinContext->rightQuery, i));
-		}
-	}
 	// start new evaluation of right expression
-	joinContext->rightContext = ExpressionCreateContext(right, joinContext->rightArguments);
+	Expression const * right = context->expression->value.children.right;
+	joinContext->rightContext = ExpressionCreateContext(right, context->arguments);
 	return true;
 }
 
 
-static void joinExpressionSetupContext(Expression const * expression, ExpressionContext * context)
+static void joinExpressionSetupContext(ExpressionContext * context)
 {
 	JoinContext * joinContext = (JoinContext *) &context->data;
-	Expression const * left = expression->value.children.left;
-	Expression const * right = expression->value.children.right;
-
-	// For the left expression we create the context once
-	joinContext->leftArguments = CreateTuple(left->dimensions.nArguments);
-	for(index8 i = 0; i < left->dimensions.nArguments; i++) {
-		TupleSetElement(joinContext->leftArguments, i,
-			TupleGetElement(context->arguments, expression->value.children.leftArgumentMap[i])
-		);
-	}
 	// For the right context, we must create a new context for each tuple from the left,
 	// and so we need to store a copy of the query tuple to prevent overwriting it.
-	joinContext->rightQuery = CreateTuple(right->dimensions.nArguments);
-	for(index8 i = 0; i < right->dimensions.nArguments; i++) {
-		TupleSetElement(joinContext->rightQuery, i,
-			TupleGetElement(context->arguments, expression->value.children.rightArgumentMap[i])
-		);
-	}
-	joinContext->rightArguments = CreateTuple(right->dimensions.nArguments);
-
+	joinContext->argumentsCopy = CreateTupleFromTuple(context->arguments);
 	// evaluate first left expression to prepare for iteration
-	joinContext->leftContext = ExpressionCreateContext(left, joinContext->leftArguments);
-	joinExpressionEvaluateLeft(expression, context);
+	Expression const * left = context->expression->value.children.left;
+	joinContext->leftContext = ExpressionCreateContext(left, context->arguments);
+	joinExpressionEvaluateLeft(context);
 }
 
 
-static bool joinExpressionCall(Expression const * expression, ExpressionContext * context)
+static bool joinExpressionCall(ExpressionContext * context)
 {
 	/**
 	 * Each call to a join expression gives one tuple from the Carthesian product
@@ -137,63 +105,50 @@ static bool joinExpressionCall(Expression const * expression, ExpressionContext 
 		return false;
 
 	// attempt to obtain next tuple from right expression
-	Expression const * right = expression->value.children.right;
-	while(!ExpressionCall(right, joinContext->rightContext)) {
+	while(!ExpressionCall(joinContext->rightContext)) {
 		// no more tuples from right expression, start over with new left tuple
-		ExpressionFreeContext(right, joinContext->rightContext);
-		if(!joinExpressionEvaluateLeft(expression, context)) {
+		ExpressionFreeContext(joinContext->rightContext);
+		if(!joinExpressionEvaluateLeft(context)) {
 			// join iteration is complete
 			return false;
 		}
-	}
-	// copy results from right expression
-	for(index8 i = 0; i < right->dimensions.nArguments; i++) {
-		TupleSetElement(
-			context->arguments,
-			expression->value.children.rightArgumentMap[i],
-			TupleGetElement(joinContext->rightArguments, i)
-		);
 	}
 	// yield the resulting tuple
 	return true;
 }
 
 
-static void joinExpressionFreeContext(Expression const * expression, ExpressionContext * context)
+static void joinExpressionFinalizeContext(ExpressionContext * context)
 {
 	JoinContext * joinContext = (JoinContext *) &context->data;
 	if(joinContext->leftContext)
-		ExpressionFreeContext(expression->value.children.left, joinContext->leftContext);
+		ExpressionFreeContext(joinContext->leftContext);
 	if(joinContext->rightContext)
-		ExpressionFreeContext(expression->value.children.right, joinContext->rightContext);
-	FreeTuple(joinContext->leftArguments);
-	FreeTuple(joinContext->rightQuery);
-	FreeTuple(joinContext->rightArguments);
+		ExpressionFreeContext(joinContext->rightContext);
+	FreeTuple(joinContext->argumentsCopy);
 }
 
 /**
  * Machine service expression
  */
 
-static void machineServiceSetupContext(MachineService const * service, ExpressionContext * context, Tuple * arguments)
+static void machineServiceSetupContext(MachineService const * service, ExpressionContext * context)
 {
-	service->provider->setupContext(
-		&context->data,
-		service->providerData,
-		arguments
-	);
+	service->provider->setupContext(context, service->providerData);
 }
 
 
-static bool machineServiceCall(MachineService const * service, ExpressionContext * context)
+static bool machineServiceCall(ExpressionContext * context)
 {
-	return service->provider->call(&context->data, context->arguments);
+	MachineService const * service = &context->expression->value.machineService;
+	return service->provider->call(context);
 }
 
 
-static void machineServiceFreeContext(MachineService const * service, ExpressionContext * context)
+static void machineServiceFinalizeContext(ExpressionContext * context)
 {
-	service->provider->freeContext(&context->data);
+	MachineService const * service = &context->expression->value.machineService;
+	service->provider->finalizeContext(context);
 }
 
 
@@ -202,11 +157,12 @@ ExpressionContext * ExpressionCreateContext(Expression const * expression, Tuple
 	size32 contextSize = sizeof(ExpressionContext) + expression->dimensions.contextSize;
 	ExpressionContext * context = Allocate(contextSize);
 	SetMemory(context, contextSize, 0);
+	context->expression = expression;
 	context->arguments = arguments;
 	
 	switch(expression->type) {
 	case EXPRESSION_JOIN:
-		joinExpressionSetupContext(expression, context);
+		joinExpressionSetupContext(context);
 		break;
 
 	case EXPRESSION_UNION:
@@ -220,7 +176,7 @@ ExpressionContext * ExpressionCreateContext(Expression const * expression, Tuple
 		break;
 
 	case EXPRESSION_MACHINE:
-		machineServiceSetupContext(&(expression->value.machineService), context, arguments);
+		machineServiceSetupContext(&(expression->value.machineService), context);
 		break;
 	
 	default:
@@ -231,11 +187,11 @@ ExpressionContext * ExpressionCreateContext(Expression const * expression, Tuple
 }
 
 
-bool ExpressionCall(Expression const * expression, ExpressionContext * context)
+bool ExpressionCall(ExpressionContext * context)
 {
-	switch(expression->type) {
+	switch(context->expression->type) {
 	case EXPRESSION_JOIN:
-		return joinExpressionCall(expression, context);
+		return joinExpressionCall(context);
 
 	case EXPRESSION_UNION:
 		// TODO
@@ -248,7 +204,7 @@ bool ExpressionCall(Expression const * expression, ExpressionContext * context)
 		return false;
 
 	case EXPRESSION_MACHINE:
-		return machineServiceCall(&(expression->value.machineService), context);
+		return machineServiceCall(context);
 	
 	default:
 		ASSERT(false)
@@ -257,11 +213,11 @@ bool ExpressionCall(Expression const * expression, ExpressionContext * context)
 }
 
 
-void ExpressionFreeContext(Expression const * expression, ExpressionContext * context)
+void ExpressionFreeContext(ExpressionContext * context)
 {
-	switch(expression->type) {
+	switch(context->expression->type) {
 	case EXPRESSION_JOIN:
-		joinExpressionFreeContext(expression, context);
+		joinExpressionFinalizeContext(context);
 		break;
 
 	case EXPRESSION_UNION:
@@ -275,7 +231,7 @@ void ExpressionFreeContext(Expression const * expression, ExpressionContext * co
 		break;
 
 	case EXPRESSION_MACHINE:
-		machineServiceFreeContext(&(expression->value.machineService), context);
+		machineServiceFinalizeContext(context);
 		break;
 	
 	default:
@@ -308,3 +264,15 @@ void PrintExpression(Expression const * expression)
 }
 
 
+TypedAtom ExpressionContextReadArgument(ExpressionContext * context, index8 index)
+{
+	index8 const * argumentMap = context->expression->argumentMap;
+	return TupleGetElement(context->arguments, argumentMap[index]);
+}
+
+
+void ExpressionContextWriteArgument(ExpressionContext * context, index8 index, TypedAtom argument)
+{
+	index8 const * argumentMap = context->expression->argumentMap;
+	TupleSetElement(context->arguments, argumentMap[index], argument);
+}

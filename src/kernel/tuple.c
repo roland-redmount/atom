@@ -208,6 +208,16 @@ void CopyTuples(Tuple const * source, Tuple * destination)
 }
 
 
+void CopyTuplesReorder(Tuple const * source, Tuple * destination, index8 const * order)
+{
+	ASSERT(source->nAtoms == destination->nAtoms)
+	for(index8 i = 0; i < source->nAtoms; i++) {
+		ASSERT(order[i] < destination->nAtoms);
+		TupleSetElement(destination, order[i], TupleGetElement(source, i));
+	}
+}
+
+
 void CopyTuplesOffset(Tuple const * source, index8 sourceOffset, Tuple * destination)
 {
 	ASSERT(source->nAtoms >= sourceOffset + destination->nAtoms)

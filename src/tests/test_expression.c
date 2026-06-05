@@ -23,70 +23,71 @@ void testMachineExpression(void)
 	index8 argumentMap[3];
 	ASSERT(DispatchQueryFormula(query, &record, argumentMap))
 
-	// Expression callExpression = {
-	// 	.type = CALL_EXPRESSION,
-	// 	.fields.record = record
-	// };
-	
 	// TODO
-/*
-	// evaluate the expression
-	EvaluationContext context;
-	ExpressionIterate(&callExpression, arguments, argumentMap, &context);
-
-	ASSERT_TRUE(ExpressionNext(&context))
-	PrintTuple(arguments);
-
-	ASSERT_FALSE(ExpressionNext(&context))
-
-	ExpressionEnd(&context);
-*/
 
 	IFactRelease(query);	
 }
 
 
 /**
- * Test evaluating the join expression
+ * Test creating and evaluating the JOIN expression
  * (multiple m element e multiset p) & (predicate-form p)
- * Here the right hand expression (predicate-form p) has only a single tuple
+ * with arguments (p, e, m)
  */
 void testJoinExpression1(void)
 {
-	ServiceRecord const * left = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
-	ServiceRecord const * right = RegistryGetCoreServiceRecord(FORM_PREDICATE_FORM);
-	
-	// Crete the join expression (multiple m element e multiset p) & (predicate-form p)
-	// with argument mapping (m e p) <- (m e p) & (p).
-	// The indexes must correspond to the form canonical order
-	Expression joinExpression;
-	CreateJoinExpression(
-		&joinExpression, 3,
-		&(left->expression), (index8[]) {0, 1, 2},
-		&(right->expression), (index8[]) {2}
+	ServiceRecord const * leftService = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
+	// Left expression: (multiple m element e multiset p)
+	Expression leftExpression;
+	SetupMachineExpression(
+		&leftExpression, 3,
+		(index8[]) {2, 1, 0},
+		&leftService->expression.value.machineService
 	);
 
-	// Argument list
-	Tuple * arguments = CreateTuple(3);
-	MultisetSetTuple(arguments,
-		CreateTypedAtom(AT_ID, GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT)),
-		anonymousVariable,
-		anonymousVariable
+	// Right expression: (predicate-form p)
+	ServiceRecord const * rightService = RegistryGetCoreServiceRecord(FORM_PREDICATE_FORM);
+	Expression rightExpression;
+	SetupMachineExpression(
+		&rightExpression, 1,
+		(index8[]) {0},
+		&rightService->expression.value.machineService
+	);
+	
+	// Create the join expression, default argument map
+	Expression joinExpression;
+	SetupJoinExpression(
+		&joinExpression, 3,
+		0,
+		&leftExpression,
+		&rightExpression
+	);
+
+	// Evaluate with arguments (@multiset-form, _ , _)
+	Tuple * arguments = CreateTupleFromArray(
+		(TypedAtom[]) {
+			CreateTypedAtom(AT_ID, GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT)),
+			anonymousVariable,
+			anonymousVariable
+		},
+		3
 	);
 	// PrintTuple(arguments);
 	// PrintChar('\n');
 	// Setup execution context
 	void * context = ExpressionCreateContext(&joinExpression, arguments);
 
-	// Call the expression
-	// this should yields 3 elements corresponding to the 3 roles of (list position element)
+	// Call the expression.
+	// This should yield 3 tuples corresponding to the 3 roles of (list position element),
+ 	// since the right expression (predicate-form @multiset-form) matches a single tuple.
 	size32 nElements = 0;
-	while(ExpressionCall(&joinExpression, context)) {
+	while(ExpressionCall(context)) {
 		PrintTuple(arguments);
 		PrintChar('\n');
 		nElements++;
 	}
-	ExpressionFreeContext(&joinExpression, context);
+	ASSERT_INT32_EQUAL(nElements, 3);
+	ExpressionFreeContext(context);
 	FreeTuple(arguments);
 }
 
@@ -94,45 +95,54 @@ void testJoinExpression1(void)
 /**
  * Test evaluating the join expression
  * (position p list l element s) & (position q list s element e)
+ * with arguments (l p s q e)
  */
 void testJoinExpression2(void)
 {
-	// Create a list of two strings
+	ServiceRecord const * listRecord = RegistryGetCoreServiceRecord(FORM_LIST_POSITION_ELEMENT);
+	
+	// The left and right expressions call the same service,
+	// but with different argument mapping.
+	// 
+	Expression leftExpression;
+	SetupMachineExpression(
+		&leftExpression, 3,
+		(index8[]) {1, 0, 2},
+		&listRecord->expression.value.machineService
+	);
+	Expression rightExpression;
+	SetupMachineExpression(
+		&rightExpression, 3,
+		(index8[]) {3, 2, 4},
+		&listRecord->expression.value.machineService
+	);
+
+	// Create the join expression 
+	Expression joinExpression;
+	SetupJoinExpression(&joinExpression, 5, 0, &leftExpression, &rightExpression);
+
+	// Arguments tuple (@stringList _  _ _ _)
 	TypedAtom string1 = CreateTypedAtom(AT_ID, CreateStringFromCString("foo"));
 	TypedAtom string2 = CreateTypedAtom(AT_ID, CreateStringFromCString("bar"));
 	TypedAtom stringList = CreateTypedAtom(AT_ID, CreateListFromArray((TypedAtom[]) {string1, string2}, 2));
-
-	ServiceRecord const * listRecord = RegistryGetCoreServiceRecord(FORM_LIST_POSITION_ELEMENT);
-	
-	// Crete the join expression 
-	// (position p list l element s) & (position q list s element e)
-	// with argument mapping (p l s q e) <- (p l s) & (q s e)
-	Expression joinExpression;
-	CreateJoinExpression(
-		&joinExpression, 5,
-		&(listRecord->expression), (index8[]) {0, 1, 2},
-		&(listRecord->expression), (index8[]) {3, 2, 4}
-	);
-
-	// Arguments (_ @stringList _  _ _)
 	Tuple * arguments = CreateTuple(5);
-	for(index8 i = 0; i < 5; i++)
+	TupleSetElement(arguments, 0, stringList);
+	for(index8 i = 1; i < 5; i++)
 		TupleSetElement(arguments, i, anonymousVariable);
-	TupleSetElement(arguments, 1, stringList);
-	// PrintTuple(arguments);
-	// PrintChar('\n');
+	PrintTuple(arguments);
+	PrintChar('\n');
+
 	// Setup execution context
 	void * context = ExpressionCreateContext(&joinExpression, arguments);
-
 	// Call the expression
 	size32 nElements = 0;
-	while(ExpressionCall(&joinExpression, context)) {
+	while(ExpressionCall(context)) {
 		PrintTuple(arguments);
 		PrintChar('\n');
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 6)
-	ExpressionFreeContext(&joinExpression, context);
+	ExpressionFreeContext(context);
 	FreeTuple(arguments);
 	ReleaseTypedAtom(stringList);
 	ReleaseTypedAtom(string1);

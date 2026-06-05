@@ -25,12 +25,12 @@ void testAdd1(void)
 	CopyListToTuple(actors, arguments);
 	
 	void * context = ExpressionCreateContext(expression, arguments);
-	ASSERT_TRUE(ExpressionCall(expression, context))
+	ASSERT_TRUE(ExpressionCall(context))
 	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 0), 2 + 3);
 
-	ASSERT_FALSE(ExpressionCall(expression, context))
+	ASSERT_FALSE(ExpressionCall(context))
 	
-	ExpressionFreeContext(expression, context);
+	ExpressionFreeContext(context);
 	FreeTuple(arguments);
 
 	IFactRelease(query);
@@ -51,12 +51,12 @@ void testAdd2(void)
 	CopyListToTuple(actors, arguments);
 	
 	void * context = ExpressionCreateContext(expression, arguments);
-	ASSERT_TRUE(ExpressionCall(expression, context))
+	ASSERT_TRUE(ExpressionCall(context))
 	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 2), 7 - 4);
 
-	ASSERT_FALSE(ExpressionCall(expression, context))
+	ASSERT_FALSE(ExpressionCall(context))
 	
-	ExpressionFreeContext(expression, context);
+	ExpressionFreeContext(context);
 	FreeTuple(arguments);
 
 	IFactRelease(query);

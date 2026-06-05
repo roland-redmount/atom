@@ -302,13 +302,10 @@ static bool compileConjunctionRecursive(
 						// TODO: how to compute argument mapping?
 						size8 rightNArguments = rightExpression.dimensions.nArguments;
 						size8 nArguments = termArity + rightNArguments;
-						index8 leftArgumentMap[termArity];
-						index8 rightArgumentMap[rightNArguments];
-						CreateJoinExpression(
-							expression, nArguments,
-							&termServiceRecord.expression, leftArgumentMap,
-							&rightExpression, rightArgumentMap
-						);
+						index8 argumentMap[nArguments];
+						SetupJoinExpression(
+							expression, nArguments, argumentMap,
+							&termServiceRecord.expression, &rightExpression);
 						success = true;
 					}
 				}

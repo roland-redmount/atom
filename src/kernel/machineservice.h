@@ -9,19 +9,16 @@
 
 #include "kernel/tuple.h"
 
-
 /**
  * A machine service provider is an implementation of a particular type
  * of machine services, such as B-Tree relations or arithmetic functions.
- * One MachineServiceProvider can host multiple MachineService for
+ * One MachineServiceProvider can provide multiple MachineService for
  * various relations.
- * 
- * NOTE: this is only used as a kind of Expression; the service registry
- * maps all (form, parameter) pairs to expression. So should perhaps be
- * renamed MachineExpression ?
  */
+ 
+struct s_ExpressionContext;
 
-typedef bool (*MachineServiceCall)(void * context, Tuple * arguments);
+typedef bool (*MachineServiceCall)(struct s_ExpressionContext * context);
 
 typedef struct s_MachineServiceProvider {
 	/**
@@ -30,7 +27,7 @@ typedef struct s_MachineServiceProvider {
 	 * This method must return a pointer to its context (or 0 if none).
 	 * This context pointer will then be supplied to call() and finalizeContext().
 	 */
-	void (*setupContext)(void * context, void * providerData, Tuple * arguments);
+	void (*setupContext)(struct s_ExpressionContext * context, void * providerData);
 
 	/**
 	 * Call (resume) an executing service, return true if a tuple was produced,
@@ -44,7 +41,7 @@ typedef struct s_MachineServiceProvider {
 	/**
 	 * Any code that needs to run to finalize the service after termination
 	 */
-	void (*freeContext)(void * context);
+	void (*finalizeContext)(struct s_ExpressionContext * context);
 
 } MachineServiceProvider;
 
@@ -52,6 +49,10 @@ typedef struct s_MachineServiceProvider {
 /**
  * A specific machine service, implemented by a provider, such as a particular B-tree,
  * or a particular arithmetic function.
+ * 
+ * NOTE: this is only used as a kind of Expression; the service registry
+ * maps all (form, parameter) pairs to expression. So should perhaps be
+ * renamed MachineExpression ?
  */
 typedef struct s_MachineService {
 	MachineServiceProvider * provider;
