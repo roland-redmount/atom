@@ -91,13 +91,13 @@ static uint8 setupUnificationGraph(Tuple const * tuple1, Tuple const * tuple2, T
 }
 
 
-bool UnifyTuples(Tuple const * tuple1, Tuple const * tuple2, SubstitutionList * subst1, SubstitutionList * subst2)
+bool UnifyTuples(Tuple const * tuple1, Tuple const * tuple2, Substitution * subst1, Substitution * subst2)
 {
 	ASSERT(tuple1->nAtoms == tuple2->nAtoms)
 	
-	// initialize substitutions list from unique variables in each tuple
-	SetupSubstitutionList(tuple1, subst1);
-	SetupSubstitutionList(tuple2, subst2);
+	// setup empty substitution lists
+	SetupSubstitution(subst1, tuple1->nAtoms);
+	SetupSubstitution(subst2, tuple2->nAtoms);
 	
 	// create the initial unification graph
 	TypedAtom edges[2 * tuple1->nAtoms];
@@ -120,15 +120,15 @@ bool UnifyTuples(Tuple const * tuple1, Tuple const * tuple2, SubstitutionList * 
 			 */
 			graphSubstitute(left, right, edges, nEdges, i+1);
 			// set a1 -> a2 in each substitution list
-			SetSubstValue(subst1, left, right);
-			SetSubstValue(subst2, left, right);
+			SubstitutionSetValue(subst1, left, right);
+			SubstitutionSetValue(subst2, left, right);
 		}
 		else {
 			if(right.type == AT_VARIABLE) {
 				// replace variable from t2 with atom from t1
 				graphSubstitute(right, left, edges, nEdges, i+1);
-				SetSubstValue(subst1, right, left);
-				SetSubstValue(subst2, right, left);
+				SubstitutionSetValue(subst1, right, left);
+				SubstitutionSetValue(subst2, right, left);
 			}
 			else {
 				// two distinct atoms, unification fails

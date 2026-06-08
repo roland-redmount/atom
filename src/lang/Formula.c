@@ -415,7 +415,7 @@ static void printClause(Atom clauseForm, Tuple const * actors, index8 * atomInde
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
 			printTerm(em.element.atom, actors, atomIndex);
-			if((j == em.multiple - 1) && (i < nTermForms - 1))
+			if((j < em.multiple - 1) || (i < nTermForms - 1))
 				PrintCString(" | ");
 		}
 	}
@@ -434,7 +434,7 @@ static void printConjunction(Atom conjunctionForm, Tuple const * actors, index8*
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
 			printClause(em.element.atom, actors, atomIndex);
-			if((j == em.multiple - 1) && (i < nClauseForms - 1))
+			if((j < em.multiple - 1) || (i < nClauseForms - 1))
 				PrintCString(" & ");
 		}
 	}

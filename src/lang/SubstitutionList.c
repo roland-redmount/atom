@@ -4,42 +4,21 @@
 #include "memory/allocator.h"
 
 
-void SetupSubstitutionList(Tuple const * tuple, SubstitutionList * subst)
+void SetupSubstitution(Substitution * subst, size8 capacity)
 {
-	// over-allocate the variable and atom lists
-	// to avoid parsing the tuple twice
-	subst->variables = Allocate(sizeof(TypedAtom) * tuple->nAtoms);
-	subst->values = Allocate(sizeof(TypedAtom) * tuple->nAtoms);
-
-	// count number of unique variables = no. pairs
+	// Do a single allocation for keys and values arrays
+	subst->keys = Allocate(2 * sizeof(TypedAtom) * capacity);
+	SetMemory(subst->keys, 2 * sizeof(TypedAtom) * capacity, 0); 
+	subst->values = subst->keys + capacity;
+	subst->capacity = capacity;
 	subst->nPairs = 0;
-	for(index8 i = 0; i < tuple->nAtoms; i++) {
-		TypedAtom a = TupleGetElement(tuple, i);
-		if(a.type == AT_VARIABLE)
-		{
-			// check if variable was already found
-			bool newVariable = true;
-			for(index8 j = 0; j < subst->nPairs; j++) {
-				if(SameTypedAtoms(subst->variables[j], a)) {
-					newVariable = false;
-					break;
-				}
-			}
-			if(newVariable) {
-				// add self-substitution a -> a to list
-				subst->variables[subst->nPairs] = a;
-				subst->values[subst->nPairs] = a;
-				subst->nPairs++;
-			}
-		}
-	}
 }
 
 
-TypedAtom FindSubstValue(SubstitutionList const * subst, TypedAtom variable)
+TypedAtom SubstitutionFindValue(Substitution const * subst, TypedAtom key)
 {
 	for(index8 i = 0; i < subst->nPairs; i++) {
-		if(SameTypedAtoms(subst->variables[i], variable))
+		if(SameTypedAtoms(subst->keys[i], key))
 			return subst->values[i];
 	}
 	// variable not found
@@ -47,24 +26,31 @@ TypedAtom FindSubstValue(SubstitutionList const * subst, TypedAtom variable)
 }
 
 
-void SetSubstValue(SubstitutionList * subst, TypedAtom variable, TypedAtom value)
+void SubstitutionSetValue(Substitution * subst, TypedAtom key, TypedAtom value)
 {
-	for(index8 i = 0; i < subst->nPairs; i++) {
-		if(SameTypedAtoms(subst->variables[i], variable)) {
-			// variable found, change value
+	index8 i = 0;
+	while(i < subst->nPairs) {
+		if(SameTypedAtoms(subst->keys[i], key)) {
+			// key found, change its value
 			subst->values[i] = value;
 			return;
  		}
+		i++;
 	}
+	// else add new key-value pair
+	ASSERT(i < subst->capacity)
+	subst->keys[i] = key;
+	subst->values[i] = value;
+	subst->nPairs++;
 }
 
 
-void SubstituteTuple(SubstitutionList const * subst, Tuple const * source, Tuple * destination)
+void SubstituteTuple(Substitution const * subst, Tuple const * source, Tuple * destination)
 {
 	ASSERT(source->nAtoms == destination->nAtoms)
 	for(index8 i = 0; i < source->nAtoms; i++) {
 		TypedAtom sourceValue = TupleGetElement(source, i);
-		TypedAtom substValue = FindSubstValue(subst, sourceValue);
+		TypedAtom substValue = SubstitutionFindValue(subst, sourceValue);
 		if(substValue.atom)
 			TupleSetElement(destination, i, substValue);
 		else
@@ -73,19 +59,18 @@ void SubstituteTuple(SubstitutionList const * subst, Tuple const * source, Tuple
 }
 
 
-void FreeSubstitutionList(SubstitutionList * subst)
+void FreeSubstitution(Substitution * subst)
 {
 	// free atom arrays
-	Free(subst->variables);
-	Free(subst->values);
+	Free(subst->keys);
 }
 
 
-void PrintSubstitutionList(SubstitutionList * subst)
+void PrintSubstitution(Substitution * subst)
 {
 	PrintChar('{');
 	for(index8 i = 0; i < subst->nPairs; i++) {
-		PrintTypedAtom(subst->variables[i]);
+		PrintTypedAtom(subst->keys[i]);
 		PrintCString(" -> ");
 		PrintTypedAtom(subst->values[i]);
 		PrintChar(' ');

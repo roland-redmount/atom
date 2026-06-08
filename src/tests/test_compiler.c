@@ -29,16 +29,11 @@ void testCompile1(void)
 	PrintServiceRecord(&record);
 	PrintChar('\n');
 
-	// TODO: call the compiled service
-
-	// Argument list
+	// Call the service
+	// this should yields 3 elements corresponding to the 3 roles of (list position element)
 	Tuple * arguments = CreateTuple(3);
 	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
-	
 	void * context = ServiceCreateContext(&record.service, arguments);
-
-	// Call the expression
-	// this should yields 3 elements corresponding to the 3 roles of (list position element)
 	size32 nElements = 0;
 	while(ServiceCall(context)) {
 		PrintTuple(arguments);
@@ -59,18 +54,19 @@ void testCompile2(void)
 {
 	// Rule: first x second y third z  <-  + x + 1 = y & + y + 1 = z
 	Atom rule = CStringToClause(
-		"first x second y third z | ! + x + 1 = y | ! + y + 1 = z");
+		"first _x second _y third _z | ! + _x + 1 = _y | ! + _y + 1 = _z");
 	DictionaryAddClause(rule);
 	
-	Atom queryTerm = CStringToTerm("first 3 second s third t");
+	Atom queryTerm = CStringToTerm("first 3 second _s third _t");
 	PrintCString("queryTerm = ");
 	PrintFormula(queryTerm);
 	PrintChar('\n');
 
-	// This will yield a JOIN expression
+	// This will yield a JOIN service
 	ServiceRecord record;
 	ASSERT_TRUE(CompileService(queryTerm, &record))
 
+	RegistryRemoveService(&record);
 	IFactRelease(queryTerm);
 	DictionaryRemoveClause(rule);
 	IFactRelease(rule);
@@ -84,6 +80,7 @@ int main(int argc, char * argv[])
 	MathSetup();
 
 	ExecuteTest(testCompile1);
+	ExecuteTest(testCompile2);
 
 	MathTeardown();
 	TestSummary();

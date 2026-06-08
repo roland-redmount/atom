@@ -16,13 +16,13 @@
 #include "lang/unification.h"
 
 /**
- * Test whether a query tuple matches a parameters tuple when permuted
- * according to the given permutation araray (0-based indies)
- * Non-variable atoms in the query must match input parameters,
- * respecting atom type; variables in the query must output parameters.
- * Writes the the tuple of matched, permuted arguments to *matches (possibly empty)
- * Return true if a match was found.
-  */
+ * Test whether a query tuple matches a service parameters list when permuted
+ * according to the given permutation array (0-based indices). The query tuple
+ * may contain parameters (used for compilation).
+ * Each service input parameter must match a query atom or input parameter of the same type.
+ * Each service output parameter must match a query variable or output parameter.
+ * Returns true if the tuples match.
+ */
 static bool signatureQueryTupleMatch(Atom parameterList, Tuple const * queryActors, index8 const * permutation)
 {
 	// both tuples must have same number of atoms
@@ -30,27 +30,32 @@ static bool signatureQueryTupleMatch(Atom parameterList, Tuple const * queryActo
 	// iterate over query tuple
 	for(index8 i = 0; i < queryActors->nAtoms; i++) {
 		TypedAtom queryAtom = TupleGetElement(queryActors, permutation[i]);
-		Atom parameter = ListGetElement(parameterList, i + 1).atom;
-		switch(ParameterGetIO(parameter)) {
+		Atom serviceParameter = ListGetElement(parameterList, i + 1).atom;
+		switch(ParameterGetIO(serviceParameter)) {
 		case PARAMETER_IN:
 			if(queryAtom.type == AT_PARAMETER) {
 				return ParameterGetIO(queryAtom.atom) == PARAMETER_IN;
 			}
 			else {
 				// query atom type must match the parameter type
-				if(queryAtom.type != ParameterGetType(parameter))
+				if(queryAtom.type != ParameterGetType(serviceParameter))
 					return false;
 				break;
 			}
 		
 		case PARAMETER_OUT:
-			// output, query atom must be a variable
-			if(queryAtom.type != AT_VARIABLE)
-				return false;
-			// if variable is typed, the type must match
-			byte variableType = VariableGetType(queryAtom.atom);
-			if(variableType && (variableType != ParameterGetType(parameter)))
-				return false;
+			if(queryAtom.type == AT_PARAMETER) {
+				return ParameterGetIO(queryAtom.atom) == PARAMETER_OUT;
+			}
+			else {
+				if(queryAtom.type != AT_VARIABLE)
+					return false;
+				// if variable is typed, the type must match
+				// TODO: typed variables should go away, replaced with AT_PARAMETER
+				byte variableType = VariableGetType(queryAtom.atom);
+				if(variableType && (variableType != ParameterGetType(serviceParameter)))
+					return false;
+			}
 			break;
 		
 		case PARAMETER_IN_OUT:

@@ -24,19 +24,19 @@ void testUnification(void)
 		(TypedAtom[]) { one, three, z, z },
 		4
 	);
-	SubstitutionList subst1;
-	SubstitutionList subst2;
+	Substitution subst1;
+	Substitution subst2;
 	UnifyTuples(tuple1, tuple2, &subst1, &subst2);
 
 	// This should produce the substition lists:
 	// subst1 = {x -> 3 y -> 2 }
 	// subst2 = {z -> 2 }
-	ASSERT_TRUE(SameTypedAtoms(FindSubstValue(&subst1, x), three));
-	ASSERT_TRUE(SameTypedAtoms(FindSubstValue(&subst1, y), two));
-	ASSERT_TRUE(SameTypedAtoms(FindSubstValue(&subst2, z), two));
+	ASSERT_TRUE(SameTypedAtoms(SubstitutionFindValue(&subst1, x), three));
+	ASSERT_TRUE(SameTypedAtoms(SubstitutionFindValue(&subst1, y), two));
+	ASSERT_TRUE(SameTypedAtoms(SubstitutionFindValue(&subst2, z), two));
 
-	FreeSubstitutionList(&subst1);
-	FreeSubstitutionList(&subst2);
+	FreeSubstitution(&subst1);
+	FreeSubstitution(&subst2);
 	FreeTuple(tuple1);
 	FreeTuple(tuple2);
 }

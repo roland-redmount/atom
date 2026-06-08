@@ -1,52 +1,52 @@
 /**
- * A substitution list is a list of (variable -> atom) pairs
+ * A substitution is a list of (key -> value) atom pairs
  * used for variable substitution, similar to a python dict.
  */
 
-#ifndef SUBSTITUTIONLIST_H
-#define SUBSTITUTIONLIST_H
+#ifndef SUBSTITUTION_H
+#define SUBSTITUTION_H
 
 #include "lang/TypedAtom.h"
 
 
-typedef struct s_SubstitutionList {
-	uint8 nPairs;	// number of substitutions = no. unique variables
-	TypedAtom * variables;
+typedef struct s_Substitution {
+	uint8 nPairs;	// current number of key-value pairs
+	uint8 capacity;
+	TypedAtom * keys;
 	TypedAtom * values;
-} SubstitutionList;
+} Substitution;
 
 
 /**
- * Create a substitution list from the unique variables of a tuple,
- * such that each variable x maps to itself (x -> x)
+ * Setup an empty substitution with capacity = maximum number of key-value pairs.
  */
-void SetupSubstitutionList(Tuple const * tuple, SubstitutionList * subst);
+void SetupSubstitution(Substitution * subst, size8 capacity);
 
 /**
- * Find the value corresponding to a given variable
+ * Find the value corresponding to a given key
  */
-TypedAtom FindSubstValue(SubstitutionList const * subst, TypedAtom variable);
+TypedAtom SubstitutionFindValue(Substitution const * subst, TypedAtom key);
 
 /**
- * Replace a substitution value for a given variable (if it exists)
+ * Replace the value for a key, if it exists
  */
-void SetSubstValue(SubstitutionList * subst, TypedAtom variable, TypedAtom value); 
+void SubstitutionSetValue(Substitution * subst, TypedAtom key, TypedAtom value); 
 
 /**
- * Substitute value in the source tuple according to the given substitution list
+ * Substitute values in the source tuple according to the given substitution
  * and write corresponding values to the destination tuple. Atoms in the source
- * tuple that are not present in the substitution list will be copied unchanged
+ * tuple that are not keys in the substitution will be copied unchanged
  * to the destination.
  * The source and destination may be the same to substitute in-place.
  */
-void SubstituteTuple(SubstitutionList const * subst, Tuple const * source, Tuple * destination);
+void SubstituteTuple(Substitution const * subst, Tuple const * source, Tuple * destination);
 
 /**
- * Deallocate a substitution list
+ * Deallocate a substitution
  */
-void FreeSubstitutionList(SubstitutionList * subst);
+void FreeSubstitution(Substitution * subst);
 
-void PrintSubstitutionList(SubstitutionList * subst);
+void PrintSubstitution(Substitution * subst);
 
 
-#endif	// SUBSTITUTIONLIST_H
+#endif	// SUBSTITUTION_H

@@ -47,7 +47,7 @@ void testJoinExpression1(void)
 		&leftServiceRecord->service.value.machineService
 	);
 
-	// Right expression: (predicate-form p)
+	// Right service: (predicate-form p)
 	// NOTE: this should be identical to the registry service
 	ServiceRecord const * rightServiceRecord = RegistryGetCoreServiceRecord(FORM_PREDICATE_FORM);
 	Service rightService;

@@ -348,7 +348,7 @@ void PrintServiceRecord(ServiceRecord const * service)
 	Atom signature = CreateFormula(service->form, service->parameters);
 	PrintFormula(signature);
 	IFactRelease(signature);
-	PrintChar(':');
+	PrintCString(" => ");
 	PrintService(&(service->service));
 }
 
