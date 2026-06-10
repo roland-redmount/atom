@@ -67,10 +67,20 @@ Atom CreateFormula(Atom form, Atom actorsList);
 Atom CreateFormulaFromArray(Atom form, TypedAtom * actors);
 
 /**
- * Convenience functions for creating formulas
+ * Create a predicate from two arrays of role names (AT_NAME) and actors,
+ * both of the same length nParts.
  */
 Atom CreatePredicate(Atom const * roles, TypedAtom * actors, size8 nParts);
+
+/**
+ * Create a term from a predicate and sign
+ */
 Atom CreateTerm(Atom predicate, bool negated);
+
+/**
+ * Find the term actor corresponding the given role and multiplicity m
+ */
+TypedAtom TermGetRoleActor(Atom termForm, Tuple const * termActors, const char * role, uint8 m);
 
 /**
  * Create a clause from a list of terms, in any order.
@@ -102,15 +112,6 @@ void ClauseGetTermActorsIndices(Atom clauseForm, index8 * termActorsIndices);
  */
 Atom CreateConjunction(Atom const * clauses, size8 nClauses);
 
-
-/**
- * Extract the actors from the clauseActors tuple that correspond to
- * the k'th occurence (k = 1, 2 ... ) of the termForm in the clauseForm, and write
- * them to the termActors tuple.
- */
-// void ClauseGetTermActors(
-// 	Atom clauseForm, Tuple const * clauseActors, Atom termForm, Tuple * termActors, index8 k);
-	
 /**
  * Test if the atom is a formula
  */

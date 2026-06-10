@@ -117,10 +117,6 @@ index32 FormulaRoleIndex(Atom formula, Atom name)
 }
 
 
-/**
- * Convenience method to create a predicate from two arrays
- * of role names (AT_NAME) and actors, both of the same length arity.
- */
 Atom CreatePredicate(Atom const * roles, TypedAtom * actors, size8 arity)
 {
 	Atom predicateForm = CreatePredicateForm(roles, arity);
@@ -145,9 +141,6 @@ Atom CreatePredicate(Atom const * roles, TypedAtom * actors, size8 arity)
 }
 
 
-/**
- * Create a term from a predicate and sign
- */
 Atom CreateTerm(Atom predicate, bool sign)
 {
 	ASSERT(FormulaIsPredicate(predicate));
@@ -159,6 +152,17 @@ Atom CreateTerm(Atom predicate, bool sign)
 	);
 	IFactRelease(termForm);
 	return term;
+}
+
+
+TypedAtom TermGetRoleActor(Atom termForm, Tuple const * termActors, const char * role, uint8 m)
+{
+	ASSERT(m > 0)
+	Atom predicateForm = TermFormGetPredicateForm(termForm);
+	Atom roleName = CreateNameFromCString(role);
+	index8 actorIndex = PredicateRoleIndex(predicateForm, roleName) + (m - 1);
+	NameRelease(roleName);
+	return TupleGetElement(termActors, actorIndex);
 }
 
 
@@ -323,15 +327,6 @@ void ClauseGetTermActorsIndices(Atom clauseForm, index8 * termActorsIndices)
 	}
 	MultisetIteratorEnd(&iterator);
 }
-
-
-// void ClauseGetTermActors(
-// 	Atom clauseForm, Tuple const * clauseActors, Atom termForm, Tuple * termActors, index8 k)
-// {
-// 	index8 index = ClauseGetTermActorsIndex(clauseForm, termForm, k);
-// 	for(index8 i = 0; i < termActors->nAtoms; i++)
-// 		TupleSetElement(termActors, i, TupleGetElement(clauseActors, index + i));
-// }
 
 
 uint8 FormulaArity(Atom formula)

@@ -186,7 +186,7 @@ static void atomsToParameters(Tuple const * actors, Tuple * replacedActors)
 	}
 }
 
-
+/*
 static bool unifyAndSubstitute(
 	Tuple const * tuple1, Tuple const * tuple2, Tuple * substTuple1, Tuple * substTuple2)
 {
@@ -194,11 +194,6 @@ static bool unifyAndSubstitute(
 	Substitution substitution1;
 	Substitution substitution2;
 	bool success = UnifyTuples(tuple1, tuple2, &substitution1, &substitution2);
-	// PrintSubstitutionList(&substitution1);
-	// PrintChar('\n');
-	// PrintSubstitutionList(&substitution2);
-	// PrintChar('\n');
-
 	// apply the substitutions in-place
 	SubstituteTuple(&substitution1, substTuple1, substTuple1);
 	SubstituteTuple(&substitution2, substTuple2, substTuple2);
@@ -207,6 +202,7 @@ static bool unifyAndSubstitute(
 	FreeSubstitution(&substitution2);
 	return success;
 }
+*/
 
 
 /**
@@ -223,9 +219,9 @@ Service * compileTerm(Atom termForm, Tuple const * termActors, size8 nArguments,
 	if(!DispatchQuery(termForm, termActors, &termServiceRecord, permutation))
 		return 0;
 
-	PrintCString("termServiceRecord: ");
-	PrintServiceRecord(&termServiceRecord);
-	PrintChar('\n');
+	// PrintCString("termServiceRecord: ");
+	// PrintServiceRecord(&termServiceRecord);
+	// PrintChar('\n');
 	// Update clause parameters types from service parameters
 	// NOTE: this essentially means to construct a substitution list from the match
 	// and apply it to the full clause.
@@ -254,9 +250,9 @@ Service * compileTerm(Atom termForm, Tuple const * termActors, size8 nArguments,
 		}
 	}
 	FreeTuple(serviceParameters);
-	PrintCString("Substitution: ");
-	PrintSubstitution(clauseSubst);
-	PrintChar('\n');
+	// PrintCString("Substitution: ");
+	// PrintSubstitution(clauseSubst);
+	// PrintChar('\n');
 
 	// Compute argument map
 	index8 argumentMap[termArity];
@@ -305,8 +301,6 @@ Service * compileConjunctionRecursive(
 	Atom clauseForm, Tuple * clauseActors, bool * termExcluded, uint8 nTermsExcluded,
 	index8 const * termActorsIndices, size8 nArguments)
 {
-	PrintCString("** compileConjunctionRecursive()\n");
-				
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	Service * service = 0;
 
@@ -330,20 +324,18 @@ Service * compileConjunctionRecursive(
 				continue;
 			// Extract term actors
 			CopyTuplesAt(clauseActors, termActorsIndices[termIndex], termActors);
-			PrintCString("Term: ");
-			PrintFormActorsAsFormula(negatedTermForm, termActors);
-			PrintChar('\n');
+			// PrintCString("Term: ");
+			// PrintFormActorsAsFormula(negatedTermForm, termActors);
+			// PrintChar('\n');
 
 			Substitution clauseSubst;
 			Service * leftService = compileTerm(negatedTermForm, termActors, nArguments, &clauseSubst);
 			// TODO: we need to substitute the clause
 			SubstituteTuple(&clauseSubst, clauseActors, clauseActors);
 			FreeSubstitution(&clauseSubst);
-
-			PrintCString("Updated clause: ");
-			PrintFormActorsAsFormula(clauseForm, clauseActors);
-			PrintChar('\n');
-
+			// PrintCString("Updated clause: ");
+			// PrintFormActorsAsFormula(clauseForm, clauseActors);
+			// PrintChar('\n');
 
 			termExcluded[termIndex] = true;
 			nTermsExcluded++;
@@ -450,9 +442,9 @@ static Service * compileService(Atom queryTermForm, Tuple * queryActors)
 			ASSERT(!joinService)
 
 			Tuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
-			PrintCString("Matched rule: ");
-			PrintFormActorsAsFormula(clauseForm.atom, clauseActors);
-			PrintChar('\n');
+			// PrintCString("Matched rule: ");
+			// PrintFormActorsAsFormula(clauseForm.atom, clauseActors);
+			// PrintChar('\n');
 
 			// Iterate over all occurences of the query term in the matched clause
 			// and find one that unifies, if any
@@ -467,9 +459,9 @@ static Service * compileService(Atom queryTermForm, Tuple * queryActors)
 				foundTerm = UnifyTuples(queryActors, matchedTermActors, &querySubst, &termSubst);
 				if(foundTerm) {
 					SubstituteTuple(&termSubst, clauseActors, substClauseActors);
-					PrintCString("Unified rule: ");
-					PrintFormActorsAsFormula(clauseForm.atom, substClauseActors);
-					PrintChar('\n');
+					// PrintCString("Unified rule: ");
+					// PrintFormActorsAsFormula(clauseForm.atom, substClauseActors);
+					// PrintChar('\n');
 
 					index8 matchedTermIndex = ClauseGetTermIndex(clauseForm.atom, queryTermForm, 1);
 					joinService = compileConjunction(clauseForm.atom, substClauseActors, matchedTermIndex, termArity);
@@ -512,9 +504,9 @@ bool CompileService(Atom queryTerm, ServiceRecord * record)
 	atomsToParameters(queryActors, serviceParameters);
 	FreeTuple(queryActors);
 
-	PrintCString("Generalized query: ");
-	PrintFormActorsAsFormula(queryTermForm, serviceParameters);
-	PrintChar('\n');
+	// PrintCString("Generalized query: ");
+	// PrintFormActorsAsFormula(queryTermForm, serviceParameters);
+	// PrintChar('\n');
 
 	bool success;
 	record->service = compileService(queryTermForm, serviceParameters);

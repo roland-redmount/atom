@@ -50,8 +50,8 @@ void testJoinService1(void)
 		},
 		3
 	);
-	PrintTuple(arguments);
-	PrintChar('\n');
+	// PrintTuple(arguments);
+	// PrintChar('\n');
 	// Setup execution context
 	void * context = ServiceCreateContext(joinService, arguments);
 
@@ -60,8 +60,8 @@ void testJoinService1(void)
  	// since the right child service (predicate-form @multiset-form) matches a single tuple.
 	size32 nElements = 0;
 	while(ServiceCall(context)) {
-		PrintTuple(arguments);
-		PrintChar('\n');
+		// PrintTuple(arguments);
+		// PrintChar('\n');
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 3);
@@ -99,19 +99,19 @@ void testJoinExpression2(void)
 	TupleSetElement(arguments, 0, stringList);
 	for(index8 i = 1; i < 5; i++)
 		TupleSetElement(arguments, i, anonymousVariable);
-	PrintTuple(arguments);
-	PrintChar('\n');
+	// PrintTuple(arguments);
+	// PrintChar('\n');
 
 	// Setup execution context
 	void * context = ServiceCreateContext(joinService, arguments);
 	// Call the join service
 	size32 nElements = 0;
 	while(ServiceCall(context)) {
-		PrintTuple(arguments);
-		PrintChar('\n');
+		// PrintTuple(arguments);
+		// PrintChar('\n');
 		nElements++;
 	}
-	ASSERT_INT32_EQUAL(nElements, 6)
+	ASSERT_INT32_EQUAL(nElements, 2 * 3)
 	ServiceFreeContext(context);
 	FreeTuple(arguments);
 	ReleaseTypedAtom(stringList);

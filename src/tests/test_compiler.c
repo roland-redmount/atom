@@ -19,30 +19,35 @@ void testCompilePermute1(void)
 	DictionaryAddClause(rule);
 	
 	Atom queryTerm = CStringToTerm("number 3 addtwo _z");
-	PrintCString("queryTerm = ");
-	PrintFormula(queryTerm);
-	PrintChar('\n');
+	// PrintCString("queryTerm = ");
+	// PrintFormula(queryTerm);
+	// PrintChar('\n');
 
 	ServiceRecord record;
 	ASSERT_TRUE(CompileService(queryTerm, &record))
-	PrintCString("Service record: ");
-	PrintServiceRecord(&record);
-	PrintChar('\n');
-/*
+	// PrintCString("Service record: ");
+	// PrintServiceRecord(&record);
+	// PrintChar('\n');
+
 	// Call the service
-	// this should yields 3 elements corresponding to the 3 roles of (list position element)
 	Tuple * arguments = CreateTuple(2);
 	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
 	void * context = ServiceCreateContext(record.service, arguments);
-	size32 nElements = 0;
-	while(ServiceCall(context)) {
-		PrintTuple(arguments);
-		PrintChar('\n');
-		nElements++;
-	}
+	ASSERT_TRUE(ServiceCall(context))
+
+	TypedAtom x = TermGetRoleActor(record.form, arguments, "number", 1);
+	ASSERT_UINT32_EQUAL(x.type, AT_INT)
+	ASSERT_UINT64_EQUAL(x.atom, 3);
+
+	TypedAtom y = TermGetRoleActor(record.form, arguments, "addtwo", 1);
+	ASSERT_UINT32_EQUAL(y.type, AT_INT)
+	ASSERT_UINT64_EQUAL(y.atom, 5);
+
+	// Second call should fail (no more tuples)
+	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
 	FreeTuple(arguments);
-*/
+
 	RegistryRemoveService(&record);
 	IFactRelease(queryTerm);
 	DictionaryRemoveClause(rule);
@@ -58,28 +63,28 @@ void testCompilePermute2(void)
 	DictionaryAddClause(rule);
 	
 	Atom queryTerm = CStringToTerm("+ 7 - 4 = _d");
-	PrintCString("queryTerm = ");
-	PrintFormula(queryTerm);
-	PrintChar('\n');
+	// PrintCString("queryTerm = ");
+	// PrintFormula(queryTerm);
+	// PrintChar('\n');
 
 	// This will yield a new service from the existing (+ + =) service
 	ServiceRecord record;
 	ASSERT_TRUE(CompileService(queryTerm, &record))
-	PrintCString("Service record: ");
-	PrintServiceRecord(&record);
-	PrintChar('\n');
+	// PrintCString("Service record: ");
+	// PrintServiceRecord(&record);
+	// PrintChar('\n');
 
 	// Call the service
-	// this should yields 3 elements corresponding to the 3 roles of (list position element)
 	Tuple * arguments = CreateTuple(3);
 	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
 	void * context = ServiceCreateContext(record.service, arguments);
-	size32 nElements = 0;
-	while(ServiceCall(context)) {
-		PrintTuple(arguments);
-		PrintChar('\n');
-		nElements++;
-	}
+	ASSERT_TRUE(ServiceCall(context))
+
+	TypedAtom d = TermGetRoleActor(record.form, arguments, "=", 1);
+	ASSERT_UINT32_EQUAL(d.type, AT_INT)
+	ASSERT_UINT64_EQUAL(d.atom, 3);
+
+	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
 	FreeTuple(arguments);
 
@@ -97,11 +102,7 @@ void testCompileJoin1(void)
 	Atom rule = CStringToClause(
 		"first _x second _y third _z | ! + _x + 1 = _y | ! + _y + 1 = _z");
 	DictionaryAddClause(rule);
-	
 	Atom queryTerm = CStringToTerm("first 3 second _s third _t");
-	PrintCString("queryTerm = ");
-	PrintFormula(queryTerm);
-	PrintChar('\n');
 
 	ServiceRecord record;
 	ASSERT_TRUE(CompileService(queryTerm, &record))
@@ -110,12 +111,17 @@ void testCompileJoin1(void)
 	Tuple * arguments = CreateTuple(3);
 	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
 	void * context = ServiceCreateContext(record.service, arguments);
-	size32 nElements = 0;
-	while(ServiceCall(context)) {
-		PrintTuple(arguments);
-		PrintChar('\n');
-		nElements++;
-	}
+	ASSERT_TRUE(ServiceCall(context))
+
+	TypedAtom y = TermGetRoleActor(record.form, arguments, "second", 1);
+	ASSERT_UINT32_EQUAL(y.type, AT_INT)
+	ASSERT_UINT64_EQUAL(y.atom, 4);
+
+	TypedAtom z = TermGetRoleActor(record.form, arguments, "third", 1);
+	ASSERT_UINT32_EQUAL(z.type, AT_INT)
+	ASSERT_UINT64_EQUAL(z.atom, 5);
+
+	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
 	FreeTuple(arguments);
 
