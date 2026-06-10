@@ -107,11 +107,6 @@ size32 RelationBTreeRemoveTuples(BTree * tree, Tuple const * queryTuple, uint8 m
 #define REMOVE_NORMAL		0
 #define REMOVE_PROTECTED	1
 
-/**
- * Create a machine service record from a B-tree for use with ServiceRegistry
- * TODO:
- */
-// Service * RelationBTreeCreateRecord(BTree * btree);
 
 /**
  * Print out an entire relation table, for debugging

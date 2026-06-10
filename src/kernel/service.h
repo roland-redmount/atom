@@ -161,13 +161,6 @@ bool ServiceCall(ServiceContext * context);
  */
 void ServiceFreeContext(ServiceContext * context);
 
-/**
- * Read and write context arguments
- */
-// TypedAtom ServiceContextReadArgument(ServiceContext * context, index8 index);
-
-// void ServiceContextWriteArgument(ServiceContext * context, index8 index, TypedAtom argument);
-
 
 void PrintService(Service const * service);
 

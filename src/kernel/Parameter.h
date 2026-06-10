@@ -25,7 +25,7 @@
  *  like going right-to-left so should be >, consistent with
  *  Unix pipes.)
  * 
- * OARAMETER_IN_OUT can be used to represent input/output combinations
+ * PARAMETER_IN_OUT can be used to represent input/output combinations
  * compactly for services that can act on either inputs or outputs,
  * such as table lookup with / without variables.
  */

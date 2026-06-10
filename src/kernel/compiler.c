@@ -14,17 +14,6 @@
 #include "lang/unification.h"
 #include "memory/allocator.h"
 
-/*
- * 
- * Dictionary: To match the predicate to a rule, we need to
- * 
- * (1) find a clause form where its form occurs
- * (2) find clauses of that clause form (rules) where the 
- *     corresponding predicate unifies with the query predicate
- * (3) take the remainder of the clause (unified) and repeat from 1
- *     until we reach resolution or there are no more matches
- */
-
 
 /*
  * A compilation example: say the dictionary contains the rule
@@ -185,24 +174,6 @@ static void atomsToParameters(Tuple const * actors, Tuple * replacedActors)
 		}
 	}
 }
-
-/*
-static bool unifyAndSubstitute(
-	Tuple const * tuple1, Tuple const * tuple2, Tuple * substTuple1, Tuple * substTuple2)
-{
-	// unify the matched term with the generalized query term to get a substitution list
-	Substitution substitution1;
-	Substitution substitution2;
-	bool success = UnifyTuples(tuple1, tuple2, &substitution1, &substitution2);
-	// apply the substitutions in-place
-	SubstituteTuple(&substitution1, substTuple1, substTuple1);
-	SubstituteTuple(&substitution2, substTuple2, substTuple2);
-
-	FreeSubstitution(&substitution1);
-	FreeSubstitution(&substitution2);
-	return success;
-}
-*/
 
 
 /**

@@ -14,13 +14,13 @@
 
 void testMachineService(void)
 {
-
+	// TODO
 }
 
 
 void testPermuteService(void)
 {
-
+	// TODO
 }
 
 
@@ -125,7 +125,6 @@ int main(int argc, char * argv[])
 {
 	KernelInitialize();
 
-	// ExecuteTest(testMachineExpression);
 	ExecuteTest(testJoinService1);
 	ExecuteTest(testJoinExpression2);
 

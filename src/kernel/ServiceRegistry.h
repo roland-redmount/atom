@@ -1,11 +1,6 @@
 /**
  * The service registry maps signatures (form, parameters) to services.
  * Dispatch uses the registry to match services to queries.
- * 
- * TODO: Service records are currently not reference counted, but we should
- * keep track of services that appear in Expression leaves; in this case we
- * must not remove the child service before the "parent". Hence, we do need
- * some form of reference counting.
  */
 
 #ifndef SERVICEREGISTRY_H
