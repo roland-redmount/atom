@@ -11,11 +11,16 @@
 
 
 /**
- * Dispatch a query (formula), return the matching service, if any.
+ * Dispatch a query, returning the matching service, if any.
  * The argument permutation required to match the service is written
  * to the given permutation array.
  */
-bool DispatchQuery(Atom query, ServiceRecord * record, index8 * permutation);
+bool DispatchQuery(Atom queryTermForm, Tuple const * queryActors, ServiceRecord * record, index8 * permutation);
+
+/**
+ * Same, using a term (formula) instead of a termform and actors tuple
+ */
+bool DispatchQueryFormula(Atom queryTerm, ServiceRecord * record, index8 * permutation);
 
 
 #endif	// DISPATCH_H

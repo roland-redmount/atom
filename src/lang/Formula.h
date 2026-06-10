@@ -67,10 +67,20 @@ Atom CreateFormula(Atom form, Atom actorsList);
 Atom CreateFormulaFromArray(Atom form, TypedAtom * actors);
 
 /**
- * Convenience functions for creating formulas
+ * Create a predicate from two arrays of role names (AT_NAME) and actors,
+ * both of the same length nParts.
  */
 Atom CreatePredicate(Atom const * roles, TypedAtom * actors, size8 nParts);
+
+/**
+ * Create a term from a predicate and sign
+ */
 Atom CreateTerm(Atom predicate, bool negated);
+
+/**
+ * Find the term actor corresponding the given role and multiplicity m
+ */
+TypedAtom TermGetRoleActor(Atom termForm, Tuple const * termActors, const char * role, uint8 m);
 
 /**
  * Create a clause from a list of terms, in any order.
@@ -78,19 +88,30 @@ Atom CreateTerm(Atom predicate, bool negated);
 Atom CreateClause(Atom const * terms, size8 nTerms);
 
 /**
+ * Find the index into the list of terms corresponding the given clause form
+ * of the m'th multiple of the given term form.
+ */
+
+index8 ClauseGetTermIndex(Atom clauseForm, Atom termForm, uint8 m);
+
+/**
+ * Find the index into a clauseForm actors tuple of the first actor in
+ * the m'th multiple of the term form.
+ */
+index8 ClauseGetTermActorsIndex(Atom clauseForm, Atom termForm, uint8 m);
+
+/**
+ * Find the indices into a clauseForm tuple of the first actor in each term,
+ * including multiples. The termIndices array must have at least as many elements
+ * as the total number of terms + 1; the last element will be set to the total clause arity.
+ */
+void ClauseGetTermActorsIndices(Atom clauseForm, index8 * termActorsIndices);
+
+/**
  * Create a conjunction from a list of terms, in any order.
  */
 Atom CreateConjunction(Atom const * clauses, size8 nClauses);
 
-
-/**
- * Extract the actors from the clauseActors tuple that correspond to
- * the k'th occurence (k = 1, 2 ... ) of the termForm in the clauseForm, and write
- * them to the termActors tuple.
- */
-void ClauseGetTermActors(
-	Atom clauseForm, Tuple const * clauseActors, Atom termForm, Tuple * termActors, index8 k);
-	
 /**
  * Test if the atom is a formula
  */
@@ -126,6 +147,8 @@ index32 FormulaRoleIndex(Atom formula, Atom name);
 // size8 FormulaUniqueVariables(Atom formula, TypedAtom * variables);
 
 void PrintFormula(Atom formula);
+
+void PrintFormActorsAsFormula(Atom form, Tuple const * actors);
 
 /**
  * Compute hash of a formula from the form hash value and actors tuple

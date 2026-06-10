@@ -117,10 +117,6 @@ index32 FormulaRoleIndex(Atom formula, Atom name)
 }
 
 
-/**
- * Convenience method to create a predicate from two arrays
- * of role names (AT_NAME) and actors, both of the same length arity.
- */
 Atom CreatePredicate(Atom const * roles, TypedAtom * actors, size8 arity)
 {
 	Atom predicateForm = CreatePredicateForm(roles, arity);
@@ -145,9 +141,6 @@ Atom CreatePredicate(Atom const * roles, TypedAtom * actors, size8 arity)
 }
 
 
-/**
- * Create a term from a predicate and sign
- */
 Atom CreateTerm(Atom predicate, bool sign)
 {
 	ASSERT(FormulaIsPredicate(predicate));
@@ -159,6 +152,17 @@ Atom CreateTerm(Atom predicate, bool sign)
 	);
 	IFactRelease(termForm);
 	return term;
+}
+
+
+TypedAtom TermGetRoleActor(Atom termForm, Tuple const * termActors, const char * role, uint8 m)
+{
+	ASSERT(m > 0)
+	Atom predicateForm = TermFormGetPredicateForm(termForm);
+	Atom roleName = CreateNameFromCString(role);
+	index8 actorIndex = PredicateRoleIndex(predicateForm, roleName) + (m - 1);
+	NameRelease(roleName);
+	return TupleGetElement(termActors, actorIndex);
 }
 
 
@@ -247,10 +251,9 @@ Atom CreateConjunction(Atom const * clauses, size8 nClauses)
 }
 
 
-void ClauseGetTermActors(
-	Atom clauseForm, Tuple const * clauseActors, Atom termForm, Tuple * termActors, index8 k)
+index8 ClauseGetTermIndex(Atom clauseForm, Atom termForm, uint8 m)
 {
-	// iterate over terms in the clause
+	// iterate over terms in the clause to compoute the index
 	MultisetIterator iterator;
 	MultisetIterate(clauseForm, &iterator);
 
@@ -263,18 +266,66 @@ void ClauseGetTermActors(
 			found = true;
 			break;
 		}
+		size8 termArity = TermFormArity(elementMultiple.element.atom);
 		index += elementMultiple.multiple;
 	}
 	MultisetIteratorEnd(&iterator);
 	ASSERT(found);
-	// select the k'th occurence of the term form
-	// (they must be contiguous in the clause form)
-	ASSERT(k <= elementMultiple.multiple)
+	// Select the k'th occurence of the term form
+	// (all terms of the same form must be contiguous in the clause form)
+	ASSERT((m > 0) && (m <= elementMultiple.multiple))
+	index += m - 1;
+	return index;	
+}
+
+
+index8 ClauseGetTermActorsIndex(Atom clauseForm, Atom termForm, uint8 m)
+{
+	// iterate over terms in the clause to compoute the index
+	MultisetIterator iterator;
+	MultisetIterate(clauseForm, &iterator);
+
+	index8 index = 0;
+	bool found = false;
+	ElementMultiple elementMultiple;
+	while(MultisetIteratorNext(&iterator)) {
+		elementMultiple = MultisetIteratorGetElement(&iterator);
+		if(elementMultiple.element.atom == termForm) {
+			found = true;
+			break;
+		}
+		size8 termArity = TermFormArity(elementMultiple.element.atom);
+		index += elementMultiple.multiple * termArity;
+	}
+	MultisetIteratorEnd(&iterator);
+	ASSERT(found);
+	// Select the k'th occurence of the term form
+	// (all terms of the same form must be contiguous in the clause form)
+	ASSERT((m > 0) && (m <= elementMultiple.multiple))
 	size8 termArity = FormArity(termForm);
-	ASSERT(termActors->nAtoms == termArity)
-	index += (k - 1) * termArity;
-	for(index8 i = 0; i < termArity; i++)
-		TupleSetElement(termActors, i, TupleGetElement(clauseActors, index + i));
+	index += (m - 1) * termArity;
+	return index;
+}
+
+
+void ClauseGetTermActorsIndices(Atom clauseForm, index8 * termActorsIndices)
+{
+	// iterate over terms in the clause and compute indices
+	MultisetIterator iterator;
+	MultisetIterate(clauseForm, &iterator);
+
+	index8 k = 0;
+	termActorsIndices[k] = 0;
+	ElementMultiple elementMultiple;
+	while(MultisetIteratorNext(&iterator)) {
+		elementMultiple = MultisetIteratorGetElement(&iterator);
+		size8 termArity = TermFormArity(elementMultiple.element.atom);
+		for(index8 i = 0; i < elementMultiple.multiple; i++) {
+			termActorsIndices[k + 1] = termActorsIndices[k] + termArity;
+			k++;
+		}
+	}
+	MultisetIteratorEnd(&iterator);
 }
 
 
@@ -315,7 +366,7 @@ Atom FormulaGetActors(Atom formula)
 /**
  * Print a predicate with actors in the order given by atomIndex
  */
-static void printPredicate(Atom predicateForm, Atom atomsList, index8 * atomIndex)
+static void printPredicate(Atom predicateForm, Tuple const * actors, index8 * atomIndex)
 {	
 	MultisetIterator iterator;
 	MultisetIterate(predicateForm, &iterator);
@@ -327,7 +378,7 @@ static void printPredicate(Atom predicateForm, Atom atomsList, index8 * atomInde
 		for(index8 j = 0; j < em.multiple; j++) {
 			PrintName(em.element.atom);
 			PrintChar(' ');
-			PrintTypedAtom(ListGetElement(atomsList, *atomIndex + 1));
+			PrintTypedAtom(TupleGetElement(actors, *atomIndex));
 			if((i < nRoles - 1) || (j < em.multiple - 1))
 				PrintChar(' ');
 			(*atomIndex)++;
@@ -337,27 +388,29 @@ static void printPredicate(Atom predicateForm, Atom atomsList, index8 * atomInde
 }
 
 
-static void printTerm(Atom termForm, Atom atomsList, index8 * atomIndex)
+static void printTerm(Atom termForm,Tuple const * actors, index8 * atomIndex)
 {
 	bool sign = TermFormGetSign(termForm);
-	if(!sign)
+	if(!sign) {
 		PrintChar('!');
-	printPredicate(GetPredicateForm(termForm), atomsList, atomIndex);
+		PrintChar(' ');
+	}
+	printPredicate(TermFormGetPredicateForm(termForm), actors, atomIndex);
 }
 
 
-static void printClause(Atom clauseForm, Atom atomsList, index8 * atomIndex)
+static void printClause(Atom clauseForm, Tuple const * actors, index8 * atomIndex)
 {	
 	MultisetIterator iterator;
 	MultisetIterate(clauseForm, &iterator);
 
-	size8 nTermForms = ClauseNUniqueTerms(clauseForm);
+	size8 nTermForms = ClauseFormNTermForms(clauseForm);
 	for(index8 i = 0; i < nTermForms; i++) {	
 		ASSERT(MultisetIteratorNext(&iterator))
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
-			printTerm(em.element.atom, atomsList, atomIndex);
-			if((j == em.multiple - 1) && (i < nTermForms - 1))
+			printTerm(em.element.atom, actors, atomIndex);
+			if((j < em.multiple - 1) || (i < nTermForms - 1))
 				PrintCString(" | ");
 		}
 	}
@@ -365,7 +418,7 @@ static void printClause(Atom clauseForm, Atom atomsList, index8 * atomIndex)
 }
 
 
-static void printConjunction(Atom conjunctionForm, Atom atomsList, index8* atomIndex)
+static void printConjunction(Atom conjunctionForm, Tuple const * actors, index8* atomIndex)
 {
 	MultisetIterator iterator;
 	MultisetIterate(conjunctionForm, &iterator);
@@ -375,8 +428,8 @@ static void printConjunction(Atom conjunctionForm, Atom atomsList, index8* atomI
 		ASSERT(MultisetIteratorNext(&iterator))
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
-			printClause(em.element.atom, atomsList, atomIndex);
-			if((j == em.multiple - 1) && (i < nClauseForms - 1))
+			printClause(em.element.atom, actors, atomIndex);
+			if((j < em.multiple - 1) || (i < nClauseForms - 1))
 				PrintCString(" & ");
 		}
 	}
@@ -389,19 +442,26 @@ static void printConjunction(Atom conjunctionForm, Atom atomsList, index8* atomI
  */
 void PrintFormula(Atom formula)
 {
-	// atom index
-	index8 atomIndex = 0;
 	Atom form = FormulaGetForm(formula);
 	Atom actorsList = FormulaGetActors(formula);
+	Tuple * actors = CreateTuple(ListLength(actorsList));
+	CopyListToTuple(actorsList, actors);
+	PrintFormActorsAsFormula(form, actors);
+	FreeTuple(actors);
+}
 
-	if(FormulaIsPredicate(formula))
-		printPredicate(form, actorsList, &atomIndex);
-	else if(FormulaIsTerm(formula))
-		printTerm(form, actorsList, &atomIndex);
-	else if(FormulaIsClause(formula))
-		printClause(form, actorsList, &atomIndex);
-	else if(FormulaIsConjunction(formula))
-		printConjunction(form, actorsList, &atomIndex);
+
+void PrintFormActorsAsFormula(Atom form, Tuple const * actors)
+{
+	index8 atomIndex = 0;
+	if(IsPredicateForm(form))
+		printPredicate(form, actors, &atomIndex);
+	else if(IsTermForm(form))
+		printTerm(form, actors, &atomIndex);
+	else if(IsClauseForm(form))
+		printClause(form, actors, &atomIndex);
+	else if(IsConjunctionForm(form))
+		printConjunction(form, actors, &atomIndex);
 	else
 		ASSERT(false);
 }

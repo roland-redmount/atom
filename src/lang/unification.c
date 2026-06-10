@@ -9,21 +9,23 @@
 // currently the variable index has range 0 .. 255
 #define MAX_NUM_VARIABLES	256
 
-#define EDGE_LEFT_NODE		0
-#define EDGE_RIGHT_NODE		1
+enum EdgeSide {
+	EDGE_LEFT_NODE = 0,
+	EDGE_RIGHT_NODE = 1
+};
 
 
 /**
  * We represent an undirected graph as an array of 2*n atom pointers
  * such that the pair {2k, 2k+1} holds edge k.
  */
-static TypedAtom graphGetNode(TypedAtom const * edges, index8 edge, index8 side)
+static TypedAtom graphGetNode(TypedAtom const * edges, index8 edgeIndex, enum EdgeSide side)
 {
-	return edges[2*edge + side];
+	return edges[2*edgeIndex + side];
 }
 
 
-static void graphSetNode(TypedAtom * edges, index8 edgeIndex, index8 side, TypedAtom newNode)
+static void graphSetNode(TypedAtom * edges, index8 edgeIndex, enum EdgeSide  side, TypedAtom newNode)
 {
 	edges[2*edgeIndex + side] = newNode;
 }
@@ -80,8 +82,8 @@ static uint8 setupUnificationGraph(Tuple const * tuple1, Tuple const * tuple2, T
 		// check if undirected edge already exists in graph
 		if(!findInUGraph(a1, a2, edges, nEdges)) {
 			// new edge, add
-			graphSetNode(edges, i, EDGE_LEFT_NODE, a1);
-			graphSetNode(edges, i, EDGE_RIGHT_NODE, a2);
+			graphSetNode(edges, nEdges, EDGE_LEFT_NODE, a1);
+			graphSetNode(edges, nEdges, EDGE_RIGHT_NODE, a2);
 			nEdges++;
 		}
 	}
@@ -89,19 +91,17 @@ static uint8 setupUnificationGraph(Tuple const * tuple1, Tuple const * tuple2, T
 }
 
 
-bool UnifyTuples(Tuple const * tuple1, Tuple const * tuple2, SubstitutionList * subst1, SubstitutionList * subst2)
+bool UnifyTuples(Tuple const * tuple1, Tuple const * tuple2, Substitution * subst1, Substitution * subst2)
 {
 	ASSERT(tuple1->nAtoms == tuple2->nAtoms)
 	
-	// initialize substitutions list from unique variables in each tuple
-	SetupSubstitutionList(tuple1, subst1);
-	SetupSubstitutionList(tuple2, subst2);
-	PrintF("Found %u and %u unique variables\n", subst1->nPairs, subst2->nPairs);
+	// setup empty substitution lists
+	SetupSubstitution(subst1, tuple1->nAtoms);
+	SetupSubstitution(subst2, tuple2->nAtoms);
 	
 	// create the initial unification graph
 	TypedAtom edges[2 * tuple1->nAtoms];
 	uint8 nEdges = setupUnificationGraph(tuple1, tuple2, edges);
-	PrintF("U Graph has %u edges\n", nEdges);
 	
 	// iterate over graph edges (in arbitrary order) and create substitutions
 	for(index8 i = 0; i < nEdges; i++) {
@@ -118,28 +118,17 @@ bool UnifyTuples(Tuple const * tuple1, Tuple const * tuple2, SubstitutionList * 
 			 * from list 2, while subst1 will only substitute with atoms.
 			 * (This choice is arbitrary)
 			 */
-			PrintCString("Replace ");
-			PrintTypedAtom(left);
-			PrintCString(" with ");
-			PrintTypedAtom(right);
-			PrintChar('\n');
-
 			graphSubstitute(left, right, edges, nEdges, i+1);
 			// set a1 -> a2 in each substitution list
-			SetSubstValue(subst1, left, right);
-			SetSubstValue(subst2, left, right);
+			SubstitutionSetValue(subst1, left, right);
+			SubstitutionSetValue(subst2, left, right);
 		}
 		else {
 			if(right.type == AT_VARIABLE) {
 				// replace variable from t2 with atom from t1
-				PrintCString("Replace ");
-				PrintTypedAtom(right);
-				PrintCString(" with ");
-				PrintTypedAtom(left);
-				PrintChar('\n');
 				graphSubstitute(right, left, edges, nEdges, i+1);
-				SetSubstValue(subst1, right, left);
-				SetSubstValue(subst2, right, left);
+				SubstitutionSetValue(subst1, right, left);
+				SubstitutionSetValue(subst2, right, left);
 			}
 			else {
 				// two distinct atoms, unification fails

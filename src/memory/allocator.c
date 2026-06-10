@@ -13,7 +13,6 @@
  * Allocate() call records for debugging memory leaks.
  */
 
-
 typedef struct {
 	const char * fileName;
 	uint32 lineNumber;
@@ -33,6 +32,8 @@ int8 compareRecords(void const * item, void const * itemOrKey, size32 itemSize)
 	else
 		return 0;
 }
+
+bool logAllocations = false;
 
 #endif
 
@@ -333,19 +334,7 @@ void DumpAllocatedBlocks(void)
 	PrintF("Total %u bytes allocated.\n", nBytesAllocated);
 }
 
-#ifdef DEBUG_ALLOCATE
-void DumpAllocateLog(void)
-{
-	BTreeIterator iterator;
-	BTreeIterate(&iterator, allocateLog);
-	while(BTreeIteratorHasItem(&iterator)) {
-		AllocateRecord const * record = BTreeIteratorPeekItem(&iterator);
-		PrintF("%x %s line %u\n",
-			record->address, record->fileName, record->lineNumber);
-		BTreeIteratorNext(&iterator);
-	}
-}
-#endif
+
 
 /**
  * Add a block the free list for block's level.
@@ -562,7 +551,6 @@ static BlockOffset allocPointerToOffset(void * allocPointer)
 }
 
 
-
 #ifdef DEBUG_ALLOCATE
 void * _Allocate(size32 allocSize)
 #else
@@ -583,15 +571,17 @@ void * Allocate(size32 allocSize)
 void * _LogAllocate(const char * fileName, uint32 lineNumber, size32 allocSize)
 {
 	void * block = _Allocate(allocSize);
-	// cannot log allocation from btree.c since we use a B-tree for logging ..
-	ASSERT(CStringCompare(fileName, "src/btree/btree.c") != 0)
-	if(block) {
-		AllocateRecord record = {
-			.fileName = fileName, 
-			.lineNumber = lineNumber,
-			.address = block
-		};
-		BTreeInsert(allocateLog, &record);
+	if(logAllocations) {
+		// cannot log allocation from btree.c since we use a B-tree for logging ..
+		ASSERT(CStringCompare(fileName, "src/btree/btree.c") != 0)
+		if(block) {
+			AllocateRecord record = {
+				.fileName = fileName, 
+				.lineNumber = lineNumber,
+				.address = block
+			};
+			BTreeInsert(allocateLog, &record);
+		}
 	}
 	return block;
 }
@@ -637,17 +627,22 @@ void Free(void * memory)
 }
 
 #ifdef DEBUG_ALLOCATE
+/**
+ * Remove the allocation record and free the block.
+ */
 void _LogFree(const char * fileName, uint32 lineNumber, void * block)
 {
-	ASSERT(CStringCompare(fileName, "src/btree/btree.c") != 0)
-	// Find record with this address
-	AllocateRecord logRecord = {.address = block};
-	if(!BTreeGetItem(allocateLog, &logRecord)) {
-		// Attempted Free() of address not from Allocate()
-		ASSERT(false);
+	if(logAllocations) {
+		ASSERT(CStringCompare(fileName, "src/btree/btree.c") != 0)
+		// Find record with this address
+		AllocateRecord logRecord = {.address = block};
+		if(!BTreeGetItem(allocateLog, &logRecord)) {
+			// Attempted Free() of address not from Allocate()
+			ASSERT(false);
+		}
+		BTreeDelete(allocateLog, &logRecord);
 	}
 	_Free(block);
-	BTreeDelete(allocateLog, &logRecord);
 }
 #endif
 
@@ -684,3 +679,24 @@ void * Reallocate(void * memory, size32 newSize)
 
 }
 
+
+#ifdef DEBUG_ALLOCATE
+void SetAllocationLogging(bool status)
+{
+	logAllocations = status;
+}
+
+
+void DumpAllocateLog(void)
+{
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, allocateLog);
+	while(BTreeIteratorNext(&iterator)) {
+		AllocateRecord const * record = BTreeIteratorPeekItem(&iterator);
+		BlockOffset block = allocPointerToOffset(record->address);
+		size32 blockSize = 1 << getLogBlockSize(block);
+		PrintF("%llx size %u : %s line %u\n",
+			record->address, blockSize, record->fileName, record->lineNumber);
+	}
+}
+#endif

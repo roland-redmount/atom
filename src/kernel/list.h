@@ -14,6 +14,7 @@
 
 /**
  * Create a list from a callback function generating list element atoms.
+ * The ListElementGenerator will be called with a 0-based index into the list.
  */
 typedef TypedAtom (*ListElementGenerator)(index32 index, void const * data);
 
@@ -24,6 +25,7 @@ Atom CreateList(ListElementGenerator generator, void const * data, size32 nEleme
  */
 Atom CreateListFromArray(TypedAtom const * listElements, size8 nAtoms);
 
+Atom CreateListFromTuple(Tuple const * tuple);
 
 /**
  * Add list ifacts obtained from the generator to an exising IFact draft.

@@ -1,18 +1,18 @@
+#include "kernel/dictionary.h"
+#include "kernel/dispatch.h"
 #include "kernel/kernel.h"
-#include "kernel/expression.h"
+#include "kernel/list.h"
+#include "kernel/multiset.h"
+#include "kernel/service.h"
+#include "kernel/Parameter.h"
 #include "kernel/ServiceRegistry.h"
+#include "lang/ClauseForm.h"
+#include "lang/Formula.h"
+#include "lang/SubstitutionList.h"
+#include "lang/TermForm.h"
 #include "lang/Variable.h"
-
-/*
- * 
- * Dictionary: To match the predicate to a rule, we need to
- * 
- * (1) find a clause form where its form occurs
- * (2) find clauses of that clause form (rules) where the 
- *     corresponding predicate unifies with the query predicate
- * (3) take the remainder of the clause (unified) and repeat from 1
- *     until we reach resolution or there are no more matches
- */
+#include "lang/unification.h"
+#include "memory/allocator.h"
 
 
 /*
@@ -51,12 +51,12 @@
  *
  * which becomes the signature of the new service. As we have no more clauses, the
  * found EXPRESSION_MACHINE is the final compilation result, and we create a new
- * service mapping (5) to this expression, which essentally becomes a synonym for
- * the service (+ 1<INT + 2>INT = 3<INT).
+ * service record mapping (5) to this service, which essentally becomes a synonym for
+ * (+ 1<INT + 2>INT = 3<INT).
  */
 
 /**
- * Compiling a join expression: dictionary contains the rule
+ * Compiling a join service: dictionary contains the rule
  * 
  *   number x plusone y plustwo z <- + x + 1 = y & + y + 1 = z 
  * 
@@ -74,35 +74,35 @@
  * 
  *   + 1<INT + 1 = a & + a + 1 = b              (3)
  * 
- * A conjunction will always compile to a JOIN expression. We initialize the join
- * expression with two terms from (3),
+ * A conjunction will always compile to a JOIN service. We initialize the join
+ * service with two terms from (3),
  * 
  *   JOIN(+ 1<INT + 1 = a, + a + 1 = b)         (4)
  * 
- * The JOIN expression will compute sequentially from left to right, To find the left and
- * right sub-expressions of the join, we must dispatch the two terms of (4) separaterly.
+ * The JOIN service will compute sequentially from left to right, To find the left and
+ * right child services of the join, we must dispatch the two terms of (4) separaterly.
  * (If we have > 2 terms we can do a series of joins.) Starting (arbitrarily) with
  * the left term, dispatch matches the service (+ 1<INT + 2<INT = 3>INT) which maps
  * to a MACHINE_EXPRESSION. After renumbering we obtain the substitution { a -> 2>INT }
  * that we apply to the _left_ term; for the right term, the output parameter 2 must
- * become an input. So that our JOIN expression is now
+ * become an input. So that our JOIN service is now
  * 
  *   JOIN(+ 1<INT + 1 = 2>INT, + 2<INT + 1 = b)       (5)
  * 
- * When later interpreting this compiled expression, we will evaluate the left sub-expression
+ * When later executing this compiled service, we will evaluate the left child service
  * to obtain values for parameter 2, which will then be copied to input parameter 2 in
- * the right sub-expression.
+ * the right child service.
  * 
  * (If we would have started with the right term, dispatch would not match the service
  * since the variable a does not match the input parameter 2<INT; in this case we
  * would have to postpone this term.)
  * 
  * Continuing with the right term, dispatch again matches (+ 1<INT + 2<INT = 3>INT)
- * yielding the substitution { b -> 3>INT}, and our JOIN expression becomes
+ * yielding the substitution { b -> 3>INT}, and our JOIN service becomes
  * 
  *   JOIN(+ 1<INT + 1 = 2>INT, + 2<INT + 1 = 3>INT)     (6)
  *
- * Which is now complete as both sub-expressions have been resolved. 
+ * Which is now complete as both child services have been resolved. 
  * Backsubstituting to (2) gives the compiled service signature
  * 
  *   number 1<INT plusone 2>INT plustwo 3>INT           (7)
@@ -122,28 +122,28 @@
   * 
   *   PROJECT(JOIN(+ x + 1 = y, + y + 1 = z), {x z})
   * 
-  * The PROJECT(expression, variables) operation requires checking for duplicate
+  * The PROJECT(service, variables) operation requires checking for duplicate
   * tuples (unless the variables are known to be a unique key for ther relation).
-  * This is problematic since we want the expression to yield one tuple at a time.
-  * To enable efficient duplicate removal, the sub-expression must yield tuples in
+  * This is problematic since we want the service to yield one tuple at a time.
+  * To enable efficient duplicate removal, the child service must yield tuples in
   * sorted order w.r.t. {x z}. 
   */
 
 
  /**
-  * Compiling a recursive expression: consider the classic
+  * Compiling a recursive service: consider the classic
   * 
   *   integer n factorial f <-
   *     + m + 1 = n & integer m factorial e & * n * e = f
   * 
   * Together with the fact (integer 0 factorial 1) terminating the recursion.
   * (We will need a precondition ? < n > 0: to ensure unique dispatch, but we
-  * ignore this for now.) When compiling this expression, the sub-expression
+  * ignore this for now.) When compiling this service, the child service
   * (integer m factorial e) will require the service we are currently compiling,
   * so it must be considered by dispatch somehow.
   * 
   * We will compile the query (integer 1<INT factorial f). To construct the first 
-  * JOIN expression we will need two resolved terms. The first term (+ m + 1 = n)
+  * JOIN service we will need two resolved terms. The first term (+ m + 1 = n)
   * matches service (+ 1>INT + 2<INT = 3<INT) and we obtain
   * 
   *   JOIN(+ 2>INT + 1 = $1>INT, ...)
@@ -153,149 +153,344 @@
   * 
   */
 
-static ServiceRecord compileCallExpression(Atom queryForm, Tuple * parameters)
+
+/**
+ * Replace non-variable atoms in the actors tuple with typed input parameters,
+ * and variables with untyped output parameters. The output parameter types
+ * must be discovered by matching against services. The genererated parameter
+ * numbers are always equan to the tuple index + 1.
+ */
+static void atomsToParameters(Tuple const * actors, Tuple * replacedActors)
 {
-	// Iterate over candidate services matching the query form
-	RegistryIterator iterator;
-	RegistryIterate(queryForm, &iterator);
-	bool match = false;
-	ServiceRecord record;
-	// TODO: rewrite the ServiceRegistry to store service indexed by
-	// term forms, not predicate forms; and matching should take with a parameter tuple,
-	// not a query tuple. The translation query tuple -> parameters happens in the compiler.
-/*
-	while(RegistryIteratorHasService(&iterator)) {
-		record = RegistryIteratorGetService(&iterator);
-		// TODO: this should take a Tuple, not a list 
-		if(PermutationMatch(queryForm, record.parameters, parameters, permutation)) {
-			match = true;
-			break;
+	for(index8 i = 0; i < actors->nAtoms; i++) {
+		TypedAtom typedAtom = TupleGetElement(actors, i);
+		if(typedAtom.type == AT_VARIABLE) {
+			Atom parameter = CreateParameter(i + 1, PARAMETER_OUT, 0);
+			TupleSetElement(replacedActors, i, CreateTypedAtom(AT_PARAMETER,parameter));
 		}
-		RegistryIteratorNext(&iterator);
+		else {
+			Atom parameter = CreateParameter(i + 1, PARAMETER_IN, typedAtom.type);
+			TupleSetElement(replacedActors, i, CreateTypedAtom(AT_PARAMETER, parameter));
+		}
 	}
-	RegistryIteratorEnd(&iterator);
-
-	Expression expression = {0};
-	if(match) {
-		expression.type = CALL_EXPRESSION;
-		expression.fields.record = record;
-
-	}
-*/
-	ASSERT(false)
-	return (ServiceRecord) {0};
-}
-
-
-static ServiceRecord compileJoinExpression(Atom const * terms)
-{
-	ASSERT(false);
-	return (ServiceRecord) {0};
 }
 
 
 /**
- * Compile a query (a term) to create a new service.
+ * A term compiles to a PERMUTE service. The term actors must be either
+ * parameters whose numbering defines the caller's parameter order,
+ * or constants. 
  */
-static ServiceRecord compileService(Atom queryTerm)
+Service * compileTerm(Atom termForm, Tuple const * termActors, size8 nArguments, Substitution * clauseSubst)
 {
-	Atom queryTermForm = FormulaGetForm(queryTerm);
-	ASSERT(IsTermForm(queryTermForm))
-	size8 arity = TermFormArity(queryTermForm);
-	Tuple * queryTermActors = CreateTuple(arity);
-	CopyListToTuple(FormulaGetActors(queryTerm), queryTermActors);
-	/**
-	 * TODO: the query actors can be generalized to parameters as:
-	 *   atom -> in parameter, of same type
-	 *   variable -> out parameter (any type)
-	 */
-	Tuple * parameters = CreateTuple(arity);
-	ActorsToParameters(queryTermActors, parameters);
+	// attempt to locate an service existing service
+	size8 termArity = termActors->nAtoms;
+	index8 permutation[termArity];
+	ServiceRecord termServiceRecord;
+	if(!DispatchQuery(termForm, termActors, &termServiceRecord, permutation))
+		return 0;
 
-	// first try locating an existing service
-/*
-	ServiceRecord service = {0};
-	service = compileCallExpression(queryTermForm, queryTermActors);
-	if(service.type == SERVICE_MACHINE)
-		return expression;
-*/
+	// PrintCString("termServiceRecord: ");
+	// PrintServiceRecord(&termServiceRecord);
+	// PrintChar('\n');
+	// Update clause parameters types from service parameters
+	// NOTE: this essentially means to construct a substitution list from the match
+	// and apply it to the full clause.
+	Tuple * serviceParameters = CreateTuple(termArity);
+	CopyListToTuple(termServiceRecord.parameters, serviceParameters);
 
+	// Determine substitution for updating clause parameter types
+	SetupSubstitution(clauseSubst, termActors->nAtoms);
+	for(index8 i = 0; i < termActors->nAtoms; i++) {
+		TypedAtom queryParameter = TupleGetElement(termActors, i);
+		if(queryParameter.type != AT_PARAMETER)
+			continue;
+		TypedAtom serviceParameter = TupleGetElement(serviceParameters, i);
+		ASSERT(serviceParameter.type == AT_PARAMETER)
+		byte queryParameterType = ParameterGetType(queryParameter.atom);
+		if(!queryParameterType) {
+			ASSERT(ParameterGetIO(queryParameter.atom) == PARAMETER_OUT)
+			// update untyped output parameter
+			Atom updatedParameter = CreateParameter(
+				ParameterGetNumber(queryParameter.atom),
+				PARAMETER_OUT,
+				ParameterGetType(serviceParameter.atom)
+			);
+			SubstitutionSetValue(clauseSubst, queryParameter, 
+				CreateTypedAtom(AT_PARAMETER, updatedParameter));
+		}
+	}
+	FreeTuple(serviceParameters);
+	// PrintCString("Substitution: ");
+	// PrintSubstitution(clauseSubst);
+	// PrintChar('\n');
+
+	// Compute argument map
+	index8 argumentMap[termArity];
+	size8 nConstants = 0;
+	for(index8 i = 0; i < termArity; i++) {
+		TypedAtom actor = TupleGetElement(termActors, i);
+		if(actor.type == AT_PARAMETER) {
+			argumentMap[i] = ParameterGetNumber(actor.atom);
+		}
+		else {
+			argumentMap[i] = 0;
+			nConstants++;
+		}
+	}
+	Tuple * constants = 0;
+	if(nConstants > 0) {
+		// Collect constants tuple
+		constants = CreateTuple(nConstants);
+		for(index8 i = 0, k = 0; i < termActors->nAtoms; i++) {
+			TypedAtom actor = TupleGetElement(termActors, i);
+			if(actor.type != AT_PARAMETER) {
+				// actor must be a constant
+				TupleSetElement(constants, k++, actor);
+			}
+		}
+	}
+	// TODO: if we have an identity argument map, we can just return the child service
+	Service * service = CreatePermuteService(
+		nArguments, constants, argumentMap, termServiceRecord.service);
+	if(constants)
+		FreeTuple(constants);
+	return service;
+}
+
+
+/**
+ * Compile a JOIN service from the conjuction obtained by negating
+ * the given clause. We iterate over all negated terms until we find
+ * a terms that resolve to a known service; we then create a JOIN
+ * between this service and the service obtained by recursively
+ * compilin the remaining terms. If there is only 1 term to consider,
+ * we emit its service directly without a JOIN, terminating recursion.
+ */
+
+Service * compileConjunctionRecursive(
+	Atom clauseForm, Tuple * clauseActors, bool * termExcluded, uint8 nTermsExcluded,
+	index8 const * termActorsIndices, size8 nArguments)
+{
+	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
+	Service * service = 0;
+
+	// Iterate over term forms
+	MultisetIterator termFormIterator;
+	MultisetIterate(clauseForm, &termFormIterator);
+	size8 termIndex = 0;
+	while(nTermsExcluded < clauseNTerms && MultisetIteratorNext(&termFormIterator)) {
+		ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
+		Atom termForm = em.element.atom;
+		size8 termArity = TermFormArity(termForm);
+		// negate the term form
+		Atom negatedTermForm = CreateTermForm(
+			TermFormGetPredicateForm(termForm),
+			!TermFormGetSign(termForm)
+		);
+		// iterate over all terms (multiples) of this form
+		Tuple * termActors = CreateTuple(termArity);
+		for(index8 k = 0; k < em.multiple; k++, termIndex++) {
+			if(termExcluded[termIndex])
+				continue;
+			// Extract term actors
+			CopyTuplesAt(clauseActors, termActorsIndices[termIndex], termActors);
+			// PrintCString("Term: ");
+			// PrintFormActorsAsFormula(negatedTermForm, termActors);
+			// PrintChar('\n');
+
+			Substitution clauseSubst;
+			Service * leftService = compileTerm(negatedTermForm, termActors, nArguments, &clauseSubst);
+			// TODO: we need to substitute the clause
+			SubstituteTuple(&clauseSubst, clauseActors, clauseActors);
+			FreeSubstitution(&clauseSubst);
+			// PrintCString("Updated clause: ");
+			// PrintFormActorsAsFormula(clauseForm, clauseActors);
+			// PrintChar('\n');
+
+			termExcluded[termIndex] = true;
+			nTermsExcluded++;
+
+			if(nTermsExcluded < clauseNTerms) {
+				// Recurse on remaining terms
+				Service * rightService = compileConjunctionRecursive(
+					clauseForm, clauseActors, termExcluded, nTermsExcluded,
+					termActorsIndices, nArguments
+				);
+				if(rightService) {
+					service = CreateJoinService(leftService, rightService);
+					ReleaseService(leftService);
+					ReleaseService(rightService);
+				}
+				else {
+					// No match for the right hand service,
+					// cannot compile join service
+					ReleaseService(leftService);
+					service = 0;
+				}
+			}
+			else {
+				// No more terms to consider, return the left child service
+				// NOTE: this ends the recursion. 
+				service = leftService;
+			}
+		}
+		IFactRelease(negatedTermForm);
+		FreeTuple(termActors);
+	}
+
+	MultisetIteratorEnd(&termFormIterator);
+	return service;
+}
+
+
+Service * compileConjunction(
+	Atom clauseForm, Tuple * clauseActors, index8 matchedTermIndex, size8 nArguments)
+{
+	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
+	index8 termActorsIndices[clauseNTerms + 1];
+	ClauseGetTermActorsIndices(clauseForm, termActorsIndices);
+	bool termExcluded[clauseNTerms];
+	for(index8 i = 0; i < clauseNTerms; i++)
+		termExcluded[i] = (i == matchedTermIndex);
+
+	return compileConjunctionRecursive(
+		clauseForm, clauseActors, termExcluded, 1, termActorsIndices, nArguments);
+}
+
+
+/**
+ * Attempt to compile a service with the given form and actors.
+ * The actors tuple must be a series of AT_PARAMETER atoms numbered 1,2, ... 
+ * If compilation succeeds, write the resulting Expression to the given pointer.
+ */
+static Service * compileService(Atom queryTermForm, Tuple * queryActors)
+{
+	size8 termArity = TermFormArity(queryTermForm);
 	/**
-	 * To find rules (clauses) c that contain a given @term-form,
-	 * we first query (clause-form c) & (multiset c element @term_form multiple _)
+	 * To find rules (clauses) c that contains a matching term form,
+	 * we query (multiset c element @term-form multiple _),
+	 * If multiple rules match, we must generate a UNION over
+	 * the resulting services
 	 */
+	Service * joinService = 0;	// for now we consider a single JOIN service
+
 	RelationBTreeIterator btreeIterator;
 	BTree * multisetBTree = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
-
 	Tuple * multisetQueryTuple = CreateTuple(3);
 	MultisetSetTuple(
 		multisetQueryTuple,
 		anonymousVariable,
-		(TypedAtom) {.type = AT_ID, .atom = queryTermForm},
+		CreateTypedAtom(AT_ID, queryTermForm),
 		anonymousVariable
 	);
 	RelationBTreeIterate(multisetBTree, multisetQueryTuple, &btreeIterator);
-	while(RelationBTreeIteratorHasTuple(&btreeIterator)) {
-		// a clause form where the term form occurs
+	while(RelationBTreeIteratorNext(&btreeIterator)) {
+		// Found a multiset where the term form occurs
 		TypedAtom clauseForm = RelationBTreeIteratorGetAtom(
 			&btreeIterator,
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 		);
+		// Ensure the multiset is a clause form
 		if(!IsClauseForm(clauseForm.atom))
 			continue;
+		// The clause must have at least 2 terms
+		uint8 clauseNTerms = ClauseFormNTerms(clauseForm.atom);
+		ASSERT(clauseNTerms >= 2);
 
-		// NOTE: the term form may occur multiple times in the clause form ?
 		size8 multiple = RelationBTreeIteratorGetAtom(
 			&btreeIterator,
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)
 		).atom;
-		ASSERT(multiple == 1)		// for now
 
-		if(clauseForm.type == AT_ID && IsClauseForm(clauseForm.atom)) {
-			PrintClauseForm(clauseForm.atom);
-			PrintChar('\n');
+		// Iterate over all rules (clauses) with this clause form.
+		DictionaryIterator dictIterator;
+		DictionaryIterate(clauseForm.atom, &dictIterator);
+		Tuple * matchedTermActors = CreateTuple(queryActors->nAtoms);
+		Tuple * substClauseActors = CreateTuple(ClauseArity(clauseForm.atom));
+		while(DictionaryIteratorNext(&dictIterator)) {
+			// TODO: we need UNION to handle multiple matching clauses
+			ASSERT(!joinService)
 
-			// We may have multiple rules (clauses) with this clause form,
-			// resulting in a UNION_EXPRESSION
-			DictionaryIterator dictIterator;
-			DictionaryIterate(clauseForm.atom, &dictIterator);
-			while(DictionaryIteratorHasRecord(&dictIterator)) {
-				Tuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
-				PrintTuple(clauseActors);
-				PrintChar('\n');
+			Tuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
+			// PrintCString("Matched rule: ");
+			// PrintFormActorsAsFormula(clauseForm.atom, clauseActors);
+			// PrintChar('\n');
 
-				// extract the actor list for the matching term in the clause
-				// (assuming multiplicity == 1)
-				Tuple * clauseTermActors = CreateTuple(2);
-				ClauseGetTermActors(clauseForm.atom, clauseActors, queryTermForm, clauseTermActors, 1);
-				
-				// unify the matched term with the query term to get a substitution list
-				SubstitutionList querySubstitution;
-				SubstitutionList clauseSubstitution;
-				UnifyTuples(queryTermActors, clauseTermActors, &querySubstitution, &clauseSubstitution);
+			// Iterate over all occurences of the query term in the matched clause
+			// and find one that unifies, if any
+			index8 matchedTermActorsIndex = ClauseGetTermActorsIndex(clauseForm.atom, queryTermForm, 1);
+			bool foundTerm = false;
+			for(index8 k = 1; !foundTerm && (k <= multiple); k++) {
+				// extract actors for the matching term in the clause
+				CopyTuplesAt(clauseActors, matchedTermActorsIndex, matchedTermActors);
+				// unify the query with the matched term
+				Substitution querySubst;
+				Substitution termSubst;
+				foundTerm = UnifyTuples(queryActors, matchedTermActors, &querySubst, &termSubst);
+				if(foundTerm) {
+					SubstituteTuple(&termSubst, clauseActors, substClauseActors);
+					// PrintCString("Unified rule: ");
+					// PrintFormActorsAsFormula(clauseForm.atom, substClauseActors);
+					// PrintChar('\n');
 
-				// apply the substitution to the clause
-				Tuple * substitutedClause;
-				// ...
-
-				// drop the matched term from the clauseForm
-				size8 nTerms = ClauseNTermsTotal(clauseForm.atom) - 1;
-				Atom conjunctionTerms[nTerms];
-				// copy the non-matched terms ...
-
-				// 
-				Expression expr = compileJoinExpression(conjunctionTerms);
-
-				DictionaryIteratorNext(&dictIterator);
+					index8 matchedTermIndex = ClauseGetTermIndex(clauseForm.atom, queryTermForm, 1);
+					joinService = compileConjunction(clauseForm.atom, substClauseActors, matchedTermIndex, termArity);
+					if(joinService) {
+						// Update the query actors from the clause actors
+						// to recover unified parameters
+						// NOTE: when multiple services are matched, the resulting parameter tuple
+						// must be identical across all services (same parameter types)
+						CopyTuplesAt(substClauseActors, matchedTermActorsIndex, queryActors);
+					}
+				}
+				FreeSubstitution(&querySubst);
+				FreeSubstitution(&termSubst);
+				matchedTermActorsIndex += termArity;
 			}
-			DictionaryIteratorEnd(&dictIterator);
 		}
-		RelationBTreeIteratorNext(&btreeIterator);	// TODO: this should change now
+		DictionaryIteratorEnd(&dictIterator);
+		FreeTuple(substClauseActors);
+		FreeTuple(matchedTermActors);
 	}
 	RelationBTreeIteratorEnd(&btreeIterator);
 	FreeTuple(multisetQueryTuple);
 
-	// TODO
-	return expression;
+	return joinService;
 }
 
+
+bool CompileService(Atom queryTerm, ServiceRecord * record)
+{
+	Atom queryTermForm = FormulaGetForm(queryTerm);
+	ASSERT(IsTermForm(queryTermForm))
+	size8 arity = TermFormArity(queryTermForm);
+	Tuple * queryActors = CreateTuple(arity);
+	CopyListToTuple(FormulaGetActors(queryTerm), queryActors);
+
+	// Generalize atoms in the query to parameters
+	// NOTE: the compilation process will determine the type
+	// of any output parameters. 
+	Tuple * serviceParameters = CreateTuple(queryActors->nAtoms);
+	atomsToParameters(queryActors, serviceParameters);
+	FreeTuple(queryActors);
+
+	// PrintCString("Generalized query: ");
+	// PrintFormActorsAsFormula(queryTermForm, serviceParameters);
+	// PrintChar('\n');
+
+	bool success;
+	record->service = compileService(queryTermForm, serviceParameters);
+	if(record->service) {
+		record->parameters = CreateListFromTuple(serviceParameters);
+		record->form = queryTermForm;
+		RegistryAddService(record);
+		IFactRelease(record->parameters);
+		ReleaseService(record->service);
+		success = true;
+	}
+	else
+		success = false;
+	FreeTuple(serviceParameters);
+	return success;
+}

@@ -22,6 +22,7 @@ struct s_Tokenizer {
 	StringBuffer buffer;
 	union {
 		struct {
+			uint8 number;
 			byte io;
 			byte atomType;
 		} parameter;

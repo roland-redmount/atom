@@ -6,11 +6,19 @@
 #include "util/sort.h"
 
 
+/**
+ * These functions give pointers to a tuple's type or atom arrays.
+ * We have two versions for each to maintain const correctness.
+ */
 static byte * tupleTypeArray(Tuple * tuple)
 {
 	return ((byte *) tuple) + sizeof(Tuple);
 }
 
+static byte const * tupleTypeArrayView(Tuple const * tuple)
+{
+	return ((byte const *) tuple) + sizeof(Tuple);
+}
 
 static size32 tupleAtomArrayOffset(size8 tupleNAtoms)
 {
@@ -18,19 +26,28 @@ static size32 tupleAtomArrayOffset(size8 tupleNAtoms)
 	return ((sizeof(Tuple) + tupleNAtoms) + 7) & ~7;
 }
 
-
 static Atom * tupleAtomArray(Tuple * tuple)
 {
 	return (Atom *) (((byte *) tuple) + tupleAtomArrayOffset(tuple->nAtoms));
 }
 
+static Atom const * tupleAtomArrayView(Tuple const * tuple)
+{
+	return (Atom const *) (((byte *) tuple) + tupleAtomArrayOffset(tuple->nAtoms));
+}
 
+
+/**
+ * Size in bytes of a tuple with the given number of atoms.
+ */
 size32 TupleNBytes(size8 tupleNAtoms)
 {
 	return tupleAtomArrayOffset(tupleNAtoms) + tupleNAtoms * sizeof(Atom);
 }
 
-
+/**
+ * Number of atoms in a tuple with the given size in bytes.
+ */
 size8 TupleNAtoms(size32 tupleNBytes)
 {
 	// size must be divisible by 8
@@ -79,7 +96,7 @@ Tuple * CreateTupleFromArray(TypedAtom * typedAtoms, size8 nAtoms)
 }
 
 
-Tuple * CreateTupleFromtuple(Tuple const * otherTuple)
+Tuple * CreateTupleFromTuple(Tuple const * otherTuple)
 {
 	Tuple * tuple = CreateTuple(otherTuple->nAtoms);
 	CopyTuples(otherTuple, tuple);
@@ -108,14 +125,14 @@ void TupleClear(Tuple * tuple)
 
 TypedAtom TupleGetElement(Tuple const * tuple, index8 index)
 {
-	byte type = tupleTypeArray((Tuple *) tuple)[index];
-	Atom atom = tupleAtomArray((Tuple *) tuple)[index];
+	byte type = tupleTypeArrayView(tuple)[index];
+	Atom atom = tupleAtomArrayView(tuple)[index];
 	return CreateTypedAtom(type, atom);
 }
 
 Atom TupleGetAtom(Tuple const * tuple, index8 index)
 {
-	return tupleAtomArray((Tuple *) tuple)[index];
+	return tupleAtomArrayView(tuple)[index];
 }
 
 
@@ -134,7 +151,7 @@ void TupleSetAtom(Tuple * tuple, index8 index, Atom atom)
 
 void TupleGetAtoms(Tuple const * tuple, Atom * atoms)
 {
-	CopyMemory(tupleAtomArray((Tuple*) tuple), atoms, tuple->nAtoms * sizeof(Atom));
+	CopyMemory(tupleAtomArrayView(tuple), atoms, tuple->nAtoms * sizeof(Atom));
 }
 
 
@@ -146,7 +163,7 @@ void TupleSetAtoms(Tuple * tuple, Atom const * atoms)
 
 byte TupleGetAtomType(Tuple const * tuple, index8 index)
 {
-	return tupleTypeArray((Tuple *) tuple)[index];
+	return tupleTypeArrayView(tuple)[index];
 }
 
 
@@ -177,8 +194,8 @@ bool SameTuples(Tuple const * tuple1, Tuple const * tuple2)
 		return false;
 	// ignore the 
 	return CompareMemory(
-		tupleTypeArray((Tuple *) tuple1),
-		tupleTypeArray((Tuple *) tuple2),
+		tupleTypeArrayView(tuple1),
+		tupleTypeArrayView(tuple2),
 		TupleNBytes(tuple1->nAtoms) - sizeof(Tuple)
 	) == 0;
 }
@@ -191,6 +208,32 @@ void CopyTuples(Tuple const * source, Tuple * destination)
 }
 
 
+void CopyTuplesReorder(Tuple const * source, Tuple * destination, index8 const * order)
+{
+	ASSERT(source->nAtoms == destination->nAtoms)
+	for(index8 i = 0; i < source->nAtoms; i++) {
+		ASSERT(order[i] < destination->nAtoms);
+		TupleSetElement(destination, order[i], TupleGetElement(source, i));
+	}
+}
+
+
+void CopyTuplesAt(Tuple const * source, index8 sourceOffset, Tuple * destination)
+{
+	ASSERT(source->nAtoms >= sourceOffset + destination->nAtoms)
+	CopyMemory(
+		tupleTypeArrayView(source) + sourceOffset,
+		tupleTypeArray(destination),
+		destination->nAtoms
+	);
+	CopyMemory(
+		tupleAtomArrayView(source) + sourceOffset,
+		tupleAtomArray(destination),
+		destination->nAtoms * sizeof(Atom)
+	);
+}
+
+
 data64 TupleHash(Tuple const * tuple, data64 initialHash)
 {
 	// hash header, except the protectedAtom field
@@ -199,7 +242,7 @@ data64 TupleHash(Tuple const * tuple, data64 initialHash)
 	data64 hash = DJB2DoubleHashAdd(&headerCopy, sizeof(Tuple), initialHash);
 	// hash the type and atom arrays
 	return DJB2DoubleHashAdd(
-		tupleTypeArray((Tuple *) tuple), TupleNBytes(tuple->nAtoms) - sizeof(Tuple), hash);
+		tupleTypeArrayView(tuple), TupleNBytes(tuple->nAtoms) - sizeof(Tuple), hash);
 }
 
 

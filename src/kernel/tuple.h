@@ -37,7 +37,7 @@ Tuple * CreateTupleFromArray(TypedAtom * typedAtoms, size8 nAtoms);
 /**
  * Create a tuple by copying another tuple
  */
-Tuple * CreateTupleFromtuple(Tuple const * otherTuple);
+Tuple * CreateTupleFromTuple(Tuple const * otherTuple);
 
 /**
  * Initialize a given memory block as a tuple of zero atoms
@@ -78,7 +78,7 @@ void TupleSetAtom(Tuple * tuple, index8 index, Atom atom);
 void TupleGetAtoms(Tuple const * tuple, Atom * atoms);
 
 /**
- * Copy the atoms array into the tuple's atom araray,
+ * Copy the atoms array into the tuple's atom array,
  * while leaving the atom types unchanges.
  */
 void TupleSetAtoms(Tuple * tuple, Atom const* atoms);
@@ -97,6 +97,19 @@ bool TupleIsProtected(Tuple const * tuple);
  * as the source tuple.
  */
 void CopyTuples(Tuple const * source, Tuple * destination);
+
+/**
+ * Copy each element i from the source tuple to element order[i] of the destination tuple.
+ * The order array must have at least as many elements as the source and destination tuples.
+ */
+void CopyTuplesReorder(Tuple const * source, Tuple * destination, index8 const * order);
+
+/**
+ * Copy destination->nAtoms from the source tuple into the destination,
+ * starting at the given offset (0-based index to first element).
+ */
+
+void CopyTuplesAt(Tuple const * source, index8 sourceOffset, Tuple * destination);
 
 /**
  * Compare two tuples for equality.

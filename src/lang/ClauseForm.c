@@ -50,13 +50,13 @@ bool IsClauseForm(Atom form)
 }
 
 
-size8 ClauseNUniqueTerms(Atom clauseForm)
+size8 ClauseFormNTermForms(Atom clauseForm)
 {
 	return MultisetNUniqueElements(clauseForm);
 }
 
 
-size8 ClauseNTermsTotal(Atom clauseForm)
+size8 ClauseFormNTerms(Atom clauseForm)
 {
 	return MultisetSize(clauseForm);
 }

@@ -1,42 +1,36 @@
 /**
- * A service is a procedure that can evaluate queries of a particular
- * form. The service registry maps (form, parameters) signatures to expressions
- * that can be evaluated by the interpreter. Dispatch uses the registry to
- * match services to queries.
- * 
- * TODO: Service records are currently not reference counted, but we should
- * keep track of services that appear in Expression leaves; in this case we
- * must not remove the child service before the "parent". Hence, we do need
- * some form of reference counting.
+ * The service registry maps signatures (form, parameters) to services.
+ * Dispatch uses the registry to match services to queries.
  */
 
 #ifndef SERVICEREGISTRY_H
 #define SERVICEREGISTRY_H
 
-#include "kernel/expression.h"
+#include "kernel/service.h"
 #include "kernel/RelationBTree.h"
 
 
 /**
- * A service is identified by a form and a parameter list.
- * The form must be a term form.
- * The parameters list contains AT_PARAMETER atoms (see Parameter.h),
+ * A service record identified by a signature consisting of a form and a parameter
+ * list. The parameters list contains AT_PARAMETER atoms (see Parameter.h),
  * indicating the io mode (in/out) and atom type for each parameter.
  * 
- * A service s subsumes another service t iff (1) the forms are equal, and
+ * NOTE: the form is currently always a predicate form, which means we
+ * cannot have services for negated predicates like (! odd x). 
+ * It's not clear to me yet if this is a major limitation.
+ * 
+ * A signature s subsumes another signature t iff (1) the forms are equal, and
  * (2) there exists a valid form permutation such that, for each parameter p
  * of s and corresponding parameter q of t: (i) their io modes are equal,
- * or the io mode of p is in/out; and (ii) their datum types are requal, or
+ * or the io mode of p is in/out; and (ii) their datum types are equal, or
  * the datum type of p is AT_NONE. 
  * 
  * TODO: If service s subsumes service t, only one of them may be in the registry. 
  */
 typedef struct s_ServiceRecord {
-	// we store the form and parameters lists of the signature separately
-	// to allow iterating across all services matching a given form
 	Atom form;
 	Atom parameters;
-	Expression expression;
+	Service * service;
 } ServiceRecord;
 
 
@@ -52,7 +46,7 @@ void SetupRegistry(void);
 void FreeRegistry(void);
 
 /**
- * Total number of services registered.
+ * Total number of service records.
  */
 size32 RegistryNServices(void);
 
@@ -103,7 +97,7 @@ void RegistryAddService(ServiceRecord const * record);
 void RegistryAddBTreeService(Atom form, BTree * btree);
 
 /**
- * Remove the given service (key) from the registry.
+ * Remove the given service record (key) from the registry.
  * The removed record is written to the given service record.
  */
 void RegistryRemoveService(ServiceRecord * record);
@@ -118,7 +112,7 @@ typedef struct {
 } RegistryIterator;
 
 /**
- * Create iterator over all services matching the given form.
+ * Create iterator over all service records matching the given form.
  */
 void RegistryIterate(Atom form, RegistryIterator * iterator);
 
@@ -144,7 +138,7 @@ ServiceRecord RegistryFindUntypedService(Atom form);
 /**
  * For debugging
  */
-void PrintService(ServiceRecord const * service);
+void PrintServiceRecord(ServiceRecord const * service);
 
 void RegistryDump(void);
 

@@ -1,33 +1,52 @@
 /**
- * A substitution list is a list of (variable -> atom) pairs
+ * A substitution is a list of (key -> value) atom pairs
  * used for variable substitution, similar to a python dict.
  */
 
-#ifndef SUBSTITUTIONLIST_H
-#define SUBSTITUTIONLIST_H
+#ifndef SUBSTITUTION_H
+#define SUBSTITUTION_H
 
 #include "lang/TypedAtom.h"
 
 
-typedef struct s_SubstitutionList {
-	uint8 nPairs;	// number of substitutions = no. unique variables
-	TypedAtom * variables;
+typedef struct s_Substitution {
+	uint8 nPairs;	// current number of key-value pairs
+	uint8 capacity;
+	TypedAtom * keys;
 	TypedAtom * values;
-} SubstitutionList;
+} Substitution;
 
 
 /**
- * Create a substitution list from the unique variables of a tuple,
- * such that each variable x maps to itself (x -> x)
+ * Setup an empty substitution with capacity = maximum number of key-value pairs.
  */
-void SetupSubstitutionList(Tuple const * tuple, SubstitutionList * subst);
+void SetupSubstitution(Substitution * subst, size8 capacity);
 
-// Find the value corresponding to a given variable
-TypedAtom FindSubstValue(SubstitutionList const * subst, TypedAtom variable);
+/**
+ * Find the value corresponding to a given key
+ */
+TypedAtom SubstitutionFindValue(Substitution const * subst, TypedAtom key);
 
-// Replace a substitution value for a given variable (if it exists)
-void SetSubstValue(SubstitutionList * subst, TypedAtom variable, TypedAtom value); 
+/**
+ * Replace the value for a key, if it exists
+ */
+void SubstitutionSetValue(Substitution * subst, TypedAtom key, TypedAtom value); 
 
-void FreeSubstitutionList(SubstitutionList * subst);
+/**
+ * Substitute values in the source tuple according to the given substitution
+ * and write corresponding values to the destination tuple. Atoms in the source
+ * tuple that are not keys in the substitution will be copied unchanged
+ * to the destination.
+ * The source and destination may be the same to substitute in-place.
+ */
+void SubstituteTuple(Substitution const * subst, Tuple const * source, Tuple * destination);
 
-#endif	// SUBSTITUTIONLIST_H
+/**
+ * Deallocate a substitution
+ */
+void FreeSubstitution(Substitution * subst);
+
+void PrintSubstitution(Substitution * subst);
+
+
+#endif	// SUBSTITUTION_H

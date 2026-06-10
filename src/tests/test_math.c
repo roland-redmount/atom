@@ -1,5 +1,5 @@
 #include "kernel/dispatch.h"
-#include "kernel/expression.h"
+#include "kernel/service.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
@@ -7,30 +7,29 @@
 #include "kernel/tuple.h"
 #include "lang/Formula.h"
 #include "library/math.h"
-#include "parser/PredicateBuilder.h"
+#include "parser/TermBuilder.h"
 #include "testing/testing.h"
 
 
 void testAdd1(void)
 {
-	Atom query = CStringToPredicate("= _ + 2 + 3");
+	Atom query = CStringToTerm("= _ + 2 + 3");
 	Atom actors = FormulaGetActors(query);
 
 	ServiceRecord record;
 	index8 permutation[3];
-	DispatchQuery(query, &record, permutation);
+	ASSERT(DispatchQueryFormula(query, &record, permutation))
 
-	Expression const * expression = &(record.expression);
 	Tuple * arguments = CreateTuple(3);
 	CopyListToTuple(actors, arguments);
 	
-	void * context = ExpressionCreateContext(expression, arguments);
-	ASSERT_TRUE(ExpressionCall(expression, context))
+	void * context = ServiceCreateContext(record.service, arguments);
+	ASSERT_TRUE(ServiceCall(context))
 	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 0), 2 + 3);
 
-	ASSERT_FALSE(ExpressionCall(expression, context))
+	ASSERT_FALSE(ServiceCall(context))
 	
-	ExpressionFreeContext(expression, context);
+	ServiceFreeContext(context);
 	FreeTuple(arguments);
 
 	IFactRelease(query);
@@ -39,24 +38,23 @@ void testAdd1(void)
 
 void testAdd2(void)
 {
-	Atom query = CStringToPredicate("= 7 + 4 + _");
+	Atom query = CStringToTerm("= 7 + 4 + _");
 	Atom actors = FormulaGetActors(query);
 
 	ServiceRecord record;
 	index8 permutation[3];
-	DispatchQuery(query, &record, permutation);
+	ASSERT(DispatchQueryFormula(query, &record, permutation))
 
-	Expression const * expression = &(record.expression);
 	Tuple * arguments = CreateTuple(3);
 	CopyListToTuple(actors, arguments);
 	
-	void * context = ExpressionCreateContext(expression, arguments);
-	ASSERT_TRUE(ExpressionCall(expression, context))
+	void * context = ServiceCreateContext(record.service, arguments);
+	ASSERT_TRUE(ServiceCall(context))
 	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 2), 7 - 4);
 
-	ASSERT_FALSE(ExpressionCall(expression, context))
+	ASSERT_FALSE(ServiceCall(context))
 	
-	ExpressionFreeContext(expression, context);
+	ServiceFreeContext(context);
 	FreeTuple(arguments);
 
 	IFactRelease(query);

@@ -3,6 +3,7 @@
  */
 
 #include "btree/btree.h"
+#include "kernel/service.h"
 #include "kernel/ifact.h"
 #include "kernel/RelationBTree.h"
 #include "kernel/tuple.h"
@@ -312,33 +313,33 @@ void RelationBTreeDump(BTree * tree)
 	PrintF("%u tuples\n", nTuples);
 }
 
-/**
+/***************************************************************************************************
  * Stubs for using the B-tree service provider.
- * The service context consists of a RelationBTreeIterator * pointer.
+ * NOTE: this could go to a separate compilation unit
+ * 
+ * The service context data holds a RelationBTreeIterator.
  */
-static void serviceSetupContext(void * context, void * providerData, Tuple * arguments)
+static void serviceSetupContext(ServiceContext * context)
 {
-	BTree * btree = (BTree *) providerData;
-	RelationBTreeIterator * iterator = context;
-	RelationBTreeIterate(btree, arguments, iterator);
+	BTree * btree = (BTree *) context->service->impl.machine.providerData;
+	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
+	RelationBTreeIterate(btree, context->arguments, iterator);
 }
 
 
-static bool serviceCall(void * context, Tuple * arguments)
+static bool serviceCall(ServiceContext * context)
 {
-	RelationBTreeIterator * iterator = context;
+	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
 	bool hasTuple = RelationBTreeIteratorNext(iterator);
-	if(hasTuple) {
-		Tuple const * tuple = RelationBTreeIteratorPeekTuple(iterator);
-		CopyTuples(tuple, arguments);
-	}
+	if(hasTuple)
+		CopyTuples(RelationBTreeIteratorPeekTuple(iterator), context->arguments);
 	return hasTuple;
 }
 
 
-static void serviceFinalizeContext(void * context)
+static void serviceFinalizeContext(ServiceContext * context)
 {
-	RelationBTreeIterator * iterator = context;
+	RelationBTreeIterator * iterator = (RelationBTreeIterator *) context->data;
 	RelationBTreeIteratorEnd(iterator);
 }
 
@@ -372,7 +373,8 @@ void agentTeardown(void * agentData)
 MachineServiceProvider bTreeServiceProvider = {
 	.setupContext = &serviceSetupContext,
 	.call = &serviceCall,
-	.freeContext = &serviceFinalizeContext,
+	.finalizeContext = &serviceFinalizeContext,
+	.contextSize = sizeof(RelationBTreeIterator)
 };
 
 /**

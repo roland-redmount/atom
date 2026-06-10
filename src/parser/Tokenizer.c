@@ -84,13 +84,6 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 
 		case '@':
 			tokenizer->type = TOKEN_PARAMETER;
-			tokenizer->data.parameter.io = PARAMETER_IN;
-			tokenizer->isValid = true;
-			return true;
-
-		case '$':
-			tokenizer->type = TOKEN_PARAMETER;
-			tokenizer->data.parameter.io = PARAMETER_OUT;
 			tokenizer->isValid = true;
 			return true;
 
@@ -182,6 +175,34 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		return false;
 
 	case TOKEN_PARAMETER:
+		if(!tokenizer->data.parameter.number) {
+			// parse parameter number (positive integer)
+			if(IsDigitChar(c)) {
+				StringBufferPush(&(tokenizer->buffer), c);
+				return true;
+			}
+			else {
+				tokenizer->data.parameter.number = StringToInt64(
+					tokenizer->buffer.buffer,
+					tokenizer->buffer.stringLength
+				);
+				StringBufferReset(&tokenizer->buffer);
+				// continue with current character
+			}
+		}
+		if(!tokenizer->data.parameter.io) {
+			// parse io type
+			if(c == '<') {
+				tokenizer->data.parameter.io = PARAMETER_IN;
+				return true;
+			}
+			else if(c == '>') {
+				tokenizer->data.parameter.io = PARAMETER_OUT;
+				return true;
+			}
+			else
+				return false;	// we don't allow PARAMETER_IN_OUT at this time
+		}
 		// parse atom type name
 		// TODO: here we must ensure that the string
 		// is always a prefix of valid type name.
@@ -282,6 +303,7 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 		token.typedAtom = CreateTypedAtom(
 			AT_PARAMETER,
 			CreateParameter(
+				tokenizer->data.parameter.number,
 				tokenizer->data.parameter.io,
 				tokenizer->data.parameter.atomType
 			)
