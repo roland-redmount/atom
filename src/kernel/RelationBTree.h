@@ -84,6 +84,8 @@ TypedAtom RelationBTreeQuerySingleAtom(BTree * tree, Tuple const * queryTuple, i
 /**
  * Add a single tuple to the relation, acquiring each atom in the tuple.
  * Does not add entries to lookup; see AssertFact()
+ * 
+ * NOTE: Should this really be acquiring atoms? Or move that to AssertFact() ?
  */
 byte RelationBTreeAddTuple(BTree * tree, Tuple const * tuple);
 

@@ -17,10 +17,60 @@ void testMachineService(void)
 	// TODO
 }
 
-
+/**
+ * This tests using a PERMUTE service to marginalize a relation
+ * (position list element) to (list element). This alone does not
+ * remove duplicates and so does not provide a valid relation;
+ * wrapping a DEDUPLICATE services around PERMUTE yields unique tuples.
+ */
 void testPermuteService(void)
 {
-	// TODO
+	// The service (position list element)
+	ServiceRecord const * listServiceRecord = RegistryGetCoreServiceRecord(FORM_LIST_POSITION_ELEMENT);
+	// Reorder (position _ list l element s) to (list l element s),
+	// providing the variable _ as a "constant"
+	Tuple * constants = CreateTupleFromArray((TypedAtom[]) {anonymousVariable}, 1);
+	Service * permuteService = CreatePermuteService(
+		2, constants, (index8[]) {0, 1, 2}, listServiceRecord->service);
+	FreeTuple(constants);
+
+	// Arguments tuple (@stringList _ )
+	TypedAtom string = CreateTypedAtom(AT_ID, CreateStringFromCString("alibaba"));
+	Tuple * arguments = CreateTupleFromArray(
+		(TypedAtom[]) {string, anonymousVariable},
+		2
+	);
+
+	// Call the PERMUTE service
+	// This enumerates all elements of the string
+	ServiceContext * context = ServiceCreateContext(permuteService, arguments);
+	size32 nElements = 0;
+	while(ServiceCall(context)) {
+		nElements++;
+	}
+	ASSERT_INT32_EQUAL(nElements, 7)
+	ServiceFreeContext(context);
+	FreeTuple(arguments);
+	
+	// Create a DEDUPLICATE service from the PERMUTE service
+	Service * deduplicateService = CreateDeduplicateService(permuteService);
+	// Call the service
+	// This yields the unique letters only ("abil")
+	arguments = CreateTupleFromArray((TypedAtom[]) {string, anonymousVariable},	2);
+	context = ServiceCreateContext(deduplicateService, arguments);
+	nElements = 0;
+	while(ServiceCall(context)) {
+		PrintTuple(arguments);
+		PrintChar('\n');
+		nElements++;
+	}
+	ASSERT_INT32_EQUAL(nElements, 4)
+	ServiceFreeContext(context);
+	FreeTuple(arguments);
+
+	ReleaseTypedAtom(string);
+	ReleaseService(deduplicateService);
+	ReleaseService(permuteService);
 }
 
 
@@ -53,7 +103,7 @@ void testJoinService1(void)
 	// PrintTuple(arguments);
 	// PrintChar('\n');
 	// Setup execution context
-	void * context = ServiceCreateContext(joinService, arguments);
+	ServiceContext * context = ServiceCreateContext(joinService, arguments);
 
 	// Call the service.
 	// This should yield 3 tuples corresponding to the 3 roles of (list position element),
@@ -77,7 +127,7 @@ void testJoinService1(void)
  * (position p list l element s) & (position q list s element e)
  * with arguments (l p s q e)
  */
-void testJoinExpression2(void)
+void testJoinService2(void)
 {
 	ServiceRecord const * listServiceRecord = RegistryGetCoreServiceRecord(FORM_LIST_POSITION_ELEMENT);
 	
@@ -103,7 +153,7 @@ void testJoinExpression2(void)
 	// PrintChar('\n');
 
 	// Setup execution context
-	void * context = ServiceCreateContext(joinService, arguments);
+	ServiceContext * context = ServiceCreateContext(joinService, arguments);
 	// Call the join service
 	size32 nElements = 0;
 	while(ServiceCall(context)) {
@@ -121,12 +171,24 @@ void testJoinExpression2(void)
 }
 
 
+/**
+ * Test evaluating a PROJECT service
+ * (+ x + 2 + z)
+ * projected onto arguments (x, z)
+ */
+void testProjectService(void)
+{
+	// TODO
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
 
+	ExecuteTest(testPermuteService);
 	ExecuteTest(testJoinService1);
-	ExecuteTest(testJoinExpression2);
+	ExecuteTest(testJoinService2);
 
 	KernelShutdown();
 

@@ -52,14 +52,40 @@ typedef struct s_MachineServiceProvider {
  * 
  * A service is evaluated stepwise, at each call yielding one tuple,
  * similar to a co-routine.
+ * 
+ * TODO: services should specify how their tuples are ordered when enumerating.
+ * Currently, B-Tree services order tuples lexiographically, and machine services
+ * do not enforce any particular order. It might be a good idea to provide an
+ * array of column numbers specifying the ordering, so that e.g. a relation
+ * with form (a b c) might specify ordering = {2, 1, 3} to order lexiographically
+ * w.r.t columns (b a c). Knowing the tuple order helps optimize PROJECT.
+ * 
  */
  enum ServiceType {
-	SERVICE_PERMUTE = 1,	// permute the arguments of another service
-							// NOTE: this is a special case of PROJECT
-	SERVICE_JOIN = 2,		// inner join between two "child" services
-	SERVICE_UNION = 3,		// union of tuple sets of child services
-	SERVICE_PROJECT = 4,	// drop arguments and remove duplicates
-	SERVICE_MACHINE = 5,	// call a machine code function
+	/**
+	 * PERMUTE calls a child service with its arguments reordered,
+	 * and may optionally include constants. This service may yield duplicate
+	 * tuples if the reordering drops one or more arguments from the child service.
+	 * 
+	 * TODO: this should be renamed -- not necessarily a permutation
+	 */
+	SERVICE_PERMUTE = 1,
+	/**
+	 * inner join between two "child" services
+	 */
+	SERVICE_JOIN = 2,
+	/**
+	 * TODO: this should give a union of tuple sets of child services
+	 */
+	SERVICE_UNION = 3,
+	/**
+	 * Remove duplicates
+	 */
+	SERVICE_DEDUPLICATE = 4,
+	/**
+	 * Call a machine code function
+	 */
+	SERVICE_MACHINE = 5,
 };
 
 typedef struct s_Service Service;
@@ -88,6 +114,10 @@ struct s_Service {
 			Service * left;
 			Service * right; 
 		} join;
+		// for SERVICE_DEDUPLICATE
+		struct {
+			Service * childService;
+		} deduplicate;
 		// for SERVICE_MACHINE
 		struct {
 			MachineServiceProvider * provider;
@@ -118,6 +148,11 @@ Service * CreateMachineService(size8 nArguments, MachineServiceProvider * provid
  * The two child services must take the same arguments, in the same order.
  */
 Service * CreateJoinService(Service * leftChild, Service * rightChild);
+
+/**
+ * Create a DEDUPLICATE service
+ */
+Service * CreateDeduplicateService(Service * childService);
 
 /**
  * Acquire a reference to a service.
