@@ -44,8 +44,8 @@ void testAddDropTable(void)
 
 	ServiceRecord record = RegistryFindUntypedService(fixture.form);
 	ASSERT(record.form)
-	ASSERT(record.service.type == SERVICE_MACHINE)
-	BTree * foundTable = (BTree *) record.service.value.machineService.providerData;
+	ASSERT(record.service->type == SERVICE_MACHINE)
+	BTree * foundTable = (BTree *) record.service->impl.machine.providerData;
 	ASSERT_PTR_NOT_EQUAL(foundTable, 0)
 	ASSERT_PTR_EQUAL(foundTable, createdTable)
 
@@ -63,7 +63,7 @@ void testCallBTreeService(void)
 	// (multiset @list-predicate-form element _ position _)
 	ServiceRecord const * record = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
 	ASSERT(record)
-	ASSERT(record->service.type == SERVICE_MACHINE)
+	ASSERT(record->service->type == SERVICE_MACHINE)
 
 	Tuple * arguments = CreateTuple(3);
 	MultisetSetTuple(arguments,
@@ -71,7 +71,7 @@ void testCallBTreeService(void)
 		anonymousVariable,
 		anonymousVariable
 	);
-	void * context = ServiceCreateContext(&record->service, arguments);
+	void * context = ServiceCreateContext(record->service, arguments);
 
 	// this should yields 3 elements corresponding to the 3 roles of (list position element)
 	size32 nElements = 0;

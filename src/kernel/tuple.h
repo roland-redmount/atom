@@ -109,7 +109,7 @@ void CopyTuplesReorder(Tuple const * source, Tuple * destination, index8 const *
  * starting at the given offset (0-based index to first element).
  */
 
-void CopyTuplesOffset(Tuple const * source, index8 sourceOffset, Tuple * destination);
+void CopyTuplesAt(Tuple const * source, index8 sourceOffset, Tuple * destination);
 
 /**
  * Compare two tuples for equality.

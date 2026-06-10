@@ -74,6 +74,11 @@ void DumpAllocatedBlocks(void);
 bool AllocatorIsEmpty(void);
 
 #ifdef DEBUG_ALLOCATE
+/**
+ * Call with status = true to activate logging, false to inactivate.
+ */
+void SetAllocationLogging(bool status);
+
 void DumpAllocateLog(void);
 #endif
 

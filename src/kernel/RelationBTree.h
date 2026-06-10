@@ -10,7 +10,7 @@
 
 #include "btree/btree.h"
 #include "kernel/tuple.h"
-#include "kernel/machineservice.h"
+#include "kernel/service.h"
 
 // TODO: replace this with a service provider registry ...
 extern MachineServiceProvider bTreeServiceProvider;
@@ -109,8 +109,9 @@ size32 RelationBTreeRemoveTuples(BTree * tree, Tuple const * queryTuple, uint8 m
 
 /**
  * Create a machine service record from a B-tree for use with ServiceRegistry
+ * TODO:
  */
-MachineService RelationBTreeCreateRecord(BTree * btree);
+// Service * RelationBTreeCreateRecord(BTree * btree);
 
 /**
  * Print out an entire relation table, for debugging

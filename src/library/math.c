@@ -8,27 +8,28 @@
 
 
 /**
- * The service (= z$INT + x@INT + y@INT)
+ * The service (= z>INT + x<INT + y<INT)
  */
 static void add1(ServiceContext * context)
 {
 	// TODO: how to index into the tuple reliably?
 	// Currently we are hardcoding canonical positions of the x, y, z roles
-	int64 x = (int64) ServiceContextReadArgument(context, 1).atom;
-	int64 y = (int64) ServiceContextReadArgument(context, 2).atom;;
-	ServiceContextWriteArgument(context, 0, CreateTypedAtom(AT_INT, x + y));
+	int64 x = (int64) TupleGetAtom(context->arguments, 1);
+	int64 y = (int64) TupleGetAtom(context->arguments, 2);
+	// TODO: typed services really should not have to write argument types ...
+	TupleSetElement(context->arguments, 0, CreateTypedAtom(AT_INT, x + y));
 }
 
 /**
- * The service (= z@INT + x@INT + y$INT)
+ * The service (= z<INT + x<INT + y>INT)
  * This implements subtraction by solving the equation
  * z = x + y  <->  y = z - x
  */
 static void add2(ServiceContext * context)
 {
-	int64 x = (int64) ServiceContextReadArgument(context, 1).atom;
-	int64 z = (int64) ServiceContextReadArgument(context, 0).atom;
-	ServiceContextWriteArgument(context, 2, CreateTypedAtom(AT_INT, z - x));
+	int64 x = (int64) TupleGetAtom(context->arguments, 1);
+	int64 z = (int64) TupleGetAtom(context->arguments, 0);
+	TupleSetElement(context->arguments, 2, CreateTypedAtom(AT_INT, z - x));
 }
 
 /**
@@ -69,10 +70,10 @@ typedef struct s_MathContext {
 /**
  * Stubs for the service provider
  */
-static void serviceSetupContext(ServiceContext * context, void * providerData)
+static void serviceSetupContext(ServiceContext * context)
 {
 	MathContext * mathContext = (MathContext *) &context->data;
-	index32 functionIndex = (data64) providerData;
+	index32 functionIndex = (data64) context->service->impl.machine.providerData;
 	mathContext->function = functionTable[functionIndex];
 	mathContext->hasBeenCalled = false;
 }
@@ -110,16 +111,13 @@ static void setupAdd1(void)
 	// PrintChar('\n');
 	// PredicateRoleIndex(form, roles[j]);
 
-	MachineService service = {
-		.provider = &mathServiceProvider,
-		.providerData = ADD1_INDEX,
-	};
 	ServiceRecord record = {
 		.form = FormulaGetForm(formula),
 		.parameters = FormulaGetActors(formula),
+		.service = CreateMachineService(3, &mathServiceProvider, (void *) ADD1_INDEX)
 	};
-	SetupMachineService(&record.service, 3, 0, &service);
 	RegistryAddService(&record);
+	ReleaseService(record.service);
 	mathServices[ADD1_INDEX] = record;
 	IFactRelease(formula);
 }
@@ -128,17 +126,13 @@ static void setupAdd1(void)
 static void setupAdd2(void)
 {
 	Atom formula = CStringToPredicate("= @1<INT + @2<INT + @3>INT");
-
-	MachineService service = {
-		.provider = &mathServiceProvider,
-		.providerData = (void *) ADD2_INDEX,
-	};
 	ServiceRecord record = {
 		.form = FormulaGetForm(formula),
 		.parameters = FormulaGetActors(formula),
+		.service = CreateMachineService(3, &mathServiceProvider, (void *) ADD2_INDEX)
 	};
-	SetupMachineService(&record.service, 3, 0, &service);
 	RegistryAddService(&record);
+	ReleaseService(record.service);
 	mathServices[ADD2_INDEX] = record;
 	IFactRelease(formula);
 }

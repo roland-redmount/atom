@@ -317,20 +317,13 @@ void RelationBTreeDump(BTree * tree)
  * Stubs for using the B-tree service provider.
  * NOTE: this could go to a separate compilation unit
  * 
- * The service context consists of a RelationBTreeIterator * pointer.
+ * The service context data holds a RelationBTreeIterator.
  */
-static void serviceSetupContext(ServiceContext * context, void * providerData)
+static void serviceSetupContext(ServiceContext * context)
 {
-	BTree * btree = (BTree *) providerData;
+	BTree * btree = (BTree *) context->service->impl.machine.providerData;
 	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
-	// Reorder arguments
-	Tuple * query = CreateTuple(context->service->dimensions.nArguments);
-	for(index8 i = 0; i < query->nAtoms; i++) {
-		TupleSetElement(query, i,
-			TupleGetElement(context->arguments, context->service->argumentMap[i]));
-	}
-	RelationBTreeIterate(btree, query, iterator);
-	FreeTuple(query);
+	RelationBTreeIterate(btree, context->arguments, iterator);
 }
 
 
@@ -338,13 +331,8 @@ static bool serviceCall(ServiceContext * context)
 {
 	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
 	bool hasTuple = RelationBTreeIteratorNext(iterator);
-	if(hasTuple) {
-		Tuple const * tuple = RelationBTreeIteratorPeekTuple(iterator);
-		for(index8 i = 0; i < tuple->nAtoms; i++) {
-			TupleSetElement(context->arguments, context->service->argumentMap[i],
-				TupleGetElement(tuple, i));
-		}
-	}
+	if(hasTuple)
+		CopyTuples(RelationBTreeIteratorPeekTuple(iterator), context->arguments);
 	return hasTuple;
 }
 
@@ -386,6 +374,7 @@ MachineServiceProvider bTreeServiceProvider = {
 	.setupContext = &serviceSetupContext,
 	.call = &serviceCall,
 	.finalizeContext = &serviceFinalizeContext,
+	.contextSize = sizeof(RelationBTreeIterator)
 };
 
 /**

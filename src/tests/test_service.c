@@ -12,68 +12,48 @@
 #include "testing/testing.h"
 
 
-void testMachineExpression(void)
+void testMachineService(void)
 {
-	/**
-	 * A EXPRESSION_MACHINE for the (+ @INT + @INT = $INT) service
-	 */
 
-	Atom query = CStringToPredicate("+ 3 + _ = 7");
-	ServiceRecord record;
-	index8 argumentMap[3];
-	ASSERT(DispatchQueryFormula(query, &record, argumentMap))
+}
 
-	// TODO
 
-	IFactRelease(query);	
+void testPermuteService(void)
+{
+
 }
 
 
 /**
- * Test creating and executing the JOIN service
+ * Test creating and executing a JOIN service
  * (multiple m element e multiset p) & (predicate-form p)
- * with arguments (p, e, m)
+ * with parent arguments (m, e, p)
  */
-void testJoinExpression1(void)
+void testJoinService1(void)
 {
+	// Left child services from the registry, no argument permutation
 	ServiceRecord const * leftServiceRecord = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
-	// Left service: (multiple m element e multiset p)
-	// This is the same machine service found in the registry,
-	// but with a different argument map
-	Service leftService;
-	SetupMachineService(
-		&leftService, 3,
-		(index8[]) {2, 1, 0},
-		&leftServiceRecord->service.value.machineService
-	);
-
-	// Right service: (predicate-form p)
-	// NOTE: this should be identical to the registry service
+	// Right service needs a PERMUTE since it takes 1 argument only
 	ServiceRecord const * rightServiceRecord = RegistryGetCoreServiceRecord(FORM_PREDICATE_FORM);
-	Service rightService;
-	SetupMachineService(
-		&rightService, 1,
-		(index8[]) {0},
-		&rightServiceRecord->service.value.machineService
-	);
+	Service * rightService = CreatePermuteService(3, 0, (index8[]) {3}, rightServiceRecord->service);
 	
-	// Create the JOIN service, with default argument map
-	Service joinService;
-	SetupJoinService(&joinService, 3, 0,	&leftService,&rightService);
+	// Create the JOIN service
+	Service * joinService = CreateJoinService(leftServiceRecord->service, rightService);
+	ReleaseService(rightService);
 
-	// Evaluate with arguments (@multiset-form, _ , _)
+	// Evaluate with arguments (@list-form, _ , _)
 	Tuple * arguments = CreateTupleFromArray(
 		(TypedAtom[]) {
-			CreateTypedAtom(AT_ID, GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT)),
 			anonymousVariable,
-			anonymousVariable
+			anonymousVariable,
+			CreateTypedAtom(AT_ID, GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT)),
 		},
 		3
 	);
-	// PrintTuple(arguments);
-	// PrintChar('\n');
+	PrintTuple(arguments);
+	PrintChar('\n');
 	// Setup execution context
-	void * context = ServiceCreateContext(&joinService, arguments);
+	void * context = ServiceCreateContext(joinService, arguments);
 
 	// Call the service.
 	// This should yield 3 tuples corresponding to the 3 roles of (list position element),
@@ -87,6 +67,8 @@ void testJoinExpression1(void)
 	ASSERT_INT32_EQUAL(nElements, 3);
 	ServiceFreeContext(context);
 	FreeTuple(arguments);
+	// This frees the child services
+	ReleaseService(joinService);
 }
 
 
@@ -101,22 +83,13 @@ void testJoinExpression2(void)
 	
 	// The left and right child services call the same machine service,
 	// but with different argument maps.
-	Service leftService;
-	SetupMachineService(
-		&leftService, 3,
-		(index8[]) {1, 0, 2},
-		&listServiceRecord->service.value.machineService
-	);
-	Service rightService;
-	SetupMachineService(
-		&rightService, 3,
-		(index8[]) {3, 2, 4},
-		&listServiceRecord->service.value.machineService
-	);
+	Service * leftService = CreatePermuteService(5, 0, (index8[]) {2, 1, 3}, listServiceRecord->service);
+	Service * rightService = CreatePermuteService(5, 0, (index8[]) {4, 3, 5}, listServiceRecord->service);
 
 	// Create the join service
-	Service joinService;
-	SetupJoinService(&joinService, 5, 0, &leftService, &rightService);
+	Service * joinService = CreateJoinService(leftService, rightService);
+	ReleaseService(leftService);
+	ReleaseService(rightService);
 
 	// Arguments tuple (@stringList _  _ _ _)
 	TypedAtom string1 = CreateTypedAtom(AT_ID, CreateStringFromCString("foo"));
@@ -130,7 +103,7 @@ void testJoinExpression2(void)
 	PrintChar('\n');
 
 	// Setup execution context
-	void * context = ServiceCreateContext(&joinService, arguments);
+	void * context = ServiceCreateContext(joinService, arguments);
 	// Call the join service
 	size32 nElements = 0;
 	while(ServiceCall(context)) {
@@ -144,6 +117,7 @@ void testJoinExpression2(void)
 	ReleaseTypedAtom(stringList);
 	ReleaseTypedAtom(string1);
 	ReleaseTypedAtom(string2);
+	ReleaseService(joinService);
 }
 
 
@@ -152,7 +126,7 @@ int main(int argc, char * argv[])
 	KernelInitialize();
 
 	// ExecuteTest(testMachineExpression);
-	ExecuteTest(testJoinExpression1);
+	ExecuteTest(testJoinService1);
 	ExecuteTest(testJoinExpression2);
 
 	KernelShutdown();

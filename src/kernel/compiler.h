@@ -6,8 +6,8 @@
 #include "kernel/ServiceRegistry.h"
 
 /**
- * Compile a query and write the generated service record
- * into the given recod. Returns true if compilation succeeded.
+ * Attempt to compile a query. If successful, registers the generated service,
+ * writes to the given ServiceRedord, and returns true.
  */
 bool CompileService(Atom queryTerm, ServiceRecord * record);
 

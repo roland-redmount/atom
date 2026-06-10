@@ -20,11 +20,10 @@ void testAdd1(void)
 	index8 permutation[3];
 	ASSERT(DispatchQueryFormula(query, &record, permutation))
 
-	Service const * service = &(record.service);
 	Tuple * arguments = CreateTuple(3);
 	CopyListToTuple(actors, arguments);
 	
-	void * context = ServiceCreateContext(service, arguments);
+	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
 	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 0), 2 + 3);
 
@@ -46,11 +45,10 @@ void testAdd2(void)
 	index8 permutation[3];
 	ASSERT(DispatchQueryFormula(query, &record, permutation))
 
-	Service const * service = &(record.service);
 	Tuple * arguments = CreateTuple(3);
 	CopyListToTuple(actors, arguments);
 	
-	void * context = ServiceCreateContext(service, arguments);
+	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
 	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 2), 7 - 4);
 

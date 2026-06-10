@@ -14,23 +14,23 @@
  */
 void testDispatchToService(void)
 {
-	ServiceRecord service;
+	ServiceRecord record;
 	Atom query;
 	
 	// this query matches with the identity permutation
 	query = CStringToTerm("+ 3 + 4 = _");
 	index8 permutation[3];
-	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	ASSERT_UINT32_EQUAL(service.service.type, SERVICE_MACHINE)
+	ASSERT_TRUE(DispatchQueryFormula(query, &record, permutation))
+	ASSERT_UINT32_EQUAL(record.service->type, SERVICE_MACHINE)
 	IFactRelease(query);
 
 	// one the following two queries requires form permutation to match
 	query = CStringToTerm("+ 3 + _ = 7");
-	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
+	ASSERT_TRUE(DispatchQueryFormula(query, &record, permutation))
 	IFactRelease(query);
 
 	query = CStringToTerm("+ _ + 3 = 7");
-	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
+	ASSERT_TRUE(DispatchQueryFormula(query, &record, permutation))
 	IFactRelease(query);
 }
 

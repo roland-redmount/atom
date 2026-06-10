@@ -218,7 +218,7 @@ void CopyTuplesReorder(Tuple const * source, Tuple * destination, index8 const *
 }
 
 
-void CopyTuplesOffset(Tuple const * source, index8 sourceOffset, Tuple * destination)
+void CopyTuplesAt(Tuple const * source, index8 sourceOffset, Tuple * destination)
 {
 	ASSERT(source->nAtoms >= sourceOffset + destination->nAtoms)
 	CopyMemory(

@@ -2,7 +2,8 @@
  * Library of machine services for basic math functions
  */
 
-#include "kernel/machineservice.h"
+#include "kernel/service.h"
+
 
 // TODO: replace this with a service provider registry ...
 extern MachineServiceProvider mathServiceProvider;

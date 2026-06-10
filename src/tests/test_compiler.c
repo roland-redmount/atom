@@ -11,9 +11,49 @@
 #include "testing/testing.h"
 
 
-void testCompile1(void)
+void testCompilePermute1(void)
 {
-	// Rule:  + z - x = y  <-  + x + y = z
+	// This rule compiles to a PERMUTE service with a constant 2
+	// number x addtwo y <- + x + 2 = y
+	Atom rule = CStringToClause("number _x addtwo _y | ! + _x + 2 = _y");
+	DictionaryAddClause(rule);
+	
+	Atom queryTerm = CStringToTerm("number 3 addtwo _z");
+	PrintCString("queryTerm = ");
+	PrintFormula(queryTerm);
+	PrintChar('\n');
+
+	ServiceRecord record;
+	ASSERT_TRUE(CompileService(queryTerm, &record))
+	PrintCString("Service record: ");
+	PrintServiceRecord(&record);
+	PrintChar('\n');
+/*
+	// Call the service
+	// this should yields 3 elements corresponding to the 3 roles of (list position element)
+	Tuple * arguments = CreateTuple(2);
+	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
+	void * context = ServiceCreateContext(record.service, arguments);
+	size32 nElements = 0;
+	while(ServiceCall(context)) {
+		PrintTuple(arguments);
+		PrintChar('\n');
+		nElements++;
+	}
+	ServiceFreeContext(context);
+	FreeTuple(arguments);
+*/
+	RegistryRemoveService(&record);
+	IFactRelease(queryTerm);
+	DictionaryRemoveClause(rule);
+	IFactRelease(rule);
+}
+
+
+void testCompilePermute2(void)
+{
+	// This rule compiles to a PERMUTE service with no constants
+	// + z - x = y  <-  + x + y = z
 	Atom rule = CStringToClause("+ _z - _x = _y | ! + _x + _y = _z");
 	DictionaryAddClause(rule);
 	
@@ -33,7 +73,7 @@ void testCompile1(void)
 	// this should yields 3 elements corresponding to the 3 roles of (list position element)
 	Tuple * arguments = CreateTuple(3);
 	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
-	void * context = ServiceCreateContext(&record.service, arguments);
+	void * context = ServiceCreateContext(record.service, arguments);
 	size32 nElements = 0;
 	while(ServiceCall(context)) {
 		PrintTuple(arguments);
@@ -50,9 +90,10 @@ void testCompile1(void)
 }
 
 
-void testCompile2(void)
+void testCompileJoin1(void)
 {
-	// Rule: first x second y third z  <-  + x + 1 = y & + y + 1 = z
+	// This rule compiles to a JOIN service
+	// first x second y third z  <-  + x + 1 = y & + y + 1 = z
 	Atom rule = CStringToClause(
 		"first _x second _y third _z | ! + _x + 1 = _y | ! + _y + 1 = _z");
 	DictionaryAddClause(rule);
@@ -62,9 +103,21 @@ void testCompile2(void)
 	PrintFormula(queryTerm);
 	PrintChar('\n');
 
-	// This will yield a JOIN service
 	ServiceRecord record;
 	ASSERT_TRUE(CompileService(queryTerm, &record))
+
+	// Call the service
+	Tuple * arguments = CreateTuple(3);
+	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
+	void * context = ServiceCreateContext(record.service, arguments);
+	size32 nElements = 0;
+	while(ServiceCall(context)) {
+		PrintTuple(arguments);
+		PrintChar('\n');
+		nElements++;
+	}
+	ServiceFreeContext(context);
+	FreeTuple(arguments);
 
 	RegistryRemoveService(&record);
 	IFactRelease(queryTerm);
@@ -73,14 +126,14 @@ void testCompile2(void)
 }
 
 
-
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
 	MathSetup();
 
-	ExecuteTest(testCompile1);
-	ExecuteTest(testCompile2);
+	ExecuteTest(testCompilePermute1);
+	ExecuteTest(testCompilePermute2);
+	ExecuteTest(testCompileJoin1);
 
 	MathTeardown();
 	TestSummary();

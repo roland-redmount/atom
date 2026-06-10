@@ -35,7 +35,7 @@
 typedef struct s_ServiceRecord {
 	Atom form;
 	Atom parameters;
-	Service service;
+	Service * service;
 } ServiceRecord;
 
 

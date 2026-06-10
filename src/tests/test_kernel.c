@@ -33,8 +33,8 @@ void testAssertRetract(void)
 	AssertFact(form, actors1);
 	record = RegistryFindUntypedService(form);
 	ASSERT(record.form)
-	ASSERT(record.service.type == SERVICE_MACHINE)
-	BTree * btree = (BTree *) record.service.value.machineService.providerData;
+	ASSERT(record.service->type == SERVICE_MACHINE)
+	BTree * btree = (BTree *) record.service->impl.machine.providerData;
 
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 1)
 

@@ -181,7 +181,7 @@ void bootstrapAssertFact(Atom predicateForm, Tuple const * actors)
 	// This is a quick hack to get the BTree * pointer)
 	index32 formIndex = getCorePredicateIndex(predicateForm);
 	ServiceRecord const * record = RegistryGetCoreServiceRecord(formIndex);
-	BTree * btree = (BTree *) record->service.value.machineService.providerData;
+	BTree * btree = (BTree *) record->service->impl.machine.providerData;
 	RelationBTreeAddTuple(btree, actors);
 }
 
@@ -454,9 +454,9 @@ void AssertFact(Atom predicateForm, Tuple const * actors)
 	// quick hack, assume B-tree service provider
 	ServiceRecord record = RegistryFindUntypedService(predicateForm);
 	if(record.form) {
-		ASSERT(record.service.type == SERVICE_MACHINE)
-		ASSERT(record.service.value.machineService.provider == &bTreeServiceProvider)
-		BTree * btree = (BTree *) record.service.value.machineService.providerData;
+		ASSERT(record.service->type == SERVICE_MACHINE)
+		ASSERT(record.service->impl.machine.provider == &bTreeServiceProvider)
+		BTree * btree = (BTree *) record.service->impl.machine.providerData;
 		RelationBTreeAddTuple(btree, actors);
 	}
 	else {
@@ -474,9 +474,9 @@ static void removeBTreeTuples(Atom predicateForm, Tuple * actors)
 {
 	ServiceRecord record = RegistryFindUntypedService(predicateForm);
 	ASSERT(record.form)
-	ASSERT(record.service.type == SERVICE_MACHINE)
-	ASSERT(record.service.value.machineService.provider == &bTreeServiceProvider)
-	BTree * btree = (BTree *) record.service.value.machineService.providerData;
+	ASSERT(record.service->type == SERVICE_MACHINE)
+	ASSERT(record.service->impl.machine.provider == &bTreeServiceProvider)
+	BTree * btree = (BTree *) record.service->impl.machine.providerData;
 	
 	// NOTE: this can cause IFacts to be removed if the tuple
 	// being removed holds the last reference to an IFact
