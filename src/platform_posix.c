@@ -265,7 +265,7 @@ FileHandle OpenFile(char const * fileName)
 {
 	FILE * file = fopen(fileName, "rb");
 	ASSERT(file);
-    return (FileHandle) file;
+	return (FileHandle) file;
 }
 
 // NOTE: can we get the file size without opening the file?
@@ -273,25 +273,25 @@ size64 GetFileSize(FileHandle fileHandle)
 {
 	FILE * file = (FILE *) fileHandle;
 	size64 currentPosition = ftell(file);
-    // get file length
-    fseek(file, 0, SEEK_END);
-    size64 fileSize = ftell(file);
-    // restore original position
-    fseek(file, currentPosition, SEEK_SET);
-    return fileSize;
+	// get file length
+	fseek(file, 0, SEEK_END);
+	size64 fileSize = ftell(file);
+	// restore original position
+	fseek(file, currentPosition, SEEK_SET);
+	return fileSize;
 }
 
 void ReadFromFile(FileHandle fileHandle, void * buffer, size64 readSize)
 {
 	FILE * file = (FILE *) fileHandle;
-    ASSERT(fread(buffer, readSize, 1, file) == 1);
+	ASSERT(fread(buffer, readSize, 1, file) == 1);
 }
 
 
 void CloseFile(FileHandle fileHandle)
 {
 	FILE * file = (FILE *) fileHandle;
-    fclose(file);
+	fclose(file);
 }
 
 
@@ -346,9 +346,9 @@ static bool openFile(char const * fileName, int * fileDescriptor)
 
 static size_t getFileSize(int fileDescriptor)
 {
-    struct stat fileStatus;
-    ASSERT(fstat(fileDescriptor, &fileStatus) == 0);
-    return fileStatus.st_size;
+	struct stat fileStatus;
+	ASSERT(fstat(fileDescriptor, &fileStatus) == 0);
+	return fileStatus.st_size;
 }
 
 static void resizeFile(int fileDescriptor, size_t size)
@@ -417,7 +417,7 @@ void GetExecutablePath(char * buffer, size32 bufferSize)
 	buffer[pathLength] = '\0';
 
 #elif defined(__APPLE__)
-    char pathBuffer[PATH_MAX];
+	char pathBuffer[PATH_MAX];
 	size32 pathBufferSize = PATH_MAX;
 	ASSERT(_NSGetExecutablePath(pathBuffer, &pathBufferSize) == 0)
 	// intermediate buffer to prevent overflow
@@ -518,8 +518,8 @@ void AbortProgram(void)
 
 uint64 RandomInteger(uint64 lowerBound, uint64 upperBound)
 {
-    // note: this distribution is somewhat skewed towards the lower bound
-    uint64 intervalLength = upperBound - lowerBound + 1;
+	// note: this distribution is somewhat skewed towards the lower bound
+	uint64 intervalLength = upperBound - lowerBound + 1;
 	return lowerBound + (rand() % intervalLength);
 }
 
