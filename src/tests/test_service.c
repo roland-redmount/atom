@@ -42,7 +42,7 @@ void testPermuteService(void)
 	);
 
 	// Call the PERMUTE service
-	// This enumerates all elements of the string
+	// This enumerates all elements of the string ("alibaba")
 	ServiceContext * context = ServiceCreateContext(permuteService, arguments);
 	size32 nElements = 0;
 	while(ServiceCall(context)) {
@@ -60,8 +60,8 @@ void testPermuteService(void)
 	context = ServiceCreateContext(deduplicateService, arguments);
 	nElements = 0;
 	while(ServiceCall(context)) {
-		PrintTuple(arguments);
-		PrintChar('\n');
+		// PrintTuple(arguments);
+		// PrintChar('\n');
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 4)
@@ -168,17 +168,6 @@ void testJoinService2(void)
 	ReleaseTypedAtom(string1);
 	ReleaseTypedAtom(string2);
 	ReleaseService(joinService);
-}
-
-
-/**
- * Test evaluating a PROJECT service
- * (+ x + 2 + z)
- * projected onto arguments (x, z)
- */
-void testProjectService(void)
-{
-	// TODO
 }
 
 

@@ -131,14 +131,17 @@ struct s_Service {
  * and specifies for each child argument either a 1-based index into the parent arguments tuple,
  * or 0 for a constant, in the order of the constants tuple. One parent argument may map to
  * multiple child arguments, in which case parent indices are repeated.
- * If some parent argument positions are missing from argumentMap, those arguments will not be
+ * 
+ * NOTE: If some parent argument positions are missing from argumentMap, those arguments will not be
  * updated by this service. This typically occurs when the permute service is a child of a join service.
+ * 
+ * NOTE: If child arguments are missing from the argumentMap, the resulting tuples may not be unique.
  */
 Service * CreatePermuteService(
 	size8 nArguments, Tuple const * constants, index8 const * argumentMap, Service * childService);
 
 /**
- * Create a machine service
+ * Create a machine code service
  */
 Service * CreateMachineService(size8 nArguments, MachineServiceProvider * provider, void * providerData);
 
