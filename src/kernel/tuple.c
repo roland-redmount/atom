@@ -190,7 +190,7 @@ int8 CompareTuples(Tuple const * tuple1, Tuple const * tuple2)
 
 bool SameTuples(Tuple const * tuple1, Tuple const * tuple2)
 {
-	if(tuple1->nAtoms != tuple1->nAtoms)
+	if(tuple1->nAtoms != tuple2->nAtoms)
 		return false;
 	// ignore the 
 	return CompareMemory(
