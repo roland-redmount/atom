@@ -118,7 +118,7 @@ static void testTokenizer(void)
 	token = tokenizeCString(&tokenizer, decimalString);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_FLOAT64)
-	ASSERT_DATA64_EQUAL(GetFloat64Value(token.typedAtom.atom), 123.45)
+	ASSERT_FLOAT_EQUAL(GetFloat64Value(token.typedAtom.atom), 123.45)
 
 	// the string "123.45." is not a legal number
 	pushCString(&tokenizer, decimalString);
