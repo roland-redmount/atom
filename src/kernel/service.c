@@ -1,5 +1,6 @@
 
 #include "kernel/service.h"
+#include "kernel/RelationBTree.h"
 #include "memory/allocator.h"
 
 
@@ -222,6 +223,74 @@ static void joinServiceFinalizeContext(ServiceContext * context)
 }
 
 
+//----------------------------------- SERVICE_DEDUPLICATE ---------------------------------------
+
+typedef struct s_DeduplicateContext {
+	// Temporary relation B-tree holding the unique, ordered tuples
+	// NOTE: a RelationBTree is a bit too much here -- we just want a tuple store,
+	// not reference handling, IFact checking &c. The "tuple store" part of RelationBTree
+	// should be factored out -- probably when implementing agents.
+	BTree * btree;
+	RelationBTreeIterator iterator;
+} DeduplicateContext;
+
+
+static void deduplicateSetupContext(ServiceContext * context)
+{
+	DeduplicateContext * deduplicateContext = (DeduplicateContext *) &context->data;
+
+	Service * childService = context->service->impl.deduplicate.childService;
+	ServiceContext * childContext = ServiceCreateContext(childService, context->arguments);
+	// Retrieve all tuples from the child relation
+	deduplicateContext->btree = CreateRelationBTree(context->service->nArguments);
+	while(ServiceCall(childContext)) {
+		RelationBTreeAddTuple(deduplicateContext->btree, context->arguments);
+	}
+	ServiceFreeContext(childContext);
+	// Setup B-tree iterator
+	RelationBTreeIterate(deduplicateContext->btree, 0, &deduplicateContext->iterator);
+}
+
+
+static bool deduplicateCall(ServiceContext * context)
+{
+	DeduplicateContext * deduplicateContext = (DeduplicateContext *) &context->data;
+
+	if(RelationBTreeIteratorNext(&deduplicateContext->iterator)) {
+		RelationBTreeIteratorGetTuple(&deduplicateContext->iterator, context->arguments);
+		return true;
+	}
+	else
+		return false;
+}
+
+
+static void deduplicateFinalizeContext(ServiceContext * context)
+{
+	DeduplicateContext * deduplicateContext = (DeduplicateContext *) &context->data;
+
+	RelationBTreeIteratorEnd(&deduplicateContext->iterator);
+	RelationBTreeRemoveTuples(deduplicateContext->btree, 0, REMOVE_NORMAL);
+	FreeRelationBTree(deduplicateContext->btree);
+}
+
+
+static void teardownDeduplicateService(Service * service)
+{
+	ASSERT(service->type == SERVICE_DEDUPLICATE)
+	ReleaseService(service->impl.deduplicate.childService);
+}
+
+
+Service * CreateDeduplicateService(Service * childService)
+{
+	Service * service = createService(SERVICE_DEDUPLICATE, childService->nArguments, sizeof(DeduplicateContext));
+	service->impl.deduplicate.childService = childService;
+	AcquireService(childService);
+	return service;
+}
+
+
 //------------------------------------- SERVICE_MACHINE -----------------------------------------
 
 
@@ -278,9 +347,8 @@ void ReleaseService(Service * service)
 			ASSERT(false)
 			break;
 
-		case SERVICE_PROJECT:
-			// TODO
-			ASSERT(false)
+		case SERVICE_DEDUPLICATE:
+			teardownDeduplicateService(service);
 			break;
 
 		case SERVICE_MACHINE:
@@ -318,9 +386,8 @@ ServiceContext * ServiceCreateContext(Service const * service, Tuple * arguments
 		ASSERT(false)
 		break;
 
-	case SERVICE_PROJECT:
-		// TODO
-		ASSERT(false)
+	case SERVICE_DEDUPLICATE:
+		deduplicateSetupContext(context);
 		break;
 
 	case SERVICE_MACHINE:
@@ -349,10 +416,8 @@ bool ServiceCall(ServiceContext * context)
 		ASSERT(false)
 		return false;
 
-	case SERVICE_PROJECT:
-		// TODO
-		ASSERT(false)
-		return false;
+	case SERVICE_DEDUPLICATE:
+		return deduplicateCall(context);
 
 	case SERVICE_MACHINE:
 		return machineServiceCall(context);
@@ -380,9 +445,8 @@ void ServiceFreeContext(ServiceContext * context)
 		ASSERT(false)
 		break;
 
-	case SERVICE_PROJECT:
-		// TODO
-		ASSERT(false)
+	case SERVICE_DEDUPLICATE:
+		deduplicateFinalizeContext(context);
 		break;
 
 	case SERVICE_MACHINE:
@@ -409,8 +473,8 @@ void PrintService(Service const * service)
 	case SERVICE_UNION:
 		PrintCString("UNION");
 		break;
-	case SERVICE_PROJECT:
-		PrintCString("PROJECT");
+	case SERVICE_DEDUPLICATE:
+		PrintCString("DEDUPLICATE");
 		break;
 	case SERVICE_MACHINE:
 		PrintCString("MACHINE");
