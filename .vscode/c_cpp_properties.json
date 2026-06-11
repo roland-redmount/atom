@@ -1,0 +1,25 @@
+{
+    "configurations": [
+        {
+            "name": "debug",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": ["DEBUG"],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c99",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "debug-allocate",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": ["DEBUG", "DEBUG_ALLOCATE"],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c99",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}

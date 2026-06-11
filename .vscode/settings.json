@@ -1,0 +1,37 @@
+{
+	"editor.tokenColorCustomizations": {
+		"textMateRules": [
+			{
+				"scope": "storage.type.class.gtkdoc",
+				"settings": {
+					"foreground": "#8B949E"  // match your theme's comment colour
+				}
+			}
+		]
+	},
+	"editor.rulers": [
+		120,
+	],
+	"todohighlight.keywords": [
+		{
+			"text": "TODO:",
+			"color": "#c0b010",
+			"backgroundColor": "#121314",
+			"fontWeight": "bold"
+		},
+		{
+			"text": "BUG:",
+			"color": "#f03030", 
+			"backgroundColor": "#121314",
+			"fontWeight": "bold"
+		},
+		{
+			"text": "NOTE:",
+			"color": "#50c0d0", 
+			"backgroundColor": "#121314",
+			"fontWeight": "bold"
+		}
+	],
+	"todohighlight.defaultStyle": {},
+	"todohighlight.isCaseSensitive": true
+}

@@ -5,5 +5,3 @@ docs/*/~*
 docs/.obsidian
 sqlite/**
 tmp/**
-
-.vscode
