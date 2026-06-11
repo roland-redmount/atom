@@ -97,6 +97,7 @@ TypedAtom PairGetElement(Atom pair, uint8 element)
 		break;
 
 	default:
+		result = invalidAtom;
 		ASSERT(false);
 	}
 	FreeTuple(tuple);

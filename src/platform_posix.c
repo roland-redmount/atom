@@ -1,11 +1,7 @@
 /**
- * This is the platform layer for Linux x86/amd64 systems.
- * 
- * Most of these functions will be different on Windows, and we would have
- * to write a new platform layer. I tried to include both platforms here
- * using conditional compilation with #ifdef statements, but it gets messy.
- * Probably better to make a separate platform_win.c and select the appropriate
- * file in the build system (makefile).
+ * This is the platform layer for POSIX (Linux, MacOS) systems.
+ * Most parts are the same across Linux and MacOS; differences
+ * are handled with conditional compilation.
  */
 
 // C standard library includes
@@ -13,18 +9,22 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
 #include <stdlib.h>		// for strtoll
 #include <time.h>
 
-// linux specific includes
+// POSIX specific includes
 #include <libgen.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#ifdef __linux__
 #include <linux/limits.h>
+#elif defined(__APPLE__)
+#include <limits.h>
+#endif
 
 #include "platform.h"
 
@@ -260,11 +260,12 @@ void CStringPrepend(const char * prefix, char * buffer, size32 bufferSize)
 
 uint32 maxPathLength = PATH_MAX;
 
+
 FileHandle OpenFile(char const * fileName)
 {
 	FILE * file = fopen(fileName, "rb");
 	ASSERT(file);
-    return (FileHandle) file;
+	return (FileHandle) file;
 }
 
 // NOTE: can we get the file size without opening the file?
@@ -272,27 +273,26 @@ size64 GetFileSize(FileHandle fileHandle)
 {
 	FILE * file = (FILE *) fileHandle;
 	size64 currentPosition = ftell(file);
-    // get file length
-    fseek(file, 0, SEEK_END);
-    size64 fileSize = ftell(file);
-    // restore original position
-    fseek(file, currentPosition, SEEK_SET);
-    return fileSize;
+	// get file length
+	fseek(file, 0, SEEK_END);
+	size64 fileSize = ftell(file);
+	// restore original position
+	fseek(file, currentPosition, SEEK_SET);
+	return fileSize;
 }
 
 void ReadFromFile(FileHandle fileHandle, void * buffer, size64 readSize)
 {
 	FILE * file = (FILE *) fileHandle;
-    ASSERT(fread(buffer, readSize, 1, file) == 1);
+	ASSERT(fread(buffer, readSize, 1, file) == 1);
 }
 
 
 void CloseFile(FileHandle fileHandle)
 {
 	FILE * file = (FILE *) fileHandle;
-    fclose(file);
+	fclose(file);
 }
-
 
 
 bool FileExists(char const * filePath)
@@ -346,15 +346,44 @@ static bool openFile(char const * fileName, int * fileDescriptor)
 
 static size_t getFileSize(int fileDescriptor)
 {
-    struct stat fileStatus;
-    ASSERT(fstat(fileDescriptor, &fileStatus) == 0);
-    return fileStatus.st_size;
+	struct stat fileStatus;
+	ASSERT(fstat(fileDescriptor, &fileStatus) == 0);
+	return fileStatus.st_size;
 }
 
 static void resizeFile(int fileDescriptor, size_t size)
 {
+#ifdef __linux__
 	int resultCode = posix_fallocate(fileDescriptor, 0, size);
 	ASSERT(resultCode == 0);
+#elif defined(__APPLE__)
+	// pre-allocate space for the file
+	fstore_t store = {0};
+	store.fst_flags = F_ALLOCATECONTIG;		// try for contiguous space first
+	store.fst_posmode = F_PEOFPOSMODE;		// from end of file
+	store.fst_offset = 0;
+	store.fst_length = size;
+
+	if(fcntl(fileDescriptor, F_PREALLOCATE, &store) == -1) {
+		// If contiguous allocation fails, try non-contiguous
+		store.fst_flags = F_ALLOCATEALL;
+		if (fcntl(fileDescriptor, F_PREALLOCATE, &store) == -1) {
+			close(fileDescriptor);
+			ASSERT(false)
+		}
+	}
+	// Now actually set the file size
+	if(ftruncate(fileDescriptor, size) == -1) {
+		close(fileDescriptor);
+		ASSERT(false);
+	}
+#endif
+}
+
+// test if two strings overlap in memory
+static bool nonOverlappingBuffers(char const * string1, size32 length1, char const * string2, size32 length2)
+{
+	return (string1 + length1 < string2) || (string2 + length2 < string1);
 }
 
 
@@ -369,7 +398,8 @@ void GetParentDirectory(char * path, size32 bufferSize)
 	}
 	else {
 		// dirname() returned a pointer to another location
-		ASSERT((parentPath < path) && (parentPath >= path + bufferSize));
+		size32 parentPathLength = CStringLength(parentPath);
+		ASSERT(nonOverlappingBuffers(path, bufferSize, parentPath, parentPathLength));
 		CStringCopyLimited(parentPath, path, bufferSize);
 	}
 }
@@ -380,10 +410,24 @@ void GetParentDirectory(char * path, size32 bufferSize)
  */
 void GetExecutablePath(char * buffer, size32 bufferSize)
 {
+#ifdef __linux__
 	// readlink does not append a zero terminator to the string, so we must have space for one
 	ssize_t pathLength = readlink("/proc/self/exe", buffer, bufferSize - 1);
 	ASSERT(pathLength != -1);
 	buffer[pathLength] = '\0';
+
+#elif defined(__APPLE__)
+	char pathBuffer[PATH_MAX];
+	size32 pathBufferSize = PATH_MAX;
+	ASSERT(_NSGetExecutablePath(pathBuffer, &pathBufferSize) == 0)
+	// intermediate buffer to prevent overflow
+	char realPathBuffer[PATH_MAX];
+	// expand to absolute path
+	ASSERT(realpath(pathBuffer, realPathBuffer));
+	size32 realPathLength = CStringLength(realPathBuffer);
+	ASSERT(realPathLength < bufferSize);
+	CStringCopy(realPathBuffer, buffer);
+#endif
 }
 
 
@@ -417,52 +461,52 @@ static void mapFileToMemory(void * address, size_t size, int fileDescriptor)
 }
 
 
-bool RestoreMappedMemory(void * address, char const * fileName, FileMapping * mapping)
+bool RestoreMappedMemory(void * address, char const * fileName, FileMapping * fileMapping)
 {
 	int fileDescriptor;
 	if(!openFile(fileName, &fileDescriptor))
 		return false;
 
-	mapping->size = getFileSize(fileDescriptor);
-	mapping->address = address;
+	fileMapping->size = getFileSize(fileDescriptor);
+	fileMapping->address = address;
 
-	mapFileToMemory(mapping->address, mapping->size, fileDescriptor);
+	mapFileToMemory(fileMapping->address, fileMapping->size, fileDescriptor);
 	close(fileDescriptor);
 	return true;
 }
 
 
-bool CreateMappedMemory(void * address, size_t size, char const * fileName, FileMapping * mapping)
+bool CreateMappedMemory(void * address, size64 size, char const * fileName, FileMapping * fileMapping)
 {
 	int fileDescriptor;
 	if(!createFile(fileName, &fileDescriptor)) {
-		mapping->size = 0;
-		mapping->address = 0;
+		fileMapping->size = 0;
+		fileMapping->address = 0;
 		return false;
 	}
 	
 	resizeFile(fileDescriptor, size);
-	mapping->size = size;
-	mapping->address = address;
+	fileMapping->size = size;
+	fileMapping->address = address;
 
-	mapFileToMemory(mapping->address, mapping->size, fileDescriptor);
+	mapFileToMemory(fileMapping->address, fileMapping->size, fileDescriptor);
 	close(fileDescriptor);
 	return true;
 }
 
 
-bool CreateOrRestoreMappedMemory(void * address, size_t size, char const * filePath, FileMapping * mapping)
+bool CreateOrRestoreMappedMemory(void * address, size64 size, char const * filePath, FileMapping * fileMapping)
 {
 	if(FileExists(filePath))
-		return RestoreMappedMemory(address, filePath, mapping);
+		return RestoreMappedMemory(address, filePath, fileMapping);
 	else
-		return CreateMappedMemory(address, size, filePath, mapping);
+		return CreateMappedMemory(address, size, filePath, fileMapping);
 }
 
 
-void ReleaseFileMapping(FileMapping * mapping)
+void ReleaseFileMapping(FileMapping * fileMapping)
 {
-	munmap(mapping->address, mapping->size);
+	munmap(fileMapping->address, fileMapping->size);
 }
 
 
@@ -474,8 +518,8 @@ void AbortProgram(void)
 
 uint64 RandomInteger(uint64 lowerBound, uint64 upperBound)
 {
-    // note: this distribution is somewhat skewed towards the lower bound
-    uint64 intervalLength = upperBound - lowerBound + 1;
+	// note: this distribution is somewhat skewed towards the lower bound
+	uint64 intervalLength = upperBound - lowerBound + 1;
 	return lowerBound + (rand() % intervalLength);
 }
 

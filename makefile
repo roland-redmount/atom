@@ -52,18 +52,19 @@ BINDIR := $(BUILDDIR)/bin
 CFLAGS_COMMON := -std=c99 -pedantic-errors\
  -Wall -Wstrict-prototypes -Werror -fstrict-aliasing -Wstrict-aliasing=2\
  -Wno-error=unused-variable -Wno-error=unused-function -Wno-error=unused-but-set-variable -Wpointer-arith\
- -m64 -D$(PLATFORM)
+ -m64
 
 ifdef DEBUG
-CFLAGS_COMMON := $(CFLAGS_COMMON) -g -DDEBUG -fprofile-arcs -ftest-coverage
+CFLAGS_COMMON += -g -DDEBUG -fprofile-arcs -ftest-coverage
 endif
 
 ifdef DEBUG_ALLOCATE
-CFLAGS_COMMON := $(CFLAGS_COMMON) -DDEBUG_ALLOCATE
+CFLAGS_COMMON += -DDEBUG_ALLOCATE
 endif
 
 ifeq ($(PLATFORM), MACOS)
-CFLAGS := $(CFLAGS_COMMON) -ferror-limit=5 -D_POSIX_C_SOURCE=200809L
+# -D_DARWIN_C_SOURCE exposes MacOS-specific extensions on top of the POSIX base
+CFLAGS := $(CFLAGS_COMMON) -ferror-limit=5 -D_POSIX_C_SOURCE=200809L -D_DARWIN_C_SOURCE
 endif
 
 ifeq ($(PLATFORM), LINUX)
@@ -74,8 +75,7 @@ ifeq ($(PLATFORM), WINDOWS)
 CFLAGS := $(CFLAGS_COMMON) -D__USE_MINGW_ANSI_STDIO
 endif
 
-
-CPPFLAGS := -Wall -g -m64 -D$(PLATFORM)
+# CPPFLAGS := -Wall -g -m64 -D$(PLATFORM)
 
 # flags controlling dependency file handling by GCC
 DEPFLAGS = -MMD -MP -MF $(DEPDIR)/$*.d
@@ -137,9 +137,9 @@ endif
 #
 
 ifeq ($(PLATFORM), LINUX)
-PLATFORM_FILE := platform_linux
+PLATFORM_FILE := platform_posix
 else ifeq ($(PLATFORM), MACOS)
-PLATFORM_FILE := platform_mac
+PLATFORM_FILE := platform_posix
 else
 PLATFORM_FILE := platform_win
 endif

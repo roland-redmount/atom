@@ -2,7 +2,7 @@
  * A conjunction form, consisting of a multiset of clause forms
  */
 
-#ifndef CONJUCTION_FORM_H
+#ifndef CONJUNCTION_FORM_H
 #define CONJUNCTION_FORM_H
 
 #include "lang/TypedAtom.h"
