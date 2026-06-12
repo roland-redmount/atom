@@ -33,5 +33,7 @@
 		}
 	],
 	"todohighlight.defaultStyle": {},
-	"todohighlight.isCaseSensitive": true
+	"todohighlight.isCaseSensitive": true,
+	"cmake.buildDirectory": "${workspaceFolder}/build",
+	"cmake.configureOnOpen": false
 }
