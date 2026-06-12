@@ -6,10 +6,7 @@
 		{
 			"label": "build debug",
 			"type": "shell",
-			"command": "make",
-			"args": [
-				"DEBUG=1"
-			],
+			"command": "cmake -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build",
 			"group": {
 				"kind": "build",
 				"isDefault": true
@@ -22,11 +19,7 @@
 		{
 			"label": "build debug-allocate",
 			"type": "shell",
-			"command": "make",
-			"args": [
-				"DEBUG=1",
-				"DEBUG_ALLOCATE=1"
-			],
+			"command": "cmake -B build -DCMAKE_BUILD_TYPE=Debug -DDEBUG_ALLOCATE=ON && cmake --build build",
 			"group": {
 				"kind": "build",
 				"isDefault": false
@@ -39,7 +32,7 @@
 		{
 			"label": "build release",
 			"type": "shell",
-			"command": "make",
+			"command": "cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build",
 			"group": {
 				"kind": "build",
 				"isDefault": false
@@ -50,13 +43,9 @@
 			"problemMatcher": "$gcc"
 		},
 		{
-			"label": "build single",
+			"label": "build target",
 			"type": "shell",
-			"command": "make",
-			"args": [
-				"${relativeFileDirname}/${fileBasenameNoExtension}.o"
-				"DEBUG=1"
-			],
+			"command": "cmake --build build --target ${fileBasenameNoExtension}",
 			"group": {
 				"kind": "build",
 				"isDefault": false
@@ -69,7 +58,7 @@
 		{
 			"label": "clean",
 			"type": "shell",
-			"command": "make clean",
+			"command": "cmake --build build --target clean",
 			"group": {
 				"kind": "build",
 				"isDefault": false
