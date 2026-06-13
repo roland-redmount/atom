@@ -11,7 +11,48 @@
 #include "testing/testing.h"
 
 
+
 void testCompilePermute1(void)
+{
+	// This rule compiles to a PERMUTE service with no constants
+	// + z - x = y  <-  + x + y = z
+	Atom rule = CStringToClause("+ _z - _x = _y | ! + _x + _y = _z");
+	DictionaryAddClause(rule);
+	
+	Atom queryTerm = CStringToTerm("+ 7 - 4 = _d");
+	// PrintCString("queryTerm = ");
+	// PrintFormula(queryTerm);
+	// PrintChar('\n');
+
+	// This will yield a new service from the existing (+ + =) service
+	ServiceRecord record;
+	ASSERT_TRUE(CompileService(queryTerm, &record))
+	// PrintCString("Service record: ");
+	// PrintServiceRecord(&record);
+	// PrintChar('\n');
+
+	// Call the service
+	Tuple * arguments = CreateTuple(3);
+	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
+	void * context = ServiceCreateContext(record.service, arguments);
+	ASSERT_TRUE(ServiceCall(context))
+
+	TypedAtom d = TermGetRoleActor(record.form, arguments, "=", 1);
+	ASSERT_UINT32_EQUAL(d.type, AT_INT)
+	ASSERT_UINT64_EQUAL(d.atom, 3);
+
+	ASSERT_FALSE(ServiceCall(context))
+	ServiceFreeContext(context);
+	FreeTuple(arguments);
+
+	RegistryRemoveService(&record);
+	IFactRelease(queryTerm);
+	DictionaryRemoveClause(rule);
+	IFactRelease(rule);
+}
+
+
+void testCompilePermute2(void)
 {
 	// This rule compiles to a PERMUTE service with a constant 2
 	// number x addtwo y <- + x + 2 = y
@@ -55,36 +96,34 @@ void testCompilePermute1(void)
 }
 
 
-void testCompilePermute2(void)
+void testCompilePermute3(void)
 {
-	// This rule compiles to a PERMUTE service with no constants
-	// + z - x = y  <-  + x + y = z
-	Atom rule = CStringToClause("+ _z - _x = _y | ! + _x + _y = _z");
+	// This rule compiles to a PERMUTE service with a variable,
+	// which requires wrapping in a DEDUPLICATE service.
+	// set s element e <- list s position _ element e
+	Atom rule = CStringToClause("set _s element _e | ! list _s position _ element _e");
 	DictionaryAddClause(rule);
 	
-	Atom queryTerm = CStringToTerm("+ 7 - 4 = _d");
-	// PrintCString("queryTerm = ");
-	// PrintFormula(queryTerm);
-	// PrintChar('\n');
+	Atom queryTerm = CStringToTerm("set \"alibaba\" element _e");
+	PrintCString("queryTerm = ");
+	PrintFormula(queryTerm);
+	PrintChar('\n');
 
-	// This will yield a new service from the existing (+ + =) service
 	ServiceRecord record;
 	ASSERT_TRUE(CompileService(queryTerm, &record))
-	// PrintCString("Service record: ");
-	// PrintServiceRecord(&record);
-	// PrintChar('\n');
+	PrintCString("Service record: ");
+	PrintServiceRecord(&record);
+	PrintChar('\n');
 
 	// Call the service
-	Tuple * arguments = CreateTuple(3);
+	Tuple * arguments = CreateTuple(2);
 	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
 	void * context = ServiceCreateContext(record.service, arguments);
-	ASSERT_TRUE(ServiceCall(context))
-
-	TypedAtom d = TermGetRoleActor(record.form, arguments, "=", 1);
-	ASSERT_UINT32_EQUAL(d.type, AT_INT)
-	ASSERT_UINT64_EQUAL(d.atom, 3);
-
-	ASSERT_FALSE(ServiceCall(context))
+	size8 nElements = 0;
+	while(ServiceCall(context)) {
+		nElements++;
+	}
+	ASSERT_UINT32_EQUAL(nElements, 4);
 	ServiceFreeContext(context);
 	FreeTuple(arguments);
 
@@ -139,6 +178,7 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testCompilePermute1);
 	ExecuteTest(testCompilePermute2);
+	ExecuteTest(testCompilePermute3);
 	ExecuteTest(testCompileJoin1);
 
 	MathTeardown();

@@ -177,9 +177,10 @@ static void atomsToParameters(Tuple const * actors, Tuple * replacedActors)
 
 
 /**
- * A term compiles to a PERMUTE service. The term actors must be either
- * parameters whose numbering defines the caller's parameter order,
- * or constants. 
+ * A term compiles to a PERMUTE service. The numbering of Parameters in the
+ * term actors defines the caller's parameter order; any non-parameter atoms
+ * are stored in a "constants" tuple. If variables are present, a DEDUPLICATE
+ * service is generated to ensure the resulting tuples are unique.
  */
 Service * compileTerm(Atom termForm, Tuple const * termActors, size8 nArguments, Substitution * clauseSubst)
 {
@@ -239,14 +240,15 @@ Service * compileTerm(Atom termForm, Tuple const * termActors, size8 nArguments,
 		}
 	}
 	Tuple * constants = 0;
+	bool deduplicate = false;
 	if(nConstants > 0) {
 		// Collect constants tuple
 		constants = CreateTuple(nConstants);
 		for(index8 i = 0, k = 0; i < termActors->nAtoms; i++) {
 			TypedAtom actor = TupleGetElement(termActors, i);
 			if(actor.type != AT_PARAMETER) {
-				// actor must be a constant
 				TupleSetElement(constants, k++, actor);
+				deduplicate = true;
 			}
 		}
 	}
@@ -255,6 +257,12 @@ Service * compileTerm(Atom termForm, Tuple const * termActors, size8 nArguments,
 		nArguments, constants, argumentMap, termServiceRecord.service);
 	if(constants)
 		FreeTuple(constants);
+	// Wrap in a deduplicate service if needed
+	if(deduplicate) {
+		Service * deduplicateService = CreateDeduplicateService(service);
+		ReleaseService(service);
+		service = deduplicateService;
+	}
 	return service;
 }
 

@@ -16,6 +16,8 @@ void CleanupMemory(void);
 /**
  * Initialize a new kernel, creating a blank "world"
  * with only the core predicates defined.
+ * 
+ * TODO: we also need methods to load a previously persisted state.
  */
 void KernelInitialize(void);
 
@@ -35,7 +37,6 @@ void KernelShutdown(void);
  */
 void AssertFact(Atom form, Tuple const * actors);
 
-
 /**
  * High level methd to retract a fact.
  * Removes the tuple from the corresponding relation table
@@ -45,12 +46,10 @@ void AssertFact(Atom form, Tuple const * actors);
  */
 void RetractFact(Atom form, Tuple * actors);
 
-
 /**
  * Remove all facts of a given form
  */
 void RetractAllFacts(Atom predicateForm);
-
 
 /**
  * Permanent identifiers for core role names (satisfying (name @name))
@@ -112,12 +111,10 @@ void RetractAllFacts(Atom predicateForm);
  */
 Atom GetCorePredicateForm(index32 formId);
 
-
 /**
  * Lookup a core role name. Returns an AT_NAME atom.
  */
 Atom GetCoreRoleName(index32 roleId);
-
 
 /**
  * Find the index in "canonical order" of a role in the
