@@ -309,7 +309,6 @@ Service * compileConjunctionRecursive(
 
 			Substitution clauseSubst;
 			Service * leftService = compileTerm(negatedTermForm, termActors, nArguments, &clauseSubst);
-			// TODO: we need to substitute the clause
 			SubstituteTuple(&clauseSubst, clauseActors, clauseActors);
 			FreeSubstitution(&clauseSubst);
 			// PrintCString("Updated clause: ");

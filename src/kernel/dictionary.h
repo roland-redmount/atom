@@ -9,25 +9,43 @@
 #include "lang/Atom.h"
 #include "btree/btree.h"
 
+// This structure uniquely defines a dictionary entry
+typedef struct  s_DictionaryEntry {
+	Atom clauseForm;
+	Tuple * tuple;
+} DictionaryEntry;
+
 
 /**
  * Setup an empty dictionary.
  */
 void SetupDictionary(void);
 
+void TeardownDictionary(void);
+
 /**
- * Add a clause (formula) to the dictionary
+ * Add a clause (formula) to the dictionary.
  */
-void DictionaryAddClause(Atom clause);
+DictionaryEntry DictionaryAddClause(Atom clause);
+
+/**
+ * Parse a string into a clause (formula) and add it to the dictionary.
+ */
+DictionaryEntry DictionaryAddClauseFromCString(const char * clauseString);
 
 /**
  * Remove a single clause from the dictionary
  */
-void DictionaryRemoveClause(Atom clause);
+void DictionaryRemoveClause(DictionaryEntry * entry);
+
+/**
+ * Remove all clauses from the dictionary. Used for testing.
+ */
+void DictionaryRemoveAll(void);
 
 
 typedef struct {
-	byte * keyRecord;
+	DictionaryEntry key;
 	BTreeIterator btreeIterator;
 } DictionaryIterator;
 
