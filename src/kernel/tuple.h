@@ -119,6 +119,11 @@ void CopyTuplesReorder(Tuple const * source, Tuple * destination, index8 const *
 void CopyTuplesAt(Tuple const * source, index8 sourceOffset, Tuple * destination);
 
 /**
+ * Swap the contents of two tuples.
+ */
+void SwapTuples(Tuple * tuple1, Tuple * tuple2);
+
+/**
  * Compare two tuples for equality.
  * The protectedAtom field is ignored for the comparison.
  */

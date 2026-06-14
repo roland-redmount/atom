@@ -75,7 +75,8 @@ typedef struct s_MachineServiceProvider {
 	 */
 	SERVICE_JOIN = 2,
 	/**
-	 * TODO: this should give a union of tuple sets of child services
+	 * UNION gives a union of the tuple sets from two child services.
+	 * It is assumed that each child service produces tuples in sorted order.
 	 */
 	SERVICE_UNION = 3,
 	/**
@@ -114,6 +115,11 @@ struct s_Service {
 			Service * left;
 			Service * right; 
 		} join;
+		// for SERVICE_UNION
+		struct {
+			Service * first;
+			Service * second;
+		} _union;
 		// for SERVICE_DEDUPLICATE
 		struct {
 			Service * childService;
@@ -190,7 +196,9 @@ typedef struct s_ServiceContext {
 ServiceContext * ServiceCreateContext(Service const * service, Tuple * arguments);
 
 /**
- * Execute a service with a given context. This is the interpreter.
+ * Execute a service with a given context. Returns true if a tuple was produced,
+ * or false if no more tuples are available. Once this function has returned false,
+ * it must not be called again.
  */
 bool ServiceCall(ServiceContext * context);
 

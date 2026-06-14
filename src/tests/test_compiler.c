@@ -170,9 +170,9 @@ void testCompileUnion(void)
 	// number x neighbor y <- + x + 1 = y
 	// number x neighbor y <- + x - 1 = y
 	DictionaryEntry entry1 = DictionaryAddClauseFromCString(
-		"number _x neighbor y_ |! + x + 1 = y");
+		"number _x neighbor _y | ! + _x + 1 = _y");
 	DictionaryEntry entry2 = DictionaryAddClauseFromCString(
-		"number _x neighbor y_ |! + y + 1 = x");
+		"number _x neighbor _y | ! + _y + 1 = _x");
 
 	Atom queryTerm = CStringToTerm("number 5 neighbor _y");
 	ServiceRecord record;
@@ -243,6 +243,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompilePermute2);
 	ExecuteTest(testCompilePermute3);
 	ExecuteTest(testCompileJoin1);
+	ExecuteTest(testCompileUnion);
 
 	MathTeardown();
 	TestSummary();

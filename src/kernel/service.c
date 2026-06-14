@@ -223,6 +223,114 @@ static void joinServiceFinalizeContext(ServiceContext * context)
 }
 
 
+//-------------------------------------- SERVICE_UNION ------------------------------------------
+
+
+typedef struct s_UnionContext {
+	ServiceContext * lookaheadContext;
+	ServiceContext * nextContext;
+	Tuple * lookahead;
+} UnionContext;
+
+
+Service * CreateUnionService(Service * firstChild, Service * secondChild)
+{
+	ASSERT(firstChild->nArguments == secondChild->nArguments)
+	Service * service = createService(SERVICE_UNION, firstChild->nArguments, sizeof(UnionContext));
+	service->impl._union.first = firstChild;
+	AcquireService(firstChild);
+	service->impl._union.second = secondChild;
+	AcquireService(secondChild);
+	return service;
+}
+
+
+static void teardownUnionService(Service * service)
+{
+	ASSERT(service->type == SERVICE_UNION)
+	ReleaseService(service->impl._union.first);
+	ReleaseService(service->impl._union.second);
+}
+
+
+static void unionGetNextTuple(UnionContext * unionContext)
+{
+
+}
+
+static void swapContexts(UnionContext * unionContext)
+{
+	ServiceContext * tmp = unionContext->lookaheadContext;
+	unionContext->lookaheadContext = unionContext->nextContext;
+	unionContext->nextContext = tmp;
+}
+
+static void unionSetupContext(ServiceContext * context)
+{
+	UnionContext * unionContext = (UnionContext *) &context->data;
+	unionContext->lookahead = CreateTuple(context->service->nArguments);
+	// Arbitratily assign child services to previous and next
+	// both child services write to the arguments tuple
+	unionContext->lookaheadContext = ServiceCreateContext(
+		context->service->impl._union.first, context->arguments);
+	unionContext->nextContext = ServiceCreateContext(
+		context->service->impl._union.second, context->arguments);
+	// Obtain the lookahead tuple
+	if(ServiceCall(unionContext->lookaheadContext)) {
+		CopyTuples(context->arguments, unionContext->lookahead);
+	}
+	else {
+		// No lookahead
+		ServiceFreeContext(unionContext->lookaheadContext);
+		unionContext->lookaheadContext = 0;
+		FreeTuple(unionContext->lookahead);
+		unionContext->lookahead = 0;
+	}	
+}
+
+
+static bool unionServiceCall(ServiceContext * context)
+{
+	UnionContext * unionContext = (UnionContext *) &context->data;
+	// We interleave tuples provided by the two services to maintain sorted order,
+	// and skip any identical tuples. At each call, we have a "lookahead" tuple from
+	// one of the child services, and we try to obtain a new tuple from the other
+	// service. If one exists, we compare it to the lookahead tuple and return the'
+	// preceding one; else we have exhausted one service.
+	if(!unionContext->lookaheadContext) {
+		// no lookahead service, call other service directly
+		return ServiceCall(unionContext->nextContext);
+	}
+	
+	if(!ServiceCall(unionContext->nextContext)) {
+		// no more lookahead, swap contexts 
+		ServiceFreeContext(unionContext->nextContext);
+		unionContext->nextContext = 0;
+		swapContexts(unionContext);
+		CopyTuples(unionContext->lookahead, context->arguments);
+		return true;
+	}
+
+	// Compare the newly obtained arguments tuple with the lookahead tuple 
+	int8 order = CompareTuples(context->arguments, unionContext->lookahead);
+	if(order == 0) {
+		// Duplicate tuple, acquire next (only one tuple can be equal)
+		if(ServiceCall(unionContext->nextContext)) {
+			order = CompareTuples(context->arguments, unionContext->lookahead);
+			ASSERT(order > 0)
+		}
+	}
+	if(order < 0) {
+		return true;
+	}
+	else {
+		// order > 0
+		SwapTuples(context->arguments, unionContext->lookahead);
+		swapContexts(unionContext);
+		return true;
+	}
+}
+
 //----------------------------------- SERVICE_DEDUPLICATE ---------------------------------------
 
 typedef struct s_DeduplicateContext {

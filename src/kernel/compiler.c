@@ -378,7 +378,13 @@ static Service * compileService(Atom queryTermForm, Tuple * queryActors)
 	 * To find rules (clauses) c that contains a matching term form,
 	 * we query (multiset c element @term-form multiple _),
 	 * If multiple rules match, we must generate a UNION over
-	 * the resulting services
+	 * the resulting services. The first clause that yields a service
+	 * will determine the query parameter types; all other clauses must
+	 * then yield services with those same types.
+	 * Recursive clauses must always occur in a UNION with a least one
+	 * non-recursive clause that can terminate the recursion. Recursive
+	 * clauses are compiled last, so that parameter types are defined
+	 * by the associated non-recursive clauses.
 	 */
 	Service * joinService = 0;	// for now we consider a single JOIN service
 
@@ -398,17 +404,13 @@ static Service * compileService(Atom queryTermForm, Tuple * queryActors)
 			&btreeIterator,
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 		);
-		// Ensure the multiset is a clause form
-		if(!IsClauseForm(clauseForm.atom))
-			continue;
-		// The clause must have at least 2 terms
-		uint8 clauseNTerms = ClauseFormNTerms(clauseForm.atom);
-		ASSERT(clauseNTerms >= 2);
-
 		size8 multiple = RelationBTreeIteratorGetAtom(
 			&btreeIterator,
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)
 		).atom;
+		// Ensure the multiset is a clause form
+		if(!IsClauseForm(clauseForm.atom))
+			continue;
 
 		// Iterate over all rules (clauses) with this clause form.
 		DictionaryIterator dictIterator;
