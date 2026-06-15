@@ -245,6 +245,20 @@ void CopyTuplesAt(Tuple const * source, index8 sourceOffset, Tuple * destination
 }
 
 
+void AcquireTuple(Tuple const * tuple)
+{
+	for(index8 i = 0; i < tuple->nAtoms; i++)
+		AcquireTypedAtom(TupleGetElement(tuple, i));
+}
+
+
+void ReleaseTuple(Tuple const * tuple)
+{
+	for(index8 i = 0; i < tuple->nAtoms; i++)
+		ReleaseTypedAtom(TupleGetElement(tuple, i));
+}
+
+
 data64 TupleHash(Tuple const * tuple, data64 initialHash)
 {
 	// hash header, except the protectedAtom field

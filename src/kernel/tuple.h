@@ -124,6 +124,16 @@ void CopyTuplesAt(Tuple const * source, index8 sourceOffset, Tuple * destination
 void SwapTuples(Tuple * tuple1, Tuple * tuple2);
 
 /**
+ * Acquire all elements of the given tuple.
+ */
+void AcquireTuple(Tuple const * tuple);
+
+/**
+ * Release all elements of the given tuple.
+ */
+void ReleaseTuple(Tuple const * tuple);
+
+/**
  * Compare two tuples for equality.
  * The protectedAtom field is ignored for the comparison.
  */

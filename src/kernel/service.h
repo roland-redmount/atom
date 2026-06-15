@@ -158,6 +158,9 @@ Service * CreateMachineService(size8 nArguments, MachineServiceProvider * provid
  */
 Service * CreateJoinService(Service * leftChild, Service * rightChild);
 
+
+Service * CreateUnionService(Service * first, Service * second);
+
 /**
  * Create a DEDUPLICATE service
  */
