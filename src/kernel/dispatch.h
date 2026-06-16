@@ -13,7 +13,8 @@
 /**
  * Dispatch a query, returning the matching service, if any.
  * The argument permutation required to match the service is written
- * to the given permutation array.
+ * to the given permutation array, such that queryActors[permutation[i]]
+ * matches service parameter i
  */
 bool DispatchQuery(Atom queryTermForm, Tuple const * queryActors, ServiceRecord * record, index8 * permutation);
 

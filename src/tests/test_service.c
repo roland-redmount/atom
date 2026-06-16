@@ -1,5 +1,6 @@
 
 #include "kernel/dispatch.h"
+#include "kernel/letter.h"
 #include "kernel/service.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
@@ -145,6 +146,9 @@ void testJoinService2(void)
 	TypedAtom string1 = CreateTypedAtom(AT_ID, CreateStringFromCString("foo"));
 	TypedAtom string2 = CreateTypedAtom(AT_ID, CreateStringFromCString("bar"));
 	TypedAtom stringList = CreateTypedAtom(AT_ID, CreateListFromArray((TypedAtom[]) {string1, string2}, 2));
+	ReleaseTypedAtom(string1);
+	ReleaseTypedAtom(string2);
+
 	Tuple * arguments = CreateTuple(5);
 	TupleSetElement(arguments, 0, stringList);
 	for(index8 i = 1; i < 5; i++)
@@ -165,9 +169,55 @@ void testJoinService2(void)
 	ServiceFreeContext(context);
 	FreeTuple(arguments);
 	ReleaseTypedAtom(stringList);
-	ReleaseTypedAtom(string1);
-	ReleaseTypedAtom(string2);
 	ReleaseService(joinService);
+}
+
+
+#define TEST_UNION_N_ELEMENTS 	(3 + 4)
+
+void testUnionService(void)
+{
+	// The UNION service (position _ list @list1 element _) | (position _ list @list2 element -)
+	ServiceRecord const * listServiceRecord = RegistryGetCoreServiceRecord(FORM_LIST_POSITION_ELEMENT);
+	TypedAtom string1 = CreateTypedAtom(AT_ID, CreateStringFromCString("foo"));
+	Tuple * constants1 = CreateTupleFromArray((TypedAtom[]) {string1}, 1);
+	Service * service1 = CreatePermuteService(
+		2, constants1, (index8[]) {1, 0, 2}, listServiceRecord->service);
+	FreeTuple(constants1);
+	ReleaseTypedAtom(string1);
+
+	TypedAtom string2 = CreateTypedAtom(AT_ID, CreateStringFromCString("barf"));
+	Tuple * constants2 = CreateTupleFromArray((TypedAtom[]) {string2}, 1);
+	Service * service2 = CreatePermuteService(
+		2, constants2, (index8[]) {1, 0, 2}, listServiceRecord->service);
+	FreeTuple(constants2);
+	ReleaseTypedAtom(string2);
+
+	Service * unionService = CreateUnionService(service1, service2);
+	ReleaseService(service1);
+	ReleaseService(service2);
+
+	Tuple * arguments = CreateTupleFromArray(
+		(TypedAtom[]) {anonymousVariable, anonymousVariable}, 2);
+
+	// Setup execution context
+	ServiceContext * context = ServiceCreateContext(unionService, arguments);
+	uint32 expectedPositions[TEST_UNION_N_ELEMENTS] = {1, 1, 2, 2, 3, 3, 4};
+	char expectedCharacters[TEST_UNION_N_ELEMENTS] = "bfaoorf";
+	for(index32 i = 0; i < TEST_UNION_N_ELEMENTS; i++) {
+		ASSERT_TRUE(ServiceCall(context))
+		ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 0), expectedPositions[i])
+		ASSERT_CHAR_EQUAL(
+			LetterToChar(TupleGetElement(arguments, 1), LETTER_LOWERCASE),
+			expectedCharacters[i]
+		)
+		PrintTuple(arguments);
+		PrintChar('\n');
+	}
+	ASSERT_FALSE(ServiceCall(context));
+	ServiceFreeContext(context);
+	FreeTuple(arguments);
+	ReleaseService(unionService);
 }
 
 
@@ -178,6 +228,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testPermuteService);
 	ExecuteTest(testJoinService1);
 	ExecuteTest(testJoinService2);
+	ExecuteTest(testUnionService);
 
 	KernelShutdown();
 

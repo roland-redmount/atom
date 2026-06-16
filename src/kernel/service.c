@@ -33,7 +33,13 @@ Service * CreatePermuteService(
 	Service * service = createService(SERVICE_PERMUTE, nArguments, sizeof(PermuteContext));
 	service->impl.permute.childService = childService;
 	AcquireService(childService);
-	service->impl.permute.constants = constants ? CreateTupleFromTuple(constants) : 0;
+	if(constants) {
+		service->impl.permute.constants =CreateTupleFromTuple(constants);
+		AcquireTuple(service->impl.permute.constants);
+	}
+	else
+		service->impl.permute.constants = 0;
+		
 	service->impl.permute.argumentMap = Allocate(childService->nArguments);
 	CopyMemory(argumentMap, service->impl.permute.argumentMap, childService->nArguments);
 	return service;
@@ -94,8 +100,10 @@ static void teardownPermuteService(Service * service)
 {
 	ASSERT(service->type == SERVICE_PERMUTE)
 	ReleaseService(service->impl.permute.childService);
-	if(service->impl.permute.constants)
+	if(service->impl.permute.constants) {
+		ReleaseTuple(service->impl.permute.constants);
 		FreeTuple(service->impl.permute.constants);
+	}
 	Free(service->impl.permute.argumentMap);
 }
 
@@ -223,6 +231,118 @@ static void joinServiceFinalizeContext(ServiceContext * context)
 }
 
 
+//-------------------------------------- SERVICE_UNION ------------------------------------------
+
+
+typedef struct s_UnionContext {
+	ServiceContext * lookaheadContext;
+	ServiceContext * nextContext;
+	Tuple * lookahead;
+} UnionContext;
+
+
+Service * CreateUnionService(Service * first, Service * second)
+{
+	ASSERT(first->nArguments == second->nArguments)
+	Service * service = createService(SERVICE_UNION, first->nArguments, sizeof(UnionContext));
+	service->impl._union.first = first;
+	AcquireService(first);
+	service->impl._union.second = second;
+	AcquireService(second);
+	return service;
+}
+
+
+static void teardownUnionService(Service * service)
+{
+	ASSERT(service->type == SERVICE_UNION)
+	ReleaseService(service->impl._union.first);
+	ReleaseService(service->impl._union.second);
+}
+
+
+static void swapContexts(UnionContext * unionContext)
+{
+	ServiceContext * tmp = unionContext->lookaheadContext;
+	unionContext->lookaheadContext = unionContext->nextContext;
+	unionContext->nextContext = tmp;
+}
+
+static void unionSetupContext(ServiceContext * context)
+{
+	UnionContext * unionContext = (UnionContext *) &context->data;
+	unionContext->lookahead = CreateTuple(context->service->nArguments);
+	// Arbitratily assign child services to previous and next
+	// both child services write to the arguments tuple
+	unionContext->lookaheadContext = ServiceCreateContext(
+		context->service->impl._union.first, context->arguments);
+	unionContext->nextContext = ServiceCreateContext(
+		context->service->impl._union.second, context->arguments);
+	// Obtain the lookahead tuple
+	if(ServiceCall(unionContext->lookaheadContext)) {
+		CopyTuples(context->arguments, unionContext->lookahead);
+	}
+	else {
+		// No lookahead
+		ServiceFreeContext(unionContext->lookaheadContext);
+		unionContext->lookaheadContext = 0;
+	}	
+}
+
+
+static bool unionServiceCall(ServiceContext * context)
+{
+	UnionContext * unionContext = (UnionContext *) &context->data;
+	// We interleave tuples provided by the two services to maintain sorted order,
+	// and skip any identical tuples. At each call, we have a "lookahead" tuple from
+	// one of the child services, and we try to obtain a new tuple from the other
+	// service. If one exists, we compare it to the lookahead tuple and return the'
+	// preceding one; else we have exhausted one service.
+	if(!unionContext->lookaheadContext) {
+		// no lookahead service, call other service directly
+		return ServiceCall(unionContext->nextContext);
+	}
+	
+	if(!ServiceCall(unionContext->nextContext)) {
+		// no more lookahead, swap contexts 
+		ServiceFreeContext(unionContext->nextContext);
+		unionContext->nextContext = 0;
+		swapContexts(unionContext);
+		CopyTuples(unionContext->lookahead, context->arguments);
+		return true;
+	}
+
+	// Compare the newly obtained arguments tuple with the lookahead tuple 
+	int8 order = CompareTuples(context->arguments, unionContext->lookahead);
+	if(order == 0) {
+		// Duplicate tuple, acquire next (only one tuple can be equal)
+		if(ServiceCall(unionContext->nextContext)) {
+			order = CompareTuples(context->arguments, unionContext->lookahead);
+			ASSERT(order > 0)
+		}
+	}
+	if(order < 0) {
+		return true;
+	}
+	else {
+		// order > 0
+		SwapTuples(context->arguments, unionContext->lookahead);
+		swapContexts(unionContext);
+		return true;
+	}
+}
+
+
+static void unionFinalizeContext(ServiceContext * context)
+{
+	UnionContext * unionContext = (UnionContext *) &context->data;
+	if(unionContext->lookaheadContext)
+		ServiceFreeContext(unionContext->lookaheadContext);
+	ServiceFreeContext(unionContext->nextContext);
+	FreeTuple(unionContext->lookahead);
+}
+
+
 //----------------------------------- SERVICE_DEDUPLICATE ---------------------------------------
 
 typedef struct s_DeduplicateContext {
@@ -343,8 +463,7 @@ void ReleaseService(Service * service)
 			break;
 
 		case SERVICE_UNION:
-			// TODO
-			ASSERT(false)
+			teardownUnionService(service);
 			break;
 
 		case SERVICE_DEDUPLICATE:
@@ -382,8 +501,7 @@ ServiceContext * ServiceCreateContext(Service const * service, Tuple * arguments
 		break;
 
 	case SERVICE_UNION:
-		// TODO
-		ASSERT(false)
+		unionSetupContext(context);
 		break;
 
 	case SERVICE_DEDUPLICATE:
@@ -412,9 +530,7 @@ bool ServiceCall(ServiceContext * context)
 		return joinServiceCall(context);
 
 	case SERVICE_UNION:
-		// TODO
-		ASSERT(false)
-		return false;
+		return unionServiceCall(context);
 
 	case SERVICE_DEDUPLICATE:
 		return deduplicateCall(context);
@@ -441,8 +557,7 @@ void ServiceFreeContext(ServiceContext * context)
 		break;
 
 	case SERVICE_UNION:
-		// TODO
-		ASSERT(false)
+		unionFinalizeContext(context);
 		break;
 
 	case SERVICE_DEDUPLICATE:
@@ -465,20 +580,39 @@ void PrintService(Service const * service)
 {
 	switch(service->type) {
 	case SERVICE_PERMUTE:
-		PrintCString("PERMUTE");
+		PrintCString("PERMUTE(");
+		for(index8 i = 0; i < service->impl.permute.childService->nArguments; i++)
+			PrintF("%u ", service->impl.permute.argumentMap[i]);
+		PrintTuple(service->impl.permute.constants);
+		PrintChar(' ');
+		PrintService(service->impl.permute.childService);
+		PrintChar(')');
 		break;
+
 	case SERVICE_JOIN:
-		PrintCString("JOIN");
+		PrintCString("JOIN(");
+		PrintService(service->impl.join.left);
+		PrintService(service->impl.join.right);
+		PrintChar(')');
 		break;
+
 	case SERVICE_UNION:
-		PrintCString("UNION");
+		PrintCString("UNION(");
+		PrintService(service->impl._union.first);
+		PrintService(service->impl._union.second);
+		PrintChar(')');
 		break;
+
 	case SERVICE_DEDUPLICATE:
-		PrintCString("DEDUPLICATE");
+		PrintCString("DEDUPLICATE(");
+		PrintService(service->impl.deduplicate.childService);
+		PrintChar(')');
 		break;
+
 	case SERVICE_MACHINE:
 		PrintCString("MACHINE");
 		break;
+
 	default:
 		ASSERT(false);
 		break;

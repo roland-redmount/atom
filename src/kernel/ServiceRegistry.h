@@ -92,7 +92,7 @@ void RegistryAddService(ServiceRecord const * record);
 
 /**
  * Convenience function add a B-tree machine service the registry,
- * generating a list of untyped parameters.
+ * generating a list of untyped in/out parameters.
  */
 void RegistryAddBTreeService(Atom form, BTree * btree);
 

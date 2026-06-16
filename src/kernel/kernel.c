@@ -435,6 +435,7 @@ void KernelShutdown(void)
 		// print methods are not available for LookupDump() at this time
 		ASSERT(false)
 	}
+	TeardownDictionary();
 	FreeIFacts();
 	FreeLookup();
 	FreeRegistry();

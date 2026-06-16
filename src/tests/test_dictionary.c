@@ -15,7 +15,7 @@ void testDictionary(void)
 	size8 const arity = 5;
 	Atom rule = CStringToClause("!number _x square _s | * _x * _x = _s");
 
-	DictionaryAddClause(rule);
+	DictionaryEntry entry = DictionaryAddClause(rule);
 
 	// test iteration
 	DictionaryIterator iterator;
@@ -35,8 +35,7 @@ void testDictionary(void)
 	DictionaryIteratorEnd(&iterator);
 
 	// test remove tuple
-	DictionaryRemoveClause(rule);
-
+	DictionaryRemoveClause(&entry);
 	IFactRelease(rule);
 }
 

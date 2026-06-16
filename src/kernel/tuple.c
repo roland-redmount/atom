@@ -218,6 +218,17 @@ void CopyTuplesReorder(Tuple const * source, Tuple * destination, index8 const *
 }
 
 
+void SwapTuples(Tuple * tuple1, Tuple * tuple2)
+{
+	ASSERT(tuple1->nAtoms == tuple2->nAtoms)
+	size32 nBytes = TupleNBytes(tuple1->nAtoms);
+	byte buffer[nBytes];
+	CopyMemory(tuple1, buffer, nBytes);
+	CopyMemory(tuple2, tuple1, nBytes);
+	CopyMemory(buffer, tuple2, nBytes);
+}
+
+
 void CopyTuplesAt(Tuple const * source, index8 sourceOffset, Tuple * destination)
 {
 	ASSERT(source->nAtoms >= sourceOffset + destination->nAtoms)
@@ -231,6 +242,20 @@ void CopyTuplesAt(Tuple const * source, index8 sourceOffset, Tuple * destination
 		tupleAtomArray(destination),
 		destination->nAtoms * sizeof(Atom)
 	);
+}
+
+
+void AcquireTuple(Tuple const * tuple)
+{
+	for(index8 i = 0; i < tuple->nAtoms; i++)
+		AcquireTypedAtom(TupleGetElement(tuple, i));
+}
+
+
+void ReleaseTuple(Tuple const * tuple)
+{
+	for(index8 i = 0; i < tuple->nAtoms; i++)
+		ReleaseTypedAtom(TupleGetElement(tuple, i));
 }
 
 

@@ -5,165 +5,116 @@
 #include "lang/Formula.h"
 #include "lang/ClauseForm.h"
 #include "memory/allocator.h"
+#include "parser/ClauseBuilder.h"
 
-
-#define MAX_ARITY	20
 
 struct {
-	// We keep one B-tree for arity, plus a dummy for arity 0
-	BTree * btrees[MAX_ARITY + 1];
+	// We keep a single B-tree for all entries
+	BTree * btree;
 } dictionary;
 
 
-/**
- * A dictionary record consists of a form atom and a Tuple
- */
-static size32 recordSize(size8 arity)
+static int8 compareEntries(DictionaryEntry const * entry, DictionaryEntry const * entryOrKey)
 {
-	return sizeof(Atom) + TupleNBytes(arity);
-}
-
-
-static Atom recordGetForm(byte const * record)
-{
-	return *((Atom *) record);
-}
-
-
-static void recordSetForm(byte const * record, Atom form)
-{
-	*((Atom *) record) = form;
-}
-
-
-static Tuple * recordPeekTuple(byte * record)
-{
-	return (Tuple *) (record + sizeof(Atom));
-}
-
-
-static int8 compareRecords(byte const * item, byte const * itemOrKey)
-{
-	Atom recordForm = recordGetForm(item);
-	Atom recordOrKeyForm = recordGetForm(itemOrKey);
-	if(recordForm < recordOrKeyForm)
+	if(entry->clauseForm < entryOrKey->clauseForm)
 		return -1;
-	else if(recordForm > recordOrKeyForm)
+	else if(entry->clauseForm > entryOrKey->clauseForm)
 		return 1;
 	else {
-		Tuple const * recordTuple = recordPeekTuple((byte *) item);
-		Tuple const * recordOrKeyTuple = recordPeekTuple((byte *) itemOrKey);
-		if(!recordOrKeyTuple->nAtoms) {
+		if(!entryOrKey->tuple) {
 			// no tuple provided
 			return 0;
 		}
-		return CompareTuples(recordTuple, recordOrKeyTuple);
+		return CompareTuples(entry->tuple, entryOrKey->tuple);
 	}
 }
 
 
-static int8 btreeCompareRecords(void const * item, void const * itemOrKey, size32 itemSize)
+static int8 btreeCompareItems(void const * item, void const * itemOrKey, size32 itemSize)
 {
-	return compareRecords(item, itemOrKey);
+	return compareEntries(item, itemOrKey);
 }
 
 
-static void freeRecord(void * item, size32 itemSize)
+static void btreeFreeItem(void * item, size32 itemSize)
 {
-	IFactRelease(recordGetForm(item));
-	Tuple const * recordTuple = recordPeekTuple((byte *) item);
-	for(index8 i = 0; i < recordTuple->nAtoms; i++)
-		ReleaseTypedAtom(TupleGetElement(recordTuple, i));
+	DictionaryEntry * entry = item;
+	IFactRelease(entry->clauseForm);
+	for(index8 i = 0; i < entry->tuple->nAtoms; i++)
+		ReleaseTypedAtom(TupleGetElement(entry->tuple, i));
+	FreeTuple(entry->tuple);
 }
 
 
 void SetupDictionary(void)
 {
-	// B-trees are allocated when needed, init to zero
-	SetMemory(&dictionary, sizeof(dictionary), 0);
+	dictionary.btree = BTreeCreate(sizeof(DictionaryEntry), &btreeCompareItems, &btreeFreeItem);
 }
 
 
-static void setupRecord(Atom clauseForm, Atom actorsList, byte * record, bool acquireAtoms)
+void TeardownDictionary(void)
 {
-	size8 arity = ClauseArity(clauseForm);
-
-	if(acquireAtoms)
-		IFactAcquire(clauseForm);
-	recordSetForm(record, clauseForm);
-	// copy actors list to record and acquire atoms
-	Tuple * tuple = recordPeekTuple(record);
-	if(actorsList) {
-		SetupTuple(tuple, arity);
-		for(index8 i = 0; i < arity; i++) {
-			TypedAtom element = ListGetElement(actorsList, i + 1);
-			if(acquireAtoms)
-				AcquireTypedAtom(element);
-			TupleSetElement(tuple, i, element);
-		}
-	}
-	else {
-		// this represents "no tuple"
-		SetupTuple(tuple, 0);
-	}
-
+	BTreeFree(dictionary.btree);
 }
 
 
-void DictionaryAddClause(Atom clause)
+static void setupEntry(DictionaryEntry * entry, Atom clauseForm, Tuple * actors)
+{
+	entry->clauseForm = clauseForm;
+	IFactAcquire(clauseForm);
+	entry->tuple = actors;
+	for(index8 i = 0; i < actors->nAtoms; i++) 
+		AcquireTypedAtom(TupleGetElement(actors, i));
+}
+
+
+DictionaryEntry DictionaryAddClause(Atom clause)
 {
 	ASSERT(IsFormula(clause))
 	ASSERT(FormulaIsClause(clause))
 	Atom clauseForm = FormulaGetForm(clause);
-	Atom actorsList = FormulaGetActors(clause);
-
 	size8 arity = ClauseArity(clauseForm);
-	byte record[recordSize(arity)];
-	setupRecord(clauseForm, actorsList, record, true);
-	
-	// create B-tree if it does not exist
-	if(!dictionary.btrees[arity])
-		dictionary.btrees[arity] = BTreeCreate(recordSize(arity), &btreeCompareRecords, &freeRecord);
-	
-	// add record
-	ASSERT(BTreeInsert(dictionary.btrees[arity], &record) == BTREE_INSERTED)
+	// Atom actorsList = FormulaGetActors(clause);
+	Tuple * actors = CreateTuple(arity);
+	CopyListToTuple(FormulaGetActors(clause), actors);
+
+	DictionaryEntry entry;
+	setupEntry(&entry, clauseForm, actors);
+	ASSERT(BTreeInsert(dictionary.btree, &entry) == BTREE_INSERTED)
+	return entry;
 }
 
 
-void DictionaryRemoveClause(Atom clause)
+DictionaryEntry DictionaryAddClauseFromCString(const char * clauseString)
 {
-	ASSERT(IsFormula(clause))
-	ASSERT(FormulaIsClause(clause))
-	Atom clauseForm = FormulaGetForm(clause);
-	Atom actorsList = FormulaGetActors(clause);
+	Atom rule = CStringToClause(clauseString);
+	DictionaryEntry entry = DictionaryAddClause(rule);
+	IFactRelease(rule);	
+	return entry;
+}
 
-	size8 arity = ClauseArity(clauseForm);
-	byte record[recordSize(arity)];
-	setupRecord(clauseForm, actorsList, record, false);
 
-	ASSERT(dictionary.btrees[arity])
-	ASSERT(BTreeDelete(dictionary.btrees[arity], record) == BTREE_DELETED)
-	// remove B-tree if empty
-	if(BTreeNItems(dictionary.btrees[arity]) == 0) {
-		BTreeFree(dictionary.btrees[arity]);
-		dictionary.btrees[arity] = 0;
-	}
+void DictionaryRemoveClause(DictionaryEntry * entry)
+{
+	ASSERT(BTreeDelete(dictionary.btree, entry) == BTREE_DELETED)
+}
+
+
+void DictionaryRemoveAll(void)
+{
+	BTreeClear(dictionary.btree);
 }
 
 
 void DictionaryIterate(Atom clauseForm, DictionaryIterator * iterator)
 {
 	ASSERT(IsClauseForm(clauseForm))
-	size8 arity = ClauseArity(clauseForm);
-	iterator->keyRecord = Allocate(recordSize(arity));
-	setupRecord(clauseForm, 0, iterator->keyRecord, false);
-	if(!dictionary.btrees[arity]) {
-		// no rules for clauses of this arity
-		iterator->btreeIterator = (BTreeIterator) {0};
-	}
-	else {
-		BTreeIterate(&(iterator->btreeIterator), dictionary.btrees[arity]);
-	}
+	// size8 arity = ClauseArity(clauseForm);
+	iterator->key =  (DictionaryEntry) {
+		.clauseForm = clauseForm,
+		.tuple = 0
+	};
+	BTreeIterate(&(iterator->btreeIterator), dictionary.btree);
 }
 
 
@@ -173,13 +124,13 @@ bool DictionaryIteratorNext(DictionaryIterator * iterator)
 		return false;
 	bool foundItem;
 	if(BTreeIteratorBeforeFirst(&(iterator->btreeIterator)))
-		foundItem = BTreeIteratorSeek(&(iterator->btreeIterator), iterator->keyRecord);
+		foundItem = BTreeIteratorSeek(&(iterator->btreeIterator), &iterator->key);
 	else
 		foundItem = BTreeIteratorNext(&(iterator->btreeIterator));
 
 	if(foundItem) {
-		byte const * btreeRecord = BTreeIteratorPeekItem(&(iterator->btreeIterator));
-		if(compareRecords(btreeRecord, iterator->keyRecord) == 0)
+		DictionaryEntry const * btreeEntry = BTreeIteratorPeekItem(&(iterator->btreeIterator));
+		if(compareEntries(btreeEntry, &iterator->key) == 0)
 			return true;
 	}
 	return false;
@@ -188,13 +139,13 @@ bool DictionaryIteratorNext(DictionaryIterator * iterator)
 
 Tuple const * DictionaryIteratorPeekActors(DictionaryIterator * iterator)
 {
-	byte const * record = BTreeIteratorPeekItem(&(iterator->btreeIterator));
-	return recordPeekTuple((byte *) record);
+	DictionaryEntry * entry = BTreeIteratorPeekItem(&(iterator->btreeIterator));
+	return entry->tuple;
 }
 
 
 void DictionaryIteratorEnd(DictionaryIterator * iterator)
 {
-	Free(iterator->keyRecord);
 	BTreeIteratorEnd(&(iterator->btreeIterator));
+	SetMemory(iterator, sizeof(DictionaryIterator), 0);
 }

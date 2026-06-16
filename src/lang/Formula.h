@@ -91,7 +91,6 @@ Atom CreateClause(Atom const * terms, size8 nTerms);
  * Find the index into the list of terms corresponding the given clause form
  * of the m'th multiple of the given term form.
  */
-
 index8 ClauseGetTermIndex(Atom clauseForm, Atom termForm, uint8 m);
 
 /**

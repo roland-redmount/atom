@@ -10,8 +10,15 @@
 
 typedef struct s_Tuple {
 	size8 nAtoms;
-	// 1-based position of the protected atom, or 0 if none
-	// a protected atom occurs only in tuples that are part of the IFact
+	/**
+	 * 1-based position of the protected atom, or 0 if none
+	 * a protected atom occurs only in tuples that are part of the IFact.
+	 * 
+	 * TODO: This does not seem to belong in a low-level construct like Tuple.
+	 * Tuple storage methods like RelationBTree should not have to deal with
+	 * the protected atom logic. Can we move the "protected" logic to lookup?
+	 */ 
+	// 
 	index8 protectedAtom;
 	// byte types[]
 	// Atom atoms[]
@@ -110,6 +117,21 @@ void CopyTuplesReorder(Tuple const * source, Tuple * destination, index8 const *
  */
 
 void CopyTuplesAt(Tuple const * source, index8 sourceOffset, Tuple * destination);
+
+/**
+ * Swap the contents of two tuples.
+ */
+void SwapTuples(Tuple * tuple1, Tuple * tuple2);
+
+/**
+ * Acquire all elements of the given tuple.
+ */
+void AcquireTuple(Tuple const * tuple);
+
+/**
+ * Release all elements of the given tuple.
+ */
+void ReleaseTuple(Tuple const * tuple);
 
 /**
  * Compare two tuples for equality.
