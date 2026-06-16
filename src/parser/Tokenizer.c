@@ -259,7 +259,7 @@ void TokenizerCleanup(Tokenizer * tokenizer)
 
 static TypedAtom parseFloat(char const * syntax, size32 length)
 {
-	return CreateTypedAtom(AT_FLOAT64, (Atom) {._float = StringToFloat64(syntax, length)});
+	return CreateTypedAtom(AT_FLOAT, (Atom) {._float = StringToFloat64(syntax, length)});
 }
 
 

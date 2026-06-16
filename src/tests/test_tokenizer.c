@@ -117,7 +117,7 @@ static void testTokenizer(void)
 	char const * decimalString = "123.45";
 	token = tokenizeCString(&tokenizer, decimalString);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
-	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_FLOAT64)
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_FLOAT)
 	ASSERT_FLOAT_EQUAL(token.typedAtom.atom._float, 123.45)
 
 	// the string "123.45." is not a legal number

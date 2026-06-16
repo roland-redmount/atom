@@ -53,7 +53,7 @@ static void setupTokensFixture(TokensFixture * fixture)
 	};	
 	fixture->actorTokens[1] = (Token) {
 		.type = TOKEN_NUMBER,
-		.typedAtom = CreateTypedAtom(AT_FLOAT64, (Atom) {._float = 123.45})
+		.typedAtom = CreateTypedAtom(AT_FLOAT, (Atom) {._float = 123.45})
 	};
 	fixture->actorTokens[2] = (Token) {
 		.type = TOKEN_STRING,
@@ -355,7 +355,7 @@ static void testCStringToClause(void)
 	ASSERT_TRUE(
 		SameTypedAtoms(
 			ListGetElement(actorsList, 3),
-			CreateTypedAtom(AT_FLOAT64, (Atom) {._float = 123.45})
+			CreateTypedAtom(AT_FLOAT, (Atom) {._float = 123.45})
 		)
 	)
 

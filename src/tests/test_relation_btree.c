@@ -32,7 +32,7 @@ static void setupFixture(void)
 	fixture.tuple1 = CreateTupleFromArray(
 		(TypedAtom[]) {
 			CreateTypedAtom(AT_INT, (Atom) {._int = 13 }),
-			CreateTypedAtom(AT_FLOAT64, (Atom) {._float = 123.456}),
+			CreateTypedAtom(AT_FLOAT, (Atom) {._float = 123.456}),
 			CreateTypedAtom(AT_LETTER, GetAlphabetLetter('A')),
 		},
 		TEST_N_COLUMNS
@@ -40,7 +40,7 @@ static void setupFixture(void)
 	fixture.tuple2 = CreateTupleFromArray(
 		(TypedAtom[]) {
 			CreateTypedAtom(AT_INT, (Atom) {._int = 13 }),
-			CreateTypedAtom(AT_FLOAT64, (Atom) {._float = 123.456}),
+			CreateTypedAtom(AT_FLOAT, (Atom) {._float = 123.456}),
 			CreateTypedAtom(AT_LETTER, GetAlphabetLetter('B')),
 		},
 		TEST_N_COLUMNS
@@ -48,7 +48,7 @@ static void setupFixture(void)
 	fixture.tuple3 = CreateTupleFromArray(
 		(TypedAtom[]) {
 			CreateTypedAtom(AT_UINT, (Atom) {._int = 14 }),
-			CreateTypedAtom(AT_FLOAT64, (Atom) {._float = 456.789}),
+			CreateTypedAtom(AT_FLOAT, (Atom) {._float = 456.789}),
 			CreateTypedAtom(AT_LETTER, GetAlphabetLetter('C')),
 		},
 		TEST_N_COLUMNS
@@ -156,7 +156,7 @@ void testFindTuple(void)
 		Tuple * queryTuple = CreateTupleFromArray(
 			(TypedAtom[]) {
 				CreateTypedAtom(AT_INT, (Atom) {._int = 31}),
-				CreateTypedAtom(AT_FLOAT64, (Atom) {._float = 123.456}),
+				CreateTypedAtom(AT_FLOAT, (Atom) {._float = 123.456}),
 				CreateTypedAtom(AT_VARIABLE, CreateVariable('x')),
 			},
 			TEST_N_COLUMNS
