@@ -106,19 +106,19 @@ static void testTokenizer(void)
 	token = tokenizeCString(&tokenizer, integerString);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_INT)
-	ASSERT_DATA64_EQUAL(token.typedAtom.atom, 12345);
+	ASSERT_INT64_EQUAL(token.typedAtom.atom._uint, 12345);
 
 	integerString = "0";
 	token = tokenizeCString(&tokenizer, integerString);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_INT)
-	ASSERT_DATA64_EQUAL(token.typedAtom.atom, 0);
+	ASSERT_INT64_EQUAL(token.typedAtom.atom._uint, 0);
 
 	char const * decimalString = "123.45";
 	token = tokenizeCString(&tokenizer, decimalString);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_FLOAT64)
-	ASSERT_FLOAT_EQUAL(GetFloat64Value(token.typedAtom.atom), 123.45)
+	ASSERT_FLOAT_EQUAL(token.typedAtom.atom._float, 123.45)
 
 	// the string "123.45." is not a legal number
 	pushCString(&tokenizer, decimalString);
@@ -133,7 +133,7 @@ static void testTokenizer(void)
 	TokenizerReset(&tokenizer);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_VARIABLE)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_VARIABLE)
-	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom), 'v');
+	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom.atom), 'v');
 
 	TokenizerCleanup(&tokenizer);
 }
@@ -143,7 +143,7 @@ static void testCreateTokenFromCString(void)
 {
 	Token token = CreateTokenFromCString("_x");
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_VARIABLE)
-	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom), 'x');
+	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom.atom), 'x');
 	ReleaseToken(token);
 }
 

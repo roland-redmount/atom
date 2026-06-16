@@ -307,21 +307,23 @@ bool TupleMatch(Tuple const * tuple, Tuple const * queryTuple)
 		TypedAtom atom = TupleGetElement(tuple, i);
 		TypedAtom queryAtom = TupleGetElement(queryTuple, i);
 		if(queryAtom.type == AT_VARIABLE) {
-			if(VariableIsQuoted(queryAtom)) {
+			if(VariableIsQuoted(queryAtom.atom)) {
 				/**
 				 * If the query variable is quoted, we remove the outermost quote.
 				 * This allows querying for a variable _x stored in a relation (foo)
 				 * using (foo '_x)
 				 * TODO: review the semantics of this!
 				 */
-				queryAtom = UnquoteVariable(queryAtom);
+				queryAtom.atom = UnquoteVariable(queryAtom.atom);
 			}
 			else {
 				if(VariableMatch(queryAtom.atom, atom)) {
 					// any repeats of this variable must correspond to the same atom
 					for(index8 j = i + 1; j < tuple->nAtoms; j++) {
 						TypedAtom nextQueryAtom = TupleGetElement(queryTuple, j);
-						if((nextQueryAtom.type == AT_VARIABLE) && SameVariable(queryAtom, nextQueryAtom)) {
+						if((nextQueryAtom.type == AT_VARIABLE) &&
+							SameVariable(queryAtom.atom, nextQueryAtom.atom))
+						{
 							TypedAtom nextAtom = TupleGetElement(tuple, j);
 							if(!SameTypedAtoms(atom, nextAtom))
 								return false;

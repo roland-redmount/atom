@@ -19,20 +19,20 @@ void testAssertRetract(void)
 	
 	// check that service does not already exist
 	ServiceRecord record = RegistryFindUntypedService(form);
-	ASSERT(!record.form)
+	ASSERT(!record.form.hash)
 
 	// asserting the first fact should create the service
 	Atom barf = CreateStringFromCString("barf");
 	Tuple * actors1 = CreateTupleFromArray(
 		(TypedAtom[]) {
 			CreateTypedAtom(AT_ID, barf),
-			CreateTypedAtom(AT_INT, -1)
+			CreateTypedAtom(AT_INT, (Atom) {._int = -1})
 		},
 		2
 	);
 	AssertFact(form, actors1);
 	record = RegistryFindUntypedService(form);
-	ASSERT(record.form)
+	ASSERT(record.form.hash)
 	ASSERT(record.service->type == SERVICE_MACHINE)
 	BTree * btree = (BTree *) record.service->impl.machine.providerData;
 
@@ -41,7 +41,7 @@ void testAssertRetract(void)
 	Atom baz = CreateStringFromCString("baz");
 	Tuple * actors2 = CreateTupleFromArray(
 		(TypedAtom[]) {
-			CreateTypedAtom(AT_INT, 42),
+			CreateTypedAtom(AT_INT, (Atom) {._int = 42}),
 			CreateTypedAtom(AT_ID, baz)
 		},
 		2
@@ -55,7 +55,7 @@ void testAssertRetract(void)
 	// retracting the last fact should remove the service
 	RetractFact(form, actors1);
 	record = RegistryFindUntypedService(form);
-	ASSERT(!record.form)
+	ASSERT(!record.form.hash)
 
 	FreeTuple(actors1);
 	FreeTuple(actors2);

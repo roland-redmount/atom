@@ -13,8 +13,8 @@ static void testPair(void)
 	uint32 initialNRows = RelationBTreeNRows(pairTable);
 
 	// create a pair
-	TypedAtom left = GetAlphabetLetter('x');
-	TypedAtom right = CreateTypedAtom(AT_UINT, 42);
+	TypedAtom left = CreateTypedAtom(AT_LETTER, GetAlphabetLetter('x'));
+	TypedAtom right = CreateTypedAtom(AT_UINT, (Atom) {._uint = 42});
 	Atom pair1 = CreatePair(left, right);
 	
 	ASSERT_TRUE(IsPair(pair1))
@@ -27,7 +27,7 @@ static void testPair(void)
 
 	// attempt to add the same pair again
 	Atom pair2 = CreatePair(left, right);
-	ASSERT_DATA64_EQUAL(pair1, pair2)
+	ASSERT_DATA64_EQUAL(pair1.hash, pair2.hash)
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(pairTable), initialNRows + 1)
 	IFactRelease(pair2);
 	

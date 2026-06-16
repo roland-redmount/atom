@@ -31,25 +31,25 @@ static void setupFixture(void)
 
 	fixture.tuple1 = CreateTupleFromArray(
 		(TypedAtom[]) {
-			CreateTypedAtom(AT_INT, 13),
-			CreateTypedAtom(AT_FLOAT64, CreateFloat64(123.456)),
-			GetAlphabetLetter('A'),
+			CreateTypedAtom(AT_INT, (Atom) {._int = 13 }),
+			CreateTypedAtom(AT_FLOAT64, (Atom) {._float = 123.456}),
+			CreateTypedAtom(AT_LETTER, GetAlphabetLetter('A')),
 		},
 		TEST_N_COLUMNS
 	);
 	fixture.tuple2 = CreateTupleFromArray(
 		(TypedAtom[]) {
-			CreateTypedAtom(AT_INT, 13),
-			CreateTypedAtom(AT_FLOAT64, CreateFloat64(123.456)),
-			GetAlphabetLetter('B'),
+			CreateTypedAtom(AT_INT, (Atom) {._int = 13 }),
+			CreateTypedAtom(AT_FLOAT64, (Atom) {._float = 123.456}),
+			CreateTypedAtom(AT_LETTER, GetAlphabetLetter('B')),
 		},
 		TEST_N_COLUMNS
 	);
 	fixture.tuple3 = CreateTupleFromArray(
 		(TypedAtom[]) {
-			CreateTypedAtom(AT_UINT, 14),
-			CreateTypedAtom(AT_FLOAT64, CreateFloat64(456.789)),
-			GetAlphabetLetter('C'),
+			CreateTypedAtom(AT_UINT, (Atom) {._int = 14 }),
+			CreateTypedAtom(AT_FLOAT64, (Atom) {._float = 456.789}),
+			CreateTypedAtom(AT_LETTER, GetAlphabetLetter('C')),
 		},
 		TEST_N_COLUMNS
 	);
@@ -135,7 +135,7 @@ void testFindTuple(void)
 	{
 		Tuple * queryTuple = CreateTuple(3);
 		CopyTuples(fixture.tuple1, queryTuple);
-		TupleSetElement(queryTuple, 2, CreateVariable('x'));
+		TupleSetElement(queryTuple, 2, CreateTypedAtom(AT_VARIABLE, CreateVariable('x')));
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);
 
 		ASSERT_TRUE(RelationBTreeIteratorNext(&iterator))
@@ -155,9 +155,9 @@ void testFindTuple(void)
 	{
 		Tuple * queryTuple = CreateTupleFromArray(
 			(TypedAtom[]) {
-				CreateTypedAtom(AT_INT, 31),
-				CreateTypedAtom(AT_FLOAT64, CreateFloat64(123.456)),
-				CreateVariable('x'),
+				CreateTypedAtom(AT_INT, (Atom) {._int = 31}),
+				CreateTypedAtom(AT_FLOAT64, (Atom) {._float = 123.456}),
+				CreateTypedAtom(AT_VARIABLE, CreateVariable('x')),
 			},
 			TEST_N_COLUMNS
 		);
@@ -171,8 +171,8 @@ void testFindTuple(void)
 	{
 		Tuple * queryTuple = CreateTupleFromArray(
 			(TypedAtom[]) {
-				CreateVariable('x'),
-				CreateVariable('y'),
+				CreateTypedAtom(AT_VARIABLE, CreateVariable('x')),
+				CreateTypedAtom(AT_VARIABLE, CreateVariable('y')),
 				TupleGetElement(fixture.tuple3, 2),
 			},
 			TEST_N_COLUMNS
@@ -192,9 +192,9 @@ void testFindTuple(void)
 	{
 		Tuple * queryTuple = CreateTupleFromArray(
 			(TypedAtom[]) {
-				CreateTypedAtom(AT_INT, 13),
-				CreateVariable('x'),
-				CreateVariable('x'),
+				CreateTypedAtom(AT_INT, (Atom) {._int = 31}),
+				CreateTypedAtom(AT_VARIABLE, CreateVariable('x')),
+				CreateTypedAtom(AT_VARIABLE, CreateVariable('x')),
 			},
 			TEST_N_COLUMNS
 		);
@@ -208,7 +208,7 @@ void testFindTuple(void)
 	{
 		Tuple * queryTuple = CreateTupleFromArray(
 			(TypedAtom[]) {
-				CreateTypedVariable('x', AT_UINT),
+				CreateTypedAtom(AT_VARIABLE, CreateTypedVariable('x', AT_UINT)),
 				anonymousVariable,
 				anonymousVariable,
 			},

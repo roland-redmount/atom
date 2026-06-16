@@ -43,7 +43,7 @@ void testAddDropTable(void)
 	ASSERT_UINT32_EQUAL(RelationBTreeNColumns(createdTable), 4)
 
 	ServiceRecord record = RegistryFindUntypedService(fixture.form);
-	ASSERT(record.form)
+	ASSERT(record.form.hash)
 	ASSERT(record.service->type == SERVICE_MACHINE)
 	BTree * foundTable = (BTree *) record.service->impl.machine.providerData;
 	ASSERT_PTR_NOT_EQUAL(foundTable, 0)

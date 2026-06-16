@@ -2,72 +2,43 @@
 #include "lang/Variable.h"
 #include "parser/Characters.h"
 
-typedef union
-{
-	struct {
-		char name;
-		byte type;
-		uint8 quoteCount;
-	} fields;
-	data64 value;
-} Variable;
+
+TypedAtom anonymousVariable = {.type = AT_VARIABLE, .atom = {0}};
 
 
-TypedAtom anonymousVariable = {.type = AT_VARIABLE, .atom = 0};
-
-
-TypedAtom CreateVariable(char name)
+Atom CreateVariable(char name)
 {
 	// for now we just store a single lowercase character _x, _y, ...
 	ASSERT(IsAlpha(name));
-	Variable var = {0};
-	var.fields.name = ToLower(name);
-	var.fields.quoteCount = 0;
-	return (TypedAtom) {.type = AT_VARIABLE, .atom = var.value};
+	return (Atom) {
+		.variable = {.name = name}
+	};
 }
 
 
-TypedAtom CreateTypedVariable(char name, byte type)
+Atom CreateTypedVariable(char name, byte type)
 {
 	// for now we just store a single lowercase character _x, _y, ...
 	ASSERT(IsAlpha(name));
-	Variable var = {0};
-	var.fields.name = ToLower(name);
-	var.fields.type = type;
-	var.fields.quoteCount = 0;
-	return (TypedAtom) {.type = AT_VARIABLE, .atom = var.value};
+	return (Atom) {
+		.variable = {.name = name, .type = type}
+	};
 }
 
 
-char GetVariableName(TypedAtom variable)
+char GetVariableName(Atom variable)
 {
-	Variable var;
-	var.value = variable.atom;
-	if(var.fields.name)
-		return var.fields.name;
+	if(variable.variable.name)
+		return variable.variable.name;
 	else
 		return '_';
 }
 
 
-byte VariableGetType(Atom variable)
+bool SameVariable(Atom variable1, Atom variable2)
 {
-	Variable var;
-	var.value = variable;
-	return var.fields.type;
-}
-
-
-bool IsVariable(TypedAtom a)
-{
-	return a.type == AT_VARIABLE;
-}
-
-
-bool SameVariable(TypedAtom variable1, TypedAtom variable2)
-{
-	if(variable1.atom && variable2.atom)
-		return variable1.atom == variable2.atom;
+	if(variable1.hash && variable1.hash)
+		return variable1.hash == variable2.hash;
 	else {
 		// either variable is _
 		return 0;
@@ -75,64 +46,59 @@ bool SameVariable(TypedAtom variable1, TypedAtom variable2)
 }
 
 
-bool VariableIsQuoted(TypedAtom variable)
+bool VariableIsQuoted(Atom variable)
 {
-	Variable var;
-	var.value = variable.atom;
-	return var.fields.quoteCount > 0;	
-}
-
-TypedAtom QuoteVariable(TypedAtom variable)
-{
-	Variable var;
-	var.value = variable.atom;
-	var.fields.quoteCount++;
-	// check for uint8 wraparound
-	ASSERT(var.fields.quoteCount > 0);
-
-	return (TypedAtom) {.type = AT_VARIABLE, .atom = var.value};
+	return variable.variable.quoteCount > 0;	
 }
 
 
-TypedAtom UnquoteVariable(TypedAtom variable)
+Atom QuoteVariable(Atom variable)
 {
-	
-	Variable var;
-	var.value = variable.atom;
-	ASSERT(var.fields.quoteCount > 0);
-	var.fields.quoteCount--;
-	return (TypedAtom) {.type = AT_VARIABLE, .atom = var.value};
+	// guard against uint8 wraparound
+	ASSERT(variable.variable.quoteCount < 255);
+	return (Atom) {
+		.variable = {
+			.name = variable.variable.name,
+			.type = variable.variable.type,
+			.quoteCount = variable.variable.quoteCount + 1
+		}
+	};
+}
+
+
+Atom UnquoteVariable(Atom variable)
+{
+	ASSERT(variable.variable.quoteCount > 0);
+	return (Atom) {
+		.variable = {
+			.name = variable.variable.name,
+			.type = variable.variable.type,
+			.quoteCount = variable.variable.quoteCount - 1
+		}
+	};
 }
 
 
 bool VariableMatch(Atom variable, TypedAtom typedAtom)
 {
-	if(!variable)
+	if(!variable.variable.name)
 		return true;	// anonymous variable
-	Variable var;
-	var.value = variable;
-	if(var.fields.type)
-		return var.fields.type == typedAtom.type;
+	if(variable.variable.type)
+		return variable.variable.type == typedAtom.type;
 	else
 		return true;
 }
 
 
-void PrintVariable(TypedAtom variable)
+void PrintVariable(Atom variable)
 {
-	Variable var;
-	var.value = variable.atom;
-	if(var.value) {
-		for(uint8 i = 0; i < var.fields.quoteCount; i++)
-			PrintChar('\'');
-		PrintChar(var.fields.name);
-		if(var.fields.type)
-			PrintF(":%s", GetAtomTypeName(var.fields.type));
-	}
-	else {
-		// anonymous variable
+	for(uint8 i = 0; i < variable.variable.quoteCount; i++)
+		PrintChar('\'');
+	if(variable.variable.name)
+		PrintChar(variable.variable.name);
+	else
 		PrintChar('_');
-	}
-
+	if(variable.variable.type)
+		PrintF(":%s", GetAtomTypeName(variable.variable.type));
 }
 

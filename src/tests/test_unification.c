@@ -10,16 +10,16 @@
 void testUnification(void)
 {
 	// Unify tuples (1 x 2 y) and (1 3 z z)
-	TypedAtom x = CreateVariable('x');
-	TypedAtom y = CreateVariable('y');
-	TypedAtom one = CreateTypedAtom(AT_INT, 1);
-	TypedAtom two = CreateTypedAtom(AT_INT, 2);
+	TypedAtom x = CreateTypedAtom(AT_VARIABLE, CreateVariable('x'));
+	TypedAtom y = CreateTypedAtom(AT_VARIABLE, CreateVariable('y'));
+	TypedAtom one = CreateTypedAtom(AT_INT, (Atom) {._int = 1});
+	TypedAtom two = CreateTypedAtom(AT_INT, (Atom) {._int = 2});
 	Tuple * tuple1 = CreateTupleFromArray(
 		(TypedAtom[]) {	one, x, two, y },
 		4
 	);
-	TypedAtom z = CreateVariable('z');
-	TypedAtom three = CreateTypedAtom(AT_INT, 3);
+	TypedAtom z = CreateTypedAtom(AT_VARIABLE, CreateVariable('z'));
+	TypedAtom three = CreateTypedAtom(AT_INT, (Atom) {._int = 3});
 	Tuple * tuple2 = CreateTupleFromArray(
 		(TypedAtom[]) { one, three, z, z },
 		4

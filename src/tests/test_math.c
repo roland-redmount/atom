@@ -25,7 +25,7 @@ void testAdd1(void)
 	
 	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
-	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 0), 2 + 3);
+	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 0)._int, 2 + 3);
 
 	ASSERT_FALSE(ServiceCall(context))
 	
@@ -50,7 +50,7 @@ void testAdd2(void)
 	
 	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
-	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 2), 7 - 4);
+	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 2)._uint, 7 - 4);
 
 	ASSERT_FALSE(ServiceCall(context))
 	

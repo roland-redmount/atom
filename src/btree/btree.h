@@ -100,6 +100,10 @@ void * BTreePeekItem(BTree * btree, void const * key);
  * if it is found.
  * Returns true if the item was found. If the item is not
  * found, key is not altered.
+ * 
+ * NOTE: this is not a very good interface; we should probably have
+ * separate const * key and * item arguments to avoid overwriting
+ * the key. Particularly for repeated use; see for example LookupRemoveAllRoles()
  */
 bool BTreeGetItem(BTree * btree, void * key);
 

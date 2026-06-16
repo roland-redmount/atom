@@ -13,7 +13,7 @@
 TypedAtom stringElementGenerator(index32 index, void const * data)
 {
 	char const * string = (char const *) data;
-	return GetAlphabetLetter(string[index]);
+	return CreateTypedAtom(AT_LETTER, GetAlphabetLetter(string[index]));
 }
 
 Atom CreateString(char const * chars, size32 length)

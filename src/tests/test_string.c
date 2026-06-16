@@ -27,7 +27,7 @@ void testString(void)
 	// second call to CreateString() should return the same string
 	// and add one reference
 	Atom string1Clone = CreateStringFromCString(cString1);
-	ASSERT_DATA64_EQUAL(string1, string1Clone)
+	ASSERT_DATA64_EQUAL(string1.hash, string1Clone.hash)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(string1), 2)
 	IFactRelease(string1Clone);
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(string1), 1)
@@ -53,7 +53,7 @@ void fuzzTestString(void)
 	Atom string = CreateStringFromCString(cString);
 	for(index32 i = 0; i < 100; i++) {
 		Atom stringClone = CreateStringFromCString(cString);
-		ASSERT_DATA64_EQUAL(string, stringClone);
+		ASSERT_DATA64_EQUAL(string.hash, stringClone.hash);
 		IFactRelease(stringClone);
 	}
 	IFactRelease(string);

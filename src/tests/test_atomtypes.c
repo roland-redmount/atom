@@ -12,7 +12,6 @@ void testGetAtomTypeName(void)
 {
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_UINT), "UINT")
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_INT), "INT")
-	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_FLOAT32), "FLOAT32")
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_FLOAT64), "FLOAT64")
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_LETTER), "LETTER")
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_VARIABLE), "VARIABLE")
@@ -27,57 +26,23 @@ void testAtomTypeFromString(void)
 }
 
 
-void testFloat(void)
-{
-	double float64Value = 3.1415926535897932384;
-	Atom float64 = CreateFloat64(float64Value);
-	ASSERT_DOUBLE_EQUAL(GetFloat64Value(float64), float64Value)
-
-	float float32Value = 3.141592;
-	Atom float32 = CreateFloat32((float) float32Value);
-	ASSERT_FLOAT_EQUAL(GetFloat32Value(float32), float32Value)
-}
-
-
-void testInt(void)
-{
-	const int values[] = {42, 0, -7};
-	size32 n_values = sizeof(values) / sizeof(int);
-	for(index32 i = 0; i < n_values; i++) {
-		TypedAtom integer = CreateTypedAtom(AT_INT, values[i]);
-		ASSERT_INT64_EQUAL(integer.atom, values[i])
-	}
-}
-
-
-void testUInt(void)
-{
-	const uint64 values[] = {42, 0, 0xFFFFFFFFFFFFFFFFUL};
-	size32 n_values = sizeof(values) / sizeof(uint64);
-	for(index32 i = 0; i < n_values; i++) {
-		TypedAtom integer = CreateTypedAtom(AT_UINT, values[i]);
-		ASSERT_UINT64_EQUAL(integer.atom, values[i])
-	}
-}
-
-
 void testVariable(void)
 {
-	TypedAtom var1 = CreateVariable('X');
+	Atom var1 = CreateVariable('X');
 	ASSERT_CHAR_EQUAL(GetVariableName(var1), 'x')
 
 	// variables are always lowercase
-	TypedAtom var2 = CreateVariable('y');
+	Atom var2 = CreateVariable('y');
 	ASSERT_CHAR_EQUAL(GetVariableName(var2), 'y')
 
-	TypedAtom var3 = anonymousVariable;
+	Atom var3 = anonymousVariable.atom;
 	ASSERT_CHAR_EQUAL(GetVariableName(var3), '_')
 
 	// test quoting
 	ASSERT_FALSE(VariableIsQuoted(var1))
-	TypedAtom quotedVar1 = QuoteVariable(var1);
+	Atom quotedVar1 = QuoteVariable(var1);
 	ASSERT_TRUE(VariableIsQuoted(quotedVar1))
-	ASSERT_TRUE(SameTypedAtoms(UnquoteVariable(quotedVar1), var1))
+	ASSERT_DATA64_EQUAL(UnquoteVariable(quotedVar1).hash, var1.hash)
 }
 
 
@@ -85,17 +50,15 @@ static void testLetter(void)
 {
 	index8 i = 1;
 	for(char c = 'A'; c <= 'Z'; c++) {
-		TypedAtom letter = GetAlphabetLetter(c);
-		ASSERT_UINT32_EQUAL(letter.type, AT_LETTER)
-		ASSERT_DATA64_EQUAL(letter.atom, i)
+		Atom letter = GetAlphabetLetter(c);
+		ASSERT_DATA64_EQUAL(letter.letter.code, i)
 		i++;
 	}
 
 	i = 1;
 	for(char c = 'a'; c <= 'z'; c++) {
-		TypedAtom letter = GetAlphabetLetter(c);
-		ASSERT_UINT32_EQUAL(letter.type, AT_LETTER)
-		ASSERT_DATA64_EQUAL(letter.atom, i)
+		Atom letter = GetAlphabetLetter(c);
+		ASSERT_DATA64_EQUAL(letter.letter.code, i)
 		i++;
 	}
 }
@@ -108,9 +71,6 @@ int main(int argc, char * argv[])
 	ExecuteTest(testGetAtomTypeName);
 	ExecuteTest(testAtomTypeFromString);
 
-	ExecuteTest(testInt);
-	ExecuteTest(testUInt);
-	ExecuteTest(testFloat);
 	ExecuteTest(testLetter);
 	ExecuteTest(testVariable);
 

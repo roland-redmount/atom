@@ -18,15 +18,14 @@
 
 #define AT_UINT					3		// unsigned integer
 #define AT_INT					4		// signed integer
-#define AT_FLOAT32				5		// double-precision floating point number
-#define AT_FLOAT64				6		// double-precision floating point number
+#define AT_FLOAT64				5		// double-precision floating point number
 
-#define AT_LETTER				7		// a letter of the English alphabet
-#define AT_VARIABLE             8		// variable with a letter identifier
+#define AT_LETTER				6		// a letter of the English alphabet
+#define AT_VARIABLE             7		// variable with a letter identifier
 
-#define AT_PARAMETER			9		// a parameter in a service
+#define AT_PARAMETER			8		// a parameter in a service
 
-#define N_ATOMTYPES				9
+#define N_ATOMTYPES				8
 
 
 /**

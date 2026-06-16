@@ -4,9 +4,9 @@
 
 int8 CompareAtoms(Atom atom1, Atom atom2)
 {
-	if(atom1 < atom2)
+	if(atom1.hash < atom2.hash)
 		return -1;
-	if(atom1 > atom2)
+	if(atom1.hash > atom2.hash)
 		return 1;
 	return 0;
 }
@@ -29,7 +29,7 @@ uint8 ReduceAtomsArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms)
 {
 	for(index8 k = 0; k < nAtoms; k++) {
 		index8 i = k + 1;
-		while((i < nAtoms) && (atoms[k] == atoms[i]))
+		while((i < nAtoms) && (atoms[k].hash == atoms[i].hash))
 			i++;
 		multiplicities[k] = i - k;
 		if(multiplicities[k] > 1) {

@@ -206,7 +206,7 @@ void testUnionService(void)
 	char expectedCharacters[TEST_UNION_N_ELEMENTS] = "bfaoorf";
 	for(index32 i = 0; i < TEST_UNION_N_ELEMENTS; i++) {
 		ASSERT_TRUE(ServiceCall(context))
-		ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 0), expectedPositions[i])
+		ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 0)._uint, expectedPositions[i])
 		ASSERT_CHAR_EQUAL(
 			LetterToChar(TupleGetElement(arguments, 1), LETTER_LOWERCASE),
 			expectedCharacters[i]

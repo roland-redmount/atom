@@ -41,15 +41,15 @@ static char letterCodeToChar(uint8 letterCode, uint8 letterCase)
 }
 
 
-TypedAtom GetAlphabetLetter(char c)
+Atom GetAlphabetLetter(char c)
 {
-	return CreateTypedAtom(AT_LETTER,charToLetterCode(c));
+	return (Atom) {.letter.code = charToLetterCode(c)};
 }
 
 
 char LetterToChar(TypedAtom letter, uint8 letterCase)
 {
-	return letterCodeToChar(letter.atom, letterCase);
+	return letterCodeToChar(letter.atom.letter.code, letterCase);
 }
 
 

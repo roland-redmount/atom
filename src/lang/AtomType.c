@@ -10,7 +10,6 @@ char const * atomTypeNames[N_ATOMTYPES + 1] = {
 
 	"UINT",
 	"INT",
-	"FLOAT32",
 	"FLOAT64",
 
 	"LETTER",

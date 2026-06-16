@@ -34,31 +34,6 @@
 #define PARAMETER_OUT		2
 
 
-/**
- * Create an parameter. The number must be positive and < 255.
- * For untyped parameters, set type to 0.
- */
-Atom CreateParameter(uint8 number, byte io, byte type);
-
-bool IsParameter(TypedAtom atom);
-
-uint8 ParameterGetNumber(Atom parameter);
-
-byte ParameterGetType(Atom parameter);
-
-byte ParameterGetIO(Atom parameter);
-
-
-/**
- * Comparison function for parameters, used to compare
- * parameter lists; see ServiceRegistry.c
- * 
- * The type AT_NONE  and io mode PARAMETER_IN_OUT are treated as
- * wildcards, matching any other value.  Therefore, distinct parameter
- * atoms can compare equal by this function.
- */
-// int8 CompareParameters(Atom parameter1, Atom parameter2);
-
 void PrintParameter(Atom parameter);
 
 

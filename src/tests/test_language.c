@@ -87,7 +87,7 @@ static void testTermForm(void)
 	Atom termForm = CreateTermForm(predicateForm, false);
 
 	ASSERT_TRUE(IsTermForm(termForm))
-	ASSERT_DATA64_EQUAL(TermFormGetPredicateForm(termForm), predicateForm)
+	ASSERT_DATA64_EQUAL(TermFormGetPredicateForm(termForm).hash, predicateForm.hash)
 	ASSERT_FALSE(TermFormGetSign(termForm))
 	ASSERT_UINT32_EQUAL(TermFormArity(termForm), PredicateArity(predicateForm))
 
@@ -161,10 +161,10 @@ static void testClauseForm(void)
 		ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
 		ASSERT_UINT32_EQUAL(em.element.type, AT_ID)
 		// order of term forms is arbitrary
-		if(em.element.atom == termFormsFixture.termForm)
+		if(em.element.atom.hash == termFormsFixture.termForm.hash)
 			ASSERT_UINT32_EQUAL(em.multiple, 2)
 		else {
-			ASSERT_DATA64_EQUAL(em.element.atom, termFormsFixture.negatedTermForm)
+			ASSERT_DATA64_EQUAL(em.element.atom.hash, termFormsFixture.negatedTermForm.hash)
 			ASSERT_UINT32_EQUAL(em.multiple, 1)
 		}
 	}
@@ -207,7 +207,7 @@ static void testCreateClause(void)
 
 	TypedAtom actors[EXAMPLE_CLAUSE_ARITY];
 	for(index8 i = 0; i < EXAMPLE_CLAUSE_ARITY; i++)
-		actors[i] = CreateTypedAtom(AT_INT, i + 1);
+		actors[i] = CreateTypedAtom(AT_INT, (Atom) {._int = i + 1});
 	Atom actorsList = CreateListFromArray(actors, EXAMPLE_CLAUSE_ARITY);
 
 	// act
@@ -216,7 +216,7 @@ static void testCreateClause(void)
 	// assert
 	ASSERT_TRUE(IsFormula(clause))
 	ASSERT_UINT32_EQUAL(FormulaArity(clause), ClauseArity(clauseFormFixture.clauseForm))
-	ASSERT_DATA64_EQUAL(FormulaGetActors(clause), actorsList)
+	ASSERT_DATA64_EQUAL(FormulaGetActors(clause).hash, actorsList.hash)
 
 	IFactRelease(clause);
 

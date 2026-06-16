@@ -28,15 +28,13 @@
  * NOTE: variables could internally be referred to 
  * by their index (order) in the formula in which they reside.
  * The character (or name) is for user readability only.
- * 
- * TODO: these functions should return Atom, not TypedAtom
  */
-TypedAtom CreateVariable(char name);
+Atom CreateVariable(char name);
 
 /**
  * Create a typed variable
  */
-TypedAtom CreateTypedVariable(char name, byte type);
+Atom CreateTypedVariable(char name, byte type);
 
 byte VariableGetType(Atom variable);
 
@@ -50,18 +48,18 @@ byte VariableGetType(Atom variable);
  */
 extern TypedAtom anonymousVariable;
 
-bool IsVariable(TypedAtom a);
+bool IsVariable(TypedAtom atom);
 
 /**
  * Compare variables, such that the anonymous variable _
  * compares unequal to any other variable, and to itself.
  */
-bool SameVariable(TypedAtom variable1, TypedAtom variable2);
+bool SameVariable(Atom variable1, Atom variable2);
 
 /**
  * Get the variable name, or '_' for the anonymous variable.
  */
-char GetVariableName(TypedAtom variable);
+char GetVariableName(Atom variable);
 
 /**
  * Determine if a variable matches an atom,
@@ -72,10 +70,10 @@ bool VariableMatch(Atom variable, TypedAtom typedAtom);
 /**
  * Handle quoted variables
  */
-bool VariableIsQuoted(TypedAtom variable);
-TypedAtom QuoteVariable(TypedAtom variable);
-TypedAtom UnquoteVariable(TypedAtom variable);
+bool VariableIsQuoted(Atom variable);
+Atom QuoteVariable(Atom variable);
+Atom UnquoteVariable(Atom variable);
 
-void PrintVariable(TypedAtom variable);
+void PrintVariable(Atom variable);
 
 #endif	// VARIABLE_H
