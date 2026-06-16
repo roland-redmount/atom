@@ -1,5 +1,5 @@
 
-#include "kernel/FloatIEEE754.h"
+#include "kernel/float.h"
 #include "kernel/Int.h"
 #include "kernel/Parameter.h"
 #include "kernel/UInt.h"
@@ -154,7 +154,7 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		break;
 
 	case AT_FLOAT:
-		PrintFloat64(typedAtom.atom);
+		PrintFloat(typedAtom.atom);
 		break;
 
 	case AT_LETTER:

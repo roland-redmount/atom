@@ -1,5 +1,5 @@
 
-#include "kernel/FloatIEEE754.h"
+#include "kernel/float.h"
 #include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"

@@ -7,7 +7,8 @@
 #ifndef FLOATIEEE754_H
 #define FLOATIEEE754_H
 
-void PrintFloat64(Atom float64);
+
+void PrintFloat(Atom _float);
 
 
 #endif //	FLOATIEEE754_H

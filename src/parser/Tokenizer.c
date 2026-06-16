@@ -21,7 +21,7 @@
  * tokenizer with a "take back" functionality.
  */
 
-#include "kernel/FloatIEEE754.h"
+#include "kernel/float.h"
 #include "kernel/Int.h"
 #include "kernel/Parameter.h"
 #include "lang/Variable.h"

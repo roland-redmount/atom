@@ -86,7 +86,7 @@ add_library(atom SHARED
     src/kernel/dictionary.c
     src/kernel/dispatch.c
     src/kernel/ifact.c
-    src/kernel/FloatIEEE754.c
+    src/kernel/float.c
     src/kernel/Int.c
     src/kernel/kernel.c
     src/kernel/letter.c
