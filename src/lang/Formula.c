@@ -262,11 +262,10 @@ index8 ClauseGetTermIndex(Atom clauseForm, Atom termForm, uint8 m)
 	ElementMultiple elementMultiple;
 	while(MultisetIteratorNext(&iterator)) {
 		elementMultiple = MultisetIteratorGetElement(&iterator);
-		if(elementMultiple.element.atom == termForm) {
+		if(elementMultiple.element.atom.hash == termForm.hash) {
 			found = true;
 			break;
 		}
-		size8 termArity = TermFormArity(elementMultiple.element.atom);
 		index += elementMultiple.multiple;
 	}
 	MultisetIteratorEnd(&iterator);
@@ -290,7 +289,7 @@ index8 ClauseGetTermActorsIndex(Atom clauseForm, Atom termForm, uint8 m)
 	ElementMultiple elementMultiple;
 	while(MultisetIteratorNext(&iterator)) {
 		elementMultiple = MultisetIteratorGetElement(&iterator);
-		if(elementMultiple.element.atom == termForm) {
+		if(elementMultiple.element.atom.hash == termForm.hash) {
 			found = true;
 			break;
 		}

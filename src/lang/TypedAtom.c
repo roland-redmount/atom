@@ -1,5 +1,5 @@
 
-#include "kernel/FloatIEEE754.h"
+#include "kernel/float.h"
 #include "kernel/Int.h"
 #include "kernel/Parameter.h"
 #include "kernel/UInt.h"
@@ -73,7 +73,7 @@ void ReleaseTypedAtom(TypedAtom typedAtom)
  */
 bool SameTypedAtoms(TypedAtom typedAtom1, TypedAtom typedAtom2)
 {
-	return (typedAtom1.type == typedAtom2.type) && (typedAtom1.atom == typedAtom2.atom);
+	return (typedAtom1.type == typedAtom2.type) && (typedAtom1.atom.hash == typedAtom2.atom.hash);
 }
 
 
@@ -153,12 +153,8 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		PrintInt(typedAtom.atom);
 		break;
 
-	case AT_FLOAT32:
-		PrintFloat32(typedAtom.atom);
-		break;
-
-	case AT_FLOAT64:
-		PrintFloat64(typedAtom.atom);
+	case AT_FLOAT:
+		PrintFloat(typedAtom.atom);
 		break;
 
 	case AT_LETTER:
@@ -166,7 +162,7 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		break;
 
 	case AT_VARIABLE:
-		PrintVariable(typedAtom);
+		PrintVariable(typedAtom.atom);
 		break;
 
 	case AT_NAME:

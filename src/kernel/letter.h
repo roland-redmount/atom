@@ -13,7 +13,7 @@
 #define LETTER_UPPERCASE	1
 
 
-TypedAtom GetAlphabetLetter(char c);
+Atom GetAlphabetLetter(char c);
 
 char LetterToChar(TypedAtom letter, uint8 letterCase);
 

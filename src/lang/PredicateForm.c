@@ -46,7 +46,7 @@ Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
 bool IsPredicateForm(Atom atom)
 {
 	// special case for (multiset element multiple) form, for bootstrapping
-	if(atom == GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE))
+	if(atom.hash == GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE).hash)
 		return true;
 
 	return AtomHasRole(
@@ -69,7 +69,7 @@ size8 PredicateArity(Atom predicateForm)
 }
 
 
-index8 PredicateRoleIndex(Atom predicateForm, Atom role)
+index8 PredicateRoleIndex(Atom predicateForm, Atom roleName)
 {
 	ASSERT(IsPredicateForm(predicateForm));
 	MultisetIterator iterator;
@@ -79,7 +79,7 @@ index8 PredicateRoleIndex(Atom predicateForm, Atom role)
 	bool found = false;
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
-		if(elementMultiple.element.atom == role) {
+		if(elementMultiple.element.atom.hash == roleName.hash) {
 			found = true;
 			break;
 		}

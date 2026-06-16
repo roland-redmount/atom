@@ -39,17 +39,17 @@ struct {
 static int8 compareServiceRecords(ServiceRecord const * record, ServiceRecord const * recordOrKey)
 {
 	// extract the 32 bit partial hashes for forms
-	if(record->form < recordOrKey->form)
+	if(record->form.hash < recordOrKey->form.hash)
 		return -1;
-	else if(record->form > recordOrKey->form)
+	else if(record->form.hash > recordOrKey->form.hash)
 		return 1;
 	else {
 		// if a search key has no parameters, any record with the same form matches
-		if(!recordOrKey->parameters)
+		if(!recordOrKey->parameters.hash)
 			return 0;
-		if(record->parameters < recordOrKey->parameters)
+		if(record->parameters.hash < recordOrKey->parameters.hash)
 			return -1;
-		else if(record->parameters  > recordOrKey->parameters)
+		else if(record->parameters.hash  > recordOrKey->parameters.hash)
 			return 1;
 		else
 			return 0;
@@ -67,10 +67,10 @@ static void btreeFreeService(void * item, size32 itemSize)
 {
 	ServiceRecord * record = (ServiceRecord *) item;
 	// The first 2 core predicate forms are released in RegistryTeardownCoreServices()
-	if(record->form > 2)
+	if(record->form.hash > 2)
 		IFactRelease(record->form);
 	// parameters is set to zero in RegistryTeardownCoreServices()
-	if(record->parameters)
+	if(record->parameters.hash)
 		IFactRelease(record->parameters);
 	ReleaseService(record->service);
 }
@@ -79,7 +79,7 @@ static void btreeFreeService(void * item, size32 itemSize)
 static index32 findCoreService(Atom form)
 {
 	for(index32 i = 1; i <= N_CORE_PREDICATES; i++) {
-		if(registry.coreServices[i].form == form)
+		if(registry.coreServices[i].form.hash == form.hash)
 			return i;
 	}
 	return 0;
@@ -137,7 +137,10 @@ void FreeRegistry(void)
 
 TypedAtom btreeParameterGenerator(index32 index, void const * data)
 {
-	return CreateTypedAtom(AT_PARAMETER, CreateParameter(index + 1, PARAMETER_IN_OUT, AT_NONE));
+	Atom parameter = (Atom) {
+		.parameter = {.number = index + 1, .io = PARAMETER_IN_OUT, .atomType = AT_NONE}
+	};
+	return CreateTypedAtom(AT_PARAMETER, parameter);
 }
 
 
@@ -185,13 +188,13 @@ void RegistryTeardownCoreServices(void)
 	for(index32 i = 1; i <= N_CORE_PREDICATES; i++) {
 		ServiceRecord * btreeRecord = BTreePeekItem(registry.tree, &(registry.coreServices[i]));
 		IFactRelease(btreeRecord->parameters);
-		btreeRecord->parameters = 0;
+		btreeRecord->parameters = (Atom) {0};
 	}
 	// remove core service records, except for (multiset element multiple) and (predicate-form)
 	ServiceRecord * record;
 	for(index32 i = N_CORE_PREDICATES; i > 2; i--) {
 		record = &(registry.coreServices[i]);
-		record->parameters = 0;
+		record->parameters = (Atom) {0};
 		ASSERT(record->service->type == SERVICE_MACHINE)
  		ASSERT(record->service->impl.machine.provider == &bTreeServiceProvider)
 		BTree * btree = record->service->impl.machine.providerData;
@@ -204,14 +207,14 @@ void RegistryTeardownCoreServices(void)
 	IFactRelease(GetCorePredicateForm(2));
 	IFactRelease(GetCorePredicateForm(1));
 	record = &(registry.coreServices[2]);
-	record->parameters = 0;
+	record->parameters = (Atom) {0};
 	ASSERT(BTreeDelete(registry.tree, record) == BTREE_DELETED)
 	BTree * predicateFormBTree = record->service->impl.machine.providerData;
 	ASSERT(RelationBTreeNRows(predicateFormBTree) == 0)
 	FreeRelationBTree(predicateFormBTree);
 
 	record = &(registry.coreServices[1]);
-	record->parameters = 0;
+	record->parameters = (Atom) {0};
 	ASSERT(BTreeDelete(registry.tree, record) == BTREE_DELETED)
 	BTree * multisetBTree = record->service->impl.machine.providerData;
 	ASSERT(RelationBTreeNRows(multisetBTree) == 0)
@@ -294,7 +297,7 @@ void RegistryIterate(Atom form, RegistryIterator * iterator)
 	iterator->keyRecord = (ServiceRecord) {
 		.form = form,
 		// setting parameters = 0 to match any parameter vector
-		.parameters = 0,
+		.parameters = (Atom) {0},
 	};
 	BTreeIterate(&(iterator->btreeIterator), registry.tree);
 }

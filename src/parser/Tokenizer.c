@@ -21,7 +21,7 @@
  * tokenizer with a "take back" functionality.
  */
 
-#include "kernel/FloatIEEE754.h"
+#include "kernel/float.h"
 #include "kernel/Int.h"
 #include "kernel/Parameter.h"
 #include "lang/Variable.h"
@@ -259,13 +259,13 @@ void TokenizerCleanup(Tokenizer * tokenizer)
 
 static TypedAtom parseFloat(char const * syntax, size32 length)
 {
-	return CreateTypedAtom(AT_FLOAT64, CreateFloat64(StringToFloat64(syntax, length)));
+	return CreateTypedAtom(AT_FLOAT, (Atom) {._float = StringToFloat64(syntax, length)});
 }
 
 
 static TypedAtom parseInteger(char const * syntax, size32 length)
 {
-	return CreateTypedAtom(AT_INT, StringToInt64(syntax, length));
+	return CreateTypedAtom(AT_INT, (Atom) {._int = StringToInt64(syntax, length)});
 }
 
 
@@ -296,17 +296,20 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 		if(stringLength == 0)
 			token.typedAtom = anonymousVariable;
 		else
-			token.typedAtom = CreateVariable(string[0]);
+			token.typedAtom = CreateTypedAtom(AT_VARIABLE, CreateVariable(string[0]));
 		break;
 
 	case TOKEN_PARAMETER:
 		token.typedAtom = CreateTypedAtom(
 			AT_PARAMETER,
-			CreateParameter(
-				tokenizer->data.parameter.number,
-				tokenizer->data.parameter.io,
-				tokenizer->data.parameter.atomType
-			)
+			// TODO: this could probably be simplified
+			(Atom) {
+				.parameter = {
+					.number = tokenizer->data.parameter.number,
+					.io = tokenizer->data.parameter.io,
+					.atomType = tokenizer->data.parameter.atomType
+				}
+			}
 		);
 		break;
 				

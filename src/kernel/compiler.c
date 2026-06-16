@@ -165,11 +165,15 @@ static void atomsToParameters(Tuple const * actors, Tuple * replacedActors)
 	for(index8 i = 0; i < actors->nAtoms; i++) {
 		TypedAtom typedAtom = TupleGetElement(actors, i);
 		if(typedAtom.type == AT_VARIABLE) {
-			Atom parameter = CreateParameter(i + 1, PARAMETER_OUT, 0);
-			TupleSetElement(replacedActors, i, CreateTypedAtom(AT_PARAMETER,parameter));
+			Atom parameter = {
+				.parameter = {.number = i + 1, .io = PARAMETER_OUT, .atomType = 0}
+			};
+			TupleSetElement(replacedActors, i, CreateTypedAtom(AT_PARAMETER, parameter));
 		}
 		else {
-			Atom parameter = CreateParameter(i + 1, PARAMETER_IN, typedAtom.type);
+			Atom parameter = {
+				.parameter = {.number = i + 1, .io = PARAMETER_IN, .atomType = typedAtom.type}
+			};
 			TupleSetElement(replacedActors, i, CreateTypedAtom(AT_PARAMETER, parameter));
 		}
 	}
@@ -201,7 +205,7 @@ static Service * compileTerm(
 	for(index8 i = 0; i < termArity; i++) {
 		TypedAtom actor = TupleGetElement(termActors, permutation[i]);
 		if(actor.type == AT_PARAMETER) {
-			argumentMap[i] = ParameterGetNumber(actor.atom);
+			argumentMap[i] = actor.atom.parameter.number;
 		}
 		else {
 			argumentMap[i] = 0;
@@ -296,20 +300,29 @@ static Service * compileConjunctionRecursive(
 				for(index8 i = 0; i < termArity; i++) {
 					TypedAtom termActor = TupleGetElement(termActors, i);
 					if(termActor.type == AT_PARAMETER) {
-						if(!ParameterGetType(termActor.atom)) {
+						if(!termActor.atom.parameter.atomType) {
 							// Corresponding service parameter must be a typed output
 							TypedAtom serviceParameter = TupleGetElement(serviceParameters, i);
 							ASSERT(serviceParameter.type == AT_PARAMETER)
-							ASSERT(ParameterGetIO(serviceParameter.atom) == PARAMETER_OUT)
-							byte parameterType = ParameterGetType(serviceParameter.atom);
+							ASSERT(serviceParameter.atom.parameter.io == PARAMETER_OUT)
+							byte parameterType = serviceParameter.atom.parameter.atomType;
 							ASSERT(parameterType)
 							// Updated parameters
-							index8 queryTermParameterNr = ParameterGetNumber(termActor.atom);
-							Atom inputParameter = CreateParameter(
-								queryTermParameterNr, PARAMETER_IN, parameterType);
-							Atom outputParameter = CreateParameter(
-								queryTermParameterNr, PARAMETER_OUT, parameterType);
-							
+							index8 queryTermParameterNr = termActor.atom.parameter.number;
+							Atom inputParameter = {
+								.parameter = {
+									.number = queryTermParameterNr,
+									.io = PARAMETER_IN,
+									.atomType = parameterType
+								}
+							};
+							Atom outputParameter = {
+								.parameter = {
+									.number = queryTermParameterNr,
+									.io = PARAMETER_OUT,
+									.atomType = parameterType
+								}
+							};
 							// Replace untyped output parameter in query matched term
 							index8 queryParameterIndex = termActorsIndices[matchedTermIndex] + queryTermParameterNr - 1;
 							TupleSetAtom(clauseActors, queryParameterIndex, outputParameter);
@@ -440,7 +453,7 @@ static Service * compileService(Atom queryTermForm, Tuple * queryActors)
 		size8 multiple = RelationBTreeIteratorGetAtom(
 			&btreeIterator,
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)
-		).atom;
+		).atom._uint;
 		// Ensure the multiset is a clause form
 		if(!IsClauseForm(clauseForm.atom))
 			continue;

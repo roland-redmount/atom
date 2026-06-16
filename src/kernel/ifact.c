@@ -145,7 +145,7 @@ static void acquireIFact(IFactHeader * header)
 
 void IFactAcquire(Atom ifact)
 {
-	IFactHeader * header = peekIFactHeader(ifact);
+	IFactHeader * header = peekIFactHeader(ifact.hash);
 	ASSERT(header);
 	acquireIFact(header);
 }
@@ -166,7 +166,7 @@ static void setupQueryTuple(Tuple * tuple, Atom ifact, index8 idColumn)
 
 uint32 IFactReferenceCount(Atom ifact)
 {
-	IFactHeader * header = peekIFactHeader(ifact);
+	IFactHeader * header = peekIFactHeader(ifact.hash);
 	ASSERT(header);
 	uint32 refCount = header->refCount;
 	return(refCount);
@@ -295,7 +295,7 @@ static void sortIFactDraft(IFactDraft * draft)
  */
 static void createFacts(IFactDraft * draft, void (* assertFact)(Atom predicateForm, Tuple const * actors))
 {
-	TypedAtom idAtom = CreateTypedAtom(AT_ID, draft->header.hash);
+	TypedAtom idAtom = CreateTypedAtom(AT_ID, (Atom) {.hash = draft->header.hash});
 
 	// walk through conjunctions and add to tuples corresponding relation table
 	IFactConjunction const * conjunction = draft->header.conjunctions;
@@ -322,7 +322,7 @@ static data64 hashConjunction(IFactConjunction const * conjunction, byte const *
 	for(index32 i = 0; i < conjunction->nRows; i++) {
 		// hash one formula, corresponding to one row of the conjunction
 		hash = FormulaHashFormActors(
-			conjunction->form, (Tuple *) tuples, conjunction->nColumns, hash);
+			conjunction->form.hash, (Tuple *) tuples, conjunction->nColumns, hash);
 		tuples += TupleNBytes(conjunction->nColumns);
 	}
 	return hash;
@@ -372,7 +372,7 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 		// create query tuple
 		// the identified atom must be identical in current and existing
 		Tuple * queryTuple = CreateTuple(conjunction->nColumns);
-		setupQueryTuple(queryTuple, (Atom) draft->header.hash, conjunction->idColumn);
+		setupQueryTuple(queryTuple, (Atom) {.hash = draft->header.hash}, conjunction->idColumn);
 
 		// TODO: this should use a Service instead, so as to not directly
 		// depend on the B-tree implementation
@@ -435,7 +435,7 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash, void (* assertFact)(Atom
 	}
 	FreePage(draft->tupleStorage);
 
-	return (Atom) draft->header.hash;
+	return (Atom) {.hash = draft->header.hash};
 }
 
 
@@ -500,7 +500,7 @@ bool IFactCheckTuple(BTree const * tree, Tuple const * tuple)
 		if(typedAtom.type != AT_ID)
 			continue;
 		// check this atom
-		IFactHeader * header = peekIFactHeader(typedAtom.atom);
+		IFactHeader * header = peekIFactHeader(typedAtom.atom.hash);
 		ASSERT(header);
 		size8 nConjunctions = header->nConjunctions;
 		IFactConjunction * conjunctions = header->conjunctions;
@@ -515,7 +515,7 @@ bool IFactCheckTuple(BTree const * tree, Tuple const * tuple)
 
 void IFactRelease(Atom ifact)
 {
-	IFactHeader * header = peekIFactHeader(ifact);
+	IFactHeader * header = peekIFactHeader(ifact.hash);
 	ASSERT(header);
 	ASSERT(header->refCount > 0);
 	ASSERT(ifactStorage.totalReferenceCount > 0);
@@ -567,7 +567,7 @@ void DumpIFacts(void)
 	BTreeIterate(&iterator, ifactStorage.btree);
 	while(BTreeIteratorNext(&iterator)) {
 		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
-		PrintIFact((Atom) header->hash);
+		PrintIFact((Atom) {.hash = header->hash});
 		PrintChar('\n');
 	}
 	BTreeIteratorEnd(&iterator);
@@ -586,7 +586,7 @@ void DumpFlaggedIFacts(void)
 	while(BTreeIteratorNext(&iterator)) {
 		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
 		if(header->flags & IFACT_NEW) {
-			PrintTypedAtom(CreateTypedAtom(AT_ID, header->hash));
+			PrintTypedAtom(CreateTypedAtom(AT_ID, (Atom) {.hash = header->hash}));
 			PrintChar('\n');
 		}
 	}

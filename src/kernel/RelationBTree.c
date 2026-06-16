@@ -60,14 +60,14 @@ static int8 compareQuery(Tuple const * tuple, Tuple const * query)
 		TypedAtom queryAtom = TupleGetElement(query, i);
 		TypedAtom tupleAtom = TupleGetElement(tuple, i);
 		if(queryAtom.type == AT_VARIABLE) {
-			if(VariableIsQuoted(queryAtom)) {
+			if(VariableIsQuoted(queryAtom.atom)) {
 				// If the query variable is quoted, we remove the (outermost) quote.
 				// This allows querying for a variable _x stored in a relation (foo)
 				// using (foo '_x')
 				// TODO: review the semantics of this!
-				queryAtom = UnquoteVariable(queryAtom);
+				queryAtom.atom = UnquoteVariable(queryAtom.atom);
 			}
-			else if(VariableMatch(queryAtom.type, tupleAtom))
+			else if(VariableMatch(queryAtom.atom, tupleAtom))
 				break;
 		}
 		else {

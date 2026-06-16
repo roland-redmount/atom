@@ -34,10 +34,10 @@ static int8 compareRecords(LookupRecord const * record, LookupRecord const * rec
 {
 	int8 atomOrder = CompareAtoms(record->atom, recordOrKey->atom);
 	if(atomOrder == 0) {
-		if(recordOrKey->predicateForm) {
+		if(recordOrKey->predicateForm.hash) {
 			int8 formOrder = CompareAtoms(record->predicateForm, recordOrKey->predicateForm);
 			if(formOrder == 0) {
-				if(recordOrKey->role)
+				if(recordOrKey->role.hash)
 					return CompareAtoms(record->role, recordOrKey->role);
 				else
 					return 0;
@@ -154,17 +154,17 @@ void AtomRemoveRole(Atom atom, Atom predicateForm, Atom role)
 
 void LookupRemoveAllRoles(Atom atom)
 {
-	LookupRecord record;
-	record.atom = atom;
-	record.predicateForm = 0;
-	record.role = 0;
-
+	LookupRecord record = {
+		.atom = atom,
+		.predicateForm = (Atom) {0},
+		.role = (Atom) {0},
+	};
 	// TODO: can we delete the item via the B-tree iterator more efficiently?
 	while(BTreeGetItem(lookup.btree, &record)) {
 		lookup.nRolesTotal -= record.nFacts;
 		BTreeDelete(lookup.btree, &record);
-		record.predicateForm = 0;
-		record.role = 0;
+		record.predicateForm = (Atom) {0};
+		record.role = (Atom) {0};
 	}
 }
 
@@ -198,13 +198,13 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm)
 
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, lookup.btree);
-	Atom previousAtom = 0;
+	Atom previousAtom = {0};
 	while(BTreeIteratorNext(&iterator)) {
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
-		if(record->predicateForm == predicateForm) {
+		if(record->predicateForm.hash == predicateForm.hash) {
 			// since lookup entries are ordered by atom,
 			// we can skip any entry with the same atom as previous
-			if(record->atom != previousAtom) {
+			if(record->atom.hash != previousAtom.hash) {
 				ResizingArrayAppend(&datumArray, &(record->atom));
 				previousAtom = record->atom;
 			}
@@ -225,8 +225,8 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm)
 void LookupIterate(Atom atom, LookupIterator * iterator)
 {
 	iterator->query.atom = atom;
-	iterator->query.predicateForm = 0;
-	iterator->query.role = 0;
+	iterator->query.predicateForm = (Atom) {0};
+	iterator->query.role = (Atom) {0};
 
 	BTreeIterate(&(iterator->treeIterator), lookup.btree);
 }

@@ -51,7 +51,7 @@ void SubstituteTuple(Substitution const * subst, Tuple const * source, Tuple * d
 	for(index8 i = 0; i < source->nAtoms; i++) {
 		TypedAtom sourceValue = TupleGetElement(source, i);
 		TypedAtom substValue = SubstitutionFindValue(subst, sourceValue);
-		if(substValue.atom)
+		if(substValue.type)
 			TupleSetElement(destination, i, substValue);
 		else
 			TupleSetElement(destination, i, sourceValue);

@@ -30,7 +30,7 @@ static data64 nameHash(char const * string, size32 length, data64 initialHash)
 
 static int8 compareNameRecords(NameRecord const * record1, NameRecord const * record2)
 {
-	return CompareAtoms(record1->hash, record2->hash);
+	return CompareAtoms((Atom) {.hash = record1->hash}, (Atom) {.hash = record2->hash});
 }
 
 
@@ -104,7 +104,7 @@ Atom CreateName(char const * string, size32 length)
 		ASSERT(addNameRecord(&record));
 	}
 	nameStorage.nReferencesTotal++;
-	return (Atom) hash;
+	return (Atom) {.hash = hash};
 }
 
 
@@ -117,7 +117,7 @@ Atom CreateNameFromCString(char const * cString)
 
 void NameAcquire(Atom name)
 {
-	NameRecord * nameRecord = peekNameRecord(name);
+	NameRecord * nameRecord = peekNameRecord(name.hash);
 	nameRecord->nReferences++;
 	nameStorage.nReferencesTotal++;
 }
@@ -125,7 +125,7 @@ void NameAcquire(Atom name)
 
 void NameRelease(Atom name)
 {
-	NameRecord * nameRecord = peekNameRecord(name);
+	NameRecord * nameRecord = peekNameRecord(name.hash);
 	ASSERT(nameRecord->nReferences > 0);
 	nameRecord->nReferences--;
 	if(nameRecord->nReferences == 0) {
@@ -148,7 +148,7 @@ bool IsName(TypedAtom atom)
 
 void PrintName(Atom name)
 {
-	NameRecord * nameRecord = peekNameRecord(name);
+	NameRecord * nameRecord = peekNameRecord(name.hash);
 	ASSERT(nameRecord);
 	PrintCharString(nameRecord->string, nameRecord->length);
 }

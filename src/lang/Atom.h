@@ -3,9 +3,36 @@
 
 #include "platform.h"
 
-// TODO: this might be better defined as a union {uint64, int64, void *}
-// or similar to avoid intepreting casts
-typedef data64 Atom;
+/**
+ * An atom is a 64-bit value with various interpretations,
+ * depending on its type.
+ */
+typedef union u_Atom {
+	// AT_NAME, AT_ID
+	data64 hash;
+	// AT_UNT
+	uint64 _uint;
+	// AT_INT
+	int64 _int;
+	// AT_FLOAT
+	float64 _float;
+	// AT_LETTER
+	struct {
+		uint8 code;
+	} letter;
+	// AT_VARIABLE
+	struct {
+		char name;
+		byte type;
+		uint8 quoteCount;
+	} variable;
+	// AT_PARAMETER
+	struct {
+		uint8 number;
+		byte io;
+		byte atomType;
+	} parameter;
+} Atom;
 
 uint8 ReduceAtomsArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms);
 

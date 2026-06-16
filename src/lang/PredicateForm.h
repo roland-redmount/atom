@@ -37,7 +37,7 @@ size8 PredicateArity(Atom predicateForm);
  * 0-based index of the first occurence of the given role (a AT_NAME)
  * The role must exist in predicateForm, or an ASSERT occurs.
  */
-index8 PredicateRoleIndex(Atom predicateForm, Atom role);
+index8 PredicateRoleIndex(Atom predicateForm, Atom roleName);
 
 void PrintPredicateForm(Atom predicateForm);
 

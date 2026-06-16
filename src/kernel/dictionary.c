@@ -16,9 +16,9 @@ struct {
 
 static int8 compareEntries(DictionaryEntry const * entry, DictionaryEntry const * entryOrKey)
 {
-	if(entry->clauseForm < entryOrKey->clauseForm)
+	if(entry->clauseForm.hash < entryOrKey->clauseForm.hash)
 		return -1;
-	else if(entry->clauseForm > entryOrKey->clauseForm)
+	else if(entry->clauseForm.hash > entryOrKey->clauseForm.hash)
 		return 1;
 	else {
 		if(!entryOrKey->tuple) {

@@ -23,9 +23,9 @@ typedef struct {
 static AtomsFixture createAtomsFixture(void)
 {
 	AtomsFixture fixture;
-	fixture.atoms[0] = CreateTypedAtom(AT_UINT, 42);
-	fixture.atoms[1] = GetAlphabetLetter('X');
-	fixture.atoms[2] = GetAlphabetLetter('Y');
+	fixture.atoms[0] = CreateTypedAtom(AT_UINT, (Atom) {._uint = 42});
+	fixture.atoms[1] = CreateTypedAtom(AT_LETTER, GetAlphabetLetter('X'));
+	fixture.atoms[2] = CreateTypedAtom(AT_LETTER, GetAlphabetLetter('Y'));
 	return fixture;
 }
 
@@ -74,13 +74,17 @@ static void testCreateList(void)
 	// attempt to add a tuple (list @string position 7 element 'Z') will violate the ifact
 	Tuple * tuple = CreateTuple(3);
 	ListSetTuple(tuple,
-		CreateTypedAtom(AT_ID, list), CreateTypedAtom(AT_UINT, 7), GetAlphabetLetter('Z')
+		CreateTypedAtom(AT_ID, list),
+		CreateTypedAtom(AT_UINT, (Atom) {._uint = 7}),
+		CreateTypedAtom(AT_LETTER, GetAlphabetLetter('Z'))
 	);
 	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(listPositionElement, tuple), TUPLE_PROTECTED)
 
 	// attempt to remove any tuple (list @string position _ element _) will violate the ifact
 	ListSetTuple(tuple,
-		CreateTypedAtom(AT_ID, list), CreateTypedAtom(AT_UINT, 3), GetAlphabetLetter('Y')
+		CreateTypedAtom(AT_ID, list),
+		CreateTypedAtom(AT_UINT, (Atom) {._uint = 3}),
+		CreateTypedAtom(AT_LETTER, GetAlphabetLetter('Y'))
 	);
 	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuples(listPositionElement, tuple, REMOVE_NORMAL), 0)
 	FreeTuple(tuple);
@@ -118,7 +122,7 @@ static void testNestedList(void)
 	ExampleListFixture fixture = setupExampleListFixture();
 
 	TypedAtom nestedListAtoms[] = {
-		GetAlphabetLetter('A'),
+		CreateTypedAtom(AT_LETTER, GetAlphabetLetter('A')),
 		CreateTypedAtom(AT_ID, fixture.list)
 	};
 

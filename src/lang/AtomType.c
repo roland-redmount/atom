@@ -7,15 +7,11 @@ char const * atomTypeNames[N_ATOMTYPES + 1] = {
 	"NONE",
 	"NAME",
 	"ID",
-
 	"UINT",
 	"INT",
-	"FLOAT32",
-	"FLOAT64",
-
+	"FLOAT",
 	"LETTER",
 	"VARIABLE",
-	
 	"PARAMETER",
 };
 

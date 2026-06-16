@@ -52,7 +52,10 @@ void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, 
 	Tuple * tuple = CreateTuple(3);
 	for(index32 i = 0; i < nUniqueElements; i++) {
 		ElementMultiple em = generator(i, data);
-		MultisetSetTuple(tuple, invalidAtom, em.element, CreateTypedAtom(AT_UINT, em.multiple));
+		MultisetSetTuple(
+			tuple,
+			invalidAtom, em.element, CreateTypedAtom(AT_UINT, (Atom) {._uint = em.multiple})
+		);
 		IFactAddClause(draft, tuple);
 	}
 	FreeTuple(tuple);
@@ -120,7 +123,10 @@ void MultisetIterate(Atom multiset, MultisetIterator * iterator)
 {
 	BTree * tree = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
 	iterator->queryTuple = CreateTuple(3);
-	MultisetSetTuple(iterator->queryTuple, CreateTypedAtom(AT_ID, multiset), anonymousVariable, anonymousVariable);
+	MultisetSetTuple(
+		iterator->queryTuple,
+		CreateTypedAtom(AT_ID, multiset), anonymousVariable, anonymousVariable
+	);
 	RelationBTreeIterate(tree, iterator->queryTuple, &(iterator->treeIterator));
 }
 
@@ -143,7 +149,7 @@ ElementMultiple MultisetIteratorGetElement(MultisetIterator const * iterator)
 	
 	ElementMultiple em;
 	em.element = element;
-	em.multiple = (size32) multiple.atom;
+	em.multiple = (size32) multiple.atom._uint;
 	return em;
 }
 

@@ -1,5 +1,5 @@
 
-#include "kernel/FloatIEEE754.h"
+#include "kernel/float.h"
 #include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
@@ -49,11 +49,11 @@ static void setupTokensFixture(TokensFixture * fixture)
 
 	fixture->actorTokens[0] = (Token) {
 		.type = TOKEN_VARIABLE,
-		.typedAtom = CreateVariable('x')
+		.typedAtom = CreateTypedAtom(AT_VARIABLE, CreateVariable('x'))
 	};	
 	fixture->actorTokens[1] = (Token) {
 		.type = TOKEN_NUMBER,
-		.typedAtom = CreateTypedAtom(AT_FLOAT32, CreateFloat32(123.45))
+		.typedAtom = CreateTypedAtom(AT_FLOAT, (Atom) {._float = 123.45})
 	};
 	fixture->actorTokens[2] = (Token) {
 		.type = TOKEN_STRING,
@@ -64,7 +64,6 @@ static void setupTokensFixture(TokensFixture * fixture)
 		fixture->names[i] = fixture->nameTokens[i].typedAtom.atom;
 		fixture->actors[i] = fixture->actorTokens[i].typedAtom;
 	}
-
 }
 
 
@@ -92,7 +91,7 @@ static void testPartBuilder(void)
 		ASSERT_TRUE(PartBuilderPush(&builder, fixture.actorTokens[i]))
 		ASSERT_TRUE(PartBuilderComplete(&builder))
 
-		ASSERT_DATA64_EQUAL(PartBuilderGetRole(&builder), fixture.names[i])
+		ASSERT_DATA64_EQUAL(PartBuilderGetRole(&builder).hash, fixture.names[i].hash)
 
 		TypedAtom actor = PartBuilderGetActor(&builder);
 		ASSERT_TRUE(SameTypedAtoms(actor, fixture.actors[i]))
@@ -150,13 +149,15 @@ static void testPredicateBuilder(void)
 	}
 	Atom predicate = PredicateBuilderCreateFormula(&builder);
 
-	ASSERT_DATA64_EQUAL(predicate, fixture.predicate)
+	ASSERT_DATA64_EQUAL(predicate.hash, fixture.predicate.hash)
 	// the forms are identical
 	ASSERT_DATA64_EQUAL(
-		FormulaGetForm(predicate), FormulaGetForm(fixture.predicate)
+		FormulaGetForm(predicate).hash, FormulaGetForm(fixture.predicate).hash
 	)
 	// the actor lists are identical
-	ASSERT_DATA64_EQUAL(FormulaGetActors(predicate), FormulaGetActors(fixture.predicate))
+	ASSERT_DATA64_EQUAL(
+		FormulaGetActors(predicate).hash, FormulaGetActors(fixture.predicate).hash
+	)
 
 	IFactRelease(predicate);
 	CleanupPredicateBuilder(&builder);
@@ -212,7 +213,7 @@ static void testTermBuilder(void)
 		Atom term = TermBuilderCreateFormula(&builder);
 
 		Atom fixtureTerm = sign ? fixture.term : fixture.negatedTerm;
-		ASSERT_DATA64_EQUAL(term, fixtureTerm)
+		ASSERT_DATA64_EQUAL(term.hash, fixtureTerm.hash)
 
 		IFactRelease(term);
 		TermBuilderReset(&builder);
@@ -287,7 +288,7 @@ static void testClauseBuilder(void)
 	Atom clause = ClauseBuilderCreateFormula(&builder);
 	CleanupClauseBuilder(&builder);
 
-	ASSERT_DATA64_EQUAL(clause, fixture.clause)
+	ASSERT_DATA64_EQUAL(clause.hash, fixture.clause.hash)
 
 	Atom actorsList = FormulaGetActors(clause);
 	ASSERT_UINT32_EQUAL(ListLength(actorsList), EXAMPLE_CLAUSE_ARITY)
@@ -348,13 +349,13 @@ static void testCStringToClause(void)
 	ASSERT_TRUE(
 		SameTypedAtoms(
 			ListGetElement(actorsList, 2),
-			CreateVariable('x')
+			CreateTypedAtom(AT_VARIABLE, CreateVariable('x'))
 		)
 	)
 	ASSERT_TRUE(
 		SameTypedAtoms(
 			ListGetElement(actorsList, 3),
-			CreateTypedAtom(AT_FLOAT64, CreateFloat64(123.45))
+			CreateTypedAtom(AT_FLOAT, (Atom) {._float = 123.45})
 		)
 	)
 

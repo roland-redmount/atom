@@ -46,7 +46,7 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 	TermFormSetTuple(tuple,
 		CreateTypedAtom(AT_ID, termForm),
 		CreateTypedAtom(AT_ID, predicateForm),
-		CreateTypedAtom(AT_UINT, sign ? 1 : 0)
+		CreateTypedAtom(AT_UINT, (Atom) {._uint = sign ? 1 : 0})
 	);
 	IFactAddClause(&draft, tuple);
 	FreeTuple(tuple);
@@ -90,7 +90,7 @@ bool TermFormGetSign(Atom termForm)
 	TypedAtom sign = RelationBTreeQuerySingleAtom(
 		tree, query, CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_SIGN));
 	FreeTuple(query);
-	return (sign.atom == 1);
+	return (sign.atom._uint == 1);
 }
 
 

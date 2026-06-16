@@ -31,28 +31,29 @@ static bool signatureQueryTupleMatch(Atom parameterList, Tuple const * queryActo
 	for(index8 i = 0; i < queryActors->nAtoms; i++) {
 		TypedAtom queryAtom = TupleGetElement(queryActors, permutation[i]);
 		Atom serviceParameter = ListGetElement(parameterList, i + 1).atom;
-		switch(ParameterGetIO(serviceParameter)) {
+		byte serviceParameterType = serviceParameter.parameter.atomType;
+		switch(serviceParameter.parameter.io) {
 		case PARAMETER_IN:
 			if(queryAtom.type == AT_PARAMETER) {
-				if(ParameterGetIO(queryAtom.atom) != PARAMETER_IN)
+				if(queryAtom.atom.parameter.io != PARAMETER_IN)
 					return false;
-				byte queryParameterType = ParameterGetType(queryAtom.type);
-				if(queryParameterType && (queryParameterType != ParameterGetType(serviceParameter)))
+				byte queryParameterType = queryAtom.atom.parameter.atomType;
+				if(queryParameterType && (queryParameterType != serviceParameterType))
 					return false;
 			}
 			else {
 				// query atom type must match the parameter type
-				if(queryAtom.type != ParameterGetType(serviceParameter))
+				if(queryAtom.type != serviceParameterType)
 					return false;
 			}
 			break;
 		
 		case PARAMETER_OUT:
 			if(queryAtom.type == AT_PARAMETER) {
-				if(ParameterGetIO(queryAtom.atom) != PARAMETER_OUT)
+				if(queryAtom.atom.parameter.io != PARAMETER_OUT)
 					return false;
-				byte queryParameterType = ParameterGetType(queryAtom.type);
-				if(queryParameterType && (queryParameterType != ParameterGetType(serviceParameter)))
+				byte queryParameterType = queryAtom.atom.parameter.atomType;
+				if(queryParameterType && (queryParameterType != serviceParameterType))
 					return false;
 			}
 			else {
@@ -60,8 +61,8 @@ static bool signatureQueryTupleMatch(Atom parameterList, Tuple const * queryActo
 					return false;
 				// if variable is typed, the type must match
 				// TODO: typed variables should go away, replaced with AT_PARAMETER
-				byte variableType = VariableGetType(queryAtom.atom);
-				if(variableType && (variableType != ParameterGetType(serviceParameter)))
+				byte variableType = queryAtom.atom.variable.type;
+				if(variableType && (variableType != serviceParameterType))
 					return false;
 			}
 			break;

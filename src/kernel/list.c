@@ -74,7 +74,8 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 	);
 
 	Tuple * listLengthTuple = CreateTuple(2);
-	ListLengthSetTuple(listLengthTuple, invalidAtom, CreateTypedAtom(AT_UINT, nElements));
+	ListLengthSetTuple(
+		listLengthTuple, invalidAtom, CreateTypedAtom(AT_UINT, (Atom) {._uint = nElements}));
 	IFactAddClause(draft, listLengthTuple);
 	FreeTuple(listLengthTuple);
 	IFactEndConjunction(draft);	
@@ -94,7 +95,10 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 
 		Tuple * listElementTuple = CreateTuple(3);
 		for(index32 i = 0; i < nElements; i++) {
-			ListSetTuple(listElementTuple, invalidAtom, CreateTypedAtom(AT_UINT, i + 1), generator(i, data));
+			ListSetTuple(
+				listElementTuple,
+				invalidAtom, CreateTypedAtom(AT_UINT, (Atom) {._uint = i + 1}), generator(i, data)
+			);
 			IFactAddClause(draft, listElementTuple);
 		}
 		FreeTuple(listElementTuple);
@@ -125,7 +129,10 @@ index32 ListAddElement(IFactDraft * draft, TypedAtom element)
 
 	Tuple * listElementTuple = CreateTuple(3);
 	index32 position = IFactDraftCurrentNClauses(draft) + 1;
-	ListSetTuple(listElementTuple, invalidAtom, CreateTypedAtom(AT_UINT, position), element);
+	ListSetTuple(
+		listElementTuple,
+		invalidAtom, CreateTypedAtom(AT_UINT, (Atom) {._uint = position}), element
+	);
 	IFactAddClause(draft, listElementTuple);
 	FreeTuple(listElementTuple);
 	return position;
@@ -211,7 +218,7 @@ size32 ListLength(Atom list)
 		CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LENGTH)
 	);
 	FreeTuple(queryTuple);
-	return (size32) length.atom;
+	return (size32) length.atom._uint;
 }
 
 
@@ -220,7 +227,10 @@ TypedAtom ListGetElement(Atom list, index32 position)
 	BTree * tree = RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT);
 
 	Tuple * queryTuple = CreateTuple(3);
-	ListSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), CreateTypedAtom(AT_UINT, position), anonymousVariable);
+	ListSetTuple(
+		queryTuple,
+		CreateTypedAtom(AT_ID, list), CreateTypedAtom(AT_UINT, (Atom) {._uint = position}), anonymousVariable
+	);
 	TypedAtom element = RelationBTreeQuerySingleAtom(
 		tree, queryTuple,
 		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)
@@ -260,7 +270,7 @@ index32 ListGetPosition(Atom list, TypedAtom element)
 			&iterator,
 			CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION)
 		);
-		p = (index32) position.atom;
+		p = (index32) position.atom._uint;
 	}
 	RelationBTreeIteratorEnd(&iterator);
 	FreeTuple(queryTuple);
@@ -276,7 +286,7 @@ index32 ListGetPosition(Atom list, TypedAtom element)
 // which leads to infinite recursion when comparing B-tree ḱeys
 int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, TypedAtom))
 {
-	if(list1 == list2)
+	if(list1.hash == list2.hash)
 		return 0;
 
 	ListIterator iterator1;

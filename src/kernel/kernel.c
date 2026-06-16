@@ -129,7 +129,7 @@ void CleanupMemory(void)
 static void setupCoreRoleNames(void)
 {
 	InitializeNameStorage();
-	kernel.coreRoleNames[0] = 0;
+	kernel.coreRoleNames[0] = (Atom) {.hash = 0};
 	kernel.coreRoleNames[ROLE_MULTISET] = CreateNameFromCString("multiset");
 	kernel.coreRoleNames[ROLE_ELEMENT] = CreateNameFromCString("element");
 	kernel.coreRoleNames[ROLE_MULTIPLE] = CreateNameFromCString("multiple");
@@ -167,7 +167,7 @@ static index32 getCorePredicateIndex(Atom predicateForm)
 {
 	index32 formIndex = 0;
 	while(formIndex < N_CORE_PREDICATES) {
-		if(kernel.corePredicateForms[++formIndex] == predicateForm)
+		if(kernel.corePredicateForms[++formIndex].hash == predicateForm.hash)
 			break;
 	}
 	ASSERT(formIndex <= N_CORE_PREDICATES)
@@ -228,9 +228,9 @@ static void setupCoreServices(void)
 	 */
 
 	// fixed values for @multiset-form and @predicate-form
-	Atom multisetForm = 1;
+	Atom multisetForm = (Atom) {.hash = 1};
 	kernel.corePredicateForms[FORM_MULTISET_ELEMENT_MULTIPLE] = multisetForm;
-	Atom predicateForm = 2;
+	Atom predicateForm = (Atom) {.hash = 2};
 	kernel.corePredicateForms[FORM_PREDICATE_FORM] = predicateForm;
 
 	// create services and set role index arrays
@@ -266,7 +266,7 @@ static void setupCoreServices(void)
 		multisetTuple,
 		CreateTypedAtom(AT_ID, multisetForm),
 		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_MULTISET)),
-		CreateTypedAtom(AT_UINT, 1)
+		CreateTypedAtom(AT_UINT, (Atom) {._uint = 1})
 	);
 	IFactAddClause(&multisetDraft, multisetTuple);
 	// (multiset @multiset-form element "element" multiple 1)
@@ -274,7 +274,7 @@ static void setupCoreServices(void)
 		multisetTuple,
 		CreateTypedAtom(AT_ID, multisetForm),
 		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_ELEMENT)),
-		CreateTypedAtom(AT_UINT, 1)
+		CreateTypedAtom(AT_UINT, (Atom) {._uint = 1})
 	);
 	IFactAddClause(&multisetDraft, multisetTuple);
 	// (multiset @multiset-form element "multiple" multiple 1)
@@ -282,7 +282,7 @@ static void setupCoreServices(void)
 		multisetTuple,
 		CreateTypedAtom(AT_ID, multisetForm),
 		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_MULTIPLE)),
-		CreateTypedAtom(AT_UINT, 1)
+		CreateTypedAtom(AT_UINT, (Atom) {._uint = 1})
 	);
 	IFactAddClause(&multisetDraft, multisetTuple);
 	IFactEndConjunction(&multisetDraft);
@@ -302,7 +302,7 @@ static void setupCoreServices(void)
 	 * and provide our own bootstrapAssertFact() function.
 	 * This gives us 1 reference to the multisetForm atom.
 	 */
-	IFactEndBootstrap(&multisetDraft, multisetForm, bootstrapAssertFact);
+	IFactEndBootstrap(&multisetDraft, multisetForm.hash, bootstrapAssertFact);
 
 	// add lookup
 	AtomAddRole(multisetForm, multisetForm, GetCoreRoleName(ROLE_MULTISET));
@@ -320,7 +320,7 @@ static void setupCoreServices(void)
 		multisetTuple,
 		predicateFormAtom,
 		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_PREDICATE_FORM)),
-		CreateTypedAtom(AT_UINT, 1)
+		CreateTypedAtom(AT_UINT, (Atom) {._uint = 1})
 	);
 	IFactAddClause(&predicateFormDraft, multisetTuple);
 	IFactEndConjunction(&predicateFormDraft);
@@ -332,7 +332,7 @@ static void setupCoreServices(void)
 	IFactEndConjunction(&predicateFormDraft);
 
 	// This gives 1 reference to the predicateForm atom
-	IFactEndBootstrap(&predicateFormDraft, predicateForm, bootstrapAssertFact);
+	IFactEndBootstrap(&predicateFormDraft, predicateForm.hash, bootstrapAssertFact);
 
 	// add lookup
 	AtomAddRole(predicateForm, multisetForm, GetCoreRoleName(ROLE_MULTISET));
@@ -355,16 +355,11 @@ static void setupCoreServices(void)
 		BTree * btree = CreateRelationBTree(corePredicateArity[i]);
 		RegistryAddCoreBTreeService(i, form, btree);
 
-		// precompute role indices (relation columns) for GetPredicateRoleIndex()
+		// precompute role indices (relation columns) for CorePredicateRoleIndex()
 		for(index8 j = 0; j < corePredicateArity[i]; j++)
 			kernel.corePredicateRoleIndex[i][j] = PredicateRoleIndex(form, roles[j]);
 	}
 	// NOTE: we now hold 1 reference to each of the core predicate forms.
-
-	// verify hardcoded multiset role index matches computed index
-	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET) == MULTISET_MULTISET_COLUMN)
-	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT) == MULTISET_ELEMENT_COLUMN)
-	ASSERT(CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE) == MULTISET_MULTIPLE_COLUMN)
 
 	RegistryFinalizeCoreServices();
 	// The service registry now holds references to each core predicate form,
@@ -454,7 +449,7 @@ void AssertFact(Atom predicateForm, Tuple const * actors)
 	// add tuple to relation table
 	// quick hack, assume B-tree service provider
 	ServiceRecord record = RegistryFindUntypedService(predicateForm);
-	if(record.form) {
+	if(record.form.hash) {
 		ASSERT(record.service->type == SERVICE_MACHINE)
 		ASSERT(record.service->impl.machine.provider == &bTreeServiceProvider)
 		BTree * btree = (BTree *) record.service->impl.machine.providerData;
@@ -474,7 +469,7 @@ void AssertFact(Atom predicateForm, Tuple const * actors)
 static void removeBTreeTuples(Atom predicateForm, Tuple * actors)
 {
 	ServiceRecord record = RegistryFindUntypedService(predicateForm);
-	ASSERT(record.form)
+	ASSERT(record.form.hash)
 	ASSERT(record.service->type == SERVICE_MACHINE)
 	ASSERT(record.service->impl.machine.provider == &bTreeServiceProvider)
 	BTree * btree = (BTree *) record.service->impl.machine.providerData;

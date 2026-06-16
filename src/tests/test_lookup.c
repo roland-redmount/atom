@@ -20,8 +20,8 @@ void testLookup(void)
 	// add 1 occurence of role
 	AtomAddRole(string, stringForm, stringRole);
 	ASSERT_TRUE(AtomHasRole(string, stringForm, stringRole))
-	ASSERT_TRUE(AtomHasRole(string, stringForm, 0))
-	ASSERT_TRUE(AtomHasRole(string, 0, 0))
+	ASSERT_TRUE(AtomHasRole(string, stringForm, (Atom) {0}))
+	ASSERT_TRUE(AtomHasRole(string, (Atom) {0}, (Atom) {0}))
 	
 	AtomRemoveRole(string, stringForm, stringRole);
 	ASSERT_TRUE(AtomHasRole(string, stringForm, stringRole))
@@ -64,8 +64,8 @@ void testLookupIterator(void)
 		Atom role = LookupIteratorGetRole(&iterator);
 		// the role is either list or string
 		ASSERT_TRUE(
-			(role == GetCoreRoleName(ROLE_LIST)) ||
-			(role == GetCoreRoleName(ROLE_STRING))
+			(role.hash == GetCoreRoleName(ROLE_LIST).hash) ||
+			(role.hash == GetCoreRoleName(ROLE_STRING).hash)
 		)
 	}
 	ASSERT_FALSE(LookupIteratorNext(&iterator))
@@ -118,9 +118,9 @@ void testRemoveAllPredicateRoles(void)
 	LookupRemoveAllPredicateRoles(form);
 
 	// all associations with the form should now be removed.
-	ASSERT_FALSE(AtomHasRole(foo, form, 0))
-	ASSERT_FALSE(AtomHasRole(bar, form, 0))
-	ASSERT_FALSE(AtomHasRole(baz, form, 0))
+	ASSERT_FALSE(AtomHasRole(foo, form, (Atom) {0}))
+	ASSERT_FALSE(AtomHasRole(bar, form, (Atom) {0}))
+	ASSERT_FALSE(AtomHasRole(baz, form, (Atom) {0}))
 
 	// remove corresponding relation table rows
 	RelationBTreeRemoveTuples(tree, 0, REMOVE_NORMAL);

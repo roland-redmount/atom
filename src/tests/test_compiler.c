@@ -32,7 +32,7 @@ void testCompilePermute1(void)
 
 	TypedAtom d = TermGetRoleActor(record.form, arguments, "=", 1);
 	ASSERT_UINT32_EQUAL(d.type, AT_INT)
-	ASSERT_UINT64_EQUAL(d.atom, 3);
+	ASSERT_UINT64_EQUAL(d.atom._uint, 3);
 
 	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
@@ -63,11 +63,11 @@ void testCompilePermute2(void)
 
 	TypedAtom x = TermGetRoleActor(record.form, arguments, "number", 1);
 	ASSERT_UINT32_EQUAL(x.type, AT_INT)
-	ASSERT_UINT64_EQUAL(x.atom, 3);
+	ASSERT_UINT64_EQUAL(x.atom._uint, 3);
 
 	TypedAtom y = TermGetRoleActor(record.form, arguments, "addtwo", 1);
 	ASSERT_UINT32_EQUAL(y.type, AT_INT)
-	ASSERT_UINT64_EQUAL(y.atom, 5);
+	ASSERT_UINT64_EQUAL(y.atom._uint, 5);
 
 	// Second call should fail (no more tuples)
 	ASSERT_FALSE(ServiceCall(context))
@@ -129,11 +129,11 @@ void testCompileJoin1(void)
 
 	TypedAtom y = TermGetRoleActor(record.form, arguments, "second", 1);
 	ASSERT_UINT32_EQUAL(y.type, AT_INT)
-	ASSERT_UINT64_EQUAL(y.atom, 4);
+	ASSERT_UINT64_EQUAL(y.atom._uint, 4);
 
 	TypedAtom z = TermGetRoleActor(record.form, arguments, "third", 1);
 	ASSERT_UINT32_EQUAL(z.type, AT_INT)
-	ASSERT_UINT64_EQUAL(z.atom, 5);
+	ASSERT_UINT64_EQUAL(z.atom._uint, 5);
 
 	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
@@ -172,14 +172,14 @@ void testCompileUnion(void)
 	PrintChar('\n');
 	TypedAtom y = TermGetRoleActor(record.form, arguments, "neighbor", 1);
 	ASSERT_UINT32_EQUAL(y.type, AT_INT)
-	ASSERT_TRUE(y.atom == 4);
+	ASSERT_TRUE(y.atom._uint == 4);
 
 	ASSERT_TRUE(ServiceCall(context))
 	PrintTuple(arguments);
 	PrintChar('\n');
 	y = TermGetRoleActor(record.form, arguments, "neighbor", 1);
 	ASSERT_UINT32_EQUAL(y.type, AT_INT)
-	ASSERT_TRUE(y.atom == 6);
+	ASSERT_TRUE(y.atom._uint == 6);
 
 	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
@@ -211,7 +211,7 @@ void testCompileRecursiveJoin(void)
 
 	TypedAtom f = TermGetRoleActor(record.form, arguments, "faculty", 1);
 	ASSERT_UINT32_EQUAL(f.type, AT_INT)
-	ASSERT_UINT64_EQUAL(f.atom, 24);
+	ASSERT_UINT64_EQUAL(f.atom._uint, 24);
 
 	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
