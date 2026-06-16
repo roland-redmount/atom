@@ -106,13 +106,13 @@ static void testTokenizer(void)
 	token = tokenizeCString(&tokenizer, integerString);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_INT)
-	ASSERT_INT64_EQUAL(token.typedAtom.atom._uint, 12345);
+	ASSERT_INT64_EQUAL(token.typedAtom.atom._int, 12345);
 
 	integerString = "0";
 	token = tokenizeCString(&tokenizer, integerString);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_INT)
-	ASSERT_INT64_EQUAL(token.typedAtom.atom._uint, 0);
+	ASSERT_INT64_EQUAL(token.typedAtom.atom._int, 0);
 
 	char const * decimalString = "123.45";
 	token = tokenizeCString(&tokenizer, decimalString);
