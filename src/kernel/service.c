@@ -580,20 +580,39 @@ void PrintService(Service const * service)
 {
 	switch(service->type) {
 	case SERVICE_PERMUTE:
-		PrintCString("PERMUTE");
+		PrintCString("PERMUTE(");
+		for(index8 i = 0; i < service->impl.permute.childService->nArguments; i++)
+			PrintF("%u ", service->impl.permute.argumentMap[i]);
+		PrintTuple(service->impl.permute.constants);
+		PrintChar(' ');
+		PrintService(service->impl.permute.childService);
+		PrintChar(')');
 		break;
+
 	case SERVICE_JOIN:
-		PrintCString("JOIN");
+		PrintCString("JOIN(");
+		PrintService(service->impl.join.left);
+		PrintService(service->impl.join.right);
+		PrintChar(')');
 		break;
+
 	case SERVICE_UNION:
-		PrintCString("UNION");
+		PrintCString("UNION(");
+		PrintService(service->impl._union.first);
+		PrintService(service->impl._union.second);
+		PrintChar(')');
 		break;
+
 	case SERVICE_DEDUPLICATE:
-		PrintCString("DEDUPLICATE");
+		PrintCString("DEDUPLICATE(");
+		PrintService(service->impl.deduplicate.childService);
+		PrintChar(')');
 		break;
+
 	case SERVICE_MACHINE:
 		PrintCString("MACHINE");
 		break;
+
 	default:
 		ASSERT(false);
 		break;

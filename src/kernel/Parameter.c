@@ -59,10 +59,17 @@ void PrintParameter(Atom parameter)
 	Parameter param;
 	param.value = parameter;
 	PrintF("@%u", param.fields.number);
-	if(param.fields.io == PARAMETER_IN)
+	switch(param.fields.io) {
+	case PARAMETER_IN:
 		PrintChar('<');
-	else
+		break;
+	case PARAMETER_OUT:
 		PrintChar('>');
+		break;
+	case PARAMETER_IN_OUT:
+		PrintChar('~');
+		break;
+	}
 	if(param.fields.atomType) {
 		PrintCString(GetAtomTypeName(param.fields.atomType));
 	}

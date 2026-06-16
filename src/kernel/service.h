@@ -77,6 +77,9 @@ typedef struct s_MachineServiceProvider {
 	/**
 	 * UNION gives a union of the tuple sets from two child services.
 	 * It is assumed that each child service produces tuples in sorted order.
+	 * 
+	 * NOTE: if services are required to be distinct (using preconditions)
+	 * then we should never have duplicate tuples in a UNION.
 	 */
 	SERVICE_UNION = 3,
 	/**

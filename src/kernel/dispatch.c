@@ -34,18 +34,26 @@ static bool signatureQueryTupleMatch(Atom parameterList, Tuple const * queryActo
 		switch(ParameterGetIO(serviceParameter)) {
 		case PARAMETER_IN:
 			if(queryAtom.type == AT_PARAMETER) {
-				return ParameterGetIO(queryAtom.atom) == PARAMETER_IN;
+				if(ParameterGetIO(queryAtom.atom) != PARAMETER_IN)
+					return false;
+				byte queryParameterType = ParameterGetType(queryAtom.type);
+				if(queryParameterType && (queryParameterType != ParameterGetType(serviceParameter)))
+					return false;
 			}
 			else {
 				// query atom type must match the parameter type
 				if(queryAtom.type != ParameterGetType(serviceParameter))
 					return false;
-				break;
 			}
+			break;
 		
 		case PARAMETER_OUT:
 			if(queryAtom.type == AT_PARAMETER) {
-				return ParameterGetIO(queryAtom.atom) == PARAMETER_OUT;
+				if(ParameterGetIO(queryAtom.atom) != PARAMETER_OUT)
+					return false;
+				byte queryParameterType = ParameterGetType(queryAtom.type);
+				if(queryParameterType && (queryParameterType != ParameterGetType(serviceParameter)))
+					return false;
 			}
 			else {
 				if(queryAtom.type != AT_VARIABLE)
@@ -60,6 +68,7 @@ static bool signatureQueryTupleMatch(Atom parameterList, Tuple const * queryActo
 		
 		case PARAMETER_IN_OUT:
 			// any query atom matches
+			// TODO: fix this
 			;
 		}
 	}
