@@ -66,7 +66,7 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 {
 	Atom listLengthForm = GetCorePredicateForm(FORM_LIST_LENGTH);
 
-	IFactBeginConjunction(
+	IFactBeginPredicateForm(
 		draft,
 		listLengthForm, 
 		RegistryGetCoreBTreeService(FORM_LIST_LENGTH),
@@ -76,9 +76,9 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 	TypedTuple * listLengthTuple = CreateTypedTuple(2);
 	ListLengthSetTuple(
 		listLengthTuple, invalidAtom, CreateTypedAtom(AT_UINT, (Atom) {._uint = nElements}));
-	IFactAddClause(draft, listLengthTuple);
+	IFactAddTuple(draft, listLengthTuple);
 	FreeTypedTuple(listLengthTuple);
-	IFactEndConjunction(draft);	
+	IFactEndPredicateForm(draft);	
 }
 
 
@@ -86,7 +86,7 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 {
 	if(nElements > 0) {
 		// assert (ĺist position elements) facts for each element
-		IFactBeginConjunction(
+		IFactBeginPredicateForm(
 			draft,
 			GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT),
 			RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT),
@@ -99,10 +99,10 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 				listElementTuple,
 				invalidAtom, CreateTypedAtom(AT_UINT, (Atom) {._uint = i + 1}), generator(i, data)
 			);
-			IFactAddClause(draft, listElementTuple);
+			IFactAddTuple(draft, listElementTuple);
 		}
 		FreeTypedTuple(listElementTuple);
-		IFactEndConjunction(draft);
+		IFactEndPredicateForm(draft);
 	}
 	assertListLength(draft, nElements);
 }
@@ -119,7 +119,7 @@ index32 ListAddElement(IFactDraft * draft, TypedAtom element)
 {
 	if(!draft->hasBegunConjunction) {
 		// first element, begin (ĺist position elements)
-		IFactBeginConjunction(
+		IFactBeginPredicateForm(
 			draft,
 			GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT),
 			RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT),
@@ -128,12 +128,12 @@ index32 ListAddElement(IFactDraft * draft, TypedAtom element)
 	}
 
 	TypedTuple * listElementTuple = CreateTypedTuple(3);
-	index32 position = IFactDraftCurrentNClauses(draft) + 1;
+	index32 position = IFactDraftCurrentNTuples(draft) + 1;
 	ListSetTuple(
 		listElementTuple,
 		invalidAtom, CreateTypedAtom(AT_UINT, (Atom) {._uint = position}), element
 	);
-	IFactAddClause(draft, listElementTuple);
+	IFactAddTuple(draft, listElementTuple);
 	FreeTypedTuple(listElementTuple);
 	return position;
 }
@@ -144,7 +144,7 @@ Atom ListEnd(IFactDraft * draft)
 	size32 nElements;
 	if(draft->hasBegunConjunction) {
 		// end (ĺist position elements)
-		nElements = IFactEndConjunction(draft);
+		nElements = IFactEndPredicateForm(draft);
 	}
 	else {
 		// no elements were added, create the empty list

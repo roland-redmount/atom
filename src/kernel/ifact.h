@@ -82,46 +82,67 @@ void FreeIFacts(void);
 void IFactBegin(IFactDraft * draft);
 
 /**
- * Begin a new conjunction for the IFact currently being created.
- * Each clause (row, fact) in the conjunction will have the given form.
+ * Begin a new predicate form for the IFactDraft. Each tuple added by
+ * IFactAddTuple() have this form.
+ * The idColumn identifies the actor that is being defined by the IFact.
+ * TODO: factor out the BTree * 
  */
-void IFactBeginConjunction(IFactDraft * draft, Atom form, BTree * btree, index8 idColumn);
+void IFactBeginPredicateForm(IFactDraft * draft, Atom predicateForm, BTree * btree, index8 idColumn);
 
 /**
- * Add a tuple that defines one clause of the current conjunction fact.
- * The atom in the column of the identified fact is ignored; it will
- * be computed by calling IFactEnd()
+ * Add one tuple, defining one predicate of the current predicate form.
+ * The atom in the ID column of the identified fact is ignored; it will
+ * be computed by IFactEnd()
  */
-void IFactAddClause(IFactDraft * draft, TypedTuple const * tuple);
+void IFactAddTuple(IFactDraft * draft, TypedTuple const * tuple);
 
 /**
- * End the current conjunction. This function must be called before
- * calling IFactEnd(). Returns the number of clauses created.
+ * End the current predicate form. This function must be called before
+ * calling IFactEnd(). Returns the number of predicates for this form.
  */
-size32 IFactEndConjunction(IFactDraft * draft);
+size32 IFactEndPredicateForm(IFactDraft * draft);
 
 /**
- * Return the number of clauses in the draft's current conjunction.
- * If IFactBeginConjunction() has not been called, this call is invalid.
+ * Return the number of tupled added so far for the current predicate form.
+ * IFactBeginPredicateForm() must be called before calling this function.
  */
-size32 IFactDraftCurrentNClauses(IFactDraft * draft);
+size32 IFactDraftCurrentNTuples(IFactDraft * draft);
 
 /**
- * Finish the IFact currently being created. Computes the IFact AT_ID atom's
- * atom as the hash of the identifying facts, creates the facts and
- * returns the AT_ID atom.
+ * Finalize the IFactDraft to create an AT_ID atom. Computes the AT_ID atom's
+ * hash from all identifying facts, asserts all facts and returns the AT_ID atom.
  */
 Atom IFactEnd(IFactDraft * draft);
 
-// This variant is only used during bootstrapping.
+/**
+ * This variant of IFactEnd() is only used during bootstrapping.
+ * Here, a precomputed AT_ID hash must be provided, and the given assertFact()
+ * is used to assert identifying facts instead of the standard AssertFact().
+ */
 Atom IFactEndBootstrap(IFactDraft * draft, data64 hash, void (* assertFact)(Atom, TypedTuple const *));
 
+/**
+ * Acquire a reference to an AT_ID atom.
+ */
 void IFactAcquire(Atom ifact);
+
+/**
+ * Release a reference to an AT_ID atom. When the last reference is released,
+ * the underlying identifying facts are retracted.
+ */
 void IFactRelease(Atom ifact);
 
+/**
+ * Reference counts
+ */
 uint32 IFactReferenceCount(Atom ifact);
-uint32 TotalIFactReferenceCount(void);
-uint32 TotalIFactCount(void);
+
+uint32 IFactTotalReferenceCount(void);
+
+/**
+ * Total number of IFact headers stored.
+ */
+uint32 IFactTotalCount(void);
 
 
 /**
@@ -144,18 +165,18 @@ uint32 TotalIFactCount(void);
 // TODO: this should take a form atom, not a tree pointer
 bool IFactCheckTuple(BTree const * tree, TypedTuple const * tuple);
 
-void PrintIFact(Atom ifact);
+void IFactPrint(Atom ifact);
 
-void DumpIFacts(void);
+void IFactDump(void);
 
 /**
- * Enable flagging of newly created ifacts, for debugging.
+ * Flagging of newly created ifacts, for debugging.
  */
-void EnableFlagCreatedIFacts(void);
+void IFactsEnableFlagging(void);
 
-void DumpFlaggedIFacts(void);
+void IFactDumpFlagged(void);
 
-void DisableFlagCreatedIFacts(void);
+void IFactDisableFlagging(void);
 
 
 

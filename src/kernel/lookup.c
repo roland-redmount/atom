@@ -281,7 +281,7 @@ void LookupDump(void)
 	BTreeIterate(&iterator, lookup.btree);
 	while(BTreeIteratorNext(&iterator)) {
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
-		PrintIFact(record->atom);
+		IFactPrint(record->atom);
 		PrintChar(' ');
 		PrintPredicateForm(record->predicateForm);
 		PrintChar(' ');

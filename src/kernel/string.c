@@ -24,7 +24,7 @@ Atom CreateString(char const * chars, size32 length)
 	AddListToIFact(&draft, stringElementGenerator, chars, length);
 
 	// add (string @string) to ifact
-	IFactBeginConjunction(
+	IFactBeginPredicateForm(
 		&draft,
 		GetCorePredicateForm(FORM_STRING),
 		RegistryGetCoreBTreeService(FORM_STRING),
@@ -32,9 +32,9 @@ Atom CreateString(char const * chars, size32 length)
 	);
 	TypedTuple * tuple = CreateTypedTuple(1);
 	TypedTupleSetElement(tuple, 0, (TypedAtom) {0});
-	IFactAddClause(&draft, tuple);
+	IFactAddTuple(&draft, tuple);
 	FreeTypedTuple(tuple);
-	IFactEndConjunction(&draft);
+	IFactEndPredicateForm(&draft);
 
 	return IFactEnd(&draft);
 }

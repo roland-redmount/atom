@@ -32,7 +32,7 @@ Atom CreateQuote(Atom quoted)
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	IFactBeginConjunction(
+	IFactBeginPredicateForm(
 		&draft,
 		GetCorePredicateForm(FORM_QUOTE_QUOTED),
 		RegistryGetCoreBTreeService(FORM_QUOTE_QUOTED),
@@ -41,9 +41,9 @@ Atom CreateQuote(Atom quoted)
 	
 	TypedTuple * tuple = CreateTypedTuple(2);
 	quoteSetTuple(tuple, invalidAtom, CreateTypedAtom(AT_ID, quoted));
-	IFactAddClause(&draft, tuple);
+	IFactAddTuple(&draft, tuple);
 	FreeTypedTuple(tuple);
-	IFactEndConjunction(&draft);
+	IFactEndPredicateForm(&draft);
 
 	return IFactEnd(&draft);
 }

@@ -73,15 +73,11 @@ static IFactConjunction * lastConjunction(IFactHeader * header)
 
 
 /**
- * Global ifact storage structure
- * 
  * We store all IFactHeaders in a BTree and perform lookup by their
  * hash value. IFactConjunctions are allocated with Allocate().
- * 
- * TODO: move this to persistent memory.
  */
 static struct {
-	BTree * btree;					// tree storing IFactHeader structs
+	BTree * btree;					// B-tree storing IFactHeader structs
 	uint32 totalReferenceCount;
 	bool flagCreatedIFacts;
 } ifactStorage = {0};
@@ -173,20 +169,20 @@ uint32 IFactReferenceCount(Atom ifact)
 }
 
 
-uint32 TotalIFactReferenceCount(void)
+uint32 IFactTotalReferenceCount(void)
 {
 	return ifactStorage.totalReferenceCount;
 }
 
 
-uint32 TotalIFactCount(void)
+uint32 IFactTotalCount(void)
 {
 	return BTreeNItems(ifactStorage.btree);
 }
 
 void FreeIFacts(void)
 {
-	ASSERT(TotalIFactCount() == 0);
+	ASSERT(IFactTotalCount() == 0);
 	BTreeFree(ifactStorage.btree);
 }
 
@@ -202,7 +198,7 @@ void IFactBegin(IFactDraft * draft)
 }
 
 
-void IFactBeginConjunction(IFactDraft * draft, Atom form, BTree * btree, index8 idColumn)
+void IFactBeginPredicateForm(IFactDraft * draft, Atom form, BTree * btree, index8 idColumn)
 {
 	ASSERT(!draft->hasBegunConjunction);
 
@@ -223,7 +219,7 @@ void IFactBeginConjunction(IFactDraft * draft, Atom form, BTree * btree, index8 
 }
 
 
-void IFactAddClause(IFactDraft * draft, TypedTuple const * tuple)
+void IFactAddTuple(IFactDraft * draft, TypedTuple const * tuple)
 {
 	ASSERT(draft->hasBegunConjunction);
 	IFactConjunction * conjunction = lastConjunction(&(draft->header));
@@ -242,7 +238,7 @@ void IFactAddClause(IFactDraft * draft, TypedTuple const * tuple)
 }
 
 
-size32 IFactEndConjunction(IFactDraft * draft)
+size32 IFactEndPredicateForm(IFactDraft * draft)
 {
 	ASSERT(draft->hasBegunConjunction);
 	
@@ -254,7 +250,7 @@ size32 IFactEndConjunction(IFactDraft * draft)
 }
 
 
-size32 IFactDraftCurrentNClauses(IFactDraft * draft)
+size32 IFactDraftCurrentNTuples(IFactDraft * draft)
 {
 	ASSERT(draft->hasBegunConjunction);
 	IFactConjunction * conjunction = lastConjunction(&(draft->header));
@@ -528,9 +524,11 @@ void IFactRelease(Atom ifact)
 		// may move items in the btree and thereby invalidate the pointer.
 		IFactHeader headerCopy = *header;
 
-		// Remove defining facts.
-		// TODO: can we achieve this using lookup instead, so that we
-		// don't actually need to store the conjunctions after IFactEnd()
+		// Retract defining facts.
+		// TODO: can we locate the facts using lookup instead, so that we
+		// don't actually need to store the conjunctions after IFactEnd() ?
+		// We only need to know the predicate form (to identify the relation/service)
+		// and the role in which the AT_ID atom participates.
 		for(index8 i = 0; i < headerCopy.nConjunctions; i++) {
 			IFactConjunction * conjunction = &(headerCopy.conjunctions[i]);
 			TypedTuple * queryTuple = CreateTypedTuple(conjunction->nColumns);
@@ -555,31 +553,31 @@ void IFactRelease(Atom ifact)
 }
 
 
-void PrintIFact(Atom atom)
+void IFactPrint(Atom atom)
 {
 	PrintF("ID %llx", atom);
 }
 
 
-void DumpIFacts(void)
+void IFactDump(void)
 {
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, ifactStorage.btree);
 	while(BTreeIteratorNext(&iterator)) {
 		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
-		PrintIFact((Atom) {.hash = header->hash});
+		IFactPrint((Atom) {.hash = header->hash});
 		PrintChar('\n');
 	}
 	BTreeIteratorEnd(&iterator);
 }
 
 
-void EnableFlagCreatedIFacts(void)
+void IFactsEnableFlagging(void)
 {
 	ifactStorage.flagCreatedIFacts = true;
 }
 
-void DumpFlaggedIFacts(void)
+void IFactDumpFlagged(void)
 {
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, ifactStorage.btree);
@@ -593,7 +591,7 @@ void DumpFlaggedIFacts(void)
 	BTreeIteratorEnd(&iterator);
 }
 
-void DisableFlagCreatedIFacts(void)
+void IFactDisableFlagging(void)
 {
 	ifactStorage.flagCreatedIFacts = false;
 	// clear all flags

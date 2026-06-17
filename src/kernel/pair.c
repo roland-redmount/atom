@@ -37,7 +37,7 @@ Atom CreatePair(TypedAtom left, TypedAtom right)
 void AddPairToIFact(IFactDraft * draft, TypedAtom left, TypedAtom right)
 {
 	// assert (pair left right)
-	IFactBeginConjunction(
+	IFactBeginPredicateForm(
 		draft,
 		GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT),
 		RegistryGetCoreBTreeService(FORM_PAIR_LEFT_RIGHT),
@@ -46,9 +46,9 @@ void AddPairToIFact(IFactDraft * draft, TypedAtom left, TypedAtom right)
 	
 	TypedTuple * tuple = CreateTypedTuple(3);
 	pairSetTuple(tuple, (TypedAtom) {0}, left, right);
-	IFactAddClause(draft, tuple);
+	IFactAddTuple(draft, tuple);
 	FreeTypedTuple(tuple);
-	IFactEndConjunction(draft);
+	IFactEndPredicateForm(draft);
 }
 
 

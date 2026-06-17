@@ -28,16 +28,16 @@ Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
 	AddMultisetToIFactFromArrays(&draft, uniqueRoles, multiplicities, nUniqueRoles);
 
 	// add (predicate-form @predicate) to ifact
-	IFactBeginConjunction(
+	IFactBeginPredicateForm(
 		&draft,
 		GetCorePredicateForm(FORM_PREDICATE_FORM),
 		RegistryGetCoreBTreeService(FORM_PREDICATE_FORM),
 		0
 	);
 	TypedTuple * tuple = CreateTypedTuple(1);
-	IFactAddClause(&draft, tuple);
+	IFactAddTuple(&draft, tuple);
 	FreeTypedTuple(tuple);
-	IFactEndConjunction(&draft);
+	IFactEndPredicateForm(&draft);
 
 	return IFactEnd(&draft);
 }

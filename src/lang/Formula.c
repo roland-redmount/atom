@@ -44,7 +44,7 @@ Atom CreateFormula(Atom form, Atom actorsList)
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	IFactBeginConjunction(
+	IFactBeginPredicateForm(
 		&draft,
 		GetCorePredicateForm(FORM_FORMULA_FORM_ACTORS),
 		RegistryGetCoreBTreeService(FORM_FORMULA_FORM_ACTORS),
@@ -53,9 +53,9 @@ Atom CreateFormula(Atom form, Atom actorsList)
 
 	TypedTuple * tuple = CreateTypedTuple(3);
 	FormulaSetTuple(tuple, invalidAtom, CreateTypedAtom(AT_ID, form), CreateTypedAtom(AT_ID, actorsList));
-	IFactAddClause(&draft, tuple);
+	IFactAddTuple(&draft, tuple);
 	FreeTypedTuple(tuple);
-	IFactEndConjunction(&draft);	
+	IFactEndPredicateForm(&draft);	
 
 	return IFactEnd(&draft);
 }

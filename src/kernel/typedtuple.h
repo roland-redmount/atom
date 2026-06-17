@@ -53,7 +53,7 @@ TypedTuple * CreateTupleFromTuple(TypedTuple const * otherTuple);
 
 /**
  * Initialize a given memory block as a tuple.
- * NOTE: this is only used by IFactAddClause(), can we remove?
+ * NOTE: this is only used by IFactAddTuple(), can we remove?
  */
 void SetupTypedTuple(TypedTuple * tuple, size8 nAtoms);
 

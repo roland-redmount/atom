@@ -43,7 +43,7 @@ Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size3
 void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, void const * data, size32 nUniqueElements)
 {
 	// assert (multiset element multiple) facts
-	IFactBeginConjunction(
+	IFactBeginPredicateForm(
 		draft, 
 		GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE),
 		RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE),
@@ -56,10 +56,10 @@ void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, 
 			tuple,
 			invalidAtom, em.element, CreateTypedAtom(AT_UINT, (Atom) {._uint = em.multiple})
 		);
-		IFactAddClause(draft, tuple);
+		IFactAddTuple(draft, tuple);
 	}
 	FreeTypedTuple(tuple);
-	IFactEndConjunction(draft);
+	IFactEndPredicateForm(draft);
 }
 
 

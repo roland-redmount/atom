@@ -207,7 +207,7 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		else if(IsTermForm(typedAtom.atom))
 			PrintTermForm(typedAtom.atom);
 		else
-			PrintIFact(typedAtom.atom);
+			IFactPrint(typedAtom.atom);
 		break;
 
 	default:

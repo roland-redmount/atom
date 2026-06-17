@@ -36,7 +36,7 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 
 	Atom termForm = GetCorePredicateForm(FORM_TERM_FORM);
 
-	IFactBeginConjunction(
+	IFactBeginPredicateForm(
 		&draft,
 		termForm,
 		RegistryGetCoreBTreeService(FORM_TERM_FORM),
@@ -48,9 +48,9 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 		CreateTypedAtom(AT_ID, predicateForm),
 		CreateTypedAtom(AT_UINT, (Atom) {._uint = sign ? 1 : 0})
 	);
-	IFactAddClause(&draft, tuple);
+	IFactAddTuple(&draft, tuple);
 	FreeTypedTuple(tuple);
-	IFactEndConjunction(&draft);
+	IFactEndPredicateForm(&draft);
 
 	return IFactEnd(&draft);
 }

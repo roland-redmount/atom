@@ -261,14 +261,14 @@ static void setupCoreServices(void)
 
 	// defining facts
 	// (multiset @multiset-form element "multiset" multiple 1)
-	IFactBeginConjunction(&multisetDraft,multisetForm, multisetBTree, MULTISET_MULTISET_COLUMN);
+	IFactBeginPredicateForm(&multisetDraft,multisetForm, multisetBTree, MULTISET_MULTISET_COLUMN);
 	MultisetSetTuple(
 		multisetTuple,
 		CreateTypedAtom(AT_ID, multisetForm),
 		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_MULTISET)),
 		CreateTypedAtom(AT_UINT, (Atom) {._uint = 1})
 	);
-	IFactAddClause(&multisetDraft, multisetTuple);
+	IFactAddTuple(&multisetDraft, multisetTuple);
 	// (multiset @multiset-form element "element" multiple 1)
 	MultisetSetTuple(
 		multisetTuple,
@@ -276,7 +276,7 @@ static void setupCoreServices(void)
 		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_ELEMENT)),
 		CreateTypedAtom(AT_UINT, (Atom) {._uint = 1})
 	);
-	IFactAddClause(&multisetDraft, multisetTuple);
+	IFactAddTuple(&multisetDraft, multisetTuple);
 	// (multiset @multiset-form element "multiple" multiple 1)
 	MultisetSetTuple(
 		multisetTuple,
@@ -284,15 +284,15 @@ static void setupCoreServices(void)
 		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_MULTIPLE)),
 		CreateTypedAtom(AT_UINT, (Atom) {._uint = 1})
 	);
-	IFactAddClause(&multisetDraft, multisetTuple);
-	IFactEndConjunction(&multisetDraft);
+	IFactAddTuple(&multisetDraft, multisetTuple);
+	IFactEndPredicateForm(&multisetDraft);
 
 	// (predicate-form @multiset-form)
 	TypedTuple * predicateFormTuple = CreateTypedTuple(1);
 	TypedTupleSetElement(predicateFormTuple, 0, multisetFormAtom);
-	IFactBeginConjunction(&multisetDraft, predicateForm, predicateFormBTree, 0);
-	IFactAddClause(&multisetDraft, predicateFormTuple);
-	IFactEndConjunction(&multisetDraft);
+	IFactBeginPredicateForm(&multisetDraft, predicateForm, predicateFormBTree, 0);
+	IFactAddTuple(&multisetDraft, predicateFormTuple);
+	IFactEndPredicateForm(&multisetDraft);
 
 	/**
 	 * We can't call the usual IFactEnd() here because it calls 
@@ -315,21 +315,21 @@ static void setupCoreServices(void)
 
 	// defining facts
 	// (multiset @predicate-form element "predicate-form" multiple 1)
-	IFactBeginConjunction(&predicateFormDraft, multisetForm, multisetBTree, MULTISET_MULTISET_COLUMN);
+	IFactBeginPredicateForm(&predicateFormDraft, multisetForm, multisetBTree, MULTISET_MULTISET_COLUMN);
 	MultisetSetTuple(
 		multisetTuple,
 		predicateFormAtom,
 		CreateTypedAtom(AT_NAME, GetCoreRoleName(ROLE_PREDICATE_FORM)),
 		CreateTypedAtom(AT_UINT, (Atom) {._uint = 1})
 	);
-	IFactAddClause(&predicateFormDraft, multisetTuple);
-	IFactEndConjunction(&predicateFormDraft);
+	IFactAddTuple(&predicateFormDraft, multisetTuple);
+	IFactEndPredicateForm(&predicateFormDraft);
 
 	// (predicate-form @predicate-form)
-	IFactBeginConjunction(&predicateFormDraft, predicateForm, predicateFormBTree, 0);
+	IFactBeginPredicateForm(&predicateFormDraft, predicateForm, predicateFormBTree, 0);
 	TypedTupleSetElement(predicateFormTuple, 0, predicateFormAtom);
-	IFactAddClause(&predicateFormDraft, predicateFormTuple);
-	IFactEndConjunction(&predicateFormDraft);
+	IFactAddTuple(&predicateFormDraft, predicateFormTuple);
+	IFactEndPredicateForm(&predicateFormDraft);
 
 	// This gives 1 reference to the predicateForm atom
 	IFactEndBootstrap(&predicateFormDraft, predicateForm.hash, bootstrapAssertFact);
@@ -380,8 +380,8 @@ void KernelInitialize(void)
 	setupCoreRoleNames();
 	setupCoreServices();
 
-	kernel.nCoreIFacts = TotalIFactCount();
-	kernel.nCoreIFactRefs = TotalIFactReferenceCount();
+	kernel.nCoreIFacts = IFactTotalCount();
+	kernel.nCoreIFactRefs = IFactTotalReferenceCount();
 	kernel.nCoreNameRefs = NameTotalReferenceCount();
 	kernel.nCoreLookupEntries = LookupTotalCount();
 }
@@ -390,15 +390,15 @@ void KernelInitialize(void)
 void KernelShutdown(void)
 {
 	// check for dangling ifacts
-	uint32 ifactCount = TotalIFactCount();
+	uint32 ifactCount = IFactTotalCount();
 	ASSERT(ifactCount >= kernel.nCoreIFacts)
 	if(ifactCount > kernel.nCoreIFacts) {
 		PrintF("Failed to remove %u ifacts\n", ifactCount - kernel.nCoreIFacts);
-		// DumpIFacts();
+		// IFactDump();
 		ASSERT(false);
 	}
 	// check for dangling references
-	uint32 nIFactRefs = TotalIFactReferenceCount();
+	uint32 nIFactRefs = IFactTotalReferenceCount();
 	ASSERT(nIFactRefs >= kernel.nCoreIFactRefs)
 	if(nIFactRefs > kernel.nCoreIFactRefs) {
 		PrintF("Failed to release %u ifact references\n", nIFactRefs - kernel.nCoreIFactRefs);
@@ -420,8 +420,8 @@ void KernelShutdown(void)
 	 */
 	RegistryTeardownCoreServices();
 
-	ASSERT(TotalIFactCount() == 0)
-	ASSERT(TotalIFactReferenceCount() == 0)
+	ASSERT(IFactTotalCount() == 0)
+	ASSERT(IFactTotalReferenceCount() == 0)
 	// remaining name references are freed by FreeNameStorage() below
 
 	uint32 nLookupEntries = LookupTotalCount();
