@@ -35,5 +35,17 @@
 	"todohighlight.defaultStyle": {},
 	"todohighlight.isCaseSensitive": true,
 	"cmake.buildDirectory": "${workspaceFolder}/build",
-	"cmake.configureOnOpen": false
+	"cmake.configureOnOpen": false,
+	"search.exclude": {
+		"coverage/**": true,
+		"build/**": true
+	},
+	"files.watcherExclude": {
+		"coverage/**": true,
+		"build/**": true
+	},
+	"C_Cpp.files.exclude": {
+		"coverage/**": true,
+		"build/**": true
+	}
 }
