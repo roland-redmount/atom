@@ -99,7 +99,7 @@ add_library(atom SHARED
     src/kernel/service.c
     src/kernel/ServiceRegistry.c
     src/kernel/string.c
-    src/kernel/tuple.c
+    src/kernel/typedtuple.c
     src/kernel/UInt.c
 
     src/library/math.c

@@ -66,7 +66,7 @@ static void testMultiset(void)
 
 	// adding a tuple (multiset @multiset element 'D' multiple 1) should fail
 	// since @multiset is an ifact
-	Tuple * tuple1 = CreateTuple(3);
+	TypedTuple * tuple1 = CreateTypedTuple(3);
 	MultisetSetTuple(
 		tuple1,
 		CreateTypedAtom(AT_ID, multiset),
@@ -74,10 +74,10 @@ static void testMultiset(void)
 		CreateTypedAtom(AT_UINT, (Atom) {._uint = 1})
 	);
 	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(table, tuple1), TUPLE_PROTECTED)
-	FreeTuple(tuple1);
+	FreeTypedTuple(tuple1);
 
 	// attempt to remove any tuple (list @string position _ element _) should fail
-	Tuple * tuple2 = CreateTuple(3);
+	TypedTuple * tuple2 = CreateTypedTuple(3);
 	MultisetSetTuple(
 		tuple2,
 		CreateTypedAtom(AT_ID, multiset),
@@ -85,7 +85,7 @@ static void testMultiset(void)
 		CreateTypedAtom(AT_UINT, (Atom) {._uint = 2})
 	);
 	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuples(table, tuple2, REMOVE_NORMAL), 0)
-	FreeTuple(tuple2);
+	FreeTypedTuple(tuple2);
 
 	IFactRelease(multiset);
 }

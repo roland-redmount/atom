@@ -25,7 +25,7 @@ Atom CreateList(ListElementGenerator generator, void const * data, size32 nEleme
  */
 Atom CreateListFromArray(TypedAtom const * listElements, size8 nAtoms);
 
-Atom CreateListFromTuple(Tuple const * tuple);
+Atom CreateListFromTuple(TypedTuple const * tuple);
 
 /**
  * Add list ifacts obtained from the generator to an exising IFact draft.
@@ -61,7 +61,7 @@ bool IsList(Atom atom);
 /**
  * Assign values to a tuple from the (list length) relation
  */
-void ListLengthSetTuple(Tuple * tuple, TypedAtom list, TypedAtom length);
+void ListLengthSetTuple(TypedTuple * tuple, TypedAtom list, TypedAtom length);
 
 
 /**
@@ -85,7 +85,7 @@ void ListGetElementsArray(Atom list, TypedAtom * elements);
 /**
  * Set the elements of tuple according to the (list position element) form.
  */
-void ListSetTuple(Tuple * tuple, TypedAtom list, TypedAtom position, TypedAtom element);
+void ListSetTuple(TypedTuple * tuple, TypedAtom list, TypedAtom position, TypedAtom element);
 
 /**
  * Return the first position p from the query
@@ -105,7 +105,7 @@ index32 ListGetPosition(Atom list, TypedAtom element);
  * Copy the elements of a list to a Tuple.
  * The Tuple must have the same number of elements.
  */
-void CopyListToTuple(Atom list, Tuple * tuple);
+void CopyListToTuple(Atom list, TypedTuple * tuple);
 
 void PrintList(Atom list);
 
@@ -119,7 +119,7 @@ int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, Type
 
 typedef struct s_ListIterator
 {
-	Tuple * queryTuple;
+	TypedTuple * queryTuple;
 	RelationBTreeIterator treeIterator;
 } ListIterator;
 

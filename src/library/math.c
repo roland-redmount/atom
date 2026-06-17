@@ -14,10 +14,10 @@ static void add1(ServiceContext * context)
 {
 	// TODO: how to index into the tuple reliably?
 	// Currently we are hardcoding canonical positions of the x, y, z roles
-	int64 x = TupleGetAtom(context->arguments, 1)._int;
-	int64 y = TupleGetAtom(context->arguments, 2)._int;
+	int64 x = TypedTupleGetAtom(context->arguments, 1)._int;
+	int64 y = TypedTupleGetAtom(context->arguments, 2)._int;
 	// TODO: typed services really should not have to write argument types ...
-	TupleSetElement(context->arguments, 0, CreateTypedAtom(AT_INT, (Atom) {._int = x + y}));
+	TypedTupleSetElement(context->arguments, 0, CreateTypedAtom(AT_INT, (Atom) {._int = x + y}));
 }
 
 /**
@@ -27,9 +27,9 @@ static void add1(ServiceContext * context)
  */
 static void add2(ServiceContext * context)
 {
-	int64 x = TupleGetAtom(context->arguments, 1)._int;
-	int64 z = TupleGetAtom(context->arguments, 0)._int;
-	TupleSetElement(context->arguments, 2, CreateTypedAtom(AT_INT, (Atom) {._int = z - x}));
+	int64 x = TypedTupleGetAtom(context->arguments, 1)._int;
+	int64 z = TypedTupleGetAtom(context->arguments, 0)._int;
+	TypedTupleSetElement(context->arguments, 2, CreateTypedAtom(AT_INT, (Atom) {._int = z - x}));
 }
 
 /**

@@ -54,7 +54,7 @@
 #ifndef FORMULA_H
 #define FORMULA_H
 
-#include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
 #include "lang/TypedAtom.h"
 
 
@@ -80,7 +80,7 @@ Atom CreateTerm(Atom predicate, bool negated);
 /**
  * Find the term actor corresponding the given role and multiplicity m
  */
-TypedAtom TermGetRoleActor(Atom termForm, Tuple const * termActors, const char * role, uint8 m);
+TypedAtom TermGetRoleActor(Atom termForm, TypedTuple const * termActors, const char * role, uint8 m);
 
 /**
  * Create a clause from a list of terms, in any order.
@@ -147,11 +147,11 @@ index32 FormulaRoleIndex(Atom formula, Atom name);
 
 void PrintFormula(Atom formula);
 
-void PrintFormActorsAsFormula(Atom form, Tuple const * actors);
+void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors);
 
 /**
  * Compute hash of a formula from the form hash value and actors tuple
  */
-data64 FormulaHashFormActors(data64 formHash, Tuple const * actors, size32 nActors, data64 initialHash);
+data64 FormulaHashFormActors(data64 formHash, TypedTuple const * actors, size32 nActors, data64 initialHash);
 
 #endif	// FORMULA_H

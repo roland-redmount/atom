@@ -23,7 +23,7 @@ void testAssertRetract(void)
 
 	// asserting the first fact should create the service
 	Atom barf = CreateStringFromCString("barf");
-	Tuple * actors1 = CreateTupleFromArray(
+	TypedTuple * actors1 = CreateTypedTupleFromArray(
 		(TypedAtom[]) {
 			CreateTypedAtom(AT_ID, barf),
 			CreateTypedAtom(AT_INT, (Atom) {._int = -1})
@@ -39,7 +39,7 @@ void testAssertRetract(void)
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 1)
 
 	Atom baz = CreateStringFromCString("baz");
-	Tuple * actors2 = CreateTupleFromArray(
+	TypedTuple * actors2 = CreateTypedTupleFromArray(
 		(TypedAtom[]) {
 			CreateTypedAtom(AT_INT, (Atom) {._int = 42}),
 			CreateTypedAtom(AT_ID, baz)
@@ -57,8 +57,8 @@ void testAssertRetract(void)
 	record = RegistryFindUntypedService(form);
 	ASSERT(!record.form.hash)
 
-	FreeTuple(actors1);
-	FreeTuple(actors2);
+	FreeTypedTuple(actors1);
+	FreeTypedTuple(actors2);
 	IFactRelease(barf);
 	IFactRelease(baz);
 	IFactRelease(form);

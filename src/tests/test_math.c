@@ -4,7 +4,7 @@
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/ServiceRegistry.h"
-#include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
 #include "lang/Formula.h"
 #include "library/math.h"
 #include "parser/TermBuilder.h"
@@ -20,17 +20,17 @@ void testAdd1(void)
 	index8 permutation[3];
 	ASSERT(DispatchQueryFormula(query, &record, permutation))
 
-	Tuple * arguments = CreateTuple(3);
+	TypedTuple * arguments = CreateTypedTuple(3);
 	CopyListToTuple(actors, arguments);
 	
 	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
-	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 0)._int, 2 + 3);
+	ASSERT_INT32_EQUAL(TypedTupleGetAtom(arguments, 0)._int, 2 + 3);
 
 	ASSERT_FALSE(ServiceCall(context))
 	
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	FreeTypedTuple(arguments);
 
 	IFactRelease(query);
 }
@@ -45,17 +45,17 @@ void testAdd2(void)
 	index8 permutation[3];
 	ASSERT(DispatchQueryFormula(query, &record, permutation))
 
-	Tuple * arguments = CreateTuple(3);
+	TypedTuple * arguments = CreateTypedTuple(3);
 	CopyListToTuple(actors, arguments);
 	
 	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
-	ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 2)._uint, 7 - 4);
+	ASSERT_INT32_EQUAL(TypedTupleGetAtom(arguments, 2)._uint, 7 - 4);
 
 	ASSERT_FALSE(ServiceCall(context))
 	
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	FreeTypedTuple(arguments);
 
 	IFactRelease(query);
 }

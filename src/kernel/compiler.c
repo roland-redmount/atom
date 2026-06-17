@@ -160,21 +160,21 @@
  * must be discovered by matching against services. The genererated parameter
  * numbers are always equan to the tuple index + 1.
  */
-static void atomsToParameters(Tuple const * actors, Tuple * replacedActors)
+static void atomsToParameters(TypedTuple const * actors, TypedTuple * replacedActors)
 {
 	for(index8 i = 0; i < actors->nAtoms; i++) {
-		TypedAtom typedAtom = TupleGetElement(actors, i);
+		TypedAtom typedAtom = TypedTupleGetElement(actors, i);
 		if(typedAtom.type == AT_VARIABLE) {
 			Atom parameter = {
 				.parameter = {.number = i + 1, .io = PARAMETER_OUT, .atomType = 0}
 			};
-			TupleSetElement(replacedActors, i, CreateTypedAtom(AT_PARAMETER, parameter));
+			TypedTupleSetElement(replacedActors, i, CreateTypedAtom(AT_PARAMETER, parameter));
 		}
 		else {
 			Atom parameter = {
 				.parameter = {.number = i + 1, .io = PARAMETER_IN, .atomType = typedAtom.type}
 			};
-			TupleSetElement(replacedActors, i, CreateTypedAtom(AT_PARAMETER, parameter));
+			TypedTupleSetElement(replacedActors, i, CreateTypedAtom(AT_PARAMETER, parameter));
 		}
 	}
 }
@@ -189,7 +189,7 @@ static void atomsToParameters(Tuple const * actors, Tuple * replacedActors)
  * permuted to match the term actors order.
  */
 static Service * compileTerm(
-	Atom termForm, Tuple const * termActors, size8 nArguments, Tuple * serviceParameters)
+	Atom termForm, TypedTuple const * termActors, size8 nArguments, TypedTuple * serviceParameters)
 {
 	// attempt to locate an service existing service
 	size8 termArity = termActors->nAtoms;
@@ -203,7 +203,7 @@ static Service * compileTerm(
 	index8 argumentMap[termArity];
 	size8 nConstants = 0;
 	for(index8 i = 0; i < termArity; i++) {
-		TypedAtom actor = TupleGetElement(termActors, permutation[i]);
+		TypedAtom actor = TypedTupleGetElement(termActors, permutation[i]);
 		if(actor.type == AT_PARAMETER) {
 			argumentMap[i] = actor.atom.parameter.number;
 		}
@@ -211,18 +211,18 @@ static Service * compileTerm(
 			argumentMap[i] = 0;
 			nConstants++;
 		}
-		TupleSetElement(serviceParameters, permutation[i],
+		TypedTupleSetElement(serviceParameters, permutation[i],
 			ListGetElement(termServiceRecord.parameters, i + 1));
 	}
-	Tuple * constants = 0;
+	TypedTuple * constants = 0;
 	bool deduplicate = false;
 	if(nConstants > 0) {
 		// Collect constants tuple
-		constants = CreateTuple(nConstants);
+		constants = CreateTypedTuple(nConstants);
 		for(index8 i = 0, k = 0; i < termActors->nAtoms; i++) {
-			TypedAtom actor = TupleGetElement(termActors, permutation[i]);
+			TypedAtom actor = TypedTupleGetElement(termActors, permutation[i]);
 			if(actor.type != AT_PARAMETER) {
-				TupleSetElement(constants, k++, actor);
+				TypedTupleSetElement(constants, k++, actor);
 				// TODO: we should only deduplicate if the "constant" is a variable?
 				deduplicate = true;
 			}
@@ -232,7 +232,7 @@ static Service * compileTerm(
 	Service * service = CreatePermuteService(
 		nArguments, constants, argumentMap, termServiceRecord.service);
 	if(constants)
-		FreeTuple(constants);
+		FreeTypedTuple(constants);
 	// Wrap in a deduplicate service if needed
 	if(deduplicate) {
 		Service * deduplicateService = CreateDeduplicateService(service);
@@ -252,7 +252,7 @@ static Service * compileTerm(
  * we emit its service directly without a JOIN, terminating recursion.
  */
 static Service * compileConjunctionRecursive(
-	Atom clauseForm, Tuple * clauseActors, index8 matchedTermIndex, size8 nArguments,
+	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 nArguments,
 	bool * termExcluded, uint8 nTermsExcluded, index8 const * termActorsIndices)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
@@ -277,20 +277,20 @@ static Service * compileConjunctionRecursive(
 			!TermFormGetSign(termForm)
 		);
 		// iterate over all terms (multiples) of this form
-		Tuple * termActors = CreateTuple(termArity);
-		Tuple * serviceParameters = CreateTuple(termArity);
+		TypedTuple * termActors = CreateTypedTuple(termArity);
+		TypedTuple * serviceParameters = CreateTypedTuple(termArity);
 		for(index8 m = 0; m < em.multiple; m++, termIndex++) {
 			if(termExcluded[termIndex])
 				continue;
 			// Extract term actors
-			CopyTuplesAt(clauseActors, termActorsIndices[termIndex], termActors);
+			TypedTupleCopyAt(clauseActors, termActorsIndices[termIndex], termActors);
 			PrintCString("Term: ");
 			PrintFormActorsAsFormula(negatedTermForm, termActors);
 			PrintChar('\n');
 
 			service = compileTerm(negatedTermForm, termActors, nArguments, serviceParameters);
 			PrintCString("serviceParameter = ");
-			PrintTuple(serviceParameters);
+			TypedTuplePrint(serviceParameters);
 			PrintChar('\n');
 			if(service) {
 				termExcluded[termIndex] = true;
@@ -298,11 +298,11 @@ static Service * compileConjunctionRecursive(
 				// Update parameter types for output parameter in the query term,
 				// and for all other terms flip matched outputs to inputs.
 				for(index8 i = 0; i < termArity; i++) {
-					TypedAtom termActor = TupleGetElement(termActors, i);
+					TypedAtom termActor = TypedTupleGetElement(termActors, i);
 					if(termActor.type == AT_PARAMETER) {
 						if(!termActor.atom.parameter.atomType) {
 							// Corresponding service parameter must be a typed output
-							TypedAtom serviceParameter = TupleGetElement(serviceParameters, i);
+							TypedAtom serviceParameter = TypedTupleGetElement(serviceParameters, i);
 							ASSERT(serviceParameter.type == AT_PARAMETER)
 							ASSERT(serviceParameter.atom.parameter.io == PARAMETER_OUT)
 							byte parameterType = serviceParameter.atom.parameter.atomType;
@@ -325,10 +325,10 @@ static Service * compileConjunctionRecursive(
 							};
 							// Replace untyped output parameter in query matched term
 							index8 queryParameterIndex = termActorsIndices[matchedTermIndex] + queryTermParameterNr - 1;
-							TupleSetAtom(clauseActors, queryParameterIndex, outputParameter);
+							TypedTupleSetAtom(clauseActors, queryParameterIndex, outputParameter);
 							// Replace untyped parameter in compiled term
 							// NOTE: not necessary, this term is not used for anything at this point
-							TupleSetAtom(
+							TypedTupleSetAtom(
 								clauseActors, termActorsIndices[termIndex] + i, outputParameter);
 							
 							// Replace matching parameters in all other non-excluded terms
@@ -336,9 +336,9 @@ static Service * compileConjunctionRecursive(
 								if(termExcluded[i])
 									continue;
 								for(index8 j = termActorsIndices[i]; j < termActorsIndices[i + 1]; j++) {
-									TypedAtom actor = TupleGetElement(clauseActors, j);
+									TypedAtom actor = TypedTupleGetElement(clauseActors, j);
 									if(SameTypedAtoms(actor, termActor))
-										TupleSetAtom(clauseActors, j, inputParameter);
+										TypedTupleSetAtom(clauseActors, j, inputParameter);
 								}
 							}
 						}
@@ -352,8 +352,8 @@ static Service * compileConjunctionRecursive(
 		PrintFormActorsAsFormula(clauseForm, clauseActors);
 		PrintChar('\n');
 
-		FreeTuple(serviceParameters);
-		FreeTuple(termActors);
+		FreeTypedTuple(serviceParameters);
+		FreeTypedTuple(termActors);
 		IFactRelease(negatedTermForm);
 	}
 	MultisetIteratorEnd(&termFormIterator);
@@ -385,7 +385,7 @@ static Service * compileConjunctionRecursive(
 
 
 static Service * compileConjunction(
-	Atom clauseForm, Tuple * clauseActors, index8 matchedTermIndex, size8 nArguments)
+	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 nArguments)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	index8 termActorsIndices[clauseNTerms + 1];
@@ -406,7 +406,7 @@ static Service * compileConjunction(
  * Parameter types in the queryActors tuple will be updated.
  * Returns the compiled service if successful, else 0.
  */
-static Service * compileService(Atom queryTermForm, Tuple * queryActors)
+static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
 {
 	size8 termArity = TermFormArity(queryTermForm);
 
@@ -436,7 +436,7 @@ static Service * compileService(Atom queryTermForm, Tuple * queryActors)
 
 	RelationBTreeIterator btreeIterator;
 	BTree * multisetBTree = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
-	Tuple * multisetQueryTuple = CreateTuple(3);
+	TypedTuple * multisetQueryTuple = CreateTypedTuple(3);
 	MultisetSetTuple(
 		multisetQueryTuple,
 		anonymousVariable,
@@ -461,10 +461,10 @@ static Service * compileService(Atom queryTermForm, Tuple * queryActors)
 		// Iterate over all rules (clauses) with this clause form.
 		DictionaryIterator dictIterator;
 		DictionaryIterate(clauseForm.atom, &dictIterator);
-		Tuple * matchedTermActors = CreateTuple(queryActors->nAtoms);
-		Tuple * substClauseActors = CreateTuple(ClauseArity(clauseForm.atom));
+		TypedTuple * matchedTermActors = CreateTypedTuple(queryActors->nAtoms);
+		TypedTuple * substClauseActors = CreateTypedTuple(ClauseArity(clauseForm.atom));
 		while(DictionaryIteratorNext(&dictIterator)) {
-			Tuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
+			TypedTuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
 			PrintCString("Matched rule: ");
 			PrintFormActorsAsFormula(clauseForm.atom, clauseActors);
 			PrintChar('\n');
@@ -475,7 +475,7 @@ static Service * compileService(Atom queryTermForm, Tuple * queryActors)
 			bool foundTerm = false;
 			for(index8 m = 1; !foundTerm && (m <= multiple); m++) {
 				// extract actors for the matching term in the clause
-				CopyTuplesAt(clauseActors, matchedTermActorsIndex, matchedTermActors);
+				TypedTupleCopyAt(clauseActors, matchedTermActorsIndex, matchedTermActors);
 				// unify the query with the matched term
 				Substitution querySubst;
 				Substitution termSubst;
@@ -494,7 +494,7 @@ static Service * compileService(Atom queryTermForm, Tuple * queryActors)
 						// to recover unified parameters
 						// NOTE: when multiple services are matched, the resulting parameter tuple
 						// must be identical across all services (same parameter types)
-						CopyTuplesAt(substClauseActors, matchedTermActorsIndex, queryActors);
+						TypedTupleCopyAt(substClauseActors, matchedTermActorsIndex, queryActors);
 						// handle unions
 						if(service) {
 							Service * unionService = CreateUnionService(service, newService);
@@ -512,11 +512,11 @@ static Service * compileService(Atom queryTermForm, Tuple * queryActors)
 			}
 		}
 		DictionaryIteratorEnd(&dictIterator);
-		FreeTuple(substClauseActors);
-		FreeTuple(matchedTermActors);
+		FreeTypedTuple(substClauseActors);
+		FreeTypedTuple(matchedTermActors);
 	}
 	RelationBTreeIteratorEnd(&btreeIterator);
-	FreeTuple(multisetQueryTuple);
+	FreeTypedTuple(multisetQueryTuple);
 
 	return service;
 }
@@ -527,15 +527,15 @@ bool CompileService(Atom queryTerm, ServiceRecord * record)
 	Atom queryTermForm = FormulaGetForm(queryTerm);
 	ASSERT(IsTermForm(queryTermForm))
 	size8 arity = TermFormArity(queryTermForm);
-	Tuple * queryActors = CreateTuple(arity);
+	TypedTuple * queryActors = CreateTypedTuple(arity);
 	CopyListToTuple(FormulaGetActors(queryTerm), queryActors);
 
 	// Generalize atoms in the query to parameters
 	// NOTE: the compilation process will determine the type
 	// of any output parameters. 
-	Tuple * serviceParameters = CreateTuple(queryActors->nAtoms);
+	TypedTuple * serviceParameters = CreateTypedTuple(queryActors->nAtoms);
 	atomsToParameters(queryActors, serviceParameters);
-	FreeTuple(queryActors);
+	FreeTypedTuple(queryActors);
 
 	PrintCString("Generalized query: ");
 	PrintFormActorsAsFormula(queryTermForm, serviceParameters);
@@ -553,6 +553,6 @@ bool CompileService(Atom queryTerm, ServiceRecord * record)
 	}
 	else
 		success = false;
-	FreeTuple(serviceParameters);
+	FreeTypedTuple(serviceParameters);
 	return success;
 }

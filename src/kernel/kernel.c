@@ -175,7 +175,7 @@ static index32 getCorePredicateIndex(Atom predicateForm)
 }
 
 
-void bootstrapAssertFact(Atom predicateForm, Tuple const * actors)
+void bootstrapAssertFact(Atom predicateForm, TypedTuple const * actors)
 {
 	// TODO: this now needs to retrieve an agent, not a service ...
 	// This is a quick hack to get the BTree * pointer)
@@ -257,7 +257,7 @@ static void setupCoreServices(void)
 	TypedAtom multisetFormAtom = CreateTypedAtom(AT_ID, multisetForm);
 	IFactDraft multisetDraft;
 	IFactBegin(&multisetDraft);
-	Tuple * multisetTuple = CreateTuple(3);
+	TypedTuple * multisetTuple = CreateTypedTuple(3);
 
 	// defining facts
 	// (multiset @multiset-form element "multiset" multiple 1)
@@ -288,8 +288,8 @@ static void setupCoreServices(void)
 	IFactEndConjunction(&multisetDraft);
 
 	// (predicate-form @multiset-form)
-	Tuple * predicateFormTuple = CreateTuple(1);
-	TupleSetElement(predicateFormTuple, 0, multisetFormAtom);
+	TypedTuple * predicateFormTuple = CreateTypedTuple(1);
+	TypedTupleSetElement(predicateFormTuple, 0, multisetFormAtom);
 	IFactBeginConjunction(&multisetDraft, predicateForm, predicateFormBTree, 0);
 	IFactAddClause(&multisetDraft, predicateFormTuple);
 	IFactEndConjunction(&multisetDraft);
@@ -327,7 +327,7 @@ static void setupCoreServices(void)
 
 	// (predicate-form @predicate-form)
 	IFactBeginConjunction(&predicateFormDraft, predicateForm, predicateFormBTree, 0);
-	TupleSetElement(predicateFormTuple, 0, predicateFormAtom);
+	TypedTupleSetElement(predicateFormTuple, 0, predicateFormAtom);
 	IFactAddClause(&predicateFormDraft, predicateFormTuple);
 	IFactEndConjunction(&predicateFormDraft);
 
@@ -338,8 +338,8 @@ static void setupCoreServices(void)
 	AtomAddRole(predicateForm, multisetForm, GetCoreRoleName(ROLE_MULTISET));
 	AtomAddRole(predicateForm, predicateForm, GetCoreRoleName(ROLE_PREDICATE_FORM));
 
-	FreeTuple(multisetTuple);
-	FreeTuple(predicateFormTuple);
+	FreeTypedTuple(multisetTuple);
+	FreeTypedTuple(predicateFormTuple);
 
 	// We can now use CreatePredicateForm() and AssertFact()
 
@@ -442,7 +442,7 @@ void KernelShutdown(void)
 
 // TODO: this should return a status code indicating whether the fact was created,
 // already existed, or if the assert failed due to logical inconsistency
-void AssertFact(Atom predicateForm, Tuple const * actors)
+void AssertFact(Atom predicateForm, TypedTuple const * actors)
 {
 	// TODO: currently we only support creating predicates
 	ASSERT(IsPredicateForm(predicateForm));
@@ -466,7 +466,7 @@ void AssertFact(Atom predicateForm, Tuple const * actors)
 }
 
 
-static void removeBTreeTuples(Atom predicateForm, Tuple * actors)
+static void removeBTreeTuples(Atom predicateForm, TypedTuple * actors)
 {
 	ServiceRecord record = RegistryFindUntypedService(predicateForm);
 	ASSERT(record.form.hash)
@@ -485,7 +485,7 @@ static void removeBTreeTuples(Atom predicateForm, Tuple * actors)
 	}
 }
 
-void RetractFact(Atom predicateForm, Tuple * actors)
+void RetractFact(Atom predicateForm, TypedTuple * actors)
 {
 	removeBTreeTuples(predicateForm, actors);
 	LookupRemovePredicateRoles(predicateForm, actors);

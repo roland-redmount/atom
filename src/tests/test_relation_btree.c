@@ -5,7 +5,7 @@
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
 #include "kernel/RelationBTree.h"
-#include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
 #include "testing/testing.h"
 
 
@@ -15,9 +15,9 @@
 
 struct {
 	BTree * tree;
-	Tuple * tuple1;
-	Tuple * tuple2;
-	Tuple * tuple3;
+	TypedTuple * tuple1;
+	TypedTuple * tuple2;
+	TypedTuple * tuple3;
 	uint32 initialRefCount;
 } fixture;
 
@@ -29,7 +29,7 @@ static void setupFixture(void)
 {
 	fixture.tree = CreateRelationBTree(TEST_N_COLUMNS);
 
-	fixture.tuple1 = CreateTupleFromArray(
+	fixture.tuple1 = CreateTypedTupleFromArray(
 		(TypedAtom[]) {
 			CreateTypedAtom(AT_INT, (Atom) {._int = 13 }),
 			CreateTypedAtom(AT_FLOAT, (Atom) {._float = 123.456}),
@@ -37,7 +37,7 @@ static void setupFixture(void)
 		},
 		TEST_N_COLUMNS
 	);
-	fixture.tuple2 = CreateTupleFromArray(
+	fixture.tuple2 = CreateTypedTupleFromArray(
 		(TypedAtom[]) {
 			CreateTypedAtom(AT_INT, (Atom) {._int = 13 }),
 			CreateTypedAtom(AT_FLOAT, (Atom) {._float = 123.456}),
@@ -45,7 +45,7 @@ static void setupFixture(void)
 		},
 		TEST_N_COLUMNS
 	);
-	fixture.tuple3 = CreateTupleFromArray(
+	fixture.tuple3 = CreateTypedTupleFromArray(
 		(TypedAtom[]) {
 			CreateTypedAtom(AT_UINT, (Atom) {._int = 14 }),
 			CreateTypedAtom(AT_FLOAT, (Atom) {._float = 456.789}),
@@ -57,9 +57,9 @@ static void setupFixture(void)
 
 static void teardownFixture(void)
 {
-	FreeTuple(fixture.tuple1);
-	FreeTuple(fixture.tuple2);
-	FreeTuple(fixture.tuple3);
+	FreeTypedTuple(fixture.tuple1);
+	FreeTypedTuple(fixture.tuple2);
+	FreeTypedTuple(fixture.tuple3);
 	FreeRelationBTree(fixture.tree);
 }
 
@@ -107,17 +107,17 @@ void testFindTuple(void)
 	
 	// find tuple 1
 	{
-		Tuple * queryTuple = CreateTuple(3);
-		CopyTuples(fixture.tuple1, queryTuple);
+		TypedTuple * queryTuple = CreateTypedTuple(3);
+		TypedTupleCopy(fixture.tuple1, queryTuple);
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);
 
 		ASSERT_TRUE(RelationBTreeIteratorNext(&iterator))
-		Tuple const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
-		ASSERT_TRUE(SameTuples(resultTuple, fixture.tuple1))
+		TypedTuple const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
+		ASSERT_TRUE(TypedTupleEqual(resultTuple, fixture.tuple1))
 		
 		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
 		RelationBTreeIteratorEnd(&iterator);
-		FreeTuple(queryTuple);
+		FreeTypedTuple(queryTuple);
 	}
 
 	// no query tuple, iterate over all 3 tuples
@@ -133,27 +133,27 @@ void testFindTuple(void)
 
 	// query matching tuples 1 and 2
 	{
-		Tuple * queryTuple = CreateTuple(3);
-		CopyTuples(fixture.tuple1, queryTuple);
-		TupleSetElement(queryTuple, 2, CreateTypedAtom(AT_VARIABLE, CreateVariable('x')));
+		TypedTuple * queryTuple = CreateTypedTuple(3);
+		TypedTupleCopy(fixture.tuple1, queryTuple);
+		TypedTupleSetElement(queryTuple, 2, CreateTypedAtom(AT_VARIABLE, CreateVariable('x')));
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);
 
 		ASSERT_TRUE(RelationBTreeIteratorNext(&iterator))
-		Tuple const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
-		ASSERT_TRUE(SameTuples(resultTuple, fixture.tuple1))
+		TypedTuple const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
+		ASSERT_TRUE(TypedTupleEqual(resultTuple, fixture.tuple1))
 		
 		ASSERT_TRUE(RelationBTreeIteratorNext(&iterator))
 		resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
-		ASSERT_TRUE(SameTuples(resultTuple, fixture.tuple2))
+		ASSERT_TRUE(TypedTupleEqual(resultTuple, fixture.tuple2))
 		
 		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
 		RelationBTreeIteratorEnd(&iterator);
-		FreeTuple(queryTuple);
+		FreeTypedTuple(queryTuple);
 	}
 
 	// query with no matching tuple
 	{
-		Tuple * queryTuple = CreateTupleFromArray(
+		TypedTuple * queryTuple = CreateTypedTupleFromArray(
 			(TypedAtom[]) {
 				CreateTypedAtom(AT_INT, (Atom) {._int = 31}),
 				CreateTypedAtom(AT_FLOAT, (Atom) {._float = 123.456}),
@@ -164,33 +164,33 @@ void testFindTuple(void)
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);
 		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
 		RelationBTreeIteratorEnd(&iterator);
-		FreeTuple(queryTuple);
+		FreeTypedTuple(queryTuple);
 	}
 
 	// query with two variables, find tuple 3
 	{
-		Tuple * queryTuple = CreateTupleFromArray(
+		TypedTuple * queryTuple = CreateTypedTupleFromArray(
 			(TypedAtom[]) {
 				CreateTypedAtom(AT_VARIABLE, CreateVariable('x')),
 				CreateTypedAtom(AT_VARIABLE, CreateVariable('y')),
-				TupleGetElement(fixture.tuple3, 2),
+				TypedTupleGetElement(fixture.tuple3, 2),
 			},
 			TEST_N_COLUMNS
 		);
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);
 		
 		ASSERT_TRUE(RelationBTreeIteratorNext(&iterator))
-		Tuple const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
-		ASSERT_TRUE(SameTuples(resultTuple, fixture.tuple3))
+		TypedTuple const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
+		ASSERT_TRUE(TypedTupleEqual(resultTuple, fixture.tuple3))
 		
 		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
 		RelationBTreeIteratorEnd(&iterator);
-		FreeTuple(queryTuple);
+		FreeTypedTuple(queryTuple);
 	}
 
 	// query with repeated variable (equality constraint)
 	{
-		Tuple * queryTuple = CreateTupleFromArray(
+		TypedTuple * queryTuple = CreateTypedTupleFromArray(
 			(TypedAtom[]) {
 				CreateTypedAtom(AT_INT, (Atom) {._int = 31}),
 				CreateTypedAtom(AT_VARIABLE, CreateVariable('x')),
@@ -201,12 +201,12 @@ void testFindTuple(void)
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);	
 		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
 		RelationBTreeIteratorEnd(&iterator);
-		FreeTuple(queryTuple);
+		FreeTypedTuple(queryTuple);
 	}
 	
 	// query with typed variable
 	{
-		Tuple * queryTuple = CreateTupleFromArray(
+		TypedTuple * queryTuple = CreateTypedTupleFromArray(
 			(TypedAtom[]) {
 				CreateTypedAtom(AT_VARIABLE, CreateTypedVariable('x', AT_UINT)),
 				anonymousVariable,
@@ -217,12 +217,12 @@ void testFindTuple(void)
 		RelationBTreeIterate(fixture.tree, queryTuple, &iterator);
 		
 		ASSERT_TRUE(RelationBTreeIteratorNext(&iterator))
-		Tuple const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
-		ASSERT_TRUE(SameTuples(resultTuple, fixture.tuple3))
+		TypedTuple const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
+		ASSERT_TRUE(TypedTupleEqual(resultTuple, fixture.tuple3))
 		
 		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
 		RelationBTreeIteratorEnd(&iterator);
-		FreeTuple(queryTuple);
+		FreeTypedTuple(queryTuple);
 	}
 
 	teardownFixture();
@@ -272,10 +272,10 @@ void testRemoveTuples(void)
 	size32 nRemoved;
 
 	// remove tuple 1 and 2
-	Tuple * queryTuple = CreateTupleFromArray(
+	TypedTuple * queryTuple = CreateTypedTupleFromArray(
 		(TypedAtom[]) {
-			TupleGetElement(fixture.tuple1, 0),
-			TupleGetElement(fixture.tuple1, 1),
+			TypedTupleGetElement(fixture.tuple1, 0),
+			TypedTupleGetElement(fixture.tuple1, 1),
 			anonymousVariable,
 		},
 		TEST_N_COLUMNS
@@ -283,7 +283,7 @@ void testRemoveTuples(void)
 	nRemoved = RelationBTreeRemoveTuples(fixture.tree, queryTuple, REMOVE_NORMAL);
 	ASSERT_UINT32_EQUAL(nRemoved, 2)
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 1)
-	FreeTuple(queryTuple);
+	FreeTypedTuple(queryTuple);
 
 	// remove tuple 3
 	nRemoved = RelationBTreeRemoveTuples(fixture.tree, fixture.tuple3, REMOVE_NORMAL);
@@ -305,7 +305,7 @@ void testRemoveAllTuples(void)
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 3)
 
 	// query tuple matching any tuple
-	Tuple * queryTuple = CreateTupleFromArray(
+	TypedTuple * queryTuple = CreateTypedTupleFromArray(
 		(TypedAtom[]) {
 			anonymousVariable,
 			anonymousVariable,
@@ -316,7 +316,7 @@ void testRemoveAllTuples(void)
 	size32 nRemoved = RelationBTreeRemoveTuples(fixture.tree, queryTuple, REMOVE_NORMAL);
 	ASSERT_UINT32_EQUAL(nRemoved, 3)
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 0)
-	FreeTuple(queryTuple);
+	FreeTypedTuple(queryTuple);
 
 	teardownFixture();
 }

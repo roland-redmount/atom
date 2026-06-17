@@ -72,7 +72,7 @@ static void testCreateList(void)
 		ASSERT_UINT32_EQUAL(ListGetPosition(list, fixture.atoms[i]), i + 1)
 
 	// attempt to add a tuple (list @string position 7 element 'Z') will violate the ifact
-	Tuple * tuple = CreateTuple(3);
+	TypedTuple * tuple = CreateTypedTuple(3);
 	ListSetTuple(tuple,
 		CreateTypedAtom(AT_ID, list),
 		CreateTypedAtom(AT_UINT, (Atom) {._uint = 7}),
@@ -87,7 +87,7 @@ static void testCreateList(void)
 		CreateTypedAtom(AT_LETTER, GetAlphabetLetter('Y'))
 	);
 	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuples(listPositionElement, tuple, REMOVE_NORMAL), 0)
-	FreeTuple(tuple);
+	FreeTypedTuple(tuple);
 
 	IFactRelease(list);
 }

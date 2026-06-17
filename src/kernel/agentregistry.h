@@ -10,7 +10,7 @@
 #ifndef BUREAU_H
 #define BUREAU_H
 
- #include "kernel/tuple.h"
+ #include "kernel/typedtuple.h"
 
  /**
   * An AgentHandler is analogous to a ServiceProvider in that

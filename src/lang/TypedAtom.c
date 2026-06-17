@@ -78,7 +78,7 @@ bool SameTypedAtoms(TypedAtom typedAtom1, TypedAtom typedAtom2)
 
 
 /**
- * Canonical ordering of typed atoms. This is used by CompareTuples()
+ * Canonical ordering of typed atoms. This is used by TypedTupleCompare()
  * which is used to order tuple storage in RelationBTree
  * 
  * NOTE: this orders atoms by the atom 64-bit value, which means

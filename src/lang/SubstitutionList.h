@@ -39,7 +39,7 @@ void SubstitutionSetValue(Substitution * subst, TypedAtom key, TypedAtom value);
  * to the destination.
  * The source and destination may be the same to substitute in-place.
  */
-void SubstituteTuple(Substitution const * subst, Tuple const * source, Tuple * destination);
+void SubstituteTuple(Substitution const * subst, TypedTuple const * source, TypedTuple * destination);
 
 /**
  * Deallocate a substitution

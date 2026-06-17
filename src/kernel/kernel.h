@@ -2,7 +2,7 @@
  * Main kernel routines
  */
 
-#include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
 #include "platform.h"
 
 
@@ -35,7 +35,7 @@ void KernelShutdown(void);
  * Adds a tuple to the corresponding relation table,
  * and adds an entry to the lookup table for each AT_ID actor.
  */
-void AssertFact(Atom form, Tuple const * actors);
+void AssertFact(Atom form, TypedTuple const * actors);
 
 /**
  * High level methd to retract a fact.
@@ -44,7 +44,7 @@ void AssertFact(Atom form, Tuple const * actors);
  * This function should always succeed, as facts can always
  * be retracted at any time.
  */
-void RetractFact(Atom form, Tuple * actors);
+void RetractFact(Atom form, TypedTuple * actors);
 
 /**
  * Remove all facts of a given form

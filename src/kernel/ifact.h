@@ -14,7 +14,7 @@
 #define IFACT_H
 
 #include "kernel/RelationBTree.h"
-#include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
 
 /**
  * A conjunction with a given form &'d together n times,
@@ -92,7 +92,7 @@ void IFactBeginConjunction(IFactDraft * draft, Atom form, BTree * btree, index8 
  * The atom in the column of the identified fact is ignored; it will
  * be computed by calling IFactEnd()
  */
-void IFactAddClause(IFactDraft * draft, Tuple const * tuple);
+void IFactAddClause(IFactDraft * draft, TypedTuple const * tuple);
 
 /**
  * End the current conjunction. This function must be called before
@@ -114,7 +114,7 @@ size32 IFactDraftCurrentNClauses(IFactDraft * draft);
 Atom IFactEnd(IFactDraft * draft);
 
 // This variant is only used during bootstrapping.
-Atom IFactEndBootstrap(IFactDraft * draft, data64 hash, void (* assertFact)(Atom, Tuple const *));
+Atom IFactEndBootstrap(IFactDraft * draft, data64 hash, void (* assertFact)(Atom, TypedTuple const *));
 
 void IFactAcquire(Atom ifact);
 void IFactRelease(Atom ifact);
@@ -142,7 +142,7 @@ uint32 TotalIFactCount(void);
  */
 
 // TODO: this should take a form atom, not a tree pointer
-bool IFactCheckTuple(BTree const * tree, Tuple const * tuple);
+bool IFactCheckTuple(BTree const * tree, TypedTuple const * tuple);
 
 void PrintIFact(Atom ifact);
 

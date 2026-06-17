@@ -54,7 +54,7 @@ size32 MultisetGetElementMultiple(Atom multiset, TypedAtom element);
 /**
  * Assign values to a tuple of the (multiset element multiple) relation
  */
-void MultisetSetTuple(Tuple * tuple, TypedAtom multiset, TypedAtom element, TypedAtom multiple);
+void MultisetSetTuple(TypedTuple * tuple, TypedAtom multiset, TypedAtom element, TypedAtom multiple);
 
 /**
  * Find an order for a given array of elements consistent with
@@ -81,13 +81,13 @@ void MultisetIterationOrder(Atom multiset, TypedAtom const * elements, index8 * 
  * 
  * Although the multiset has no "semantic" ordering, this iterator
  * is guaranteed to produce tuples according to the order defined by
- * CompareTuples(), generating a stable ordering. This is used to
+ * TypedTupleCompare(), generating a stable ordering. This is used to
  * align the roles of a form with an ordered actor list by DT_FORMULA.
  */
 
 typedef struct s_MultisetIterator
 {
-	Tuple * queryTuple;
+	TypedTuple * queryTuple;
 	RelationBTreeIterator treeIterator;
 } MultisetIterator;
 

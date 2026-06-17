@@ -16,7 +16,7 @@
  * to the given permutation array, such that queryActors[permutation[i]]
  * matches service parameter i
  */
-bool DispatchQuery(Atom queryTermForm, Tuple const * queryActors, ServiceRecord * record, index8 * permutation);
+bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRecord * record, index8 * permutation);
 
 /**
  * Same, using a term (formula) instead of a termform and actors tuple

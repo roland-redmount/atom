@@ -1,5 +1,5 @@
 #include "lang/Variable.h"
-#include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
 #include "lang/TypedAtom.h"
 #include "memory/allocator.h"
 #include "util/hashing.h"
@@ -10,45 +10,40 @@
  * These functions give pointers to a tuple's type or atom arrays.
  * We have two versions for each to maintain const correctness.
  */
-static byte * tupleTypeArray(Tuple * tuple)
+static byte * tupleTypeArray(TypedTuple * tuple)
 {
-	return ((byte *) tuple) + sizeof(Tuple);
+	return ((byte *) tuple) + sizeof(TypedTuple);
 }
 
-static byte const * tupleTypeArrayView(Tuple const * tuple)
+static byte const * tupleTypeArrayView(TypedTuple const * tuple)
 {
-	return ((byte const *) tuple) + sizeof(Tuple);
+	return ((byte const *) tuple) + sizeof(TypedTuple);
 }
 
 static size32 tupleAtomArrayOffset(size8 tupleNAtoms)
 {
 	// size of the struct + types array, rounded up to an 8-byte boundary
-	return ((sizeof(Tuple) + tupleNAtoms) + 7) & ~7;
+	return ((sizeof(TypedTuple) + tupleNAtoms) + 7) & ~7;
 }
 
-static Atom * tupleAtomArray(Tuple * tuple)
+static Atom * tupleAtomArray(TypedTuple * tuple)
 {
 	return (Atom *) (((byte *) tuple) + tupleAtomArrayOffset(tuple->nAtoms));
 }
 
-static Atom const * tupleAtomArrayView(Tuple const * tuple)
+static Atom const * tupleAtomArrayView(TypedTuple const * tuple)
 {
 	return (Atom const *) (((byte *) tuple) + tupleAtomArrayOffset(tuple->nAtoms));
 }
 
 
-/**
- * Size in bytes of a tuple with the given number of atoms.
- */
-size32 TupleNBytes(size8 tupleNAtoms)
+size32 TypedTupleNBytes(size8 tupleNAtoms)
 {
 	return tupleAtomArrayOffset(tupleNAtoms) + tupleNAtoms * sizeof(Atom);
 }
 
-/**
- * Number of atoms in a tuple with the given size in bytes.
- */
-size8 TupleNAtoms(size32 tupleNBytes)
+
+size8 TypedTupleNAtoms(size32 tupleNBytes)
 {
 	// size must be divisible by 8
 	ASSERT((tupleNBytes >= 16) && !(tupleNBytes & 7))
@@ -79,106 +74,100 @@ size8 TupleNAtoms(size32 tupleNBytes)
 }
 
 
-Tuple * CreateTuple(size8 nAtoms)
+TypedTuple * CreateTypedTuple(size8 nAtoms)
 {
-	Tuple * tuple = Allocate(TupleNBytes(nAtoms));
-	SetupTuple(tuple, nAtoms);
+	TypedTuple * tuple = Allocate(TypedTupleNBytes(nAtoms));
+	SetupTypedTuple(tuple, nAtoms);
 	return tuple;
 }
 
 
-Tuple * CreateTupleFromArray(TypedAtom * typedAtoms, size8 nAtoms)
+TypedTuple * CreateTypedTupleFromArray(TypedAtom * typedAtoms, size8 nAtoms)
 {
-	Tuple * tuple = CreateTuple(nAtoms);
+	TypedTuple * tuple = CreateTypedTuple(nAtoms);
 	for(index8 i = 0; i < nAtoms; i++)
-		TupleSetElement(tuple, i, typedAtoms[i]);
+		TypedTupleSetElement(tuple, i, typedAtoms[i]);
 	return tuple;
 }
 
 
-Tuple * CreateTupleFromTuple(Tuple const * otherTuple)
+TypedTuple * CreateTupleFromTuple(TypedTuple const * otherTuple)
 {
-	Tuple * tuple = CreateTuple(otherTuple->nAtoms);
-	CopyTuples(otherTuple, tuple);
+	TypedTuple * tuple = CreateTypedTuple(otherTuple->nAtoms);
+	TypedTupleCopy(otherTuple, tuple);
 	return tuple;
 }
 
 
-void SetupTuple(Tuple * tuple, size8 nAtoms)
+void SetupTypedTuple(TypedTuple * tuple, size8 nAtoms)
 {
-	SetMemory(tuple, TupleNBytes(nAtoms), 0);
+	SetMemory(tuple, TypedTupleNBytes(nAtoms), 0);
 	tuple->nAtoms = nAtoms;
 }
 
 
-void FreeTuple(Tuple * tuple)
+void FreeTypedTuple(TypedTuple * tuple)
 {
 	Free(tuple);
 }
 
 
-void TupleClear(Tuple * tuple)
+void TypedTupleClear(TypedTuple * tuple)
 {
 	SetMemory(tupleAtomArray(tuple), tuple->nAtoms * sizeof(Atom), 0);
 }
 
 
-TypedAtom TupleGetElement(Tuple const * tuple, index8 index)
+TypedAtom TypedTupleGetElement(TypedTuple const * tuple, index8 index)
 {
 	byte type = tupleTypeArrayView(tuple)[index];
 	Atom atom = tupleAtomArrayView(tuple)[index];
 	return CreateTypedAtom(type, atom);
 }
 
-Atom TupleGetAtom(Tuple const * tuple, index8 index)
+Atom TypedTupleGetAtom(TypedTuple const * tuple, index8 index)
 {
 	return tupleAtomArrayView(tuple)[index];
 }
 
 
-void TupleSetElement(Tuple * tuple, index8 index, TypedAtom element)
+void TypedTupleSetElement(TypedTuple * tuple, index8 index, TypedAtom element)
 {
 	tupleTypeArray(tuple)[index] = element.type;
 	tupleAtomArray(tuple)[index] = element.atom;
 }
 
 
-void TupleSetAtom(Tuple * tuple, index8 index, Atom atom)
+void TypedTupleSetAtom(TypedTuple * tuple, index8 index, Atom atom)
 {
 	tupleAtomArray(tuple)[index] = atom;
 }
 
 
-void TupleGetAtoms(Tuple const * tuple, Atom * atoms)
-{
-	CopyMemory(tupleAtomArrayView(tuple), atoms, tuple->nAtoms * sizeof(Atom));
-}
+// void TypedTupleGetAtoms(TypedTuple const * tuple, Atom * atoms)
+// {
+// 	CopyMemory(tupleAtomArrayView(tuple), atoms, tuple->nAtoms * sizeof(Atom));
+// }
 
 
-void TupleSetAtoms(Tuple * tuple, Atom const * atoms)
-{
-	CopyMemory(atoms, tupleAtomArray(tuple), tuple->nAtoms * sizeof(Atom));
-}
+// void TypedTupleSetAtoms(TypedTuple * tuple, Atom const * atoms)
+// {
+// 	CopyMemory(atoms, tupleAtomArray(tuple), tuple->nAtoms * sizeof(Atom));
+// }
 
 
-byte TupleGetAtomType(Tuple const * tuple, index8 index)
-{
-	return tupleTypeArrayView(tuple)[index];
-}
+// byte TupleGetAtomType(TypedTuple const * tuple, index8 index)
+// {
+// 	return tupleTypeArrayView(tuple)[index];
+// }
 
 
-bool TupleIsProtected(Tuple const * tuple)
-{
-	return tuple->protectedAtom > 0;
-}
-
-
-int8 CompareTuples(Tuple const * tuple1, Tuple const * tuple2)
+int8 TypedTupleCompare(TypedTuple const * tuple1, TypedTuple const * tuple2)
 {
 	ASSERT(tuple1->nAtoms == tuple1->nAtoms)
 	for(index8 i = 0; i < tuple1->nAtoms; i++) {
 		int atomOrdering = CompareTypedAtoms(
-			TupleGetElement(tuple1, i), TupleGetElement(tuple2, i));
+			TypedTupleGetElement(tuple1, i), TypedTupleGetElement(tuple2, i));
 		if(atomOrdering < 0)
 			return -1;
 		if(atomOrdering > 0)
@@ -188,7 +177,7 @@ int8 CompareTuples(Tuple const * tuple1, Tuple const * tuple2)
 }
 
 
-bool SameTuples(Tuple const * tuple1, Tuple const * tuple2)
+bool TypedTupleEqual(TypedTuple const * tuple1, TypedTuple const * tuple2)
 {
 	if(tuple1->nAtoms != tuple2->nAtoms)
 		return false;
@@ -196,32 +185,32 @@ bool SameTuples(Tuple const * tuple1, Tuple const * tuple2)
 	return CompareMemory(
 		tupleTypeArrayView(tuple1),
 		tupleTypeArrayView(tuple2),
-		TupleNBytes(tuple1->nAtoms) - sizeof(Tuple)
+		TypedTupleNBytes(tuple1->nAtoms) - sizeof(TypedTuple)
 	) == 0;
 }
 
 
-void CopyTuples(Tuple const * source, Tuple * destination)
+void TypedTupleCopy(TypedTuple const * source, TypedTuple * destination)
 {
 	ASSERT(source->nAtoms == destination->nAtoms)
-	CopyMemory(source, destination, TupleNBytes(source->nAtoms));
+	CopyMemory(source, destination, TypedTupleNBytes(source->nAtoms));
 }
 
 
-void CopyTuplesReorder(Tuple const * source, Tuple * destination, index8 const * order)
+void TypedTupleCopyReorder(TypedTuple const * source, TypedTuple * destination, index8 const * order)
 {
 	ASSERT(source->nAtoms == destination->nAtoms)
 	for(index8 i = 0; i < source->nAtoms; i++) {
 		ASSERT(order[i] < destination->nAtoms);
-		TupleSetElement(destination, order[i], TupleGetElement(source, i));
+		TypedTupleSetElement(destination, order[i], TypedTupleGetElement(source, i));
 	}
 }
 
 
-void SwapTuples(Tuple * tuple1, Tuple * tuple2)
+void TypedTupleSwap(TypedTuple * tuple1, TypedTuple * tuple2)
 {
 	ASSERT(tuple1->nAtoms == tuple2->nAtoms)
-	size32 nBytes = TupleNBytes(tuple1->nAtoms);
+	size32 nBytes = TypedTupleNBytes(tuple1->nAtoms);
 	byte buffer[nBytes];
 	CopyMemory(tuple1, buffer, nBytes);
 	CopyMemory(tuple2, tuple1, nBytes);
@@ -229,7 +218,7 @@ void SwapTuples(Tuple * tuple1, Tuple * tuple2)
 }
 
 
-void CopyTuplesAt(Tuple const * source, index8 sourceOffset, Tuple * destination)
+void TypedTupleCopyAt(TypedTuple const * source, index8 sourceOffset, TypedTuple * destination)
 {
 	ASSERT(source->nAtoms >= sourceOffset + destination->nAtoms)
 	CopyMemory(
@@ -245,54 +234,54 @@ void CopyTuplesAt(Tuple const * source, index8 sourceOffset, Tuple * destination
 }
 
 
-void AcquireTuple(Tuple const * tuple)
+void TypedTupleAcquire(TypedTuple const * tuple)
 {
 	for(index8 i = 0; i < tuple->nAtoms; i++)
-		AcquireTypedAtom(TupleGetElement(tuple, i));
+		AcquireTypedAtom(TypedTupleGetElement(tuple, i));
 }
 
 
-void ReleaseTuple(Tuple const * tuple)
+void TypedTupleRelease(TypedTuple const * tuple)
 {
 	for(index8 i = 0; i < tuple->nAtoms; i++)
-		ReleaseTypedAtom(TupleGetElement(tuple, i));
+		ReleaseTypedAtom(TypedTupleGetElement(tuple, i));
 }
 
 
-data64 TupleHash(Tuple const * tuple, data64 initialHash)
+data64 TypedTupleHash(TypedTuple const * tuple, data64 initialHash)
 {
 	// hash header, except the protectedAtom field
-	Tuple headerCopy = *tuple;
+	TypedTuple headerCopy = *tuple;
 	headerCopy.protectedAtom = 0;	
-	data64 hash = DJB2DoubleHashAdd(&headerCopy, sizeof(Tuple), initialHash);
+	data64 hash = DJB2DoubleHashAdd(&headerCopy, sizeof(TypedTuple), initialHash);
 	// hash the type and atom arrays
 	return DJB2DoubleHashAdd(
-		tupleTypeArrayView(tuple), TupleNBytes(tuple->nAtoms) - sizeof(Tuple), hash);
+		tupleTypeArrayView(tuple), TypedTupleNBytes(tuple->nAtoms) - sizeof(TypedTuple), hash);
 }
 
 
 // ItemComparator function for QuickSort
 static int8 quickSortCompareTuples(void const * tuple1, void const * tuple2, size32 tupleSize)
 {
-    return CompareTuples((Tuple const *) tuple1, (Tuple const *) tuple2);
+    return TypedTupleCompare((TypedTuple const *) tuple1, (TypedTuple const *) tuple2);
 }
 
 /**
  * NOTE: sorting order for tuples should be identical to the iteration order
  * of RelationBTree; see compareQuery() in RelationBTree.c
  */
-void SortTuples(Tuple * tuples, size32 nTuples)
+void TypedTupleSort(TypedTuple * tuples, size32 nTuples)
 {
 	ASSERT(nTuples > 0)
-    QuickSort(tuples, nTuples, TupleNBytes(tuples[0].nAtoms), quickSortCompareTuples);
+    QuickSort(tuples, nTuples, TypedTupleNBytes(tuples[0].nAtoms), quickSortCompareTuples);
 }
 
 
-void PrintTuple(Tuple const * tuple)
+void TypedTuplePrint(TypedTuple const * tuple)
 {
 	PrintChar('{');
 	for(index8 i = 0; i < tuple->nAtoms; i++) {
-		PrintTypedAtom(TupleGetElement(tuple, i));
+		PrintTypedAtom(TypedTupleGetElement(tuple, i));
 		if(i < tuple->nAtoms - 1)
 			PrintChar(' ');
 	}
@@ -300,12 +289,12 @@ void PrintTuple(Tuple const * tuple)
 }
 
 
-bool TupleMatch(Tuple const * tuple, Tuple const * queryTuple)
+bool TypedTupleMatch(TypedTuple const * tuple, TypedTuple const * queryTuple)
 {
 	ASSERT(tuple->nAtoms == queryTuple->nAtoms)
 	for(index8 i = 0; i < tuple->nAtoms; i++) {
-		TypedAtom atom = TupleGetElement(tuple, i);
-		TypedAtom queryAtom = TupleGetElement(queryTuple, i);
+		TypedAtom atom = TypedTupleGetElement(tuple, i);
+		TypedAtom queryAtom = TypedTupleGetElement(queryTuple, i);
 		if(queryAtom.type == AT_VARIABLE) {
 			if(VariableIsQuoted(queryAtom.atom)) {
 				/**
@@ -320,11 +309,11 @@ bool TupleMatch(Tuple const * tuple, Tuple const * queryTuple)
 				if(VariableMatch(queryAtom.atom, atom)) {
 					// any repeats of this variable must correspond to the same atom
 					for(index8 j = i + 1; j < tuple->nAtoms; j++) {
-						TypedAtom nextQueryAtom = TupleGetElement(queryTuple, j);
+						TypedAtom nextQueryAtom = TypedTupleGetElement(queryTuple, j);
 						if((nextQueryAtom.type == AT_VARIABLE) &&
 							SameVariable(queryAtom.atom, nextQueryAtom.atom))
 						{
-							TypedAtom nextAtom = TupleGetElement(tuple, j);
+							TypedAtom nextAtom = TypedTupleGetElement(tuple, j);
 							if(!SameTypedAtoms(atom, nextAtom))
 								return false;
 						}
@@ -347,10 +336,10 @@ bool TupleMatch(Tuple const * tuple, Tuple const * queryTuple)
 }
 
 
-bool TupleContainsAtom(Tuple const * tuple, TypedAtom atom)
+bool TypedTupleContainsAtom(TypedTuple const * tuple, TypedAtom atom)
 {
 	for(index8 i = 0; i < tuple->nAtoms; i++) {
-		if(SameTypedAtoms(TupleGetElement(tuple, i), atom))
+		if(SameTypedAtoms(TypedTupleGetElement(tuple, i), atom))
 			return true;
 	}
 	return false;

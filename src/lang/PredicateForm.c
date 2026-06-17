@@ -34,9 +34,9 @@ Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
 		RegistryGetCoreBTreeService(FORM_PREDICATE_FORM),
 		0
 	);
-	Tuple * tuple = CreateTuple(1);
+	TypedTuple * tuple = CreateTypedTuple(1);
 	IFactAddClause(&draft, tuple);
-	FreeTuple(tuple);
+	FreeTypedTuple(tuple);
 	IFactEndConjunction(&draft);
 
 	return IFactEnd(&draft);

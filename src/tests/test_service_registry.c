@@ -65,7 +65,7 @@ void testCallBTreeService(void)
 	ASSERT(record)
 	ASSERT(record->service->type == SERVICE_MACHINE)
 
-	Tuple * arguments = CreateTuple(3);
+	TypedTuple * arguments = CreateTypedTuple(3);
 	MultisetSetTuple(arguments,
 		CreateTypedAtom(AT_ID, GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT)),
 		anonymousVariable,
@@ -80,7 +80,7 @@ void testCallBTreeService(void)
 	ASSERT_INT32_EQUAL(nElements, 3);
 
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	FreeTypedTuple(arguments);
 }
 
 

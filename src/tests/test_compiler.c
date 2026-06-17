@@ -25,7 +25,7 @@ void testCompilePermute1(void)
 	ASSERT_TRUE(CompileService(queryTerm, &record))
 
 	// Call the service
-	Tuple * arguments = CreateTuple(3);
+	TypedTuple * arguments = CreateTypedTuple(3);
 	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
 	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
@@ -36,7 +36,7 @@ void testCompilePermute1(void)
 
 	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	FreeTypedTuple(arguments);
 
 	RegistryRemoveService(&record);
 	IFactRelease(queryTerm);
@@ -56,7 +56,7 @@ void testCompilePermute2(void)
 	ASSERT_TRUE(CompileService(queryTerm, &record))
 
 	// Call the service
-	Tuple * arguments = CreateTuple(2);
+	TypedTuple * arguments = CreateTypedTuple(2);
 	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
 	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
@@ -72,7 +72,7 @@ void testCompilePermute2(void)
 	// Second call should fail (no more tuples)
 	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	FreeTypedTuple(arguments);
 
 	RegistryRemoveService(&record);
 	IFactRelease(queryTerm);
@@ -93,7 +93,7 @@ void testCompilePermute3(void)
 	ASSERT_TRUE(CompileService(queryTerm, &record))
 
 	// Call the service
-	Tuple * arguments = CreateTuple(2);
+	TypedTuple * arguments = CreateTypedTuple(2);
 	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
 	void * context = ServiceCreateContext(record.service, arguments);
 	size8 nElements = 0;
@@ -102,7 +102,7 @@ void testCompilePermute3(void)
 	}
 	ASSERT_UINT32_EQUAL(nElements, 4);
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	FreeTypedTuple(arguments);
 
 	RegistryRemoveService(&record);
 	IFactRelease(queryTerm);
@@ -122,7 +122,7 @@ void testCompileJoin1(void)
 	ASSERT_TRUE(CompileService(queryTerm, &record))
 
 	// Call the service
-	Tuple * arguments = CreateTuple(3);
+	TypedTuple * arguments = CreateTypedTuple(3);
 	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
 	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
@@ -137,7 +137,7 @@ void testCompileJoin1(void)
 
 	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	FreeTypedTuple(arguments);
 
 	RegistryRemoveService(&record);
 	IFactRelease(queryTerm);
@@ -163,19 +163,19 @@ void testCompileUnion(void)
 	PrintChar('\n');
 
 	// Call the service
-	Tuple * arguments = CreateTuple(2);
+	TypedTuple * arguments = CreateTypedTuple(2);
 	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
 	void * context = ServiceCreateContext(record.service, arguments);
 
 	ASSERT_TRUE(ServiceCall(context))
-	PrintTuple(arguments);
+	TypedTuplePrint(arguments);
 	PrintChar('\n');
 	TypedAtom y = TermGetRoleActor(record.form, arguments, "neighbor", 1);
 	ASSERT_UINT32_EQUAL(y.type, AT_INT)
 	ASSERT_TRUE(y.atom._uint == 4);
 
 	ASSERT_TRUE(ServiceCall(context))
-	PrintTuple(arguments);
+	TypedTuplePrint(arguments);
 	PrintChar('\n');
 	y = TermGetRoleActor(record.form, arguments, "neighbor", 1);
 	ASSERT_UINT32_EQUAL(y.type, AT_INT)
@@ -183,7 +183,7 @@ void testCompileUnion(void)
 
 	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	FreeTypedTuple(arguments);
 
 	RegistryRemoveService(&record);
 	IFactRelease(queryTerm);
@@ -204,7 +204,7 @@ void testCompileRecursiveJoin(void)
 	ASSERT_TRUE(CompileService(queryTerm, &record))
 
 	// Call the service
-	Tuple * arguments = CreateTuple(3);
+	TypedTuple * arguments = CreateTypedTuple(3);
 	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
 	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
@@ -215,7 +215,7 @@ void testCompileRecursiveJoin(void)
 
 	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	FreeTypedTuple(arguments);
 
 	RegistryRemoveService(&record);
 	IFactRelease(queryTerm);

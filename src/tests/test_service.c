@@ -30,14 +30,14 @@ void testPermuteService(void)
 	ServiceRecord const * listServiceRecord = RegistryGetCoreServiceRecord(FORM_LIST_POSITION_ELEMENT);
 	// Reorder (position _ list l element s) to (list l element s),
 	// providing the variable _ as a "constant"
-	Tuple * constants = CreateTupleFromArray((TypedAtom[]) {anonymousVariable}, 1);
+	TypedTuple * constants = CreateTypedTupleFromArray((TypedAtom[]) {anonymousVariable}, 1);
 	Service * permuteService = CreatePermuteService(
 		2, constants, (index8[]) {0, 1, 2}, listServiceRecord->service);
-	FreeTuple(constants);
+	FreeTypedTuple(constants);
 
 	// Arguments tuple (@stringList _ )
 	TypedAtom string = CreateTypedAtom(AT_ID, CreateStringFromCString("alibaba"));
-	Tuple * arguments = CreateTupleFromArray(
+	TypedTuple * arguments = CreateTypedTupleFromArray(
 		(TypedAtom[]) {string, anonymousVariable},
 		2
 	);
@@ -51,23 +51,23 @@ void testPermuteService(void)
 	}
 	ASSERT_INT32_EQUAL(nElements, 7)
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	FreeTypedTuple(arguments);
 	
 	// Create a DEDUPLICATE service from the PERMUTE service
 	Service * deduplicateService = CreateDeduplicateService(permuteService);
 	// Call the service
 	// This yields the unique letters only ("abil")
-	arguments = CreateTupleFromArray((TypedAtom[]) {string, anonymousVariable},	2);
+	arguments = CreateTypedTupleFromArray((TypedAtom[]) {string, anonymousVariable},	2);
 	context = ServiceCreateContext(deduplicateService, arguments);
 	nElements = 0;
 	while(ServiceCall(context)) {
-		// PrintTuple(arguments);
+		// TypedTuplePrint(arguments);
 		// PrintChar('\n');
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 4)
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	FreeTypedTuple(arguments);
 
 	ReleaseTypedAtom(string);
 	ReleaseService(deduplicateService);
@@ -93,7 +93,7 @@ void testJoinService1(void)
 	ReleaseService(rightService);
 
 	// Evaluate with arguments (@list-form, _ , _)
-	Tuple * arguments = CreateTupleFromArray(
+	TypedTuple * arguments = CreateTypedTupleFromArray(
 		(TypedAtom[]) {
 			anonymousVariable,
 			anonymousVariable,
@@ -101,7 +101,7 @@ void testJoinService1(void)
 		},
 		3
 	);
-	// PrintTuple(arguments);
+	// TypedTuplePrint(arguments);
 	// PrintChar('\n');
 	// Setup execution context
 	ServiceContext * context = ServiceCreateContext(joinService, arguments);
@@ -111,13 +111,13 @@ void testJoinService1(void)
  	// since the right child service (predicate-form @multiset-form) matches a single tuple.
 	size32 nElements = 0;
 	while(ServiceCall(context)) {
-		// PrintTuple(arguments);
+		// TypedTuplePrint(arguments);
 		// PrintChar('\n');
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 3);
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	FreeTypedTuple(arguments);
 	// This frees the child services
 	ReleaseService(joinService);
 }
@@ -149,11 +149,11 @@ void testJoinService2(void)
 	ReleaseTypedAtom(string1);
 	ReleaseTypedAtom(string2);
 
-	Tuple * arguments = CreateTuple(5);
-	TupleSetElement(arguments, 0, stringList);
+	TypedTuple * arguments = CreateTypedTuple(5);
+	TypedTupleSetElement(arguments, 0, stringList);
 	for(index8 i = 1; i < 5; i++)
-		TupleSetElement(arguments, i, anonymousVariable);
-	// PrintTuple(arguments);
+		TypedTupleSetElement(arguments, i, anonymousVariable);
+	// TypedTuplePrint(arguments);
 	// PrintChar('\n');
 
 	// Setup execution context
@@ -161,13 +161,13 @@ void testJoinService2(void)
 	// Call the join service
 	size32 nElements = 0;
 	while(ServiceCall(context)) {
-		// PrintTuple(arguments);
+		// TypedTuplePrint(arguments);
 		// PrintChar('\n');
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 2 * 3)
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	FreeTypedTuple(arguments);
 	ReleaseTypedAtom(stringList);
 	ReleaseService(joinService);
 }
@@ -180,24 +180,24 @@ void testUnionService(void)
 	// The UNION service (position _ list @list1 element _) | (position _ list @list2 element -)
 	ServiceRecord const * listServiceRecord = RegistryGetCoreServiceRecord(FORM_LIST_POSITION_ELEMENT);
 	TypedAtom string1 = CreateTypedAtom(AT_ID, CreateStringFromCString("foo"));
-	Tuple * constants1 = CreateTupleFromArray((TypedAtom[]) {string1}, 1);
+	TypedTuple * constants1 = CreateTypedTupleFromArray((TypedAtom[]) {string1}, 1);
 	Service * service1 = CreatePermuteService(
 		2, constants1, (index8[]) {1, 0, 2}, listServiceRecord->service);
-	FreeTuple(constants1);
+	FreeTypedTuple(constants1);
 	ReleaseTypedAtom(string1);
 
 	TypedAtom string2 = CreateTypedAtom(AT_ID, CreateStringFromCString("barf"));
-	Tuple * constants2 = CreateTupleFromArray((TypedAtom[]) {string2}, 1);
+	TypedTuple * constants2 = CreateTypedTupleFromArray((TypedAtom[]) {string2}, 1);
 	Service * service2 = CreatePermuteService(
 		2, constants2, (index8[]) {1, 0, 2}, listServiceRecord->service);
-	FreeTuple(constants2);
+	FreeTypedTuple(constants2);
 	ReleaseTypedAtom(string2);
 
 	Service * unionService = CreateUnionService(service1, service2);
 	ReleaseService(service1);
 	ReleaseService(service2);
 
-	Tuple * arguments = CreateTupleFromArray(
+	TypedTuple * arguments = CreateTypedTupleFromArray(
 		(TypedAtom[]) {anonymousVariable, anonymousVariable}, 2);
 
 	// Setup execution context
@@ -206,17 +206,17 @@ void testUnionService(void)
 	char expectedCharacters[TEST_UNION_N_ELEMENTS] = "bfaoorf";
 	for(index32 i = 0; i < TEST_UNION_N_ELEMENTS; i++) {
 		ASSERT_TRUE(ServiceCall(context))
-		ASSERT_INT32_EQUAL(TupleGetAtom(arguments, 0)._uint, expectedPositions[i])
+		ASSERT_INT32_EQUAL(TypedTupleGetAtom(arguments, 0)._uint, expectedPositions[i])
 		ASSERT_CHAR_EQUAL(
-			LetterToChar(TupleGetElement(arguments, 1), LETTER_LOWERCASE),
+			LetterToChar(TypedTupleGetElement(arguments, 1), LETTER_LOWERCASE),
 			expectedCharacters[i]
 		)
-		PrintTuple(arguments);
+		TypedTuplePrint(arguments);
 		PrintChar('\n');
 	}
 	ASSERT_FALSE(ServiceCall(context));
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	FreeTypedTuple(arguments);
 	ReleaseService(unionService);
 }
 

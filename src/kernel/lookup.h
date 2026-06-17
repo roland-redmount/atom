@@ -29,7 +29,7 @@
  */
 
 #include "btree/btree.h"
-#include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
 
 
 void InitializeLookup(void);
@@ -66,12 +66,12 @@ void LookupRemoveAllRoles(Atom atom);
 /**
  * Add lookup entries for all actors in a predicate.
  */
-void LookupAddPredicateRoles(Atom predicateForm, Tuple const * actors);
+void LookupAddPredicateRoles(Atom predicateForm, TypedTuple const * actors);
 
 /**
  *	Remove lookup entries for each actor in a predicate.
  */
-void LookupRemovePredicateRoles(Atom predicateForm, Tuple const * actors);
+void LookupRemovePredicateRoles(Atom predicateForm, TypedTuple const * actors);
 
 /**
  *	Remove lookup entries for all atoms acting in the given predicate form.

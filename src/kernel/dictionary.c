@@ -1,7 +1,7 @@
 #include "btree/btree.h"
 #include "kernel/dictionary.h"
 #include "kernel/list.h"
-#include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
 #include "lang/Formula.h"
 #include "lang/ClauseForm.h"
 #include "memory/allocator.h"
@@ -25,7 +25,7 @@ static int8 compareEntries(DictionaryEntry const * entry, DictionaryEntry const 
 			// no tuple provided
 			return 0;
 		}
-		return CompareTuples(entry->tuple, entryOrKey->tuple);
+		return TypedTupleCompare(entry->tuple, entryOrKey->tuple);
 	}
 }
 
@@ -41,8 +41,8 @@ static void btreeFreeItem(void * item, size32 itemSize)
 	DictionaryEntry * entry = item;
 	IFactRelease(entry->clauseForm);
 	for(index8 i = 0; i < entry->tuple->nAtoms; i++)
-		ReleaseTypedAtom(TupleGetElement(entry->tuple, i));
-	FreeTuple(entry->tuple);
+		ReleaseTypedAtom(TypedTupleGetElement(entry->tuple, i));
+	FreeTypedTuple(entry->tuple);
 }
 
 
@@ -58,13 +58,13 @@ void TeardownDictionary(void)
 }
 
 
-static void setupEntry(DictionaryEntry * entry, Atom clauseForm, Tuple * actors)
+static void setupEntry(DictionaryEntry * entry, Atom clauseForm, TypedTuple * actors)
 {
 	entry->clauseForm = clauseForm;
 	IFactAcquire(clauseForm);
 	entry->tuple = actors;
 	for(index8 i = 0; i < actors->nAtoms; i++) 
-		AcquireTypedAtom(TupleGetElement(actors, i));
+		AcquireTypedAtom(TypedTupleGetElement(actors, i));
 }
 
 
@@ -75,7 +75,7 @@ DictionaryEntry DictionaryAddClause(Atom clause)
 	Atom clauseForm = FormulaGetForm(clause);
 	size8 arity = ClauseArity(clauseForm);
 	// Atom actorsList = FormulaGetActors(clause);
-	Tuple * actors = CreateTuple(arity);
+	TypedTuple * actors = CreateTypedTuple(arity);
 	CopyListToTuple(FormulaGetActors(clause), actors);
 
 	DictionaryEntry entry;
@@ -137,7 +137,7 @@ bool DictionaryIteratorNext(DictionaryIterator * iterator)
 }
 
 
-Tuple const * DictionaryIteratorPeekActors(DictionaryIterator * iterator)
+TypedTuple const * DictionaryIteratorPeekActors(DictionaryIterator * iterator)
 {
 	DictionaryEntry * entry = BTreeIteratorPeekItem(&(iterator->btreeIterator));
 	return entry->tuple;

@@ -9,19 +9,19 @@
 #include "util/sort.h"
 
 
-void MultisetSetTuple(Tuple * tuple, TypedAtom multiset, TypedAtom element, TypedAtom multiple)
+void MultisetSetTuple(TypedTuple * tuple, TypedAtom multiset, TypedAtom element, TypedAtom multiple)
 {
-	TupleSetElement(
+	TypedTupleSetElement(
 		tuple,
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET),
 		multiset
 	);
-	TupleSetElement(
+	TypedTupleSetElement(
 		tuple,
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT),
 		element
 	);
-	TupleSetElement(
+	TypedTupleSetElement(
 		tuple,
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE),
 		multiple
@@ -49,7 +49,7 @@ void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, 
 		RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE),
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 	);
-	Tuple * tuple = CreateTuple(3);
+	TypedTuple * tuple = CreateTypedTuple(3);
 	for(index32 i = 0; i < nUniqueElements; i++) {
 		ElementMultiple em = generator(i, data);
 		MultisetSetTuple(
@@ -58,7 +58,7 @@ void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, 
 		);
 		IFactAddClause(draft, tuple);
 	}
-	FreeTuple(tuple);
+	FreeTypedTuple(tuple);
 	IFactEndConjunction(draft);
 }
 
@@ -122,7 +122,7 @@ size32 MultisetGetElementMultiple(Atom multiset, TypedAtom element)
 void MultisetIterate(Atom multiset, MultisetIterator * iterator)
 {
 	BTree * tree = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
-	iterator->queryTuple = CreateTuple(3);
+	iterator->queryTuple = CreateTypedTuple(3);
 	MultisetSetTuple(
 		iterator->queryTuple,
 		CreateTypedAtom(AT_ID, multiset), anonymousVariable, anonymousVariable
@@ -139,11 +139,11 @@ bool MultisetIteratorNext(MultisetIterator * iterator)
 
 ElementMultiple MultisetIteratorGetElement(MultisetIterator const * iterator)
 {
-	Tuple const * tuple = RelationBTreeIteratorPeekTuple(&(iterator->treeIterator));
-	TypedAtom element = TupleGetElement(
+	TypedTuple const * tuple = RelationBTreeIteratorPeekTuple(&(iterator->treeIterator));
+	TypedAtom element = TypedTupleGetElement(
 		tuple, CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)
 	);
-	TypedAtom multiple = TupleGetElement(
+	TypedAtom multiple = TypedTupleGetElement(
 		tuple,CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)
 	);
 	
@@ -156,7 +156,7 @@ ElementMultiple MultisetIteratorGetElement(MultisetIterator const * iterator)
 void MultisetIteratorEnd(MultisetIterator * iterator)
 {
 	RelationBTreeIteratorEnd(&(iterator->treeIterator));
-	FreeTuple(iterator->queryTuple);
+	FreeTypedTuple(iterator->queryTuple);
 	SetMemory(iterator, sizeof(MultisetIterator), 0);
 }
 

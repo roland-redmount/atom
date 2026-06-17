@@ -11,7 +11,7 @@
  * (unified) tuple in both cases.
  * If the tuples do not unify, returns false.
  */
-bool UnifyTuples(Tuple const * tuple1, Tuple const * tuple2, Substitution * subst1, Substitution * subst2);
+bool UnifyTuples(TypedTuple const * tuple1, TypedTuple const * tuple2, Substitution * subst1, Substitution * subst2);
 
 
 #endif	// UNIFICATION_H

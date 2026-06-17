@@ -10,14 +10,14 @@
 
 
 
-static void quoteSetTuple(Tuple * tuple, TypedAtom quote, TypedAtom quoted)
+static void quoteSetTuple(TypedTuple * tuple, TypedAtom quote, TypedAtom quoted)
 {
-	TupleSetElement(
+	TypedTupleSetElement(
 		tuple,
 		CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTE),
 		 quote
 	);
-	TupleSetElement(
+	TypedTupleSetElement(
 		tuple,
 		CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED),
 		quoted
@@ -39,10 +39,10 @@ Atom CreateQuote(Atom quoted)
 		CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTE)
 	);
 	
-	Tuple * tuple = CreateTuple(2);
+	TypedTuple * tuple = CreateTypedTuple(2);
 	quoteSetTuple(tuple, invalidAtom, CreateTypedAtom(AT_ID, quoted));
 	IFactAddClause(&draft, tuple);
-	FreeTuple(tuple);
+	FreeTypedTuple(tuple);
 	IFactEndConjunction(&draft);
 
 	return IFactEnd(&draft);
@@ -63,13 +63,13 @@ Atom QuoteGetQuoted(Atom quote)
 {
 	BTree * tree = RegistryGetCoreBTreeService(FORM_QUOTE_QUOTED);
 
-	Tuple * query = CreateTuple(2);
+	TypedTuple * query = CreateTypedTuple(2);
 	quoteSetTuple(query, CreateTypedAtom(AT_ID, quote), anonymousVariable);
 	TypedAtom quoted = RelationBTreeQuerySingleAtom(
 		tree, query,
 		CorePredicateRoleIndex(FORM_QUOTE_QUOTED, ROLE_QUOTED)
 	);
-	FreeTuple(query);
+	FreeTypedTuple(query);
 	return quoted.atom;
 }
 

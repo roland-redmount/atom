@@ -22,11 +22,11 @@ void testDictionary(void)
 	DictionaryIterate(FormulaGetForm(rule), &iterator);
 	ASSERT_TRUE(DictionaryIteratorNext(&iterator))
 	// test that actors tuple is identical to the formula
-	Tuple const * actorsTuple = DictionaryIteratorPeekActors(&iterator);
+	TypedTuple const * actorsTuple = DictionaryIteratorPeekActors(&iterator);
 	for(index8 i = 0; i < arity; i++) {
 		ASSERT_TRUE(
 			SameTypedAtoms(
-				TupleGetElement(actorsTuple, i),
+				TypedTupleGetElement(actorsTuple, i),
 				ListGetElement(FormulaGetActors(rule), i + 1)
 			)
 		)

@@ -6,7 +6,7 @@
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "kernel/ServiceRegistry.h"
-#include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
 #include "lang/Form.h"
 #include "lang/Formula.h"
 #include "lang/name.h"
@@ -19,19 +19,19 @@
 #include "util/sort.h"
 
 
-void FormulaSetTuple(Tuple * tuple, TypedAtom formula, TypedAtom form, TypedAtom actorsList)
+void FormulaSetTuple(TypedTuple * tuple, TypedAtom formula, TypedAtom form, TypedAtom actorsList)
 {
-	TupleSetElement(
+	TypedTupleSetElement(
 		tuple,
 		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA),
 		formula
 	);
-	TupleSetElement(
+	TypedTupleSetElement(
 		tuple,
 		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM),
 		form
 	);
-	TupleSetElement(
+	TypedTupleSetElement(
 		tuple,
 		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS),
 		actorsList
@@ -51,10 +51,10 @@ Atom CreateFormula(Atom form, Atom actorsList)
 		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA)
 	);
 
-	Tuple * tuple = CreateTuple(3);
+	TypedTuple * tuple = CreateTypedTuple(3);
 	FormulaSetTuple(tuple, invalidAtom, CreateTypedAtom(AT_ID, form), CreateTypedAtom(AT_ID, actorsList));
 	IFactAddClause(&draft, tuple);
-	FreeTuple(tuple);
+	FreeTypedTuple(tuple);
 	IFactEndConjunction(&draft);	
 
 	return IFactEnd(&draft);
@@ -155,14 +155,14 @@ Atom CreateTerm(Atom predicate, bool sign)
 }
 
 
-TypedAtom TermGetRoleActor(Atom termForm, Tuple const * termActors, const char * role, uint8 m)
+TypedAtom TermGetRoleActor(Atom termForm, TypedTuple const * termActors, const char * role, uint8 m)
 {
 	ASSERT(m > 0)
 	Atom predicateForm = TermFormGetPredicateForm(termForm);
 	Atom roleName = CreateNameFromCString(role);
 	index8 actorIndex = PredicateRoleIndex(predicateForm, roleName) + (m - 1);
 	NameRelease(roleName);
-	return TupleGetElement(termActors, actorIndex);
+	return TypedTupleGetElement(termActors, actorIndex);
 }
 
 
@@ -337,13 +337,13 @@ uint8 FormulaArity(Atom formula)
 Atom FormulaGetForm(Atom formula)
 {
 	BTree * tree = RegistryGetCoreBTreeService(FORM_FORMULA_FORM_ACTORS);
-	Tuple * query = CreateTuple(3);
+	TypedTuple * query = CreateTypedTuple(3);
 	FormulaSetTuple(query, CreateTypedAtom(AT_ID, formula), anonymousVariable, anonymousVariable);
 	TypedAtom form = RelationBTreeQuerySingleAtom(
 		tree, query,
 		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM)
 	);
-	FreeTuple(query);
+	FreeTypedTuple(query);
 	return form.atom;
 }
 
@@ -351,13 +351,13 @@ Atom FormulaGetForm(Atom formula)
 Atom FormulaGetActors(Atom formula)
 {
 	BTree * tree = RegistryGetCoreBTreeService(FORM_FORMULA_FORM_ACTORS);
-	Tuple * query = CreateTuple(3);
+	TypedTuple * query = CreateTypedTuple(3);
 	FormulaSetTuple(query, CreateTypedAtom(AT_ID, formula), anonymousVariable, anonymousVariable);
 	TypedAtom actorsList = RelationBTreeQuerySingleAtom(
 		tree, query,
 		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS)
 	);
-	FreeTuple(query);
+	FreeTypedTuple(query);
 	return actorsList.atom;
 }
 
@@ -365,7 +365,7 @@ Atom FormulaGetActors(Atom formula)
 /**
  * Print a predicate with actors in the order given by atomIndex
  */
-static void printPredicate(Atom predicateForm, Tuple const * actors, index8 * atomIndex)
+static void printPredicate(Atom predicateForm, TypedTuple const * actors, index8 * atomIndex)
 {	
 	MultisetIterator iterator;
 	MultisetIterate(predicateForm, &iterator);
@@ -377,7 +377,7 @@ static void printPredicate(Atom predicateForm, Tuple const * actors, index8 * at
 		for(index8 j = 0; j < em.multiple; j++) {
 			PrintName(em.element.atom);
 			PrintChar(' ');
-			PrintTypedAtom(TupleGetElement(actors, *atomIndex));
+			PrintTypedAtom(TypedTupleGetElement(actors, *atomIndex));
 			if((i < nRoles - 1) || (j < em.multiple - 1))
 				PrintChar(' ');
 			(*atomIndex)++;
@@ -387,7 +387,7 @@ static void printPredicate(Atom predicateForm, Tuple const * actors, index8 * at
 }
 
 
-static void printTerm(Atom termForm,Tuple const * actors, index8 * atomIndex)
+static void printTerm(Atom termForm,TypedTuple const * actors, index8 * atomIndex)
 {
 	bool sign = TermFormGetSign(termForm);
 	if(!sign) {
@@ -398,7 +398,7 @@ static void printTerm(Atom termForm,Tuple const * actors, index8 * atomIndex)
 }
 
 
-static void printClause(Atom clauseForm, Tuple const * actors, index8 * atomIndex)
+static void printClause(Atom clauseForm, TypedTuple const * actors, index8 * atomIndex)
 {	
 	MultisetIterator iterator;
 	MultisetIterate(clauseForm, &iterator);
@@ -417,7 +417,7 @@ static void printClause(Atom clauseForm, Tuple const * actors, index8 * atomInde
 }
 
 
-static void printConjunction(Atom conjunctionForm, Tuple const * actors, index8* atomIndex)
+static void printConjunction(Atom conjunctionForm, TypedTuple const * actors, index8* atomIndex)
 {
 	MultisetIterator iterator;
 	MultisetIterate(conjunctionForm, &iterator);
@@ -443,14 +443,14 @@ void PrintFormula(Atom formula)
 {
 	Atom form = FormulaGetForm(formula);
 	Atom actorsList = FormulaGetActors(formula);
-	Tuple * actors = CreateTuple(ListLength(actorsList));
+	TypedTuple * actors = CreateTypedTuple(ListLength(actorsList));
 	CopyListToTuple(actorsList, actors);
 	PrintFormActorsAsFormula(form, actors);
-	FreeTuple(actors);
+	FreeTypedTuple(actors);
 }
 
 
-void PrintFormActorsAsFormula(Atom form, Tuple const * actors)
+void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors)
 {
 	index8 atomIndex = 0;
 	if(IsPredicateForm(form))
@@ -466,10 +466,10 @@ void PrintFormActorsAsFormula(Atom form, Tuple const * actors)
 }
 
 
-data64 FormulaHashFormActors(data64 formHash, Tuple const * actors, size32 nActors, data64 initialHash)
+data64 FormulaHashFormActors(data64 formHash, TypedTuple const * actors, size32 nActors, data64 initialHash)
 {
 	data64 hash = DJB2DoubleHashAdd(&formHash, sizeof(data64), initialHash);
-	return TupleHash(actors, hash);
+	return TypedTupleHash(actors, hash);
 }
 
 /*
@@ -481,7 +481,7 @@ size8 FormulaUniqueVariables(Atom formula, TypedAtom * variables)
 	index8 i = 0;
 	while(ListIteratorHasNext(&iterator)) {
 		TypedAtom atom = ListIteratorGetElement(&iterator);
-		if(IsVariable(atom) && !TupleContainsAtom(variables, i, atom))
+		if(IsVariable(atom) && !TypedTupleContainsAtom(variables, i, atom))
 			variables[i++] = atom;	
 		ListIteratorNext(&iterator);
 	}
