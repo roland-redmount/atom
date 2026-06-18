@@ -11,9 +11,9 @@
 
 
 /**
- * A service record identified by a signature consisting of a form and a parameter
- * list. The parameters list contains AT_PARAMETER atoms (see Parameter.h),
- * indicating the io mode (in/out) and atom type for each parameter.
+ * A service record identified by a signature consisting of a form and an
+ * array of AT_PARAMETER atoms indicating the io mode (in/out) and atom type
+ * for each parameter.
  * 
  * NOTE: the form is currently always a predicate form, which means we
  * cannot have services for negated predicates like (! odd x). 
@@ -29,10 +29,24 @@
  */
 typedef struct s_ServiceRecord {
 	Atom form;
-	Atom parameters;
-	Service * service;
+	Atom * parameters;
+	Service const * service;
 } ServiceRecord;
 
+void ServiceRecordGetAtomTypes(ServiceRecord const * record, byte * atomTypes);
+
+/**
+ * Compare service record based on the service atom field.
+ * Two ServiceRecord compare equal if (1) both forms and parameters match, or
+ * (2) forms match and serviceOrKey is 0.
+ * 
+ * TODO: This does not allow having PARAMETER_IN_OUT subsume other parameters;
+ * we now simply compare the parameter lists for equality. So the only cases
+ * we can represent is (1) no in/out parameters or (2) all in/out parameters (parameters = 0)
+ * For more complex cases, we will need to iterate over matching forms and
+ * check for conflicts when adding new services.
+ */
+int8 CompareServiceRecords(ServiceRecord const * record, ServiceRecord const * recordOrKey);
 
 /**
  * Setup an empty service registry. Called during bootstrapping only.
@@ -88,13 +102,13 @@ void RegistryTeardownCoreServices(void);
  * NOTE: currently this method will ASSERT(false) if the (form, parameters) pair already
  * exists in the registry.
  */
-void RegistryAddService(ServiceRecord const * record);
+void RegistryAddService(Atom predicateForm, Atom const * parameters, Service const * service);
 
 /**
  * Convenience function add a B-tree machine service the registry,
  * generating a list of untyped in/out parameters.
  */
-void RegistryAddBTreeService(Atom form, BTree * btree);
+void RegistryAddBTreeService(Atom form, RelationBTree * tree);
 
 /**
  * Remove the given service record (key) from the registry.
@@ -123,22 +137,25 @@ ServiceRecord const * RegistryIteratorPeekService(RegistryIterator * iterator);
 void RegistryIteratorEnd(RegistryIterator * iterator);
 
 /**
- * Retrieve the service record with the given form and parameters list.
+ * Retrieve the service record with the given form and parameters array
+ * of the same length as the form arity.
  * If a matching service does not exist, returns a zero record.
  */
-ServiceRecord RegistryFindService(Atom form, Atom parameters);
+ServiceRecord RegistryFindService(Atom form, Atom const * parameters);
 
 /**
  * Retrieve the service of the given form with all parameters in/out untyped.
  * If a matching service does not exist, returns a zero record.
+ * 
+ * NOTE: remove this, untyped no longer allowed
  */
-ServiceRecord RegistryFindUntypedService(Atom form);
+// ServiceRecord RegistryFindUntypedService(Atom form);
 
 
 /**
  * For debugging
  */
-void PrintServiceRecord(ServiceRecord const * service);
+void PrintServiceRecord(ServiceRecord const * record);
 
 void RegistryDump(void);
 

@@ -1,43 +1,58 @@
 /**
- * Implementation of a relation table using the btree data structure.
+ * Implementation of a relation table storing tuples in a B-tree data structure.
  * This implements both a MachineServiceProvider (queries for various relations)
- * and an AgentProvider
- * and a mechanism for asserting facts. 
+ * and a mechanism for asserting facts
  */
 
 #ifndef RELATION_B_TREE_H
 #define RELATION_B_TREE_H
 
 #include "btree/btree.h"
-#include "kernel/typedtuple.h"
+#include "kernel/tuple.h"
 #include "kernel/service.h"
+
 
 // TODO: replace this with a service provider registry ...
 extern MachineServiceProvider bTreeServiceProvider;
 
-typedef struct s_RelationBTreeIterator {
+typedef struct s_RelationBTree {
 	BTree * btree;
-	BTreeIterator treeIterator;
-	TypedTuple * queryTuple;
 	size8 nColumns;
+	byte atomTypes[];
+} RelationBTree;
+
+/**
+ * Create a RelationBTree.
+ * TODO: for a typed version, this needs the column types.
+ * We then create services with the corresponding signatures.
+ */
+RelationBTree * CreateRelationBTree(size8 nColumns, byte const * atomTypes);
+
+void FreeRelationBTree(RelationBTree * tree);
+
+// size8 RelationBTreeNColumns(RelationBTree const * table);
+size32 RelationBTreeNRows(RelationBTree const * tree);
+
+// NOTE: iterating over a B-tree should now be done by calling the appropriate service.
+// The service signature determines the input arguments. The first n arguments
+// are inputs, and the remainder outputs; this is due to B-tree lexiographic ordering.
+
+typedef struct s_RelationBTreeIterator {
+	RelationBTree * tree;
+	BTreeIterator treeIterator;
+	struct s_BTreeTuple * queryTuple;
 } RelationBTreeIterator;
 
 
-BTree * CreateRelationBTree(size8 nColumns);
-void FreeRelationBTree(BTree * tree);
-
-size8 RelationBTreeNColumns(BTree const * table);
-size32 RelationBTreeNRows(BTree const * tree);
-
-
 /**
- * Initialize an iterator returning all tuples matching queryTuple
- * according to TypedTupleMatch();  or, if queryTuple is 0, returning all tuples in the B-tree.
+ * Initialize an iterator returning all tuples matching queryTuple, or,
+ * if queryTuple is 0, returning all tuples in the B-tree.
  * The iterator will be positioned before the first item, and 
  * RelationBTreeIteratorNext() must be called before RelationBTreeIteratorHasTuple().
  * The tree is write-locked to prevent modification while iterating.
  */
-void RelationBTreeIterate(BTree * tree, TypedTuple const * queryTuple, RelationBTreeIterator * iterator);
+void RelationBTreeIterate(
+	RelationBTree * tree, Tuple const * queryTuple, size8 nInputs, RelationBTreeIterator * iterator);
 
 /**
  * Advance the iterator to the next tuple matching the query, if any.
@@ -51,17 +66,20 @@ bool RelationBTreeIteratorNext(RelationBTreeIterator * iterator);
  */
 bool BTreeIteratorBeforeFirst(BTreeIterator * iterator);
 
-TypedAtom RelationBTreeIteratorGetAtom(RelationBTreeIterator const * iterator, index8 i);
+/**
+ * Get the atom at 0-based index i in the current tuple.
+ */
+Atom RelationBTreeIteratorGetAtom(RelationBTreeIterator const * iterator, index8 i);
 
 /**
  * Copy the iterator's current tuple into a tuple provided by the caller.
  */
-void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, TypedTuple * tuple);
+void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, Tuple * tuple);
 
 /**
  * View the iterator's current tuple
  */
-TypedTuple const * RelationBTreeIteratorPeekTuple(RelationBTreeIterator const * iterator);
+Atom const * RelationBTreeIteratorPeekTuple(RelationBTreeIterator const * iterator);
 
 /**
  * Terminate the iterator, releasing lock from the tree.
@@ -72,42 +90,41 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator);
  * Query the relation and return a single tuple.
  * The relation table must have exactly one tuple matching the query.
  */
-void RelationBTreeQuerySingle(BTree * tree, TypedTuple const * queryTuple, TypedTuple * resultTuple);
+void RelationBTreeQuerySingle(BTree * tree, Tuple const * queryTuple, Tuple * resultTuple);
 
 /**
  * Query the relation and return a single TypedAtom from a single tuple.
  * The relation table must have exactly one tuple matching the query.
  */
-TypedAtom RelationBTreeQuerySingleAtom(BTree * tree, TypedTuple const * queryTuple, index8 index);
+TypedAtom RelationBTreeQuerySingleAtom(BTree * tree, Tuple const * queryTuple, index8 index);
 
 
 /**
  * Add a single tuple to the relation, acquiring each atom in the tuple.
- * Does not add entries to lookup; see AssertFact()
+ * Does not add entries to lookup; see AssertFact().
+ * To mark a protected atom (for ifacts), set protected to a 1-based position.
  * 
  * NOTE: Should this really be acquiring atoms? Or move that to AssertFact() ?
  */
-byte RelationBTreeAddTuple(BTree * tree, TypedTuple const * tuple);
+byte RelationBTreeAddTuple(RelationBTree * tree, Atom const * tuple, uint8 protected);
 
 // result codes for RelationBTreeAddTuple()
 #define TUPLE_ADDED			1
 #define TUPLE_EXISTS		2
-#define TUPLE_PROTECTED		3	// adding would violate an ifact definition
+// #define TUPLE_PROTECTED		3	// adding would violate an ifact definition
 
 
 /**
- * Remove tuples from the BTree matching the query. To remove all tuples, set
- * queryTuple to 0.
- * 
- * If mode is REMOVE_NORMAL, tuples containing an atom with the ATOM_PROTECTED bit set
- * will NOT be removed. If mode is REMOVE_PROTECTED, all matching tuples are removed.
- * Releases a reference to each AT_ID atom in a removed tuple, except for atoms with
- * the ATOM_PROTECTED bit set.
+ * Remove tuples from the BTree matching the query.
+ * If protected is nonzero, tuples with a protected atom in this position will be removed,
+ * otherwise, only tuples without identified atoms will be removed.
+ * Releases a reference to each AT_ID atom in a removed tuple, except identified atoms.
+ * To remove all tuples, set queryTuple to 0 (the nuclear option).
  */
-size32 RelationBTreeRemoveTuples(BTree * tree, TypedTuple const * queryTuple, uint8 mode);
+size32 RelationBTreeRemoveTuples(BTree * tree, Tuple const * queryTuple, uint8 identified);
 
-#define REMOVE_NORMAL		0
-#define REMOVE_PROTECTED	1
+// #define REMOVE_NORMAL		0
+// #define REMOVE_PROTECTED	1
 
 
 /**

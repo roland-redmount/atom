@@ -5,6 +5,7 @@
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
 #include "kernel/RelationBTree.h"
+#include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
 #include "testing/testing.h"
 
@@ -14,10 +15,10 @@
 #define TEST_N_COLUMNS	3
 
 struct {
-	BTree * tree;
-	TypedTuple * tuple1;
-	TypedTuple * tuple2;
-	TypedTuple * tuple3;
+	RelationBTree * tree;
+	Atom * tuple1;
+	Atom * tuple2;
+	Atom * tuple3;
 	uint32 initialRefCount;
 } fixture;
 
@@ -27,39 +28,34 @@ struct {
 
 static void setupFixture(void)
 {
-	fixture.tree = CreateRelationBTree(TEST_N_COLUMNS);
+	byte atomTypes[TEST_N_COLUMNS] = {AT_INT, AT_FLOAT, AT_LETTER} ;
+	fixture.tree = CreateRelationBTree(TEST_N_COLUMNS, atomTypes);
 
-	fixture.tuple1 = CreateTypedTupleFromArray(
-		(TypedAtom[]) {
-			CreateTypedAtom(AT_INT, (Atom) {._int = 13 }),
-			CreateTypedAtom(AT_FLOAT, (Atom) {._float = 123.456}),
-			CreateTypedAtom(AT_LETTER, GetAlphabetLetter('A')),
-		},
-		TEST_N_COLUMNS
-	);
-	fixture.tuple2 = CreateTypedTupleFromArray(
-		(TypedAtom[]) {
-			CreateTypedAtom(AT_INT, (Atom) {._int = 13 }),
-			CreateTypedAtom(AT_FLOAT, (Atom) {._float = 123.456}),
-			CreateTypedAtom(AT_LETTER, GetAlphabetLetter('B')),
-		},
-		TEST_N_COLUMNS
-	);
-	fixture.tuple3 = CreateTypedTupleFromArray(
-		(TypedAtom[]) {
-			CreateTypedAtom(AT_UINT, (Atom) {._int = 14 }),
-			CreateTypedAtom(AT_FLOAT, (Atom) {._float = 456.789}),
-			CreateTypedAtom(AT_LETTER, GetAlphabetLetter('C')),
-		},
-		TEST_N_COLUMNS
-	);
+	fixture.tuple1 = Allocate(TEST_N_COLUMNS * sizeof(Atom));
+	fixture.tuple1 = (Atom[]) {
+		(Atom) {._int = 13},
+		(Atom) {._float = 123.456},
+		GetAlphabetLetter('A'),
+	};
+	fixture.tuple2 = Allocate(TEST_N_COLUMNS * sizeof(Atom));
+	fixture.tuple2 = (Atom[]) {
+		(Atom) {._int = 13},
+		(Atom) {._float = 123.456},
+		GetAlphabetLetter('B'),
+	};
+	fixture.tuple3 = Allocate(TEST_N_COLUMNS * sizeof(Atom));
+	fixture.tuple3 = (Atom[]) {
+		(Atom) {._int = 14},
+		(Atom) {._float = 456.789},
+		GetAlphabetLetter('C'),
+	};
 }
 
 static void teardownFixture(void)
 {
-	FreeTypedTuple(fixture.tuple1);
-	FreeTypedTuple(fixture.tuple2);
-	FreeTypedTuple(fixture.tuple3);
+	Free(fixture.tuple1);
+	Free(fixture.tuple2);
+	Free(fixture.tuple3);
 	FreeRelationBTree(fixture.tree);
 }
 

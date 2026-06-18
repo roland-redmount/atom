@@ -38,4 +38,6 @@ uint8 ReduceAtomsArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms);
 
 int8 CompareAtoms(Atom atom1, Atom atom2);
 
+void AcquireAtom(Atom atom, byte atomType);
+
 #endif	// ATOM_H

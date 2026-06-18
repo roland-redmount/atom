@@ -24,7 +24,7 @@ Atom CreateString(char const * chars, size32 length)
 	AddListToIFact(&draft, stringElementGenerator, chars, length);
 
 	// add (string @string) to ifact
-	IFactBeginPredicateForm(
+	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_STRING),
 		RegistryGetCoreBTreeService(FORM_STRING),

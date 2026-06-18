@@ -12,7 +12,7 @@
 Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
 {
 	// reduce to unique terms
-	// here we need an array of atoms, since they will be stored in a multiset
+	// here we need an array of typed atoms, since they will be stored in a multiset
 	TypedAtom uniqueTermForms[nTermForms];
 	for(index8 i = 0; i < nTermForms; i++)
 		uniqueTermForms[i] = (TypedAtom) {.type = AT_ID, .atom = termForms[i]};
@@ -25,15 +25,13 @@ Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
 	AddMultisetToIFactFromArrays(&draft, uniqueTermForms, multiplicities, nUniqueTermForms);
 
 	// (clause-form @form)
-	IFactBeginPredicateForm(
+	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_CLAUSE_FORM),
-		RegistryGetCoreBTreeService(FORM_CLAUSE_FORM),
+		(byte[]) {AT_ID},
 		0
 	);
-	TypedTuple * tuple = CreateTypedTuple(1);
-	IFactAddTuple(&draft, tuple);
-	FreeTypedTuple(tuple);
+	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
 	IFactEndPredicateForm(&draft);	
 
 	return IFactEnd(&draft);

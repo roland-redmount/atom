@@ -32,7 +32,7 @@ Atom CreateQuote(Atom quoted)
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	IFactBeginPredicateForm(
+	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_QUOTE_QUOTED),
 		RegistryGetCoreBTreeService(FORM_QUOTE_QUOTED),

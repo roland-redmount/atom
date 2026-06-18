@@ -19,42 +19,29 @@
 #include "util/sort.h"
 
 
-void FormulaSetTuple(TypedTuple * tuple, TypedAtom formula, TypedAtom form, TypedAtom actorsList)
+void FormulaSetTuple(Atom * tuple, Atom formula, Atom form, Atom actorsList)
 {
-	TypedTupleSetElement(
-		tuple,
-		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA),
-		formula
-	);
-	TypedTupleSetElement(
-		tuple,
-		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM),
-		form
-	);
-	TypedTupleSetElement(
-		tuple,
-		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS),
-		actorsList
-	);
+	tuple[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA)] = formula;
+	tuple[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORM)] = form;
+	tuple[CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_ACTORS)] = actorsList;
 }
 
 
-Atom CreateFormula(Atom form, Atom actorsList)
+Atom CreateFormula(Atom form, TypedTuple const * actorsList)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	IFactBeginPredicateForm(
+	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_FORMULA_FORM_ACTORS),
-		RegistryGetCoreBTreeService(FORM_FORMULA_FORM_ACTORS),
+		(byte[]) {AT_ID, AT_ID, AT_ID},
 		CorePredicateRoleIndex(FORM_FORMULA_FORM_ACTORS, ROLE_FORMULA)
 	);
 
-	TypedTuple * tuple = CreateTypedTuple(3);
-	FormulaSetTuple(tuple, invalidAtom, CreateTypedAtom(AT_ID, form), CreateTypedAtom(AT_ID, actorsList));
+	Atom tuple[3];
+	FormulaSetTuple(tuple, (Atom) {0}, form, actorsList);
 	IFactAddTuple(&draft, tuple);
-	FreeTypedTuple(tuple);
 	IFactEndPredicateForm(&draft);	
 
 	return IFactEnd(&draft);
@@ -180,7 +167,8 @@ Atom CreateClause(Atom const * terms, size8 nTerms)
 	}
 	Atom clauseForm = CreateClauseForm(termForms, nTerms);
 
-	// collect actors from terms into a single array
+	// Collect actors from terms into a single array
+	// BUG: here actors may have mixed types! --> THIS WONT WORK
 	TypedAtom actors[clauseArity];
 	for(index8 i = 0, k = 0; i < nTerms; i++) {
 		Atom actorsList = FormulaGetActors(terms[i]);

@@ -1,5 +1,6 @@
 
-#include "lang/Atom.h"
+#include "kernel/ifact.h"
+#include "lang/name.h"
 
 
 int8 CompareAtoms(Atom atom1, Atom atom2)
@@ -38,4 +39,20 @@ uint8 ReduceAtomsArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms)
 		}
 	}
 	return nAtoms;
+}
+
+
+void AcquireAtom(Atom atom, byte atomType)
+{
+	switch(atomType) {
+		case AT_ID:
+		IFactAcquire(atom);
+		break;
+
+		case AT_NAME:
+		NameAcquire(atom);
+		break;
+
+		// else nothing to do
+	}
 }

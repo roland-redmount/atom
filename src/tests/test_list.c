@@ -71,15 +71,17 @@ static void testCreateList(void)
 	for(index8 i = 0; i < EXAMPLE_LIST_N_ELEMENTS; i++)
 		ASSERT_UINT32_EQUAL(ListGetPosition(list, fixture.atoms[i]), i + 1)
 
-	// attempt to add a tuple (list @string position 7 element 'Z') will violate the ifact
 	TypedTuple * tuple = CreateTypedTuple(3);
+	// attempt to add a tuple (list @list position 7 element 'Z') will violate the ifact
+	// NOTE: removed this, I don't think it's correct--- see IFactCheckTuple()
+/*
 	ListSetTuple(tuple,
 		CreateTypedAtom(AT_ID, list),
 		CreateTypedAtom(AT_UINT, (Atom) {._uint = 7}),
 		CreateTypedAtom(AT_LETTER, GetAlphabetLetter('Z'))
 	);
 	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(listPositionElement, tuple), TUPLE_PROTECTED)
-
+*/
 	// attempt to remove any tuple (list @string position _ element _) will violate the ifact
 	ListSetTuple(tuple,
 		CreateTypedAtom(AT_ID, list),

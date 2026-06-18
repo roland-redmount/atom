@@ -43,7 +43,7 @@ Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size3
 void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, void const * data, size32 nUniqueElements)
 {
 	// assert (multiset element multiple) facts
-	IFactBeginPredicateForm(
+	IFactBeginConjunction(
 		draft, 
 		GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE),
 		RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE),
@@ -139,12 +139,12 @@ bool MultisetIteratorNext(MultisetIterator * iterator)
 
 ElementMultiple MultisetIteratorGetElement(MultisetIterator const * iterator)
 {
-	TypedTuple const * tuple = RelationBTreeIteratorPeekTuple(&(iterator->treeIterator));
+	Atom const * tupleAtoms = RelationBTreeIteratorPeekTuple(&(iterator->treeIterator));
 	TypedAtom element = TypedTupleGetElement(
 		tuple, CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)
 	);
 	TypedAtom multiple = TypedTupleGetElement(
-		tuple,CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)
+		tuple, CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)
 	);
 	
 	ElementMultiple em;

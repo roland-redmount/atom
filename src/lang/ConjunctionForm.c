@@ -25,15 +25,13 @@ Atom CreateConjunctionForm(Atom const * clauseForms, size8 nClauseForms)
 	AddMultisetToIFactFromArrays(&draft, uniqueClauseForms, multiplicities, nUniqueClauseForms);
 
 	// (clause-form @form)
-	IFactBeginPredicateForm(
+	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_CONJUNCTION_FORM),
-		RegistryGetCoreBTreeService(FORM_CONJUNCTION_FORM),
+		(byte[]) {AT_ID},
 		0
 	);
-	TypedTuple * tuple = CreateTypedTuple(1);
-	IFactAddTuple(&draft, tuple);
-	FreeTypedTuple(tuple);
+	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
 	IFactEndPredicateForm(&draft);	
 
 	return IFactEnd(&draft);

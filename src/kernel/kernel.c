@@ -48,7 +48,7 @@ const index8 corePredicateArity[N_CORE_PREDICATES + 1] = {
 	3,	// (list position element)
 	2,	// (list length)
 	3,	// (pair left right)
-	3,	// (formula form actors)
+//	3,	// (formula form actors)
 	2,	// (quote quoted)
 	1,	// (string)
 };
@@ -63,7 +63,7 @@ const index32 coreFormRoleIds[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY] = {
 	{ROLE_LIST, ROLE_POSITION, ROLE_ELEMENT},
 	{ROLE_LIST, ROLE_LENGTH},
 	{ROLE_PAIR, ROLE_LEFT, ROLE_RIGHT},
-	{ROLE_FORMULA, ROLE_FORM, ROLE_ACTORS},
+//	{ROLE_FORMULA, ROLE_FORM, ROLE_ACTORS},
 	{ROLE_QUOTE, ROLE_QUOTED},
 	{ROLE_STRING},
 };
@@ -261,7 +261,7 @@ static void setupCoreServices(void)
 
 	// defining facts
 	// (multiset @multiset-form element "multiset" multiple 1)
-	IFactBeginPredicateForm(&multisetDraft,multisetForm, multisetBTree, MULTISET_MULTISET_COLUMN);
+	IFactBeginConjunction(&multisetDraft,multisetForm, multisetBTree, MULTISET_MULTISET_COLUMN);
 	MultisetSetTuple(
 		multisetTuple,
 		CreateTypedAtom(AT_ID, multisetForm),
@@ -290,7 +290,7 @@ static void setupCoreServices(void)
 	// (predicate-form @multiset-form)
 	TypedTuple * predicateFormTuple = CreateTypedTuple(1);
 	TypedTupleSetElement(predicateFormTuple, 0, multisetFormAtom);
-	IFactBeginPredicateForm(&multisetDraft, predicateForm, predicateFormBTree, 0);
+	IFactBeginConjunction(&multisetDraft, predicateForm, predicateFormBTree, 0);
 	IFactAddTuple(&multisetDraft, predicateFormTuple);
 	IFactEndPredicateForm(&multisetDraft);
 
@@ -315,7 +315,7 @@ static void setupCoreServices(void)
 
 	// defining facts
 	// (multiset @predicate-form element "predicate-form" multiple 1)
-	IFactBeginPredicateForm(&predicateFormDraft, multisetForm, multisetBTree, MULTISET_MULTISET_COLUMN);
+	IFactBeginConjunction(&predicateFormDraft, multisetForm, multisetBTree, MULTISET_MULTISET_COLUMN);
 	MultisetSetTuple(
 		multisetTuple,
 		predicateFormAtom,
@@ -326,7 +326,7 @@ static void setupCoreServices(void)
 	IFactEndPredicateForm(&predicateFormDraft);
 
 	// (predicate-form @predicate-form)
-	IFactBeginPredicateForm(&predicateFormDraft, predicateForm, predicateFormBTree, 0);
+	IFactBeginConjunction(&predicateFormDraft, predicateForm, predicateFormBTree, 0);
 	TypedTupleSetElement(predicateFormTuple, 0, predicateFormAtom);
 	IFactAddTuple(&predicateFormDraft, predicateFormTuple);
 	IFactEndPredicateForm(&predicateFormDraft);
@@ -438,35 +438,37 @@ void KernelShutdown(void)
 	CleanupMemory();
 }
 
-// TODO: move assert / retract to agent
+// TODO: this should use an assert() service ("agent") exposed by the service
+// matching the actor types.
 
 // TODO: this should return a status code indicating whether the fact was created,
 // already existed, or if the assert failed due to logical inconsistency
-void AssertFact(Atom predicateForm, TypedTuple const * actors)
+void AssertFact(Atom predicateForm, TypedTuple const * actors, uint8 idPosition)
 {
 	// TODO: currently we only support creating predicates
 	ASSERT(IsPredicateForm(predicateForm));
-	// add tuple to relation table
-	// quick hack, assume B-tree service provider
-	ServiceRecord record = RegistryFindUntypedService(predicateForm);
-	if(record.form.hash) {
-		ASSERT(record.service->type == SERVICE_MACHINE)
-		ASSERT(record.service->impl.machine.provider == &bTreeServiceProvider)
-		BTree * btree = (BTree *) record.service->impl.machine.providerData;
-		RelationBTreeAddTuple(btree, actors);
-	}
-	else {
-		// No record found; create new relation table
-		size8 arity = PredicateArity(predicateForm);
-		BTree * btree = CreateRelationBTree(arity);
-		RegistryAddBTreeService(predicateForm, btree);
-		RelationBTreeAddTuple(btree, actors);
-	}
+	Agent const * agent = BureauFindAgent(predicateForm, TypedTuplePeekAtomTypes(actors));
+	AgentAssertFact(agent, TypedTuplePeekAtoms(actors), idPosition);
+
+	// ServiceRecord record = RegistryFindUntypedService(predicateForm);
+	// if(record.form.hash) {
+	// 	ASSERT(record.service->type == SERVICE_MACHINE)
+	// 	ASSERT(record.service->impl.machine.provider == &bTreeServiceProvider)
+	// 	BTree * btree = (BTree *) record.service->impl.machine.providerData;
+	// 	RelationBTreeAddTuple(btree, actors);
+	// }
+	// else {
+	// 	// No record found; create new relation table
+	// 	size8 arity = PredicateArity(predicateForm);
+	// 	BTree * btree = CreateRelationBTree(arity);
+	// 	RegistryAddBTreeService(predicateForm, btree);
+	// 	RelationBTreeAddTuple(btree, actors);
+	// }
 	LookupAddPredicateRoles(predicateForm, actors);
 }
 
-
-static void removeBTreeTuples(Atom predicateForm, TypedTuple * actors)
+// Remove one or more tuples of the given form
+static void removeBTreeTuples(Atom predicateForm, TypedTuple * query)
 {
 	ServiceRecord record = RegistryFindUntypedService(predicateForm);
 	ASSERT(record.form.hash)
@@ -476,7 +478,7 @@ static void removeBTreeTuples(Atom predicateForm, TypedTuple * actors)
 	
 	// NOTE: this can cause IFacts to be removed if the tuple
 	// being removed holds the last reference to an IFact
-	RelationBTreeRemoveTuples(btree, actors, REMOVE_NORMAL);
+	RelationBTreeRemoveTuples(btree, query, REMOVE_NORMAL);
 	// remove btree if empty
 	// NOTE: I think this should be an explicit function in ServiceRegistry, purgeEmptyService() or such
 	if(RelationBTreeNRows(btree) == 0) {
@@ -487,17 +489,20 @@ static void removeBTreeTuples(Atom predicateForm, TypedTuple * actors)
 
 void RetractFact(Atom predicateForm, TypedTuple * actors)
 {
+	// TODO: for now we assume B-tree service provider
 	removeBTreeTuples(predicateForm, actors);
+	// NOTE: the below does not accept variables in the actors tuple,
+	// so we can only retract 1 fact at a time.
 	LookupRemovePredicateRoles(predicateForm, actors);
 }
 
-
+/*
 void RetractAllFacts(Atom predicateForm)
 {
 	removeBTreeTuples(predicateForm, 0);
 	LookupRemoveAllPredicateRoles(predicateForm);
 }
-
+*/
 
 Atom GetCorePredicateForm(index32 formId)
 {

@@ -1,34 +1,40 @@
 /**
- * An identifying fact (ifact) is a conjunction across one or more relations
- * that uniquely identify an atom. To create an identifying fact,
- * we must process a formula (conjunction), locate or create the
- * corresponding tuples across one or more tables, mark them as
- * protected from deletion, and compute a hash value of the formula.
- * This hash will serve as the identified atom ID.
+ * An identifying fact (ifact) is a conjunction of predicates
+ * across one or more relations that uniquely identify an atom.
+ * To create an identifying fact, we must (1) build the conjunction
+ * (2) compute a hash value from the conjunction (3) create the
+ * corresponding facts (protected from deletion) across one or more
+ * tables. The hash serves as the identified atom ID.
  * 
- * Tuples that are part of an identifying fact cannot be retracted
+ * Predicates that are part of an identifying fact cannot be retracted
  * until the identified atom is released.
  */
 
 #ifndef IFACT_H
 #define IFACT_H
 
-#include "kernel/RelationBTree.h"
+#include "kernel/agentregistry.h"
+// #include "kernel/RelationBTree.h"
+#include "kernel/ServiceRegistry.h"
 #include "kernel/typedtuple.h"
 
+
+struct s_ServiceRecord;
+
 /**
- * A conjunction with a given form &'d together n times,
- * 
- * form & form & ... & form   (n times)
- * 
- * Corresponding tuples are stored in the BTree.
+ * A conjunction is a set of predicates &'d together,
+ * and is associated with a service 
+ * specifying the predicate form and atom types.
  */
 typedef struct s_IFactConjunction {
-	Atom form;				// clause or predicate form for the relation
-	BTree * btree;			// B-tree storing the relation
-	index8 idColumn;		// these 3 fields total 4 bytes
+	Atom predicateForm;				// predicate form for the relation
+	byte * columnTypes;
+	// BTree * btree;			// B-tree storing the relation
+	// ServiceRecord const * serviceRecord;
+	Agent * agent;
+	index8 idColumn;		// position of the identified atom in the tuple
 	size8 nColumns;
-	size16 nRows;
+	size16 nRows;			// number of tuples in this conjunction
 } __attribute__((packed)) IFactConjunction;
 
 
@@ -51,11 +57,11 @@ struct s_IFactHeader {
 
 
 /**
- * A "draft" ifact, used while building a ifact
+ * A "draft" ifact, used while constructin a new ifact.
  */
 typedef struct s_IFactDraft {
-	byte * tupleStorage;
-	byte * currentTuple;
+	Atom * tupleStorage;
+	Atom * currentTuple;
 	IFactHeader header;		// IFact being constructed
 	bool hasBegunConjunction;
 } IFactDraft;
@@ -82,19 +88,19 @@ void FreeIFacts(void);
 void IFactBegin(IFactDraft * draft);
 
 /**
- * Begin a new predicate form for the IFactDraft. Each tuple added by
- * IFactAddTuple() have this form.
- * The idColumn identifies the actor that is being defined by the IFact.
- * TODO: factor out the BTree * 
+ * Begin a new conjunction for the IFactDraft, identified by an
+ * (form, atom types) pair.
+ * The idColumn indicates the actor that is being defined by the IFact.
  */
-void IFactBeginPredicateForm(IFactDraft * draft, Atom predicateForm, BTree * btree, index8 idColumn);
+void IFactBeginConjunction(
+	IFactDraft * draft, Atom predicateForm, byte const * atomTypes, index8 idColumn);
 
 /**
  * Add one tuple, defining one predicate of the current predicate form.
  * The atom in the ID column of the identified fact is ignored; it will
  * be computed by IFactEnd()
  */
-void IFactAddTuple(IFactDraft * draft, TypedTuple const * tuple);
+void IFactAddTuple(IFactDraft * draft, Atom const * tuple);
 
 /**
  * End the current predicate form. This function must be called before
@@ -161,9 +167,8 @@ uint32 IFactTotalCount(void);
  * This check does not apply to atoms with the ATOM_PROTECTED flag set, which are themselves
  * part of IFact tuples.
  */
+// bool IFactCheckTuple(BTree const * tree, TypedTuple const * tuple);
 
-// TODO: this should take a form atom, not a tree pointer
-bool IFactCheckTuple(BTree const * tree, TypedTuple const * tuple);
 
 void IFactPrint(Atom ifact);
 

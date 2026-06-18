@@ -34,8 +34,11 @@ void KernelShutdown(void);
  * High level method to assert a fact.
  * Adds a tuple to the corresponding relation table,
  * and adds an entry to the lookup table for each AT_ID actor.
+ * The actors tuple may not contain variables.
+ * To indicate an identifying fact, set idPosition to the 1-based position
+ * of the identified atom.
  */
-void AssertFact(Atom form, TypedTuple const * actors);
+void AssertFact(Atom predicateForm, TypedTuple const * actors, uint8 idPosition);
 
 /**
  * High level methd to retract a fact.
@@ -49,7 +52,7 @@ void RetractFact(Atom form, TypedTuple * actors);
 /**
  * Remove all facts of a given form
  */
-void RetractAllFacts(Atom predicateForm);
+// void RetractAllFacts(Atom predicateForm);
 
 /**
  * Permanent identifiers for core role names (satisfying (name @name))
@@ -67,22 +70,22 @@ void RetractAllFacts(Atom predicateForm);
 #define	ROLE_CLAUSE_FORM			6
 #define	ROLE_CONJUNCTION_FORM		7
 
-#define ROLE_LIST					8		// required for formula
+#define ROLE_LIST					8
 #define ROLE_POSITION				9
 #define ROLE_LENGTH					10
 
 #define ROLE_PAIR					11		// required for formula
 #define ROLE_LEFT					12
 #define ROLE_RIGHT					13
-#define	ROLE_FORMULA				14
-#define	ROLE_QUOTE					15
-#define	ROLE_QUOTED					16
-#define	ROLE_STRING					17		// not really core language
-#define ROLE_SIGN					18
-#define ROLE_FORM					19
-#define ROLE_ACTORS					20
+// #define	ROLE_FORMULA				14
+#define	ROLE_QUOTE					14
+#define	ROLE_QUOTED					15
+#define	ROLE_STRING					16		// not really core language
+#define ROLE_SIGN					17
+// #define ROLE_FORM					19
+// #define ROLE_ACTORS					20
 
-#define N_CORE_ROLES				20
+#define N_CORE_ROLES				17
 
 
 /**
@@ -99,7 +102,7 @@ void RetractAllFacts(Atom predicateForm);
 #define FORM_LIST_POSITION_ELEMENT			6	// (list position element)
 #define FORM_LIST_LENGTH					7	// (list length)
 #define FORM_PAIR_LEFT_RIGHT				8 	// (pair left right)
-#define FORM_FORMULA_FORM_ACTORS			9	// (formula form actors)
+// #define FORM_FORMULA_FORM_ACTORS			9	// (formula form actors)
 #define FORM_QUOTE_QUOTED					10	// (quote quoted)
 #define FORM_STRING							11	// (string)
 

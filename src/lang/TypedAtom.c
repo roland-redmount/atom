@@ -42,15 +42,7 @@ TypedAtom CreateTypedAtom(byte type, Atom atom)
 
 void AcquireTypedAtom(TypedAtom typedAtom)
 {
-	switch(typedAtom.type) {
-		case AT_ID:
-		IFactAcquire(typedAtom.atom);
-		break;
-
-		case AT_NAME:
-		NameAcquire(typedAtom.atom);
-		break;
-	}
+	AcquireAtom(typedAtom.atom, typedAtom.type);
 }
 
 

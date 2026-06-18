@@ -28,7 +28,7 @@ Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
 	AddMultisetToIFactFromArrays(&draft, uniqueRoles, multiplicities, nUniqueRoles);
 
 	// add (predicate-form @predicate) to ifact
-	IFactBeginPredicateForm(
+	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_PREDICATE_FORM),
 		RegistryGetCoreBTreeService(FORM_PREDICATE_FORM),

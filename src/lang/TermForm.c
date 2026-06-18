@@ -36,7 +36,7 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 
 	Atom termForm = GetCorePredicateForm(FORM_TERM_FORM);
 
-	IFactBeginPredicateForm(
+	IFactBeginConjunction(
 		&draft,
 		termForm,
 		RegistryGetCoreBTreeService(FORM_TERM_FORM),

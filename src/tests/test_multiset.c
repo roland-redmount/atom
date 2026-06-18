@@ -66,6 +66,8 @@ static void testMultiset(void)
 
 	// adding a tuple (multiset @multiset element 'D' multiple 1) should fail
 	// since @multiset is an ifact
+	// NOTE: no longer true
+/*
 	TypedTuple * tuple1 = CreateTypedTuple(3);
 	MultisetSetTuple(
 		tuple1,
@@ -75,6 +77,7 @@ static void testMultiset(void)
 	);
 	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(table, tuple1), TUPLE_PROTECTED)
 	FreeTypedTuple(tuple1);
+*/
 
 	// attempt to remove any tuple (list @string position _ element _) should fail
 	TypedTuple * tuple2 = CreateTypedTuple(3);

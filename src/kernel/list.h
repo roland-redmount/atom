@@ -1,6 +1,6 @@
 /**
- * A list (DT_LIST) stores a sequence of n elements
- * with positions 1, 2, ..., n
+ * A list stores a sequence of n elements with positions 1, 2, ..., n.
+ * 
  */
 
 
@@ -16,12 +16,12 @@
  * Create a list from a callback function generating list element atoms.
  * The ListElementGenerator will be called with a 0-based index into the list.
  */
-typedef TypedAtom (*ListElementGenerator)(index32 index, void const * data);
+typedef Atom (*ListElementGenerator)(index32 index, void const * data);
 
 Atom CreateList(ListElementGenerator generator, void const * data, size32 nElements);
 
 /**
- * Create a list from an array of list elements
+ * Create a list from an array of typed atoms
  */
 Atom CreateListFromArray(TypedAtom const * listElements, size8 nAtoms);
 
@@ -43,7 +43,7 @@ void ListBegin(IFactDraft * draft);
  * Returns the (1-based) position of the new element,
  * which is the same as the new length of the list.
  */
-index32 ListAddElement(IFactDraft * draft, TypedAtom element);
+// index32 ListAddElement(IFactDraft * draft, Atom element);
 
 /**
  * Finalize a draft list, returning the completed list atom.
@@ -59,12 +59,6 @@ bool IsList(Atom atom);
 
 
 /**
- * Assign values to a tuple from the (list length) relation
- */
-void ListLengthSetTuple(TypedTuple * tuple, TypedAtom list, TypedAtom length);
-
-
-/**
  * Return l from the query (list @list length l)
  */
 size32 ListLength(Atom list);
@@ -74,18 +68,18 @@ size32 ListLength(Atom list);
  * 
  * NOTE: position is 1-based.
  */
-TypedAtom ListGetElement(Atom list, index32 position);
+Atom ListGetElement(Atom list, index32 position);
 
 /**
  * Copy all list elements into a given array
  * (assumed to be large enough to hold the eleements)
  */
-void ListGetElementsArray(Atom list, TypedAtom * elements);
+// void ListGetElementsArray(Atom list, Atom * elements);
 
 /**
  * Set the elements of tuple according to the (list position element) form.
  */
-void ListSetTuple(TypedTuple * tuple, TypedAtom list, TypedAtom position, TypedAtom element);
+void ListSetTuple(Tuple * tuple, Atom list, Atom position, Atom element);
 
 /**
  * Return the first position p from the query
@@ -112,11 +106,6 @@ void PrintList(Atom list);
 int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, TypedAtom));
 
 
-/**
- * Iteration over a list.
- * align the roles of a form with an ordered actor list by DT_FORMULA.
- */
-
 typedef struct s_ListIterator
 {
 	TypedTuple * queryTuple;
@@ -124,9 +113,16 @@ typedef struct s_ListIterator
 } ListIterator;
 
 
+/**
+ * Create a list iterator. This is a thin wrapper around RelationBTreeIterator.
+ */
 void ListIterate(Atom list, ListIterator * iterator);
+
 bool ListIteratorNext(ListIterator * iterator);
+
 TypedAtom ListIteratorGetElement(ListIterator const * iterator);
+
 void ListIteratorEnd(ListIterator * iterator);
+
 
 #endif  // LIST_H

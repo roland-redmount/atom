@@ -37,7 +37,7 @@ Atom CreatePair(TypedAtom left, TypedAtom right)
 void AddPairToIFact(IFactDraft * draft, TypedAtom left, TypedAtom right)
 {
 	// assert (pair left right)
-	IFactBeginPredicateForm(
+	IFactBeginConjunction(
 		draft,
 		GetCorePredicateForm(FORM_PAIR_LEFT_RIGHT),
 		RegistryGetCoreBTreeService(FORM_PAIR_LEFT_RIGHT),

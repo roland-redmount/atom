@@ -1,11 +1,11 @@
 /**
- * A formula is defined by a fact
- * 
- * (formula @formula form @form actors @actors)
- * 
- * where @actors is a list matching the iteration ("canonical") order of the form.
- * 
- * NOTE: the mismatch between fully ordered list of actors and partially ordered
+ * A formula is a temporary data structure consisting of a form atom (AT_ID)
+ * and a typed tuple of actors.
+ */
+
+
+ /* 
+ * NOTE: the mismatch between fully ordered actors tuple and partially ordered
  * multisets for the form is problematic when matching tuples to signatures.
  *  
  * It might be better to represent actors
@@ -48,7 +48,6 @@
  * x: INT y:INT z:INT w:INT
  * 
  * has form (+^2 =)^2 and actors ({({x y} z) ({x y} w)}) ... 
- * 
  */
 
 #ifndef FORMULA_H
@@ -57,12 +56,17 @@
 #include "kernel/typedtuple.h"
 #include "lang/TypedAtom.h"
 
+typedef struct s_Formula {
+	Atom form;
+	TypedTuple * actors;	// or Atom atoms[], byte types[] ?
+} Formula;
 
 /**
- * Create a formula from a form and an actors list (DT_LIST).
+ * Create a formula from a form and an actors tuple.
  * The order of actors must correspond to the iteration order of the form.
+ * TODO: remove this
  */
-Atom CreateFormula(Atom form, Atom actorsList);
+// Atom CreateFormula(Atom form, TypedTuple const * actorsList);
 
 Atom CreateFormulaFromArray(Atom form, TypedAtom * actors);
 
@@ -131,7 +135,7 @@ Atom FormulaGetForm(Atom formula);
 /**
  * Return the list of actors
  */
-Atom FormulaGetActors(Atom formula);
+Atom const * FormulaGetActors(Atom formula);
 
 /**
  * Return the index of the given name in the corresponding form

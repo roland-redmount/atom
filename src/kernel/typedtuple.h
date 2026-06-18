@@ -10,16 +10,16 @@
 
 typedef struct s_TypedTuple {
 	size8 nAtoms;
+	size8 reserved;
 	/**
 	 * 1-based position of the protected atom, or 0 if no atom is protected.
 	 * a protected atom occurs only in tuples that are part of the IFact.
 	 * 
-	 * TODO: This does not seem to belong in a low-level construct like Tuple.
-	 * Tuple storage methods like RelationBTree should not have to deal with
-	 * the protected atom logic. Can we move the "protected" logic to lookup?
+	 * TODO: This should probably be removed from Tuple. Storage methods
+	 * like RelationBTree need to keep track of protected atoms to store
+	 * identifing facts, but they may represent tuples differently internally,
+	 * so the protected atom should be stored separately. I think.
 	 */ 
-	// 
-	index8 protectedAtom;
 	// byte types[]
 	// Atom atoms[]
 } __attribute__((packed)) TypedTuple;
@@ -28,7 +28,6 @@ typedef struct s_TypedTuple {
 /**
  * Size in bytes of a TypedTuple with the given number of atoms.
  */
-
 size32 TypedTupleNBytes(size8 tupleNAtoms);
 
 /**
@@ -84,6 +83,17 @@ void TypedTupleSetElement(TypedTuple * tuple, index8 index, TypedAtom element);
  * The type of the atom is unchanged.
  */
 void TypedTupleSetAtom(TypedTuple * tuple, index8 index, Atom atom);
+
+/**
+ * Return the tuple's atom array
+ */
+Atom const * TypedTuplePeekAtoms(TypedTuple const * tuple);
+
+
+/**
+ * Return the tuple's atom types array
+ */
+byte const * TypedTuplePeekAtomTypes(TypedTuple const * tuple);
 
 /**
  * Copy untyped atoms from the TypedTuple into the given Atom array
@@ -151,7 +161,7 @@ int8 TypedTupleCompare(TypedTuple const * tuple1, TypedTuple const * tuple2);
 /**
  * Sort a list of tuples
  */
-void TypedTupleSort(TypedTuple * tuples, size32 nTuples);
+// void TypedTupleSort(TypedTuple * tuples, size32 nTuples);
 
 /**
  * Hash value of a tuple.

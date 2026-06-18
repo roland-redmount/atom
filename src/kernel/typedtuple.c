@@ -15,10 +15,11 @@ static byte * tupleTypeArray(TypedTuple * tuple)
 	return ((byte *) tuple) + sizeof(TypedTuple);
 }
 
-static byte const * tupleTypeArrayView(TypedTuple const * tuple)
+byte const * TypedTuplePeekAtomTypes(TypedTuple const * tuple)
 {
 	return ((byte const *) tuple) + sizeof(TypedTuple);
 }
+
 
 static size32 tupleAtomArrayOffset(size8 tupleNAtoms)
 {
@@ -31,7 +32,8 @@ static Atom * tupleAtomArray(TypedTuple * tuple)
 	return (Atom *) (((byte *) tuple) + tupleAtomArrayOffset(tuple->nAtoms));
 }
 
-static Atom const * tupleAtomArrayView(TypedTuple const * tuple)
+
+Atom const * TypedTuplePeekAtoms(TypedTuple const * tuple)
 {
 	return (Atom const *) (((byte *) tuple) + tupleAtomArrayOffset(tuple->nAtoms));
 }
@@ -49,8 +51,8 @@ size8 TypedTupleNAtoms(size32 tupleNBytes)
 	ASSERT((tupleNBytes >= 16) && !(tupleNBytes & 7))
 	/**
 	 * Inverting the formula is a bit complicated.
-	 * 
-	 * Let s = ceil((n+2)/8) + n = floor((n+9)/8) + n
+	 * Let s be the size in bytes and n the number of atoms.
+	 * We have s = ceil((n+2)/8) + n = floor((n+9)/8) + n
 	 * since ceil((n+2)/8) = floor((n+2+7)/8)
 	 * 
 	 * Express n as n = 8q + r. We get two cases:
@@ -120,14 +122,14 @@ void TypedTupleClear(TypedTuple * tuple)
 
 TypedAtom TypedTupleGetElement(TypedTuple const * tuple, index8 index)
 {
-	byte type = tupleTypeArrayView(tuple)[index];
-	Atom atom = tupleAtomArrayView(tuple)[index];
+	byte type = TypedTuplePeekAtomTypes(tuple)[index];
+	Atom atom = TypedTuplePeekAtoms(tuple)[index];
 	return CreateTypedAtom(type, atom);
 }
 
 Atom TypedTupleGetAtom(TypedTuple const * tuple, index8 index)
 {
-	return tupleAtomArrayView(tuple)[index];
+	return TypedTuplePeekAtoms(tuple)[index];
 }
 
 
@@ -183,8 +185,8 @@ bool TypedTupleEqual(TypedTuple const * tuple1, TypedTuple const * tuple2)
 		return false;
 	// ignore the 
 	return CompareMemory(
-		tupleTypeArrayView(tuple1),
-		tupleTypeArrayView(tuple2),
+		TypedTuplePeekAtomTypes(tuple1),
+		TypedTuplePeekAtomTypes(tuple2),
 		TypedTupleNBytes(tuple1->nAtoms) - sizeof(TypedTuple)
 	) == 0;
 }
@@ -222,12 +224,12 @@ void TypedTupleCopyAt(TypedTuple const * source, index8 sourceOffset, TypedTuple
 {
 	ASSERT(source->nAtoms >= sourceOffset + destination->nAtoms)
 	CopyMemory(
-		tupleTypeArrayView(source) + sourceOffset,
+		TypedTuplePeekAtomTypes(source) + sourceOffset,
 		tupleTypeArray(destination),
 		destination->nAtoms
 	);
 	CopyMemory(
-		tupleAtomArrayView(source) + sourceOffset,
+		TypedTuplePeekAtoms(source) + sourceOffset,
 		tupleAtomArray(destination),
 		destination->nAtoms * sizeof(Atom)
 	);
@@ -250,13 +252,12 @@ void TypedTupleRelease(TypedTuple const * tuple)
 
 data64 TypedTupleHash(TypedTuple const * tuple, data64 initialHash)
 {
-	// hash header, except the protectedAtom field
+	// hash header
 	TypedTuple headerCopy = *tuple;
-	headerCopy.protectedAtom = 0;	
 	data64 hash = DJB2DoubleHashAdd(&headerCopy, sizeof(TypedTuple), initialHash);
 	// hash the type and atom arrays
 	return DJB2DoubleHashAdd(
-		tupleTypeArrayView(tuple), TypedTupleNBytes(tuple->nAtoms) - sizeof(TypedTuple), hash);
+		TypedTuplePeekAtomTypes(tuple), TypedTupleNBytes(tuple->nAtoms) - sizeof(TypedTuple), hash);
 }
 
 
@@ -268,13 +269,13 @@ static int8 quickSortCompareTuples(void const * tuple1, void const * tuple2, siz
 
 /**
  * NOTE: sorting order for tuples should be identical to the iteration order
- * of RelationBTree; see compareQuery() in RelationBTree.c
+ * of tuples in relation tables; see compareQuery() in RelationBTree.c
  */
-void TypedTupleSort(TypedTuple * tuples, size32 nTuples)
-{
-	ASSERT(nTuples > 0)
-    QuickSort(tuples, nTuples, TypedTupleNBytes(tuples[0].nAtoms), quickSortCompareTuples);
-}
+// void TypedTupleSort(TypedTuple * tuples, size32 nTuples)
+// {
+// 	ASSERT(nTuples > 0)
+//     QuickSort(tuples, nTuples, TypedTupleNBytes(tuples[0].nAtoms), quickSortCompareTuples);
+// }
 
 
 void TypedTuplePrint(TypedTuple const * tuple)
