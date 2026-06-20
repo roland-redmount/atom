@@ -84,7 +84,7 @@ TypedTuple * CreateTypedTuple(size8 nAtoms)
 }
 
 
-TypedTuple * CreateTypedTupleFromArray(TypedAtom * typedAtoms, size8 nAtoms)
+TypedTuple * CreateTypedTupleFromArray(TypedAtom const * typedAtoms, size8 nAtoms)
 {
 	TypedTuple * tuple = CreateTypedTuple(nAtoms);
 	for(index8 i = 0; i < nAtoms; i++)

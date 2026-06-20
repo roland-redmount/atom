@@ -1,6 +1,31 @@
 /**
- * A formula is a temporary data structure consisting of a form atom (AT_ID)
- * and a typed tuple of actors.
+ * A formula can be a predicate, term, clause or conjunction.
+ * (NOTE: unclear if we ever need to represent conjuctions as formulas?)
+ * It consists of a a form atom (AT_ID) and a tuple of actors.
+ * A formula must be an Atom, since we must be able to represent reflected
+ * formulas (see quote.c). Formulas are often short-lived objects, but
+ * reflected formulas can be part of asserted facts.
+ * 
+ * We previously used a list atom instead of a typed tuple, but
+ * this becomes complicated when relations (including (list position element))
+ * are typed, so that all elements must be of the same type, while
+ * the actors in a formula can be of different types, since they derive from
+ * different roles (relation table columns). This is a fundamental mismatch.
+ * We could solve this with a UNION across several (list position element) services,
+ * but it gets quite complicated for such a fundamental data structure.
+ * 
+ * 
+ * A possibility is to store formulas as tuples of relation tables, re-using
+ * existing storage methods. However, this presents some problems:
+ * (1) Formulas are not asserted facts, so they must somehow be marked as such in tables
+ * (2) There is no stable reference (pointer) to a specific tuple in a relation table,
+ *     so we must do a table search to inspect the actors of a formula. This could
+ *     be optimized later with some form of tuple cache.
+ * (3) Clauses may combine muliple terms across multiple tables. We would probably
+ *     have to represent a clause as a table where each column is a predicate actor,
+ *     rather than a single actors tuple. An advantage of this format is that "slicing"
+ *     out actors for terms is simpler than with a single actors tuple.
+ * 
  */
 
 
@@ -61,25 +86,29 @@ typedef struct s_Formula {
 	TypedTuple * actors;	// or Atom atoms[], byte types[] ?
 } Formula;
 
-/**
- * Create a formula from a form and an actors tuple.
- * The order of actors must correspond to the iteration order of the form.
- * TODO: remove this
- */
-// Atom CreateFormula(Atom form, TypedTuple const * actorsList);
 
-Atom CreateFormulaFromArray(Atom form, TypedAtom * actors);
+/**
+ * Create a formula. The actors array is copied.
+ * The new formula holds a reference to the form atom. 
+ */
+Formula * CreateFormula(Atom form, TypedTuple const * actors);
+
+
+Formula * CreateFormulaFromArray(Atom form, TypedAtom const * actors);
+
+
+void FreeFormula(Formula * formula);
 
 /**
  * Create a predicate from two arrays of role names (AT_NAME) and actors,
  * both of the same length nParts.
  */
-Atom CreatePredicate(Atom const * roles, TypedAtom * actors, size8 nParts);
+Formula * CreatePredicate(Atom const * roleNames, TypedAtom * actors, size8 arity);
 
 /**
  * Create a term from a predicate and sign
  */
-Atom CreateTerm(Atom predicate, bool negated);
+Formula * CreateTerm(Formula const * predicate, bool sign);
 
 /**
  * Find the term actor corresponding the given role and multiplicity m
@@ -87,9 +116,9 @@ Atom CreateTerm(Atom predicate, bool negated);
 TypedAtom TermGetRoleActor(Atom termForm, TypedTuple const * termActors, const char * role, uint8 m);
 
 /**
- * Create a clause from a list of terms, in any order.
+ * Create a clause from a list of term formulas, in any order.
  */
-Atom CreateClause(Atom const * terms, size8 nTerms);
+Formula * CreateClause(Formula const ** terms, size8 nTerms);
 
 /**
  * Find the index into the list of terms corresponding the given clause form
@@ -113,34 +142,32 @@ void ClauseGetTermActorsIndices(Atom clauseForm, index8 * termActorsIndices);
 /**
  * Create a conjunction from a list of terms, in any order.
  */
-Atom CreateConjunction(Atom const * clauses, size8 nClauses);
+Formula * CreateConjunction(Formula const ** clauses, size8 nClauses);
+
 
 /**
- * Test if the atom is a formula
+ * Formula type predicates.
  */
-bool IsFormula(Atom atom);
+bool FormulaIsPredicate(Formula const * formula);
+
+bool FormulaIsTerm(Formula const * formula);
+
+bool FormulaIsClause(Formula const * formula);
+
+bool FormulaIsConjunction(Formula const * formula);
+
+uint8 FormulaArity(Formula const * formula);
+
 
 /**
- * Formula type predicates. These assume the atom is indeed a formula.
+ * Return the list of actors.  REMOVE
  */
-bool FormulaIsPredicate(Atom formula);
-bool FormulaIsTerm(Atom formula);
-bool FormulaIsClause(Atom formula);
-bool FormulaIsConjunction(Atom formula);
-
-uint8 FormulaArity(Atom formula);
-
-Atom FormulaGetForm(Atom formula);
-
-/**
- * Return the list of actors
- */
-Atom const * FormulaGetActors(Atom formula);
+// Atom const * FormulaGetActors(Atom formula);
 
 /**
  * Return the index of the given name in the corresponding form
  */
-index32 FormulaRoleIndex(Atom formula, Atom name);
+index32 FormulaRoleIndex(Formula const * formula, Atom roleName);
 
 /**
  * Store a list of the unique formula variables into the provided array,
@@ -149,7 +176,7 @@ index32 FormulaRoleIndex(Atom formula, Atom name);
  */
 // size8 FormulaUniqueVariables(Atom formula, TypedAtom * variables);
 
-void PrintFormula(Atom formula);
+void PrintFormula(Formula const * formula);
 
 void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors);
 

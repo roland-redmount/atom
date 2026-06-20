@@ -31,12 +31,10 @@ Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
 	IFactBeginConjunction(
 		&draft,
 		GetCorePredicateForm(FORM_PREDICATE_FORM),
-		RegistryGetCoreBTreeService(FORM_PREDICATE_FORM),
+		(byte[]) {AT_ID},
 		0
 	);
-	TypedTuple * tuple = CreateTypedTuple(1);
-	IFactAddTuple(&draft, tuple);
-	FreeTypedTuple(tuple);
+	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
 	IFactEndPredicateForm(&draft);
 
 	return IFactEnd(&draft);

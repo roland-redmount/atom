@@ -77,13 +77,10 @@ void RetractFact(Atom form, TypedTuple * actors);
 #define ROLE_PAIR					11		// required for formula
 #define ROLE_LEFT					12
 #define ROLE_RIGHT					13
-// #define	ROLE_FORMULA				14
 #define	ROLE_QUOTE					14
 #define	ROLE_QUOTED					15
 #define	ROLE_STRING					16		// not really core language
 #define ROLE_SIGN					17
-// #define ROLE_FORM					19
-// #define ROLE_ACTORS					20
 
 #define N_CORE_ROLES				17
 
@@ -102,11 +99,10 @@ void RetractFact(Atom form, TypedTuple * actors);
 #define FORM_LIST_POSITION_ELEMENT			6	// (list position element)
 #define FORM_LIST_LENGTH					7	// (list length)
 #define FORM_PAIR_LEFT_RIGHT				8 	// (pair left right)
-// #define FORM_FORMULA_FORM_ACTORS			9	// (formula form actors)
-#define FORM_QUOTE_QUOTED					10	// (quote quoted)
-#define FORM_STRING							11	// (string)
+#define FORM_QUOTE_QUOTED					9	// (quote quoted)
+#define FORM_STRING							10	// (string)
 
-#define N_CORE_PREDICATES					11
+#define N_CORE_PREDICATES					10
 
 /**
  * Lookup one of the "primitive" forms for core tables

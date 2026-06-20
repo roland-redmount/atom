@@ -43,7 +43,7 @@ TypedTuple * CreateTypedTuple(size8 nAtoms);
 /**
  * Create a tuple by copying an array of atoms
  */
-TypedTuple * CreateTypedTupleFromArray(TypedAtom * typedAtoms, size8 nAtoms);
+TypedTuple * CreateTypedTupleFromArray(TypedAtom const * typedAtoms, size8 nAtoms);
 
 /**
  * Create a tuple by copying another tuple
