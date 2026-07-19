@@ -180,6 +180,7 @@ bool BTreeIteratorNext(BTreeIterator * iterator);
  */
 void * BTreeIteratorPeekItem(BTreeIterator const * iterator);
 
+bool BTreeIteratorBeforeFirst(BTreeIterator * iterator);
 
 /**
  * Reposition the iterator at the first item matching keyItem,

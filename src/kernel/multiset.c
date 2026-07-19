@@ -59,7 +59,7 @@ void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, 
 		IFactAddTuple(draft, tuple);
 	}
 	FreeTypedTuple(tuple);
-	IFactEndPredicateForm(draft);
+	IFactEndConjunction(draft);
 }
 
 

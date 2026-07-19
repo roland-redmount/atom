@@ -28,7 +28,7 @@ typedef struct s_PermuteContext {
 
 
 Service * CreatePermuteService(
-	size8 nArguments, TypedTuple const * constants, index8 const * argumentMap, Service * childService)
+	size8 nArguments, Atom const * constants, index8 const * argumentMap, Service * childService)
 {
 	Service * service = createService(SERVICE_PERMUTE, nArguments, sizeof(PermuteContext));
 	service->impl.permute.childService = childService;
@@ -471,7 +471,7 @@ void ReleaseService(Service * service)
 			break;
 
 		case SERVICE_MACHINE:
-			// Nothing to do (?)
+			service->impl.machine.provider->finalizeService(service);
 			break;
 		
 		default:

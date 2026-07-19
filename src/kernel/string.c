@@ -34,7 +34,7 @@ Atom CreateString(char const * chars, size32 length)
 	TypedTupleSetElement(tuple, 0, (TypedAtom) {0});
 	IFactAddTuple(&draft, tuple);
 	FreeTypedTuple(tuple);
-	IFactEndPredicateForm(&draft);
+	IFactEndConjunction(&draft);
 
 	return IFactEnd(&draft);
 }

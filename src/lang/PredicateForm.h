@@ -30,6 +30,7 @@ size8 PredicateNRoles(Atom predicateForm);
 
 /**
  * Arity is the number of actors = number of roles * multiplicity
+ * TODO: rename this PredicateFormArity() ?
  */
 size8 PredicateArity(Atom predicateForm);
 

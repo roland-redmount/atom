@@ -58,28 +58,22 @@ void TeardownDictionary(void)
 }
 
 
-static void setupEntry(DictionaryEntry * entry, Atom clauseForm, TypedTuple * actors)
+static void setupEntry(DictionaryEntry * entry, Atom clauseForm, TypedTuple const * actors)
 {
 	entry->clauseForm = clauseForm;
 	IFactAcquire(clauseForm);
-	entry->tuple = actors;
+	entry->tuple = CreateTypedTuple(actors->nAtoms);
+	TypedTupleCopy(actors, entry->tuple);
 	for(index8 i = 0; i < actors->nAtoms; i++) 
 		AcquireTypedAtom(TypedTupleGetElement(actors, i));
 }
 
 
-DictionaryEntry DictionaryAddClause(Atom clause)
+DictionaryEntry DictionaryAddClause(Formula const * clause)
 {
-	ASSERT(IsFormula(clause))
 	ASSERT(FormulaIsClause(clause))
-	Atom clauseForm = FormulaGetForm(clause);
-	size8 arity = ClauseArity(clauseForm);
-	// Atom actorsList = FormulaGetActors(clause);
-	TypedTuple * actors = CreateTypedTuple(arity);
-	CopyListToTuple(FormulaGetActors(clause), actors);
-
 	DictionaryEntry entry;
-	setupEntry(&entry, clauseForm, actors);
+	setupEntry(&entry, clause->form, clause->actors);
 	ASSERT(BTreeInsert(dictionary.btree, &entry) == BTREE_INSERTED)
 	return entry;
 }
@@ -87,9 +81,9 @@ DictionaryEntry DictionaryAddClause(Atom clause)
 
 DictionaryEntry DictionaryAddClauseFromCString(const char * clauseString)
 {
-	Atom rule = CStringToClause(clauseString);
+	Formula * rule = CStringToClause(clauseString);
 	DictionaryEntry entry = DictionaryAddClause(rule);
-	IFactRelease(rule);	
+	FreeFormula(rule);	
 	return entry;
 }
 

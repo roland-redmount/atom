@@ -30,7 +30,7 @@ bool ClauseBuilderIsEmpty(ClauseBuilder const * builder);
  */
 bool ClauseBuilderIsValid(ClauseBuilder const * builder);
 
-Atom ClauseBuilderCreateFormula(ClauseBuilder * builder);
+Formula * ClauseBuilderCreateFormula(ClauseBuilder * builder);
 
 void ClauseBuilderReset(ClauseBuilder * builder);
 
@@ -39,7 +39,7 @@ void CleanupClauseBuilder(ClauseBuilder * builder);
 /**
  * Parse a C string to a clause
  */
-Atom CStringToClause(char const * cString);
+Formula * CStringToClause(char const * cString);
 
 
 #endif	// CLAUSEBUILDER_H

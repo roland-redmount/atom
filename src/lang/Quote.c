@@ -9,7 +9,6 @@
 #include "lang/Formula.h"
 
 
-
 static void quoteSetTuple(TypedTuple * tuple, TypedAtom quote, TypedAtom quoted)
 {
 	TypedTupleSetElement(
@@ -43,7 +42,7 @@ Atom CreateQuote(Atom quoted)
 	quoteSetTuple(tuple, invalidAtom, CreateTypedAtom(AT_ID, quoted));
 	IFactAddTuple(&draft, tuple);
 	FreeTypedTuple(tuple);
-	IFactEndPredicateForm(&draft);
+	IFactEndConjunction(&draft);
 
 	return IFactEnd(&draft);
 }

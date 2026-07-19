@@ -24,15 +24,14 @@ Atom CreateConjunctionForm(Atom const * clauseForms, size8 nClauseForms)
 
 	AddMultisetToIFactFromArrays(&draft, uniqueClauseForms, multiplicities, nUniqueClauseForms);
 
-	// (clause-form @form)
-	IFactBeginConjunction(
-		&draft,
+	// (conjunction-form @form)
+	RelationTable conjunctionFormTable = FindRelationTable(
 		GetCorePredicateForm(FORM_CONJUNCTION_FORM),
-		(byte[]) {AT_ID},
-		0
-	);
+		(byte[]) {AT_ID}
+	);	
+	IFactBeginConjunction(&draft, &conjunctionFormTable, 0);
 	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
-	IFactEndPredicateForm(&draft);	
+	IFactEndConjunction(&draft);	
 
 	return IFactEnd(&draft);
 }

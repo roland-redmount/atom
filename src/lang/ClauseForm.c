@@ -22,17 +22,17 @@ Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
 	IFactDraft draft;
 	IFactBegin(&draft);
 
+	// TODO: this needs a separate (multiset:ID element:ID multiple:UINT) relation 
 	AddMultisetToIFactFromArrays(&draft, uniqueTermForms, multiplicities, nUniqueTermForms);
 
 	// (clause-form @form)
-	IFactBeginConjunction(
-		&draft,
+	RelationTable clauseFormTable = FindRelationTable(
 		GetCorePredicateForm(FORM_CLAUSE_FORM),
-		(byte[]) {AT_ID},
-		0
-	);
+		(byte[]) {AT_ID}
+	);	
+	IFactBeginConjunction(&draft, &clauseFormTable, 0);
 	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
-	IFactEndPredicateForm(&draft);	
+	IFactEndConjunction(&draft);	
 
 	return IFactEnd(&draft);
 }

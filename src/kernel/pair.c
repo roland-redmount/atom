@@ -48,7 +48,7 @@ void AddPairToIFact(IFactDraft * draft, TypedAtom left, TypedAtom right)
 	pairSetTuple(tuple, (TypedAtom) {0}, left, right);
 	IFactAddTuple(draft, tuple);
 	FreeTypedTuple(tuple);
-	IFactEndPredicateForm(draft);
+	IFactEndConjunction(draft);
 }
 
 

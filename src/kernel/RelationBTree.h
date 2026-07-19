@@ -8,6 +8,7 @@
 #define RELATION_B_TREE_H
 
 #include "btree/btree.h"
+#include "kernel/RelationTable.h"
 #include "kernel/tuple.h"
 #include "kernel/service.h"
 
@@ -15,30 +16,42 @@
 // TODO: replace this with a service provider registry ...
 extern MachineServiceProvider bTreeServiceProvider;
 
+extern RelationTableProvider btreeTableProvider;
+
+/*
 typedef struct s_RelationBTree {
 	BTree * btree;
-	size8 nColumns;
-	byte atomTypes[];
+	// NOTE: these are now store inh RelationTable,
+	// so we really just need a BTree * 
+	// size8 nColumns;
+	// byte atomTypes[];
 } RelationBTree;
+*/
+
+/**
+ * Register relation table provider
+ */
+void RelationBTreeInitialize(void);
 
 /**
  * Create a RelationBTree.
- * TODO: for a typed version, this needs the column types.
- * We then create services with the corresponding signatures.
+ * NOTE: use CreateRelationTable() instead
  */
-RelationBTree * CreateRelationBTree(size8 nColumns, byte const * atomTypes);
+// RelationBTree * CreateRelationBTree(size8 nColumns, byte const * atomTypes);
 
-void FreeRelationBTree(RelationBTree * tree);
+// NOTE: this should be handled automatically by RelationTable
+// void FreeRelationBTree(RelationBTree * tree);
 
 // size8 RelationBTreeNColumns(RelationBTree const * table);
-size32 RelationBTreeNRows(RelationBTree const * tree);
+// size32 RelationBTreeNRows(RelationBTree const * tree);
 
 // NOTE: iterating over a B-tree should now be done by calling the appropriate service.
 // The service signature determines the input arguments. The first n arguments
 // are inputs, and the remainder outputs; this is due to B-tree lexiographic ordering.
+// TODO: this should be handled by a service call
 
 typedef struct s_RelationBTreeIterator {
-	RelationBTree * tree;
+	RelationTable * table;
 	BTreeIterator treeIterator;
 	struct s_BTreeTuple * queryTuple;
 } RelationBTreeIterator;
@@ -52,7 +65,7 @@ typedef struct s_RelationBTreeIterator {
  * The tree is write-locked to prevent modification while iterating.
  */
 void RelationBTreeIterate(
-	RelationBTree * tree, Tuple const * queryTuple, size8 nInputs, RelationBTreeIterator * iterator);
+	RelationTable * table, Atom const * queryTuple, size8 nInputs, RelationBTreeIterator * iterator);
 
 /**
  * Advance the iterator to the next tuple matching the query, if any.
@@ -64,7 +77,7 @@ bool RelationBTreeIteratorNext(RelationBTreeIterator * iterator);
 /**
  * Returns true if RelationBTreeIteratorNext() has not been called.
  */
-bool BTreeIteratorBeforeFirst(BTreeIterator * iterator);
+bool RelationBTreeIteratorBeforeFirst(RelationBTreeIterator * iterator);
 
 /**
  * Get the atom at 0-based index i in the current tuple.
@@ -74,7 +87,7 @@ Atom RelationBTreeIteratorGetAtom(RelationBTreeIterator const * iterator, index8
 /**
  * Copy the iterator's current tuple into a tuple provided by the caller.
  */
-void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, Tuple * tuple);
+void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, Atom * tuple);
 
 /**
  * View the iterator's current tuple
@@ -87,31 +100,28 @@ Atom const * RelationBTreeIteratorPeekTuple(RelationBTreeIterator const * iterat
 void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator);
 
 /**
- * Query the relation and return a single tuple.
+ * Query a B-tree relation table and return a single tuple.
  * The relation table must have exactly one tuple matching the query.
  */
-void RelationBTreeQuerySingle(BTree * tree, Tuple const * queryTuple, Tuple * resultTuple);
+void RelationBTreeQuerySingle(RelationTable * table, Atom const * queryTuple, size8 nInputs, Atom * resultTuple);
 
 /**
  * Query the relation and return a single TypedAtom from a single tuple.
  * The relation table must have exactly one tuple matching the query.
  */
-TypedAtom RelationBTreeQuerySingleAtom(BTree * tree, Tuple const * queryTuple, index8 index);
+Atom RelationBTreeQuerySingleAtom(RelationTable * table, Atom const * queryTuple, size8 nInputs, index8 index);
 
 
 /**
  * Add a single tuple to the relation, acquiring each atom in the tuple.
  * Does not add entries to lookup; see AssertFact().
- * To mark a protected atom (for ifacts), set protected to a 1-based position.
+ * For ifacts, the identified parameter is a 1-based position of the identified atom;
+ * else set identified = 0
  * 
  * NOTE: Should this really be acquiring atoms? Or move that to AssertFact() ?
  */
-byte RelationBTreeAddTuple(RelationBTree * tree, Atom const * tuple, uint8 protected);
+// byte RelationBTreeAddTuple(RelationBTree * tree, Atom const * tuple, uint8 identified);
 
-// result codes for RelationBTreeAddTuple()
-#define TUPLE_ADDED			1
-#define TUPLE_EXISTS		2
-// #define TUPLE_PROTECTED		3	// adding would violate an ifact definition
 
 
 /**
@@ -121,7 +131,7 @@ byte RelationBTreeAddTuple(RelationBTree * tree, Atom const * tuple, uint8 prote
  * Releases a reference to each AT_ID atom in a removed tuple, except identified atoms.
  * To remove all tuples, set queryTuple to 0 (the nuclear option).
  */
-size32 RelationBTreeRemoveTuples(BTree * tree, Tuple const * queryTuple, uint8 identified);
+size32 RelationBTreeRemoveTuples(RelationTable * table, Atom const * queryTuple, size8 nInputs, uint8 identified);
 
 // #define REMOVE_NORMAL		0
 // #define REMOVE_PROTECTED	1
@@ -130,6 +140,6 @@ size32 RelationBTreeRemoveTuples(BTree * tree, Tuple const * queryTuple, uint8 i
 /**
  * Print out an entire relation table, for debugging
  */
-void RelationBTreeDump(BTree * tree);
+void RelationBTreeDump(RelationTable * table);
 
 #endif	// RELATION_B_TREE_H

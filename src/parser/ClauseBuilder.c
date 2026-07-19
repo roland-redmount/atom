@@ -110,7 +110,7 @@ void CleanupClauseBuilder(ClauseBuilder * builder)
 }
 
 
-Atom CStringToClause(char const * cString)
+Formula * CStringToClause(char const * cString)
 {
 	size32 length = CStringLength(cString);
 	Tokenizer tokenizer;

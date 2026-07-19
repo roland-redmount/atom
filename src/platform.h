@@ -72,8 +72,7 @@ typedef uint64_t addr64;
 
 /**
  * The ASSERT() macro is used to ensure conditions hold at various points
- * throughout the code base. It is defined only in DEBUG builds to avoid
- * spurious code generation in release builds.
+ * throughout the code base. It is defined only in DEBUG builds.
  */
 #ifdef DEBUG
 #define ASSERT(condition) {\
@@ -83,7 +82,7 @@ typedef uint64_t addr64;
 	}\
 }
 #else
-#define ASSERT(condition)
+#define ASSERT(condition) {if(condition) {}}
 #endif
 
 

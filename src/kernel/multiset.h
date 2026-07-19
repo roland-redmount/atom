@@ -54,7 +54,7 @@ size32 MultisetGetElementMultiple(Atom multiset, TypedAtom element);
 /**
  * Assign values to a tuple of the (multiset element multiple) relation
  */
-void MultisetSetTuple(TypedTuple * tuple, TypedAtom multiset, TypedAtom element, TypedAtom multiple);
+void MultisetSetTuple(Atom * tuple, Atom multiset, Atom element, Atom multiple);
 
 /**
  * Find an order for a given array of elements consistent with

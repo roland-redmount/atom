@@ -13,8 +13,6 @@
 #ifndef IFACT_H
 #define IFACT_H
 
-#include "kernel/agentregistry.h"
-// #include "kernel/RelationBTree.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/typedtuple.h"
 
@@ -27,13 +25,14 @@ struct s_ServiceRecord;
  * specifying the predicate form and atom types.
  */
 typedef struct s_IFactConjunction {
-	Atom predicateForm;				// predicate form for the relation
-	byte * columnTypes;
-	// BTree * btree;			// B-tree storing the relation
-	// ServiceRecord const * serviceRecord;
-	Agent * agent;
+	// Atom predicateForm;				// predicate form for the relation
+	// byte * columnTypes;
+	// relation table storing tuples for this conjunction
+	RelationTable const * table;
+	// service for retrieving existing tuples
+	Service const * service;
 	index8 idColumn;		// position of the identified atom in the tuple
-	size8 nColumns;
+	// size8 nColumns;
 	size16 nRows;			// number of tuples in this conjunction
 } __attribute__((packed)) IFactConjunction;
 
@@ -88,25 +87,23 @@ void FreeIFacts(void);
 void IFactBegin(IFactDraft * draft);
 
 /**
- * Begin a new conjunction for the IFactDraft, identified by an
- * (form, atom types) pair.
+ * Begin a new conjunction for the IFactDraft, storing tuples in the given table.
  * The idColumn indicates the actor that is being defined by the IFact.
  */
-void IFactBeginConjunction(
-	IFactDraft * draft, Atom predicateForm, byte const * atomTypes, index8 idColumn);
+void IFactBeginConjunction(IFactDraft * draft, RelationTable * table, index8 idColumn);
 
 /**
- * Add one tuple, defining one predicate of the current predicate form.
- * The atom in the ID column of the identified fact is ignored; it will
+ * Add one tuple, defining one predicate of the current conjunction (predicate form).
+ * The atom in the ID column of the conjunction is ignored; it will
  * be computed by IFactEnd()
  */
-void IFactAddTuple(IFactDraft * draft, Atom const * tuple);
+void IFactAddTuple(IFactDraft * draft, Atom const tuple[]);
 
 /**
  * End the current predicate form. This function must be called before
  * calling IFactEnd(). Returns the number of predicates for this form.
  */
-size32 IFactEndPredicateForm(IFactDraft * draft);
+size32 IFactEndConjunction(IFactDraft * draft);
 
 /**
  * Return the number of tupled added so far for the current predicate form.
@@ -125,7 +122,7 @@ Atom IFactEnd(IFactDraft * draft);
  * Here, a precomputed AT_ID hash must be provided, and the given assertFact()
  * is used to assert identifying facts instead of the standard AssertFact().
  */
-Atom IFactEndBootstrap(IFactDraft * draft, data64 hash, void (* assertFact)(Atom, TypedTuple const *));
+Atom IFactEndBootstrap(IFactDraft * draft, data64 hash); // , void (* assertFact)(Atom, TypedTuple const *, uint8));
 
 /**
  * Acquire a reference to an AT_ID atom.

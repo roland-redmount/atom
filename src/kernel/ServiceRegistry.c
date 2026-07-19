@@ -24,8 +24,12 @@ struct {
 	ServiceRecord coreServices[N_CORE_PREDICATES + 1];
 } registry;
 
-
-int8 CompareServiceRecords(ServiceRecord const * record, ServiceRecord const * recordOrKey)
+/**
+ * Compare service record based on the service atom field.
+ * Two ServiceRecord compare equal if (1) both forms and parameters match, or
+ * (2) forms match and serviceOrKey is 0.
+ */
+static int8 compareServiceRecords(ServiceRecord const * record, ServiceRecord const * recordOrKey)
 {
 	if(record->form.hash < recordOrKey->form.hash)
 		return -1;
@@ -43,7 +47,7 @@ int8 CompareServiceRecords(ServiceRecord const * record, ServiceRecord const * r
 
 static int8 btreeCompareServiceRecords(void const * item, void const * itemOrKey, size32 itemSize)
 {
-	return CompareServiceRecords((ServiceRecord *) item, (ServiceRecord *) itemOrKey);
+	return compareServiceRecords((ServiceRecord *) item, (ServiceRecord *) itemOrKey);
 }
 
 
@@ -101,13 +105,13 @@ ServiceRecord const * RegistryGetCoreServiceRecord(index32 index)
 }
 
 
-BTree * RegistryGetCoreBTreeService(index32 index)
-{
-	Service const * service = registry.coreServices[index].service;
-	ASSERT(service->type == SERVICE_MACHINE)
-	ASSERT(service->impl.machine.provider == &(bTreeServiceProvider))
-	return (BTree *) service->impl.machine.providerData;
-}
+// RelationBTree * RegistryGetCoreBTreeService(index32 index)
+// {
+// 	Service const * service = registry.coreServices[index].service;
+// 	ASSERT(service->type == SERVICE_MACHINE)
+// 	ASSERT(service->impl.machine.provider == &(bTreeServiceProvider))
+// 	return (RelationBTree *) service->impl.machine.providerData;
+// }
 
 
 void FreeRegistry(void)
@@ -117,15 +121,15 @@ void FreeRegistry(void)
 }
 
 
-TypedAtom btreeParameterGenerator(index32 index, void const * data)
-{
-	Atom parameter = (Atom) {
-		.parameter = {.number = index + 1, .io = PARAMETER_IN_OUT, .atomType = AT_NONE}
-	};
-	return CreateTypedAtom(AT_PARAMETER, parameter);
-}
+// TypedAtom btreeParameterGenerator(index32 index, void const * data)
+// {
+// 	Atom parameter = (Atom) {
+// 		.parameter = {.number = index + 1, .io = PARAMETER_IN_OUT, .atomType = AT_NONE}
+// 	};
+// 	return CreateTypedAtom(AT_PARAMETER, parameter);
+// }
 
-
+/*
 static void setupBTreeParameters(RelationBTree * tree, Atom * parameters)
 {
 	for(index8 i = 0; i < tree->nColumns; i++) {
@@ -140,7 +144,7 @@ static void setupBTreeParameters(RelationBTree * tree, Atom * parameters)
 }
 
 
-void RegistryAddCoreBTreeService(index32 index, Atom form, BTree * btree)
+void RegistryAddCoreBTreeService(index32 index, Atom form, RelationBTree * btree)
 {
 	ASSERT(index >= 1);
 	ASSERT(index <= N_CORE_PREDICATES)
@@ -155,7 +159,6 @@ void RegistryAddCoreBTreeService(index32 index, Atom form, BTree * btree)
 	// by RegistryFinalizeCoreServices()
 	// TODO: is this still necessary when parameters is an array?
 }
-
 
 void RegistryFinalizeCoreServices(void)
 {
@@ -179,8 +182,9 @@ void RegistryFinalizeCoreServices(void)
 		ReleaseService(record->service);
 	}
 }
+*/
 
-
+// TODO: revise this 
 void RegistryTeardownCoreServices(void)
 {
 	// first release and zero out parameter lists from the stored service records
@@ -240,8 +244,9 @@ void RegistryAddService(Atom predicateForm, Atom const * parameters, Service con
 }
 
 /**
- * TODO: This is specific to the B-tree service provider, should move to RelationBTree
+ * TODO: remove this
  */
+/*
 void RegistryAddBTreeService(Atom form, RelationBTree * tree)
 {
 	Atom parameters[tree->nColumns];
@@ -250,7 +255,7 @@ void RegistryAddBTreeService(Atom form, RelationBTree * tree)
 	return RegistryAddService(form, parameters, service);
 	ReleaseService(service);
 }
-
+*/
 
 void RegistryRemoveService(ServiceRecord * record)
 {
@@ -320,7 +325,7 @@ bool RegistryIteratorNext(RegistryIterator * iterator)
 
 	if(foundItem) {
 		ServiceRecord const * btreeRecord = BTreeIteratorPeekItem(&(iterator->btreeIterator));
-		if(CompareServiceRecords(btreeRecord, &(iterator->keyRecord)) == 0)
+		if(compareServiceRecords(btreeRecord, &(iterator->keyRecord)) == 0)
 			return true;		
 	}
 	return false;
@@ -333,9 +338,9 @@ void RegistryIteratorEnd(RegistryIterator * iterator)
 }
 
 
-ServiceRecord RegistryFindService(Atom form, Atom const * parameters)
+Service const * RegistryFindService(Atom form, Atom const * parameters)
 {
-	return getServiceRecord(form, parameters);
+	return getServiceRecord(form, parameters).service;
 }
 
 
@@ -346,7 +351,7 @@ void PrintServiceRecord(ServiceRecord const * record)
 		TypedTupleSetElement(parameters, i, 
 			CreateTypedAtom(AT_PARAMETER, record->parameters[i]));
 	}
-	PrintFormActorsAsFormula(service->form, parameters);
+	PrintFormActorsAsFormula(record->form, parameters);
 	FreeTuple(parameters);
 	PrintCString(" => ");
 	PrintService(record->service);

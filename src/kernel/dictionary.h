@@ -6,7 +6,7 @@
 #define DICTIONARY_H
 
 #include "kernel/typedtuple.h"
-#include "lang/Atom.h"
+#include "lang/Formula.h"
 #include "btree/btree.h"
 
 // This structure uniquely defines a dictionary entry
@@ -26,7 +26,7 @@ void TeardownDictionary(void);
 /**
  * Add a clause (formula) to the dictionary.
  */
-DictionaryEntry DictionaryAddClause(Atom clause);
+DictionaryEntry DictionaryAddClause(Formula const * clause);
 
 /**
  * Parse a string into a clause (formula) and add it to the dictionary.

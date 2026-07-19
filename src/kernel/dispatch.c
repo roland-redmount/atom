@@ -10,7 +10,7 @@
 #include "lang/Form.h"
 #include "lang/FormPermutation.h"
 #include "lang/Formula.h"
-#include "lang/Quote.h"
+// #include "lang/Quote.h" 
 #include "lang/SubstitutionList.h"
 #include "lang/Variable.h"
 #include "lang/unification.h"
@@ -23,16 +23,13 @@
  * Each service output parameter must match a query variable or output parameter.
  * Returns true if the tuples match.
  */
-static bool signatureQueryTupleMatch(Atom parameterList, TypedTuple const * queryActors, index8 const * permutation)
+static bool signatureQueryTupleMatch(Atom const * parameters, TypedTuple const * queryActors, index8 const * permutation)
 {
-	// both tuples must have same number of atoms
-	ASSERT(queryActors->nAtoms == ListLength(parameterList));
 	// iterate over query tuple
 	for(index8 i = 0; i < queryActors->nAtoms; i++) {
 		TypedAtom queryAtom = TypedTupleGetElement(queryActors, permutation[i]);
-		Atom serviceParameter = ListGetElement(parameterList, i + 1).atom;
-		byte serviceParameterType = serviceParameter.parameter.atomType;
-		switch(serviceParameter.parameter.io) {
+		byte serviceParameterType = parameters[i].parameter.atomType;
+		switch(parameters[i].parameter.io) {
 		case PARAMETER_IN:
 			if(queryAtom.type == AT_PARAMETER) {
 				if(queryAtom.atom.parameter.io != PARAMETER_IN)
@@ -66,11 +63,6 @@ static bool signatureQueryTupleMatch(Atom parameterList, TypedTuple const * quer
 					return false;
 			}
 			break;
-		
-		case PARAMETER_IN_OUT:
-			// any query atom matches
-			// TODO: fix this
-			;
 		}
 	}
 	return true;
@@ -82,14 +74,14 @@ static bool signatureQueryTupleMatch(Atom parameterList, TypedTuple const * quer
  * and test each for a match against parametersList.
  * Returns true if a match is found.
  */
-bool PermutationMatch(Atom predicateForm, Atom parametersList, TypedTuple const * queryActors, index8 * permutation)
+static bool permutationMatch(Atom predicateForm, Atom const * parameters, TypedTuple const * queryActors, index8 * permutation)
 {
 	// iterate over all permutations of the form
 	FormIterator * iter = CreateFormIterator(predicateForm);
 	bool match = false;
 	do {
 		GetTuplePermutation(iter, permutation);
-		if(signatureQueryTupleMatch(parametersList, queryActors, permutation)) {
+		if(signatureQueryTupleMatch(parameters, queryActors, permutation)) {
 			match = true;
 			break;
 		}
@@ -111,7 +103,7 @@ bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRe
 	bool match = false;
 	while(RegistryIteratorNext(&iterator)) {
 		ServiceRecord const * currentRecord = RegistryIteratorPeekService(&iterator);
-		if(PermutationMatch(predicateForm, currentRecord->parameters, queryActors, permutation)) {
+		if(permutationMatch(predicateForm, currentRecord->parameters, queryActors, permutation)) {
 			match = true;
 			// copy the record to the caller
 			*record = *currentRecord;
@@ -123,16 +115,8 @@ bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRe
 }
 
 
-bool DispatchQueryFormula(Atom queryTerm, ServiceRecord * record, index8 * permutation)
+bool DispatchQueryFormula(Formula * queryTerm, ServiceRecord * record, index8 * permutation)
 {
-	Atom queryTermForm = FormulaGetForm(queryTerm);
-	ASSERT(IsTermForm(queryTermForm))
-	Atom queryActorsList = FormulaGetActors(queryTerm);
-	size8 termArity = TermFormArity(queryTermForm);
-	TypedTuple * queryActors = CreateTypedTuple(termArity);
-	CopyListToTuple(queryActorsList, queryActors);
-	bool found = DispatchQuery(queryTermForm, queryActors, record, permutation);
-	FreeTypedTuple(queryActors);
-	return found;
+	return DispatchQuery(queryTerm->form, queryTerm->actors, record, permutation);
 }
 

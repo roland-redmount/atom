@@ -173,9 +173,7 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		
 		// TODO: move this somewhere better
 		if(IsPair(typedAtom.atom)) {
-			if(IsFormula(typedAtom.atom))
-				PrintFormula(typedAtom.atom);
-			else if(IsQuote(typedAtom.atom))
+			if(IsQuote(typedAtom.atom))
 				PrintQuoted(typedAtom.atom);
 			else
 				PrintPair(typedAtom.atom);

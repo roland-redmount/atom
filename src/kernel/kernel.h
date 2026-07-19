@@ -1,8 +1,10 @@
 /**
- * Main kernel routines
+ * The kernel provides the essential "core" relation tables and services
  */
 
 #include "kernel/typedtuple.h"
+#include "kernel/RelationTable.h"
+#include "kernel/service.h"
 #include "platform.h"
 
 
@@ -41,9 +43,10 @@ void KernelShutdown(void);
 void AssertFact(Atom predicateForm, TypedTuple const * actors, uint8 idPosition);
 
 /**
- * High level methd to retract a fact.
+ * High level method to retract a fact.
+ * The actors tuple may not contain variables.
  * Removes the tuple from the corresponding relation table
- * and removes entries from the lookup table.
+ * and removes corresponding entries from the lookup table.
  * This function should always succeed, as facts can always
  * be retracted at any time.
  */
@@ -70,13 +73,14 @@ void RetractFact(Atom form, TypedTuple * actors);
 #define	ROLE_CLAUSE_FORM			6
 #define	ROLE_CONJUNCTION_FORM		7
 
-#define ROLE_LIST					8
+#define ROLE_LIST					8       // was required for formula -- can be skipped 
 #define ROLE_POSITION				9
 #define ROLE_LENGTH					10
 
-#define ROLE_PAIR					11		// required for formula
+#define ROLE_PAIR					11		// was required for formula -- can be skipped
 #define ROLE_LEFT					12
 #define ROLE_RIGHT					13
+
 #define	ROLE_QUOTE					14
 #define	ROLE_QUOTED					15
 #define	ROLE_STRING					16		// not really core language
@@ -86,9 +90,10 @@ void RetractFact(Atom form, TypedTuple * actors);
 
 
 /**
- * Indexes the for core predicates forms into lookup tables (see kernel.c)
- * and into to the "core" B-tree services in ServiceRegistry.
- * For forms 1 and 2 these are also the hardcoded atom values.
+ * Indexes the for core predicates forms into predicate data tables (see kernel.c)
+ * 
+ * NOTE: we should revise this as there may now be multiple services
+ * per relation table.
  */
 
 #define FORM_MULTISET_ELEMENT_MULTIPLE		1	// (multiset element multiple)
@@ -114,6 +119,15 @@ Atom GetCorePredicateForm(index32 formId);
  * Lookup a core role name. Returns an AT_NAME atom.
  */
 Atom GetCoreRoleName(index32 roleId);
+
+RelationTable GetCoreRelationTable(index32 formId);
+
+Service const * GetCoreService(index32 formId);
+
+/**
+ * Get the atom types array for the given core predicate form/table
+ */
+byte const * GetCorePredicateAtomTypes(index32 formId);
 
 /**
  * Find the index in "canonical order" of a role in the

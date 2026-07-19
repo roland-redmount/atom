@@ -1,12 +1,11 @@
 /**
  * A Tuple consists of an Atom array and atom count.
+ * NOTE: this might not be necesssary; can use Atom[] atoms, size8 nAtoms
  */
 #ifndef TUPLE_H
 #define TUPLE_H
 
 #include "lang/Atom.h"
-
-
 
 typedef struct s_Tuple {
 	size8 nAtoms;

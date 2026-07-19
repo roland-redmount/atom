@@ -5,6 +5,9 @@
 #include "kernel/typedtuple.h"
 
 
+typedef struct s_Service Service;
+typedef struct s_ServiceContext ServiceContext;
+
 /**
  * A machine service provider is an implementation of a particular type
  * of machine services, such as B-Tree relations or arithmetic functions.
@@ -12,9 +15,7 @@
  * various relations.
  */
  
-struct s_ServiceContext;
-
-typedef bool (*MachineServiceCall)(struct s_ServiceContext * context);
+typedef bool (*MachineServiceCall)(ServiceContext * context);
 
 typedef struct s_MachineServiceProvider {
 	/**
@@ -23,7 +24,7 @@ typedef struct s_MachineServiceProvider {
 	 * This method must return a pointer to its context (or 0 if none).
 	 * This context pointer will then be supplied to call() and finalizeContext().
 	 */
-	void (*setupContext)(struct s_ServiceContext * context);
+	void (*setupContext)(ServiceContext * context);
 
 	/**
 	 * Call (resume) an executing service, return true if a tuple was produced,
@@ -35,9 +36,14 @@ typedef struct s_MachineServiceProvider {
 	MachineServiceCall call;
 
 	/**
-	 * Any code that needs to run to finalize the service after termination
+	 * Finalize a service context after termination
 	 */
-	void (*finalizeContext)(struct s_ServiceContext * context);
+	void (*finalizeContext)(ServiceContext * context);
+
+	/**
+	 * Finalize the machine service 
+	 */
+	void (*finalizeService)(Service * service);
 
 	size32 contextSize;
 
@@ -92,8 +98,6 @@ typedef struct s_MachineServiceProvider {
 	SERVICE_MACHINE = 5,
 };
 
-typedef struct s_Service Service;
-
 struct s_Service {
 	enum ServiceType type;
 	// Number of arguments for this service
@@ -106,7 +110,7 @@ struct s_Service {
 		struct {
 			Service * childService;
 			// Stored constants
-			TypedTuple * constants;
+			Atom * constants;
 			// 1-based indices of each child argument into the parent arguments,
 			// or 0 if the child argument is a constant.
 			// NOTE: the parent:child mapping is 1:n, a parent argument
@@ -147,7 +151,7 @@ struct s_Service {
  * NOTE: If child arguments are missing from the argumentMap, the resulting tuples may not be unique.
  */
 Service * CreatePermuteService(
-	size8 nArguments, TypedTuple const * constants, index8 const * argumentMap, Service * childService);
+	size8 nArguments, Atom const * constants, index8 const * argumentMap, Service * childService);
 
 /**
  * Create a machine code service
@@ -174,7 +178,6 @@ Service * CreateDeduplicateService(Service * childService);
  */
 void AcquireService(Service * service);
 
-
 /**
  * Remove one reference to the given service, deallocate if references reach zero.
  */
@@ -187,11 +190,11 @@ void ReleaseService(Service * service);
  * Sub-services will have their own execution contexts, which are initialized
  * as necessary.
  */
-typedef struct s_ServiceContext {
+struct s_ServiceContext {
 	Service const * service;
-	TypedTuple * arguments;
+	Atom * arguments;
 	byte data[];
-} ServiceContext;
+};
 
 
  /**
@@ -199,7 +202,7 @@ typedef struct s_ServiceContext {
   * with the given arguments tuple. Each ServiceCall() to this context
   * will write its result into the arguments tuple.
   */
-ServiceContext * ServiceCreateContext(Service const * service, TypedTuple * arguments);
+ServiceContext * ServiceCreateContext(Service const * service, Atom * arguments);
 
 /**
  * Execute a service with a given context. Returns true if a tuple was produced,
@@ -212,6 +215,11 @@ bool ServiceCall(ServiceContext * context);
  * Finalize a service context, releasing any allocated resources.
  */
 void ServiceFreeContext(ServiceContext * context);
+
+/**
+ * Initialize a service context, perform one call, and terminate.
+ */
+ServiceContext * ServiceCallOnce(Service const * service, Atom * arguments);
 
 
 void PrintService(Service const * service);

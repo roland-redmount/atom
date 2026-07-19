@@ -5,6 +5,7 @@
 #include "kernel/multiset.h"
 #include "kernel/service.h"
 #include "kernel/Parameter.h"
+#include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/ClauseForm.h"
 #include "lang/Formula.h"
@@ -212,27 +213,30 @@ static Service * compileTerm(
 			nConstants++;
 		}
 		TypedTupleSetElement(serviceParameters, permutation[i],
-			ListGetElement(termServiceRecord.parameters, i + 1));
+			CreateTypedAtom(AT_PARAMETER, termServiceRecord.parameters[i + 1]));
 	}
-	TypedTuple * constants = 0;
 	bool deduplicate = false;
+	Service * service;
 	if(nConstants > 0) {
-		// Collect constants tuple
-		constants = CreateTypedTuple(nConstants);
+		Atom constants[nConstants];
 		for(index8 i = 0, k = 0; i < termActors->nAtoms; i++) {
 			TypedAtom actor = TypedTupleGetElement(termActors, permutation[i]);
 			if(actor.type != AT_PARAMETER) {
-				TypedTupleSetElement(constants, k++, actor);
+				constants[k++] = actor.atom;
 				// TODO: we should only deduplicate if the "constant" is a variable?
 				deduplicate = true;
 			}
 		}
+		service = CreatePermuteService(
+			nArguments, constants, argumentMap, termServiceRecord.service);
 	}
+	else {
+		service = CreatePermuteService(
+			nArguments, 0, argumentMap, termServiceRecord.service);
+	}
+
 	// TODO: if we have an identity argument map, we can just return the child service
-	Service * service = CreatePermuteService(
-		nArguments, constants, argumentMap, termServiceRecord.service);
-	if(constants)
-		FreeTypedTuple(constants);
+
 	// Wrap in a deduplicate service if needed
 	if(deduplicate) {
 		Service * deduplicateService = CreateDeduplicateService(service);
@@ -434,44 +438,47 @@ static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
 
 	Service * service = 0;
 
-	RelationBTreeIterator btreeIterator;
-	BTree * multisetBTree = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
-	TypedTuple * multisetQueryTuple = CreateTypedTuple(3);
-	MultisetSetTuple(
-		multisetQueryTuple,
-		anonymousVariable,
-		CreateTypedAtom(AT_ID, queryTermForm),
-		anonymousVariable
+	// TODO: this must be the typed relation (multiset:ID element:ID multiple:UINT),
+	// while for predicates roles we need (multiset:ID element:NAME multiple:UINT).
+	RelationTable multisetTable = FindRelationTable(
+		GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE),
+		GetCorePredicateAtomTypes(FORM_MULTISET_ELEMENT_MULTIPLE)
 	);
-	RelationBTreeIterate(multisetBTree, multisetQueryTuple, &btreeIterator);
+
+	RelationBTreeIterator btreeIterator;
+	Atom multisetQueryTuple[3];
+	// TODO: the element role of (multiset element multiple) may not be the
+	// first column, so we have to table scan and filter.
+	MultisetSetTuple(multisetQueryTuple, (Atom) {0}, queryTermForm, (Atom) {0});
+	RelationBTreeIterate(&multisetTable, multisetQueryTuple, 1, &btreeIterator);
 	while(RelationBTreeIteratorNext(&btreeIterator)) {
 		// Found a multiset where the term form occurs
-		TypedAtom clauseForm = RelationBTreeIteratorGetAtom(
+		Atom clauseForm = RelationBTreeIteratorGetAtom(
 			&btreeIterator,
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 		);
 		size8 multiple = RelationBTreeIteratorGetAtom(
 			&btreeIterator,
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)
-		).atom._uint;
+		)._uint;
 		// Ensure the multiset is a clause form
-		if(!IsClauseForm(clauseForm.atom))
+		if(!IsClauseForm(clauseForm))
 			continue;
 
 		// Iterate over all rules (clauses) with this clause form.
 		DictionaryIterator dictIterator;
-		DictionaryIterate(clauseForm.atom, &dictIterator);
+		DictionaryIterate(clauseForm, &dictIterator);
 		TypedTuple * matchedTermActors = CreateTypedTuple(queryActors->nAtoms);
-		TypedTuple * substClauseActors = CreateTypedTuple(ClauseArity(clauseForm.atom));
+		TypedTuple * substClauseActors = CreateTypedTuple(ClauseArity(clauseForm));
 		while(DictionaryIteratorNext(&dictIterator)) {
 			TypedTuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
 			PrintCString("Matched rule: ");
-			PrintFormActorsAsFormula(clauseForm.atom, clauseActors);
+			PrintFormActorsAsFormula(clauseForm, clauseActors);
 			PrintChar('\n');
 
 			// Iterate over all occurences of the query term in the matched clause
 			// and find one that unifies, if any.
-			index8 matchedTermActorsIndex = ClauseGetTermActorsIndex(clauseForm.atom, queryTermForm, 1);
+			index8 matchedTermActorsIndex = ClauseGetTermActorsIndex(clauseForm, queryTermForm, 1);
 			bool foundTerm = false;
 			for(index8 m = 1; !foundTerm && (m <= multiple); m++) {
 				// extract actors for the matching term in the clause
@@ -483,12 +490,12 @@ static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
 				if(foundTerm) {
 					SubstituteTuple(&termSubst, clauseActors, substClauseActors);
 					PrintCString("Unified rule: ");
-					PrintFormActorsAsFormula(clauseForm.atom, substClauseActors);
+					PrintFormActorsAsFormula(clauseForm, substClauseActors);
 					PrintChar('\n');
 
-					index8 matchedTermIndex = ClauseGetTermIndex(clauseForm.atom, queryTermForm, m);
+					index8 matchedTermIndex = ClauseGetTermIndex(clauseForm, queryTermForm, m);
 					Service * newService = compileConjunction(
-						clauseForm.atom, substClauseActors, matchedTermIndex, termArity);
+						clauseForm, substClauseActors, matchedTermIndex, termArity);
 					if(newService) {
 						// Update the query actors from the clause actors
 						// to recover unified parameters
@@ -516,43 +523,34 @@ static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
 		FreeTypedTuple(matchedTermActors);
 	}
 	RelationBTreeIteratorEnd(&btreeIterator);
-	FreeTypedTuple(multisetQueryTuple);
 
 	return service;
 }
 
 
-bool CompileService(Atom queryTerm, ServiceRecord * record)
+Service const * CompileService(Formula const * queryTerm)
 {
-	Atom queryTermForm = FormulaGetForm(queryTerm);
-	ASSERT(IsTermForm(queryTermForm))
-	size8 arity = TermFormArity(queryTermForm);
-	TypedTuple * queryActors = CreateTypedTuple(arity);
-	CopyListToTuple(FormulaGetActors(queryTerm), queryActors);
+	ASSERT(IsTermForm(queryTerm->form))
+	// TypedTuple * queryActors = CreateTypedTuple(arity);
+	// CopyListToTuple(FormulaGetActors(queryTerm), queryActors);
 
 	// Generalize atoms in the query to parameters
 	// NOTE: the compilation process will determine the type
 	// of any output parameters. 
-	TypedTuple * serviceParameters = CreateTypedTuple(queryActors->nAtoms);
-	atomsToParameters(queryActors, serviceParameters);
-	FreeTypedTuple(queryActors);
+	TypedTuple * generalizedActors = CreateTypedTuple(queryTerm->actors->nAtoms);
+	atomsToParameters(queryTerm->actors, generalizedActors);
 
 	PrintCString("Generalized query: ");
-	PrintFormActorsAsFormula(queryTermForm, serviceParameters);
+	PrintFormActorsAsFormula(queryTerm->form, generalizedActors);
 	PrintChar('\n');
 
-	bool success;
-	record->service = compileService(queryTermForm, serviceParameters);
-	if(record->service) {
-		record->parameters = CreateListFromTuple(serviceParameters);
-		record->form = queryTermForm;
-		RegistryAddService(record);
-		IFactRelease(record->parameters);
-		ReleaseService(record->service);
-		success = true;
+	Service * service = compileService(queryTerm->form, generalizedActors);
+	if(service) {
+		// TODO: the service registry now expects a predicate form
+		Atom const * serviceParameters = TypedTuplePeekAtoms(generalizedActors);
+		RegistryAddService(queryTerm->form, serviceParameters, service);
+		ReleaseService(service);
 	}
-	else
-		success = false;
-	FreeTypedTuple(serviceParameters);
-	return success;
+	FreeTypedTuple(generalizedActors);
+	return service;
 }

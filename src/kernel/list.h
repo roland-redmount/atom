@@ -1,8 +1,9 @@
 /**
  * A list stores a sequence of n elements with positions 1, 2, ..., n.
  * 
+ * NOTE: this was a "core" class when a formula was implemented a pair
+ * of a form and and a list. It could be removed from the kernel.
  */
-
 
 #ifndef LIST_H
 #define	LIST_H
@@ -18,19 +19,22 @@
  */
 typedef Atom (*ListElementGenerator)(index32 index, void const * data);
 
-Atom CreateList(ListElementGenerator generator, void const * data, size32 nElements);
+Atom CreateList(ListElementGenerator generator, void const * data, byte elementType, size32 nElements);
 
 /**
  * Create a list from an array of typed atoms
  */
-Atom CreateListFromArray(TypedAtom const * listElements, size8 nAtoms);
+Atom CreateListFromArray(Atom const * listElements, byte elementType, size8 nAtoms);
 
-Atom CreateListFromTuple(TypedTuple const * tuple);
+// Atom CreateListFromTuple(TypedTuple const * tuple);
 
 /**
  * Add list ifacts obtained from the generator to an exising IFact draft.
+ * TODO: this now assumes the element type is AT_LETTER. We need to take element type
+ * as a parameter and use the corresponding (typed) relation table.
  */
-void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void const * data, size32 nElements);
+void AddListToIFact(
+	IFactDraft * draft, ListElementGenerator generator, void const * data, byte elementType, size32 nElements);
 
 
 /**
@@ -68,7 +72,7 @@ size32 ListLength(Atom list);
  * 
  * NOTE: position is 1-based.
  */
-Atom ListGetElement(Atom list, index32 position);
+Atom ListGetElement(Atom list, byte elementType, index32 position);
 
 /**
  * Copy all list elements into a given array
@@ -79,7 +83,7 @@ Atom ListGetElement(Atom list, index32 position);
 /**
  * Set the elements of tuple according to the (list position element) form.
  */
-void ListSetTuple(Tuple * tuple, Atom list, Atom position, Atom element);
+void ListSetTuple(Atom * tuple, Atom list, Atom position, Atom element);
 
 /**
  * Return the first position p from the query

@@ -8,7 +8,7 @@
 #define DISPATCH_H
 
 #include "kernel/ServiceRegistry.h"
-
+#include "lang/Formula.h"
 
 /**
  * Dispatch a query, returning the matching service, if any.
@@ -21,7 +21,7 @@ bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRe
 /**
  * Same, using a term (formula) instead of a termform and actors tuple
  */
-bool DispatchQueryFormula(Atom queryTerm, ServiceRecord * record, index8 * permutation);
+bool DispatchQueryFormula(Formula * queryTerm, ServiceRecord * record, index8 * permutation);
 
 
 #endif	// DISPATCH_H

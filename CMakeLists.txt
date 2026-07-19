@@ -75,7 +75,6 @@ add_library(atom SHARED
     src/lang/FormPermutation.c
     src/lang/name.c
     src/lang/PredicateForm.c
-    src/lang/Quote.c
     src/lang/SubstitutionList.c
     src/lang/TermForm.c
     src/lang/TypedAtom.c
@@ -96,6 +95,7 @@ add_library(atom SHARED
     src/kernel/pair.c
     src/kernel/Parameter.c
     src/kernel/RelationBTree.c
+    src/kernel/RelationTable.c
     src/kernel/service.c
     src/kernel/ServiceRegistry.c
     src/kernel/string.c
