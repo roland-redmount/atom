@@ -17,6 +17,11 @@ int8 TupleCompare(Atom const tuple1[], Atom const tuple2[], size8 nAtoms)
     return 0;
 }
 
+bool TupleEqual(Atom const tuple1[], Atom const tuple2[], size8 nAtoms)
+{
+	return CompareMemory(tuple1, tuple2, nAtoms * sizeof(Atom)) == 0;
+}
+
 
 void PrintTuple(byte const atomTypes[], Atom const tuple[], size8 nAtoms)
 {

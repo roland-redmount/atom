@@ -106,6 +106,11 @@ Generally, all functions and structures that do not modify the contents of a poi
 The `const` keyword should always go to the right side of the constant thing: use `char const *` not `const char *`.  C allows const on either left or right side, but only for the first const in a declaration, so this style (known as "East const") is more consistent and easier to read.
 C 
 
+## 1-based positions vs. 0-based indexing
+
+C code naturally uses 0-based indexing into arrays (offsets). We use the data types `index8` through `index64` to indicate 0-based indices. Some data structure in this codebase uses 1-based indexing to match the atom language conventions. To help distinguish between the two, we refer to a 1-based index as "position" and use the `uint` data types for these values. 1-based positions have the advantage that a 0 value can be used as the "null" value (position not specified).
+
+
 ## Array intervals
 
 For indexes into arrays/strings that denote intervals, we use the convention of half-open intervals [a, b) as in Python, so that the interval ranges from x[a] to x[b-1]. This has several advantages, including that the interval length equals b - a.

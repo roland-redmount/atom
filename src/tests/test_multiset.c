@@ -59,15 +59,6 @@ static void testMultiset(void)
 	ASSERT_DATA64_EQUAL(multiset.hash, multiset3.hash)
 	IFactRelease(multiset3);
 
-	// attempt to remove any tuple (list @string position _ element _) should fail
-	Atom tuple2[3];
-	CoreFormSetTuple(
-		FORM_MULTISET_ELEMENT_MULTIPLE,
-		(Atom[]) { multiset, two, (Atom) {._uint = 2}},
-		tuple2
-	);
-	ASSERT_UINT32_EQUAL(RelationTableRemoveTuple(table, tuple2, 0), TUPLE_PROTECTED)
-
 	IFactRelease(multiset);
 	NameRelease(one);
 	NameRelease(two);

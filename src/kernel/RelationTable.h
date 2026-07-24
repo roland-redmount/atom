@@ -25,19 +25,13 @@ typedef struct s_RelationTable RelationTable;
  * Description of an implementation provider, such as RelationBTree.
  * One provider may provide multiple relation tables, sharing the same
  * callbacks.
- * 
- * TODO: I don't think these callbacks should take the RelationTable
- * as argument, only the RelationTable.data void * pointer. Implementations
- * should not depend on RelationTable. Any data needed by the implementation
- * must be stored in the data pointer.
  */
 typedef struct s_RelationTableProvider {
 
 	/** 
-	 * Create a new relation table, return its data structure; this will
-	 * be assigned to the RelationTable.data field.
-	 * This function should also register services associated with the table
-	 * in the service registry.
+	 * Create a new relation table, return its storage data structure; this will
+	 * be assigned to the RelationTable.stroage field and passed to the function
+	 * below.
 	 */
 	void * (*createTable)(size8 nColumns, byte const atomTypes[]);
 
@@ -47,23 +41,28 @@ typedef struct s_RelationTableProvider {
 	 * If idPosition is > 0 it indicates the 1-based position of an identified
 	 * atom (the tuple is part of an ifact).
 	 */
-	byte (*addTuple)(RelationTable const * table, Atom const tuple[], uint8 idPosition);
+	byte (*addTuple)(void * storage, Atom const tuple[], uint8 idPosition);
 
 	/**
-	 * Remove a tuple from the underlying relation.
-	 * The tuple must not contain any missing values
+	 * Remove a specific tuple from the underlying relation.
+	 * The removeTuple() function may assume the tuple contains no identified atom.
 	 */
-	byte (*removeTuple)(RelationTable const * table, Atom const tuple[]);
+	byte (*removeTuple)(void * storage, Atom const tuple[]);
+
+	/**
+	 * Remove all tuples containing idAtom in the idPosition column (1-based)
+	 */
+	void (*removeIFactTuples)(void * storage, Atom idAtom, uint8 idPosition);
 
 	/**
 	 * Return number of tuples in the relation table
 	 */
-	size32 (*numberOfTuples)(RelationTable const * table);
+	size32 (*numberOfTuples)(void * storage);
 
 	/**
 	 * Free a relation table. Typically deallocates the underlying data structures.
 	 */
-	void (*free)(RelationTable * table);
+	void (*free)(void * storage);
 
 } RelationTableProvider;
 
@@ -73,7 +72,7 @@ typedef struct s_RelationTableProvider {
 
 // result codes for removeTuple()
 #define TUPLE_REMOVED		1
-#define TUPLE_PROTECTED		2
+#define TUPLE_NOT_FOUND		2
 
 /**
  * A relation table implementation record, identified by (form, atomTypes).
@@ -87,7 +86,7 @@ struct s_RelationTable {
 	byte * atomTypes;
 	// provider may be 0 for computed relations
 	RelationTableProvider * provider;
-	void * data;	// any implementation-dependent data
+	void * storage;	// any implementation-dependent storage data
 };
 
 /**
@@ -97,18 +96,21 @@ size32 RelationTableNRows(RelationTable const * table);
 
 /**
  * Add a single tuple to the relation, acquiring each atom in the tuple.
- * Acquires a reference to each atom in the tuple.
- * Does not add entries to lookup; see AssertFact()
+ * If idPosition is > 0 it indicates the 1-based position of an identified atom.
+ * Acquires a reference to each atom in the tuple, except an identified atom.
+ * Does not add lookup entries; see AssertFact()
  */
 byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
 
 /**
  * Remove the given tuple from the relation table.
- * Does not remove entries from the lookup table; see RetractFact()
- * If idPosition is > 0 it indicates the 1-based position of an identified
- * atom to be removed; if 0, a tuple containing an identified atom will not be removed.
+ * The tuple must not contain an identified atom.
+ * Does not remove lookup entries; see RetractFact()
  */
-byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
+byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[]);
+
+
+void RelationTableRemoveIFactTuples(RelationTable const * table, Atom idAtom, uint8 idPosition);
 
 /**
  * Print out an entire relation table, for debugging
@@ -117,7 +119,7 @@ byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], u
  * Or should we treat queries without variables ("check tuple") differently,
  * as part of the table functionality?
  */
-// void RelationTableDump(RelationTable const * table);
+void RelationTableDump(RelationTable const * table);
 
 
 #endif	// RELATION_TABLE_H

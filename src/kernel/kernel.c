@@ -556,7 +556,18 @@ static void setupCoreServices(void)
 	for(index32 i = 1; i <= N_CORE_PREDICATES; i++)
 		IFactRelease(kernel.corePredicateForms[i]);
 
-	// Create services
+	// TODO: Lookup core services and store in array
+	kernel.coreServices[0] = 0;
+	// (multiset <ID element >NAME multiple >UINT)
+	kernel.coreServices[SERVICE_MULTISET_NAME] = RegistryFindService(
+		kernel.coreRelations[RELATION_MULTISET_NAME, 0]
+	)
+	// (multiset <ID element >ID multiple >UINT)
+	kernel.coreServices[SERVICE_MULTISET_ID]
+	// (multiset >ID element <ID multiple >UINT)
+	kernel.coreServices[SERVICE_MULTISET_ID_BY_ELEMENT]
+	// (list <ID length >UINT)
+	// (term-form <ID predicate-form >ID)
 }
 
 
@@ -652,7 +663,7 @@ void RetractFact(Atom predicateForm, TypedTuple * actors)
 	RelationTable const * relation = FindRelationTable(predicateForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
 	// this will not remove defining facts
 	Atom const * actorsArray = TypedTuplePeekAtoms(actors);
-	RelationTableRemoveTuple(relation, actorsArray, 0);
+	RelationTableRemoveTuple(relation, actorsArray);
 	// NOTE: the below does not accept variables in the actors tuple,
 	// so we can only retract 1 fact at a time.
 	LookupRemovePredicateRoles(relation, actorsArray);

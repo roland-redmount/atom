@@ -22,7 +22,10 @@ extern RelationTableProvider btreeTableProvider;
 
 /**
  * Create a B-tree relation table. This function is called
- * by btreeTableProvider.createTable()
+ * by btreeTableProvider.createTable().
+ * 
+ * NOTE: currently the B-tree relation only stores a B-tree,
+ * and in particular does not store the column types.
  */
 BTree * CreateRelationBTree(size8 nColumns, byte const atomTypes[]);
 
@@ -41,10 +44,9 @@ byte RelationBTreeAddTuple(BTree * btree, Atom const tuple[], uint8 idPosition);
 void RelationBTreeInitialize(void);
 
 
-// NOTE: iterating over a B-tree should now be done by calling the appropriate service.
+// NOTE: iterating over a B-tree should usually be done by calling the appropriate service.
 // The service signature determines the input arguments. The first n arguments
 // are inputs, and the remainder outputs; this is due to B-tree lexiographic ordering.
-// TODO: this should be handled by a service call
 
 typedef struct s_RelationBTreeIterator {
 	BTreeIterator treeIterator;
@@ -124,7 +126,9 @@ Atom RelationBTreeQuerySingleAtom(RelationTable * table, Atom const queryTuple[]
  * Releases a reference to each AT_ID atom in a removed tuple, except identified atoms.
  * To remove all tuples, set queryTuple to 0 (the nuclear option).
  */
-size32 RelationBTreeRemoveTuples(BTree * btree, Atom const queryTuple[], size8 nInputs, uint8 identified);
+// size32 RelationBTreeRemoveTuples(BTree * btree, Atom const queryTuple[], size8 nInputs, uint8 identified);
+
+byte RelationBTreeRemoveTuple(BTree * btree, Atom const tuple[]);
 
 /**
  * High-level method to create a RelationTable backed by a B-tree,
@@ -132,9 +136,5 @@ size32 RelationBTreeRemoveTuples(BTree * btree, Atom const queryTuple[], size8 n
  */
 RelationTable const * CreateRelationBTreeWithServices(Atom form, size8 nColumns, byte const atomTypes[]);
 
-/**
- * Print out an entire relation table, for debugging
- */
-void RelationBTreeDump(RelationTable * table);
 
 #endif	// RELATION_B_TREE_H

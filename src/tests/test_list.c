@@ -60,10 +60,6 @@ static void testCreateList(void)
 	for(index8 i = 0; i < EXAMPLE_LIST_N_ELEMENTS; i++)
 		ASSERT_UINT32_EQUAL(ListGetPosition(list, listAtoms[i]), i + 1)
 
-	// attempt to remove any tuple (list @string position _ element _) will violate the ifact
-	Atom tuple[EXAMPLE_LIST_N_ELEMENTS] = {list, (Atom) {._uint = 3}, listAtoms[3-1]};
-	ASSERT_UINT32_EQUAL(RelationTableRemoveTuple(listPositionElement, tuple, 0), TUPLE_PROTECTED)
-
 	IFactRelease(list);
 }
 

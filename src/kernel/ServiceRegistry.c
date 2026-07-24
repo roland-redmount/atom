@@ -116,9 +116,9 @@ RelationTable const * CreateRelationTable(
 	relation->atomTypes = Allocate(nColumns);
 	CopyMemory(atomTypes, relation->atomTypes, nColumns);
 	if(provider)
-		relation->data = provider->createTable(nColumns, atomTypes);
+		relation->storage = provider->createTable(nColumns, atomTypes);
 	else
-		relation->data = 0;
+		relation->storage = 0;
 	// add to registry
 	ASSERT(BTreeInsert(registry.relationBTree, &relation) == BTREE_INSERTED)
 	return relation;
@@ -255,7 +255,32 @@ static void btreePrintCallback(void const * item)
 }
 
 
-void RegistryDump(void)
+void RelationTableDump(RelationTable const * table)
+{
+	// find a service for enumerating all tuples
+	byte parameterIO[table->nColumns];
+	for(index8 i = 0; i < table->nColumns; i++)
+		parameterIO[i] = PARAMETER_OUT;
+	Service const * service = RegistryFindService(table, parameterIO);
+	
+	PrintF("Table %u columns\n", table->nColumns);
+
+	Atom arguments[table->nColumns];
+	ServiceContext * context = ServiceCreateContext(service, arguments);
+	size32 nTuples = 0;
+	while(ServiceCall(context)) {
+		// TODO: we should probably not print the full representaiton
+		// of identified atoms, as it triggers repeated queries
+		PrintTuple(table->atomTypes, arguments, table->nColumns);
+		PrintChar('\n');
+		nTuples++;
+	}
+	ServiceFreeContext(context);
+	PrintF("%u tuples\n", nTuples);
+}
+
+
+void RegistryDumpServices(void)
 {
 	BTreeTraversal(registry.services, &btreePrintCallback);
 }

@@ -12,6 +12,8 @@ void TupleCopy(Atom const sourceTuple[], Atom destinationTuple[], size8 nAtoms);
 
 int8 TupleCompare(Atom const tuple1[], Atom const tuple2[], size8 nAtoms);
 
+bool TupleEqual(Atom const tuple1[], Atom const tuple2[], size8 nAtoms);
+
 void PrintTuple(byte const atomTypes[], Atom const tuple[], size8 nAtoms);
 
 #endif	// TUPLE_H

@@ -97,7 +97,16 @@ Service const * RegistryFindService(RelationTable const * relation, byte const p
  */
 void PrintServiceRecord(ServiceRecord const * record);
 
-void RegistryDump(void);
+/**
+ * Dump all tuples in a the given relation table.
+ * Requires an associated service for enumerating all tuples.
+ */
+void RelationTableDump(RelationTable const * table);
+
+/**
+ * Print a list of all registered services
+ */
+void RegistryDumpServices(void);
 
 
 #endif  // REGISTRY_H

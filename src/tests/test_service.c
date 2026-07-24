@@ -26,8 +26,8 @@ void testMachineService(void)
  */
 void testPermuteService(void)
 {
-	// The service (position list element)
-	ServiceRecord const * listServiceRecord = RegistryGetCoreServiceRecord(FORM_LIST_POSITION_ELEMENT);
+	// The service (position >UINT list <ID element >LETTER)
+	ServiceRecord const * listServiceRecord = RegistryGetCoreServiceRecord(SERVICE_LIST_LETTER);
 	// Reorder (position _ list l element s) to (list l element s),
 	// providing the variable _ as a "constant"
 	TypedTuple * constants = CreateTypedTupleFromArray((TypedAtom[]) {anonymousVariable}, 1);
