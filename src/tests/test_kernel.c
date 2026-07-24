@@ -13,14 +13,14 @@ void testAssertRetract(void)
 {
 	// form (foo bar)
 	Atom roles[2] = {CreateNameFromCString("foo"), CreateNameFromCString("bar")};
+	byte atomTypes[2] = {AT_ID, AT_INT};
 	Atom form = CreatePredicateForm(roles, 2);
 	NameRelease(roles[0]);
 	NameRelease(roles[1]);
 	
-	// check that service does not already exist
-	ServiceRecord record = RegistryFindUntypedService(form);
-	ASSERT(!record.form.hash)
-
+	// check that relation table does not already exist
+	ASSERT_NULL(FindRelationTable(form, 2, atomTypes))
+	
 	// asserting the first fact should create the service
 	Atom barf = CreateStringFromCString("barf");
 	TypedTuple * actors1 = CreateTypedTupleFromArray(
@@ -30,13 +30,11 @@ void testAssertRetract(void)
 		},
 		2
 	);
-	AssertFact(form, actors1);
-	record = RegistryFindUntypedService(form);
-	ASSERT(record.form.hash)
-	ASSERT(record.service->type == SERVICE_MACHINE)
-	BTree * btree = (BTree *) record.service->impl.machine.providerData;
+	AssertFact(form, actors1, 0);
 
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 1)
+	RelationTable const * relation = FindRelationTable(form, 2, atomTypes);
+	ASSERT_NOT_NULL(relation)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(relation), 1)
 
 	Atom baz = CreateStringFromCString("baz");
 	TypedTuple * actors2 = CreateTypedTupleFromArray(
@@ -46,17 +44,16 @@ void testAssertRetract(void)
 		},
 		2
 	);
-	AssertFact(form, actors2);
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 2)
+	AssertFact(form, actors2, 0);
+	ASSERT_UINT32_EQUAL(RelationTableNRows(relation), 2)
 
 	RetractFact(form, actors2);
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(btree), 1)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(relation), 1)
 
 	// retracting the last fact should remove the service
 	RetractFact(form, actors1);
-	record = RegistryFindUntypedService(form);
-	ASSERT(!record.form.hash)
-
+	ASSERT_NULL(FindRelationTable(form, 2, atomTypes))
+	
 	FreeTypedTuple(actors1);
 	FreeTypedTuple(actors2);
 	IFactRelease(barf);

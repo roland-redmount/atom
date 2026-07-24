@@ -1,9 +1,10 @@
-
+#include "btree/btree.h"
 #include "kernel/Int.h"
 #include "kernel/float.h"
 #include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
+#include "kernel/RelationTable.h"
 #include "kernel/RelationBTree.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
@@ -15,10 +16,10 @@
 #define TEST_N_COLUMNS	3
 
 struct {
-	RelationBTree * tree;
-	Atom * tuple1;
-	Atom * tuple2;
-	Atom * tuple3;
+	BTree * tree;
+	Atom tuple1[TEST_N_COLUMNS];
+	Atom tuple2[TEST_N_COLUMNS];
+	Atom tuple3[TEST_N_COLUMNS];
 	uint32 initialRefCount;
 } fixture;
 
@@ -31,32 +32,39 @@ static void setupFixture(void)
 	byte atomTypes[TEST_N_COLUMNS] = {AT_INT, AT_FLOAT, AT_LETTER} ;
 	fixture.tree = CreateRelationBTree(TEST_N_COLUMNS, atomTypes);
 
-	fixture.tuple1 = Allocate(TEST_N_COLUMNS * sizeof(Atom));
-	fixture.tuple1 = (Atom[]) {
-		(Atom) {._int = 13},
-		(Atom) {._float = 123.456},
-		GetAlphabetLetter('A'),
-	};
-	fixture.tuple2 = Allocate(TEST_N_COLUMNS * sizeof(Atom));
-	fixture.tuple2 = (Atom[]) {
-		(Atom) {._int = 13},
-		(Atom) {._float = 123.456},
-		GetAlphabetLetter('B'),
-	};
-	fixture.tuple3 = Allocate(TEST_N_COLUMNS * sizeof(Atom));
-	fixture.tuple3 = (Atom[]) {
-		(Atom) {._int = 14},
-		(Atom) {._float = 456.789},
-		GetAlphabetLetter('C'),
-	};
+	// C99 does not allow assigning array values
+	CopyMemory(
+		(Atom[]) {
+			(Atom) {._int = 13},
+			(Atom) {._float = 123.456},
+			GetAlphabetLetter('A'),
+		},
+		fixture.tuple1,
+		sizeof(fixture.tuple1)
+	);
+	CopyMemory(
+		(Atom[]) {
+			(Atom) {._int = 13},
+			(Atom) {._float = 123.456},
+			GetAlphabetLetter('B'),
+		},
+		fixture.tuple2,
+		sizeof(fixture.tuple2)
+	);
+	CopyMemory(
+		(Atom[]) {
+			(Atom) {._int = 14},
+			(Atom) {._float = 456.789},
+			GetAlphabetLetter('C'),
+		},
+		fixture.tuple3,
+		sizeof(fixture.tuple3)
+	);
 }
 
 static void teardownFixture(void)
 {
-	Free(fixture.tuple1);
-	Free(fixture.tuple2);
-	Free(fixture.tuple3);
-	FreeRelationBTree(fixture.tree);
+	BTreeFree(fixture.tree);
 }
 
 
@@ -75,17 +83,17 @@ void testAddTuple(void )
 {
 	setupFixture();
 
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple1);
+	RelationBTreeAddTuple(fixture.tree, fixture.tuple1, 0);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 1)
 
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple2);
+	RelationBTreeAddTuple(fixture.tree, fixture.tuple2, 0);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 2)
 
 	// adding a tuple that exists should not change the table
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple1);
+	RelationBTreeAddTuple(fixture.tree, fixture.tuple1, 0);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 2)
 
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple3);
+	RelationBTreeAddTuple(fixture.tree, fixture.tuple3, 0);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 3)
 
 	teardownFixture();
@@ -95,9 +103,9 @@ void testAddTuple(void )
 void testFindTuple(void)
 {
 	setupFixture();
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple1);
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple2);
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple3);
+	RelationBTreeAddTuple(fixture.tree, fixture.tuple1, 0);
+	RelationBTreeAddTuple(fixture.tree, fixture.tuple2, 0);
+	RelationBTreeAddTuple(fixture.tree, fixture.tuple3, 0);
 
 	RelationBTreeIterator iterator;
 	

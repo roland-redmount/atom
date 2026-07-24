@@ -7,16 +7,11 @@
 
 #include "lang/Atom.h"
 
-typedef struct s_Tuple {
-	size8 nAtoms;
-	Atom atoms[];
-} Tuple;
 
-/**
- * Allocate an return a tuple with all atoms set to zero.
- */
-Tuple * CreateTuple(size8 nAtoms);
+void TupleCopy(Atom const sourceTuple[], Atom destinationTuple[], size8 nAtoms);
 
-void TupleCopy(Tuple const * source, Tuple * destination);
+int8 TupleCompare(Atom const tuple1[], Atom const tuple2[], size8 nAtoms);
+
+void PrintTuple(byte const atomTypes[], Atom const tuple[], size8 nAtoms);
 
 #endif	// TUPLE_H

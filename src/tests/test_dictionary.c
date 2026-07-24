@@ -13,13 +13,13 @@
 void testDictionary(void)
 {
 	size8 const arity = 5;
-	Atom rule = CStringToClause("!number _x square _s | * _x * _x = _s");
+	Formula * rule = CStringToClause("!number _x square _s | * _x * _x = _s");
 
 	DictionaryEntry entry = DictionaryAddClause(rule);
 
 	// test iteration
 	DictionaryIterator iterator;
-	DictionaryIterate(FormulaGetForm(rule), &iterator);
+	DictionaryIterate(rule->form, &iterator);
 	ASSERT_TRUE(DictionaryIteratorNext(&iterator))
 	// test that actors tuple is identical to the formula
 	TypedTuple const * actorsTuple = DictionaryIteratorPeekActors(&iterator);
@@ -27,7 +27,7 @@ void testDictionary(void)
 		ASSERT_TRUE(
 			SameTypedAtoms(
 				TypedTupleGetElement(actorsTuple, i),
-				ListGetElement(FormulaGetActors(rule), i + 1)
+				TypedTupleGetElement(rule->actors, i + 1)
 			)
 		)
 	}
@@ -36,7 +36,7 @@ void testDictionary(void)
 
 	// test remove tuple
 	DictionaryRemoveClause(&entry);
-	IFactRelease(rule);
+	FreeFormula(rule);
 }
 
 

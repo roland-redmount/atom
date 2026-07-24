@@ -19,6 +19,14 @@
  */
 typedef int8 (* ItemComparator)(void const * item, void const * itemOrKey, size32 itemSize);
 
+
+/**
+ * Compare pointers by address
+ */
+int8 ComparePointers(void const * ptr1, void const * ptr2);
+
+int8 CompareUInt(uint64 uint1, uint64 uint2);
+
 /**
  * Sort a list of items using the specified comparator.
  */

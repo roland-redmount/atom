@@ -1,22 +1,13 @@
 
+#include "btree/btree.h"
 #include "kernel/RelationTable.h"
+#include "kernel/service.h"
+#include "lang/TypedAtom.h"
+#include "memory/allocator.h"
+#include "memory/pool.h"
 
 
-RelationTable CreateRelationTable(
-	RelationTableProvider * provider, Atom form, size8 nColumns, byte const atomTypes[])
-{
-	RelationTable table;
-	table.nColumns = nColumns;
-	table.data = provider->createTable(form, nColumns, atomTypes);
-
-	// TODO: store the table description in a registry for lookup later
-	// This should also acquire a reference to the form atom
-
-	return table;
-}
-
-
-bool RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)
+byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)
 {
 	byte result = table->provider->addTuple(table, tuple, idPosition);
 	if(result == TUPLE_ADDED) {
@@ -29,14 +20,6 @@ bool RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint
 }
 
 
-RelationTable FindRelationTable(Atom form, byte const * atomTypes)
-{
-	// TODO:
-	ASSERT(false);
-	return (RelationTable) {0};
-}
-
-
 size32 RelationTableNRows(RelationTable const * table)
 {
 	return table->provider->numberOfTuples(table);
@@ -45,9 +28,12 @@ size32 RelationTableNRows(RelationTable const * table)
 
 byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)
 {
-	table->provider->removeTuple(table, tuple);
-	for(index32 j = 0; j < table->nColumns; j++) {
-		if(j + 1 != idPosition)
-			ReleaseTypedAtom(tuple[j]);
+	byte result = table->provider->removeTuple(table, tuple);
+	if(result == TUPLE_REMOVED) {
+		for(index32 j = 0; j < table->nColumns; j++) {
+			if((table->atomTypes[j] == AT_ID) && (j + 1 != idPosition))
+				ReleaseTypedAtom((TypedAtom) {.type = table->atomTypes[j], .atom = tuple[j]});
+		}
 	}
+	return result;
 }

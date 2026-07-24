@@ -5,35 +5,34 @@
 #include "kernel/kernel.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/multiset.h"
-#include "lang/TypedAtom.h"
+#include "lang/Atom.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "util/utilities.h"
 
 
 
-Atom CreatePredicateForm(Atom const * roles, size8 nRoles)
+Atom CreatePredicateForm(Atom const roles[], size8 nRoles)
 {
 	// reduce to unique roles, typed for use with multiset
-	TypedAtom uniqueRoles[nRoles];
-	for(index8 i = 0; i < nRoles; i++)
-		uniqueRoles[i] = (TypedAtom) {.type = AT_NAME, .atom = roles[i]};
-	SortTypedAtoms(uniqueRoles, nRoles);
+	Atom uniqueRoles[nRoles];
+	CopyMemory(roles, uniqueRoles, nRoles);
+	SortAtoms(uniqueRoles, nRoles);
 	uint32 multiplicities[nRoles];
-	size8 nUniqueRoles = ReduceTypedAtomsArray(uniqueRoles, multiplicities, nRoles);
+	size8 nUniqueRoles = ReduceAtomsArray(uniqueRoles, multiplicities, nRoles);
 
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	AddMultisetToIFactFromArrays(&draft, uniqueRoles, multiplicities, nUniqueRoles);
+	AddMultisetToIFactFromArrays(&draft, uniqueRoles, multiplicities, nUniqueRoles, AT_NAME);
 
 	// add (predicate-form @predicate) to ifact
-	RelationTable predicateFormTable = FindRelationTable(
+	RelationTable const * predicateFormTable = FindRelationTable(
 		GetCorePredicateForm(FORM_PREDICATE_FORM),
-		(byte[]) {AT_ID}
+		1, (byte[]) {AT_ID}
 	);
 
-	IFactBeginConjunction(&draft, &predicateFormTable, 0);
+	IFactBeginConjunction(&draft, predicateFormTable, 0);
 	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
 	IFactEndConjunction(&draft);
 
@@ -49,7 +48,7 @@ bool IsPredicateForm(Atom atom)
 
 	return AtomHasRole(
 		atom,
-		GetCorePredicateForm(FORM_PREDICATE_FORM),
+		GetCoreRelationTable(RELATION_PREDICATE_FORM),
 		GetCoreRoleName(ROLE_PREDICATE_FORM)
 	);
 }
@@ -77,7 +76,7 @@ index8 PredicateRoleIndex(Atom predicateForm, Atom roleName)
 	bool found = false;
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
-		if(elementMultiple.element.atom.hash == roleName.hash) {
+		if(elementMultiple.element.hash == roleName.hash) {
 			found = true;
 			break;
 		}
@@ -99,7 +98,7 @@ void PrintPredicateForm(Atom predicateForm)
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
-			PrintName(elementMultiple.element.atom);
+			PrintName(elementMultiple.element);
 			PrintChar(' ');
 		}
 	}

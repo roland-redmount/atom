@@ -2,7 +2,10 @@
  * A list stores a sequence of n elements with positions 1, 2, ..., n.
  * 
  * NOTE: this was a "core" class when a formula was implemented a pair
- * of a form and and a list. It could be removed from the kernel.
+ * of a form and and a list of actors. It was then untyped and stored
+ * arbitrary elements. The new version is typed, and so there may be
+ * multiple relation tables, one for each element type (esssentially
+ * a typed array). This could be removed from the kernel.
  */
 
 #ifndef LIST_H
@@ -10,7 +13,7 @@
 
 #include "lang/TypedAtom.h"
 #include "kernel/ifact.h"
-#include "kernel/RelationBTree.h"
+#include "kernel/service.h"
 
 
 /**
@@ -69,10 +72,9 @@ size32 ListLength(Atom list);
 
 /**
  * Return e from the query (list @list position @position element e)
- * 
- * NOTE: position is 1-based.
+ * with the specified element type. Position is 1-based.
  */
-Atom ListGetElement(Atom list, byte elementType, index32 position);
+Atom ListGetElement(Atom list, index32 position);
 
 /**
  * Copy all list elements into a given array
@@ -83,37 +85,32 @@ Atom ListGetElement(Atom list, byte elementType, index32 position);
 /**
  * Set the elements of tuple according to the (list position element) form.
  */
-void ListSetTuple(Atom * tuple, Atom list, Atom position, Atom element);
+// void ListSetTuple(Atom * tuple, Atom list, Atom position, Atom element);
 
 /**
  * Return the first position p from the query
  * (list @list position p element @element)
  * or 0 if the element is not in the list.
- * 
- * NOTE: since this relies on a quey (list @list position _ element @element),
- * we cannot use it to find specific variables in a list, such as
- * (list @list position_ element _x)
- * This will always return position 1 since _x matches any element.
- * To find elements that are variables, we would have to use a quoted variable '_x.
- * This is not yet implemented.
  */
-index32 ListGetPosition(Atom list, TypedAtom element);
+index32 ListGetPosition(Atom list, Atom element);
 
 /**
  * Copy the elements of a list to a Tuple.
  * The Tuple must have the same number of elements.
+ * 
+ * NOTE: this is no longer well defined when the list element type is constant
  */
-void CopyListToTuple(Atom list, TypedTuple * tuple);
+// void CopyListToTuple(Atom list, TypedTuple * tuple);
 
 void PrintList(Atom list);
 
-int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, TypedAtom));
+int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(Atom, Atom));
 
 
 typedef struct s_ListIterator
 {
-	TypedTuple * queryTuple;
-	RelationBTreeIterator treeIterator;
+	Atom queryTuple[3];
+	ServiceContext * context;
 } ListIterator;
 
 
@@ -124,7 +121,7 @@ void ListIterate(Atom list, ListIterator * iterator);
 
 bool ListIteratorNext(ListIterator * iterator);
 
-TypedAtom ListIteratorGetElement(ListIterator const * iterator);
+Atom ListIteratorGetElement(ListIterator const * iterator);
 
 void ListIteratorEnd(ListIterator * iterator);
 

@@ -5,66 +5,67 @@
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
+#include "kernel/Parameter.h"
 #include "kernel/ServiceRegistry.h"
 #include "util/sort.h"
 
 
-void MultisetSetTuple(TypedTuple * tuple, TypedAtom multiset, TypedAtom element, TypedAtom multiple)
-{
-	TypedTupleSetElement(
-		tuple,
-		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET),
-		multiset
-	);
-	TypedTupleSetElement(
-		tuple,
-		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT),
-		element
-	);
-	TypedTupleSetElement(
-		tuple,
-		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE),
-		multiple
-	);
-}
-
-
-Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size32 nUniqueElements)
+Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size32 nUniqueElements, byte atomType)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	AddMultisetToIFact(&draft, generator, data, nUniqueElements);
+	AddMultisetToIFact(&draft, generator, data, nUniqueElements, atomType);
 	
 	return IFactEnd(&draft);
 }
 
 
-void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, void const * data, size32 nUniqueElements)
+void AddMultisetToIFact(
+	IFactDraft * draft, MultisetElementGenerator generator, void const * data, size32 nUniqueElements, byte atomType)
 {
+	// currently we only support multisets of ID or NAME atoms
+	RelationTable const * relation;
+	switch(atomType) {
+		case AT_ID:
+		relation = GetCoreRelationTable(RELATION_MULTISET_ID);
+		break;
+
+		case AT_NAME:
+		relation = GetCoreRelationTable(RELATION_MULTISET_NAME);
+		break;
+
+		default:
+		ASSERT(false)
+		break;
+	}
+	
 	// assert (multiset element multiple) facts
 	IFactBeginConjunction(
 		draft, 
-		GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE),
-		RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE),
+		relation,
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 	);
-	TypedTuple * tuple = CreateTypedTuple(3);
+	Atom tuple[3];
 	for(index32 i = 0; i < nUniqueElements; i++) {
 		ElementMultiple em = generator(i, data);
-		MultisetSetTuple(
-			tuple,
-			invalidAtom, em.element, CreateTypedAtom(AT_UINT, (Atom) {._uint = em.multiple})
+		CoreFormSetTuple(
+			FORM_MULTISET_ELEMENT_MULTIPLE,
+			(Atom[]) {
+				(Atom) {0},
+				em.element,
+				(Atom) {._uint = em.multiple},
+			},
+			tuple
 		);
 		IFactAddTuple(draft, tuple);
 	}
-	FreeTypedTuple(tuple);
 	IFactEndConjunction(draft);
 }
 
 
 typedef struct {
-	TypedAtom const * atoms;
+	Atom const * atoms;
 	size32 const * multiples;
 } MultisetElementData;
 
@@ -79,39 +80,57 @@ static ElementMultiple arrayElementGenerator(index32 index, void const * data)
 }
 
 
-Atom CreateMultisetFromArrays(TypedAtom const * atoms, size32 const * multiples, size32 nUniqueElements)
+Atom CreateMultisetFromArrays(Atom const atoms[], size32 const multiples[], size32 nUniqueElements, byte atomType)
 {
 	MultisetElementData elementData;
 	elementData.atoms = atoms;
 	elementData.multiples = multiples;
 
-	return CreateMultiset(&arrayElementGenerator, &elementData, nUniqueElements);
+	return CreateMultiset(&arrayElementGenerator, &elementData, nUniqueElements, atomType);
 }
 
 
-void AddMultisetToIFactFromArrays(IFactDraft * draft, TypedAtom const * atoms, size32 const * multiples, size32 nUniqueElements)
+void AddMultisetToIFactFromArrays(
+	IFactDraft * draft,  Atom const atoms[], size32 const multiples[], size32 nUniqueElements, byte atomType)
 {
 	MultisetElementData elementData;
 	elementData.atoms = atoms;
 	elementData.multiples = multiples;
 
-	AddMultisetToIFact(draft, &arrayElementGenerator, &elementData, nUniqueElements);
+	AddMultisetToIFact(draft, &arrayElementGenerator, &elementData, nUniqueElements, atomType);
 }
 
 bool IsMultiset(Atom atom)
 {
-	return AtomHasRole(
-		atom,
-		GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE),
-		GetCoreRoleName(ROLE_MULTISET)
+	// NOTE: for now, we assume there are only two multiset relations
+	return (
+		AtomHasRole(
+			atom,
+			GetCoreRelationTable(RELATION_MULTISET_ID),
+			GetCoreRoleName(ROLE_MULTISET)) ||
+		AtomHasRole(
+			atom,
+			GetCoreRelationTable(RELATION_MULTISET_NAME),
+			GetCoreRoleName(ROLE_MULTISET)
+		)
 	);
 }
 
-size32 MultisetGetElementMultiple(Atom multiset, TypedAtom element)
+size32 MultisetGetElementMultiple(Atom multiset, Atom element)
 {
 	// TODO
 	ASSERT(false);
 	return 0;
+}
+
+
+static RelationTable const * lookupMultisetRelation(Atom multiset)
+{
+	return LookupFindRelation(
+		multiset,
+		GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE),
+		GetCoreRoleName(ROLE_MULTISET)
+	);
 }
 
 
@@ -121,42 +140,43 @@ size32 MultisetGetElementMultiple(Atom multiset, TypedAtom element)
 
 void MultisetIterate(Atom multiset, MultisetIterator * iterator)
 {
-	BTree * tree = RegistryGetCoreBTreeService(FORM_MULTISET_ELEMENT_MULTIPLE);
-	iterator->queryTuple = CreateTypedTuple(3);
-	MultisetSetTuple(
-		iterator->queryTuple,
-		CreateTypedAtom(AT_ID, multiset), anonymousVariable, anonymousVariable
+	RelationTable const * relation = lookupMultisetRelation(multiset);
+	byte parameterIO[3];
+	CoreFormSetByteArray(
+		FORM_MULTISET_ELEMENT_MULTIPLE,
+		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
+		parameterIO
 	);
-	RelationBTreeIterate(tree, iterator->queryTuple, &(iterator->treeIterator));
+	Service const * service = RegistryFindService(relation, parameterIO);
+	CoreFormSetTuple(
+		FORM_MULTISET_ELEMENT_MULTIPLE,
+		(Atom[]) {multiset, (Atom) {0}, (Atom) {0}},
+		iterator->queryTuple
+	);
+	iterator->context = ServiceCreateContext(service, iterator->queryTuple);
 }
 
 
 bool MultisetIteratorNext(MultisetIterator * iterator)
 {
-	return RelationBTreeIteratorNext(&(iterator->treeIterator));
+	return ServiceCall(iterator->context);
 }
 
 
 ElementMultiple MultisetIteratorGetElement(MultisetIterator const * iterator)
 {
-	Atom const * tupleAtoms = RelationBTreeIteratorPeekTuple(&(iterator->treeIterator));
-	TypedAtom element = TypedTupleGetElement(
-		tuple, CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)
-	);
-	TypedAtom multiple = TypedTupleGetElement(
-		tuple, CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)
-	);
-	
-	ElementMultiple em;
-	em.element = element;
-	em.multiple = (size32) multiple.atom._uint;
-	return em;
+	Atom multiple = iterator->queryTuple[CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)];
+	Atom element = iterator->queryTuple[CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
+	return (ElementMultiple) {
+		.element = element,
+		.multiple = multiple._uint
+	};
 }
+
 
 void MultisetIteratorEnd(MultisetIterator * iterator)
 {
-	RelationBTreeIteratorEnd(&(iterator->treeIterator));
-	FreeTypedTuple(iterator->queryTuple);
+	ServiceFreeContext(iterator->context);
 	SetMemory(iterator, sizeof(MultisetIterator), 0);
 }
 
@@ -190,12 +210,16 @@ size32 MultisetSize(Atom multiset)
 
 void PrintMultiset(Atom multiset)
 {
+	RelationTable const * relation = lookupMultisetRelation(multiset);
+	byte elementType = relation->atomTypes[
+		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)
+	];
 	PrintChar('{');
 	MultisetIterator iterator;
 	MultisetIterate(multiset, &iterator);
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
-		PrintTypedAtom(em.element);
+		PrintTypedAtom(CreateTypedAtom(elementType, em.element));
 		PrintF("(%u)", em.multiple);
 		MultisetIteratorNext(&iterator);
 	}
@@ -204,7 +228,7 @@ void PrintMultiset(Atom multiset)
 }
 
 
-void MultisetIterationOrder(Atom multiset, TypedAtom const * elements, index8 * order, size8 nElements)
+void MultisetIterationOrder(Atom multiset, Atom const elements[], index8 * order, size8 nElements)
 {
 	MultisetIterator iterator;
 	MultisetIterate(multiset, &iterator);
@@ -214,7 +238,7 @@ void MultisetIterationOrder(Atom multiset, TypedAtom const * elements, index8 * 
 		index8 m = 0;
 		// find corresponding element in the elements array
 		for(index8 j = 0; j < nElements; j++) {
-			if(SameTypedAtoms(elements[j], em.element)) {
+			if(elements[j].hash == em.element.hash) {
 				order[i + m] = j;
 				m++;
 			}

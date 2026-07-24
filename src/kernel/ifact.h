@@ -90,7 +90,7 @@ void IFactBegin(IFactDraft * draft);
  * Begin a new conjunction for the IFactDraft, storing tuples in the given table.
  * The idColumn indicates the actor that is being defined by the IFact.
  */
-void IFactBeginConjunction(IFactDraft * draft, RelationTable * table, index8 idColumn);
+void IFactBeginConjunction(IFactDraft * draft, RelationTable const * table, index8 idColumn);
 
 /**
  * Add one tuple, defining one predicate of the current conjunction (predicate form).

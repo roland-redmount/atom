@@ -12,24 +12,23 @@
  */
 Atom CreateConjunctionForm(Atom const * clauseForms, size8 nClauseForms)
 {
-	TypedAtom uniqueClauseForms[nClauseForms];
-	for(index8 i = 0; i < nClauseForms; i++) 
-		uniqueClauseForms[i] = CreateTypedAtom(AT_ID, clauseForms[i]);
+	Atom uniqueClauseForms[nClauseForms];
+	CopyMemory(clauseForms, uniqueClauseForms, nClauseForms * sizeof(Atom));
 	// reduce to unique roles
 	uint32 multiplicities[nClauseForms];
-	size8 nUniqueClauseForms = ReduceTypedAtomsArray(uniqueClauseForms, multiplicities, nClauseForms);
+	size8 nUniqueClauseForms = ReduceAtomsArray(uniqueClauseForms, multiplicities, nClauseForms);
 
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	AddMultisetToIFactFromArrays(&draft, uniqueClauseForms, multiplicities, nUniqueClauseForms);
+	AddMultisetToIFactFromArrays(&draft, uniqueClauseForms, multiplicities, nUniqueClauseForms, AT_ID);
 
 	// (conjunction-form @form)
-	RelationTable conjunctionFormTable = FindRelationTable(
+	RelationTable const * conjunctionFormTable = FindRelationTable(
 		GetCorePredicateForm(FORM_CONJUNCTION_FORM),
-		(byte[]) {AT_ID}
+		1, (byte[]) {AT_ID}
 	);	
-	IFactBeginConjunction(&draft, &conjunctionFormTable, 0);
+	IFactBeginConjunction(&draft, conjunctionFormTable, 0);
 	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
 	IFactEndConjunction(&draft);	
 
@@ -41,7 +40,7 @@ bool IsConjunctionForm(Atom atom)
 {
 	return AtomHasRole(
 		atom,
-		GetCorePredicateForm(FORM_CONJUNCTION_FORM),
+		GetCoreRelationTable(RELATION_CONJUNCTION_FORM),
 		GetCoreRoleName(ROLE_CONJUNCTION_FORM)
 	);
 }
@@ -67,7 +66,7 @@ size8 ConjunctionFormArity(Atom form)
 	size8 arity = 0;
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
-		uint8 clauseArity = ClauseArity(elementMultiple.element.atom);
+		uint8 clauseArity = ClauseArity(elementMultiple.element);
 		arity += clauseArity * elementMultiple.multiple;
 	}
 	MultisetIteratorEnd(&iterator);
@@ -86,7 +85,7 @@ void PrintConjunctionForm(Atom form)
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
-			PrintClauseForm(elementMultiple.element.atom);
+			PrintClauseForm(elementMultiple.element);
 			PrintCString(" & ");
 		}
 	}

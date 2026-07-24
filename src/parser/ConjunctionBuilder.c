@@ -13,7 +13,7 @@
 void InitializeConjunctionBuilder(ConjunctionBuilder * builder)
 {
 	InitializeClauseBuilder(&(builder->clauseBuilder));
-	CreateResizingArray(&(builder->clauses), sizeof(Atom), INITIAL_N_TERMS);
+	CreateResizingArray(&(builder->clauses), sizeof(Formula *), INITIAL_N_TERMS);
 	builder->arity = 0;
 	builder->isValid = false;
 }
@@ -22,7 +22,7 @@ void InitializeConjunctionBuilder(ConjunctionBuilder * builder)
 static void addCurrentClause(ConjunctionBuilder * builder)
 {
 	// add current clause to array
-	Atom clause = ClauseBuilderCreateFormula(&(builder->clauseBuilder));
+	Formula * clause = ClauseBuilderCreateFormula(&(builder->clauseBuilder));
 	ClauseBuilderReset(&(builder->clauseBuilder));
 	// update arity
 	uint8 clauseArity = FormulaArity(clause);
@@ -70,12 +70,12 @@ static void finishConjunctionBuilder(ConjunctionBuilder * builder)
 }
 
 
-Atom ConjunctionBuilderCreateFormula(ConjunctionBuilder * builder)
+Formula * ConjunctionBuilderCreateFormula(ConjunctionBuilder * builder)
 {
 	finishConjunctionBuilder(builder);
 
 	size8 nClauses = ResizingArrayNElements(&(builder->clauses));
-	Atom const * clauses = ResizingArrayGetMemory(&(builder->clauses));
+	Formula const ** clauses = ResizingArrayGetMemory(&(builder->clauses));
 	return CreateConjunction(clauses, nClauses);
 }
 
@@ -100,7 +100,7 @@ void CleanupConjunctionBuilder(ConjunctionBuilder * builder)
 }
 
 
-Atom CStringToConjunction(char const * cString)
+Formula * CStringToConjunction(char const * cString)
 {
 	size32 length = CStringLength(cString);
 	Tokenizer tokenizer;
@@ -117,7 +117,7 @@ Atom CStringToConjunction(char const * cString)
 		}
 	}
 	ASSERT(ConjunctionBuilderIsValid(&builder));
-	Atom conjuction = ConjunctionBuilderCreateFormula(&builder);
+	Formula * conjuction = ConjunctionBuilderCreateFormula(&builder);
 	
 	CleanupConjunctionBuilder(&builder);
 	TokenizerCleanup(&tokenizer);

@@ -15,6 +15,15 @@ void SwapBytes(byte* a, byte* b)
 }
 
 
+void SwapMemory(void * address1, void * address2, size32 nBytes)
+{
+    byte buffer[nBytes];
+    CopyMemory(address1, buffer, nBytes);
+    CopyMemory(address2, address1, nBytes);
+    CopyMemory(buffer, address2, nBytes);
+}
+
+
 void PrintIndexArray(const index32* array, size32 n)
 {
     for(index32 i = 0; i < n-1; i++) {

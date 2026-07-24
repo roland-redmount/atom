@@ -1,22 +1,22 @@
 /**
- * Lookup maintains a table of all roles associatd with  AT_ID atoms (ONLY AT_ID atoms)
- * across all relation tables. Each lookup entry is a triple [atom predicate-form role-name]
- * since both the predicate form and role name are needed to uniquely identify a role.
+ * Lookup maintains a table of all roles associated with AT_ID atoms (ONLY AT_ID atoms)
+ * across all relation tables. Each lookup entry is a triple [atom relation column],
+ * which uniquely identifies the role (column) played by the atom in a relation.
  * This is information is redundant with the corresponding relation table,
  * but serves to efficient locate roles from atoms, rather than scanning all
  * relations tables in the system. So lookup is basically an index.
  * 
  * When creating a fact with AssertFact(), entries for all DT_ID atoms
- * are added to the lookup table. For example, when creating the fact
+ * are added to the lookup table. For example, when adding the tuple (in canonical order)
  * 
- * (list @x element @e position @p)
+ * (list @x element "foo" position 42)
  * 
- * where @x and @e are AT_ID atoms, AssertFact() creates the lookup entries
+ * to a relation R, where @x and @e are AT_ID atoms, we create the lookup entries
  * 
- * [@x (list element position) list]
- * [@e (list element position) element]
+ * [list R 1]
+ * ["foo" R 2]
  * 
- * but no entry for @p as it was not a AT_ID atom (usually an integer).
+ * but no entry for position 42 since it was not a AT_ID atom.
  * 
  * An atom can be associated with a role multiple times, for example
  * atom @x in the facts
@@ -25,10 +25,11 @@
  * (list @x element @f position 2)
  * (list @x element @g position 3)
  * 
- * Lookup keeps a count of such identical associations.
+ * Lookup keeps a count of the number of associations to the role.
  */
 
 #include "btree/btree.h"
+#include "kernel/RelationTable.h"
 #include "kernel/typedtuple.h"
 
 
@@ -38,25 +39,25 @@ void FreeLookup(void);
 size32 LookupTotalCount(void);
 
 /**
- * Test whether an atom participates in a given role (AT_NAME).
+ * Test whether an atom participates in a given role in the given relation.
  * If role == 0, the function returns true if the atom participates
- * in any role in the given predicate form.
+ * in any role in the given relation.
  * If predicateForm == 0, the function returns true if the atom participates
- * in any role in any predicate form.
+ * in any role in any relation.
  */
-bool AtomHasRole(Atom atom, Atom predicateForm, Atom role);
+bool AtomHasRole(Atom atom, RelationTable const * relation, Atom role);
 
 /**
  * Add a lookup entry for an atom participating in a role.
  * This is called by AssertFact()
  */
-void AtomAddRole(Atom atom, Atom predicateForm, Atom role);
+void AtomAddRole(Atom atom, RelationTable const * relation, Atom role);
 
 /**
  * Remove a lookup entry for an atom participating in a role.
  * This is called by RetractFact()
  */
-void AtomRemoveRole(Atom atom, Atom predicateForm, Atom role);
+void AtomRemoveRole(Atom atom, RelationTable const * relation, Atom role);
 
 /**
  * Remove all roles for an AT_ID atom. This is used when removing a AT_ID atom.
@@ -64,19 +65,31 @@ void AtomRemoveRole(Atom atom, Atom predicateForm, Atom role);
 void LookupRemoveAllRoles(Atom atom);
 
 /**
- * Add lookup entries for all actors in a predicate.
+ * Add lookup entries for all actors in a predicate, defined by an actor list
+ * for a given RelationTable
  */
-void LookupAddPredicateRoles(Atom predicateForm, TypedTuple const * actors);
+void LookupAddPredicateRoles(RelationTable const * relation, Atom const * actors);
 
 /**
- *	Remove lookup entries for each actor in a predicate.
+ * Remove lookup entries for each actor in a predicate, defined by an actor list
+ * for a given RelationTable.
  */
-void LookupRemovePredicateRoles(Atom predicateForm, TypedTuple const * actors);
+void LookupRemovePredicateRoles(RelationTable const * relation, Atom const * actors);
 
 /**
- *	Remove lookup entries for all atoms acting in the given predicate form.
+ * Lookup the relation with the given form where atom partipates in role.
+ * There must be only one such relation, or the function will assert.
+ * This is used by list, multiset where there may be multiple relation tables
+ * for lists with different element types, but all elements of one list are
+ * in the same table.
  */
-void LookupRemoveAllPredicateRoles(Atom predicateForm);
+RelationTable const * LookupFindRelation(Atom atom, Atom form, Atom role);
+
+/**
+ * Remove lookup entries for all atoms acting in the given predicate form.
+ * NOTE: this function might not be needed
+ */
+// void LookupRemoveAllPredicateRoles(Atom predicateForm);
 
  /**
  * A record associates any atom (key) to a role (value).
@@ -93,7 +106,7 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm);
  */
 typedef struct s_LookupRecord {
 	Atom atom;
-	Atom predicateForm;
+	RelationTable const * relation;
 	Atom role;
 	size32 nFacts;	// the number of facts that match this record
 } LookupRecord;
@@ -114,7 +127,7 @@ void LookupIterate(Atom atom, LookupIterator * iterator);
 
 bool LookupIteratorNext(LookupIterator * iterator);
 
-Atom LookupIteratorGetForm(LookupIterator const * iterator);
+RelationTable const * LookupIteratorGetRelation(LookupIterator const * iterator);
 
 Atom LookupIteratorGetRole(LookupIterator const * iterator);
 

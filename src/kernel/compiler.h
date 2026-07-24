@@ -4,6 +4,7 @@
 #define COMPILER_H
 
 #include "kernel/ServiceRegistry.h"
+#include "lang/Formula.h"
 
 /**
  * Attempt to compile a query. If successful, registers the generated service,

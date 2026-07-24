@@ -34,6 +34,11 @@ typedef union u_Atom {
 	} parameter;
 } Atom;
 
+/**
+ * Sort an array of atoms according to CompareAtoms()
+ */
+void SortAtoms(Atom atoms[], size32 nAtoms);
+
 uint8 ReduceAtomsArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms);
 
 int8 CompareAtoms(Atom atom1, Atom atom2);

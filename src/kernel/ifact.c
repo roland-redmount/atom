@@ -200,7 +200,7 @@ void IFactBegin(IFactDraft * draft)
 }
 
 
-void IFactBeginConjunction(IFactDraft * draft, RelationTable * table, index8 idColumn)
+void IFactBeginConjunction(IFactDraft * draft, RelationTable const * relation, index8 idColumn)
 {
 	ASSERT(!draft->hasBegunConjunction);
 
@@ -212,7 +212,7 @@ void IFactBeginConjunction(IFactDraft * draft, RelationTable * table, index8 idC
 	);
 	IFactConjunction * conjunction = lastConjunction(&(draft->header));
 	
-	conjunction->table = table;
+	conjunction->table = relation;
 	conjunction->nRows = 0;
 	conjunction->idColumn = idColumn;
 
@@ -220,17 +220,21 @@ void IFactBeginConjunction(IFactDraft * draft, RelationTable * table, index8 idC
 	// an input in the idColumn position, and outputs in all other positions.
 	// NOTE: this service could be compiled using a FILTER operation 
 	// if it does not already exist.
-	Atom parameters[conjunction->table->nColumns];
+	// Atom parameters[conjunction->table->nColumns];
+	// for(index8 i = 0; i < conjunction->table->nColumns; i++) {
+	// 	parameters[i] = (Atom) {
+	// 		.parameter = {
+	// 			.number = i+ 1,
+	// 			.io = (i == idColumn) ? PARAMETER_IN : PARAMETER_OUT,
+	// 			.atomType = conjunction->table->atomTypes[i]
+	// 		}
+	// 	};
+	// }
+	byte parameterIO[conjunction->table->nColumns];
 	for(index8 i = 0; i < conjunction->table->nColumns; i++) {
-		parameters[i] = (Atom) {
-			.parameter = {
-				.number = i+ 1,
-				.io = (i == idColumn) ? PARAMETER_IN : PARAMETER_OUT,
-				.atomType = conjunction->table->atomTypes[i]
-			}
-		};
+		parameterIO[i] = (i == idColumn) ? PARAMETER_IN : PARAMETER_OUT;
 	}
-	conjunction->service = RegistryFindService(conjunction->table->form, parameters);
+	conjunction->service = RegistryFindService(relation, parameterIO);
 	ASSERT(conjunction->service)
 	draft->hasBegunConjunction = true;
 }
@@ -333,7 +337,6 @@ static void createFacts(IFactDraft * draft, bool bootstrap)
 	// walk through conjunctions and add to tuples corresponding relation table
 	IFactConjunction const * conjunction = draft->header.conjunctions;
 	Atom * tuple = draft->tupleStorage;
-	TypedTuple * typedTuple = CreateTypedTuple(conjunction->table->nColumns);
 	for(index8 i = 0; i < draft->header.nConjunctions; i++) {
 		for(index32 j = 0; j < conjunction->nRows; j++) {
 			// set the identified atom
@@ -342,9 +345,7 @@ static void createFacts(IFactDraft * draft, bool bootstrap)
 			ASSERT(RelationTableAddTuple(conjunction->table, tuple, conjunction->idColumn + 1) == TUPLE_ADDED)
 			// add lookup
 			if(!bootstrap) {
-				for(index8 k = 0; k < conjunction->table->nColumns; k++)
-					TypedTupleSetElement(typedTuple, k, CreateTypedAtom(conjunction->table->atomTypes[k], tuple[k]));
-				LookupAddPredicateRoles(conjunction->table->form, typedTuple);
+				LookupAddPredicateRoles(conjunction->table, tuple);
 			}
 			// assertFact(conjunction->table->form, typedTuple, conjunction->idColumn + 1);
 			tuple += conjunction->table->nColumns;
@@ -403,8 +404,7 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 		if(CompareMemory(conjunction, existingConjunction, sizeof(IFactConjunction)))
 			return false;
 
-		// Fetch identifying facts for the existing IFact compare
-		RelationBTreeIterator iterator;
+		// Fetch identifying facts for the existing IFact.
 		// Create query tuple
 		// the identified atom must be identical in current and existing
 		TypedTuple * queryTuple = CreateTypedTuple(conjunction->table->nColumns);
@@ -433,7 +433,6 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 			draftTuple += conjunction->table->nColumns;
 			// currentTuple now points to the first tuple of the next conjuction
 		}
-		RelationBTreeIteratorEnd(&iterator);
 	}
 	return true;
 }

@@ -13,46 +13,35 @@
 // TODO: we need more test cases!
 // Should have a fuzz test with large number of tuples
 
-#define EXAMPLE_N_ATOMS		3
-
-typedef struct {
-	TypedAtom atoms[EXAMPLE_N_ATOMS];
-} AtomsFixture;
-
-
-static AtomsFixture createAtomsFixture(void)
-{
-	AtomsFixture fixture;
-	fixture.atoms[0] = CreateTypedAtom(AT_UINT, (Atom) {._uint = 42});
-	fixture.atoms[1] = CreateTypedAtom(AT_LETTER, GetAlphabetLetter('X'));
-	fixture.atoms[2] = CreateTypedAtom(AT_LETTER, GetAlphabetLetter('Y'));
-	return fixture;
-}
-
 #define EXAMPLE_LIST_N_ELEMENTS		3
-
 
 static void testCreateList(void)
 {
-	AtomsFixture fixture = createAtomsFixture();
-	BTree * listLength = RegistryGetCoreBTreeService(FORM_LIST_LENGTH);
-	BTree * listPositionElement = RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT);
-	size32 listLengthNRowsInitial = RelationBTreeNRows(listLength);
-	size32 listPositionElementNRowsInitial = RelationBTreeNRows(listPositionElement);
+	RelationTable const * listLength = GetCoreRelationTable(RELATION_LIST_LENGTH);
+	RelationTable const * listPositionElement = GetCoreRelationTable(RELATION_LIST_LETTER);
+
+	size32 listLengthNRowsInitial = RelationTableNRows(listLength);
+	size32 listPositionElementNRowsInitial = RelationTableNRows(listPositionElement);
 	
-	Atom list = CreateListFromArray(fixture.atoms, EXAMPLE_LIST_N_ELEMENTS);
+	// create list
+	Atom listAtoms[EXAMPLE_LIST_N_ELEMENTS] = {
+		GetAlphabetLetter('X'),
+		GetAlphabetLetter('Y'),
+		GetAlphabetLetter('Z')
+	};	
+	Atom list = CreateListFromArray(listAtoms, AT_LETTER, EXAMPLE_LIST_N_ELEMENTS);
+
 	// test (list length) relation table
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(listLength),listLengthNRowsInitial + 1)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength),listLengthNRowsInitial + 1)
 	// test (list position element) relation table
 	ASSERT_UINT32_EQUAL(
-		RelationBTreeNRows(listPositionElement),
+		RelationTableNRows(listPositionElement),
 		listPositionElementNRowsInitial + EXAMPLE_LIST_N_ELEMENTS
 	)
-
 	// test elements are as expected
-	for(index8 i = 0; i < EXAMPLE_LIST_N_ELEMENTS; i++)
-		ASSERT_TRUE(SameTypedAtoms(ListGetElement(list, i+1), fixture.atoms[i]))
-
+	for(index8 i = 0; i < EXAMPLE_LIST_N_ELEMENTS; i++) {
+		ASSERT_DATA64_EQUAL(ListGetElement(list, i+1).hash, listAtoms[i].hash)
+	}
 	// test list length
 	ASSERT_UINT32_EQUAL(ListLength(list), EXAMPLE_LIST_N_ELEMENTS)
 
@@ -61,58 +50,21 @@ static void testCreateList(void)
 	ListIterate(list, &iterator);
 	for(index8 i = 0; i < EXAMPLE_LIST_N_ELEMENTS; i++) {
 		ASSERT_TRUE(ListIteratorNext(&iterator))
-		TypedAtom element = ListIteratorGetElement(&iterator);
-		ASSERT_TRUE(SameTypedAtoms(element, fixture.atoms[i]))
+		Atom element = ListIteratorGetElement(&iterator);
+		ASSERT_DATA64_EQUAL(element.hash, listAtoms[i].hash)
 	}
 	ASSERT_FALSE(ListIteratorNext(&iterator))
 	ListIteratorEnd(&iterator);
 
 	// test ListGetPosition
 	for(index8 i = 0; i < EXAMPLE_LIST_N_ELEMENTS; i++)
-		ASSERT_UINT32_EQUAL(ListGetPosition(list, fixture.atoms[i]), i + 1)
+		ASSERT_UINT32_EQUAL(ListGetPosition(list, listAtoms[i]), i + 1)
 
-	TypedTuple * tuple = CreateTypedTuple(3);
-	// attempt to add a tuple (list @list position 7 element 'Z') will violate the ifact
-	// NOTE: removed this, I don't think it's correct--- see IFactCheckTuple()
-/*
-	ListSetTuple(tuple,
-		CreateTypedAtom(AT_ID, list),
-		CreateTypedAtom(AT_UINT, (Atom) {._uint = 7}),
-		CreateTypedAtom(AT_LETTER, GetAlphabetLetter('Z'))
-	);
-	ASSERT_UINT32_EQUAL(RelationBTreeAddTuple(listPositionElement, tuple), TUPLE_PROTECTED)
-*/
 	// attempt to remove any tuple (list @string position _ element _) will violate the ifact
-	ListSetTuple(tuple,
-		CreateTypedAtom(AT_ID, list),
-		CreateTypedAtom(AT_UINT, (Atom) {._uint = 3}),
-		CreateTypedAtom(AT_LETTER, GetAlphabetLetter('Y'))
-	);
-	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuples(listPositionElement, tuple, REMOVE_NORMAL), 0)
-	FreeTypedTuple(tuple);
+	Atom tuple[EXAMPLE_LIST_N_ELEMENTS] = {list, (Atom) {._uint = 3}, listAtoms[3-1]};
+	ASSERT_UINT32_EQUAL(RelationTableRemoveTuple(listPositionElement, tuple, 0), TUPLE_PROTECTED)
 
 	IFactRelease(list);
-}
-
-
-typedef struct {
-	AtomsFixture atomsFixture;
-	Atom list;
-} ExampleListFixture;
-
-// a list containing only "small" atoms
-static ExampleListFixture setupExampleListFixture(void)
-{
-	ExampleListFixture fixture;
-	fixture.atomsFixture = createAtomsFixture();
-	fixture.list = CreateListFromArray( fixture.atomsFixture.atoms, EXAMPLE_LIST_N_ELEMENTS);
-	return fixture;
-}
-
-
-static void teardownExampleListFixture(ExampleListFixture fixture)
-{
-	IFactRelease(fixture.list);
 }
 
 
@@ -120,33 +72,31 @@ static void teardownExampleListFixture(ExampleListFixture fixture)
 
 static void testNestedList(void)
 {
-	// arrange
-	ExampleListFixture fixture = setupExampleListFixture();
-
-	TypedAtom nestedListAtoms[] = {
-		CreateTypedAtom(AT_LETTER, GetAlphabetLetter('A')),
-		CreateTypedAtom(AT_ID, fixture.list)
+	Atom innerListAtoms[EXAMPLE_LIST_N_ELEMENTS] = {
+		GetAlphabetLetter('X'),
+		GetAlphabetLetter('Y'),
+		GetAlphabetLetter('Z')
 	};
+	Atom innerList = CreateListFromArray(innerListAtoms, AT_LETTER, EXAMPLE_LIST_N_ELEMENTS);
 
-	Atom nestedList = CreateListFromArray(nestedListAtoms, NESTED_LIST_N_ELEMENTS);
+	// TODO: this will require a relation for a list of AT_ID elements
+	Atom outerListAtoms[1] = {innerList};
+	Atom outerList = CreateListFromArray(outerListAtoms, AT_LETTER, 1);
 	
 	// test ListGetElement
-	for(index8 i = 0; i < NESTED_LIST_N_ELEMENTS; i++)
-		ASSERT_TRUE(SameTypedAtoms(ListGetElement(nestedList, i+1), nestedListAtoms[i]))
+	ASSERT_DATA64_EQUAL(ListGetElement(outerList, 1).hash, outerListAtoms[0].hash)
 
 	// test ListGetPosition
-	index32 position = ListGetPosition(nestedList, CreateTypedAtom(AT_ID, fixture.list));
-	ASSERT_UINT32_EQUAL(position, 2)
+	ASSERT_UINT32_EQUAL(ListGetPosition(outerList, innerList), 1)
 
-	IFactRelease(nestedList);
-
-	teardownExampleListFixture(fixture);
+	IFactRelease(outerList);
+	IFactRelease(innerList);
 }
 
 
 static void testCreateEmptyList(void)
 {
-	Atom emptyList = CreateListFromArray(0, 0);
+	Atom emptyList = CreateListFromArray(0, AT_LETTER, 0);
 	ASSERT_TRUE(IsList(emptyList))
 	ASSERT_UINT32_EQUAL(ListLength(emptyList), 0)
 

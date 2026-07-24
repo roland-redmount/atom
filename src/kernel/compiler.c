@@ -203,6 +203,7 @@ static Service * compileTerm(
 	// respecting the argument permutation obtained from DispatchQuery() above
 	index8 argumentMap[termArity];
 	size8 nConstants = 0;
+	// loop over service parameters
 	for(index8 i = 0; i < termArity; i++) {
 		TypedAtom actor = TypedTupleGetElement(termActors, permutation[i]);
 		if(actor.type == AT_PARAMETER) {
@@ -213,27 +214,37 @@ static Service * compileTerm(
 			nConstants++;
 		}
 		TypedTupleSetElement(serviceParameters, permutation[i],
-			CreateTypedAtom(AT_PARAMETER, termServiceRecord.parameters[i + 1]));
+			CreateTypedAtom(
+				AT_PARAMETER,
+				(Atom) {
+					.parameter = {
+						.number = 0,
+						.atomType = termServiceRecord.relation->atomTypes[i],
+						.io = termServiceRecord.parameterIO[i]
+					}
+				}
+				// termServiceRecord.parameters[i + 1])
+			)
+		);
 	}
+	TypedTuple * constants = 0;
 	bool deduplicate = false;
 	Service * service;
 	if(nConstants > 0) {
-		Atom constants[nConstants];
+		constants = CreateTypedTuple(nConstants);
 		for(index8 i = 0, k = 0; i < termActors->nAtoms; i++) {
 			TypedAtom actor = TypedTupleGetElement(termActors, permutation[i]);
 			if(actor.type != AT_PARAMETER) {
-				constants[k++] = actor.atom;
+				TypedTupleSetElement(constants, k++, actor);
 				// TODO: we should only deduplicate if the "constant" is a variable?
 				deduplicate = true;
 			}
 		}
-		service = CreatePermuteService(
-			nArguments, constants, argumentMap, termServiceRecord.service);
 	}
-	else {
-		service = CreatePermuteService(
-			nArguments, 0, argumentMap, termServiceRecord.service);
-	}
+	service = CreatePermuteService(
+		nArguments, constants, argumentMap, termServiceRecord.service);
+	if(constants)
+		FreeTypedTuple(constants);
 
 	// TODO: if we have an identity argument map, we can just return the child service
 
@@ -273,7 +284,7 @@ static Service * compileConjunctionRecursive(
 			termIndex += em.multiple;
 			continue;
 		}
-		Atom termForm = em.element.atom;
+		Atom termForm = em.element;
 		size8 termArity = TermFormArity(termForm);
 		// negate the term form
 		Atom negatedTermForm = CreateTermForm(
@@ -438,29 +449,23 @@ static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
 
 	Service * service = 0;
 
-	// TODO: this must be the typed relation (multiset:ID element:ID multiple:UINT),
-	// while for predicates roles we need (multiset:ID element:NAME multiple:UINT).
-	RelationTable multisetTable = FindRelationTable(
-		GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE),
-		GetCorePredicateAtomTypes(FORM_MULTISET_ELEMENT_MULTIPLE)
-	);
-
-	RelationBTreeIterator btreeIterator;
+	// the service (multiset >ID element <ID multiple >UINT) where element is input
+	Service const * multisetService = GetCoreService(SERVICE_MULTISET_ID_BY_ELEMENT);
 	Atom multisetQueryTuple[3];
 	// TODO: the element role of (multiset element multiple) may not be the
 	// first column, so we have to table scan and filter.
-	MultisetSetTuple(multisetQueryTuple, (Atom) {0}, queryTermForm, (Atom) {0});
-	RelationBTreeIterate(&multisetTable, multisetQueryTuple, 1, &btreeIterator);
-	while(RelationBTreeIteratorNext(&btreeIterator)) {
+	CoreFormSetTuple(
+		FORM_MULTISET_ELEMENT_MULTIPLE,
+		(Atom[]) {(Atom) {0}, queryTermForm, (Atom) {0}},
+		multisetQueryTuple
+	);
+	ServiceContext * multisetContext = ServiceCreateContext(multisetService, multisetQueryTuple);
+	while(ServiceCall(multisetContext)) {
 		// Found a multiset where the term form occurs
-		Atom clauseForm = RelationBTreeIteratorGetAtom(
-			&btreeIterator,
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
-		);
-		size8 multiple = RelationBTreeIteratorGetAtom(
-			&btreeIterator,
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)
-		)._uint;
+		Atom clauseForm = multisetQueryTuple[
+			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)];
+		size8 multiple = multisetQueryTuple[
+			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)]._uint;
 		// Ensure the multiset is a clause form
 		if(!IsClauseForm(clauseForm))
 			continue;
@@ -522,7 +527,7 @@ static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
 		FreeTypedTuple(substClauseActors);
 		FreeTypedTuple(matchedTermActors);
 	}
-	RelationBTreeIteratorEnd(&btreeIterator);
+	ServiceFreeContext(multisetContext);
 
 	return service;
 }
@@ -546,9 +551,18 @@ Service const * CompileService(Formula const * queryTerm)
 
 	Service * service = compileService(queryTerm->form, generalizedActors);
 	if(service) {
-		// TODO: the service registry now expects a predicate form
 		Atom const * serviceParameters = TypedTuplePeekAtoms(generalizedActors);
-		RegistryAddService(queryTerm->form, serviceParameters, service);
+		// extract parameter IO types from parameter list
+		size8 arity = queryTerm->actors->nAtoms;
+		byte parameterIO[arity];
+		for(index8 i = 0; i < arity; i++)
+			parameterIO[i] = serviceParameters[i].parameter.io;
+		// create table
+		// TODO: must check if table already exists!
+		RelationTable const * relation = CreateRelationTable(
+			0, queryTerm->form, arity, parameterIO
+		);
+		RelationAddService(relation, parameterIO, service);
 		ReleaseService(service);
 	}
 	FreeTypedTuple(generalizedActors);

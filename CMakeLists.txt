@@ -92,13 +92,14 @@ add_library(atom SHARED
     src/kernel/list.c
     src/kernel/lookup.c
     src/kernel/multiset.c
-    src/kernel/pair.c
+    # src/kernel/pair.c
     src/kernel/Parameter.c
     src/kernel/RelationBTree.c
     src/kernel/RelationTable.c
     src/kernel/service.c
     src/kernel/ServiceRegistry.c
     src/kernel/string.c
+    src/kernel/tuple.c
     src/kernel/typedtuple.c
     src/kernel/UInt.c
 
@@ -152,7 +153,7 @@ set(ATOM_TESTS
     test_math
     test_memory
     test_multiset
-    test_pair
+    # test_pair
     test_parsing
     test_persistence
     test_relation_btree

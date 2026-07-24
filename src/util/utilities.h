@@ -19,6 +19,7 @@ uint32 DivCeiling(uint32 numerator, uint32 divisor);
 
 void SwapBytes(byte * a, byte * b);
 
+void SwapMemory(void * address1, void * address2, size32 nBytes);
 
 /**
  * Printing arrays to stdout

@@ -4,6 +4,10 @@
  * A relation table should register one or more services for querying
  * and optionally agents for modifying contents (if read/write).
  * 
+ * NOTE: the form is currently always a predicate form, which means we
+ * cannot have services for negated predicates like (! odd x). 
+ * It's not clear to me yet if this is a major limitation.
+ * 
  * NOTE: in the future, we want to be able to hot-load implementations
  * into a running atom process. This would involve loading code into
  * executable memory and registering services with the appropriate
@@ -13,7 +17,7 @@
 #ifndef RELATION_TABLE_H
 #define RELATION_TABLE_H
 
-#include "lang/Atom.h"
+#include "kernel/service.h"
 
 typedef struct s_RelationTable RelationTable;
 
@@ -21,6 +25,11 @@ typedef struct s_RelationTable RelationTable;
  * Description of an implementation provider, such as RelationBTree.
  * One provider may provide multiple relation tables, sharing the same
  * callbacks.
+ * 
+ * TODO: I don't think these callbacks should take the RelationTable
+ * as argument, only the RelationTable.data void * pointer. Implementations
+ * should not depend on RelationTable. Any data needed by the implementation
+ * must be stored in the data pointer.
  */
 typedef struct s_RelationTableProvider {
 
@@ -30,7 +39,7 @@ typedef struct s_RelationTableProvider {
 	 * This function should also register services associated with the table
 	 * in the service registry.
 	 */
-	void * (*createTable)(Atom form, size8 nColumns, byte const atomTypes[]);
+	void * (*createTable)(size8 nColumns, byte const atomTypes[]);
 
 	/**
 	 * Add a tuple to the given table.
@@ -38,17 +47,18 @@ typedef struct s_RelationTableProvider {
 	 * If idPosition is > 0 it indicates the 1-based position of an identified
 	 * atom (the tuple is part of an ifact).
 	 */
-	byte (*addTuple)(RelationTable * table, Atom const tuple[], uint8 idPosition);
+	byte (*addTuple)(RelationTable const * table, Atom const tuple[], uint8 idPosition);
 
 	/**
 	 * Remove a tuple from the underlying relation.
+	 * The tuple must not contain any missing values
 	 */
-	void (*removeTuple)(RelationTable * table, Atom const tuple[]);
+	byte (*removeTuple)(RelationTable const * table, Atom const tuple[]);
 
 	/**
 	 * Return number of tuples in the relation table
 	 */
-	size32 (*numberOfTuples)(RelationTable * table);
+	size32 (*numberOfTuples)(RelationTable const * table);
 
 	/**
 	 * Free a relation table. Typically deallocates the underlying data structures.
@@ -61,36 +71,29 @@ typedef struct s_RelationTableProvider {
 #define TUPLE_ADDED			1
 #define TUPLE_EXISTS		2
 
+// result codes for removeTuple()
+#define TUPLE_REMOVED		1
+#define TUPLE_PROTECTED		2
+
 /**
- * A relation table implementation record.
+ * A relation table implementation record, identified by (form, atomTypes).
+ * 
  * Each implementation must provide callbacks to support adding
- * and removing tuples
+ * and removing tuples.
  */
 struct s_RelationTable {
 	Atom form;
 	size8 nColumns;
 	byte * atomTypes;
+	// provider may be 0 for computed relations
 	RelationTableProvider * provider;
 	void * data;	// any implementation-dependent data
 };
 
 /**
- * Create a new relation table. The RelationTableProvider * must be valid for as
- * long as the implementation is in use. Calls provider->createTable().
+ * Return the number of rows in a relation table
  */
-RelationTable CreateRelationTable(RelationTableProvider * provider, Atom form, size8 nColumns, byte const atomTypes[]);
-
-/**
- * Locate a relation table for given (form, column types).
- * NOTE: if we store RelationTable in a B-tree we need to return a copy
- * of the structure. Same problem as for ServiceRecord. We might want
- * a "T-tree" structure where the data items are stored at stable addresses?
- */
-RelationTable FindRelationTable(Atom form, byte const * atomTypes);
-
-
 size32 RelationTableNRows(RelationTable const * table);
-
 
 /**
  * Add a single tuple to the relation, acquiring each atom in the tuple.
@@ -98,7 +101,6 @@ size32 RelationTableNRows(RelationTable const * table);
  * Does not add entries to lookup; see AssertFact()
  */
 byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
-
 
 /**
  * Remove the given tuple from the relation table.

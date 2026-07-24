@@ -74,18 +74,15 @@ bool PredicateBuilderIsEmpty(PredicateBuilder const * builder)
 /**
  * Create a DT_FORMULA from the lists of roles and actors stored in this builder.
  */
-Atom PredicateBuilderCreateFormula(PredicateBuilder const * builder)
+Formula * PredicateBuilderCreateFormula(PredicateBuilder const * builder)
 {
 	size8 arity = predicateArity(builder);
 	Atom const * roles = ResizingArrayGetMemory(&(builder->roles));
 	Atom form = CreatePredicateForm(roles, arity);
 
 	// determine the order of roles used by multiset
-	TypedAtom roleAtoms[arity];
-	for(index8 i = 0; i < arity; i++)
-		roleAtoms[i] = (TypedAtom) {.type = AT_NAME, .atom = roles[i]};
 	index8 order[arity]; 
-	MultisetIterationOrder(form, roleAtoms, order, arity);
+	MultisetIterationOrder(form, roles, order, arity);
 
 	// ordered list of atoms
 	TypedAtom actors[arity];
@@ -94,7 +91,7 @@ Atom PredicateBuilderCreateFormula(PredicateBuilder const * builder)
 		actors[i] = actor;
 	}
 	
-	Atom formula = CreateFormulaFromArray(form, actors);
+	Formula * formula = CreateFormulaFromArray(form, actors);
 	IFactRelease(form);
 	return formula;
 }
@@ -130,7 +127,7 @@ void CleanupPredicateBuilder(PredicateBuilder * builder)
 }
 
 
-Atom CStringToPredicate(char const * string)
+Formula * CStringToPredicate(char const * string)
 {
 	size32 length = CStringLength(string);
 	Tokenizer tokenizer;
@@ -148,7 +145,7 @@ Atom CStringToPredicate(char const * string)
 		}
 	}
 	ASSERT(PredicateBuilderIsValid(&builder));
-	Atom predicate = PredicateBuilderCreateFormula(&builder);
+	Formula * predicate = PredicateBuilderCreateFormula(&builder);
 	
 	CleanupPredicateBuilder(&builder);
 	TokenizerCleanup(&tokenizer);

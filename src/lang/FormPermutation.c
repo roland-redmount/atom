@@ -192,7 +192,7 @@ ClauseIterator * CreateClauseIterator(Atom clauseForm)
 
 		// create a predicate iterator for each multiple of each term form
 		iter->predIter[i] = malloc(em.multiple * sizeof(PredicateIterator *));
-		Atom predicateForm = TermFormGetPredicateForm(em.element.atom);
+		Atom predicateForm = TermFormGetPredicateForm(em.element);
 		for(index8 j = 0; j < em.multiple; j++) {
 			iter->predIter[i][j] = CreatePredicateIterator(predicateForm);
 		}
@@ -301,7 +301,7 @@ ConjunctionIterator * CreateConjunctionIterator(Atom form)
 		// create a clause iterator for each multiple of each clause form
 		iter->clauseIter[i] = malloc(em.multiple * sizeof(ClauseIterator *));
 		for(index8 j = 0; j < em.multiple; j++) {
-			iter->clauseIter[i][j] = CreateClauseIterator(em.element.atom);
+			iter->clauseIter[i][j] = CreateClauseIterator(em.element);
 		}
 	}
 	MultisetIteratorEnd(&iterator);

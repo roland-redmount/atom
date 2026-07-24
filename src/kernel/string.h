@@ -14,13 +14,6 @@ Atom CreateStringFromCString(char const * cString);
 
 bool IsString(Atom atom);
 
-size32 GetStringLength(Atom string);
-
-/**
- * Returne the letter (AT_LETTER) at the given position (1-based).
- */
-Atom StringGetLetter(Atom string, index32 position);
-
 void PrintString(Atom string);
 
 Atom ParseString(char const * syntax, size32 length);

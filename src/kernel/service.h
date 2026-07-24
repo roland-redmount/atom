@@ -2,7 +2,7 @@
  #ifndef SERVICE_H
  #define SERVICE_H
 
-#include "kernel/typedtuple.h"
+ #include "kernel/typedtuple.h"
 
 
 typedef struct s_Service Service;
@@ -110,7 +110,7 @@ struct s_Service {
 		struct {
 			Service * childService;
 			// Stored constants
-			Atom * constants;
+			TypedTuple * constants;
 			// 1-based indices of each child argument into the parent arguments,
 			// or 0 if the child argument is a constant.
 			// NOTE: the parent:child mapping is 1:n, a parent argument
@@ -151,7 +151,7 @@ struct s_Service {
  * NOTE: If child arguments are missing from the argumentMap, the resulting tuples may not be unique.
  */
 Service * CreatePermuteService(
-	size8 nArguments, Atom const * constants, index8 const * argumentMap, Service * childService);
+	size8 nArguments, TypedTuple const * constants, index8 const * argumentMap, Service * childService);
 
 /**
  * Create a machine code service
@@ -202,7 +202,7 @@ struct s_ServiceContext {
   * with the given arguments tuple. Each ServiceCall() to this context
   * will write its result into the arguments tuple.
   */
-ServiceContext * ServiceCreateContext(Service const * service, Atom * arguments);
+ServiceContext * ServiceCreateContext(Service const * service, Atom arguments[]);
 
 /**
  * Execute a service with a given context. Returns true if a tuple was produced,
@@ -218,8 +218,10 @@ void ServiceFreeContext(ServiceContext * context);
 
 /**
  * Initialize a service context, perform one call, and terminate.
+ * The service must produce at most one tuple for the given arguments.
+ * Return true if a tuple was produced.
  */
-ServiceContext * ServiceCallOnce(Service const * service, Atom * arguments);
+bool ServiceCallOnce(Service const * service, Atom arguments[]);
 
 
 void PrintService(Service const * service);

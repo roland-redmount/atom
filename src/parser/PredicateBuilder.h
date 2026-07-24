@@ -7,7 +7,7 @@
 #ifndef PREDICATEBUILDER_H
 #define PREDICATEBUILDER_H
 
-
+#include "lang/Formula.h"
 #include "parser/PartBuilder.h"
 #include "util/ResizingArray.h"
 
@@ -24,15 +24,16 @@ void InitializePredicateBuilder(PredicateBuilder * builder);
 bool PredicateBuilderPush(PredicateBuilder * builder, Token token);
 
 bool PredicateBuilderIsEmpty(PredicateBuilder const * builder);
+
 bool PredicateBuilderIsValid(PredicateBuilder const * builder);
 
-Atom PredicateBuilderCreateFormula(PredicateBuilder const * builder);
+Formula * PredicateBuilderCreateFormula(PredicateBuilder const * builder);
 
 void PredicateBuilderReset(PredicateBuilder * builder);
 
 void CleanupPredicateBuilder(PredicateBuilder * builder);
 
-Atom CStringToPredicate(char const * string);
+Formula * CStringToPredicate(char const * string);
 
 
 #endif	// PREDICATEBUILDER_H

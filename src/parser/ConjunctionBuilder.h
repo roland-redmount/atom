@@ -18,14 +18,17 @@ typedef struct s_ConjunctionBuilder {
 void InitializeConjunctionBuilder(ConjunctionBuilder * builder);
 
 bool ConjunctionBuilderPush(ConjunctionBuilder * builder, Token token);
+
 bool ConjunctionBuilderIsValid(ConjunctionBuilder const * builder);
-Atom ConjunctionBuilderCreateFormula(ConjunctionBuilder * builder);
+
+Formula * ConjunctionBuilderCreateFormula(ConjunctionBuilder * builder);
+
 void ConjunctionBuilderReset(ConjunctionBuilder * builder);
 
 void CleanupConjunctionBuilder(ConjunctionBuilder * builder);
 
 // convenience method for testing
-Atom CStringToConjunction(char const * cString);
+Formula * CStringToConjunction(char const * cString);
 
 
 #endif	// CONJUNCTION_BUILDER_H

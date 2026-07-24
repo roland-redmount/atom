@@ -70,7 +70,12 @@ static void testPredicateForm(void)
 	for(index32 i = 0; i < EXAMPLE_PREDICATE_N_ROLES; i++) {
 		ASSERT_TRUE(MultisetIteratorNext(&roleIterator))
 		em = MultisetIteratorGetElement(&roleIterator);
-		ASSERT_UINT32_EQUAL(em.element.type, AT_NAME)
+		if(em.element.hash == exampleNames.baz.hash) {
+			ASSERT(em.multiple == 2)
+		}
+		else {
+			ASSERT(em.multiple == 1)
+		}
 	}
 	ASSERT_FALSE(MultisetIteratorNext(&roleIterator))
 	MultisetIteratorEnd(&roleIterator);
@@ -159,12 +164,12 @@ static void testClauseForm(void)
 	for(index8 i = 0; i < EXAMPLE_CLAUSE_N_UNIQUE_TERMS; i++) {
 		ASSERT_TRUE(MultisetIteratorNext(&termFormIterator))
 		ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
-		ASSERT_UINT32_EQUAL(em.element.type, AT_ID)
 		// order of term forms is arbitrary
-		if(em.element.atom.hash == termFormsFixture.termForm.hash)
+		if(em.element.hash == termFormsFixture.termForm.hash) {
 			ASSERT_UINT32_EQUAL(em.multiple, 2)
+		}
 		else {
-			ASSERT_DATA64_EQUAL(em.element.atom.hash, termFormsFixture.negatedTermForm.hash)
+			ASSERT_DATA64_EQUAL(em.element.hash, termFormsFixture.negatedTermForm.hash)
 			ASSERT_UINT32_EQUAL(em.multiple, 1)
 		}
 	}
@@ -202,26 +207,19 @@ void teardownClauseForm(ClauseFormFixture fixture)
 
 static void testCreateClause(void)
 {
-	// arrange
 	ClauseFormFixture clauseFormFixture = setupClauseForm();
 
-	TypedAtom actors[EXAMPLE_CLAUSE_ARITY];
+	TypedTuple * actors = CreateTypedTuple(EXAMPLE_CLAUSE_ARITY);
 	for(index8 i = 0; i < EXAMPLE_CLAUSE_ARITY; i++)
-		actors[i] = CreateTypedAtom(AT_INT, (Atom) {._int = i + 1});
-	Atom actorsList = CreateListFromArray(actors, EXAMPLE_CLAUSE_ARITY);
+		TypedTupleSetElement(actors, i, CreateTypedAtom(AT_INT, (Atom) {._int = i + 1}));
+	
+	Formula * clause = CreateFormula(clauseFormFixture.clauseForm, actors);
 
-	// act
-	Atom clause = CreateFormula(clauseFormFixture.clauseForm, actorsList);
+	ASSERT_UINT32_EQUAL(clause->actors->nAtoms, EXAMPLE_CLAUSE_ARITY)
+	ASSERT_TRUE(TypedTupleEqual(clause->actors, actors));
 
-	// assert
-	ASSERT_TRUE(IsFormula(clause))
-	ASSERT_UINT32_EQUAL(FormulaArity(clause), ClauseArity(clauseFormFixture.clauseForm))
-	ASSERT_DATA64_EQUAL(FormulaGetActors(clause).hash, actorsList.hash)
-
-	IFactRelease(clause);
-
-	// teardown
-	IFactRelease(actorsList);
+	FreeFormula(clause);
+	FreeTypedTuple(actors);
 	teardownClauseForm(clauseFormFixture);
 }
 

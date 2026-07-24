@@ -4,7 +4,6 @@
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
-#include "kernel/pair.h"
 #include "kernel/Parameter.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/TermForm.h"
@@ -39,10 +38,11 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	RelationTable termFormTable = GetCoreRelationTable(FORM_TERM_FORM);
-	IFactBeginConjunction(&draft, &termFormTable, CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM));
+	RelationTable const * termFormTable = GetCoreRelationTable(FORM_TERM_FORM);
+	IFactBeginConjunction(&draft, termFormTable, CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM));
 	Atom tuple[3];
-	termFormSetTuple(tuple, termFormTable.form, predicateForm, (Atom) {._uint = sign ? 1 : 0});
+	// TODO: make this a kernel function CoreFormSetTuple()
+	termFormSetTuple(tuple, (Atom) {0}, predicateForm, (Atom) {._uint = sign ? 1 : 0});
 	IFactAddTuple(&draft, tuple);
 	IFactEndConjunction(&draft);
 
@@ -54,34 +54,22 @@ bool IsTermForm(Atom atom)
 {
 	return AtomHasRole(
 		atom,
-		GetCorePredicateForm(FORM_TERM_FORM),
+		GetCoreRelationTable(RELATION_TERM_FORM),
 		GetCoreRoleName(ROLE_TERM_FORM)
 	);
 }
 
-
-void termFormGetTuple(Atom termForm, Atom result[])
+// Retrieve the (unique) tuple from the (term-form predicate-form sign) relation
+// matching the given term form atom
+static void termFormGetTuple(Atom termForm, Atom tuple[])
 {
-	// NOTE: we could do this with a service call but it is rather involved
-	// Atom parameters[3];
-	// termFormSetParameters(parameters, PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT);
-	// Service const * service = RegistryFindService(
-	// 	GetCorePredicateForm(FORM_TERM_FORM),
-	// 	parameters
-	// );
-	// ServiceContext * context = ServiceCreateContext(service, query);
-
-	RelationTable termFormTable = FindRelationTable(
-		GetCorePredicateForm(FORM_TERM_FORM),
-		GetCorePredicateAtomTypes(FORM_TERM_FORM)
+	Service const * service = GetCoreService(SERVICE_TERM_FORM);
+	CoreFormSetTuple(
+		FORM_TERM_FORM,
+		(Atom[]) {termForm, (Atom) {0}, (Atom) {0}},
+		tuple
 	);
-
-	Atom query[3];
-	termFormSetTuple(query, termForm, (Atom) {0}, (Atom) {0});
-	// TODO: this assumes the term-form role is column position 1
-	// We would need B-tree tables to maintain a specific column order,
-	// or explicity specify the index columns (which is the same thing)
-	RelationBTreeQuerySingle(&termFormTable, query, 1, result);	
+	ServiceCallOnce(service, tuple);
 }
 
 Atom TermFormGetPredicateForm(Atom termForm)

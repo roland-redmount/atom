@@ -1,7 +1,10 @@
 
+#include "btree/btree.h"
 #include "kernel/service.h"
-#include "kernel/RelationBTree.h"
+#include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
 #include "memory/allocator.h"
+#include "util/utilities.h"
 
 
 /**
@@ -22,19 +25,19 @@ static Service * createService(enum ServiceType type, size8 nArguments, size32 c
 //------------------------------------- SERVICE_PERMUTE -----------------------------------------
 
 typedef struct s_PermuteContext {
-	TypedTuple * childArguments;
+	Atom * childArguments;
 	ServiceContext * childContext;
 } PermuteContext;
 
 
 Service * CreatePermuteService(
-	size8 nArguments, Atom const * constants, index8 const * argumentMap, Service * childService)
+	size8 nArguments, TypedTuple const * constants, index8 const * argumentMap, Service * childService)
 {
 	Service * service = createService(SERVICE_PERMUTE, nArguments, sizeof(PermuteContext));
 	service->impl.permute.childService = childService;
 	AcquireService(childService);
 	if(constants) {
-		service->impl.permute.constants =CreateTupleFromTuple(constants);
+		service->impl.permute.constants = CreateTupleFromTuple(constants);
 		TypedTupleAcquire(service->impl.permute.constants);
 	}
 	else
@@ -51,19 +54,19 @@ static void permuteServiceSetupContext(ServiceContext * context)
 	PermuteContext * permuteContext = (PermuteContext *) &context->data;
 	size8 nChildArguments = context->service->impl.permute.childService->nArguments;
 	
-	permuteContext->childArguments = CreateTypedTuple(nChildArguments);
+	permuteContext->childArguments = Allocate(nChildArguments * sizeof(Atom));
 	for(index8 i = 0, k = 0; i < nChildArguments; i++) {
 		int parentIndex = context->service->impl.permute.argumentMap[i];
-		TypedAtom a;
+		Atom a;
 		if(parentIndex) {
 			// copy parent argument to child, permuted
-			a = TypedTupleGetElement(context->arguments, parentIndex - 1);
+			a = context->arguments[parentIndex - 1];
 		}
 		else {
 			// copy next constant
-			a = TypedTupleGetElement(context->service->impl.permute.constants, k++);
+			a = TypedTupleGetAtom(context->service->impl.permute.constants, k++);
 		}
-		TypedTupleSetElement(permuteContext->childArguments,	i, a);
+		permuteContext->childArguments[i] = a;
 	}
 	// setup child context
 	permuteContext->childContext = ServiceCreateContext(
@@ -84,11 +87,7 @@ static bool permuteServiceCall(ServiceContext * context)
 			int parentIndex = context->service->impl.permute.argumentMap[i];
 			if(parentIndex) {
 				// copy parent argument to child, permuted
-				TypedTupleSetElement(
-					context->arguments,
-					parentIndex - 1,
-					TypedTupleGetElement(permuteContext->childArguments, i)
-				);
+				context->arguments[parentIndex - 1] = permuteContext->childArguments[i];
 			}
 		}
 	}
@@ -112,7 +111,7 @@ static void permuteServiceFinalizeContext(ServiceContext * context)
 {
 	PermuteContext * permuteContext = (PermuteContext *) &context->data;
 	ServiceFreeContext(permuteContext->childContext);
-	FreeTypedTuple(permuteContext->childArguments);
+	Free(permuteContext->childArguments);
 }
 
 
@@ -120,7 +119,7 @@ static void permuteServiceFinalizeContext(ServiceContext * context)
 
 typedef struct s_JoinContext {
 	// Copy of the caller's arguments
-	TypedTuple * argumentsCopy;
+	Atom * argumentsCopy;
 	// Left and right child contexts
 	ServiceContext * leftContext;
 	ServiceContext * rightContext;
@@ -156,7 +155,7 @@ static bool joinServiceEvaluateLeft(ServiceContext * context)
 	JoinContext * joinContext = (JoinContext *) &context->data;
 	ASSERT(joinContext->leftContext)
 	// restore parent arguments tuple
-	TypedTupleCopy(joinContext->argumentsCopy, context->arguments);
+	CopyMemory(joinContext->argumentsCopy, context->arguments, context->service->nArguments * sizeof(Atom));
 
 	// Obtain next tuple from left service, if any.
 	// This will write directly to the context->arguments tuple
@@ -179,7 +178,7 @@ static void joinServiceSetupContext(ServiceContext * context)
 {
 	JoinContext * joinContext = (JoinContext *) &context->data;
 	// Make a backup of the argument tuple
-	joinContext->argumentsCopy = CreateTupleFromTuple(context->arguments);
+	CopyMemory(context->arguments, joinContext->argumentsCopy, context->service->nArguments * sizeof(Atom));
 	// call left service to prepare for iteration
 	joinContext->leftContext = ServiceCreateContext(
 		context->service->impl.join.left,
@@ -227,7 +226,7 @@ static void joinServiceFinalizeContext(ServiceContext * context)
 		ServiceFreeContext(joinContext->leftContext);
 	if(joinContext->rightContext)
 		ServiceFreeContext(joinContext->rightContext);
-	FreeTypedTuple(joinContext->argumentsCopy);
+	Free(joinContext->argumentsCopy);
 }
 
 
@@ -237,7 +236,7 @@ static void joinServiceFinalizeContext(ServiceContext * context)
 typedef struct s_UnionContext {
 	ServiceContext * lookaheadContext;
 	ServiceContext * nextContext;
-	TypedTuple * lookahead;
+	Atom * lookahead;
 } UnionContext;
 
 
@@ -271,7 +270,7 @@ static void swapContexts(UnionContext * unionContext)
 static void unionSetupContext(ServiceContext * context)
 {
 	UnionContext * unionContext = (UnionContext *) &context->data;
-	unionContext->lookahead = CreateTypedTuple(context->service->nArguments);
+	unionContext->lookahead = Allocate(context->service->nArguments * sizeof(Atom));
 	// Arbitratily assign child services to previous and next
 	// both child services write to the arguments tuple
 	unionContext->lookaheadContext = ServiceCreateContext(
@@ -280,7 +279,7 @@ static void unionSetupContext(ServiceContext * context)
 		context->service->impl._union.second, context->arguments);
 	// Obtain the lookahead tuple
 	if(ServiceCall(unionContext->lookaheadContext)) {
-		TypedTupleCopy(context->arguments, unionContext->lookahead);
+		CopyMemory(context->arguments, unionContext->lookahead, context->service->nArguments * sizeof(Atom));
 	}
 	else {
 		// No lookahead
@@ -293,6 +292,7 @@ static void unionSetupContext(ServiceContext * context)
 static bool unionServiceCall(ServiceContext * context)
 {
 	UnionContext * unionContext = (UnionContext *) &context->data;
+	size8 nArguments = context->service->nArguments;
 	// We interleave tuples provided by the two services to maintain sorted order,
 	// and skip any identical tuples. At each call, we have a "lookahead" tuple from
 	// one of the child services, and we try to obtain a new tuple from the other
@@ -308,16 +308,16 @@ static bool unionServiceCall(ServiceContext * context)
 		ServiceFreeContext(unionContext->nextContext);
 		unionContext->nextContext = 0;
 		swapContexts(unionContext);
-		TypedTupleCopy(unionContext->lookahead, context->arguments);
+		CopyMemory(unionContext->lookahead, context->arguments, nArguments * sizeof(Atom));
 		return true;
 	}
 
 	// Compare the newly obtained arguments tuple with the lookahead tuple 
-	int8 order = TypedTupleCompare(context->arguments, unionContext->lookahead);
+	int8 order = TupleCompare(context->arguments, unionContext->lookahead, nArguments);
 	if(order == 0) {
 		// Duplicate tuple, acquire next (only one tuple can be equal)
 		if(ServiceCall(unionContext->nextContext)) {
-			order = TypedTupleCompare(context->arguments, unionContext->lookahead);
+			order = TupleCompare(context->arguments, unionContext->lookahead, nArguments);
 			ASSERT(order > 0)
 		}
 	}
@@ -326,7 +326,7 @@ static bool unionServiceCall(ServiceContext * context)
 	}
 	else {
 		// order > 0
-		TypedTupleSwap(context->arguments, unionContext->lookahead);
+		SwapMemory(context->arguments, unionContext->lookahead, nArguments * sizeof(Atom));
 		swapContexts(unionContext);
 		return true;
 	}
@@ -339,20 +339,23 @@ static void unionFinalizeContext(ServiceContext * context)
 	if(unionContext->lookaheadContext)
 		ServiceFreeContext(unionContext->lookaheadContext);
 	ServiceFreeContext(unionContext->nextContext);
-	FreeTypedTuple(unionContext->lookahead);
+	Free(unionContext->lookahead);
 }
 
 
 //----------------------------------- SERVICE_DEDUPLICATE ---------------------------------------
 
 typedef struct s_DeduplicateContext {
-	// Temporary relation B-tree holding the unique, ordered tuples
-	// NOTE: a RelationBTree is a bit too much here -- we just want a tuple store,
-	// not reference handling, IFact checking &c. The "tuple store" part of RelationBTree
-	// should be factored out -- probably when implementing agents.
+	// B-tree holding the unique, ordered tuples
 	BTree * btree;
-	RelationBTreeIterator iterator;
+	BTreeIterator iterator;
 } DeduplicateContext;
+
+
+int8 btreeCompareTuples(void const * item1, void const * item2, size32 itemSize)
+{
+	return TupleCompare((Atom *) item1, (Atom *) item2, itemSize / sizeof(Atom));
+}
 
 
 static void deduplicateSetupContext(ServiceContext * context)
@@ -362,13 +365,18 @@ static void deduplicateSetupContext(ServiceContext * context)
 	Service * childService = context->service->impl.deduplicate.childService;
 	ServiceContext * childContext = ServiceCreateContext(childService, context->arguments);
 	// Retrieve all tuples from the child relation
-	deduplicateContext->btree = CreateRelationBTree(context->service->nArguments);
+	deduplicateContext->btree = BTreeCreate(
+		context->service->nArguments * sizeof(Atom),
+		btreeCompareTuples,
+		0
+	);
+	// CreateRelationBTree(context->service->nArguments);
 	while(ServiceCall(childContext)) {
-		RelationBTreeAddTuple(deduplicateContext->btree, context->arguments);
+		BTreeInsert(deduplicateContext->btree, context->arguments);
 	}
 	ServiceFreeContext(childContext);
 	// Setup B-tree iterator
-	RelationBTreeIterate(deduplicateContext->btree, 0, &deduplicateContext->iterator);
+	BTreeIterate(&deduplicateContext->iterator, deduplicateContext->btree);
 }
 
 
@@ -376,8 +384,12 @@ static bool deduplicateCall(ServiceContext * context)
 {
 	DeduplicateContext * deduplicateContext = (DeduplicateContext *) &context->data;
 
-	if(RelationBTreeIteratorNext(&deduplicateContext->iterator)) {
-		RelationBTreeIteratorGetTuple(&deduplicateContext->iterator, context->arguments);
+	if(BTreeIteratorNext(&deduplicateContext->iterator)) {
+		CopyMemory(
+			BTreeIteratorPeekItem(&deduplicateContext->iterator),
+			context->arguments,
+			context->service->nArguments * sizeof(Atom)
+		);
 		return true;
 	}
 	else
@@ -388,10 +400,8 @@ static bool deduplicateCall(ServiceContext * context)
 static void deduplicateFinalizeContext(ServiceContext * context)
 {
 	DeduplicateContext * deduplicateContext = (DeduplicateContext *) &context->data;
-
-	RelationBTreeIteratorEnd(&deduplicateContext->iterator);
-	RelationBTreeRemoveTuples(deduplicateContext->btree, 0, REMOVE_NORMAL);
-	FreeRelationBTree(deduplicateContext->btree);
+	BTreeIteratorEnd(&deduplicateContext->iterator);
+	BTreeFree(deduplicateContext->btree);
 }
 
 
@@ -483,7 +493,7 @@ void ReleaseService(Service * service)
 }
 
 
-ServiceContext * ServiceCreateContext(Service const * service, TypedTuple * arguments)
+ServiceContext * ServiceCreateContext(Service const * service, Atom arguments[])
 {
 	size32 contextSize = sizeof(ServiceContext) + service->contextSize;
 	ServiceContext * context = Allocate(contextSize);
@@ -573,6 +583,15 @@ void ServiceFreeContext(ServiceContext * context)
 		break;
 	}
 	Free(context);
+}
+
+
+bool ServiceCallOnce(Service const * service, Atom arguments[])
+{
+	ServiceContext * context = ServiceCreateContext(service, arguments);
+	bool result = ServiceCall(context);
+	ServiceFreeContext(context);
+	return result;
 }
 
 

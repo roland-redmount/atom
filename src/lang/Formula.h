@@ -10,7 +10,6 @@
 #include "lang/TypedAtom.h"
 
 typedef struct s_Formula {
-	data64 hash;
 	Atom form;
 	TypedTuple * actors;	// or Atom atoms[], byte types[] ?
 } Formula;
@@ -25,6 +24,8 @@ Formula * CreateFormula(Atom form, TypedTuple const * actors);
 
 Formula * CreateFormulaFromArray(Atom form, TypedAtom const * actors);
 
+
+bool FormulaEqual(Formula const * formula1, Formula const * formula2);
 
 void FreeFormula(Formula * formula);
 
@@ -41,8 +42,9 @@ Formula * CreateTerm(Formula const * predicate, bool sign);
 
 /**
  * Find the term actor corresponding the given role and multiplicity m
+ * NOTE: this is currently only used by test_compiler.c
  */
-TypedAtom TermGetRoleActor(Atom termForm, TypedTuple const * termActors, const char * role, uint8 m);
+Atom TermGetRoleActor(Atom termForm, Atom const termActors[], const char * role, uint8 m);
 
 /**
  * Create a clause from a list of term formulas, in any order.
