@@ -16,7 +16,7 @@
 #define TEST_N_COLUMNS	3
 
 struct {
-	BTree * tree;
+	RelationBTree * relation;
 	Atom tuple1[TEST_N_COLUMNS];
 	Atom tuple2[TEST_N_COLUMNS];
 	Atom tuple3[TEST_N_COLUMNS];
@@ -30,7 +30,8 @@ struct {
 static void setupFixture(void)
 {
 	byte atomTypes[TEST_N_COLUMNS] = {AT_INT, AT_FLOAT, AT_LETTER} ;
-	fixture.tree = CreateRelationBTree(TEST_N_COLUMNS, atomTypes);
+	index8 indexColumns[TEST_N_COLUMNS] = {0, 1, 2};
+	fixture.relation = CreateRelationBTree(TEST_N_COLUMNS, atomTypes, indexColumns);
 
 	// C99 does not allow assigning array values
 	CopyMemory(
@@ -64,7 +65,7 @@ static void setupFixture(void)
 
 static void teardownFixture(void)
 {
-	BTreeFree(fixture.tree);
+	FreeRelationBTree(fixture.relation);
 }
 
 
@@ -72,8 +73,8 @@ void testCreateRelationTable(void)
 {
 	setupFixture();
 
-	ASSERT_UINT32_EQUAL(RelationBTreeNColumns(fixture.tree), TEST_N_COLUMNS)
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 0)
+	ASSERT_UINT32_EQUAL(fixture.relation->nColumns, TEST_N_COLUMNS)
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 0)
 
 	teardownFixture();
 }
@@ -83,18 +84,18 @@ void testAddTuple(void )
 {
 	setupFixture();
 
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple1, 0);
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 1)
+	RelationBTreeAddTuple(fixture.relation, fixture.tuple1, 0);
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 1)
 
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple2, 0);
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 2)
+	RelationBTreeAddTuple(fixture.relation, fixture.tuple2, 0);
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 2)
 
 	// adding a tuple that exists should not change the table
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple1, 0);
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 2)
+	RelationBTreeAddTuple(fixture.relation, fixture.tuple1, 0);
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 2)
 
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple3, 0);
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 3)
+	RelationBTreeAddTuple(fixture.relation, fixture.tuple3, 0);
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 3)
 
 	teardownFixture();
 }
@@ -103,19 +104,24 @@ void testAddTuple(void )
 void testFindTuple(void)
 {
 	setupFixture();
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple1, 0);
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple2, 0);
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple3, 0);
+	RelationBTreeAddTuple(fixture.relation, fixture.tuple1, 0);
+	RelationBTreeAddTuple(fixture.relation, fixture.tuple2, 0);
+	RelationBTreeAddTuple(fixture.relation, fixture.tuple3, 0);
 
 	RelationBTreeIterator iterator;
-	
+	Atom resultTuple[TEST_N_COLUMNS];
+
 	// find tuple 1
 	{
-		RelationBTreeIterate(fixture.tree, fixture.tuple1, TEST_N_COLUMNS, &iterator);
+		RelationBTreeIterate(fixture.relation, fixture.tuple1, TEST_N_COLUMNS, &iterator);
 
 		ASSERT_TRUE(RelationBTreeIteratorNext(&iterator))
-		Atom const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
+		RelationBTreeIteratorGetTuple(&iterator, resultTuple);
 		ASSERT_TRUE(TupleEqual(resultTuple, fixture.tuple1, TEST_N_COLUMNS))
+
+		for(index8 i = 0; i < TEST_N_COLUMNS; i++) {
+			ASSERT_DATA64_EQUAL(RelationBTreeIteratorGetAtom(&iterator, i).hash, fixture.tuple1[i].hash)
+		}
 		
 		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
 		RelationBTreeIteratorEnd(&iterator);
@@ -123,7 +129,7 @@ void testFindTuple(void)
 
 	// no query tuple, iterate over all 3 tuples
 	{
-		RelationBTreeIterate(fixture.tree, 0, 0, &iterator);
+		RelationBTreeIterate(fixture.relation, 0, 0, &iterator);
 		size32 tupleCount = 0;
 		while(RelationBTreeIteratorNext(&iterator)) {
 			tupleCount++;
@@ -139,14 +145,14 @@ void testFindTuple(void)
 			fixture.tuple1[1],
 			(Atom) {0}
 		};
-		RelationBTreeIterate(fixture.tree, queryTuple, 2, &iterator);
+		RelationBTreeIterate(fixture.relation, queryTuple, 2, &iterator);
 
 		ASSERT_TRUE(RelationBTreeIteratorNext(&iterator))
-		Atom const * resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
+		RelationBTreeIteratorGetTuple(&iterator, resultTuple);
 		ASSERT_TRUE(TupleEqual(resultTuple, fixture.tuple1, TEST_N_COLUMNS))
 		
 		ASSERT_TRUE(RelationBTreeIteratorNext(&iterator))
-		resultTuple = RelationBTreeIteratorPeekTuple(&iterator);
+		RelationBTreeIteratorGetTuple(&iterator, resultTuple);
 		ASSERT_TRUE(TupleEqual(resultTuple, fixture.tuple2, TEST_N_COLUMNS))
 		
 		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
@@ -160,7 +166,7 @@ void testFindTuple(void)
 			(Atom) {._float = 123.456},
 			GetAlphabetLetter('X'),
 		};
-		RelationBTreeIterate(fixture.tree, queryTuple, TEST_N_COLUMNS, &iterator);
+		RelationBTreeIterate(fixture.relation, queryTuple, TEST_N_COLUMNS, &iterator);
 		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))
 		RelationBTreeIteratorEnd(&iterator);
 	}
@@ -176,28 +182,28 @@ void testRemoveTuple(void)
 {
 	setupFixture();
 
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple1, 0);
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple2, 0);
-	RelationBTreeAddTuple(fixture.tree, fixture.tuple3, 0);
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 3)
+	RelationBTreeAddTuple(fixture.relation, fixture.tuple1, 0);
+	RelationBTreeAddTuple(fixture.relation, fixture.tuple2, 0);
+	RelationBTreeAddTuple(fixture.relation, fixture.tuple3, 0);
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 3)
 
-	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.tree, fixture.tuple2), TUPLE_REMOVED)
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 2)
+	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple2), TUPLE_REMOVED)
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 2)
 
-	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.tree, fixture.tuple3), TUPLE_REMOVED)
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 1)
+	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple3), TUPLE_REMOVED)
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 1)
 
 	// attempting to remove a tuple that does not exist 
 	// does not change the number of rows
-	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.tree, fixture.tuple2), TUPLE_NOT_FOUND)
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 1)
+	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple2), TUPLE_NOT_FOUND)
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 1)
 
-	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.tree, fixture.tuple1), TUPLE_REMOVED)
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 0)
+	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple1), TUPLE_REMOVED)
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 0)
 
 	// attempt to remove from empty tree
-	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.tree, fixture.tuple1), TUPLE_NOT_FOUND)
-	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.tree), 0)
+	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple1), TUPLE_NOT_FOUND)
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 0)
 
 	teardownFixture();
 }

@@ -560,7 +560,7 @@ Service const * CompileService(Formula const * queryTerm)
 		// create table
 		// TODO: must check if table already exists!
 		RelationTable const * relation = CreateRelationTable(
-			0, queryTerm->form, arity, parameterIO
+			0, queryTerm->form, arity, parameterIO, 0
 		);
 		RelationAddService(relation, parameterIO, service);
 		ReleaseService(service);

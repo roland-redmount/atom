@@ -96,8 +96,7 @@ static void testTokenizer(void)
 	Atom tokenString = token.typedAtom.atom;
 	ASSERT_UINT32_EQUAL(ListLength(tokenString), 6)
 	for(index32 i = 0; i < 6; i++) {
-		TypedAtom letter = ListGetElement(tokenString, i+1);
-		ASSERT_UINT32_EQUAL(letter.type, AT_LETTER)
+		Atom letter = ListGetElement(tokenString, i+1);
 		ASSERT_CHAR_EQUAL(LetterToChar(letter, LETTER_LOWERCASE), nameString[i])
 	}
 	ReleaseToken(token);

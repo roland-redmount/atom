@@ -20,7 +20,6 @@
  * We store RelationTable entries in a pool for stable allocation.
  */
 struct {
-	void * relationPool;
 	// B-tree for lookup of relations by form
 	BTree * relationBTree;
 	// B-tree storing (relation, service) pairs
@@ -51,10 +50,7 @@ static int8 btreeCompareRelations(void const * item, void const * itemOrKey, siz
 static void btreeFreeRelation(void * item, size32 itemSize)
 {
 	RelationTable * relation = *((RelationTable **) item);
-	if(relation->form.hash > 2)
-		IFactRelease(relation->form);
-	Free(relation->atomTypes);
-	PoolFreeItem(registry.relationPool, relation);
+	FreeRelationTable(relation);
 }
 
 
@@ -83,7 +79,6 @@ static int8 btreeCompareServiceRecords(void const * item, void const * itemOrKey
 
 void SetupRegistry(void)
 {
-	registry.relationBTree = CreatePool(sizeof(RelationTable));
 	// The lookup B-tree stores pointers to RelationTable records
 	registry.relationBTree = BTreeCreate(
 		sizeof(RelationTable *),
@@ -103,32 +98,18 @@ void FreeRegistry(void)
 {
 	BTreeFree(registry.services);
 	BTreeFree(registry.relationBTree);
-	FreePool(registry.relationPool);
 }
 
 
-RelationTable const * CreateRelationTable(
-	RelationTableProvider * provider, Atom form, size8 nColumns, byte const atomTypes[])
+void RegistryAddRelationTable(RelationTable const * relation)
 {
-	RelationTable * relation = PoolAllocate(registry.relationPool);
-	relation->form = form;
-	relation->nColumns = nColumns;
-	relation->atomTypes = Allocate(nColumns);
-	CopyMemory(atomTypes, relation->atomTypes, nColumns);
-	if(provider)
-		relation->storage = provider->createTable(nColumns, atomTypes);
-	else
-		relation->storage = 0;
-	// add to registry
 	ASSERT(BTreeInsert(registry.relationBTree, &relation) == BTREE_INSERTED)
-	return relation;
 }
 
 
-void RemoveRelationTable(RelationTable const * relation)
+void RegistryRemoveRelationTable(RelationTable const * relation)
 {
 	ASSERT(BTreeDelete(registry.relationBTree, &relation))
-	PoolFreeItem(registry.relationPool, (RelationTable *) relation);
 }
 
 
@@ -142,6 +123,13 @@ void RelationAddService(RelationTable const * relation, byte const parameterIO[]
 	CopyMemory(parameterIO, record.parameterIO, relation->nColumns);
 	BTreeInsert(registry.services, &record);
 }
+
+
+size32 RegistryNRelations(void)
+{
+	return BTreeNItems(registry.relationBTree);
+}
+
 
 
 size32 RegistryNServices(void)
@@ -210,7 +198,7 @@ void RegistryIteratorEnd(RegistryIterator * iterator)
 }
 
 
-Service const * RegistryFindService(RelationTable const * relation, byte const parameterIO[])
+Service * RegistryFindService(RelationTable const * relation, byte const parameterIO[])
 {
 	RegistryIterator iterator;
 	RegistryIterate(relation, &iterator);

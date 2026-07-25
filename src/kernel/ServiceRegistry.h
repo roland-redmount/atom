@@ -17,17 +17,17 @@
 void SetupRegistry(void);
 
 /**
- * Add a new relation table to the registry. For computed relations, provider is 0;
- * when non zero, the provider pointer must remain valid for as
- * long as the relation is in use. Calls provider->createTable().
+ * Add a relation table to the registry.
+ * The registry takes ownership of the relation, and will call FreeRelationTable()
+ * upon removal.
  */
-RelationTable const * CreateRelationTable(
-	RelationTableProvider * provider, Atom form, size8 nColumns, byte const atomTypes[]);
+void RegistryAddRelationTable(RelationTable const * relation);
 
 /**
  * Remove a relation table, include all stored tuples (if any), and all associated services.
+ * Calls FreeRelationTable()
  */
-void RemoveRelationTable(RelationTable const * relation);
+void RegistryRemoveRelationTable(RelationTable const * relation);
 
 /**
  * Add a service to a relation.
@@ -51,7 +51,12 @@ RelationTable const * FindRelationTable(Atom form, size8 nColumns, byte const at
 void FreeRegistry(void);
 
 /**
- * Total number of service records.
+ * Number of registered relation tables.
+ */
+size32 RegistryNRelations(void);
+
+/**
+ * Total number of registered services.
  */
 size32 RegistryNServices(void);
 
@@ -89,7 +94,7 @@ void RegistryIteratorEnd(RegistryIterator * iterator);
  * which must be the same length as the form arity.
  * If a matching service does not exist, returns 0
  */
-Service const * RegistryFindService(RelationTable const * relation, byte const parameterIO[]);
+Service * RegistryFindService(RelationTable const * relation, byte const parameterIO[]);
 
 
 /**

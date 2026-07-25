@@ -1,8 +1,6 @@
 /**
  * High level interface to relation tables, independent of implementation.
  * A relation table is 1:1 with a (form, columns types) pair.
- * A relation table should register one or more services for querying
- * and optionally agents for modifying contents (if read/write).
  * 
  * NOTE: the form is currently always a predicate form, which means we
  * cannot have services for negated predicates like (! odd x). 
@@ -22,21 +20,24 @@
 typedef struct s_RelationTable RelationTable;
 
 /**
- * Description of an implementation provider, such as RelationBTree.
+ * Description of a implementation provider, such as RelationBTree.
  * One provider may provide multiple relation tables, sharing the same
  * callbacks.
  */
 typedef struct s_RelationTableProvider {
 
 	/** 
-	 * Create a new relation table, return its storage data structure; this will
-	 * be assigned to the RelationTable.stroage field and passed to the function
-	 * below.
+	 * Create storage for a new relation table. 
+	 * The returned storage data pointer will be assigned to the RelationTable.storage field.
+	 * See also CreateRelationTable()
+	 * 
+	 * NOTE: the table implementation is currently not aware of the relation's predicate form,
+	 * but it could be useful for the implementation to know role multiples for column optimization?
 	 */
-	void * (*createTable)(size8 nColumns, byte const atomTypes[]);
+	void * (*createStorage)(size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
 
 	/**
-	 * Add a tuple to the given table.
+	 * Add a tuple to storage, as returned by createTable()
 	 * The atom types are fixed, so providing an Atom array is sufficient.
 	 * If idPosition is > 0 it indicates the 1-based position of an identified
 	 * atom (the tuple is part of an ifact).
@@ -84,10 +85,29 @@ struct s_RelationTable {
 	Atom form;
 	size8 nColumns;
 	byte * atomTypes;
+	index8 * indexColumns;
 	// provider may be 0 for computed relations
 	RelationTableProvider * provider;
 	void * storage;	// any implementation-dependent storage data
 };
+
+/**
+ * Create a relation table using the specified storage provider, or 0 if there is not storage
+ * (computed relations).
+ * 
+ * If not 0, indexColumns indicates the desired order of index columns, so that tuples are
+ * effectively ordered lexigraphically by indexColumns[0], ..., indexColumns[nColumns-1].
+ * Hence, lookup should be fast when leading columns are specified in this order, while
+ * out-of-order columns may lead to table scanning. For example, a relation with
+ * canonical order (element list position) and indexColumns = {1, 0, 2} will be ordered as
+ * (list position element), so that queries (@list _ _) and (@list @position _) are fast,
+ * but (_ _ @element) may be slow.
+ */
+RelationTable const * CreateRelationTable(
+	RelationTableProvider * provider, Atom form, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
+
+
+void FreeRelationTable(RelationTable const * table);
 
 /**
  * Return the number of rows in a relation table

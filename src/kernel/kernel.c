@@ -8,6 +8,7 @@
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
+#include "kernel/Parameter.h"
 #include "kernel/RelationBTree.h"
 #include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
@@ -55,9 +56,13 @@ static const size8 corePredicateArity[N_CORE_PREDICATES + 1] = {
 	1,	// (string)
 };
 
-// This defines a "reference" order of roles in core predicates,
-// for "addressing" a role in a given predicate. The canonical order role index
-// is provided by CorePredicateRoleIndex()
+/**
+ * This defines a stable "kernel order" of roles in core predicates,
+ * for "addressing" a role in a given predicate. The corresponding role index
+ * in canonical order is provided by CorePredicateRoleIndex().
+ * This ordering is also used as indexColumns in CreateRelationTable(), so that
+ * lookup is fast on leading columns in this order.
+ */ 
 static const index32 coreFormRoleIds[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY] = {
 	{0},
 	{ROLE_MULTISET, ROLE_ELEMENT, ROLE_MULTIPLE},
@@ -72,6 +77,9 @@ static const index32 coreFormRoleIds[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY
 	{ROLE_STRING},
 };
 
+/**
+ * The core predicate form ID for each core relation
+ */
 static const index32 coreRelationFormId[N_CORE_RELATIONS + 1] = {
 	0,
 	FORM_MULTISET_ELEMENT_MULTIPLE,
@@ -87,7 +95,7 @@ static const index32 coreRelationFormId[N_CORE_RELATIONS + 1] = {
 };
 
 /**
- * List of atom types for each relation, in the order given by coreFormRoleIds
+ * List of atom types for each relation, in the "kernel order" given by coreFormRoleIds
  * for the corresponding form.
  */
 static const byte coreRelationAtomTypes[N_CORE_RELATIONS + 1][CORE_FORMS_MAX_ARITY] = {
@@ -114,17 +122,65 @@ static const byte coreRelationAtomTypes[N_CORE_RELATIONS + 1][CORE_FORMS_MAX_ARI
 	{AT_ID},
 };
 
+/**
+ * The core relation ID for each core service
+ */
+static const index32 coreServiceRelationId[N_CORE_RELATIONS + 1] = {
+	0,
+	// (multiset <ID element >NAME multiple >UINT)
+	RELATION_MULTISET_NAME,
+	// (multiset <ID element >ID multiple >UINT)
+	RELATION_MULTISET_ID,
+	// (multiset >ID element <ID multiple >UINT)
+	RELATION_MULTISET_ID,
+	// (predicate-form >ID)
+	RELATION_PREDICATE_FORM,
+	// (term-form <ID predicate-form >ID)
+	RELATION_TERM_FORM,
+	// (list <ID length >UINT)
+	RELATION_LIST_LENGTH,
+	// (list <ID position >UINT element >LETTER)
+	RELATION_LIST_LETTER,
+};
+
+
+/**
+ * Parameter IO for core services, arguments in "kernel order"
+ */
+static const byte coreServiceParameterIO[N_CORE_SERVICES + 1][CORE_FORMS_MAX_ARITY] = {
+	{0},
+	// (multiset <ID element >NAME multiple >UINT)
+	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
+	// (multiset <ID element >ID multiple >UINT)
+	{PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT},
+	// (multiset >ID element <ID multiple >UINT)
+	{PARAMETER_OUT, PARAMETER_IN, PARAMETER_OUT},
+	// (predicate-form >ID)
+	{PARAMETER_IN},
+	// (term-form <ID predicate-form >ID)
+	{PARAMETER_IN, PARAMETER_OUT},
+	// (list <ID length >UINT)
+	{PARAMETER_IN, PARAMETER_OUT},
+	// (list <ID position >UINT element >LETTER)
+	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
+};
+
+
 // TODO: this structure must be persistent
-struct s_Kernel {
+static struct s_Kernel {
 	void * allocatorArea;
 
 	// Core predicate forms and roles, defined during bootstrapping
 	Atom corePredicateForms[N_CORE_PREDICATES + 1];
 	Atom coreRoleNames[N_CORE_ROLES + 1];
+
+	// Mapping of roles from "kernel order" in canonical order, such that
+	// corePredicateRoleIndex[i][j] is the canonical order index of role j
+	// in "kernel order" for form i.
 	index8 corePredicateRoleIndex[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY];
 	// Corresponding core relations and services
 	RelationTable const * coreRelations[N_CORE_RELATIONS + 1];
-	Service const * coreServices[N_CORE_SERVICES + 1];
+	Service * coreServices[N_CORE_SERVICES + 1];
 
 	// number of ifacts abnd references created by bootstrapping
 	size32 nCoreIFacts;
@@ -282,7 +338,8 @@ static RelationTable const * createCoreRelationTable(uint32 relationId)
 	return CreateRelationBTreeWithServices(
 		kernel.corePredicateForms[formId],
 		corePredicateArity[formId],
-		atomTypes
+		atomTypes,
+		kernel.corePredicateRoleIndex[formId]
 	);
 }
 
@@ -302,7 +359,7 @@ RelationTable const * GetCoreRelationTable(index32 relationId)
 
 // ----------------- Core services, moved from ServiceRegistry.c -----------------------
 
-Service const * GetCoreService(index32 serviceId)
+Service * GetCoreService(index32 serviceId)
 {
 	return kernel.coreServices[serviceId];
 }
@@ -323,7 +380,7 @@ void RegistryTeardownCoreServices(void)
 {
 	// Remove relation tables and associated services in reverse order
 	for(index32 i = N_CORE_RELATIONS; i > 0; i--) {
-		RemoveRelationTable(kernel.coreRelations[i]);
+		RegistryRemoveRelationTable(kernel.coreRelations[i]);
 	}
 
 	// TODO: figure out what parts of the below are still necessary
@@ -361,7 +418,6 @@ void RegistryTeardownCoreServices(void)
 	SetMemory(kernel.coreRelations, (N_CORE_RELATIONS + 1) * sizeof(RelationTable *), 0);
 	SetMemory(kernel.coreServices, (N_CORE_SERVICES + 1) * sizeof(Service *), 0);
 }
-
 
 
 /**
@@ -416,6 +472,7 @@ static void setupCoreServices(void)
 	kernel.corePredicateForms[FORM_PREDICATE_FORM] = predicateForm;
 
 	// Set role index arrays
+	// TODO: can we reorder this so that predicate roles are ordered by name?
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][0] = MULTISET_MULTISET_COLUMN;
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][1] = MULTISET_ELEMENT_COLUMN;
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][2] = MULTISET_MULTIPLE_COLUMN;
@@ -545,9 +602,6 @@ static void setupCoreServices(void)
 	// NOTE: we now hold 1 reference to each of the core predicate forms.
 
 	// Create remaining B-tree relation tables.
-	// TODO: Corresponding services are now generated automatically by the
-	// B-tree implementation, but this does not allow choosing index columns.
-	// We probably need to create these services manually ...
 	for(index32 i = RELATION_TERM_FORM; i <= N_CORE_RELATIONS; i++)
 		createCoreRelationTable(i);
 
@@ -556,18 +610,23 @@ static void setupCoreServices(void)
 	for(index32 i = 1; i <= N_CORE_PREDICATES; i++)
 		IFactRelease(kernel.corePredicateForms[i]);
 
-	// TODO: Lookup core services and store in array
+	// Lookup core services and store in array
 	kernel.coreServices[0] = 0;
-	// (multiset <ID element >NAME multiple >UINT)
-	kernel.coreServices[SERVICE_MULTISET_NAME] = RegistryFindService(
-		kernel.coreRelations[RELATION_MULTISET_NAME, 0]
-	)
-	// (multiset <ID element >ID multiple >UINT)
-	kernel.coreServices[SERVICE_MULTISET_ID]
-	// (multiset >ID element <ID multiple >UINT)
-	kernel.coreServices[SERVICE_MULTISET_ID_BY_ELEMENT]
-	// (list <ID length >UINT)
-	// (term-form <ID predicate-form >ID)
+	byte parameterIO[CORE_FORMS_MAX_ARITY];
+
+	for(index32 i = 1; i <= N_CORE_SERVICES; i++) {
+		uint8 relationId = coreServiceRelationId[i];
+		CoreFormSetByteArray(
+			coreRelationFormId[relationId],
+			coreServiceParameterIO[i],
+			parameterIO
+		);
+		kernel.coreServices[i] = RegistryFindService(
+			kernel.coreRelations[relationId],
+			parameterIO
+		);
+		ASSERT(kernel.coreServices[i])
+	}
 }
 
 

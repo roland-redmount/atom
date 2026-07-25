@@ -13,13 +13,14 @@
 #include "lang/TypedAtom.h"
 #include "lang/Variable.h"
 #include "memory/allocator.h"
-#include "memory/paging.h"
+#include "memory/pool.h"
 #include "util/ResizingArray.h"
 
 
+
 /**
- * The B-tree must store both the Atom array and the column number of
- * an identified atom, if any.
+ * A B-tree item stores the tuple Atom array, permuted according to the column order,
+ * and the column number (not permuted) of an identified atom, if any.
  */
 typedef struct s_BTreeTuple {
 	size8 nAtoms;
@@ -39,18 +40,21 @@ static size32 btreeTupleNBytes(size8 nAtoms)
 	return sizeof(BTreeTuple) + nAtoms * sizeof(Atom);
 }
 
-static size8 btreeTupleNAtoms(size32 nBytes)
-{
-	return (nBytes - sizeof(BTreeTuple)) / sizeof(Atom);
-}
+// static size8 btreeTupleNAtoms(size32 nBytes)
+// {
+// 	return (nBytes - sizeof(BTreeTuple)) / sizeof(Atom);
+// }
 
-static BTreeTuple * createBTreeTuple(size8 nAtoms, uint8 idPosition, index8 nAtomsPresent, Atom const * atoms)
+static BTreeTuple * createBTreeTuple(
+	size8 nColumns, uint8 idPosition, index8 nAtomsPresent, Atom const * atoms, index8 const indexColumns[])
 {
-	BTreeTuple * btreeTuple = Allocate(btreeTupleNBytes(nAtoms));
-	btreeTuple->nAtoms = nAtoms;
+	BTreeTuple * btreeTuple = Allocate(btreeTupleNBytes(nColumns));
+	btreeTuple->nAtoms = nColumns;
 	btreeTuple->idPosition = idPosition;
 	btreeTuple->nAtomsPresent = nAtomsPresent;
-	CopyMemory(atoms, btreeTuple->atoms, nAtoms * sizeof(Atom));
+	// Store atoms in index column order
+	for(index8 i = 0; i < nColumns; i++)
+		btreeTuple->atoms[i] = atoms[indexColumns[i]];
 	return btreeTuple;
 }
 
@@ -120,55 +124,48 @@ static int8 btreeCompareItems(void const * item, void const * itemOrKey, size32 
 	return compareBTreeTuples((BTreeTuple const *) item, (BTreeTuple const *) itemOrKey);
 }
 
-// Could not fit this in the 8-byte Service.impl.machine.providerData field :-/
-typedef struct s_BTreeServiceData {
-	// RelationTable const * table;
-	BTree * btree;
-	index8 nInputs;
-} BTreeServiceData;
 
-
-BTree * CreateRelationBTree(size8 nColumns, byte const atomTypes[])
+RelationBTree * CreateRelationBTree(size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
 {
-	return BTreeCreate(btreeTupleNBytes(nColumns), btreeCompareItems, 0);
+	RelationBTree * relation = Allocate(sizeof(RelationBTree));
+	relation->nColumns = nColumns;
+	relation->indexColumns = Allocate(nColumns);
+	CopyMemory(indexColumns, relation->indexColumns, nColumns);
+	relation->btree = BTreeCreate(btreeTupleNBytes(nColumns), btreeCompareItems, 0);
+	return relation;
 }
 
 
-size8 RelationBTreeNColumns(BTree const * tree)
+size32 RelationBTreeNRows(RelationBTree const * relation)
 {
-	return btreeTupleNAtoms(tree->itemSize);
+	return BTreeNItems(relation->btree);
 }
 
 
-size32 RelationBTreeNRows(BTree const * tree)
+void FreeRelationBTree(RelationBTree * relation)
 {
-	return BTreeNItems(tree);
+	Free(relation->indexColumns);
+	BTreeFree(relation->btree);
 }
 
 
-void FreeRelationBTree(BTree * tree)
-{
-	BTreeFree(tree);
-}
-
-
-byte RelationBTreeAddTuple(BTree * btree, Atom const tuple[], uint8 idPosition)
+byte RelationBTreeAddTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition)
 {
 	// NOTE: this could be done with C99 VLA stack allocation
-	size8 nColumns = btreeTupleNAtoms(btree->itemSize);
-	BTreeTuple * btreeTuple = createBTreeTuple(nColumns, idPosition, nColumns, tuple);
-	byte result = BTreeInsert(btree, btreeTuple);
+	BTreeTuple * btreeTuple = createBTreeTuple(
+		relation->nColumns, idPosition, relation->nColumns, tuple, relation->indexColumns);
+	byte result = BTreeInsert(relation->btree, btreeTuple);
 	Free(btreeTuple);
 	return result;
 }
 
 
-byte RelationBTreeRemoveTuple(BTree * btree, Atom const tuple[])
+byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[])
 {
-	ASSERT(!BTreeIsWriteLocked(btree))
-	size8 nColumns = btreeTupleNAtoms(btree->itemSize);
-	BTreeTuple * btreeTuple = createBTreeTuple(nColumns, 0, nColumns, tuple);
-	BTreeDeleteResult btreeResult = BTreeDelete(btree, btreeTuple);
+	ASSERT(!BTreeIsWriteLocked(relation->btree))
+	BTreeTuple * btreeTuple = createBTreeTuple(
+		relation->nColumns, 0, relation->nColumns, tuple, relation->indexColumns);
+	BTreeDeleteResult btreeResult = BTreeDelete(relation->btree, btreeTuple);
 	byte result;
 	if(btreeResult == BTREE_DELETED) {
 		// verify the tuple did not contain an identified atom
@@ -185,36 +182,35 @@ byte RelationBTreeRemoveTuple(BTree * btree, Atom const tuple[])
 
 /**
  * Stubs for the RelationTableProvider interface.
- * These are just for casting to correct function pointer types.
  */
 
-static void * createRelationBTree(size8 nColumns, byte const atomTypes[])
+static void * createRelationBTree(size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
 {
-	return CreateRelationBTree(nColumns, atomTypes);
+	return CreateRelationBTree(nColumns, atomTypes, indexColumns);
 }
 
 static size32 relationBTreeNTuples(void * storage)
 {
-	return RelationBTreeNRows((BTree *) storage);
+	return RelationBTreeNRows((RelationBTree *) storage);
 }
 
 static byte relationBTreeAddTuple(void * storage, Atom const tuple[], uint8 idPosition)
 {
-	return RelationBTreeAddTuple((BTree *) storage, tuple, idPosition);
+	return RelationBTreeAddTuple((RelationBTree *) storage, tuple, idPosition);
 }
 
 static byte relationBTreeRemoveTuple(void * storage, Atom const tuple[])
 {
-	return RelationBTreeRemoveTuple((BTree *) storage, tuple);
+	return RelationBTreeRemoveTuple((RelationBTree *) storage, tuple);
 }
 
 static void freeRelationBTree(void * storage)
 {
-	FreeRelationBTree((BTree *) storage);
+	FreeRelationBTree((RelationBTree *) storage);
 }
 
 RelationTableProvider btreeTableProvider = {
-	.createTable = createRelationBTree,
+	.createStorage = createRelationBTree,
 	.addTuple = relationBTreeAddTuple,
 	.removeTuple = relationBTreeRemoveTuple,
 	.numberOfTuples = relationBTreeNTuples,
@@ -236,16 +232,16 @@ RelationTableProvider btreeTableProvider = {
  */
 
 void RelationBTreeIterate(
-	BTree * btree, Atom const queryTuple[], size8 nInputs, RelationBTreeIterator * iterator)
+	RelationBTree * relation, Atom const queryTuple[], size8 nInputs, RelationBTreeIterator * iterator)
 {
-	SetMemory(iterator, sizeof(RelationBTreeIterator), 0);
-	size8 nColumns = btreeTupleNAtoms(btree->itemSize);
+	iterator->relation = relation;
 	if(queryTuple) {
-		iterator->queryTuple = createBTreeTuple(nColumns, 0, nInputs, queryTuple);
+		iterator->queryTuple = createBTreeTuple(
+			relation->nColumns, 0, nInputs, queryTuple, relation->indexColumns);
 	}
 	else
 		iterator->queryTuple = 0;
-	BTreeIterate(&(iterator->treeIterator), btree);
+	BTreeIterate(&(iterator->treeIterator), relation->btree);
 }
 
 
@@ -266,8 +262,7 @@ bool RelationBTreeIteratorNext(RelationBTreeIterator * iterator)
 
 Atom RelationBTreeIteratorGetAtom(RelationBTreeIterator const * iterator, index8 i)
 {
-	size8 nColumns = btreeTupleNAtoms(iterator->treeIterator.btree->itemSize);
-	ASSERT(i < nColumns);
+	ASSERT(i < iterator->relation->nColumns);
 	BTreeTuple const * tuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
 	return tuple->atoms[i];
 }
@@ -276,14 +271,8 @@ Atom RelationBTreeIteratorGetAtom(RelationBTreeIterator const * iterator, index8
 void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, Atom tuple[])
 {
 	BTreeTuple const * btreeTuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
-	CopyMemory(btreeTuple->atoms, tuple, btreeTuple->nAtoms * sizeof(Atom));
-}
-
-// NOTE: not feasible to return at Tuple as the B-tree stores BTreeTuple
-Atom const * RelationBTreeIteratorPeekTuple(RelationBTreeIterator const * iterator)
-{
-	BTreeTuple const * btreeTuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
-	return btreeTuple->atoms;
+	for(index8 i = 0; i < iterator->relation->nColumns; i++)
+		tuple[iterator->relation->indexColumns[i]] = btreeTuple->atoms[i];
 }
 
 
@@ -383,19 +372,25 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator)
 // }
 
 
-
-/***************************************************************************************************
+/**
  * Stubs for the B-tree service provider.
  * 
  * The service context data holds a RelationBTreeIterator.
  */
+
+// Could not fit this in the 8-byte Service.impl.machine.providerData field :-/
+typedef struct s_RelationBTreeServiceProviderData {
+	RelationBTree * relation;
+	index8 nInputs;
+} RelationBTreeServiceProviderData;
+
+
 static void serviceSetupContext(ServiceContext * context)
 {
-	// 
-	BTreeServiceData * serviceData = context->service->impl.machine.providerData;
+	RelationBTreeServiceProviderData * serviceData = context->service->impl.machine.providerData;
 	// Initialize the RelationBTreeIterator, allocated by ServiceCreateContext()
 	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
-	RelationBTreeIterate(serviceData->btree, context->arguments, serviceData->nInputs, iterator);
+	RelationBTreeIterate(serviceData->relation, context->arguments, serviceData->nInputs, iterator);
 }
 
 
@@ -403,13 +398,8 @@ static bool serviceCall(ServiceContext * context)
 {
 	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
 	bool hasTuple = RelationBTreeIteratorNext(iterator);
-	if(hasTuple) {
-		CopyMemory(
-			RelationBTreeIteratorPeekTuple(iterator),
-			context->arguments,
-			iterator->queryTuple->nAtoms * sizeof(Atom)
-		);
-	}
+	if(hasTuple)
+		RelationBTreeIteratorGetTuple(iterator, context->arguments);
 	return hasTuple;
 }
 
@@ -422,7 +412,6 @@ static void serviceFinalizeContext(ServiceContext * context)
 
 static void finalizeBTreeService(Service * service)
 {
-	// Deallocate the BTreeServiceData structure
 	Free(service->impl.machine.providerData);
 }
 
@@ -438,26 +427,27 @@ MachineServiceProvider bTreeServiceProvider = {
 /**
  * Create a B-tree service with nInputs leadning input parameters
  */
-static Service * createBTreeService(BTree * btree, size8 nInputs)
+static Service * createBTreeService(RelationBTree * relation, size8 nInputs)
 {
-	size8 nColumns = btreeTupleNAtoms(btree->itemSize);
-	BTreeServiceData * serviceData = Allocate(sizeof(BTreeServiceData));
-	serviceData->btree = btree;
+	RelationBTreeServiceProviderData * serviceData = Allocate(sizeof(RelationBTreeServiceProviderData));
+	serviceData->relation = relation;
 	serviceData->nInputs = nInputs;
-	return CreateMachineService(nColumns, &bTreeServiceProvider, serviceData);
+	return CreateMachineService(relation->nColumns, &bTreeServiceProvider, serviceData);
 }
 
 
-RelationTable const * CreateRelationBTreeWithServices(Atom form, size8 nColumns, byte const atomTypes[])
+RelationTable const * CreateRelationBTreeWithServices(
+	Atom form, size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
 {
 	// Create the B-tree storage and register as relation table
-	RelationTable const * table = CreateRelationTable(&btreeTableProvider, form, nColumns, atomTypes);
-
-	BTree * btree = table->storage;
+	RelationTable const * table = CreateRelationTable(&btreeTableProvider, form, nColumns, atomTypes, indexColumns);
+	RegistryAddRelationTable(table);
+	
+	RelationBTree * relation = table->storage;
 
 	// register nColumns services with leading columns as inputs
 	for(index8 nInputs = 1; nInputs <= nColumns; nInputs++) {
-		Service * service = createBTreeService(btree, nInputs);
+		Service * service = createBTreeService(relation, nInputs);
 		byte parameterIO[nColumns];
 		for(index8 i = 0; i < nColumns; i++) {
 			if(i < nInputs)

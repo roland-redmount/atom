@@ -145,6 +145,7 @@ void MathSetup(void)
 	NameRelease(plus);
 	NameRelease(equals);
 	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
+	// Map roles in our "user order" (+ + =) to canonical order
 	argumentIndex[0] = PredicateRoleIndex(addForm, plus);
 	argumentIndex[1] = argumentIndex[0] + 1;
 	argumentIndex[2] = PredicateRoleIndex(addForm, equals);
@@ -154,7 +155,8 @@ void MathSetup(void)
 	atomTypes[argumentIndex[0]] = AT_INT;
 	atomTypes[argumentIndex[1]] = AT_INT;
 	atomTypes[argumentIndex[2]] = AT_INT;
-	mathRelations[ADD_RELATION] = CreateRelationTable(0, addForm, 3, atomTypes);
+	// NOTE: no particular column index order here
+	mathRelations[ADD_RELATION] = CreateRelationTable(0, addForm, 3, atomTypes, 0);
 
 	// setup services
 	setupAdd1();
@@ -165,5 +167,5 @@ void MathSetup(void)
 void MathTeardown(void)
 {
 	for(index32 i = 0; i < N_RELATIONS; i++)
-		RemoveRelationTable(mathRelations[i]);
+		RegistryRemoveRelationTable(mathRelations[i]);
 }
