@@ -196,6 +196,17 @@ void IFactBegin(IFactDraft * draft)
 }
 
 
+void IFactReserve(data64 hash)
+{
+	ASSERT(!peekIFactHeader(hash));
+	IFactHeader header;
+	SetMemory(&header, sizeof(IFactHeader), 0);
+	header.hash = hash;
+	header.flags = IFACT_RESERVED;
+	ASSERT(BTreeInsert(ifactStorage.btree, &header) == BTREE_INSERTED)
+}
+
+
 void IFactBeginConjunction(IFactDraft * draft, RelationTable const * relation, index8 idColumn)
 {
 	ASSERT(!draft->hasBegunConjunction);
@@ -421,7 +432,21 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash) // , void (* assertFact)
 
 	// check for existing IFact with the same hash value
 	IFactHeader * existingIFact = peekIFactHeader(draft->header.hash);
-	if(existingIFact) {
+	if(existingIFact && (existingIFact->flags & IFACT_RESERVED)) {
+		// Finalize a header reserved by IFactReserve(): adopt the draft's
+		// conjunctions, retaining references already acquired against the
+		// reserved header (typically by the relation tables storing its
+		// defining facts).
+		ASSERT(existingIFact->nConjunctions == 0);
+		existingIFact->nConjunctions = draft->header.nConjunctions;
+		existingIFact->conjunctions = draft->header.conjunctions;
+		existingIFact->flags &= ~((data8) IFACT_RESERVED);
+		createFacts(draft, hash != 0);
+		acquireIFact(existingIFact);
+		if(ifactStorage.flagCreatedIFacts)
+			existingIFact->flags |= IFACT_NEW;
+	}
+	else if(existingIFact) {
 		if(sameIFact(draft, existingIFact)) {
 			// reuse existing ifact
 			acquireIFact(existingIFact);

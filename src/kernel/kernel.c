@@ -477,6 +477,15 @@ static void setupCoreServices(void)
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][2] = MULTISET_MULTIPLE_COLUMN;
 	kernel.corePredicateRoleIndex[FORM_PREDICATE_FORM][0] = 0;
 
+	/*
+	 * Reserve the IFact headers for the two forms, so that the relation tables
+	 * below can acquire a reference to their form even though the corresponding
+	 * defining facts cannot be built until those very tables exist.
+	 * The headers are finalized by the IFactEndBootstrap() calls further down.
+	 */
+	IFactReserve(multisetForm.hash);
+	IFactReserve(predicateForm.hash);
+
 	// Create table for multisets of AT_NAME, used for predicate forms
 	kernel.coreRelations[RELATION_MULTISET_NAME] = createCoreRelationTable(RELATION_MULTISET_NAME);
 	// Create table for multisets of AT_NAME, used for predicate forms

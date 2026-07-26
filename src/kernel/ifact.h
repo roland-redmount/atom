@@ -51,6 +51,8 @@ struct s_IFactHeader {
 } __attribute__((packed)) ;
 
 #define IFACT_NEW		1
+// header reserved by IFactReserve(), defining facts not yet built
+#define IFACT_RESERVED	2
 
 
 /**
@@ -121,6 +123,20 @@ Atom IFactEnd(IFactDraft * draft);
  * is used to assert identifying facts instead of the standard AssertFact().
  */
 Atom IFactEndBootstrap(IFactDraft * draft, data64 hash); // , void (* assertFact)(Atom, TypedTuple const *, uint8));
+
+/**
+ * Reserve an IFact header with a predefined hash, before its defining facts
+ * exist. This is only used during bootstrapping, to break the circular
+ * dependency between the core predicate forms and the relation tables that
+ * store their defining facts: a table created by CreateRelationTable()
+ * acquires a reference to its form, but that form's IFact cannot be built
+ * until the table itself exists.
+ *
+ * A reserved header holds no conjunctions and can only be acquired and
+ * released; it must be finalized by a matching IFactEndBootstrap() call with
+ * the same hash before the identified atom is used for anything else.
+ */
+void IFactReserve(data64 hash);
 
 /**
  * Acquire a reference to an AT_ID atom.
