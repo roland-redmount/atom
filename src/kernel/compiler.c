@@ -449,11 +449,14 @@ static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
 
 	Service * service = 0;
 
-	// the service (multiset >ID element <ID multiple >UINT) where element is input
-	Service const * multisetService = GetCoreService(SERVICE_MULTISET_ID_BY_ELEMENT);
+	// TODO: here we need the service (multiset >ID element <ID multiple >UINT) where element is input
+	// Since the element role is not a leading column, RelationBTree does not support this.
+	// We will need a means of generating such a service, by table scanning + filter.
+	// Service const * multisetService = GetCoreService(SERVICE_MULTISET_ID_BY_ELEMENT);
+	Service const * multisetService = 0;
+	ASSERT(false)
+
 	Atom multisetQueryTuple[3];
-	// TODO: the element role of (multiset element multiple) may not be the
-	// first column, so we have to table scan and filter.
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
 		(Atom[]) {(Atom) {0}, queryTermForm, (Atom) {0}},

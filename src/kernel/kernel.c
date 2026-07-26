@@ -132,7 +132,7 @@ static const index32 coreServiceRelationId[N_CORE_RELATIONS + 1] = {
 	// (multiset <ID element >ID multiple >UINT)
 	RELATION_MULTISET_ID,
 	// (multiset >ID element <ID multiple >UINT)
-	RELATION_MULTISET_ID,
+	// RELATION_MULTISET_ID,
 	// (predicate-form >ID)
 	RELATION_PREDICATE_FORM,
 	// (term-form <ID predicate-form >ID)
@@ -154,7 +154,7 @@ static const byte coreServiceParameterIO[N_CORE_SERVICES + 1][CORE_FORMS_MAX_ARI
 	// (multiset <ID element >ID multiple >UINT)
 	{PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT},
 	// (multiset >ID element <ID multiple >UINT)
-	{PARAMETER_OUT, PARAMETER_IN, PARAMETER_OUT},
+	// {PARAMETER_OUT, PARAMETER_IN, PARAMETER_OUT},
 	// (predicate-form >ID)
 	{PARAMETER_IN},
 	// (term-form <ID predicate-form >ID)
@@ -615,7 +615,7 @@ static void setupCoreServices(void)
 
 	// Create remaining B-tree relation tables.
 	for(index32 i = RELATION_TERM_FORM; i <= N_CORE_RELATIONS; i++)
-		createCoreRelationTable(i);
+		kernel.coreRelations[i] = createCoreRelationTable(i);
 
 	// The relation table registry now holds references to each core predicate form,
 	// so we can release our references.
