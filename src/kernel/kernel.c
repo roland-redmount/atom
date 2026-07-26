@@ -117,7 +117,7 @@ static const byte coreRelationAtomTypes[N_CORE_RELATIONS + 1][CORE_FORMS_MAX_ARI
 	// (list:ID length:UINT)
 	{AT_ID, AT_UINT},
 	// (quote:ID quoted:ID)
-	{AT_ID, AT_ID, AT_ID},
+	{AT_ID, AT_ID},
 	// (string:ID)
 	{AT_ID},
 };
@@ -125,7 +125,7 @@ static const byte coreRelationAtomTypes[N_CORE_RELATIONS + 1][CORE_FORMS_MAX_ARI
 /**
  * The core relation ID for each core service
  */
-static const index32 coreServiceRelationId[N_CORE_RELATIONS + 1] = {
+static const index32 coreServiceRelationId[N_CORE_SERVICES + 1] = {
 	0,
 	// (multiset <ID element >NAME multiple >UINT)
 	RELATION_MULTISET_NAME,
@@ -157,8 +157,8 @@ static const byte coreServiceParameterIO[N_CORE_SERVICES + 1][CORE_FORMS_MAX_ARI
 	// {PARAMETER_OUT, PARAMETER_IN, PARAMETER_OUT},
 	// (predicate-form >ID)
 	{PARAMETER_IN},
-	// (term-form <ID predicate-form >ID)
-	{PARAMETER_IN, PARAMETER_OUT},
+	// (term-form <ID predicate-form >ID sign >UINT)
+	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 	// (list <ID length >UINT)
 	{PARAMETER_IN, PARAMETER_OUT},
 	// (list <ID position >UINT element >LETTER)
@@ -300,16 +300,22 @@ static void setupCoreRoleNames(void)
 // }
 
 
+/**
+ * Permute an input given in "kernel order" into the canonical role order used
+ * for relation table columns. Since corePredicateRoleIndex[formId][i] is the
+ * canonical index of the role at kernel position i, the canonical index is the
+ * destination, not the source.
+ */
 void CoreFormSetTuple(index32 formId, Atom const inputTuple[], Atom tuple[])
 {
 	for(index8 i = 0; i < corePredicateArity[formId]; i++)
-		tuple[i] = inputTuple[kernel.corePredicateRoleIndex[formId][i]];
+		tuple[kernel.corePredicateRoleIndex[formId][i]] = inputTuple[i];
 }
 
 void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
 {
 	for(index8 i = 0; i < corePredicateArity[formId]; i++)
-		array[i] = inputArray[kernel.corePredicateRoleIndex[formId][i]];
+		array[kernel.corePredicateRoleIndex[formId][i]] = inputArray[i];
 }
 
 
