@@ -65,7 +65,7 @@ static void testPredicateForm(void)
 	// NOTE: ordering of roles names is no longer alphanumeric, but is detemined
 	// by the string (list) hash value.
 	MultisetIterator roleIterator;
-	MultisetIterate(predicateForm, &roleIterator);
+	MultisetIterate(predicateForm, AT_NAME, &roleIterator);
 	ElementMultiple em;
 	for(index32 i = 0; i < EXAMPLE_PREDICATE_N_ROLES; i++) {
 		ASSERT_TRUE(MultisetIteratorNext(&roleIterator))
@@ -160,7 +160,7 @@ static void testClauseForm(void)
 	ASSERT_UINT32_EQUAL(ClauseArity(clauseForm), EXAMPLE_CLAUSE_ARITY)
 
 	MultisetIterator termFormIterator;
-	MultisetIterate(clauseForm, &termFormIterator);
+	MultisetIterate(clauseForm, AT_ID, &termFormIterator);
 	for(index8 i = 0; i < EXAMPLE_CLAUSE_N_UNIQUE_TERMS; i++) {
 		ASSERT_TRUE(MultisetIteratorNext(&termFormIterator))
 		ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);

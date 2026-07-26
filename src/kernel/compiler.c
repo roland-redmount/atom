@@ -276,7 +276,7 @@ static Service * compileConjunctionRecursive(
 	// Find a term that can be compiled.
 	// First iterate over term forms in the clause form
 	MultisetIterator termFormIterator;
-	MultisetIterate(clauseForm, &termFormIterator);
+	MultisetIterate(clauseForm, AT_ID, &termFormIterator);
 	size8 termIndex = 0;
 	while(!service && nTermsExcluded < clauseNTerms && MultisetIteratorNext(&termFormIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);

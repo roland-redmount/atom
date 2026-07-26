@@ -40,10 +40,6 @@ static size32 btreeTupleNBytes(size8 nAtoms)
 	return sizeof(BTreeTuple) + nAtoms * sizeof(Atom);
 }
 
-// static size8 btreeTupleNAtoms(size32 nBytes)
-// {
-// 	return (nBytes - sizeof(BTreeTuple)) / sizeof(Atom);
-// }
 
 static BTreeTuple * createBTreeTuple(
 	size8 nColumns, uint8 idPosition, index8 nAtomsPresent, Atom const * atoms, index8 const indexColumns[])
@@ -66,56 +62,15 @@ static void freeBTreeTuple(BTreeTuple * btreeTuple)
 
 
 /**
- * Comparison function c(t, q) used to compare a B-tree tuple to another tuple or key (query).
- * If the query tuple contains variables, any columns after the leftmost variable
- * are ignored, so that any tuple matching all leftmost non-variables of the query
- * compares equal to it.
- * If the query tuple contains no variables, this function is the same as
- * TypedTupleCompare().
- * 
- * NOTE: compareQuery() returning 0 does NOT guarantee that the tuple matches
- * the query in the sense of TypedTupleMatch().
- * For example, with the set of tuples ordered by TypedTupleCompare()
- * 
- *  (1, 2, 1)
- *  (1, 2, 3)
- *  (3, 4, 1)
- *  (3, 4, 5)
- *  (4, 2, 0)
- * 
- * and query = (3, _, 1), we obtain
- * 
- *  (1, 2, 1) < query
- *  (1, 2, 3) < query
- *  (3, 4, 1) = query
- *  (3, 4, 5) = query
- *  (4, 2, 0) > query
- * 
- * Of the two tuples that compare equal to query, only (3, 4, 1) matches query
- * according TypedTupleMatch().
- * compareQuery() and TypedTupleCompare() are compatible in the sense that 
- * q <= t1 and t1 <= t2 implies q <= t2
- * 
- * TODO: Currently, atom ordering within tuples is dictated by the ordering
- * of roles in the relation's form, which may not be the optimal order
- * for indexing. For example, for the form (position list element) the
- * "indexing" column order should be (list position element) to achieve
- * efficient searcher for quey tuples (@list _ _) and (@list @position _).
- * We therefore need to index tuples in a different atom order than that
- * given by the form.
+ * Comparison function used to compare a B-tree tuple to another tuple or key.
+ * If n = tupleOrKey->nAtomsPresent is less than the tuple length, only the n
+ * leftmost atoms (leading columns) are used for the comparison, while the remaining
+ * columns are considered as variables. Otherwise, the comparison is the same as TupleCompare().
+ * This does not handle query tuples like (a _ b).
  */
-
 static int8 compareBTreeTuples(BTreeTuple const * tuple, BTreeTuple const * tupleOrKey)
 {
-	for(index8 i = 0; i < tupleOrKey->nAtomsPresent; i++) {
-		int atomOrdering = CompareAtoms(tuple->atoms[i], tupleOrKey->atoms[i]);
-		if(atomOrdering < 0)
-			return -1;
-		if(atomOrdering > 0)
-			return 1;
-		// else continue
-	}
-	return 0;
+	return TupleCompare(tuple->atoms, tupleOrKey->atoms, tupleOrKey->nAtomsPresent);
 }
 
 
@@ -451,9 +406,9 @@ RelationTable const * CreateRelationBTreeWithServices(
 		byte parameterIO[nColumns];
 		for(index8 i = 0; i < nColumns; i++) {
 			if(i < nInputs)
-				parameterIO[i] = PARAMETER_IN;
+				parameterIO[indexColumns[i]] = PARAMETER_IN;
 			else
-				parameterIO[i] = PARAMETER_OUT;
+				parameterIO[indexColumns[i]] = PARAMETER_OUT;
 		}
 		RelationAddService(table, parameterIO, service);
 	}

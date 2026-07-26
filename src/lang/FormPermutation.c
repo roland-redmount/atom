@@ -104,7 +104,7 @@ PredicateIterator * CreatePredicateIterator(Atom predicateForm)
 	iter->rolePerm = malloc(iter->nUniqueRoles * sizeof(Permutation *));
 	// create iterators for each unique role
 	MultisetIterator iterator;
-	MultisetIterate(predicateForm, &iterator);
+	MultisetIterate(predicateForm, AT_NAME, &iterator);
 	iter->arity = 0;
 	for(index8 i = 0; i < iter->nUniqueRoles; i++) {
 		ASSERT(MultisetIteratorNext(&iterator));
@@ -182,7 +182,7 @@ ClauseIterator * CreateClauseIterator(Atom clauseForm)
 	
 	// create permutations and corresponding iterators
 	MultisetIterator iterator;
-	MultisetIterate(clauseForm, &iterator);
+	MultisetIterate(clauseForm, AT_ID, &iterator);
 	iter->arity = 0;
 	for(index8 i = 0; i < iter->nUniqueTerms; i++) {
 		ASSERT(MultisetIteratorNext(&iterator));
@@ -291,7 +291,7 @@ ConjunctionIterator * CreateConjunctionIterator(Atom form)
 	iter->clauseIter = malloc(iter->nClauses * sizeof(ClauseIterator **));
 
 	MultisetIterator iterator;
-	MultisetIterate(form, &iterator);
+	MultisetIterate(form, AT_ID, &iterator);
 	for(index8 i = 0; i < iter->nClauses; i++) {
 		ASSERT(MultisetIteratorNext(&iterator));
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);

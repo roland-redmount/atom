@@ -129,7 +129,7 @@ void LookupAddPredicateRoles(RelationTable const * relation, Atom const * actors
 	record.relation = relation;
 
 	MultisetIterator formIterator;
-	MultisetIterate(relation->form, &formIterator);
+	MultisetIterate(relation->form, AT_NAME, &formIterator);
 	index8 index = 0;
 	while(MultisetIteratorNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
@@ -193,7 +193,7 @@ void LookupRemovePredicateRoles(RelationTable const * relation, Atom const * act
 	record.relation = relation;
 
 	MultisetIterator formIterator;
-	MultisetIterate(relation->form, &formIterator);
+	MultisetIterate(relation->form, AT_NAME, &formIterator);
 	index8 index = 0;
 	while(MultisetIteratorNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);

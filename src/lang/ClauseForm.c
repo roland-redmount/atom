@@ -48,13 +48,13 @@ bool IsClauseForm(Atom form)
 
 size8 ClauseFormNTermForms(Atom clauseForm)
 {
-	return MultisetNUniqueElements(clauseForm);
+	return MultisetNUniqueElements(clauseForm, AT_ID);
 }
 
 
 size8 ClauseFormNTerms(Atom clauseForm)
 {
-	return MultisetSize(clauseForm);
+	return MultisetSize(clauseForm, AT_ID);
 }
 
 
@@ -62,7 +62,7 @@ size8 ClauseArity(Atom clauseForm)
 {
 	// the arity of a clause is the sum of unique terms arity * multiple
 	MultisetIterator iterator;
-	MultisetIterate(clauseForm, &iterator);
+	MultisetIterate(clauseForm, AT_ID, &iterator);
 	size8 arity = 0;
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
@@ -77,7 +77,7 @@ size8 ClauseArity(Atom clauseForm)
 void PrintClauseForm(Atom clauseForm)
 {	
 	MultisetIterator iterator;
-	MultisetIterate(clauseForm, &iterator);
+	MultisetIterate(clauseForm, AT_ID, &iterator);
 
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);

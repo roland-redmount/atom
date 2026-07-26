@@ -31,7 +31,7 @@ static int8 quickSortCompareAtoms(void const * item1, void const * item2, size32
 
 void SortAtoms(Atom atoms[], size32 nAtoms)
 {
-	QuickSort(atoms, nAtoms, sizeof(TypedAtom), quickSortCompareAtoms);
+	QuickSort(atoms, nAtoms, sizeof(Atom), quickSortCompareAtoms);
 }
 
 

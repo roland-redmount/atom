@@ -54,6 +54,24 @@ static void btreeFreeRelation(void * item, size32 itemSize)
 }
 
 
+static void setupServiceRecord(
+	ServiceRecord * record, RelationTable const * relation, byte const parameterIO[], Service * service)
+{
+	record->relation = relation,
+	record->parameterIO = Allocate(relation->nColumns);
+	CopyMemory(parameterIO, record->parameterIO, relation->nColumns);
+	record->service = service;
+}
+
+
+// callback to free the parameterIO allocation upon B-tree deletion of a ServiceRecord
+static void btreeFreeServiceRecord(void * item, size32 itemSize)
+{
+	ServiceRecord * record = item;
+	Free(record->parameterIO);
+}
+
+
 static int8 compareServiceRecords(ServiceRecord const * record, ServiceRecord const * recordOrKey)
 {
 	// First compare relations
@@ -89,7 +107,7 @@ void SetupRegistry(void)
 	registry.services = BTreeCreate(
 		sizeof(ServiceRecord),
 		btreeCompareServiceRecords,
-		0
+		btreeFreeServiceRecord
 	);
 }
 
@@ -115,13 +133,9 @@ void RegistryRemoveRelationTable(RelationTable const * relation)
 
 void RelationAddService(RelationTable const * relation, byte const parameterIO[], Service * service)
 {
-	ServiceRecord record = {
-		.relation = relation,
-		.parameterIO = Allocate(relation->nColumns),
-		.service = service
-	};
-	CopyMemory(parameterIO, record.parameterIO, relation->nColumns);
-	BTreeInsert(registry.services, &record);
+	ServiceRecord record;
+	setupServiceRecord(&record, relation, parameterIO, service);
+	ASSERT(BTreeInsert(registry.services, &record) == BTREE_INSERTED)
 }
 
 
@@ -148,7 +162,9 @@ RelationTable const * FindRelationTable(Atom form, size8 nColumns, byte const at
 		.nColumns = nColumns,
 		.atomTypes = atomTypesCopy
 	};
-	RelationTable ** relationPtr = BTreePeekItem(registry.relationBTree, &key);
+	// the B-tree item nust be a pointer to the key structure
+	RelationTable *keyPtr = &key;
+	RelationTable ** relationPtr = BTreePeekItem(registry.relationBTree, &keyPtr);
 	if(relationPtr)
 		return *relationPtr;
 	else
@@ -200,15 +216,18 @@ void RegistryIteratorEnd(RegistryIterator * iterator)
 
 Service * RegistryFindService(RelationTable const * relation, byte const parameterIO[])
 {
-	RegistryIterator iterator;
-	RegistryIterate(relation, &iterator);
+	ServiceRecord key;
+	setupServiceRecord(&key, relation, parameterIO, 0);
+
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, registry.services);
 	Service * service = 0;
-	if(RegistryIteratorNext(&iterator)) {
-		service = RegistryIteratorPeekRecord(&iterator)->service;
-		// the service must be unique
-		ASSERT(!RegistryIteratorNext(&iterator))
+	if(BTreeIteratorSeek(&iterator, &key)) {
+		ServiceRecord * record = BTreeIteratorPeekItem(&iterator);
+		service = record->service;
 	}
-	RegistryIteratorEnd(&iterator);
+	BTreeIteratorEnd(&iterator);
+	btreeFreeServiceRecord(&key, 0);
 	return service;
 }
 

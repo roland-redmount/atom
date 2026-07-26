@@ -48,13 +48,13 @@ bool IsConjunctionForm(Atom atom)
 
 size8 ConjunctionFormNUniqueClauseForms(Atom form)
 {
-	return MultisetNUniqueElements(form);
+	return MultisetNUniqueElements(form, AT_ID);
 }
 
 
 size8 ConjunctionFormNClauseFormsTotal(Atom form)
 {
-	return MultisetSize(form);
+	return MultisetSize(form, AT_ID);
 }
 
 
@@ -62,7 +62,7 @@ size8 ConjunctionFormArity(Atom form)
 {
 	// the arity of a cojunction is the sum of unique terms arity * multiple
 	MultisetIterator iterator;
-	MultisetIterate(form, &iterator);
+	MultisetIterate(form, AT_ID, &iterator);
 	size8 arity = 0;
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
@@ -79,7 +79,7 @@ size8 ConjunctionFormArity(Atom form)
 void PrintConjunctionForm(Atom form)
 {
 	MultisetIterator iterator;
-	MultisetIterate(form, &iterator);
+	MultisetIterate(form, AT_ID, &iterator);
 
 	PrintChar('(');
 	while(MultisetIteratorNext(&iterator)) {

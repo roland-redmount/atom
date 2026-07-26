@@ -237,6 +237,19 @@ index32 BinarySearchLowerBound(
 }
 
 
+void * BinarySearch(
+	void const * key, void const * items, size32 nItems, size32 itemSize, ItemComparator compare)
+{
+	index32 lowerBound = BinarySearchLowerBound(key, items, nItems, itemSize, compare);
+	if(lowerBound < nItems) {
+		void * candidate = ((byte * ) items) + lowerBound * itemSize;
+		if(compare(candidate, key, itemSize) == 0)
+			return candidate;
+	}
+	return 0;
+}
+
+
 void ReorderByteArray(byte const * array, index8 const * index, size8 n, byte * reordered)
 {
 	for(index8 i = 0; i < n; i++)

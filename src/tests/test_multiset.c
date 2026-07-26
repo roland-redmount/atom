@@ -30,12 +30,12 @@ static void testMultiset(void)
 	ASSERT_TRUE(IsMultiset(multiset))
 
 	// multiset size
-	ASSERT_UINT32_EQUAL(MultisetNUniqueElements(multiset), TEST_MULTISET_N_UNIQUE)
-	ASSERT_UINT32_EQUAL(MultisetSize(multiset), TEST_MULTISET_SIZE)
+	ASSERT_UINT32_EQUAL(MultisetNUniqueElements(multiset, AT_NAME), TEST_MULTISET_N_UNIQUE)
+	ASSERT_UINT32_EQUAL(MultisetSize(multiset, AT_NAME), TEST_MULTISET_SIZE)
 
 	// iteration order of multiset currently yields elements ordered by multiple
 	MultisetIterator iterator;
-	MultisetIterate(multiset, &iterator);
+	MultisetIterate(multiset, AT_NAME, &iterator);
 		for(index32 i = 0; i < TEST_MULTISET_N_UNIQUE; i++) {
 		ASSERT_TRUE(MultisetIteratorNext(&iterator))
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);

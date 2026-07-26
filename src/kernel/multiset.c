@@ -10,35 +10,39 @@
 #include "util/sort.h"
 
 
-Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size32 nUniqueElements, byte atomType)
+Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size32 nUniqueElements, byte elementType)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	AddMultisetToIFact(&draft, generator, data, nUniqueElements, atomType);
+	AddMultisetToIFact(&draft, generator, data, nUniqueElements, elementType);
 	
 	return IFactEnd(&draft);
 }
 
 
-void AddMultisetToIFact(
-	IFactDraft * draft, MultisetElementGenerator generator, void const * data, size32 nUniqueElements, byte atomType)
+// currently we only support multisets of ID or NAME atoms
+RelationTable const * findMultisetRelation(byte elementType)
 {
-	// currently we only support multisets of ID or NAME atoms
-	RelationTable const * relation;
-	switch(atomType) {
+	switch(elementType) {
 		case AT_ID:
-		relation = GetCoreRelationTable(RELATION_MULTISET_ID);
-		break;
+		return GetCoreRelationTable(RELATION_MULTISET_ID);
 
 		case AT_NAME:
-		relation = GetCoreRelationTable(RELATION_MULTISET_NAME);
-		break;
+		return GetCoreRelationTable(RELATION_MULTISET_NAME);
 
 		default:
 		ASSERT(false)
-		break;
+		return 0;
 	}
+}
+
+
+void AddMultisetToIFact(
+	IFactDraft * draft,
+	MultisetElementGenerator generator, void const * data, size32 nUniqueElements, byte elementType)
+{
+	RelationTable const * relation = findMultisetRelation(elementType);
 	
 	// assert (multiset element multiple) facts
 	IFactBeginConjunction(
@@ -80,25 +84,26 @@ static ElementMultiple arrayElementGenerator(index32 index, void const * data)
 }
 
 
-Atom CreateMultisetFromArrays(Atom const atoms[], size32 const multiples[], size32 nUniqueElements, byte atomType)
+Atom CreateMultisetFromArrays(Atom const atoms[], size32 const multiples[], size32 nUniqueElements, byte elementType)
 {
 	MultisetElementData elementData;
 	elementData.atoms = atoms;
 	elementData.multiples = multiples;
 
-	return CreateMultiset(&arrayElementGenerator, &elementData, nUniqueElements, atomType);
+	return CreateMultiset(&arrayElementGenerator, &elementData, nUniqueElements, elementType);
 }
 
 
 void AddMultisetToIFactFromArrays(
-	IFactDraft * draft,  Atom const atoms[], size32 const multiples[], size32 nUniqueElements, byte atomType)
+	IFactDraft * draft,  Atom const atoms[], size32 const multiples[], size32 nUniqueElements, byte elementType)
 {
 	MultisetElementData elementData;
 	elementData.atoms = atoms;
 	elementData.multiples = multiples;
 
-	AddMultisetToIFact(draft, &arrayElementGenerator, &elementData, nUniqueElements, atomType);
+	AddMultisetToIFact(draft, &arrayElementGenerator, &elementData, nUniqueElements, elementType);
 }
+
 
 bool IsMultiset(Atom atom)
 {
@@ -124,23 +129,12 @@ size32 MultisetGetElementMultiple(Atom multiset, Atom element)
 }
 
 
-static RelationTable const * lookupMultisetRelation(Atom multiset)
-{
-	return LookupFindRelation(
-		multiset,
-		GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE),
-		GetCoreRoleName(ROLE_MULTISET)
-	);
-}
-
-
 /**
  * Multiset iterator
  */
-
-void MultisetIterate(Atom multiset, MultisetIterator * iterator)
+void MultisetIterate(Atom multiset, byte elementType, MultisetIterator * iterator)
 {
-	RelationTable const * relation = lookupMultisetRelation(multiset);
+	RelationTable const * relation = findMultisetRelation(elementType);
 	byte parameterIO[3];
 	CoreFormSetByteArray(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
@@ -181,10 +175,10 @@ void MultisetIteratorEnd(MultisetIterator * iterator)
 }
 
 
-size32 MultisetNUniqueElements(Atom multiset)
+size32 MultisetNUniqueElements(Atom multiset, byte elementType)
 {
 	MultisetIterator iterator;
-	MultisetIterate(multiset, &iterator);
+	MultisetIterate(multiset, elementType, &iterator);
 	size32 nElements = 0;
 	while(MultisetIteratorNext(&iterator)) {
 		nElements++;
@@ -194,10 +188,10 @@ size32 MultisetNUniqueElements(Atom multiset)
 }
 
 
-size32 MultisetSize(Atom multiset)
+size32 MultisetSize(Atom multiset, byte elementType)
 {
 	MultisetIterator iterator;
-	MultisetIterate(multiset, &iterator);
+	MultisetIterate(multiset, elementType, &iterator);
 	size32 size = 0;
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
@@ -207,6 +201,18 @@ size32 MultisetSize(Atom multiset)
 	return size;
 }
 
+/**
+ * Find the relation associated with a multiset.
+ * This can be used to determine the element type.
+ */
+static RelationTable const * lookupMultisetRelation(Atom multiset)
+{
+	return LookupFindRelation(
+		multiset,
+		GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE),
+		GetCoreRoleName(ROLE_MULTISET)
+	);
+}
 
 void PrintMultiset(Atom multiset)
 {
@@ -216,7 +222,7 @@ void PrintMultiset(Atom multiset)
 	];
 	PrintChar('{');
 	MultisetIterator iterator;
-	MultisetIterate(multiset, &iterator);
+	MultisetIterate(multiset, elementType, &iterator);
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		PrintTypedAtom(CreateTypedAtom(elementType, em.element));
@@ -228,10 +234,10 @@ void PrintMultiset(Atom multiset)
 }
 
 
-void MultisetIterationOrder(Atom multiset, Atom const elements[], index8 * order, size8 nElements)
+void MultisetIterationOrder(Atom multiset, byte elementType, Atom const elements[], index8 * order, size8 nElements)
 {
 	MultisetIterator iterator;
-	MultisetIterate(multiset, &iterator);
+	MultisetIterate(multiset, elementType, &iterator);
 	size8 i = 0;
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);

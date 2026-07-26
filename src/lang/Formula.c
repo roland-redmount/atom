@@ -88,7 +88,7 @@ Formula * CreatePredicate(Atom const * roleNames, TypedAtom * actors, size8 arit
 	Atom predicateForm = CreatePredicateForm(roleNames, arity);
 
 	index8 roleOrder[arity];
-	MultisetIterationOrder(predicateForm, roleNames, roleOrder, arity);
+	MultisetIterationOrder(predicateForm, AT_NAME, roleNames, roleOrder, arity);
 
 	TypedAtom actorsOrdered[arity];
 	CopyMemory(actors, actorsOrdered, arity * sizeof(TypedAtom));
@@ -146,7 +146,7 @@ Formula * CreateClause(Formula const ** terms, size8 nTerms)
 	// reorder actors to match the name order of clauseForm
 	index8 termOrder[nTerms]; 
 	// find ordering
-	MultisetIterationOrder(clauseForm, termForms, termOrder, nTerms);
+	MultisetIterationOrder(clauseForm, AT_ID, termForms, termOrder, nTerms);
 	// reorder actors
 	size32 blockSizes[nTerms];
 	for(index8 i = 0; i < nTerms; i++)
@@ -184,7 +184,7 @@ Formula * CreateConjunction(Formula const ** clauses, size8 nClauses)
 	// reorder actors to match the name order of clauseForm
 	index8 clauseOrder[nClauses]; 
 	// find ordering
-	MultisetIterationOrder(conjunctionForm, clauseForms, clauseOrder, nClauses);
+	MultisetIterationOrder(conjunctionForm, AT_ID, clauseForms, clauseOrder, nClauses);
 	// reorder actors
 	size32 blockSizes[nClauses];
 	for(index8 i = 0; i < nClauses; i++)
@@ -201,7 +201,7 @@ index8 ClauseGetTermIndex(Atom clauseForm, Atom termForm, uint8 m)
 {
 	// iterate over terms in the clause to compoute the index
 	MultisetIterator iterator;
-	MultisetIterate(clauseForm, &iterator);
+	MultisetIterate(clauseForm, AT_ID, &iterator);
 
 	index8 index = 0;
 	bool found = false;
@@ -228,7 +228,7 @@ index8 ClauseGetTermActorsIndex(Atom clauseForm, Atom termForm, uint8 m)
 {
 	// iterate over terms in the clause to compoute the index
 	MultisetIterator iterator;
-	MultisetIterate(clauseForm, &iterator);
+	MultisetIterate(clauseForm, AT_ID, &iterator);
 
 	index8 index = 0;
 	bool found = false;
@@ -257,7 +257,7 @@ void ClauseGetTermActorsIndices(Atom clauseForm, index8 * termActorsIndices)
 {
 	// iterate over terms in the clause and compute indices
 	MultisetIterator iterator;
-	MultisetIterate(clauseForm, &iterator);
+	MultisetIterate(clauseForm, AT_ID, &iterator);
 
 	index8 k = 0;
 	termActorsIndices[k] = 0;
@@ -286,7 +286,7 @@ uint8 FormulaArity(Formula const * formula)
 static void printPredicate(Atom predicateForm, TypedTuple const * actors, index8 * atomIndex)
 {	
 	MultisetIterator iterator;
-	MultisetIterate(predicateForm, &iterator);
+	MultisetIterate(predicateForm, AT_NAME, &iterator);
 
 	size8 nRoles = PredicateNRoles(predicateForm);
 	for(index8 i = 0; i < nRoles; i++) {	
@@ -319,7 +319,7 @@ static void printTerm(Atom termForm, TypedTuple const * actors, index8 * atomInd
 static void printClause(Atom clauseForm, TypedTuple const * actors, index8 * atomIndex)
 {	
 	MultisetIterator iterator;
-	MultisetIterate(clauseForm, &iterator);
+	MultisetIterate(clauseForm, AT_ID, &iterator);
 
 	size8 nTermForms = ClauseFormNTermForms(clauseForm);
 	for(index8 i = 0; i < nTermForms; i++) {	
@@ -338,7 +338,7 @@ static void printClause(Atom clauseForm, TypedTuple const * actors, index8 * ato
 static void printConjunction(Atom conjunctionForm, TypedTuple const * actors, index8* atomIndex)
 {
 	MultisetIterator iterator;
-	MultisetIterate(conjunctionForm, &iterator);
+	MultisetIterate(conjunctionForm, AT_ID, &iterator);
 
 	size8 nClauseForms = ConjunctionFormNUniqueClauseForms(conjunctionForm);
 	for(index8 i = 0; i < nClauseForms; i++) {	

@@ -150,16 +150,12 @@ void IFactAcquire(Atom ifact)
 
 
 /**
- * Create query tuple to retrieve all facts with the ifact atom in the idColumn.
+ * Create query tuple to retrieve all facts with the ifact atom in the idColumn (0-based)
  */ 
-static void setupQueryTuple(TypedTuple * tuple, Atom ifact, index8 idColumn)
+static void setupQueryTuple(Atom * tuple, size8 nColumns, Atom ifact, index8 idColumn)
 {
-	for(index8 j = 0; j < tuple->nAtoms; j++) {
-		if(j == idColumn) 
-			TypedTupleSetElement(tuple, j, CreateTypedAtom(AT_ID, ifact));
-		else
-			TypedTupleSetElement(tuple, j, anonymousVariable);
-	}
+	SetMemory(tuple, nColumns * sizeof(Atom), 0);
+	tuple[idColumn] = ifact;
 }
 
 uint32 IFactReferenceCount(Atom ifact)
@@ -211,54 +207,42 @@ void IFactBeginConjunction(IFactDraft * draft, RelationTable const * relation, i
 		draft->header.nConjunctions * sizeof(IFactConjunction)
 	);
 	IFactConjunction * conjunction = lastConjunction(&(draft->header));
-	
+	SetMemory(conjunction, sizeof(IFactConjunction), 0);
 	conjunction->table = relation;
-	conjunction->nRows = 0;
 	conjunction->idColumn = idColumn;
 
-	// To retrieve existing ifacts, we will need a service accepting
-	// an input in the idColumn position, and outputs in all other positions.
-	// NOTE: this service could be compiled using a FILTER operation 
-	// if it does not already exist.
-	// Atom parameters[conjunction->table->nColumns];
-	// for(index8 i = 0; i < conjunction->table->nColumns; i++) {
-	// 	parameters[i] = (Atom) {
-	// 		.parameter = {
-	// 			.number = i+ 1,
-	// 			.io = (i == idColumn) ? PARAMETER_IN : PARAMETER_OUT,
-	// 			.atomType = conjunction->table->atomTypes[i]
-	// 		}
-	// 	};
-	// }
+	// Locate a service for querying tuple based on the id column.
+	// This is required by sameIFacts() to retrieve existing ifact tuples.
 	byte parameterIO[conjunction->table->nColumns];
 	for(index8 i = 0; i < conjunction->table->nColumns; i++) {
 		parameterIO[i] = (i == idColumn) ? PARAMETER_IN : PARAMETER_OUT;
 	}
 	conjunction->service = RegistryFindService(relation, parameterIO);
 	ASSERT(conjunction->service)
+
 	draft->hasBegunConjunction = true;
 }
 
 /**
  * Conjunctions are ordered first by form, then by column types.
  * 
- * NOTE: I think it's sufficient to just use CompareMemory on the IFactConjunction struct
+ * TODO: we currently use CompareMemory on the conjunction struct, but this ends
+ * up comparing relation table pointers which could be brittle. Review this.
  */
-/*
-static int8 compareConjunctions(void const * item1, void const * item2, size32 itemSize)
-{
-	IFactConjunction const * conjunction1 = item1;
-	IFactConjunction const * conjunction2 = item2;
-	ASSERT(conjunction1->nColumns == conjunction2->nColumns)
-	if(conjunction1->predicateForm.hash < conjunction2->predicateForm.hash)
-		return -1;
-	else if(conjunction1->predicateForm.hash > conjunction2->predicateForm.hash)
-		return 1;
-	else {
-		return CompareMemory(conjunction1->columnTypes, conjunction2->columnTypes, conjunction1->nColumns);
-	}
-}
-*/
+
+// static int8 compareConjunctions(void const * item1, void const * item2, size32 itemSize)
+// {
+// 	IFactConjunction const * conjunction1 = item1;
+// 	IFactConjunction const * conjunction2 = item2;
+// 	ASSERT(conjunction1->nColumns == conjunction2->nColumns)
+// 	if(conjunction1->predicateForm.hash < conjunction2->predicateForm.hash)
+// 		return -1;
+// 	else if(conjunction1->predicateForm.hash > conjunction2->predicateForm.hash)
+// 		return 1;
+// 	else {
+// 		return CompareMemory(conjunction1->columnTypes, conjunction2->columnTypes, conjunction1->nColumns);
+// 	}
+// }
 
 
 /**
@@ -309,7 +293,6 @@ static void sortIFactDraft(IFactDraft * draft)
 	for(index8 i = 0; i < ifact->nConjunctions; i++) {
 		IFactConjunction * conjunction = &(ifact->conjunctions[i]);
 		tupleBlockSizes[i] = conjunction->nRows * conjunction->table->nColumns * sizeof(Atom);
-		// NOTE: this ordering of tuples must be consistent with relation table iteration order
 		QuickSort(tuples, conjunction->nRows, conjunction->table->nColumns * sizeof(Atom), CompareMemory);
 		tuples += conjunction->nRows * conjunction->table->nColumns;
 	}
@@ -347,7 +330,6 @@ static void createFacts(IFactDraft * draft, bool bootstrap)
 			if(!bootstrap) {
 				LookupAddPredicateRoles(conjunction->table, tuple);
 			}
-			// assertFact(conjunction->table->form, typedTuple, conjunction->idColumn + 1);
 			tuple += conjunction->table->nColumns;
 		}
 		conjunction++;
@@ -360,9 +342,9 @@ static data64 hashConjunction(IFactConjunction const * conjunction, Atom const *
 	data64 hash = initialHash;
 	// hash the form and types
 	hash = DJB2DoubleHashAdd(&conjunction->table->form.hash, sizeof(data64), initialHash);
-	hash = DJB2DoubleHashAdd(conjunction->table->atomTypes, conjunction->table->nColumns, initialHash);
+	hash = DJB2DoubleHashAdd(conjunction->table->atomTypes, conjunction->table->nColumns, hash);
 	// hash all tuples (sorted)
-	return DJB2DoubleHashAdd(tuples, conjunction->table->nColumns * conjunction->nRows * sizeof(Atom), hash);
+	return DJB2DoubleHashAdd(tuples, conjunction->nRows * conjunction->table->nColumns * sizeof(Atom), hash);
 }
 
 
@@ -377,7 +359,7 @@ static data64 hashIFact(IFactDraft * draft)
 	for(index32 i = 0; i < draft->header.nConjunctions; i++) {
 		IFactConjunction * conjunction = &(draft->header.conjunctions[i]);
 		hash = hashConjunction(conjunction, tuplePtr, hash);
-		tuplePtr += conjunction->nRows * TypedTupleNBytes(conjunction->table->nColumns);
+		tuplePtr += conjunction->nRows * conjunction->table->nColumns;
 	}
 	return hash;
 }
@@ -396,43 +378,30 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 	if(draft->header.nConjunctions != existingIFact->nConjunctions)
 		return false;
 
-	Atom const * draftTuple = draft->tupleStorage;	
+	Atom const * draftTuples = draft->tupleStorage;	
 	for(index32 i = 0; i < existingIFact->nConjunctions; i++) {
 		IFactConjunction * conjunction = &(draft->header.conjunctions[i]);
+		size8 nRows = conjunction->nRows;
+		size8 nColumns = conjunction->table->nColumns;
 		IFactConjunction * existingConjunction = &(existingIFact->conjunctions[i]);
 		// check conjunctions headers are identical
 		if(CompareMemory(conjunction, existingConjunction, sizeof(IFactConjunction)))
 			return false;
 
 		// Fetch identifying facts for the existing IFact.
-		// Create query tuple
-		// the identified atom must be identical in current and existing
-		TypedTuple * queryTuple = CreateTypedTuple(conjunction->table->nColumns);
-		setupQueryTuple(
-			queryTuple, (Atom) {.hash = draft->header.hash}, conjunction->idColumn);
-
-		// NOTE: there must exist a matching service ...
-		ServiceRecord record;
-		index8 permutation[conjunction->table->nColumns];
-		DispatchQuery(conjunction->table->form, queryTuple, &record, permutation);
-
-		Atom arguments[conjunction->table->nColumns];
-		// TODO: now we need to setup the arguments array with permutation ...
-		// Can this be done by dispatch so we don't expose the permutation?
-		ASSERT(false);
-
-		ServiceContext * context = ServiceCreateContext(record.service, arguments);
-
+		// NOTE: The service may return tuples a different order than the tupleStorage array.
+		Atom arguments[nColumns];
+		setupQueryTuple(arguments, nColumns, (Atom) {.hash = draft->header.hash}, conjunction->idColumn);
+		ServiceContext * context = ServiceCreateContext(conjunction->service, arguments);
 		while(ServiceCall(context)) {
-			// the id column is still zero in the draft tuple
-			// and must not affect the comparison
-			// TODO: why not set the identified atom when computing the hash?
-			arguments[conjunction->idColumn] = draftTuple[conjunction->idColumn];
-			if(!CompareMemory(arguments, draftTuple, conjunction->table->nColumns * sizeof(Atom)))
+			// The id column is still zero in the draft tuple and must not affect the comparison.
+			arguments[conjunction->idColumn] = draftTuples[conjunction->idColumn];
+			// Find the tuple in the draft tuple storage for this conjunction
+			if(!BinarySearch(arguments, draftTuples, nRows, nColumns * sizeof(Atom), CompareMemory))
 				return false;
-			draftTuple += conjunction->table->nColumns;
-			// currentTuple now points to the first tuple of the next conjuction
 		}
+		ServiceFreeContext(context);
+		draftTuples += conjunction->nRows * nColumns;
 	}
 	return true;
 }
@@ -444,8 +413,9 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash) // , void (* assertFact)
 	ASSERT(draft->header.conjunctions);
 
 	sortIFactDraft(draft);
-	if(hash == 0)
+	if(hash == 0) {
 		draft->header.hash = hashIFact(draft);
+	}
 	else
 		draft->header.hash = hash;
 
@@ -577,25 +547,21 @@ void IFactRelease(Atom ifact)
 		IFactHeader headerCopy = *header;
 
 		// Retract defining facts.
-		// TODO: can we locate the facts using lookup instead, so that we
+		// NOTE: can we locate the facts using lookup instead, so that we
 		// don't actually need to store the conjunctions after IFactEnd() ?
 		// We only need to know the predicate form (to identify the relation/service)
 		// and the role in which the AT_ID atom participates.
 		for(index8 i = 0; i < headerCopy.nConjunctions; i++) {
 			IFactConjunction * conjunction = &(headerCopy.conjunctions[i]);
-			TypedTuple * queryTuple = CreateTypedTuple(conjunction->table->nColumns);
-			setupQueryTuple(queryTuple, ifact, conjunction->idColumn);
 
-			// Delete protected tuples.
-			// This may result in recursive calls to IFactRelease()
-			// on atoms in the deleted tuple.
-
-			// NOTE: this does not remove entries from the lookup table
-			// TODO: RetractFact() cannot be used for this purpose as it does REMOVE_NORMAL,
-			// but we should have an Btree-independent method
+			// TODO: Delete protected tuples -- we need a function for this!
+			// This may result in recursive calls to IFactRelease() on atoms in the deleted tuple.
 			ASSERT(false)
+			size8 nColumns = conjunction->table->nColumns;
+			Atom queryTuple[nColumns];
+			setupQueryTuple(queryTuple, nColumns, ifact, conjunction->idColumn);
+			// We need a 
 			// RelationBTreeRemoveTuples(conjunction->btree, queryTuple, REMOVE_PROTECTED);
-			FreeTypedTuple(queryTuple);
 		}
 		LookupRemoveAllRoles(ifact);
 
@@ -608,7 +574,7 @@ void IFactRelease(Atom ifact)
 
 void IFactPrint(Atom atom)
 {
-	PrintF("ID %llx", atom);
+	PrintF("ID %llx, (%llu)", atom.hash, atom.hash);
 }
 
 

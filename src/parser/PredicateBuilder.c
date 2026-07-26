@@ -82,7 +82,7 @@ Formula * PredicateBuilderCreateFormula(PredicateBuilder const * builder)
 
 	// determine the order of roles used by multiset
 	index8 order[arity]; 
-	MultisetIterationOrder(form, roles, order, arity);
+	MultisetIterationOrder(form, AT_NAME, roles, order, arity);
 
 	// ordered list of atoms
 	TypedAtom actors[arity];

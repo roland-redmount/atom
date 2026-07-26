@@ -118,6 +118,7 @@ Atom CreateNameFromCString(char const * cString)
 void NameAcquire(Atom name)
 {
 	NameRecord * nameRecord = peekNameRecord(name.hash);
+	ASSERT(nameRecord)
 	nameRecord->nReferences++;
 	nameStorage.nReferencesTotal++;
 }
@@ -168,7 +169,7 @@ void NameDump(void)
 	BTreeIterate(&iterator, nameStorage.tree);
 	while(BTreeIteratorNext(&iterator)) {
 		NameRecord const * nameRecord = BTreeIteratorPeekItem(&iterator);
-		PrintF("%llx: ", nameRecord->hash);
+		PrintF("%llx (%llu) ", nameRecord->hash, nameRecord->hash);
 		PrintCharString(nameRecord->string, nameRecord->length);
 		PrintF(" %u references\n", nameRecord->nReferences);
 	};

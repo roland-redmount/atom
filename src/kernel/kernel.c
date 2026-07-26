@@ -327,7 +327,7 @@ void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
 /**
  * Create a core relation table using the B-tree implementation,
  * and create associated services.
- * This requires kernel.corePredicateRoleIndex to be initialized
+ * This requires kernel.corePredicateRoleIndex to be initialized for the correponding form
  */
 static RelationTable const * createCoreRelationTable(uint32 relationId)
 {
@@ -472,7 +472,6 @@ static void setupCoreServices(void)
 	kernel.corePredicateForms[FORM_PREDICATE_FORM] = predicateForm;
 
 	// Set role index arrays
-	// TODO: can we reorder this so that predicate roles are ordered by name?
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][0] = MULTISET_MULTISET_COLUMN;
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][1] = MULTISET_ELEMENT_COLUMN;
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][2] = MULTISET_MULTIPLE_COLUMN;
@@ -526,14 +525,14 @@ static void setupCoreServices(void)
 	/**
 	 * We can't call the usual IFactEnd() here because it calls 
 	 * (1) hashIFact(), while we want a predefined hash value
-	 * (2) AssertFact() which requires these forms to be in place already
+	 * (2) AtomAddRole() which requires these forms to be in place already
 	 * Instead we define the hash to be the same as the form hash,
 	 * and provide our own bootstrapAssertFact() function.
 	 * This gives us 1 reference to the multisetForm atom.
 	 */
 	IFactEndBootstrap(&multisetDraft, multisetForm.hash);
 
-	// Add lookup roles one by one
+	// Add lookup roles one by one -- NOTE: why can't we do this in ifact assertFacts() ?
 	AtomAddRole(
 		multisetForm,
 		kernel.coreRelations[RELATION_MULTISET_NAME],
@@ -588,16 +587,20 @@ static void setupCoreServices(void)
 
 	// Create remaining forms
 	Atom roles[CORE_FORMS_MAX_ARITY];	
-	for(index32 i = FORM_TERM_FORM; i <= N_CORE_PREDICATES; i++) {
-		for(index8 j = 0; j < corePredicateArity[i]; j++)
-			roles[j] = kernel.coreRoleNames[coreFormRoleIds[i][j]];
+	for(index32 formId = FORM_TERM_FORM; formId <= N_CORE_PREDICATES; formId++) {
+		for(index8 j = 0; j < corePredicateArity[formId]; j++) {
+			roles[j] = kernel.coreRoleNames[coreFormRoleIds[formId][j]];
+			PrintName(roles[j]);
+			PrintChar(' ');
+		}
 
-		Atom form = CreatePredicateForm(roles, corePredicateArity[i]);
-		kernel.corePredicateForms[i] = form;
+		Atom form = CreatePredicateForm(roles, corePredicateArity[formId]);
+		kernel.corePredicateForms[formId] = form;
+		PrintF("form.hash = %llx (%llu)\n", form.hash, form.hash);
 
 		// precompute role indices (relation columns) for CorePredicateRoleIndex()
-		for(index8 j = 0; j < corePredicateArity[i]; j++)
-			kernel.corePredicateRoleIndex[i][j] = PredicateRoleIndex(form, roles[j]);
+		for(index8 j = 0; j < corePredicateArity[formId]; j++)
+			kernel.corePredicateRoleIndex[formId][j] = PredicateRoleIndex(form, roles[j]);
 	}
 	// NOTE: we now hold 1 reference to each of the core predicate forms.
 

@@ -1,23 +1,22 @@
 
 #include "btree/btree.h"
+#include "kernel/ifact.h"
 #include "kernel/RelationTable.h"
 #include "kernel/service.h"
 #include "lang/TypedAtom.h"
 #include "memory/allocator.h"
-#include "memory/pool.h"
-
-// Pool allocator for RelatonTable structures
-void * relationPool;
 
 
 RelationTable const * CreateRelationTable(
 	RelationTableProvider * provider, Atom form, size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
 {
-	RelationTable * relation = PoolAllocate(relationPool);
-
+	// NOTE: pool allocation would be preferable
+	RelationTable * relation = Allocate(sizeof(RelationTable));
+	relation->provider = provider;
 	relation->form = form;
+	IFactAcquire(form);
 	relation->nColumns = nColumns;
-	// TODO: this seems like to many small allocs ...
+	// NOTE: this seems like to many small allocs ...
 	relation->atomTypes = Allocate(nColumns);
 	CopyMemory(atomTypes, relation->atomTypes, nColumns);
 
@@ -42,9 +41,10 @@ RelationTable const * CreateRelationTable(
 
 void FreeRelationTable(RelationTable const * table)
 {
+	IFactRelease(table->form);
 	Free(table->atomTypes);
 	Free(table->indexColumns);
-	PoolFreeItem(relationPool, (void *) table);
+	Free((void *) table);
 }
 
 

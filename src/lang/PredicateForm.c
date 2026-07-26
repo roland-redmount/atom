@@ -5,18 +5,18 @@
 #include "kernel/kernel.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/multiset.h"
+#include "kernel/tuple.h"
 #include "lang/Atom.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "util/utilities.h"
 
 
-
 Atom CreatePredicateForm(Atom const roles[], size8 nRoles)
 {
 	// reduce to unique roles, typed for use with multiset
 	Atom uniqueRoles[nRoles];
-	CopyMemory(roles, uniqueRoles, nRoles);
+	TupleCopy(roles, uniqueRoles, nRoles);
 	SortAtoms(uniqueRoles, nRoles);
 	uint32 multiplicities[nRoles];
 	size8 nUniqueRoles = ReduceAtomsArray(uniqueRoles, multiplicities, nRoles);
@@ -27,11 +27,7 @@ Atom CreatePredicateForm(Atom const roles[], size8 nRoles)
 	AddMultisetToIFactFromArrays(&draft, uniqueRoles, multiplicities, nUniqueRoles, AT_NAME);
 
 	// add (predicate-form @predicate) to ifact
-	RelationTable const * predicateFormTable = FindRelationTable(
-		GetCorePredicateForm(FORM_PREDICATE_FORM),
-		1, (byte[]) {AT_ID}
-	);
-
+	RelationTable const * predicateFormTable = GetCoreRelationTable(RELATION_PREDICATE_FORM);
 	IFactBeginConjunction(&draft, predicateFormTable, 0);
 	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
 	IFactEndConjunction(&draft);
@@ -56,13 +52,13 @@ bool IsPredicateForm(Atom atom)
 
 size8 PredicateNRoles(Atom predicateForm)
 {
-	return MultisetNUniqueElements(predicateForm);
+	return MultisetNUniqueElements(predicateForm, AT_NAME);
 }
 
 
 size8 PredicateArity(Atom predicateForm)
 {
-	return MultisetSize(predicateForm);
+	return MultisetSize(predicateForm, AT_NAME);
 }
 
 
@@ -70,7 +66,7 @@ index8 PredicateRoleIndex(Atom predicateForm, Atom roleName)
 {
 	ASSERT(IsPredicateForm(predicateForm));
 	MultisetIterator iterator;
-	MultisetIterate(predicateForm, &iterator);
+	MultisetIterate(predicateForm, AT_NAME, &iterator);
 
 	index8 index = 0;
 	bool found = false;
@@ -92,7 +88,7 @@ void PrintPredicateForm(Atom predicateForm)
 {	
 	ASSERT(IsPredicateForm(predicateForm))
 	MultisetIterator iterator;
-	MultisetIterate(predicateForm, &iterator);
+	MultisetIterate(predicateForm, AT_NAME, &iterator);
 
 	PrintChar('(');
 	while(MultisetIteratorNext(&iterator)) {

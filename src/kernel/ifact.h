@@ -25,14 +25,12 @@ struct s_ServiceRecord;
  * specifying the predicate form and atom types.
  */
 typedef struct s_IFactConjunction {
-	// Atom predicateForm;				// predicate form for the relation
-	// byte * columnTypes;
 	// relation table storing tuples for this conjunction
 	RelationTable const * table;
 	// service for retrieving existing tuples
 	Service const * service;
 	index8 idColumn;		// position of the identified atom in the tuple
-	// size8 nColumns;
+	byte pad;
 	size16 nRows;			// number of tuples in this conjunction
 } __attribute__((packed)) IFactConjunction;
 
