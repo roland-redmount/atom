@@ -101,6 +101,7 @@ void FreeRelationBTree(RelationBTree * relation)
 {
 	Free(relation->indexColumns);
 	BTreeFree(relation->btree);
+	Free(relation);
 }
 
 
@@ -401,10 +402,10 @@ MachineServiceProvider bTreeServiceProvider = {
  */
 static Service * createBTreeService(RelationBTree * relation, size8 nInputs)
 {
-	RelationBTreeServiceProviderData * serviceData = Allocate(sizeof(RelationBTreeServiceProviderData));
-	serviceData->relation = relation;
-	serviceData->nInputs = nInputs;
-	return CreateMachineService(relation->nColumns, &bTreeServiceProvider, serviceData);
+	RelationBTreeServiceProviderData * providerData = Allocate(sizeof(RelationBTreeServiceProviderData));
+	providerData->relation = relation;
+	providerData->nInputs = nInputs;
+	return CreateMachineService(relation->nColumns, &bTreeServiceProvider, providerData);
 }
 
 
@@ -428,6 +429,8 @@ RelationTable const * CreateRelationBTreeWithServices(
 				parameterIO[indexColumns[i]] = PARAMETER_OUT;
 		}
 		RelationAddService(table, parameterIO, service);
+		// The registry now holds the reference to the service
+		ReleaseService(service);
 	}
 	return table;
 }

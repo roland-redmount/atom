@@ -559,16 +559,10 @@ static void setupCoreServices(void)
 	// Create remaining forms
 	Atom roles[CORE_FORMS_MAX_ARITY];	
 	for(index32 formId = FORM_TERM_FORM; formId <= N_CORE_PREDICATES; formId++) {
-		for(index8 j = 0; j < corePredicateArity[formId]; j++) {
+		for(index8 j = 0; j < corePredicateArity[formId]; j++)
 			roles[j] = kernel.coreRoleNames[coreFormRoleIds[formId][j]];
-			PrintName(roles[j]);
-			PrintChar(' ');
-		}
-
 		Atom form = CreatePredicateForm(roles, corePredicateArity[formId]);
 		kernel.corePredicateForms[formId] = form;
-		PrintF("form.hash = %llx (%llu)\n", form.hash, form.hash);
-
 		// precompute role indices (relation columns) for CorePredicateRoleIndex()
 		for(index8 j = 0; j < corePredicateArity[formId]; j++)
 			kernel.corePredicateRoleIndex[formId][j] = PredicateRoleIndex(form, roles[j]);
@@ -696,15 +690,9 @@ void KernelShutdown(void)
 		RegistryRemoveRelationTable(kernel.coreRelations[relationId]);
 	}
 
-	// Check item counts
-
-	PrintF("IFactTotalCount() = %u\n", IFactTotalCount());
-	PrintF("IFactTotalReferenceCount() = %u\n", IFactTotalReferenceCount());
-	PrintF("NameTotalReferenceCount() = %u\n", NameTotalReferenceCount());
-
+	// Verify ifact counts
 	ASSERT(IFactTotalCount() == 0)
 	ASSERT(IFactTotalReferenceCount() == 0)
-	// remaining name references are freed by FreeNameStorage() below
 
 	uint32 nLookupEntries = LookupTotalCount();
 	if(nLookupEntries > kernel.nCoreLookupEntries) {
