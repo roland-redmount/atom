@@ -153,7 +153,7 @@ static void removeRecord(LookupRecord * record)
 	if(existingRecord->nFacts > 1)
 		existingRecord->nFacts--;
 	else {
-		ASSERT(BTreeDelete(lookup.btree, record) == BTREE_DELETED)
+		ASSERT(BTreeDelete(lookup.btree, record, 0) == BTREE_DELETED)
 	}
 	lookup.nRolesTotal--;
 }
@@ -172,15 +172,16 @@ void AtomRemoveRole(Atom atom, RelationTable const * relation, Atom role)
 
 void LookupRemoveAllRoles(Atom atom)
 {
-	LookupRecord record = {
+	LookupRecord key = {
 		.atom = atom,
 		.relation = 0,
 		.role = (Atom) {0}
 	};
+	LookupRecord record;
 	// TODO: can we delete the item via the B-tree iterator more efficiently?
-	while(BTreeGetItem(lookup.btree, &record)) {
+	while(BTreeGetItem(lookup.btree, &key, &record)) {
 		lookup.nRolesTotal -= record.nFacts;
-		BTreeDelete(lookup.btree, &record);
+		BTreeDelete(lookup.btree, &record, 0);
 		record.relation = 0;
 		record.role = (Atom) {0};
 	}

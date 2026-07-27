@@ -15,6 +15,7 @@
 #include "memory/paging.h"
 #include "memory/allocator.h"
 #include "util/hashing.h"
+#include "util/ResizingArray.h"
 #include "util/sort.h"
 
 
@@ -556,9 +557,50 @@ bool IFactCheckTuple(BTree const * tree, TypedTuple const * tuple)
 }
 */
 
-void IFactRelease(Atom ifact)
+void removeIFactTuples(IFactConjunction * conjunction, Atom idAtom)
 {
-	IFactHeader * header = peekIFactHeader(ifact.hash);
+	RelationTable const * table = conjunction->table;
+	size8 nColumns = table->nColumns;
+
+	// Retrieve all tuples having idAtom in the idColumn.
+	// NOTE: although it may be possible to have tuples where idAtom is
+	// present in idColumn _without_ being an identifying fact,
+	// such tuples cannot occur here because they would have to reference idAtom,
+	// and we already know that its reference count is zero.
+	ResizingArray tuplesArray;
+	CreateResizingArray(&tuplesArray, nColumns * sizeof(Atom), 10);
+	Atom arguments[nColumns];
+	setupQueryTuple(arguments, nColumns, idAtom, conjunction->idColumn);
+	ServiceContext * context = ServiceCreateContext(conjunction->service, arguments);
+	while(ServiceCall(context))
+		ResizingArrayAppend(&tuplesArray, arguments);
+	ServiceFreeContext(context);
+
+	// Release all atoms referenced by tuples.
+	// NOTE: in general, this cannot be done while iterating over service,
+	// since iteration typically write-locks the storage.
+	// Note that IFactRelease() may call this function recursively.
+
+	// NOTE: we now do this in RelationTableRemoveTuple()
+	// for(index32 i = 0; i < tuplesArray.nElements; i++) {
+	// 	Atom * tuple = ResizingArrayGetElement(&tuplesArray, i);
+	// 	for(index32 j = 0; j < nColumns; j++) {
+	// 		if(j != conjunction->idColumn)
+	// 			ReleaseTypedAtom(CreateTypedAtom(table->atomTypes[j], tuple[j]));
+	// 	}
+	// }
+	// Delete tuples
+	for(index32 i = 0; i < tuplesArray.nElements; i++) {
+		Atom * tuple = ResizingArrayGetElement(&tuplesArray, i);
+		ASSERT(RelationTableRemoveTuple(table, tuple, conjunction->idColumn + 1) == BTREE_DELETED);
+	}
+	FreeResizingArray(&tuplesArray);
+}
+
+
+void IFactRelease(Atom idAtom)
+{
+	IFactHeader * header = peekIFactHeader(idAtom.hash);
 	ASSERT(header);
 	ASSERT(header->refCount > 0);
 	ASSERT(ifactStorage.totalReferenceCount > 0);
@@ -578,28 +620,22 @@ void IFactRelease(Atom ifact)
 		// and the role in which the AT_ID atom participates.
 		for(index8 i = 0; i < headerCopy.nConjunctions; i++) {
 			IFactConjunction * conjunction = &(headerCopy.conjunctions[i]);
-
-			// TODO: Delete protected tuples -- we need a function for this!
-			// This may result in recursive calls to IFactRelease() on atoms in the deleted tuple.
-			ASSERT(false)
-			size8 nColumns = conjunction->table->nColumns;
-			Atom queryTuple[nColumns];
-			setupQueryTuple(queryTuple, nColumns, ifact, conjunction->idColumn);
-			// We need a 
-			// RelationBTreeRemoveTuples(conjunction->btree, queryTuple, REMOVE_PROTECTED);
+			removeIFactTuples(conjunction, idAtom);
 		}
-		LookupRemoveAllRoles(ifact);
+		LookupRemoveAllRoles(idAtom);
 
 		// remove IFact
 		Free(headerCopy.conjunctions);
-		ASSERT(BTreeDelete(ifactStorage.btree, &headerCopy) == BTREE_DELETED);
+		ASSERT(BTreeDelete(ifactStorage.btree, &headerCopy, 0) == BTREE_DELETED);
 	}
 }
 
 
 void IFactPrint(Atom atom)
 {
-	PrintF("ID %llx, (%llu)", atom.hash, atom.hash);
+	IFactHeader * header = peekIFactHeader(atom.hash);
+	ASSERT(header)
+	PrintF("ID %llx (%llu) refCount = %u", atom.hash, atom.hash, header->refCount);
 }
 
 

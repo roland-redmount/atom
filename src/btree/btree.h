@@ -78,9 +78,9 @@ bool BTreeIsWriteLocked(BTree const * btree);
  * Lock the b-tree for all operations. Fails if the b-tree is already
  * locked or write-locked.
  */
-bool BTreeLock(BTree * btree);
-void BTreeUnlock(BTree * btree);
-bool BTreeIsLocked(BTree const * btree);
+// bool BTreeLock(BTree * btree);
+// void BTreeUnlock(BTree * btree);
+// bool BTreeIsLocked(BTree const * btree);
 
 size32 BTreeHeight(BTree const * btree);
 size32 BTreeNItems(BTree const * btree);
@@ -96,16 +96,10 @@ size32 BTreeNItems(BTree const * btree);
 void * BTreePeekItem(BTree * btree, void const * key);
 
 /**
- * Similar to BTreePeekItem(), but copies the item to *key
- * if it is found.
- * Returns true if the item was found. If the item is not
- * found, key is not altered.
- * 
- * NOTE: this is not a very good interface; we should probably have
- * separate const * key and * item arguments to avoid overwriting
- * the key. Particularly for repeated use; see for example LookupRemoveAllRoles()
+ * Similar to BTreePeekItem(), but copies the stored item to *item if found.
+ * Returns true if the item was found.
  */
-bool BTreeGetItem(BTree * btree, void * key);
+bool BTreeGetItem(BTree * btree, void const * key, void * item);
 
 bool BTreeContainsItem(BTree * btree, const void * key);
 
@@ -124,14 +118,14 @@ BTreeInsertResult BTreeInsert(BTree * btree, void const * item);
 
 typedef enum e_BTreeDeleteResult {
 	BTREE_DELETED = 1,
-	BTREE_NO_MATCH,
+	BTREE_NO_MATCH = 2,
 } BTreeDeleteResult;
 
 /**
- * Delete an item that compares equal to the given item
- * by compareItems(). The deleted item is written to *item.
+ * Delete an item that compares equal to the given key by compareItems(),
+ * if any. The deleted item is copied to *item if item is not 0.
  */
-BTreeDeleteResult BTreeDelete(BTree * btree, void * item);
+BTreeDeleteResult BTreeDelete(BTree * btree, void const * key, void * item);
 
 /**
  * Delete all items in the B-tree.

@@ -99,9 +99,7 @@ void testBTreeExample(void)
 
 	// delete items in order
 	for(index32 i = 0; i < nTestItems; i++) {
-		// insert the new item
-		*itemCopy = items[i];
-		ASSERT_TRUE(BTreeDelete(btree, itemCopy) == BTREE_DELETED)
+		ASSERT_TRUE(BTreeDelete(btree, &items[i], itemCopy) == BTREE_DELETED)
 		ASSERT_TRUE(testItemsEqual(&items[i], itemCopy))
 		// check B-tree integrity
 		ASSERT_UINT32_EQUAL(btree->nItemsTotal, nTestItems - i - 1)
@@ -150,14 +148,13 @@ void testBTreeRandomized(void)
 		validateBTree(btree);
 
 		// delete item
-		*itemCopy = items[i];
-		ASSERT_TRUE(BTreeDelete(btree, itemCopy) == BTREE_DELETED);
+		ASSERT_TRUE(BTreeDelete(btree, &items[i], itemCopy) == BTREE_DELETED);
 		ASSERT_TRUE(testItemsEqual(&items[i], itemCopy))
 		ASSERT_UINT32_EQUAL(btree->nItemsTotal, i)
 		validateBTree(btree);
 
 		// attempt to delete item again
-		ASSERT_TRUE(BTreeDelete(btree, itemCopy) == BTREE_NO_MATCH);
+		ASSERT_TRUE(BTreeDelete(btree, &items[i], itemCopy) == BTREE_NO_MATCH);
 		ASSERT_UINT32_EQUAL(btree->nItemsTotal, i)
 		validateBTree(btree);
 
@@ -178,15 +175,14 @@ void testBTreeRandomized(void)
 
 	// attempt to delete items outside the range of keys in the tree
 	TestItem minItem = {.key = -1 };
-	ASSERT_TRUE(BTreeDelete(btree, &minItem) == BTREE_NO_MATCH)
+	ASSERT_TRUE(BTreeDelete(btree, &minItem, 0) == BTREE_NO_MATCH)
 	TestItem maxItem = {.key = nTestItems };
-	ASSERT_TRUE(BTreeDelete(btree, &maxItem) == BTREE_NO_MATCH)
+	ASSERT_TRUE(BTreeDelete(btree, &maxItem, 0) == BTREE_NO_MATCH)
 
     // delete all items in random order
     RandomPermutation(items, nTestItems, sizeof(TestItem));
     for(index32 i = 0; i < nTestItems; i++) {
-		*itemCopy = items[i];
-        if(BTreeDelete(btree, itemCopy) != BTREE_DELETED) {
+		if(BTreeDelete(btree, &items[i], itemCopy) != BTREE_DELETED) {
 			ASSERT(false)
 		}
 		ASSERT_TRUE(testItemsEqual(&items[i], itemCopy))
@@ -211,8 +207,7 @@ void testBTreeRandomized(void)
 
 	for(index32 i = 0; i < nTestItems; i++) {
 		ASSERT_TRUE(BTreeInsert(btree, &items[i]) == BTREE_UPDATED)
-		itemCopy->key = items[i].key;
-		BTreeGetItem(btree, itemCopy);
+		BTreeGetItem(btree, &items[i], itemCopy);
 		ASSERT_TRUE(testItemsEqual(&items[i], itemCopy))
 		validateBTree(btree);
 	}
@@ -230,8 +225,7 @@ void testBTreeRandomized(void)
 
     // delete even-numbered keys
     for(uint32 i = 0; i < nTestItems; i += 2) {
-		itemCopy->key = items[i].key;
-        ASSERT_TRUE(BTreeDelete(btree, itemCopy) == BTREE_DELETED)
+		ASSERT_TRUE(BTreeDelete(btree, &items[i], itemCopy) == BTREE_DELETED)
 		ASSERT_TRUE(testItemsEqual(&items[i], itemCopy))
 		validateBTree(btree);
 	}
@@ -246,8 +240,7 @@ void testBTreeRandomized(void)
 
     // delete odd-numbered keys
     for(uint32 i = 1; i < nTestItems; i += 2) {
-		itemCopy->key = items[i].key;
-        ASSERT_TRUE(BTreeDelete(btree, itemCopy) == BTREE_DELETED)
+		ASSERT_TRUE(BTreeDelete(btree, &items[i], itemCopy) == BTREE_DELETED)
 		ASSERT_TRUE(testItemsEqual(&items[i], itemCopy))
 		validateBTree(btree);
 	}

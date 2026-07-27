@@ -46,14 +46,15 @@ typedef struct s_RelationTableProvider {
 
 	/**
 	 * Remove a specific tuple from the underlying relation.
-	 * The removeTuple() function may assume the tuple contains no identified atom.
+	 * If the stored tuplehad an identified atom, it must match the given idPosition,
+	 * or an error occurs.
 	 */
-	byte (*removeTuple)(void * storage, Atom const tuple[]);
+	byte (*removeTuple)(void * storage, Atom const tuple[], uint8 idPosition);
 
 	/**
 	 * Remove all tuples containing idAtom in the idPosition column (1-based)
 	 */
-	void (*removeIFactTuples)(void * storage, Atom idAtom, uint8 idPosition);
+	// void (*removeIFactTuples)(void * storage, Atom idAtom, uint8 idPosition);
 
 	/**
 	 * Return number of tuples in the relation table
@@ -74,6 +75,7 @@ typedef struct s_RelationTableProvider {
 // result codes for removeTuple()
 #define TUPLE_REMOVED		1
 #define TUPLE_NOT_FOUND		2
+#define TUPLE_PROTECTED		3
 
 /**
  * A relation table implementation record, identified by (form, atomTypes).
@@ -124,13 +126,14 @@ byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint
 
 /**
  * Remove the given tuple from the relation table.
- * The tuple must not contain an identified atom.
+ * If the tuple must not contain an identified atom, its position must match
+ * the given idPosition to remove the tuple.
  * Does not remove lookup entries; see RetractFact()
  */
-byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[]);
+byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
 
 
-void RelationTableRemoveIFactTuples(RelationTable const * table, Atom idAtom, uint8 idPosition);
+// void RelationTableRemoveIFactTuples(RelationTable const * table, Atom idAtom, uint8 idPosition);
 
 /**
  * Print out an entire relation table, for debugging

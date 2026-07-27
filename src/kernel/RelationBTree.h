@@ -123,27 +123,13 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator);
  */
 // Atom RelationBTreeQuerySingleAtom(RelationTable * table, Atom const queryTuple[], size8 nInputs, index8 index);
 
-/**
- * Add a single tuple to the relation, acquiring each atom in the tuple.
- * Does not add entries to lookup; see AssertFact().
- * For ifacts, the identified parameter is a 1-based position of the identified atom;
- * else set identified = 0
- * 
- * NOTE: Should this really be acquiring atoms? Or move that to AssertFact() ?
- */
-// byte RelationBTreeAddTuple(RelationBTree * tree, Atom const * tuple, uint8 identified);
-
 
 /**
- * Remove tuples from the BTree matching the query.
- * If identified is nonzero, tuples with an identified atom in this position (1-based) will be removed,
- * otherwise, only tuples without identified atoms will be removed.
- * Releases a reference to each AT_ID atom in a removed tuple, except identified atoms.
- * To remove all tuples, set queryTuple to 0 (the nuclear option).
+ * Remove a tuple from the BTree matching the query. See RelationTableRemoveTuple()
  */
+byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition);
+
 // size32 RelationBTreeRemoveTuples(BTree * btree, Atom const queryTuple[], size8 nInputs, uint8 identified);
-
-byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[]);
 
 /**
  * High-level method to create a RelationTable backed by a B-tree,

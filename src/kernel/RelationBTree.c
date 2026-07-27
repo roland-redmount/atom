@@ -106,7 +106,8 @@ void FreeRelationBTree(RelationBTree * relation)
 
 byte RelationBTreeAddTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition)
 {
-	// NOTE: this could be done with C99 VLA stack allocation
+	// NOTE: if we are to query for tuples based on idPosition, it must be the leading column
+	
 	BTreeTuple * btreeTuple = createBTreeTuple(
 		relation->nColumns, idPosition, relation->nColumns, tuple, relation->indexColumns);
 	byte result = BTreeInsert(relation->btree, btreeTuple);
@@ -115,24 +116,33 @@ byte RelationBTreeAddTuple(RelationBTree * relation, Atom const tuple[], uint8 i
 }
 
 
-byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[])
+byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition)
 {
 	ASSERT(!BTreeIsWriteLocked(relation->btree))
-	BTreeTuple * btreeTuple = createBTreeTuple(
+
+	// NOTE: the below logic is common to all relation tables, could be moved to RelationTable?
+	// This would require a method to get the idPosition of a stored tuple from the RelationTableProvider.
+
+	// retrieve the stored tuple to inspect its idPosition
+	BTreeTuple * queryTuple = createBTreeTuple(
 		relation->nColumns, 0, relation->nColumns, tuple, relation->indexColumns);
-	BTreeDeleteResult btreeResult = BTreeDelete(relation->btree, btreeTuple);
-	byte result;
-	if(btreeResult == BTREE_DELETED) {
-		// verify the tuple did not contain an identified atom
-		ASSERT(!btreeTuple->idPosition)
-		result = TUPLE_REMOVED;
+	BTreeTuple * btreeTuple = BTreePeekItem(relation->btree, queryTuple);
+	Free(queryTuple);
+	
+	if(idPosition && (btreeTuple->idPosition != idPosition)) {
+		// The specified idPosition is wrong, indicating an internal error
+		ASSERT(false)
 	}
-	else {
-		ASSERT(btreeResult == BTREE_NO_MATCH)
-		result = TUPLE_NOT_FOUND;
+	if(!queryTuple->idPosition && btreeTuple->idPosition) {
+		// Attempt to retract an identifying fact
+		return TUPLE_PROTECTED;
 	}
-	Free(btreeTuple);
-	return result;
+	
+	// TODO: we should probably have a BTreeDeleteAt(void * item) function that accepts a direct
+	// pointer to a stored item, to avoid re-running the search
+	BTreeDeleteResult btreeResult = BTreeDelete(relation->btree, btreeTuple, 0);
+
+	return (btreeResult == BTREE_DELETED) ? TUPLE_REMOVED : TUPLE_NOT_FOUND;
 }
 
 /**
@@ -154,10 +164,11 @@ static byte relationBTreeAddTuple(void * storage, Atom const tuple[], uint8 idPo
 	return RelationBTreeAddTuple((RelationBTree *) storage, tuple, idPosition);
 }
 
-static byte relationBTreeRemoveTuple(void * storage, Atom const tuple[])
+static byte relationBTreeRemoveTuple(void * storage, Atom const tuple[], uint8 idPosition)
 {
-	return RelationBTreeRemoveTuple((RelationBTree *) storage, tuple);
+	return RelationBTreeRemoveTuple((RelationBTree *) storage, tuple, idPosition);
 }
+
 
 static void freeRelationBTree(void * storage)
 {
@@ -168,6 +179,7 @@ RelationTableProvider btreeTableProvider = {
 	.createStorage = createRelationBTree,
 	.addTuple = relationBTreeAddTuple,
 	.removeTuple = relationBTreeRemoveTuple,
+	// .removeIFactTuples = relationBTreeRemoveIFactTuples,
 	.numberOfTuples = relationBTreeNTuples,
 	.free = freeRelationBTree,
 };
@@ -209,8 +221,13 @@ bool RelationBTreeIteratorNext(RelationBTreeIterator * iterator)
 		// new iterator, seek to first match
 		return BTreeIteratorSeek(&(iterator->treeIterator), iterator->queryTuple);
 	}
-	else
-		return BTreeIteratorNext(&(iterator->treeIterator));
+	else {
+		if(BTreeIteratorNext(&(iterator->treeIterator))) {
+			// return tuples as long as they match
+			BTreeTuple const * btreeTuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
+			return (compareBTreeTuples(btreeTuple, iterator->queryTuple) == 0);
+		}
+	}	
 	return false;
 }
 

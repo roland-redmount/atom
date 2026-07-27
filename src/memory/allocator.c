@@ -635,12 +635,13 @@ void _LogFree(const char * fileName, uint32 lineNumber, void * block)
 	if(logAllocations) {
 		ASSERT(CStringCompare(fileName, "src/btree/btree.c") != 0)
 		// Find record with this address
-		AllocateRecord logRecord = {.address = block};
-		if(!BTreeGetItem(allocateLog, &logRecord)) {
+		AllocateRecord key = {.address = block};
+		AllocateRecord record;
+		if(!BTreeGetItem(allocateLog, &key, &record)) {
 			// Attempted Free() of address not from Allocate()
 			ASSERT(false);
 		}
-		BTreeDelete(allocateLog, &logRecord);
+		BTreeDelete(allocateLog, &record, 0);
 	}
 	_Free(block);
 }

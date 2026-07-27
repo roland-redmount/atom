@@ -130,7 +130,7 @@ void NameRelease(Atom name)
 	ASSERT(nameRecord->nReferences > 0);
 	nameRecord->nReferences--;
 	if(nameRecord->nReferences == 0) {
-		ASSERT(BTreeDelete(nameStorage.tree, nameRecord) == BTREE_DELETED);
+		ASSERT(BTreeDelete(nameStorage.tree, nameRecord, 0) == BTREE_DELETED);
 	}
 	nameStorage.nReferencesTotal--;
 }

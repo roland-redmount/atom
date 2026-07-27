@@ -30,14 +30,21 @@ void RegistryAddRelationTable(RelationTable const * relation);
 void RegistryRemoveRelationTable(RelationTable const * relation);
 
 /**
- * Add a service to a relation.
+ * Associated a service with a relation in the registry.
+ * Aquires a reference to the service.
  */
 void RelationAddService(RelationTable const * relation, byte const parameterIO[], Service * service);
 
 /**
- * Remove the given service from a relation
+ * Dissociate the given service from a relation in the registry.
+ * Releases a reference to the service.
  */
 void RelationRemoveService(RelationTable const * relation, Service * service);
+
+/**
+ * Dissociate all services from the a relation in the registry.
+ */
+void RelationRemoveAllServices(RelationTable const * relation);
 
 /**
  * Locate a relation table for given (form, column types).

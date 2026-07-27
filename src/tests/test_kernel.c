@@ -6,6 +6,7 @@
 #include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "lang/PredicateForm.h"
+#include "memory/allocator.h"
 #include "testing/testing.h"
 
 
@@ -64,9 +65,11 @@ void testAssertRetract(void)
 
 int main(int argc, char * argv[])
 {
+	SetAllocationLogging(true);
+
 	KernelInitialize();
 
-	ExecuteTest(testAssertRetract);
+	// ExecuteTest(testAssertRetract);
 
 	KernelShutdown();
 

@@ -41,6 +41,8 @@ RelationTable const * CreateRelationTable(
 
 void FreeRelationTable(RelationTable const * table)
 {
+	ASSERT(RelationTableNRows(table) == 0)
+	table->provider->free(table->storage);
 	IFactRelease(table->form);
 	Free(table->atomTypes);
 	Free(table->indexColumns);
@@ -67,19 +69,14 @@ size32 RelationTableNRows(RelationTable const * table)
 }
 
 
-byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[])
+byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)
 {
-	byte result = table->provider->removeTuple(table->storage, tuple);
+	byte result = table->provider->removeTuple(table->storage, tuple, idPosition);
 	if(result == TUPLE_REMOVED) {
 		for(index32 i = 0; i < table->nColumns; i++) {
-			ReleaseTypedAtom(CreateTypedAtom(table->atomTypes[i], tuple[i]));
+			if((i + 1) != idPosition)
+				ReleaseTypedAtom(CreateTypedAtom(table->atomTypes[i], tuple[i]));
 		}
 	}
 	return result;
-}
-
-
-void RelationTableRemoveIFactTuples(RelationTable const * table, Atom idAtom, uint8 idPosition)
-{
-	table->provider->removeIFactTuples(table->storage, idAtom, idPosition);
 }

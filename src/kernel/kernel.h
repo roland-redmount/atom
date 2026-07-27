@@ -112,8 +112,8 @@ void RetractFact(Atom form, TypedTuple * actors);
  * There may be > 1 relation per predicate, with distinct types.
  */
 #define RELATION_MULTISET_NAME      		1	// (multiset:ID element:NAME multiple:UINT)
-#define RELATION_MULTISET_ID         		2	// (multiset:ID element:ID multiple:INT)
-#define RELATION_PREDICATE_FORM				3	// (predicate-form:ID)
+#define RELATION_PREDICATE_FORM				2	// (predicate-form:ID)
+#define RELATION_MULTISET_ID         		3	// (multiset:ID element:ID multiple:INT)
 #define RELATION_TERM_FORM					4	// (term-form:ID predicate-form:ID sign:UINT)
 #define RELATION_CLAUSE_FORM				5	// (clause-form:ID)
 #define RELATION_CONJUNCTION_FORM			6	// (conjunction-form:ID)
@@ -131,10 +131,10 @@ void RetractFact(Atom form, TypedTuple * actors);
  * There may be > 1 service per relation table.
  */
 #define SERVICE_MULTISET_NAME				1	// (multiset <ID element >NAME multiple >UINT)
-#define SERVICE_MULTISET_ID					2	// (multiset <ID element >ID multiple >UINT)
+#define SERVICE_PREDICATE_FORM				2	// (predicate-form >ID)
+#define SERVICE_MULTISET_ID					3	// (multiset <ID element >ID multiple >UINT)
 // TODO: this will not work, as it does not follow leading columns
-// #define SERVICE_MULTISET_ID_BY_ELEMENT		3	// (multiset >ID element <ID multiple >UINT)
-#define SERVICE_PREDICATE_FORM				3	// (predicate-form >ID)
+// #define SERVICE_MULTISET_ID_BY_ELEMENT		...	// (multiset >ID element <ID multiple >UINT)
 #define SERVICE_TERM_FORM					4	// (term-form <ID predicate-form >ID)
 #define SERVICE_LIST_LENGTH                 5	// (list <ID length >UINT)
 #define SERVICE_LIST_LETTER					6	// (list <ID position >UINT element >LETTER)	

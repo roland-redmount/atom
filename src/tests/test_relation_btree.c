@@ -187,22 +187,22 @@ void testRemoveTuple(void)
 	RelationBTreeAddTuple(fixture.relation, fixture.tuple3, 0);
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 3)
 
-	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple2), TUPLE_REMOVED)
+	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple2, 0), TUPLE_REMOVED)
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 2)
 
-	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple3), TUPLE_REMOVED)
+	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple3, 0), TUPLE_REMOVED)
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 1)
 
 	// attempting to remove a tuple that does not exist 
 	// does not change the number of rows
-	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple2), TUPLE_NOT_FOUND)
+	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple2, 0), TUPLE_NOT_FOUND)
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 1)
 
-	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple1), TUPLE_REMOVED)
+	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple1, 0), TUPLE_REMOVED)
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 0)
 
 	// attempt to remove from empty tree
-	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple1), TUPLE_NOT_FOUND)
+	ASSERT_UINT32_EQUAL(RelationBTreeRemoveTuple(fixture.relation, fixture.tuple1, 0), TUPLE_NOT_FOUND)
 	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 0)
 
 	teardownFixture();

@@ -90,7 +90,7 @@ DictionaryEntry DictionaryAddClauseFromCString(const char * clauseString)
 
 void DictionaryRemoveClause(DictionaryEntry * entry)
 {
-	ASSERT(BTreeDelete(dictionary.btree, entry) == BTREE_DELETED)
+	ASSERT(BTreeDelete(dictionary.btree, entry, 0) == BTREE_DELETED)
 }
 
 

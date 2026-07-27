@@ -13,6 +13,7 @@
 #include "memory/allocator.h"
 #include "memory/pool.h"
 #include "util/hashing.h"
+#include "util/ResizingArray.h"
 
 
 /**
@@ -20,9 +21,9 @@
  * We store RelationTable entries in a pool for stable allocation.
  */
 struct {
-	// B-tree for lookup of relations by form
+	// B-tree for lookup of relations by form, stores RelationTable * pointers as items
 	BTree * relationBTree;
-	// B-tree storing (relation, service) pairs
+	// B-tree storing ServiceRecord items
 	BTree * services;
 } registry;
 
@@ -57,9 +58,13 @@ static void btreeFreeRelation(void * item, size32 itemSize)
 static void setupServiceRecord(
 	ServiceRecord * record, RelationTable const * relation, byte const parameterIO[], Service * service)
 {
-	record->relation = relation,
-	record->parameterIO = Allocate(relation->nColumns);
-	CopyMemory(parameterIO, record->parameterIO, relation->nColumns);
+	record->relation = relation;
+	if(parameterIO) {
+		record->parameterIO = Allocate(relation->nColumns);
+		CopyMemory(parameterIO, record->parameterIO, relation->nColumns);
+	}
+	else
+		record->parameterIO = 0;
 	record->service = service;
 }
 
@@ -68,7 +73,8 @@ static void setupServiceRecord(
 static void btreeFreeServiceRecord(void * item, size32 itemSize)
 {
 	ServiceRecord * record = item;
-	Free(record->parameterIO);
+	if(record->parameterIO)
+		Free(record->parameterIO);
 }
 
 
@@ -127,7 +133,7 @@ void RegistryAddRelationTable(RelationTable const * relation)
 
 void RegistryRemoveRelationTable(RelationTable const * relation)
 {
-	ASSERT(BTreeDelete(registry.relationBTree, &relation))
+	ASSERT(BTreeDelete(registry.relationBTree, &relation, 0))
 }
 
 
@@ -136,6 +142,47 @@ void RelationAddService(RelationTable const * relation, byte const parameterIO[]
 	ServiceRecord record;
 	setupServiceRecord(&record, relation, parameterIO, service);
 	ASSERT(BTreeInsert(registry.services, &record) == BTREE_INSERTED)
+	AcquireService(service);
+}
+
+
+void RelationRemoveService(RelationTable const * relation, Service * service)
+{
+	ServiceRecord key;
+	setupServiceRecord(&key, relation, 0, service);
+	// find the corresponding service record
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, registry.services);
+	ServiceRecord const * record;
+	if(BTreeIteratorSeek(&iterator, &key)) {
+		do {
+			record = BTreeIteratorPeekItem(&iterator);
+			if(record->service == service) {
+				break;
+			}
+		} while(BTreeIteratorNext(&iterator));
+	}
+	BTreeIteratorEnd(&iterator);
+	// TODO: this will fail if the B-tree is modified concurrently,
+	// invalidating the record pointer.
+	ASSERT(BTreeDelete(registry.services, record, 0) == BTREE_DELETED)
+	ReleaseService(service);
+
+	btreeFreeServiceRecord(&key, 0);
+}
+
+
+void RelationRemoveAllServices(RelationTable const * relation)
+{
+	ServiceRecord key;
+	setupServiceRecord(&key, relation, 0, 0);
+	ServiceRecord record;
+	while(BTreeGetItem(registry.services, &key, &record)) {
+	ASSERT(BTreeDelete(registry.services, &record, 0) == BTREE_DELETED)
+		ReleaseService(record.service);
+	}
+	btreeFreeServiceRecord(&key, 0);
+	// record is shallow-copied by BTreeGetItem() and does not need deallocation
 }
 
 
@@ -143,7 +190,6 @@ size32 RegistryNRelations(void)
 {
 	return BTreeNItems(registry.relationBTree);
 }
-
 
 
 size32 RegistryNServices(void)
