@@ -699,5 +699,6 @@ void DumpAllocateLog(void)
 		PrintF("%llx size %u : %s line %u\n",
 			record->address, blockSize, record->fileName, record->lineNumber);
 	}
+	BTreeIteratorEnd(&iterator);
 }
 #endif
