@@ -129,6 +129,8 @@ byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint
 		relation->nColumns, 0, relation->nColumns, tuple, relation->indexColumns);
 	BTreeTuple * btreeTuple = BTreePeekItem(relation->btree, queryTuple);
 	Free(queryTuple);
+	if(!btreeTuple)
+		return TUPLE_NOT_FOUND;
 	
 	if(idPosition && (btreeTuple->idPosition != idPosition)) {
 		// The specified idPosition is wrong, indicating an internal error
@@ -141,9 +143,8 @@ byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint
 	
 	// TODO: we should probably have a BTreeDeleteAt(void * item) function that accepts a direct
 	// pointer to a stored item, to avoid re-running the search
-	BTreeDeleteResult btreeResult = BTreeDelete(relation->btree, btreeTuple, 0);
-
-	return (btreeResult == BTREE_DELETED) ? TUPLE_REMOVED : TUPLE_NOT_FOUND;
+	ASSERT(BTreeDelete(relation->btree, btreeTuple, 0) == BTREE_DELETED)
+	return TUPLE_REMOVED;
 }
 
 /**
