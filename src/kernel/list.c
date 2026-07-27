@@ -50,7 +50,7 @@ Atom CreateList(ListElementGenerator generator, void const * data, byte elementT
 // assert (list length) fact
 static void assertListLength(IFactDraft * draft, size32 nElements)
 {
-	RelationTable const * listLengthTable = GetCoreRelationTable(FORM_LIST_LENGTH);
+	RelationTable const * listLengthTable = GetCoreRelationTable(RELATION_LIST_LENGTH);
 
 	IFactBeginConjunction(
 		draft,

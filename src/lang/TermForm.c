@@ -38,7 +38,7 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	RelationTable const * termFormTable = GetCoreRelationTable(FORM_TERM_FORM);
+	RelationTable const * termFormTable = GetCoreRelationTable(RELATION_TERM_FORM);
 	IFactBeginConjunction(&draft, termFormTable, CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM));
 	Atom tuple[3];
 	// TODO: make this a kernel function CoreFormSetTuple()

@@ -28,12 +28,16 @@ void testPermuteService(void)
 {
 	// The service (list <ID position >UINT element >LETTER)
 	Service * listService = GetCoreService(SERVICE_LIST_LETTER);
-	// Reorder (position _ list l element s) to (list l element s)
-	// by providing the variable _ as a "constant"
-	// TODO: handle user order vs canonical order in the below
+	// Reorder (list l position p element e) to (list l element e)
+	// by providing the variable p as a "constant"
 	TypedTuple * constants = CreateTypedTupleFromArray((TypedAtom[]) {anonymousVariable}, 1);
-	Service * permuteService = CreatePermuteService(
-		2, constants, (index8[]) {0, 1, 2}, listService);
+	index8 argumentMap[3];
+	CoreFormSetByteArray(
+		FORM_LIST_POSITION_ELEMENT,
+		(index8[]) {1, 0, 2},		// (l p e) -> (l e)
+		argumentMap
+	);
+	Service * permuteService = CreatePermuteService(2, constants, argumentMap, listService);
 	FreeTypedTuple(constants);
 
 	// Arguments tuple (@stringList _ ) for the marginalize service
@@ -45,6 +49,8 @@ void testPermuteService(void)
 	ServiceContext * context = ServiceCreateContext(permuteService, arguments);
 	size32 nElements = 0;
 	while(ServiceCall(context)) {
+		// PrintChar(LetterToChar(arguments[1], LETTER_LOWERCASE));
+		// PrintChar('\n');
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 7)
@@ -59,7 +65,7 @@ void testPermuteService(void)
 	context = ServiceCreateContext(deduplicateService, arguments);
 	nElements = 0;
 	while(ServiceCall(context)) {
-		// TypedTuplePrint(arguments);
+		// PrintChar(LetterToChar(arguments[1], LETTER_LOWERCASE));
 		// PrintChar('\n');
 		nElements++;
 	}
@@ -83,6 +89,7 @@ void testJoinService1(void)
 	Service * leftService = GetCoreService(SERVICE_MULTISET_NAME);
 	// Right service needs a PERMUTE since it takes 1 argument only
 	Service * rightServiceChild = GetCoreService(SERVICE_PREDICATE_FORM);
+	// TODO: is this mapping correct?
 	Service * rightService = CreatePermuteService(3, 0, (index8[]) {3}, rightServiceChild);
 	
 	// Create the JOIN service

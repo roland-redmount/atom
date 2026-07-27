@@ -43,6 +43,13 @@ Service * CreatePermuteService(
 	else
 		service->impl.permute.constants = 0;
 		
+#ifdef DEBUG
+	// Bounds check the argument map: 1-based indices into the parent arguments tuple,
+	// or 0 to take the next constant.
+	for(index8 i = 0; i < childService->nArguments; i++)
+		ASSERT(argumentMap[i] <= nArguments)
+#endif
+
 	service->impl.permute.argumentMap = Allocate(childService->nArguments);
 	CopyMemory(argumentMap, service->impl.permute.argumentMap, childService->nArguments);
 	return service;
@@ -177,7 +184,7 @@ static bool joinServiceEvaluateLeft(ServiceContext * context)
 static void joinServiceSetupContext(ServiceContext * context)
 {
 	JoinContext * joinContext = (JoinContext *) &context->data;
-	// Make a backup of the argument tuple
+	joinContext->argumentsCopy = Allocate(context->service->nArguments * sizeof(Atom));
 	CopyMemory(context->arguments, joinContext->argumentsCopy, context->service->nArguments * sizeof(Atom));
 	// call left service to prepare for iteration
 	joinContext->leftContext = ServiceCreateContext(
