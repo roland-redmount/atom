@@ -15,6 +15,7 @@ RelationTable const * CreateRelationTable(
 	relation->provider = provider;
 	relation->form = form;
 	IFactAcquire(form);
+	relation->ownsForm = true;
 	relation->nColumns = nColumns;
 	// NOTE: this seems like to many small allocs ...
 	relation->atomTypes = Allocate(nColumns);
@@ -39,11 +40,21 @@ RelationTable const * CreateRelationTable(
 }
 
 
+void RelationTableReleaseForm(RelationTable const * table)
+{
+	ASSERT(table->ownsForm)
+	// clear the flag first, as the release may retract tuples from this table
+	((RelationTable *) table)->ownsForm = false;
+	IFactRelease(table->form);
+}
+
+
 void FreeRelationTable(RelationTable const * table)
 {
 	ASSERT(RelationTableNRows(table) == 0)
 	table->provider->free(table->storage);
-	IFactRelease(table->form);
+	if(table->ownsForm)
+		IFactRelease(table->form);
 	Free(table->atomTypes);
 	Free(table->indexColumns);
 	Free((void *) table);

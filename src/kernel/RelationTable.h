@@ -85,6 +85,8 @@ typedef struct s_RelationTableProvider {
  */
 struct s_RelationTable {
 	Atom form;
+	// whether this table holds a reference to its form; see RelationTableReleaseForm()
+	bool ownsForm;
 	size8 nColumns;
 	byte * atomTypes;
 	index8 * indexColumns;
@@ -110,6 +112,22 @@ RelationTable const * CreateRelationTable(
 
 
 void FreeRelationTable(RelationTable const * table);
+
+/**
+ * Release the reference this table holds to its form, without freeing the table.
+ *
+ * This is only for shutting down the self-referential core tables, whose own
+ * defining facts are stored in those same tables. Such a table cannot be freed
+ * directly: FreeRelationTable() requires it to be empty, but the tuples are only
+ * retracted once the form's reference count drops to zero, which cannot happen
+ * while the table holds a reference. Detaching the reference first lets the
+ * ifact drain its tuples out of a table that is still alive and serviced.
+ *
+ * The table must still be registered (its form is the registry B-tree key) and
+ * must still have its services, which are used to locate the tuples to retract.
+ * It should be removed from the registry immediately afterwards.
+ */
+void RelationTableReleaseForm(RelationTable const * table);
 
 /**
  * Return the number of rows in a relation table

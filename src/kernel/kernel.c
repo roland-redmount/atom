@@ -661,29 +661,40 @@ void KernelShutdown(void)
 	}
 
 	/**
-	 * TODO: Remove RELATION_PREDICATE_FORM and RELATION_MULTISET_NAME.
-	 * This is tricky since there are circular references here (by design).
-	 * These RELATION_PREDICATE_FORM tables now contains the tuples
-	 * 
+	 * Remove RELATION_PREDICATE_FORM and RELATION_MULTISET_NAME.
+	 * These are circular by design. RELATION_PREDICATE_FORM now contains the tuples
+	 *
 	 *  (predicate-form @multiset-form)
 	 *  (predicate-form @predicate-form)
-	 * 
+	 *
 	 * which are part of the defining facts for the atoms @predicate-form and @multiset-form.
 	 * Similarly, RELATION_MULTISET_NAME now contains the tuples
-	 
+
 	 *  (multiset @multiset-form element @multiset-role multiple 1)
 	 *  (multiset @multiset-form element @element-role multiple 1)
 	 *  (multiset @multiset-form element @multiple-role multiple 1)
 	 *  (multiset @predicate-form element @predicate-form-role multiple 1)
-	 * 
+	 *
 	 * as created by setupCoreServices(). These two relation tables now carry the sole reference
-	 * to @multiset-form and @predicate-form, respectively.
+	 * to @multiset-form and @predicate-form, respectively. Neither of the above tuples holds
+	 * a reference to the form it defines, since the identified atom sits in the id column
+	 * and is not acquired by RelationTableAddTuple().
+	 *
+	 * So we first detach the form reference held by each table, which is the only thing
+	 * keeping the two ifacts alive. Each release then retracts that ifact's defining facts
+	 * from both tables, which are still alive and serviced at this point. Once both are
+	 * detached, the two tables are empty and can be torn down in the usual way.
 	 */
+	RelationTableReleaseForm(kernel.coreRelations[RELATION_MULTISET_NAME]);
+	RelationTableReleaseForm(kernel.coreRelations[RELATION_PREDICATE_FORM]);
 
-	PrintF("RELATION_PREDICATE_FORM %u tuples\n", RelationTableNRows(kernel.coreRelations[RELATION_PREDICATE_FORM]));
-	PrintF("RELATION_MULTISET_NAME %u tuples\n", RelationTableNRows(kernel.coreRelations[RELATION_MULTISET_NAME]));
-	IFactDump();
-	
+	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_PREDICATE_FORM]) == 0)
+	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_MULTISET_NAME]) == 0)
+
+	for(index32 relationId = RELATION_PREDICATE_FORM; relationId >= RELATION_MULTISET_NAME; relationId--) {
+		RelationRemoveAllServices(kernel.coreRelations[relationId]);
+		RegistryRemoveRelationTable(kernel.coreRelations[relationId]);
+	}
 
 	// Check item counts
 
