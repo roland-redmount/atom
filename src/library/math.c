@@ -32,13 +32,14 @@ RelationTable const * mathRelations[N_RELATIONS];
 static index8 relationArgumentIndex[N_RELATIONS][MAX_RELATION_ARITY];
 
 /**
- * The service (= z>INT + x<INT + y<INT)
+ * The service (+ x<INT + y<INT = z>INT )
  */
 static void add1(ServiceContext * context)
 {
-	int64 x = context->arguments[1]._int;
-	int64 y = context->arguments[2]._int;
-	context->arguments[1]._int = x + y;
+	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
+	int64 x = context->arguments[argumentIndex[0]]._int;
+	int64 y = context->arguments[argumentIndex[1]]._int;
+	context->arguments[argumentIndex[2]]._int = x + y;
 }
 
 static void setupAdd1(void)
@@ -56,15 +57,16 @@ static void setupAdd1(void)
 }
 
 /**
- * The service (= z<INT + x<INT + y>INT)
+ * The service (+ x<INT + y>INT = z<INT)
  * This implements subtraction by solving the equation
  * z = x + y  <->  y = z - x
  */
 static void add2(ServiceContext * context)
 {
-	int64 x = context->arguments[1]._int;
-	int64 z = context->arguments[0]._int;
-	context->arguments[2]._int = z - x;
+	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
+	int64 x = context->arguments[argumentIndex[0]]._int;
+	int64 z = context->arguments[argumentIndex[2]]._int;
+	context->arguments[argumentIndex[1]]._int = z - x;
 }
 
 
@@ -72,9 +74,9 @@ static void setupAdd2(void)
 {
 	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
 	byte parameterIO[3];
-	parameterIO[argumentIndex[0]] = PARAMETER_IN;
+	parameterIO[argumentIndex[0]] = PARAMETER_OUT;
 	parameterIO[argumentIndex[1]] = PARAMETER_IN;
-	parameterIO[argumentIndex[2]] = PARAMETER_OUT;
+	parameterIO[argumentIndex[2]] = PARAMETER_IN;
 
 	Service * service = CreateMachineService(3, &mathServiceProvider, (void *) ADD2_INDEX);
 	RelationAddService(mathRelations[ADD_RELATION], parameterIO, service);
@@ -138,7 +140,7 @@ MachineServiceProvider mathServiceProvider = {
 
 void MathSetup(void)
 {
-	// create forms and setup argument indices
+	// Create forms and setup argument indices
 	Atom plus = CreateNameFromCString("+");
 	Atom equals = CreateNameFromCString("=");
 	Atom addForm = CreatePredicateForm((Atom[]) {plus, plus, equals}, 3);
