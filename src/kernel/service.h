@@ -36,12 +36,14 @@ typedef struct s_MachineServiceProvider {
 	MachineServiceCall call;
 
 	/**
-	 * Finalize a service context after termination
+	 * Finalize a service context after termination.
+	 * This pointer may be 0 if no finalization is required.
 	 */
 	void (*finalizeContext)(ServiceContext * context);
 
 	/**
-	 * Finalize the machine service 
+	 * Finalize the machine service (deallocate data structures, &c).
+	 * This pointer may be 0 if no finalization is required.
 	 */
 	void (*finalizeService)(Service * service);
 

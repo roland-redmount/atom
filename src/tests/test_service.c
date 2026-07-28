@@ -16,8 +16,29 @@
 
 void testMachineService(void)
 {
-	// TODO
+	// Test calling the B-tree service
+	// (multiset @list-predicate-form element _ position _)
+	Service * service = GetCoreService(SERVICE_MULTISET_NAME);
+	ASSERT(service)
+	ASSERT(service->type == SERVICE_MACHINE)
+
+	Atom arguments[3];
+	CoreFormSetTuple(
+		FORM_MULTISET_ELEMENT_MULTIPLE,
+		(Atom[]) {GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT), (Atom) {0}, (Atom) {0}},
+		arguments
+	);
+	void * context = ServiceCreateContext(service, arguments);
+
+	// this should yield 3 elements corresponding to the 3 roles of (list position element)
+	size32 nElements = 0;
+	while(ServiceCall(context))
+		nElements++;
+	ASSERT_INT32_EQUAL(nElements, 3);
+
+	ServiceFreeContext(context);
 }
+
 
 /**
  * This tests using a PERMUTE service to marginalize the relation
@@ -267,6 +288,7 @@ int main(int argc, char * argv[])
 {
 	KernelInitialize();
 
+	ExecuteTest(testMachineService);
 	ExecuteTest(testPermuteService);
 	ExecuteTest(testJoinService1);
 	ExecuteTest(testJoinService2);

@@ -47,6 +47,7 @@ void FreeFormula(Formula * formula)
 {
 	IFactRelease(formula->form);
 	FreeTypedTuple(formula->actors);
+	Free(formula);
 }
 
 

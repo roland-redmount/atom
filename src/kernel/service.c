@@ -445,7 +445,9 @@ static bool machineServiceCall(ServiceContext * context)
 
 static void machineServiceFinalizeContext(ServiceContext * context)
 {
-	context->service->impl.machine.provider->finalizeContext(context);
+	MachineServiceProvider * provider = context->service->impl.machine.provider;
+	if(provider->finalizeContext)
+		provider->finalizeContext(context);
 }
 
 
@@ -456,6 +458,15 @@ Service * CreateMachineService(size8 nArguments, MachineServiceProvider * provid
 	service->impl.machine.providerData = providerData;
 	return service;
 }
+
+
+static void tearDownMachineService(Service * service)
+{
+	MachineServiceProvider * provider = service->impl.machine.provider;
+	if(provider->finalizeService)
+		provider->finalizeService(service);
+}
+
 
 //------------------------------------- Generic Service -----------------------------------------
 
@@ -488,7 +499,7 @@ void ReleaseService(Service * service)
 			break;
 
 		case SERVICE_MACHINE:
-			service->impl.machine.provider->finalizeService(service);
+			tearDownMachineService(service);
 			break;
 		
 		default:
