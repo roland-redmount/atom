@@ -140,7 +140,8 @@ struct s_Service {
 };
 
 /**
- * Create a permute service. The argumentMap array has length equal to childService->nArguments
+ * Create a permute service with the specified number of arguments.
+ * The argumentMap array has length equal to childService->nArguments
  * and specifies for each child argument either a 1-based index into the parent arguments tuple,
  * or 0 for a constant, in the order of the constants tuple. One parent argument may map to
  * multiple child arguments, in which case parent indices are repeated.
@@ -148,7 +149,7 @@ struct s_Service {
  * NOTE: If some parent argument positions are missing from argumentMap, those arguments will not be
  * updated by this service. This typically occurs when the permute service is a child of a join service.
  * 
- * NOTE: If child arguments are missing from the argumentMap, the resulting tuples may not be unique.
+ * NOTE: If child arguments are missing from the argumentMap, the tuples of the permute service may not be unique.
  */
 Service * CreatePermuteService(
 	size8 nArguments, TypedTuple const * constants, index8 const * argumentMap, Service * childService);

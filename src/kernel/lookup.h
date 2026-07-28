@@ -131,7 +131,7 @@ RelationTable const * LookupIteratorGetRelation(LookupIterator const * iterator)
 
 Atom LookupIteratorGetRole(LookupIterator const * iterator);
 
-void FreeLookupIterator(LookupIterator * iterator);
+void LookupIteratorEnd(LookupIterator * iterator);
 
 /**
  * For debugging

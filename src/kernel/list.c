@@ -33,13 +33,6 @@
 
 Atom CreateList(ListElementGenerator generator, void const * data, byte elementType, size32 nElements)
 {
-	// TODO: currently we only support list of AT_LETTER, with a core relation
-	// created during kernel bootstrap.
-	// To handle other element types, we should create the corresponding relations
-	// as part of initialization; this should probably not be a core relation,
-	// but part of the "standard library"
-	ASSERT(elementType == AT_LETTER)
-
 	IFactDraft draft;
 	IFactBegin(&draft);
 	AddListToIFact(&draft, generator, data, elementType, nElements);
@@ -78,7 +71,11 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 			(byte[]) {AT_ID, AT_UINT, elementType},
 			atomTypes
 		);
-		RelationTable const * table = GetCoreRelationTable(RELATION_LIST_LETTER);
+		RelationTable const * table = FindRelationTable(
+			GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT),
+			3, atomTypes
+		);
+		ASSERT(table);
 		// assert (ĺist position elements) facts for each element
 		IFactBeginConjunction(
 			draft,
@@ -379,6 +376,7 @@ void PrintList(Atom list)
 {
 	PrintCString("LIST{");
 	RelationTable const * relation = lookupListElementRelation(list);
+	ASSERT(relation)
 	byte elementType = relation->atomTypes[
 		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)
 	];

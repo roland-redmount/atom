@@ -133,13 +133,12 @@ void LookupAddPredicateRoles(RelationTable const * relation, Atom const * actors
 	index8 index = 0;
 	while(MultisetIteratorNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
-		for(index8 i = 0; i < em.multiple; i++) {
-			if(relation->atomTypes[i] != AT_ID)
+		for(index8 i = 0; i < em.multiple; i++, index++) {
+			if(relation->atomTypes[index] != AT_ID)
 				continue;
 			record.atom = actors[index];
 			record.role = em.element;
 			addRecord(&record);
-			index++;
 		}
 	}
 	MultisetIteratorEnd(&formIterator);
@@ -292,7 +291,7 @@ Atom LookupIteratorGetRole(LookupIterator const * iterator)
 }
 
 
-void FreeLookupIterator(LookupIterator * iterator)
+void LookupIteratorEnd(LookupIterator * iterator)
 {
 	BTreeIteratorEnd(&(iterator->treeIterator));
 	SetMemory(iterator, sizeof(LookupIterator), 0);
@@ -307,11 +306,12 @@ RelationTable const * LookupFindRelation(Atom atom, Atom form, Atom role)
 	while(LookupIteratorNext(&iterator)) {
 		Atom currentRole = LookupIteratorGetRole(&iterator);
 		RelationTable const * currentRelation = LookupIteratorGetRelation(&iterator);
-		if((currentRole.hash == role.hash) && (currentRelation->form.hash == role.hash)) {
+		if((currentRole.hash == role.hash) && (currentRelation->form.hash == form.hash)) {
 			ASSERT(relation == 0)	// ensure we have only 1 matching relation
 			relation = currentRelation;
 		}
 	}
+	LookupIteratorEnd(&iterator);
 	return relation;
 }
 

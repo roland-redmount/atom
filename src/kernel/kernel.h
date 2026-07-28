@@ -118,13 +118,14 @@ void RetractFact(Atom form, TypedTuple * actors);
 #define RELATION_CLAUSE_FORM				5	// (clause-form:ID)
 #define RELATION_CONJUNCTION_FORM			6	// (conjunction-form:ID)
 #define RELATION_LIST_LETTER        		7	// (list:ID position:UINT element:LETTER)
-#define RELATION_LIST_LENGTH				8	// (list:ID length:UINT)
-#define RELATION_QUOTE	    				9	// (quote:ID quoted:ID)
-#define RELATION_STRING						10	// (string:ID)
+#define RELATION_LIST_ID  	 	     		8	// (list:ID position:UINT element:LETTER)
+#define RELATION_LIST_LENGTH				9	// (list:ID length:UINT)
+#define RELATION_QUOTE	    				10	// (quote:ID quoted:ID)
+#define RELATION_STRING						11	// (string:ID)
 
 // #define RELATION_PAIR_LEFT_RIGHT			X 	// (pair:ID left right)
 
-#define N_CORE_RELATIONS					10
+#define N_CORE_RELATIONS					11
 
 /**
  * Stable identifiers for a small set of core services.
@@ -138,8 +139,9 @@ void RetractFact(Atom form, TypedTuple * actors);
 #define SERVICE_TERM_FORM					4	// (term-form <ID predicate-form >ID)
 #define SERVICE_LIST_LENGTH                 5	// (list <ID length >UINT)
 #define SERVICE_LIST_LETTER					6	// (list <ID position >UINT element >LETTER)	
+#define SERVICE_LIST_ID						7	// (list <ID position >UINT element >ID)	
 
-#define N_CORE_SERVICES                     6
+#define N_CORE_SERVICES                     7
 
 /**
  * Lookup one of the "primitive" forms for core tables

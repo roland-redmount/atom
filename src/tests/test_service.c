@@ -7,6 +7,7 @@
 #include "kernel/multiset.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
+#include "kernel/tuple.h"
 #include "lang/Formula.h"
 #include "lang/Variable.h"
 #include "parser/PredicateBuilder.h"
@@ -80,14 +81,19 @@ void testPermuteService(void)
 
 /**
  * Test creating and executing a JOIN service
- * (multiple m element e multiset p) & (predicate-form p)
- * with parent arguments (m, e, p)
+ * (element e multiset m multiple n) & (predicate-form p)
+ * with parent arguments (m, e, n)
  */
 void testJoinService1(void)
 {
-	// Left child services from the registry, no argument permutation
+	// Left child service (multiset m element e multiple n) from the registry
 	Service * leftService = GetCoreService(SERVICE_MULTISET_NAME);
-	// Right service needs a PERMUTE since it takes 1 argument only
+	// Right service is permuted (predicate m) -> (multiset m element _ multiple _)
+	// where arguments _ are not filled in.
+	// TODO: this is not really a valid service, as some values in the resulting tuples
+	// are left undefined, This works as input for JOIN, but we should probably require
+	// that every service yields a valid relation. Therefore, we should move this reindexing
+	// into the JOIN service.
 	Service * rightServiceChild = GetCoreService(SERVICE_PREDICATE_FORM);
 	// TODO: is this mapping correct?
 	Service * rightService = CreatePermuteService(3, 0, (index8[]) {3}, rightServiceChild);
@@ -99,7 +105,7 @@ void testJoinService1(void)
 	// Evaluate with arguments (@list-form, _ , _)
 	Atom arguments[3];
 	CoreFormSetTuple(
-		FORM_LIST_POSITION_ELEMENT,
+		FORM_MULTISET_ELEMENT_MULTIPLE,
 		(Atom[]) {GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT), (Atom) {0}, (Atom) {0}},
 		arguments
 	);
@@ -155,23 +161,45 @@ void testJoinService2(void)
 	ReleaseService(leftService);
 	ReleaseService(rightService);
 
-	// Arguments tuple (@stringList _  _ _ _)
+	// test case, a list of two strings (two lists of letters)
 	Atom string1 = CreateStringFromCString("foo");
 	Atom string2 = CreateStringFromCString("bar");
-	Atom stringList = CreateListFromArray((Atom[]) {string1, string2}, AT_LETTER, 2);
+	Atom stringList = CreateListFromArray((Atom[]) {string1, string2}, AT_ID, 2);
 	IFactRelease(string1);
 	IFactRelease(string2);
+	PrintList(stringList);
+	PrintChar('\n');
 
+	// Arguments tuple (@stringList _  _ _ _)
 	Atom arguments[5];
 	arguments[0] = stringList;
 	for(index8 i = 1; i < 5; i++)
 		arguments[i] = (Atom) {0};
 
+	// Create argument types for printing tuples.
+	// (The created join service does not keep track of its argument types,
+	//  but they could be inferred recursively from its child services, since
+	//  a "leaf" service must be a MachineService with specific argument types.)
+	byte const * childArgumentTypes = GetCoreRelationTable(RELATION_LIST_LETTER)->atomTypes;
+	byte joinArgumentTypes[5];
+	for(index8 i = 0; i < 3; i++)
+		joinArgumentTypes[leftServiceArgumentMap[i] - 1] = childArgumentTypes[i];
+	for(index8 i = 0; i < 3; i++)
+		joinArgumentTypes[rightServiceArgumentMap[i] - 1] = childArgumentTypes[i];
+
 	// Setup execution context
 	ServiceContext * context = ServiceCreateContext(joinService, arguments);
-	// Call the join service
+
+	// Call the join service.  We expect the tuples
+	//  (@stringList 1 @string1 1 'f')
+	//  (@stringList 1 @string1 2 'o')
+	//  (@stringList 1 @string1 3 'o')
+	//  (@stringList 2 @string2 1 'b')
+	//  (@stringList 2 @string2 2 'a')
+	//  (@stringList 2 @string2 3 '3')
 	size32 nElements = 0;
 	while(ServiceCall(context)) {
+		PrintTuple(joinArgumentTypes, arguments, 5);
 		// TypedTuplePrint(arguments);
 		// PrintChar('\n');
 		nElements++;

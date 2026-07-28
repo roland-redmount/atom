@@ -89,6 +89,7 @@ static const index32 coreRelationFormId[N_CORE_RELATIONS + 1] = {
 	FORM_CLAUSE_FORM,
 	FORM_CONJUNCTION_FORM,
 	FORM_LIST_POSITION_ELEMENT,
+	FORM_LIST_POSITION_ELEMENT,
 	FORM_LIST_LENGTH,
 	FORM_QUOTE_QUOTED,
 	FORM_STRING,
@@ -114,6 +115,8 @@ static const byte coreRelationAtomTypes[N_CORE_RELATIONS + 1][CORE_FORMS_MAX_ARI
 	{AT_ID},
 	// (list:ID position:UINT element:LETTER)
 	{AT_ID, AT_UINT, AT_LETTER},
+	// (list:ID position:UINT element:ID)
+	{AT_ID, AT_UINT, AT_ID},
 	// (list:ID length:UINT)
 	{AT_ID, AT_UINT},
 	// (quote:ID quoted:ID)
@@ -141,6 +144,8 @@ static const index32 coreServiceRelationId[N_CORE_SERVICES + 1] = {
 	RELATION_LIST_LENGTH,
 	// (list <ID position >UINT element >LETTER)
 	RELATION_LIST_LETTER,
+	// (list <ID position >UINT element >ID)
+	RELATION_LIST_ID,
 };
 
 
@@ -162,6 +167,8 @@ static const byte coreServiceParameterIO[N_CORE_SERVICES + 1][CORE_FORMS_MAX_ARI
 	// (list <ID length >UINT)
 	{PARAMETER_IN, PARAMETER_OUT},
 	// (list <ID position >UINT element >LETTER)
+	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
+	// (list <ID position >UINT element >ID)
 	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 };
 

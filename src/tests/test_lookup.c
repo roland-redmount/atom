@@ -69,7 +69,7 @@ void testLookupIterator(void)
 		)
 	}
 	ASSERT_FALSE(LookupIteratorNext(&iterator))
-	FreeLookupIterator(&iterator);
+	LookupIteratorEnd(&iterator);
 
 	IFactRelease(string);
 }
