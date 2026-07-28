@@ -85,8 +85,8 @@ void ConjunctionBuilderReset(ConjunctionBuilder * builder)
 	ClauseBuilderReset(&(builder->clauseBuilder));
 	size8 nClauses = ResizingArrayNElements(&(builder->clauses));
 	for(index8 i = 0; i < nClauses; i++) {
-		Atom clause = *((Atom const *) ResizingArrayGetElement(&(builder->clauses), i));
-		IFactRelease(clause);
+		Formula * clause = *((Formula **) ResizingArrayGetElement(&(builder->clauses), i));
+		FreeFormula(clause);
 	}
 	ResizingArrayReset(&(builder->clauses));
 }

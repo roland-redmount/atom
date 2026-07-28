@@ -95,8 +95,8 @@ void ClauseBuilderReset(ClauseBuilder * builder)
 	TermBuilderReset(&(builder->termBuilder));
 	size8 nTerms = ResizingArrayNElements(&(builder->terms));
 	for(index8 i = 0; i < nTerms; i++) {
-		Atom term = *((Atom const *) ResizingArrayGetElement(&(builder->terms), i));
-		IFactRelease(term);
+		Formula * term = *((Formula **) ResizingArrayGetElement(&(builder->terms), i));
+		FreeFormula(term);
 	}
 	ResizingArrayReset(&(builder->terms));
 }
