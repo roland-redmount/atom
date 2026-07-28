@@ -135,11 +135,13 @@ void testJoinService1(void)
  */
 void testJoinService2(void)
 {
-	Service * listService = GetCoreService(SERVICE_LIST_LETTER);
-	
-	// The left and right child services call the same machine service,
-	// but with different argument maps. The argument map determines the
-	// join service argument order.
+	// The left child enumerates the outer list (a list of strings, i.e. of ID
+	// elements); the right child enumerates each string (a list of letters).
+	// So they use different machine services, with different argument maps.
+	// The argument map determines the join service argument order.
+	Service * listIdService = GetCoreService(SERVICE_LIST_ID);
+	Service * listLetterService = GetCoreService(SERVICE_LIST_LETTER);
+
 	index8 leftServiceArgumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
@@ -153,8 +155,8 @@ void testJoinService2(void)
 		rightServiceArgumentMap
 	);
 
-	Service * leftService = CreatePermuteService(5, 0, leftServiceArgumentMap, listService);
-	Service * rightService = CreatePermuteService(5, 0, rightServiceArgumentMap, listService);
+	Service * leftService = CreatePermuteService(5, 0, leftServiceArgumentMap, listIdService);
+	Service * rightService = CreatePermuteService(5, 0, rightServiceArgumentMap, listLetterService);
 
 	// Create the join service
 	Service * joinService = CreateJoinService(leftService, rightService);
@@ -167,8 +169,6 @@ void testJoinService2(void)
 	Atom stringList = CreateListFromArray((Atom[]) {string1, string2}, AT_ID, 2);
 	IFactRelease(string1);
 	IFactRelease(string2);
-	PrintList(stringList);
-	PrintChar('\n');
 
 	// Arguments tuple (@stringList _  _ _ _)
 	Atom arguments[5];
@@ -180,12 +180,13 @@ void testJoinService2(void)
 	// (The created join service does not keep track of its argument types,
 	//  but they could be inferred recursively from its child services, since
 	//  a "leaf" service must be a MachineService with specific argument types.)
-	byte const * childArgumentTypes = GetCoreRelationTable(RELATION_LIST_LETTER)->atomTypes;
+	byte const * leftArgumentTypes = GetCoreRelationTable(RELATION_LIST_ID)->atomTypes;
+	byte const * rightArgumentTypes = GetCoreRelationTable(RELATION_LIST_LETTER)->atomTypes;
 	byte joinArgumentTypes[5];
 	for(index8 i = 0; i < 3; i++)
-		joinArgumentTypes[leftServiceArgumentMap[i] - 1] = childArgumentTypes[i];
+		joinArgumentTypes[leftServiceArgumentMap[i] - 1] = leftArgumentTypes[i];
 	for(index8 i = 0; i < 3; i++)
-		joinArgumentTypes[rightServiceArgumentMap[i] - 1] = childArgumentTypes[i];
+		joinArgumentTypes[rightServiceArgumentMap[i] - 1] = rightArgumentTypes[i];
 
 	// Setup execution context
 	ServiceContext * context = ServiceCreateContext(joinService, arguments);
@@ -199,8 +200,7 @@ void testJoinService2(void)
 	//  (@stringList 2 @string2 3 '3')
 	size32 nElements = 0;
 	while(ServiceCall(context)) {
-		PrintTuple(joinArgumentTypes, arguments, 5);
-		// TypedTuplePrint(arguments);
+		// PrintTuple(joinArgumentTypes, arguments, 5);
 		// PrintChar('\n');
 		nElements++;
 	}
