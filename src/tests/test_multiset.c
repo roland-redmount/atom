@@ -22,7 +22,7 @@ static void testMultiset(void)
 	Atom elements[3] = {one, two, three};
 	size32 multiples[] = {1, 2, 3};
 
-	Atom multiset = CreateMultisetFromArrays(elements, multiples, TEST_MULTISET_N_UNIQUE, AT_LETTER);
+	Atom multiset = CreateMultisetFromArrays(elements, multiples, TEST_MULTISET_N_UNIQUE, AT_NAME);
 
 	// we should have 3 tuples added to the table
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), initialNRows + 3)
@@ -46,7 +46,7 @@ static void testMultiset(void)
 	MultisetIteratorEnd(&iterator);
  
 	// creating again from the same elements should yield the same atom, with one additional reference
-	Atom multiset2 = CreateMultisetFromArrays(elements, multiples, TEST_MULTISET_N_UNIQUE, AT_LETTER);
+	Atom multiset2 = CreateMultisetFromArrays(elements, multiples, TEST_MULTISET_N_UNIQUE, AT_NAME);
 	ASSERT_DATA64_EQUAL(multiset.hash, multiset2.hash)
 	IFactRelease(multiset2);
 
@@ -54,7 +54,7 @@ static void testMultiset(void)
 	Atom permutedElements[3] = { three, one, two };
 	size32 permutedMultiples[] = {3, 1, 2};
 
-	Atom multiset3 = CreateMultisetFromArrays(permutedElements, permutedMultiples, TEST_MULTISET_N_UNIQUE, AT_LETTER);
+	Atom multiset3 = CreateMultisetFromArrays(permutedElements, permutedMultiples, TEST_MULTISET_N_UNIQUE, AT_NAME);
 
 	ASSERT_DATA64_EQUAL(multiset.hash, multiset3.hash)
 	IFactRelease(multiset3);
