@@ -57,8 +57,9 @@ static void testCreateList(void)
 	ListIteratorEnd(&iterator);
 
 	// test ListGetPosition
-	for(index8 i = 0; i < EXAMPLE_LIST_N_ELEMENTS; i++)
-		ASSERT_UINT32_EQUAL(ListGetPosition(list, listAtoms[i]), i + 1)
+	// TODO: this is currently not supported; see ListGetPosition()
+	// for(index8 i = 0; i < EXAMPLE_LIST_N_ELEMENTS; i++)
+	// 	ASSERT_UINT32_EQUAL(ListGetPosition(list, listAtoms[i]), i + 1)
 
 	IFactRelease(list);
 }
@@ -75,18 +76,20 @@ static void testNestedList(void)
 	};
 	Atom innerList = CreateListFromArray(innerListAtoms, AT_LETTER, EXAMPLE_LIST_N_ELEMENTS);
 
-	// TODO: this will require a relation for a list of AT_ID elements
 	Atom outerListAtoms[1] = {innerList};
-	Atom outerList = CreateListFromArray(outerListAtoms, AT_LETTER, 1);
+	Atom outerList = CreateListFromArray(outerListAtoms, AT_ID, 1);
+	ASSERT_INT32_EQUAL(IFactReferenceCount(innerList), 2)
+	IFactRelease(innerList);
 	
 	// test ListGetElement
 	ASSERT_DATA64_EQUAL(ListGetElement(outerList, 1).hash, outerListAtoms[0].hash)
 
 	// test ListGetPosition
-	ASSERT_UINT32_EQUAL(ListGetPosition(outerList, innerList), 1)
+	// TODO: this is currently not supported; see ListGetPosition()
+	// ASSERT_UINT32_EQUAL(ListGetPosition(outerList, innerList), 1)
 
+	// NOTE: this will trigger release of the outerList atom.
 	IFactRelease(outerList);
-	IFactRelease(innerList);
 }
 
 

@@ -173,6 +173,8 @@ Atom CreateListFromTuple(TypedTuple const * tuple)
 
 bool IsList(Atom atom)
 {
+	// We define this from the (list length) relation since
+	// there may be no (list element position) fact if atom is an empty list.
 	return AtomHasRole(
 		atom,
 		GetCoreRelationTable(RELATION_LIST_LENGTH),
@@ -188,7 +190,7 @@ size32 ListLength(Atom list)
 	Atom arguments[2];
 	CoreFormSetTuple(
 		FORM_LIST_LENGTH,
-		(Atom[]) {(Atom) {0}},
+		(Atom[]) {list, (Atom) {0}},
 		arguments
 	);
 	ASSERT(ServiceCallOnce(service, arguments))
@@ -208,7 +210,7 @@ static RelationTable const * lookupListElementRelation(Atom list)
 
 Atom ListGetElement(Atom list, index32 position)
 {
-	ASSERT(IsList(list))
+	ASSERT(ListLength(list) > 0)
 	RelationTable const * relation = lookupListElementRelation(list);
 	ASSERT(relation)
 
@@ -250,6 +252,9 @@ index32 ListGetPosition(Atom list, Atom element)
 	RelationTable const * relation = lookupListElementRelation(list);
 	ASSERT(relation)
 
+	// TODO: this service is not provided by the B-tree relation provider
+	// as the keys are not in leading columns. Calling this function will
+	// trigger the ASSERT below.
 	byte parameterIO[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
@@ -257,6 +262,7 @@ index32 ListGetPosition(Atom list, Atom element)
 		parameterIO
 	);
 	Service const * service = RegistryFindService(relation, parameterIO);
+	ASSERT(service)
 
 	Atom arguments[3];
 	CoreFormSetTuple(
@@ -334,26 +340,36 @@ void CopyListToTuple(Atom list, TypedTuple * tuple)
 
 void ListIterate(Atom list, ListIterator * iterator)
 {
-	RelationTable const * relation = lookupListElementRelation(list);
-	byte parameterIO[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
-		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
-		parameterIO
-	);
-	Service const * service = RegistryFindService(relation, parameterIO);
 	CoreFormSetTuple(
 		FORM_LIST_POSITION_ELEMENT,
 		(Atom[]) {list, (Atom) {0}, (Atom) {0}},
 		iterator->queryTuple
 	);
-	iterator->context = ServiceCreateContext(service, iterator->queryTuple);
+
+	if(ListLength(list) > 0) {
+		RelationTable const * relation = lookupListElementRelation(list);
+		ASSERT(relation)
+		
+		byte parameterIO[3];
+		CoreFormSetByteArray(
+			FORM_LIST_POSITION_ELEMENT,
+			(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
+			parameterIO
+		);
+		Service const * service = RegistryFindService(relation, parameterIO);
+		iterator->context = ServiceCreateContext(service, iterator->queryTuple);
+	}
+	else
+		iterator->context = 0;
 }
 
 
 bool ListIteratorNext(ListIterator * iterator)
 {
-	return ServiceCall(iterator->context);
+	if(iterator->context)
+		return ServiceCall(iterator->context);
+	else
+		return false;
 }
 
 
@@ -367,7 +383,8 @@ Atom ListIteratorGetElement(ListIterator const * iterator)
 
 void ListIteratorEnd(ListIterator * iterator)
 {
-	ServiceFreeContext(iterator->context);
+	if(iterator->context)
+		ServiceFreeContext(iterator->context);
 	SetMemory(iterator, sizeof(ListIterator), 0);
 }
 
