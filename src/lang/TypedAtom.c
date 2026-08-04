@@ -1,27 +1,21 @@
 
 #include "kernel/float.h"
-#include "kernel/Int.h"
-#include "kernel/Parameter.h"
-#include "kernel/UInt.h"
-#include "lang/Variable.h"
-
-#include "lang/name.h"
-// #include "lang/Quote.h"
-
 #include "kernel/ifact.h"
+#include "kernel/Int.h"
 #include "kernel/letter.h"
 #include "kernel/list.h"
 #include "kernel/multiset.h"
+#include "kernel/Parameter.h"
 #include "kernel/string.h"
-
-#include "lang/TypedAtom.h"
-#include "lang/ClauseForm.h"
+#include "kernel/UInt.h"
 #include "lang/Atom.h"
+#include "lang/ClauseForm.h"
 #include "lang/Formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
-
+#include "lang/TypedAtom.h"
+#include "lang/Variable.h"
 #include "util/hashing.h"
 #include "util/sort.h"
 
@@ -47,15 +41,7 @@ void AcquireTypedAtom(TypedAtom typedAtom)
 
 void ReleaseTypedAtom(TypedAtom typedAtom)
 {
-	switch(typedAtom.type) {
-		case AT_ID:
-		IFactRelease(typedAtom.atom);
-		break;
-
-		case AT_NAME:
-		NameRelease(typedAtom.atom);
-		break;
-	}
+	ReleaseAtom(typedAtom.atom, typedAtom.type);
 }
 
 
@@ -171,6 +157,7 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		// Here we somewhat arbitrarily try the "most specific" type predicate first
 		
 		// TODO: move this somewhere better
+		
 		// if(IsPair(typedAtom.atom)) {
 		// 	if(IsQuote(typedAtom.atom))
 		// 		PrintQuoted(typedAtom.atom);

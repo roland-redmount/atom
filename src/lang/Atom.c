@@ -71,3 +71,17 @@ void AcquireAtom(Atom atom, byte atomType)
 		// else nothing to do
 	}
 }
+
+
+void ReleaseAtom(Atom atom, byte atomType)
+{
+	switch(atomType) {
+		case AT_ID:
+		IFactRelease(atom);
+		break;
+
+		case AT_NAME:
+		NameRelease(atom);
+		break;
+	}
+}

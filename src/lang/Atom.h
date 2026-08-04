@@ -45,4 +45,7 @@ int8 CompareAtoms(Atom atom1, Atom atom2);
 
 void AcquireAtom(Atom atom, byte atomType);
 
+void ReleaseAtom(Atom atom, byte atomType);
+
+
 #endif	// ATOM_H
