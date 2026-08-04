@@ -48,4 +48,35 @@ void FreeRelationRegistry(void);
 size32 RelationRegistryNTables(void);
 
 
+/**
+ * Iterating over the relation tables of a given form.
+ * A single form may have several tables, one per combination of column types.
+ */
+typedef struct {
+	Atom form;
+	BTreeIterator btreeIterator;
+} RelationIterator;
+
+/**
+ * Create an iterator over all relation tables registered for the given form.
+ * The iterator is positioned before the first matching table, so
+ * RelationIteratorNext() must be called before RelationIteratorGet().
+ */
+void RelationRegistryIterate(Atom form, RelationIterator * iterator);
+
+/**
+ * Advance to the next relation table for the form, if one exists.
+ */
+bool RelationIteratorNext(RelationIterator * iterator);
+
+/**
+ * The relation table at the current iterator position.
+ * Only valid after RelationIteratorNext() has returned true,
+ * and until RelationIteratorEnd() is called.
+ */
+RelationTable const * RelationIteratorGet(RelationIterator const * iterator);
+
+void RelationIteratorEnd(RelationIterator * iterator);
+
+
 #endif  // RELATION_REGISTRY_H

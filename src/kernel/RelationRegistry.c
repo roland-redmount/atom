@@ -93,3 +93,47 @@ RelationTable const * RelationRegistryFind(Atom form, size8 nColumns, byte const
 	else
 		return 0;
 }
+
+
+void RelationRegistryIterate(Atom form, RelationIterator * iterator)
+{
+	iterator->form = form;
+	BTreeIterate(&(iterator->btreeIterator), relationRegistry);
+}
+
+
+bool RelationIteratorNext(RelationIterator * iterator)
+{
+	// A key without atom types matches every table for the form
+	RelationTable key = {
+		.form = iterator->form,
+		.nColumns = 0,
+		.atomTypes = 0
+	};
+	RelationTable * keyPtr = &key;
+
+	bool foundItem;
+	if(BTreeIteratorBeforeFirst(&(iterator->btreeIterator)))
+		foundItem = BTreeIteratorSeek(&(iterator->btreeIterator), &keyPtr);
+	else
+		foundItem = BTreeIteratorNext(&(iterator->btreeIterator));
+
+	if(foundItem) {
+		RelationTable * const * btreeItem = BTreeIteratorPeekItem(&(iterator->btreeIterator));
+		if(compareRelations(*btreeItem, &key) == 0)
+			return true;
+	}
+	return false;
+}
+
+
+RelationTable const * RelationIteratorGet(RelationIterator const * iterator)
+{
+	return *((RelationTable * const *) BTreeIteratorPeekItem(&(iterator->btreeIterator)));
+}
+
+
+void RelationIteratorEnd(RelationIterator * iterator)
+{
+	BTreeIteratorEnd(&(iterator->btreeIterator));
+}
