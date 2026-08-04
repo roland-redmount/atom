@@ -9,6 +9,7 @@
 /**
  * Attempt to compile a query, registering every generated service and writing
  * its record to the records array. Returns the number of records written.
+ * The service(s) to be compiled must not already exist before this call.
  *
  * A query may compile to more than one service. Where the query leaves an
  * output parameter untyped, its type is unconstrained, and each relation table

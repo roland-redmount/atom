@@ -220,7 +220,7 @@ void testCompileRecursiveJoin(void)
 	// TODO: Compile a recursive rule to a JOIN service
 	// number n faculty f <- + m + 1 = n & number m faculty e & * e * n = f
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"number _n faculty _f | ! + _m + 1 = _n | ! number _m faculty _e | * _e * _n = _f");
+		"number _n faculty _f | ! + _m + 1 = _n | ! number _m faculty _e | ! * _e * _n = _f");
 	Formula * queryTerm = CStringToTerm("number 4 faculty _f");
 
 	ServiceRecord records[MAX_COMPILED_SERVICES];
@@ -257,6 +257,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompilePermute3);
 	ExecuteTest(testCompileJoin1);
 	ExecuteTest(testCompileUnion);
+	// ExecuteTest(testCompileRecursiveJoin);
 
 	MathTeardown();
 	TestSummary();
