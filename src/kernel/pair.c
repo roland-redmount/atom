@@ -3,22 +3,21 @@
 #include "kernel/pair.h"
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
-#include "kernel/ServiceRegistry.h"
 #include "lang/PredicateForm.h"
 
-static void pairSetTuple(Tuple * tuple, TypedAtom pair, TypedAtom left, TypedAtom right)
+static void pairSetTuple(TypedTuple * tuple, TypedAtom pair, TypedAtom left, TypedAtom right)
 {
-	TupleSetElement(
+	TypedTupleSetElement(
 		tuple,
 		CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_PAIR),
 		pair
 	);
-	TupleSetElement(
+	TypedTupleSetElement(
 		tuple,
 		CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT),
 		left
 	);
-	TupleSetElement(
+	TypedTupleSetElement(
 		tuple,
 		CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_RIGHT),
 		right
@@ -44,10 +43,10 @@ void AddPairToIFact(IFactDraft * draft, TypedAtom left, TypedAtom right)
 		CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_PAIR)
 	);
 	
-	Tuple * tuple = CreateTuple(3);
+	TypedTuple * tuple = CreateTypedTuple(3);
 	pairSetTuple(tuple, (TypedAtom) {0}, left, right);
-	IFactAddClause(draft, tuple);
-	FreeTuple(tuple);
+	IFactAddTuple(draft, tuple);
+	FreeTypedTuple(tuple);
 	IFactEndConjunction(draft);
 }
 
@@ -62,35 +61,35 @@ bool IsPair(Atom atom)
 }
 
 
-static void getPairTuple(Atom pair, Tuple * tuple)
+static void getPairTuple(Atom pair, TypedTuple * tuple)
 {
 	BTree * tree = RegistryGetCoreBTreeService(FORM_PAIR_LEFT_RIGHT);
 
-	Tuple * query = CreateTuple(3);
+	TypedTuple * query = CreateTypedTuple(3);
 	pairSetTuple(
 		query,
 		CreateTypedAtom(AT_ID, pair), anonymousVariable, anonymousVariable
 	);
 	RelationBTreeQuerySingle(tree, query, tuple);
-	FreeTuple(query);
+	FreeTypedTuple(query);
 }
 
 
 TypedAtom PairGetElement(Atom pair, uint8 element)
 {
-	Tuple * tuple = CreateTuple(3);
+	TypedTuple * tuple = CreateTypedTuple(3);
 	getPairTuple(pair, tuple);
 	TypedAtom result;
 	switch(element) {
 	case PAIR_LEFT:
-		result = TupleGetElement(
+		result = TypedTupleGetElement(
 			tuple,
 			CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT)
 		);
 		break;
 
 	case PAIR_RIGHT:
-		result = TupleGetElement(
+		result = TypedTupleGetElement(
 			tuple,
 			CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_RIGHT)
 		);
@@ -100,28 +99,28 @@ TypedAtom PairGetElement(Atom pair, uint8 element)
 		result = invalidAtom;
 		ASSERT(false);
 	}
-	FreeTuple(tuple);
+	FreeTypedTuple(tuple);
 	return result;
 }
 
 
 void PrintPair(Atom pair)
 {
-	Tuple * tuple = CreateTuple(3);
+	TypedTuple * tuple = CreateTypedTuple(3);
 	getPairTuple(pair, tuple);
 	PrintChar('[');
-	TypedAtom left = TupleGetElement(
+	TypedAtom left = TypedTupleGetElement(
 		tuple,
 		CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_LEFT)
 	);
 	PrintTypedAtom(left);
 	PrintChar(' ');
-	TypedAtom right = TupleGetElement(
+	TypedAtom right = TypedTupleGetElement(
 		tuple,
 		CorePredicateRoleIndex(FORM_PAIR_LEFT_RIGHT, ROLE_RIGHT)
 	);
 	PrintTypedAtom(right);
 	PrintChar(']');
-	FreeTuple(tuple);
+	FreeTypedTuple(tuple);
 }
 

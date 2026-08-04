@@ -29,7 +29,6 @@
  * compactly for services that can act on either inputs or outputs,
  * such as table lookup with / without variables.
  */
-#define PARAMETER_IN_OUT	0
 #define PARAMETER_IN		1
 #define PARAMETER_OUT		2
 

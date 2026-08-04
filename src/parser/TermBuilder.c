@@ -54,12 +54,14 @@ bool TermBuilderIsEmpty(TermBuilder const * builder)
 }
 
 
-Atom TermBuilderCreateFormula(TermBuilder const * builder)
+Formula * TermBuilderCreateFormula(TermBuilder const * builder)
 {
 	ASSERT(builder->isValid);
-	Atom predicate = PredicateBuilderCreateFormula(&(builder->predicateBuilder));
-	Atom term = CreateTerm(predicate, builder->sign);
-	IFactRelease(predicate);
+	Formula * predicate = PredicateBuilderCreateFormula(&(builder->predicateBuilder));
+	Formula * term = CreateTerm(predicate, builder->sign);
+	// CreateTerm() copies the actors, so the intermediate predicate formula
+	// is no longer needed here.
+	FreeFormula(predicate);
 	return term;
 }
 
@@ -78,7 +80,7 @@ void CleanupTermBuilder(TermBuilder * builder)
 }
 
 
-Atom CStringToTerm(char const * cString)
+Formula * CStringToTerm(char const * cString)
 {
 	size32 length = CStringLength(cString);
 	Tokenizer tokenizer;
@@ -95,7 +97,7 @@ Atom CStringToTerm(char const * cString)
 		}
 	}
 	ASSERT(TermBuilderIsValid(&builder));
-	Atom term = TermBuilderCreateFormula(&builder);
+	Formula * term = TermBuilderCreateFormula(&builder);
 	
 	CleanupTermBuilder(&builder);
 	TokenizerCleanup(&tokenizer);

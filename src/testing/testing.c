@@ -278,30 +278,30 @@ static void executeCheckReferences(void (*function)(void), CheckType checkType)
 	uint32 initialRefCount;
 	uint32 initialIFactCount;
 	if(IFactsInitialized()) {
-		initialRefCount = TotalIFactReferenceCount();
-		initialIFactCount = TotalIFactCount();
-		EnableFlagCreatedIFacts();
+		initialRefCount = IFactTotalReferenceCount();
+		initialIFactCount = IFactTotalCount();
+		IFactsEnableFlagging();
 	}
 	uint32 initialBytesAllocated = AllocatorNBytesAllocated();
 
 	function();
 
 	if(IFactsInitialized()) {
-		int32 refCountDiff = TotalIFactReferenceCount() - initialRefCount;
+		int32 refCountDiff = IFactTotalReferenceCount() - initialRefCount;
 		if(checkType != CHECK_TEARDOWN && refCountDiff < 0)
 			PrintF("%s: Lost %d IFact references.\n", checkTypeNames[checkType], refCountDiff);
 		if(checkType != CHECK_SETUP && refCountDiff > 0)
 			PrintF("%s: Failed to release %d IFact references.\n", checkTypeNames[checkType], refCountDiff);
 
-		int32 ifactDiff = TotalIFactCount() - initialIFactCount;
+		int32 ifactDiff = IFactTotalCount() - initialIFactCount;
 		if(checkType != CHECK_TEARDOWN && ifactDiff < 0)
 			PrintF("%s: Lost %d IFacts.\n", checkTypeNames[checkType], ifactDiff);
 		if(checkType != CHECK_SETUP && ifactDiff > 0) {
 			PrintF("%s: Failed to release %d IFacts.\n", checkTypeNames[checkType], ifactDiff);
 			PrintCString("Flagged IFacts:\n");
-			DumpFlaggedIFacts();
+			IFactDumpFlagged();
 		}
-		DisableFlagCreatedIFacts();
+		IFactDisableFlagging();
 	}
 
 	int32 allocateDiff = AllocatorNBytesAllocated() - initialBytesAllocated;

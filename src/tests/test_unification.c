@@ -1,5 +1,5 @@
 #include "kernel/kernel.h"
-#include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
 #include "lang/Variable.h"
 #include "lang/unification.h"
 #include "parser/ClauseBuilder.h"
@@ -14,13 +14,13 @@ void testUnification(void)
 	TypedAtom y = CreateTypedAtom(AT_VARIABLE, CreateVariable('y'));
 	TypedAtom one = CreateTypedAtom(AT_INT, (Atom) {._int = 1});
 	TypedAtom two = CreateTypedAtom(AT_INT, (Atom) {._int = 2});
-	Tuple * tuple1 = CreateTupleFromArray(
+	TypedTuple * tuple1 = CreateTypedTupleFromArray(
 		(TypedAtom[]) {	one, x, two, y },
 		4
 	);
 	TypedAtom z = CreateTypedAtom(AT_VARIABLE, CreateVariable('z'));
 	TypedAtom three = CreateTypedAtom(AT_INT, (Atom) {._int = 3});
-	Tuple * tuple2 = CreateTupleFromArray(
+	TypedTuple * tuple2 = CreateTypedTupleFromArray(
 		(TypedAtom[]) { one, three, z, z },
 		4
 	);
@@ -37,8 +37,8 @@ void testUnification(void)
 
 	FreeSubstitution(&subst1);
 	FreeSubstitution(&subst2);
-	FreeTuple(tuple1);
-	FreeTuple(tuple2);
+	FreeTypedTuple(tuple1);
+	FreeTypedTuple(tuple2);
 }
 
 

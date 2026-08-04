@@ -45,16 +45,16 @@ void SubstitutionSetValue(Substitution * subst, TypedAtom key, TypedAtom value)
 }
 
 
-void SubstituteTuple(Substitution const * subst, Tuple const * source, Tuple * destination)
+void SubstituteTuple(Substitution const * subst, TypedTuple const * source, TypedTuple * destination)
 {
 	ASSERT(source->nAtoms == destination->nAtoms)
 	for(index8 i = 0; i < source->nAtoms; i++) {
-		TypedAtom sourceValue = TupleGetElement(source, i);
+		TypedAtom sourceValue = TypedTupleGetElement(source, i);
 		TypedAtom substValue = SubstitutionFindValue(subst, sourceValue);
 		if(substValue.type)
-			TupleSetElement(destination, i, substValue);
+			TypedTupleSetElement(destination, i, substValue);
 		else
-			TupleSetElement(destination, i, sourceValue);
+			TypedTupleSetElement(destination, i, sourceValue);
 	}
 }
 

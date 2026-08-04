@@ -4,6 +4,8 @@
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
 #include "kernel/list.h"
+#include "kernel/RelationRegistry.h"
+#include "kernel/tuple.h"
 #include "lang/Formula.h"
 #include "library/math.h"
 #include "parser/ClauseBuilder.h"
@@ -17,29 +19,30 @@ void testCompilePermute1(void)
 	// This rule compiles to a PERMUTE service with no constants
 	// + z - x = y  <-  + x + y = z
 	DictionaryEntry entry = DictionaryAddClauseFromCString("+ _z - _x = _y | ! + _x + _y = _z");
-	
-	Atom queryTerm = CStringToTerm("+ 7 - 4 = _d");
+	Formula * queryTerm = CStringToTerm("+ 7 - 4 = _d");
 
 	// This will yield a new service from the existing (+ + =) service
-	ServiceRecord record;
-	ASSERT_TRUE(CompileService(queryTerm, &record))
+	ServiceRecord record = CompileService(queryTerm);
+	ASSERT_NOT_NULL(record.relation)
+	ASSERT_NOT_NULL(record.service)
+
+	// TODO: verify the compiled service atom types are correct
 
 	// Call the service
-	Tuple * arguments = CreateTuple(3);
-	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
+	Atom arguments[3];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 3);
 	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
 
-	TypedAtom d = TermGetRoleActor(record.form, arguments, "=", 1);
-	ASSERT_UINT32_EQUAL(d.type, AT_INT)
-	ASSERT_UINT64_EQUAL(d.atom._uint, 3);
+	Atom d = TermGetRoleActor(queryTerm->form, arguments, "=", 1);
+	ASSERT_UINT64_EQUAL(d._uint, 3);
 
 	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
 
-	RegistryRemoveService(&record);
-	IFactRelease(queryTerm);
+	ServiceRegistryRemove(record.relation, record.service);
+	RelationRegistryRemove(record.relation);
+	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
 
@@ -49,33 +52,31 @@ void testCompilePermute2(void)
 	// This rule compiles to a PERMUTE service with a constant 2
 	// number x addtwo y <- + x + 2 = y
 	DictionaryEntry entry = DictionaryAddClauseFromCString("number _x addtwo _y | ! + _x + 2 = _y");
-	
-	Atom queryTerm = CStringToTerm("number 3 addtwo _z");
+	Formula * queryTerm = CStringToTerm("number 3 addtwo _z");
 
-	ServiceRecord record;
-	ASSERT_TRUE(CompileService(queryTerm, &record))
+	ServiceRecord record = CompileService(queryTerm);
+	ASSERT_NOT_NULL(record.relation)
+	ASSERT_NOT_NULL(record.service)
 
 	// Call the service
-	Tuple * arguments = CreateTuple(2);
-	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
+	Atom arguments[3];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 3);
 	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
 
-	TypedAtom x = TermGetRoleActor(record.form, arguments, "number", 1);
-	ASSERT_UINT32_EQUAL(x.type, AT_INT)
-	ASSERT_UINT64_EQUAL(x.atom._uint, 3);
+	Atom x = TermGetRoleActor(queryTerm->form, arguments, "number", 1);
+	ASSERT_UINT64_EQUAL(x._uint, 3);
 
-	TypedAtom y = TermGetRoleActor(record.form, arguments, "addtwo", 1);
-	ASSERT_UINT32_EQUAL(y.type, AT_INT)
-	ASSERT_UINT64_EQUAL(y.atom._uint, 5);
+	Atom y = TermGetRoleActor(queryTerm->form, arguments, "addtwo", 1);
+	ASSERT_UINT64_EQUAL(y._uint, 5);
 
 	// Second call should fail (no more tuples)
 	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
 
-	RegistryRemoveService(&record);
-	IFactRelease(queryTerm);
+	ServiceRegistryRemove(record.relation, record.service);
+	RelationRegistryRemove(record.relation);
+	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
 
@@ -87,14 +88,15 @@ void testCompilePermute3(void)
 	// set s element e <- list s position _ element e
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
 		"set _s element _e | ! list _s position _ element _e");
-	
-	Atom queryTerm = CStringToTerm("set \"alibaba\" element _e");
-	ServiceRecord record;
-	ASSERT_TRUE(CompileService(queryTerm, &record))
+	Formula * queryTerm = CStringToTerm("set \"alibaba\" element _e");
+
+	ServiceRecord record = CompileService(queryTerm);
+	ASSERT_NOT_NULL(record.relation)
+	ASSERT_NOT_NULL(record.service)
 
 	// Call the service
-	Tuple * arguments = CreateTuple(2);
-	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
 	void * context = ServiceCreateContext(record.service, arguments);
 	size8 nElements = 0;
 	while(ServiceCall(context)) {
@@ -102,10 +104,10 @@ void testCompilePermute3(void)
 	}
 	ASSERT_UINT32_EQUAL(nElements, 4);
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
 
-	RegistryRemoveService(&record);
-	IFactRelease(queryTerm);
+	ServiceRegistryRemove(record.relation, record.service);
+	RelationRegistryRemove(record.relation);
+	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
 
@@ -116,31 +118,30 @@ void testCompileJoin1(void)
 	// first x second y third z  <-  + x + 1 = y & + y + 1 = z
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
 		"first _x second _y third _z | ! + _x + 1 = _y | ! + _y + 1 = _z");
+	Formula * queryTerm = CStringToTerm("first 3 second _s third _t");
 
-	Atom queryTerm = CStringToTerm("first 3 second _s third _t");
-	ServiceRecord record;
-	ASSERT_TRUE(CompileService(queryTerm, &record))
+	ServiceRecord record = CompileService(queryTerm);
+	ASSERT_NOT_NULL(record.relation)
+	ASSERT_NOT_NULL(record.service)
 
 	// Call the service
-	Tuple * arguments = CreateTuple(3);
-	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
+	Atom arguments[3];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 3);
 	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
 
-	TypedAtom y = TermGetRoleActor(record.form, arguments, "second", 1);
-	ASSERT_UINT32_EQUAL(y.type, AT_INT)
-	ASSERT_UINT64_EQUAL(y.atom._uint, 4);
+	Atom y = TermGetRoleActor(queryTerm->form, arguments, "second", 1);
+	ASSERT_UINT64_EQUAL(y._uint, 4);
 
-	TypedAtom z = TermGetRoleActor(record.form, arguments, "third", 1);
-	ASSERT_UINT32_EQUAL(z.type, AT_INT)
-	ASSERT_UINT64_EQUAL(z.atom._uint, 5);
+	Atom z = TermGetRoleActor(queryTerm->form, arguments, "third", 1);
+	ASSERT_UINT64_EQUAL(z._uint, 5);
 
 	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
 
-	RegistryRemoveService(&record);
-	IFactRelease(queryTerm);
+	ServiceRegistryRemove(record.relation, record.service);
+	RelationRegistryRemove(record.relation);
+	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
 
@@ -154,39 +155,40 @@ void testCompileUnion(void)
 		"number _x neighbor _y | ! = _y + _x + 1");
 	DictionaryEntry entry2 = DictionaryAddClauseFromCString(
 		"number _x neighbor _y | ! = _x + _y + 1");
+	Formula * queryTerm = CStringToTerm("number 5 neighbor _y");
 
-	Atom queryTerm = CStringToTerm("number 5 neighbor _y");
-	ServiceRecord record;
-	ASSERT_TRUE(CompileService(queryTerm, &record))
-	PrintCString("Service record = ");
-	PrintServiceRecord(&record);
+	ServiceRecord record = CompileService(queryTerm);
+	ASSERT_NOT_NULL(record.relation)
+	ASSERT_NOT_NULL(record.service)
+	PrintCString("Service  = ");
+	PrintService(record.service);
 	PrintChar('\n');
 
 	// Call the service
-	Tuple * arguments = CreateTuple(2);
-	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
 	void * context = ServiceCreateContext(record.service, arguments);
+	ASSERT_TRUE(ServiceCall(context))
+
+	// The atom types are encoded in the relation table associated with
+	// the compiled service ...
+	// PrintTuple(atomTypes?, arguments, 3);
+	// PrintChar('\n');
+	Atom y = TermGetRoleActor(queryTerm->form, arguments, "neighbor", 1);
+	ASSERT_TRUE(y._uint == 4);
 
 	ASSERT_TRUE(ServiceCall(context))
-	PrintTuple(arguments);
-	PrintChar('\n');
-	TypedAtom y = TermGetRoleActor(record.form, arguments, "neighbor", 1);
-	ASSERT_UINT32_EQUAL(y.type, AT_INT)
-	ASSERT_TRUE(y.atom._uint == 4);
-
-	ASSERT_TRUE(ServiceCall(context))
-	PrintTuple(arguments);
-	PrintChar('\n');
-	y = TermGetRoleActor(record.form, arguments, "neighbor", 1);
-	ASSERT_UINT32_EQUAL(y.type, AT_INT)
-	ASSERT_TRUE(y.atom._uint == 6);
+	// PrintTuple(arguments, 3);
+	// PrintChar('\n');
+	y = TermGetRoleActor(queryTerm->form, arguments, "neighbor", 1);
+	ASSERT_TRUE(y._uint == 6);
 
 	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
 
-	RegistryRemoveService(&record);
-	IFactRelease(queryTerm);
+	ServiceRegistryRemove(record.relation, record.service);
+	RelationRegistryRemove(record.relation);
+	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry1);
 	DictionaryRemoveClause(&entry2);
 }
@@ -198,27 +200,27 @@ void testCompileRecursiveJoin(void)
 	// number n faculty f <- + m + 1 = n & number m faculty e & * e * n = f
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
 		"number _n faculty _f | ! + _m + 1 = _n | ! number _m faculty _e | * _e * _n = _f");
+	Formula * queryTerm = CStringToTerm("number 4 faculty _f");
 
-	Atom queryTerm = CStringToTerm("number 4 faculty _f");
-	ServiceRecord record;
-	ASSERT_TRUE(CompileService(queryTerm, &record))
+	ServiceRecord record = CompileService(queryTerm);
+	ASSERT_NOT_NULL(record.relation)
+	ASSERT_NOT_NULL(record.service)
 
 	// Call the service
-	Tuple * arguments = CreateTuple(3);
-	CopyListToTuple(FormulaGetActors(queryTerm), arguments);
+	Atom arguments[3];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 3);
 	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
 
-	TypedAtom f = TermGetRoleActor(record.form, arguments, "faculty", 1);
-	ASSERT_UINT32_EQUAL(f.type, AT_INT)
-	ASSERT_UINT64_EQUAL(f.atom._uint, 24);
+	Atom f = TermGetRoleActor(queryTerm->form, arguments, "faculty", 1);
+	ASSERT_UINT64_EQUAL(f._uint, 24);
 
 	ASSERT_FALSE(ServiceCall(context))
 	ServiceFreeContext(context);
-	FreeTuple(arguments);
 
-	RegistryRemoveService(&record);
-	IFactRelease(queryTerm);
+	ServiceRegistryRemove(record.relation, record.service);
+	RelationRegistryRemove(record.relation);
+	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
 

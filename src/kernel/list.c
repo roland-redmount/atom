@@ -6,33 +6,13 @@
 #include "kernel/lookup.h"
 #include "kernel/list.h"
 #include "kernel/kernel.h"
+#include "kernel/Parameter.h"
+#include "kernel/RelationTable.h"
+#include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/AtomType.h"
 #include "lang/PredicateForm.h"
 #include "util/hashing.h"
-
-
-/**
- * Assign values to a tuple from the (list position element) relation
- */
-void ListSetTuple(Tuple * tuple, TypedAtom list, TypedAtom position, TypedAtom element)
-{
-	TupleSetElement(
-		tuple,
-		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST),
-		list
-	);
-	TupleSetElement(
-		tuple,
-		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION),
-		position
-	);
-	TupleSetElement(
-		tuple,
-		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT),
-		element
-	);
-}
 
 
 /**
@@ -52,11 +32,11 @@ void ListSetTuple(Tuple * tuple, TypedAtom list, TypedAtom position, TypedAtom e
  * but those are not workable for "core" tables so we must check explicitly.
  */
 
-Atom CreateList(ListElementGenerator generator, void const * data, size32 nElements)
+Atom CreateList(ListElementGenerator generator, void const * data, byte elementType, size32 nElements)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
-	AddListToIFact(&draft, generator, data, nElements);
+	AddListToIFact(&draft, generator, data, elementType, nElements);
 	return IFactEnd(&draft);
 }
 
@@ -64,44 +44,55 @@ Atom CreateList(ListElementGenerator generator, void const * data, size32 nEleme
 // assert (list length) fact
 static void assertListLength(IFactDraft * draft, size32 nElements)
 {
-	Atom listLengthForm = GetCorePredicateForm(FORM_LIST_LENGTH);
+	RelationTable const * listLengthTable = GetCoreRelationTable(RELATION_LIST_LENGTH);
 
 	IFactBeginConjunction(
 		draft,
-		listLengthForm, 
-		RegistryGetCoreBTreeService(FORM_LIST_LENGTH),
+		listLengthTable,
 		CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LIST)
 	);
 
-	Tuple * listLengthTuple = CreateTuple(2);
-	ListLengthSetTuple(
-		listLengthTuple, invalidAtom, CreateTypedAtom(AT_UINT, (Atom) {._uint = nElements}));
-	IFactAddClause(draft, listLengthTuple);
-	FreeTuple(listLengthTuple);
+	Atom listLengthTuple[2];
+	CoreFormSetTuple(
+		FORM_LIST_LENGTH,
+		(Atom[]) {(Atom) {0}, (Atom) {._uint = nElements}},
+		listLengthTuple
+	);
+	IFactAddTuple(draft, listLengthTuple);
 	IFactEndConjunction(draft);	
 }
 
 
-void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void const * data, size32 nElements)
+void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void const * data, byte elementType, size32 nElements)
 {
 	if(nElements > 0) {
+		byte atomTypes[3];
+		CoreFormSetByteArray(
+			FORM_LIST_POSITION_ELEMENT,
+			(byte[]) {AT_ID, AT_UINT, elementType},
+			atomTypes
+		);
+		RelationTable const * table = RelationRegistryFind(
+			GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT),
+			3, atomTypes
+		);
+		ASSERT(table);
 		// assert (ĺist position elements) facts for each element
 		IFactBeginConjunction(
 			draft,
-			GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT),
-			RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT),
+			table,
 			CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST)
 		);
 
-		Tuple * listElementTuple = CreateTuple(3);
+		Atom listElementTuple[3];
 		for(index32 i = 0; i < nElements; i++) {
-			ListSetTuple(
-				listElementTuple,
-				invalidAtom, CreateTypedAtom(AT_UINT, (Atom) {._uint = i + 1}), generator(i, data)
+			CoreFormSetTuple(
+				FORM_LIST_POSITION_ELEMENT,
+				(Atom[]) {(Atom) {0}, (Atom) {._uint = i + 1}, generator(i, data)},
+				listElementTuple
 			);
-			IFactAddClause(draft, listElementTuple);
+			IFactAddTuple(draft, listElementTuple);
 		}
-		FreeTuple(listElementTuple);
 		IFactEndConjunction(draft);
 	}
 	assertListLength(draft, nElements);
@@ -112,30 +103,6 @@ void ListBegin(IFactDraft * draft)
 {
 	IFactBegin(draft);
 	// we postpone starting  ()
-}
-
-
-index32 ListAddElement(IFactDraft * draft, TypedAtom element)
-{
-	if(!draft->hasBegunConjunction) {
-		// first element, begin (ĺist position elements)
-		IFactBeginConjunction(
-			draft,
-			GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT),
-			RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT),
-			CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST)
-		);
-	}
-
-	Tuple * listElementTuple = CreateTuple(3);
-	index32 position = IFactDraftCurrentNClauses(draft) + 1;
-	ListSetTuple(
-		listElementTuple,
-		invalidAtom, CreateTypedAtom(AT_UINT, (Atom) {._uint = position}), element
-	);
-	IFactAddClause(draft, listElementTuple);
-	FreeTuple(listElementTuple);
-	return position;
 }
 
 
@@ -156,52 +123,26 @@ Atom ListEnd(IFactDraft * draft)
 }
 
 
-void ListLengthSetTuple(Tuple * tuple, TypedAtom list, TypedAtom length)
+static Atom arrayElementGenerator(index32 index, void const * data)
 {
-	TupleSetElement(
-		tuple,
-		CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LIST),
-		list
-	);
-	TupleSetElement(
-		tuple,
-		CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LENGTH),
-		length
-	);
-}
-
-
-static TypedAtom arrayElementGenerator(index32 index, void const * data)
-{
-	TypedAtom const * atoms = (TypedAtom const *) data;
+	Atom const * atoms = data;
 	return atoms[index];
 }
 
 
-Atom CreateListFromArray(TypedAtom const * atoms, size8 nAtoms)
+Atom CreateListFromArray(Atom const * atoms, byte elementType, size8 nAtoms)
 {
-	return CreateList(arrayElementGenerator, atoms, nAtoms);
-}
-
-
-static TypedAtom tupleElementGenerator(index32 index, void const * data)
-{
-	Tuple const * tuple = (Tuple const *) data;
-	return TupleGetElement(tuple, index);
-}
-
-
-Atom CreateListFromTuple(Tuple const * tuple)
-{
-	return CreateList(tupleElementGenerator, tuple, tuple->nAtoms);
+	return CreateList(arrayElementGenerator, atoms, elementType, nAtoms);
 }
 
 
 bool IsList(Atom atom)
 {
+	// We define this from the (list length) relation since
+	// there may be no (list element position) fact if atom is an empty list.
 	return AtomHasRole(
 		atom,
-		GetCorePredicateForm(FORM_LIST_LENGTH),
+		GetCoreRelationTable(RELATION_LIST_LENGTH),
 		GetCoreRoleName(ROLE_LIST)
 	);
 }
@@ -209,82 +150,84 @@ bool IsList(Atom atom)
 
 size32 ListLength(Atom list)
 {
-	BTree * tree = RegistryGetCoreBTreeService(FORM_LIST_LENGTH);
+	Service const * service = GetCoreService(SERVICE_LIST_LENGTH);
 
-	Tuple * queryTuple = CreateTuple(2);
-	ListLengthSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), anonymousVariable);
-	TypedAtom length = RelationBTreeQuerySingleAtom(
-		tree, queryTuple,
-		CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LENGTH)
+	Atom arguments[2];
+	CoreFormSetTuple(
+		FORM_LIST_LENGTH,
+		(Atom[]) {list, (Atom) {0}},
+		arguments
 	);
-	FreeTuple(queryTuple);
-	return (size32) length.atom._uint;
+	ASSERT(ServiceCallOnce(service, arguments))
+	return (size32) arguments[CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LENGTH)]._uint;
 }
 
 
-TypedAtom ListGetElement(Atom list, index32 position)
+static RelationTable const * lookupListElementRelation(Atom list)
 {
-	BTree * tree = RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT);
-
-	Tuple * queryTuple = CreateTuple(3);
-	ListSetTuple(
-		queryTuple,
-		CreateTypedAtom(AT_ID, list), CreateTypedAtom(AT_UINT, (Atom) {._uint = position}), anonymousVariable
+	return LookupFindRelation(
+		list,
+		GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT),
+		GetCoreRoleName(ROLE_LIST)
 	);
-	TypedAtom element = RelationBTreeQuerySingleAtom(
-		tree, queryTuple,
-		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)
-	);
-	FreeTuple(queryTuple);
-	return element;
 }
 
 
-void ListGetElementsArray(Atom list, TypedAtom * elements)
+Atom ListGetElement(Atom list, index32 position)
+{
+	ASSERT(ListLength(list) > 0)
+	RelationTable const * relation = lookupListElementRelation(list);
+	ASSERT(relation)
+
+	byte parameterIO[3];
+	CoreFormSetByteArray(
+		FORM_LIST_POSITION_ELEMENT,
+		(byte[]) {PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT},
+		parameterIO
+	);
+	Service const * service = ServiceRegistryFind(relation, parameterIO);
+
+	Atom arguments[3];
+	CoreFormSetTuple(
+		FORM_LIST_POSITION_ELEMENT,
+		(Atom []) {list, (Atom) {._uint = position}, (Atom) {0}},
+		arguments
+	);
+	ASSERT(ServiceCallOnce(service, arguments))
+	return arguments[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)];
+}
+
+
+index32 ListGetPosition(Atom list, Atom element)
 {
 	ASSERT(IsList(list))
-	ListIterator iterator;
-	ListIterate(list, &iterator);
-	
-	for(index32 i = 0; ListIteratorNext(&iterator); i++) {
-		elements[i] = ListIteratorGetElement(&iterator);
-	}
-	ListIteratorEnd(&iterator);
+	RelationTable const * relation = lookupListElementRelation(list);
+	ASSERT(relation)
+
+	// TODO: this service is not provided by the B-tree relation provider
+	// as the keys are not in leading columns. Calling this function will
+	// trigger the ASSERT below.
+	byte parameterIO[3];
+	CoreFormSetByteArray(
+		FORM_LIST_POSITION_ELEMENT,
+		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_IN},
+		parameterIO
+	);
+	Service const * service = ServiceRegistryFind(relation, parameterIO);
+	ASSERT(service)
+
+	Atom arguments[3];
+	CoreFormSetTuple(
+		FORM_LIST_POSITION_ELEMENT,
+		(Atom []) {list, (Atom) {0}, element},
+		arguments
+	);
+	ASSERT(ServiceCallOnce(service, arguments))
+	return arguments[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION)]._uint;
 }
 
 
-index32 ListGetPosition(Atom list, TypedAtom element)
-{
-	ASSERT(IsList(list))
-	BTree * tree = RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT);
-
-	Tuple * queryTuple = CreateTuple(3);
-	ListSetTuple(queryTuple, CreateTypedAtom(AT_ID, list), anonymousVariable, element);
-
-	RelationBTreeIterator iterator;
-	RelationBTreeIterate(tree, queryTuple, &iterator);
-	
-	index32 p = 0;
-	if(RelationBTreeIteratorNext(&iterator)) {
-		TypedAtom position = RelationBTreeIteratorGetAtom(
-			&iterator,
-			CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION)
-		);
-		p = (index32) position.atom._uint;
-	}
-	RelationBTreeIteratorEnd(&iterator);
-	FreeTuple(queryTuple);
-	return p;
-}
-
-
-// lexical ordering of two lists
-// NOTE: it is currently not possible to use this
-// in the CompareTypedAtoms() function for
-// canonical ordering of list (and string) atoms
-// since this function depends on B-tree iteration,
-// which leads to infinite recursion when comparing B-tree ḱeys
-int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, TypedAtom))
+int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(Atom, Atom))
 {
 	if(list1.hash == list2.hash)
 		return 0;
@@ -307,8 +250,8 @@ int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, Type
 			break;
 		}
 		ASSERT(hasNext1 && hasNext2);
-		TypedAtom atom1 = ListIteratorGetElement(&iterator1);
-		TypedAtom atom2 = ListIteratorGetElement(&iterator2);
+		Atom atom1 = ListIteratorGetElement(&iterator1);
+		Atom atom2 = ListIteratorGetElement(&iterator2);
 		int8 atomOrder = compare(atom1, atom2);
 		if(atomOrder != 0) {
 			listOrder = atomOrder;
@@ -322,66 +265,91 @@ int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(TypedAtom, Type
 }
 
 
-void CopyListToTuple(Atom list, Tuple * tuple)
+void CopyListToTuple(Atom list, TypedTuple * tuple)
 {
 	ASSERT(ListLength(list) == tuple->nAtoms)
-
+	RelationTable const * relation = lookupListElementRelation(list);
+	byte elementType = relation->atomTypes[
+		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)
+	];
 	ListIterator iterator;
 	ListIterate(list, &iterator);
 	index8 i = 0;
 	while(ListIteratorNext(&iterator)) {
-		TupleSetElement(tuple, i, ListIteratorGetElement(&iterator));
+		Atom element = ListIteratorGetElement(&iterator);
+		TypedTupleSetElement(tuple, i, CreateTypedAtom(elementType, element));
 		i++;
 	}
 	ListIteratorEnd(&iterator);
 }
 
 
-/**
- * List iterator
- * 
- * This is a thin wrapper around RelationBTreeIterator.
- */
-
 void ListIterate(Atom list, ListIterator * iterator)
 {
-	BTree * tree = RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT);
-	iterator->queryTuple = CreateTuple(3);
-	ListSetTuple(iterator->queryTuple, CreateTypedAtom(AT_ID, list), anonymousVariable, anonymousVariable);
-	RelationBTreeIterate(tree, iterator->queryTuple, &(iterator->treeIterator));
+	CoreFormSetTuple(
+		FORM_LIST_POSITION_ELEMENT,
+		(Atom[]) {list, (Atom) {0}, (Atom) {0}},
+		iterator->queryTuple
+	);
+
+	if(ListLength(list) > 0) {
+		RelationTable const * relation = lookupListElementRelation(list);
+		ASSERT(relation)
+		
+		byte parameterIO[3];
+		CoreFormSetByteArray(
+			FORM_LIST_POSITION_ELEMENT,
+			(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
+			parameterIO
+		);
+		Service const * service = ServiceRegistryFind(relation, parameterIO);
+		iterator->context = ServiceCreateContext(service, iterator->queryTuple);
+	}
+	else
+		iterator->context = 0;
 }
 
 
 bool ListIteratorNext(ListIterator * iterator)
 {
-	return RelationBTreeIteratorNext(&(iterator->treeIterator));
+	if(iterator->context)
+		return ServiceCall(iterator->context);
+	else
+		return false;
 }
 
 
-TypedAtom ListIteratorGetElement(ListIterator const * iterator)
+Atom ListIteratorGetElement(ListIterator const * iterator)
 {
-	Tuple const * tuple = RelationBTreeIteratorPeekTuple(&(iterator->treeIterator));
-	return TupleGetElement(tuple, CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT));
+	return iterator->queryTuple[
+		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)
+	];
 }
 
 
 void ListIteratorEnd(ListIterator * iterator)
 {
-	RelationBTreeIteratorEnd(&(iterator->treeIterator));
-	FreeTuple(iterator->queryTuple);
+	if(iterator->context)
+		ServiceFreeContext(iterator->context);
+	SetMemory(iterator, sizeof(ListIterator), 0);
 }
 
 
 void PrintList(Atom list)
 {
 	PrintCString("LIST{");
+	RelationTable const * relation = lookupListElementRelation(list);
+	ASSERT(relation)
+	byte elementType = relation->atomTypes[
+		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)
+	];
 
 	ListIterator iterator;
 	ListIterate(list, &iterator);
 
 	while(ListIteratorNext(&iterator)) {
-		TypedAtom element = ListIteratorGetElement(&iterator);
-		PrintTypedAtom(element);
+		Atom element = ListIteratorGetElement(&iterator);
+		PrintTypedAtom(CreateTypedAtom(elementType, element));
 		PrintChar(' ');
 	}
 	ListIteratorEnd(&iterator);

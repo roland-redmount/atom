@@ -67,14 +67,14 @@ static bool findInUGraph(TypedAtom a1, TypedAtom a2, TypedAtom const * edges, ui
  * *unique* edges {list1[i], list2[i]} for i = 1, ..., n, minus self-edges
  * where list1[i] = list2[i]. Returns the number of edges added
  */
-static uint8 setupUnificationGraph(Tuple const * tuple1, Tuple const * tuple2, TypedAtom * edges)
+static uint8 setupUnificationGraph(TypedTuple const * tuple1, TypedTuple const * tuple2, TypedAtom * edges)
 {
 	uint8 nEdges = 0;
 	// traverse tuples
 	// we assume both tuples are of the same length
 	for(index8 i = 0; i < tuple1->nAtoms; i++) {
-		TypedAtom a1 = TupleGetElement(tuple1, i);
-		TypedAtom a2 = TupleGetElement(tuple2, i);
+		TypedAtom a1 = TypedTupleGetElement(tuple1, i);
+		TypedAtom a2 = TypedTupleGetElement(tuple2, i);
 		if(SameTypedAtoms(a1, a2)) {
 			// Skip self-edge
 			continue;
@@ -91,7 +91,7 @@ static uint8 setupUnificationGraph(Tuple const * tuple1, Tuple const * tuple2, T
 }
 
 
-bool UnifyTuples(Tuple const * tuple1, Tuple const * tuple2, Substitution * subst1, Substitution * subst2)
+bool UnifyTuples(TypedTuple const * tuple1, TypedTuple const * tuple2, Substitution * subst1, Substitution * subst2)
 {
 	ASSERT(tuple1->nAtoms == tuple2->nAtoms)
 	

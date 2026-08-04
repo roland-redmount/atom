@@ -7,33 +7,30 @@
 #include "kernel/kernel.h"
 #include "kernel/RelationBTree.h"
 #include "kernel/string.h"
-#include "kernel/ServiceRegistry.h"
 
 
-TypedAtom stringElementGenerator(index32 index, void const * data)
+Atom stringElementGenerator(index32 index, void const * data)
 {
 	char const * string = (char const *) data;
-	return CreateTypedAtom(AT_LETTER, GetAlphabetLetter(string[index]));
+	return GetAlphabetLetter(string[index]);
 }
+
 
 Atom CreateString(char const * chars, size32 length)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	AddListToIFact(&draft, stringElementGenerator, chars, length);
+	AddListToIFact(&draft, stringElementGenerator, chars, AT_LETTER, length);
 
 	// add (string @string) to ifact
 	IFactBeginConjunction(
 		&draft,
-		GetCorePredicateForm(FORM_STRING),
-		RegistryGetCoreBTreeService(FORM_STRING),
+		GetCoreRelationTable(RELATION_STRING),
 		0
 	);
-	Tuple * tuple = CreateTuple(1);
-	TupleSetElement(tuple, 0, (TypedAtom) {0});
-	IFactAddClause(&draft, tuple);
-	FreeTuple(tuple);
+	Atom tuple[1] = {(Atom) {0}};
+	IFactAddTuple(&draft, tuple);
 	IFactEndConjunction(&draft);
 
 	return IFactEnd(&draft);
@@ -50,22 +47,9 @@ bool IsString(Atom atom)
 {
 	return AtomHasRole(
 		atom,
-		GetCorePredicateForm(FORM_STRING),
+		GetCoreRelationTable(RELATION_STRING),
 		GetCoreRoleName(ROLE_STRING)
 	);
-}
-
-Atom StringGetLetter(Atom string, index32 position)
-{
-	TypedAtom element = ListGetElement(string, position);
-	ASSERT(element.type == AT_LETTER)
-	return element.atom;
-}
-
-
-size32 GetStringLength(Atom string)
-{
-	return ListLength(string);
 }
 
 
@@ -76,7 +60,7 @@ void PrintString(Atom string)
 	ListIterator iterator;
 	ListIterate(string, &iterator);
 	while(ListIteratorNext(&iterator)) {
-		TypedAtom letter = ListIteratorGetElement(&iterator);
+		Atom letter = ListIteratorGetElement(&iterator);
 		PrintChar(LetterToChar(letter, LETTER_LOWERCASE));
 	}
 	ListIteratorEnd(&iterator);

@@ -13,9 +13,6 @@ void PrintParameter(Atom atom)
 	case PARAMETER_OUT:
 		PrintChar('>');
 		break;
-	case PARAMETER_IN_OUT:
-		PrintChar('~');
-		break;
 	}
 	PrintCString(GetAtomTypeName(atom.parameter.atomType));
 }

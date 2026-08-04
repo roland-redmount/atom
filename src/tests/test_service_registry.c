@@ -1,86 +1,79 @@
 
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/multiset.h"
+#include "kernel/Parameter.h"
+#include "kernel/RelationBTree.h"
+#include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
-#include "lang/ConjunctionForm.h"
-#include "lang/Variable.h"
 #include "parser/PredicateBuilder.h"
-#include "parser/ConjunctionBuilder.h"
 #include "testing/testing.h"
 
 
+#define EXAMPLE_FORM_ARITY	4
+
 struct {
 	Atom form;		// a form
+	byte atomTypes[EXAMPLE_FORM_ARITY];
+	RelationTable const * table;
 } fixture;
 
 
 static void setupFixture(void)
 {
 	// TODO: we should have a way to parse a form from a C string.
-	Atom formula = CStringToPredicate("foo 0 bar 0 bar 0 baz 0");
-	fixture.form = FormulaGetForm(formula);
+	Formula * formula = CStringToPredicate("foo 0 bar 0 bar 0 baz 0");
+	fixture.form = formula->form;
+	SetMemory(fixture.atomTypes, EXAMPLE_FORM_ARITY, AT_INT);
 	IFactAcquire(fixture.form);
-	IFactRelease(formula);
+	FreeFormula(formula);
+
+	// services are registered per relation table, so we need one to test with
+	fixture.table = CreateRelationTable(
+		&btreeTableProvider, fixture.form, EXAMPLE_FORM_ARITY,
+		fixture.atomTypes, 0
+	);
+	RelationRegistryAdd(fixture.table);
 }
 
 
 static void teardownFixture(void)
 {
+	RelationRegistryRemove(fixture.table);
 	IFactRelease(fixture.form);
 }
 
 
-void testAddDropTable(void)
+void testAddRemoveService(void)
 {
 	setupFixture();
-	size32 nTablesInitial = RegistryNServices();
 
-	BTree * createdTable = CreateRelationBTree(4);
-	RegistryAddBTreeService(fixture.form, createdTable);
-	ASSERT_UINT32_EQUAL(RegistryNServices(), nTablesInitial + 1)
-	ASSERT_UINT32_EQUAL(RelationBTreeNColumns(createdTable), 4)
+	// Add a dummy service to the relation table
+	MachineServiceProvider dummyProvider = {
+		.setupContext = 0,
+		.call = 0,
+		.finalizeContext = 0,
+		.finalizeService = 0,
+		.contextSize = 0
+	};
 
-	ServiceRecord record = RegistryFindUntypedService(fixture.form);
-	ASSERT(record.form.hash)
-	ASSERT(record.service->type == SERVICE_MACHINE)
-	BTree * foundTable = (BTree *) record.service->impl.machine.providerData;
-	ASSERT_PTR_NOT_EQUAL(foundTable, 0)
-	ASSERT_PTR_EQUAL(foundTable, createdTable)
+	Service * service = CreateMachineService(EXAMPLE_FORM_ARITY, &dummyProvider, 0);
+	byte parameterIO[EXAMPLE_FORM_ARITY] = {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT};
+	ASSERT_INT32_EQUAL(service->referenceCount, 1)
+	ServiceRegistryAdd(fixture.table, parameterIO, service);
+	ASSERT_INT32_EQUAL(service->referenceCount, 2)
 
-	RegistryRemoveService(&record);
-	FreeRelationBTree(createdTable);
-	ASSERT_UINT32_EQUAL(RegistryNServices(), nTablesInitial)
-	
-	teardownFixture();
-}
-
-
-void testCallBTreeService(void)
-{
-	// Test calling 
-	// (multiset @list-predicate-form element _ position _)
-	ServiceRecord const * record = RegistryGetCoreServiceRecord(FORM_MULTISET_ELEMENT_MULTIPLE);
-	ASSERT(record)
-	ASSERT(record->service->type == SERVICE_MACHINE)
-
-	Tuple * arguments = CreateTuple(3);
-	MultisetSetTuple(arguments,
-		CreateTypedAtom(AT_ID, GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT)),
-		anonymousVariable,
-		anonymousVariable
+	ASSERT_PTR_EQUAL(
+		ServiceRegistryFind(fixture.table, parameterIO),
+		service
 	);
-	void * context = ServiceCreateContext(record->service, arguments);
 
-	// this should yields 3 elements corresponding to the 3 roles of (list position element)
-	size32 nElements = 0;
-	while(ServiceCall(context))
-		nElements++;
-	ASSERT_INT32_EQUAL(nElements, 3);
+	// Remove the service
+	ServiceRegistryRemove(fixture.table, service);
+	ASSERT_INT32_EQUAL(service->referenceCount, 1)
+	ReleaseService(service);
 
-	ServiceFreeContext(context);
-	FreeTuple(arguments);
+	teardownFixture();
 }
 
 
@@ -88,8 +81,7 @@ int main(void)
 {
 	KernelInitialize();
 
-	ExecuteTest(testAddDropTable);
-	ExecuteTest(testCallBTreeService);
+	ExecuteTest(testAddRemoveService);
 
 	KernelShutdown();
 

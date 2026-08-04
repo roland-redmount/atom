@@ -1,91 +1,62 @@
 /**
- * A formula is defined by a fact
- * 
- * (formula @formula form @form actors @actors)
- * 
- * where @actors is a list matching the iteration ("canonical") order of the form.
- * 
- * NOTE: the mismatch between fully ordered list of actors and partially ordered
- * multisets for the form is problematic when matching tuples to signatures.
- *  
- * It might be better to represent actors
- * using "multilists" where each position associates with a set of elements. For example
- * the form (+^2 =) would have a multilist where position 1 has two actors, so that
- * e.g. (+ 2 3 = 5) has actor multilist ({2 3} 5). Stable iteration order over sets
- * ensures that the representation {2 3} is always used, not {3 2}, so that actor
- * multilists are unique. For multiplicity over terms and clauses, we use nested multilists
- * in the same fashion as the form's nested multisets, e.g. the clause
- * 
- * (+ 2 3 = 5) | ( + 2 4 = 6) | odd 3
- * 
- * has form ((+^2 =)^2 | odd) and actor multilist ({ ({2 3} 5) ({2 4} 5) } 3).
- * 
- * For services, arguments bound to roles with multiplicity must be exchangable:
- * for example the service with signature
- * 
- * + 'x 'y = z
- * x: INT y:INT z:INT
- * 
- * must produce identical tuples for queries (+ 2 + 3 = _) and (+ 3 + 2 = _).
- * With the multilist representation, this is ensured since the arguments x y would
- * always be ordered as (2 3). Similarly, a service with signature
- * 
- * + 'x y = 'z
- * x: INT y:INT z:INT
- * 
- * (where y is now the output) will match (+ _ 3 = 5) if variables are always sorted
- * after integers, so the query multilist is ({3 _ } 5) and the service is ({x' y} 'z').
- * 
- * This is essentially the same as storing arguments
- * in a tuple/array but always keeping them sorted, so that x in the above service
- * always binds to the first argument (by iteration order) in the set for role '+'
- * 
- * Note that the multilist representaton does not solve the more general unification problem,
- * since we cannot have a total ordering on terms and clauses (??)
- * For example the signature
- * 
- * + x y = 'z & + x y = 'w
- * x: INT y:INT z:INT w:INT
- * 
- * has form (+^2 =)^2 and actors ({({x y} z) ({x y} w)}) ... 
- * 
+ * A Formula stores a form and an actore tuple.
+ * The form may be a predicate, term, clause or conjunction form.
  */
 
 #ifndef FORMULA_H
 #define FORMULA_H
 
-#include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
 #include "lang/TypedAtom.h"
+
+typedef struct s_Formula {
+	Atom form;
+	TypedTuple * actors;	// or Atom atoms[], byte types[] ?
+} Formula;
 
 
 /**
- * Create a formula from a form and an actors list (DT_LIST).
- * The order of actors must correspond to the iteration order of the form.
+ * Create a Formula. The actors tuple is copied.
+ * The new formula acquires a reference to the form atom. 
  */
-Atom CreateFormula(Atom form, Atom actorsList);
+Formula * CreateFormula(Atom form, TypedTuple const * actors);
 
-Atom CreateFormulaFromArray(Atom form, TypedAtom * actors);
+/**
+ * Create a Formula
+ */
+Formula * CreateFormulaFromArray(Atom form, TypedAtom const * actors);
+
+/**
+ * Compare two formulas for equality
+ */
+bool FormulaEqual(Formula const * formula1, Formula const * formula2);
+
+/**
+ * Deallocate a formula. Releases a reference to the form atom.
+ */
+void FreeFormula(Formula * formula);
 
 /**
  * Create a predicate from two arrays of role names (AT_NAME) and actors,
  * both of the same length nParts.
  */
-Atom CreatePredicate(Atom const * roles, TypedAtom * actors, size8 nParts);
+Formula * CreatePredicate(Atom const * roleNames, TypedAtom * actors, size8 arity);
 
 /**
  * Create a term from a predicate and sign
  */
-Atom CreateTerm(Atom predicate, bool negated);
+Formula * CreateTerm(Formula const * predicate, bool sign);
 
 /**
  * Find the term actor corresponding the given role and multiplicity m
+ * NOTE: this is currently only used by test_compiler.c
  */
-TypedAtom TermGetRoleActor(Atom termForm, Tuple const * termActors, const char * role, uint8 m);
+Atom TermGetRoleActor(Atom termForm, Atom const termActors[], const char * role, uint8 m);
 
 /**
- * Create a clause from a list of terms, in any order.
+ * Create a clause from a list of term formulas, in any order.
  */
-Atom CreateClause(Atom const * terms, size8 nTerms);
+Formula * CreateClause(Formula const ** terms, size8 nTerms);
 
 /**
  * Find the index into the list of terms corresponding the given clause form
@@ -109,34 +80,26 @@ void ClauseGetTermActorsIndices(Atom clauseForm, index8 * termActorsIndices);
 /**
  * Create a conjunction from a list of terms, in any order.
  */
-Atom CreateConjunction(Atom const * clauses, size8 nClauses);
+Formula * CreateConjunction(Formula const ** clauses, size8 nClauses);
+
 
 /**
- * Test if the atom is a formula
+ * Formula type predicates.
  */
-bool IsFormula(Atom atom);
+bool FormulaIsPredicate(Formula const * formula);
 
-/**
- * Formula type predicates. These assume the atom is indeed a formula.
- */
-bool FormulaIsPredicate(Atom formula);
-bool FormulaIsTerm(Atom formula);
-bool FormulaIsClause(Atom formula);
-bool FormulaIsConjunction(Atom formula);
+bool FormulaIsTerm(Formula const * formula);
 
-uint8 FormulaArity(Atom formula);
+bool FormulaIsClause(Formula const * formula);
 
-Atom FormulaGetForm(Atom formula);
+bool FormulaIsConjunction(Formula const * formula);
 
-/**
- * Return the list of actors
- */
-Atom FormulaGetActors(Atom formula);
+uint8 FormulaArity(Formula const * formula);
 
 /**
  * Return the index of the given name in the corresponding form
  */
-index32 FormulaRoleIndex(Atom formula, Atom name);
+index32 FormulaRoleIndex(Formula const * formula, Atom roleName);
 
 /**
  * Store a list of the unique formula variables into the provided array,
@@ -145,13 +108,13 @@ index32 FormulaRoleIndex(Atom formula, Atom name);
  */
 // size8 FormulaUniqueVariables(Atom formula, TypedAtom * variables);
 
-void PrintFormula(Atom formula);
+void PrintFormula(Formula const * formula);
 
-void PrintFormActorsAsFormula(Atom form, Tuple const * actors);
+void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors);
 
 /**
  * Compute hash of a formula from the form hash value and actors tuple
  */
-data64 FormulaHashFormActors(data64 formHash, Tuple const * actors, size32 nActors, data64 initialHash);
+data64 FormulaHashFormActors(data64 formHash, TypedTuple const * actors, size32 nActors, data64 initialHash);
 
 #endif	// FORMULA_H

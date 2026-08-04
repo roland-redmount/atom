@@ -1,8 +1,10 @@
 /**
- * Main kernel routines
+ * The kernel provides the essential "core" relation tables and services
  */
 
-#include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
+#include "kernel/RelationTable.h"
+#include "kernel/service.h"
 #include "platform.h"
 
 
@@ -34,25 +36,24 @@ void KernelShutdown(void);
  * High level method to assert a fact.
  * Adds a tuple to the corresponding relation table,
  * and adds an entry to the lookup table for each AT_ID actor.
+ * The actors tuple may not contain variables.
+ * To indicate an identifying fact, set idPosition to the 1-based position
+ * of the identified atom.
  */
-void AssertFact(Atom form, Tuple const * actors);
+void AssertFact(Atom predicateForm, TypedTuple const * actors, uint8 idPosition);
 
 /**
- * High level methd to retract a fact.
+ * High level method to retract a fact.
+ * The actors tuple may not contain variables.
  * Removes the tuple from the corresponding relation table
- * and removes entries from the lookup table.
+ * and removes corresponding entries from the lookup table.
  * This function should always succeed, as facts can always
  * be retracted at any time.
  */
-void RetractFact(Atom form, Tuple * actors);
+void RetractFact(Atom form, TypedTuple * actors);
 
 /**
- * Remove all facts of a given form
- */
-void RetractAllFacts(Atom predicateForm);
-
-/**
- * Permanent identifiers for core role names (satisfying (name @name))
+ * Stable identifiers for core role names (satisfying (name @name))
  * 
  * NOTE: we now identify a role as a pair (predicate, role name).
  * An alternative would be to define a role as an ifact defined by
@@ -67,30 +68,22 @@ void RetractAllFacts(Atom predicateForm);
 #define	ROLE_CLAUSE_FORM			6
 #define	ROLE_CONJUNCTION_FORM		7
 
-#define ROLE_LIST					8		// required for formula
+#define ROLE_LIST					8       // was required for formula -- can be skipped 
 #define ROLE_POSITION				9
 #define ROLE_LENGTH					10
 
-#define ROLE_PAIR					11		// required for formula
-#define ROLE_LEFT					12
-#define ROLE_RIGHT					13
-#define	ROLE_FORMULA				14
-#define	ROLE_QUOTE					15
-#define	ROLE_QUOTED					16
-#define	ROLE_STRING					17		// not really core language
-#define ROLE_SIGN					18
-#define ROLE_FORM					19
-#define ROLE_ACTORS					20
+#define	ROLE_QUOTE					11
+#define	ROLE_QUOTED					12
 
-#define N_CORE_ROLES				20
+#define	ROLE_STRING					13		// not really core language
+#define ROLE_SIGN					14
+
+#define N_CORE_ROLES				14
 
 
 /**
- * Indexes the for core predicates forms into lookup tables (see kernel.c)
- * and into to the "core" B-tree services in ServiceRegistry.
- * For forms 1 and 2 these are also the hardcoded atom values.
+ * Stable identifiers the for core predicates forms
  */
-
 #define FORM_MULTISET_ELEMENT_MULTIPLE		1	// (multiset element multiple)
 #define FORM_PREDICATE_FORM					2	// (predicate-form)
 #define FORM_TERM_FORM						3	// (term-form predicate-form sign)
@@ -98,12 +91,48 @@ void RetractAllFacts(Atom predicateForm);
 #define FORM_CONJUNCTION_FORM				5	// (conjunction-form)
 #define FORM_LIST_POSITION_ELEMENT			6	// (list position element)
 #define FORM_LIST_LENGTH					7	// (list length)
-#define FORM_PAIR_LEFT_RIGHT				8 	// (pair left right)
-#define FORM_FORMULA_FORM_ACTORS			9	// (formula form actors)
-#define FORM_QUOTE_QUOTED					10	// (quote quoted)
-#define FORM_STRING							11	// (string)
+#define FORM_QUOTE_QUOTED					8	// (quote quoted)
+#define FORM_STRING							9	// (string)
 
-#define N_CORE_PREDICATES					11
+// #define FORM_PAIR_LEFT_RIGHT				X 	// (pair left right)
+
+#define N_CORE_PREDICATES					9
+
+
+/**
+ * Stable identifiers the for core relations.
+ * There may be > 1 relation per predicate, with distinct types.
+ */
+#define RELATION_MULTISET_NAME      		1	// (multiset:ID element:NAME multiple:UINT)
+#define RELATION_PREDICATE_FORM				2	// (predicate-form:ID)
+#define RELATION_MULTISET_ID         		3	// (multiset:ID element:ID multiple:INT)
+#define RELATION_TERM_FORM					4	// (term-form:ID predicate-form:ID sign:UINT)
+#define RELATION_CLAUSE_FORM				5	// (clause-form:ID)
+#define RELATION_CONJUNCTION_FORM			6	// (conjunction-form:ID)
+#define RELATION_LIST_LETTER        		7	// (list:ID position:UINT element:LETTER)
+#define RELATION_LIST_ID  	 	     		8	// (list:ID position:UINT element:LETTER)
+#define RELATION_LIST_LENGTH				9	// (list:ID length:UINT)
+#define RELATION_QUOTE	    				10	// (quote:ID quoted:ID)
+#define RELATION_STRING						11	// (string:ID)
+
+// #define RELATION_PAIR_LEFT_RIGHT			X 	// (pair:ID left right)
+
+#define N_CORE_RELATIONS					11
+
+/**
+ * Stable identifiers for a small set of core services.
+ * There may be > 1 service per relation table.
+ */
+#define SERVICE_MULTISET_NAME				1	// (multiset <ID element >NAME multiple >UINT)
+#define SERVICE_PREDICATE_FORM				2	// (predicate-form >ID)
+#define SERVICE_MULTISET_ID					3	// (multiset <ID element >ID multiple >UINT)
+#define SERVICE_MULTISET_ID_ALL				4	// (multiset >ID element >ID multiple >UINT)
+#define SERVICE_TERM_FORM					5	// (term-form <ID predicate-form >ID)
+#define SERVICE_LIST_LENGTH                 6	// (list <ID length >UINT)
+#define SERVICE_LIST_LETTER					7	// (list <ID position >UINT element >LETTER)	
+#define SERVICE_LIST_ID						8	// (list <ID position >UINT element >ID)	
+
+#define N_CORE_SERVICES                     8
 
 /**
  * Lookup one of the "primitive" forms for core tables
@@ -112,13 +141,35 @@ void RetractAllFacts(Atom predicateForm);
 Atom GetCorePredicateForm(index32 formId);
 
 /**
+ * Set a tuple in the canonical order for the indicated core form,
+ * given a tuple in "reference" order, according to coreFormRoleIds
+ */
+void CoreFormSetTuple(index32 formId, Atom const inputTuple[], Atom tuple[]);
+
+/**
+ * Set a byte array in the canonical order for the indicated core form,
+ * given an array in "reference" order, according to coreFormRoleIds
+ */
+void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[]);
+
+/**
  * Lookup a core role name. Returns an AT_NAME atom.
  */
 Atom GetCoreRoleName(index32 roleId);
 
+RelationTable const * GetCoreRelationTable(index32 relationId);
+
 /**
- * Find the index in "canonical order" of a role in the
- * tuple of actors corresponding to the given core predicate form.
- * formId and roleId as as defined above.
+ * Return a core service.
+ */
+Service * GetCoreService(index32 serviceId);
+
+/**
+ * Get the atom types array for the given core predicate form/table
+ */
+byte const * GetCorePredicateAtomTypes(index32 formId);
+
+/**
+ * Find the index in "canonical order" of a role in the given core predicate form.
  */
 index8 CorePredicateRoleIndex(index32 formId, index32 roleId);

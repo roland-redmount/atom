@@ -5,7 +5,6 @@
 #include "lang/Variable.h"
 #include "kernel/letter.h"
 #include "kernel/ifact.h"
-#include "kernel/ServiceRegistry.h"
 
 
 /**
@@ -47,13 +46,13 @@ Atom GetAlphabetLetter(char c)
 }
 
 
-char LetterToChar(TypedAtom letter, uint8 letterCase)
+char LetterToChar(Atom letter, uint8 letterCase)
 {
-	return letterCodeToChar(letter.atom.letter.code, letterCase);
+	return letterCodeToChar(letter.letter.code, letterCase);
 }
 
 
-void PrintLetter(TypedAtom letter, uint8 letterCase)
+void PrintLetter(Atom letter, uint8 letterCase)
 {
 	char c = LetterToChar(letter, letterCase);
 	PrintChar('\'');

@@ -1,146 +1,102 @@
 /**
- * The service registry maps signatures (form, parameters) to services.
- * Dispatch uses the registry to match services to queries.
+ * The service registry keeps track of the services available for each
+ * registered relation. Dispatch uses the registry to match queries to services.
+ * The relations themselves are registered separately; see RelationRegistry.h
  */
 
-#ifndef SERVICEREGISTRY_H
-#define SERVICEREGISTRY_H
+#ifndef SERVICE_REGISTRY_H
+#define SERVICE_REGISTRY_H
 
+#include "btree/btree.h"
 #include "kernel/service.h"
-#include "kernel/RelationBTree.h"
+#include "kernel/RelationTable.h"
 
 
 /**
- * A service record identified by a signature consisting of a form and a parameter
- * list. The parameters list contains AT_PARAMETER atoms (see Parameter.h),
- * indicating the io mode (in/out) and atom type for each parameter.
- * 
- * NOTE: the form is currently always a predicate form, which means we
- * cannot have services for negated predicates like (! odd x). 
- * It's not clear to me yet if this is a major limitation.
- * 
- * A signature s subsumes another signature t iff (1) the forms are equal, and
- * (2) there exists a valid form permutation such that, for each parameter p
- * of s and corresponding parameter q of t: (i) their io modes are equal,
- * or the io mode of p is in/out; and (ii) their datum types are equal, or
- * the datum type of p is AT_NONE. 
- * 
- * TODO: If service s subsumes service t, only one of them may be in the registry. 
+ * A service record links a relation to a service with a particular parameter IO
  */
 typedef struct s_ServiceRecord {
-	Atom form;
-	Atom parameters;
-	Service * service;
+	RelationTable const * relation;
+	byte * parameterIO;
+	Service * service;	// cannot be const * if we want to do AcquireService(service)
 } ServiceRecord;
-
 
 /**
  * Setup an empty service registry. Called during bootstrapping only.
  */
-void SetupRegistry(void);
+void SetupServiceRegistry(void);
 
 /**
- * Deallocate the registry. Before calling this function,
+ * Associates a service with a relation in the service registry.
+ * Acquires a reference to the service.
+ * Returns a copy of the created service record.
+ */
+ServiceRecord ServiceRegistryAdd(RelationTable const * relation, byte const parameterIO[], Service * service);
+
+/**
+ * Dissociate the given service from a relation in the service registry.
+ * Releases a reference to the service.
+ */
+void ServiceRegistryRemove(RelationTable const * relation, Service * service);
+
+/**
+ * Dissociate all services from the given relation in the service registry.
+ */
+void ServiceRegistryRemoveAll(RelationTable const * relation);
+
+/**
+ * Deallocate the service registry. Before calling this function,
  * all services must have been removed.
  */
-void FreeRegistry(void);
+void FreeServiceRegistry(void);
 
 /**
- * Total number of service records.
+ * Total number of registered services.
  */
-size32 RegistryNServices(void);
-
-/**
- * Core services are created during bootstrap.
- * They are accessible by iteration but can also be retrieved
- * with an integer index corresponding to the core predicate indices in kernel.h
- */
-
-/**
-* Create a core B-tree service during bootstrap.
-*/
-void RegistryAddCoreBTreeService(index32 index, Atom form, BTree * btree);
-
-/**
- * Must be called during bootstrap, after all core services have been installed
- * and we are able to create parameter lists.
- */
-void RegistryFinalizeCoreServices(void);
-
-/**
- * Get the service record corresponding to a core predicate.
- * The index is the form index used by kernel.h
- */
-ServiceRecord const * RegistryGetCoreServiceRecord(index32 index);
-
-/**
- * Get the relation table corresponding to a core predicate.
- */
-BTree * RegistryGetCoreBTreeService(index32 index);
-
-/**
- * Remove all core services.
- */
-void RegistryTeardownCoreServices(void);
-
-/**
- * Add a service to the registry.
- * NOTE: currently this method will ASSERT(false) if the (form, parameters) pair already
- * exists in the registry.
- */
-void RegistryAddService(ServiceRecord const * record);
-
-/**
- * Convenience function add a B-tree machine service the registry,
- * generating a list of untyped in/out parameters.
- */
-void RegistryAddBTreeService(Atom form, BTree * btree);
-
-/**
- * Remove the given service record (key) from the registry.
- * The removed record is written to the given service record.
- */
-void RegistryRemoveService(ServiceRecord * record);
+size32 ServiceRegistryCount(void);
 
 
 /**
  * Iterating over services
  */
 typedef struct {
-	ServiceRecord keyRecord;
+	RelationTable const * table;
 	BTreeIterator btreeIterator;
-} RegistryIterator;
+} ServiceIterator;
 
 /**
- * Create iterator over all service records matching the given form.
+ * Create iterator over all service records for a given relation table
  */
-void RegistryIterate(Atom form, RegistryIterator * iterator);
+void ServiceRegistryIterate(RelationTable const * table, ServiceIterator * iterator);
 
-bool RegistryIteratorNext(RegistryIterator * iterator);
+bool ServiceIteratorNext(ServiceIterator * iterator);
 
-ServiceRecord const * RegistryIteratorPeekService(RegistryIterator * iterator);
+ServiceRecord const * ServiceIteratorPeekRecord(ServiceIterator const * iterator);
 
-void RegistryIteratorEnd(RegistryIterator * iterator);
+void ServiceIteratorEnd(ServiceIterator * iterator);
 
 /**
- * Retrieve the service record with the given form and parameters list.
- * If a matching service does not exist, returns a zero record.
+ * Retrieve the service for the given form and parameters array,
+ * which must be the same length as the form arity.
+ * If a matching service does not exist, returns 0
  */
-ServiceRecord RegistryFindService(Atom form, Atom parameters);
-
-/**
- * Retrieve the service of the given form with all parameters in/out untyped.
- * If a matching service does not exist, returns a zero record.
- */
-ServiceRecord RegistryFindUntypedService(Atom form);
-
+Service * ServiceRegistryFind(RelationTable const * relation, byte const parameterIO[]);
 
 /**
  * For debugging
  */
-void PrintServiceRecord(ServiceRecord const * service);
+void PrintServiceRecord(ServiceRecord const * record);
 
-void RegistryDump(void);
+/**
+ * Dump all tuples in a the given relation table.
+ * Requires an associated service for enumerating all tuples.
+ */
+void RelationTableDump(RelationTable const * table);
+
+/**
+ * Print a list of all registered services
+ */
+void ServiceRegistryDump(void);
 
 
-#endif  // SERVICEREGISTRY_H
+#endif  // SERVICE_REGISTRY_H

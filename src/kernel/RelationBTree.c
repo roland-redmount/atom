@@ -1,136 +1,218 @@
 /**
  * A relation table based on a B-tree. Relies on btree.c for implemention.
+ * Provides both services (query) and agents (assert)
  */
 
 #include "btree/btree.h"
 #include "kernel/service.h"
 #include "kernel/ifact.h"
+#include "kernel/Parameter.h"
 #include "kernel/RelationBTree.h"
-#include "kernel/tuple.h"
+#include "kernel/RelationRegistry.h"
+#include "kernel/RelationTable.h"
+#include "kernel/ServiceRegistry.h"
+#include "kernel/typedtuple.h"
 #include "lang/TypedAtom.h"
 #include "lang/Variable.h"
 #include "memory/allocator.h"
-#include "memory/paging.h"
+#include "memory/pool.h"
 #include "util/ResizingArray.h"
 
 
+
 /**
- * Comparison function c(t, q) used to compare a tuple to a query.
- * If the query tuple contains variables, any columns after the leftmost variable
- * are ignored, so that any tuple matching all leftmost non-variables of the query
- * compares equal to it.
- * If the query tuple contains no variables, this function is the same as
- * CompareTuples().
- * 
- * NOTE: compareQuery() returning 0 does NOT guarantee that the tuple matches
- * the query in the sense of TupleMatch().
- * For example, with the set of tuples ordered by CompareTuples()
- * 
- *  (1, 2, 1)
- *  (1, 2, 3)
- *  (3, 4, 1)
- *  (3, 4, 5)
- *  (4, 2, 0)
- * 
- * and query = (3, _, 1), we obtain
- * 
- *  (1, 2, 1) < query
- *  (1, 2, 3) < query
- *  (3, 4, 1) = query
- *  (3, 4, 5) = query
- *  (4, 2, 0) > query
- * 
- * Of the two tuples that compare equal to query, only (3, 4, 1) matches query
- * according TupleMatch().
- * compareQuery() and CompareTuples() are compatible in the sense that 
- * q <= t1 and t1 <= t2 implies q <= t2
- * 
- * TODO: Currently, atom ordering within tuples is dictated by the ordering
- * of roles in the relation's form, which may not be the optimal order
- * for indexing. For example, for the form (position list element) the
- * "indexing" column order should be (list position element) to achieve
- * efficient searcher for quey tuples (@list _ _) and (@list @position _).
- * We therefore need to index tuples in a different atom order than that
- * given by the form.
+ * A B-tree item stores the tuple Atom array, permuted according to the column order,
+ * and the column number (not permuted) of an identified atom, if any.
+ */
+typedef struct s_BTreeTuple {
+	size8 nAtoms;
+	// 1-based position of the identified atom in the tuple, or 0 if none.
+	// Not used for comparing tuples.
+	uint8 idPosition;
+	// Only atoms[0] .. atoms[nAtomsPresent-1] are stored in the tuple.
+	// This is = nAtoms in B-tree items (full tuple is stored),
+	// but < nAtoms in queries as output arguments are not present.
+	index8 nAtomsPresent;
+	Atom atoms[];
+} BTreeTuple;
+
+
+static size32 btreeTupleNBytes(size8 nAtoms)
+{
+	return sizeof(BTreeTuple) + nAtoms * sizeof(Atom);
+}
+
+
+static BTreeTuple * createBTreeTuple(
+	size8 nColumns, uint8 idPosition, index8 nAtomsPresent, Atom const * atoms, index8 const indexColumns[])
+{
+	BTreeTuple * btreeTuple = Allocate(btreeTupleNBytes(nColumns));
+	btreeTuple->nAtoms = nColumns;
+	btreeTuple->idPosition = idPosition;
+	btreeTuple->nAtomsPresent = nAtomsPresent;
+	// Store atoms in index column order
+	for(index8 i = 0; i < nColumns; i++)
+		btreeTuple->atoms[i] = atoms[indexColumns[i]];
+	return btreeTuple;
+}
+
+
+static void freeBTreeTuple(BTreeTuple * btreeTuple)
+{
+	Free(btreeTuple);
+}
+
+
+/**
+ * Comparison function used to compare a B-tree tuple to another tuple or key.
+ * If n = tupleOrKey->nAtomsPresent is less than the tuple length, only the n
+ * leftmost atoms (leading columns) are used for the comparison, while the remaining
+ * columns are considered as variables. Otherwise, the comparison is the same as TupleCompare().
+ * This does not handle query tuples like (a _ b).
+ */
+static int8 compareBTreeTuples(BTreeTuple const * tuple, BTreeTuple const * tupleOrKey)
+{
+	return TupleCompare(tuple->atoms, tupleOrKey->atoms, tupleOrKey->nAtomsPresent);
+}
+
+
+static int8 btreeCompareItems(void const * item, void const * itemOrKey, size32 itemSize)
+{
+	return compareBTreeTuples((BTreeTuple const *) item, (BTreeTuple const *) itemOrKey);
+}
+
+
+RelationBTree * CreateRelationBTree(size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
+{
+	RelationBTree * relation = Allocate(sizeof(RelationBTree));
+	relation->nColumns = nColumns;
+	relation->indexColumns = Allocate(nColumns);
+	CopyMemory(indexColumns, relation->indexColumns, nColumns);
+	relation->btree = BTreeCreate(btreeTupleNBytes(nColumns), btreeCompareItems, 0);
+	return relation;
+}
+
+
+size32 RelationBTreeNRows(RelationBTree const * relation)
+{
+	return BTreeNItems(relation->btree);
+}
+
+
+void FreeRelationBTree(RelationBTree * relation)
+{
+	Free(relation->indexColumns);
+	BTreeFree(relation->btree);
+	Free(relation);
+}
+
+
+byte RelationBTreeAddTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition)
+{
+	// NOTE: if we are to query for tuples based on idPosition, it must be the leading column
+	
+	BTreeTuple * btreeTuple = createBTreeTuple(
+		relation->nColumns, idPosition, relation->nColumns, tuple, relation->indexColumns);
+	byte result = BTreeInsert(relation->btree, btreeTuple);
+	Free(btreeTuple);
+	return result;
+}
+
+
+byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition)
+{
+	ASSERT(!BTreeIsWriteLocked(relation->btree))
+
+	// NOTE: the below logic is common to all relation tables, could be moved to RelationTable?
+	// This would require a method to get the idPosition of a stored tuple from the RelationTableProvider.
+
+	// retrieve the stored tuple to inspect its idPosition
+	BTreeTuple * queryTuple = createBTreeTuple(
+		relation->nColumns, 0, relation->nColumns, tuple, relation->indexColumns);
+	BTreeTuple * btreeTuple = BTreePeekItem(relation->btree, queryTuple);
+	Free(queryTuple);
+	if(!btreeTuple)
+		return TUPLE_NOT_FOUND;
+	
+	if(idPosition && (btreeTuple->idPosition != idPosition)) {
+		// The specified idPosition is wrong, indicating an internal error
+		ASSERT(false)
+	}
+	if(!queryTuple->idPosition && btreeTuple->idPosition) {
+		// Attempt to retract an identifying fact
+		return TUPLE_PROTECTED;
+	}
+	
+	// TODO: we should probably have a BTreeDeleteAt(void * item) function that accepts a direct
+	// pointer to a stored item, to avoid re-running the search
+	ASSERT(BTreeDelete(relation->btree, btreeTuple, 0) == BTREE_DELETED)
+	return TUPLE_REMOVED;
+}
+
+/**
+ * Stubs for the RelationTableProvider interface.
  */
 
-static int8 compareQuery(Tuple const * tuple, Tuple const * query)
+static void * createRelationBTree(size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
 {
-	for(index8 i = 0; i < tuple->nAtoms; i++) {
-		TypedAtom queryAtom = TupleGetElement(query, i);
-		TypedAtom tupleAtom = TupleGetElement(tuple, i);
-		if(queryAtom.type == AT_VARIABLE) {
-			if(VariableIsQuoted(queryAtom.atom)) {
-				// If the query variable is quoted, we remove the (outermost) quote.
-				// This allows querying for a variable _x stored in a relation (foo)
-				// using (foo '_x')
-				// TODO: review the semantics of this!
-				queryAtom.atom = UnquoteVariable(queryAtom.atom);
-			}
-			else if(VariableMatch(queryAtom.atom, tupleAtom))
-				break;
-		}
-		else {
-			// all other atom types
-			int atomOrdering = CompareTypedAtoms(tupleAtom, queryAtom);
-			if(atomOrdering < 0)
-				return -1;
-			if(atomOrdering > 0)
-				return 1;
-			// else contiue
-		}
-	}
-	return 0;
+	return CreateRelationBTree(nColumns, atomTypes, indexColumns);
+}
+
+static size32 relationBTreeNTuples(void * storage)
+{
+	return RelationBTreeNRows((RelationBTree *) storage);
+}
+
+static byte relationBTreeAddTuple(void * storage, Atom const tuple[], uint8 idPosition)
+{
+	return RelationBTreeAddTuple((RelationBTree *) storage, tuple, idPosition);
+}
+
+static byte relationBTreeRemoveTuple(void * storage, Atom const tuple[], uint8 idPosition)
+{
+	return RelationBTreeRemoveTuple((RelationBTree *) storage, tuple, idPosition);
 }
 
 
-static int8 btreeCompareItems(void const * item, void const * queryItem, size32 itemSize)
+static void freeRelationBTree(void * storage)
 {
-	return compareQuery((Tuple const *) item, (Tuple const *) queryItem);
+	FreeRelationBTree((RelationBTree *) storage);
 }
 
+RelationTableProvider btreeTableProvider = {
+	.createStorage = createRelationBTree,
+	.addTuple = relationBTreeAddTuple,
+	.removeTuple = relationBTreeRemoveTuple,
+	// .removeIFactTuples = relationBTreeRemoveIFactTuples,
+	.numberOfTuples = relationBTreeNTuples,
+	.free = freeRelationBTree,
+};
 
-BTree * CreateRelationBTree(size8 nColumns)
+
+/*
+ * NOTE: to support searching with variables when using an untyped tuple,
+ * all atoms except 0 ...  nInputs-1 are considered variables and are
+ * ignored by the B-tree comparison function.
+ * 
+ * NOTE: This does not support queries with repeated variables like (a x b y z y) !
+ * For this, the service must identify parameters, e.g. (a @1 b @2 c @2) so that
+ * we can check for equality. Compare with TypedTupleMatch()
+ * We might handle this with a permutation, (a @1 b@1) <- (a @1 b @2 c @2) ?
+ * Not clear to me if there is a value in having services with repeated parameters
+ * (as opposed to rules with repeated variables, which is necessary for joins).
+ */
+
+void RelationBTreeIterate(
+	RelationBTree * relation, Atom const queryTuple[], size8 nInputs, RelationBTreeIterator * iterator)
 {
-	// we create a btree where one item = one tuple
-	return BTreeCreate(
-		TupleNBytes(nColumns),  // item size
-		btreeCompareItems,
-		0  // free()
-	);
-}
-
-
-void FreeRelationBTree(BTree * tree)
-{
-	BTreeFree(tree);
-}
-
-
-size8 RelationBTreeNColumns(BTree const * tree)
-{
-	return TupleNAtoms(tree->itemSize);
-}
-
-
-size32 RelationBTreeNRows(BTree const * tree)
-{
-	return BTreeNItems(tree);
-}
-
-
-void RelationBTreeIterate(BTree * tree, Tuple const * queryTuple, RelationBTreeIterator * iterator)
-{
-	SetMemory(iterator, sizeof(RelationBTreeIterator), 0);
-	iterator->btree = tree;
-	iterator->nColumns = RelationBTreeNColumns(tree);
+	iterator->relation = relation;
 	if(queryTuple) {
-		iterator->queryTuple = CreateTuple(queryTuple->nAtoms);
-		CopyTuples(queryTuple, iterator->queryTuple);
+		iterator->queryTuple = createBTreeTuple(
+			relation->nColumns, 0, nInputs, queryTuple, relation->indexColumns);
 	}
 	else
 		iterator->queryTuple = 0;
-	BTreeIterate(&(iterator->treeIterator), tree);
+	BTreeIterate(&(iterator->treeIterator), relation->btree);
 }
 
 
@@ -139,50 +221,34 @@ bool RelationBTreeIteratorNext(RelationBTreeIterator * iterator)
 	if(!iterator->queryTuple)
 		return BTreeIteratorNext(&(iterator->treeIterator));
 	// else we have a query tuple
-	bool foundItem;
 	if(BTreeIteratorBeforeFirst(&iterator->treeIterator)) {
 		// new iterator, seek to first match
-		foundItem = BTreeIteratorSeek(&(iterator->treeIterator), iterator->queryTuple);
+		return BTreeIteratorSeek(&(iterator->treeIterator), iterator->queryTuple);
 	}
-	else
-		foundItem = BTreeIteratorNext(&(iterator->treeIterator));
-	if(!foundItem)
-		return false;
-	// advance iterator to next matching tuple
-	do {
-		Tuple const * tuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
-		if(TupleMatch(tuple, iterator->queryTuple))
-			return true;
-		;
-	} while(BTreeIteratorNext(&(iterator->treeIterator)));
-	// else no matching item in btree
+	else {
+		if(BTreeIteratorNext(&(iterator->treeIterator))) {
+			// return tuples as long as they match
+			BTreeTuple const * btreeTuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
+			return (compareBTreeTuples(btreeTuple, iterator->queryTuple) == 0);
+		}
+	}	
 	return false;
 }
 
 
-/**
- * Accessor functions.
- * 
- * NOTE: these are no longer strictly necessary as ATOM_PROTECTED is no longer used
- */
-TypedAtom RelationBTreeIteratorGetAtom(RelationBTreeIterator const * iterator, index8 i)
+Atom RelationBTreeIteratorGetAtom(RelationBTreeIterator const * iterator, index8 i)
 {
-	ASSERT(i < iterator->nColumns);
-	Tuple const * tuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
-	return TupleGetElement(tuple, i);
+	ASSERT(i < iterator->relation->nColumns);
+	BTreeTuple const * tuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
+	return tuple->atoms[i];
 }
 
 
-void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, Tuple * tuple)
+void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, Atom tuple[])
 {
-	Tuple const * btreeTuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
-	CopyTuples(btreeTuple, tuple);
-}
-
-
-Tuple const * RelationBTreeIteratorPeekTuple(RelationBTreeIterator const * iterator)
-{
-	return BTreeIteratorPeekItem(&(iterator->treeIterator));
+	BTreeTuple const * btreeTuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
+	for(index8 i = 0; i < iterator->relation->nColumns; i++)
+		tuple[iterator->relation->indexColumns[i]] = btreeTuple->atoms[i];
 }
 
 
@@ -190,140 +256,117 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator)
 {
 	BTreeIteratorEnd(&(iterator->treeIterator));
 	if(iterator->queryTuple)
-		FreeTuple(iterator->queryTuple);
+		freeBTreeTuple(iterator->queryTuple);
 	SetMemory(iterator, sizeof(RelationBTreeIterator), 0);
 }
 
+/*  TODO: these convenience functions might be moved to service / service registry? */
 
-void RelationBTreeQuerySingle(BTree * tree, Tuple const * queryTuple, Tuple * resultTuple)
- {
- 	RelationBTreeIterator iterator;
- 	RelationBTreeIterate(tree, queryTuple, &iterator);
- 	ASSERT(RelationBTreeIteratorNext(&iterator));
- 	RelationBTreeIteratorGetTuple(&iterator, resultTuple);
- 	// verify the relation has a single tuple only
- 	ASSERT(!RelationBTreeIteratorNext(&iterator));
- 	RelationBTreeIteratorEnd(&iterator);
- }
-
-
-TypedAtom RelationBTreeQuerySingleAtom(BTree * tree, Tuple const * queryTuple, index8 index)
-{
- 	RelationBTreeIterator iterator;
- 	RelationBTreeIterate(tree, queryTuple, &iterator);
- 	ASSERT(RelationBTreeIteratorNext(&iterator));
- 	TypedAtom atom = RelationBTreeIteratorGetAtom(&iterator, index);
- 	// verify the relation has a single tuple only
- 	ASSERT(!RelationBTreeIteratorNext(&iterator));
- 	RelationBTreeIteratorEnd(&iterator);
-	return atom;
- }
+// void RelationBTreeQuerySingle(RelationTable * table, Atom const queryTuple[], size8 nInputs, Atom resultTuple[])
+// {
+// 	RelationBTreeIterator iterator;
+//  	RelationBTreeIterate(table, queryTuple, nInputs, &iterator);
+//  	ASSERT(RelationBTreeIteratorNext(&iterator));
+//  	RelationBTreeIteratorGetTuple(&iterator, resultTuple);
+//  	// verify the relation has a single tuple only
+//  	ASSERT(!RelationBTreeIteratorNext(&iterator));
+//  	RelationBTreeIteratorEnd(&iterator);
+// }
 
 
- /**
-  * To add a protected atom (for ifact) simply set the protectedAtom field of the tuple
-  */
+// Atom RelationBTreeQuerySingleAtom(RelationTable * table, Atom const queryTuple[], size8 nInputs, index8 index)
+// {
+//  	RelationBTreeIterator iterator;
+//  	RelationBTreeIterate(table, queryTuple, nInputs, &iterator);
+//  	ASSERT(RelationBTreeIteratorNext(&iterator));
+//  	Atom atom = RelationBTreeIteratorGetAtom(&iterator, index);
+//  	// verify the relation has a single tuple only
+//  	ASSERT(!RelationBTreeIteratorNext(&iterator));
+//  	RelationBTreeIteratorEnd(&iterator);
+// 	return atom;
+// }
 
-byte RelationBTreeAddTuple(BTree * tree, Tuple const * tuple)
-{
-	ASSERT(RelationBTreeNColumns(tree) == tuple->nAtoms)
-	
-	if(!IFactCheckTuple(tree, tuple))
-		return TUPLE_PROTECTED;
+/**
+ * TODO: unclear how this function fits within the RelationTable framework.
+ * We now also have relationBTreeRemoveTuple() for removing 1 tuple.
+ * With an Atom[] as query, we cannot encode variables; RelatonTable only adds/removes
+ * 1 tuple at a time, as does RetractFact().
+ * 
+ * Removing multiple facts should probably be a query-action combination like
+ * 
+ * (list @l element e position p) : retract (list @l element e position p)
+ *
+ * This should compile to a loop where for each tuple provided by the service,
+ * the retract "agent" removes the tuple. A practical problem with this is that
+ * many data structures (including our B-tree) does not support deleting elements during
+ * iteration; and even if it is supported, it may be very slow, for example in array
+ * storage where each delete requires moving O(N) elements, so that deleting the full
+ * array is O(N^2). We could implement a special case in RelationTable for removing the
+ * entire storage structure though, as this does not require variables.
+ * This is a fundamental problem when separating read/write operations into services and agents.
+ * 
+ * Removing multiple elements also occurs when releasing an ifact; see open issue in IFactRelease()
+ * There is also the thorny issue of recursive deletions via IFactRelease().
+ */
 
-	if(BTreeInsert(tree, tuple) == BTREE_INSERTED) {
-		// tuple was added, acquire atoms
-		for(index8 i = 0; i < tuple->nAtoms; i++) {
-			if((i + 1) != tuple->protectedAtom)
-				AcquireTypedAtom(TupleGetElement(tuple, i));
-		}
-		return TUPLE_ADDED;
-	}
-	else
-		return TUPLE_EXISTS;
-	
-}
+// size32 RelationBTreeRemoveTuples(BTree * btree, Atom const queryTuple[], size8 nInputs, uint8 identified)
+// {
+// 	ASSERT(!BTreeIsWriteLocked(btree));
+// 	size8 nColumns = btreeTupleNAtoms(btree->itemSize);
 
-size32 RelationBTreeRemoveTuples(BTree * tree, Tuple const * queryTuple, uint8 mode)
-{
-	ASSERT(!BTreeIsWriteLocked(tree));
-	size8 nColumns = RelationBTreeNColumns(tree);
-	if(queryTuple) {
-		ASSERT(nColumns == queryTuple->nAtoms)
-	}
+// 	// retrieve all matching tuples
+// 	ResizingArray tuplesArray;
+// 	CreateResizingArray(&tuplesArray, btreeTupleNBytes(nColumns), 10);
+// 	RelationBTreeIterator iterator;
+// 	size32 nTuplesToDelete = 0;
+// 	RelationBTreeIterate(btree, queryTuple, nInputs, &iterator);
+// 	while(RelationBTreeIteratorNext(&iterator)) {
+// 		BTreeTuple const * tuple = BTreeIteratorPeekItem(&(iterator.treeIterator));
+// 		if(tuple->identified == identified) {
+// 			ResizingArrayAppend(&tuplesArray, tuple);
+// 			nTuplesToDelete++;
+// 		}
+// 	}
+// 	RelationBTreeIteratorEnd(&iterator);
 
-	// retrieve all matching tuples
-	ResizingArray tuplesArray;
-	CreateResizingArray(&tuplesArray, TupleNBytes(nColumns), 10);
-
-	RelationBTreeIterator iterator;
-	size32 nTuplesToDelete = 0;
-	RelationBTreeIterate(tree, queryTuple, &iterator);
-	while(RelationBTreeIteratorNext(&iterator)) {
-		Tuple const * tuple = BTreeIteratorPeekItem(&(iterator.treeIterator));
-		if((mode == REMOVE_PROTECTED) || !TupleIsProtected(tuple)) {
-			ResizingArrayAppend(&tuplesArray, tuple);
-			nTuplesToDelete++;
-		}
-	}
-	RelationBTreeIteratorEnd(&iterator);
-
-	// Release all atoms references by tuples.
-	// NOTE: this cannot be done while iterating over the tree,
-	// as IFactRelease() calls RelationBTreeRemoveTuples()
-	for(index32 i = 0; i < nTuplesToDelete; i++) {
-		Tuple * tuple = ResizingArrayGetElement(&tuplesArray, i);
-		for(index32 j = 0; j < nColumns; j++) {
-			// protected atoms can only be released by calling IFactRelease()
-			if((j+1) != tuple->protectedAtom) {
-				TypedAtom atom = TupleGetElement(tuple, j);
-				ReleaseTypedAtom(atom);
-			}
-		}
-	}
-	// delete tuples
-	for(index32 i = 0; i < nTuplesToDelete; i++) {
-		Tuple * tuple = ResizingArrayGetElement(&tuplesArray, i);
-		ASSERT(BTreeDelete(tree, tuple) == BTREE_DELETED);
-	}
-
-	FreeResizingArray(&tuplesArray);
-	return nTuplesToDelete;
-}
+// 	// Release all atoms referenced by tuples.
+// 	// NOTE: this cannot be done while iterating over the tree,
+// 	// as IFactRelease() calls RelationBTreeRemoveTuples() recursively.
+// 	for(index32 i = 0; i < nTuplesToDelete; i++) {
+// 		BTreeTuple * tuple = ResizingArrayGetElement(&tuplesArray, i);
+// 		for(index32 j = 0; j < nColumns; j++) {
+// 			ReleaseTypedAtom(CreateTypedAtom(table->atomTypes[j], tuple->atoms[j]));
+// 		}
+// 	}
+// 	// delete tuples
+// 	for(index32 i = 0; i < nTuplesToDelete; i++) {
+// 		BTreeTuple * tuple = ResizingArrayGetElement(&tuplesArray, i);
+// 		ASSERT(BTreeDelete(btree, tuple) == BTREE_DELETED);
+// 	}
+// 	FreeResizingArray(&tuplesArray);
+// 	return nTuplesToDelete;
+// }
 
 
-// for debugging
-void RelationBTreeDump(BTree * tree)
-{
-	size8 nColumns = RelationBTreeNColumns(tree);
-	PrintF("BTree %u columns\n", nColumns);
-
-	RelationBTreeIterator iterator;
-	RelationBTreeIterate(tree, 0, &iterator);
-	size32 nTuples = 0;
-	while(RelationBTreeIteratorNext(&iterator)) {
-		Tuple const * tuple = RelationBTreeIteratorPeekTuple(&iterator);
-		// TODO: we should probably not print the full representaiton
-		// of identified atoms, as it triggers repeated queries
-		PrintTuple(tuple);
-		PrintChar('\n');
-		nTuples++;
-	}
-	RelationBTreeIteratorEnd(&iterator);
-	PrintF("%u tuples\n", nTuples);
-}
-
-/***************************************************************************************************
- * Stubs for using the B-tree service provider.
- * NOTE: this could go to a separate compilation unit
+/**
+ * Stubs for the B-tree service provider.
  * 
  * The service context data holds a RelationBTreeIterator.
  */
+
+// Could not fit this in the 8-byte Service.impl.machine.providerData field :-/
+typedef struct s_RelationBTreeServiceProviderData {
+	RelationBTree * relation;
+	index8 nInputs;
+} RelationBTreeServiceProviderData;
+
+
 static void serviceSetupContext(ServiceContext * context)
 {
-	BTree * btree = (BTree *) context->service->impl.machine.providerData;
+	RelationBTreeServiceProviderData * serviceData = context->service->impl.machine.providerData;
+	// Initialize the RelationBTreeIterator, allocated by ServiceCreateContext()
 	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
-	RelationBTreeIterate(btree, context->arguments, iterator);
+	RelationBTreeIterate(serviceData->relation, context->arguments, serviceData->nInputs, iterator);
 }
 
 
@@ -332,7 +375,7 @@ static bool serviceCall(ServiceContext * context)
 	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
 	bool hasTuple = RelationBTreeIteratorNext(iterator);
 	if(hasTuple)
-		CopyTuples(RelationBTreeIteratorPeekTuple(iterator), context->arguments);
+		RelationBTreeIteratorGetTuple(iterator, context->arguments);
 	return hasTuple;
 }
 
@@ -343,47 +386,55 @@ static void serviceFinalizeContext(ServiceContext * context)
 	RelationBTreeIteratorEnd(iterator);
 }
 
-/**
- * Stubs for the B-tree agent provider
- */
-void agentAddTuple(void * agentData, Tuple const * arguments)
+static void finalizeBTreeService(Service * service)
 {
-	RelationBTreeAddTuple((BTree *) agentData, arguments);
+	Free(service->impl.machine.providerData);
 }
-
-
-void agentRemoveTuples(void * agentData, Tuple const * arguments)
-{
-	RelationBTreeRemoveTuples((BTree *) agentData, arguments, REMOVE_NORMAL);
-}
-
-
-bool agentIsEmpty(void * agentData)
-{
-	return BTreeNItems((BTree *) agentData) == 0;
-}
-
-
-void agentTeardown(void * agentData)
-{
-	FreeRelationBTree((BTree *) agentData);
-}
-
 
 MachineServiceProvider bTreeServiceProvider = {
 	.setupContext = &serviceSetupContext,
 	.call = &serviceCall,
 	.finalizeContext = &serviceFinalizeContext,
+	.finalizeService = &finalizeBTreeService,
 	.contextSize = sizeof(RelationBTreeIterator)
 };
 
-/**
- * TODO: create AgentHandler
- */
 
- /*
-	.addTuple = &serviceAddTuple,
-	.removeTuples = &serviceRemoveTuples,
-	.isEmpty = &serviceIsEmpty,
-	.teardown = &serviceTeardown,
+/**
+ * Create a B-tree service with nInputs leadning input parameters
  */
+static Service * createBTreeService(RelationBTree * relation, size8 nInputs)
+{
+	RelationBTreeServiceProviderData * providerData = Allocate(sizeof(RelationBTreeServiceProviderData));
+	providerData->relation = relation;
+	providerData->nInputs = nInputs;
+	return CreateMachineService(relation->nColumns, &bTreeServiceProvider, providerData);
+}
+
+
+RelationTable const * CreateRelationBTreeWithServices(
+	Atom form, size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
+{
+	// Create the B-tree storage and register as relation table
+	RelationTable const * table = CreateRelationTable(&btreeTableProvider, form, nColumns, atomTypes, indexColumns);
+	RelationRegistryAdd(table);
+	
+	RelationBTree * relation = table->storage;
+
+	// register nColumns services with leading columns as inputs
+	for(index8 nInputs = 0; nInputs <= nColumns; nInputs++) {
+		Service * service = createBTreeService(relation, nInputs);
+		byte parameterIO[nColumns];
+		for(index8 i = 0; i < nColumns; i++) {
+			if(i < nInputs)
+				parameterIO[indexColumns[i]] = PARAMETER_IN;
+			else
+				parameterIO[indexColumns[i]] = PARAMETER_OUT;
+		}
+		ServiceRegistryAdd(table, parameterIO, service);
+		// The registry now holds the reference to the service
+		ReleaseService(service);
+	}
+	return table;
+}
+

@@ -75,7 +75,6 @@ add_library(atom SHARED
     src/lang/FormPermutation.c
     src/lang/name.c
     src/lang/PredicateForm.c
-    src/lang/Quote.c
     src/lang/SubstitutionList.c
     src/lang/TermForm.c
     src/lang/TypedAtom.c
@@ -93,13 +92,15 @@ add_library(atom SHARED
     src/kernel/list.c
     src/kernel/lookup.c
     src/kernel/multiset.c
-    src/kernel/pair.c
     src/kernel/Parameter.c
     src/kernel/RelationBTree.c
+    src/kernel/RelationRegistry.c
+    src/kernel/RelationTable.c
     src/kernel/service.c
     src/kernel/ServiceRegistry.c
     src/kernel/string.c
     src/kernel/tuple.c
+    src/kernel/typedtuple.c
     src/kernel/UInt.c
 
     src/library/math.c
@@ -139,30 +140,49 @@ endif()
 
 enable_testing()
 
-set(ATOM_TESTS
-    test_atomtypes
+# Tests are grouped into tiers of increasing dependency. Each tier is a CTest
+# "fixture": if any test in a tier fails, CTest automatically skips (marks
+# "Not Run") every test in the later tiers, since there is no point running
+# higher-level tests once a fundamental one is broken.
+#
+# To move a test between tiers, just move its name to a different list.
+
+set(ATOM_TESTS_TIER0        # fundamentals
     test_btree
-    test_compiler
-    test_dictionary
-    test_dispatch
-    test_kernel
+    test_memory
+    test_persistence
+    test_utilities
+)
+
+set(ATOM_TESTS_TIER1        # core data structures, language elements
+    test_atomtypes
+	test_kernel
     test_language
     test_list
     test_lookup
-    test_math
-    test_memory
     test_multiset
-    test_pair
     test_parsing
-    test_persistence
     test_relation_btree
+    test_relation_registry
     test_service
     test_service_registry
     test_string
     test_tokenizer
     test_tuple
+)
+
+set(ATOM_TESTS_TIER2        # higher level kernel procedures
+    test_dictionary
+    test_compiler
+    test_dispatch
     test_unification
-    test_utilities
+    test_math
+)
+
+set(ATOM_TESTS
+    ${ATOM_TESTS_TIER0}
+    ${ATOM_TESTS_TIER1}
+    ${ATOM_TESTS_TIER2}
 )
 
 foreach(T ${ATOM_TESTS})
@@ -170,6 +190,17 @@ foreach(T ${ATOM_TESTS})
     target_link_libraries(${T} PRIVATE atom)
     add_test(NAME ${T} COMMAND ${T})
 endforeach()
+
+# Wire up the fixture gating: each tier sets up a fixture that the next
+# tier(s) require. A test both provides its own tier's fixture and requires
+# all earlier tiers' fixtures.
+set_tests_properties(${ATOM_TESTS_TIER0} PROPERTIES
+    FIXTURES_SETUP TIER0)
+set_tests_properties(${ATOM_TESTS_TIER1} PROPERTIES
+    FIXTURES_REQUIRED TIER0
+    FIXTURES_SETUP    TIER1)
+set_tests_properties(${ATOM_TESTS_TIER2} PROPERTIES
+    FIXTURES_REQUIRED "TIER0;TIER1")
 
 # ---------------------------------------------------------------------------
 # Optional graphics target

@@ -1,28 +1,21 @@
 
 #include "kernel/float.h"
-#include "kernel/Int.h"
-#include "kernel/Parameter.h"
-#include "kernel/UInt.h"
-#include "lang/Variable.h"
-
-#include "lang/name.h"
-#include "lang/Quote.h"
-
 #include "kernel/ifact.h"
+#include "kernel/Int.h"
 #include "kernel/letter.h"
 #include "kernel/list.h"
 #include "kernel/multiset.h"
-#include "kernel/pair.h"
+#include "kernel/Parameter.h"
 #include "kernel/string.h"
-
-#include "lang/TypedAtom.h"
-#include "lang/ClauseForm.h"
+#include "kernel/UInt.h"
 #include "lang/Atom.h"
+#include "lang/ClauseForm.h"
 #include "lang/Formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
-
+#include "lang/TypedAtom.h"
+#include "lang/Variable.h"
 #include "util/hashing.h"
 #include "util/sort.h"
 
@@ -42,29 +35,13 @@ TypedAtom CreateTypedAtom(byte type, Atom atom)
 
 void AcquireTypedAtom(TypedAtom typedAtom)
 {
-	switch(typedAtom.type) {
-		case AT_ID:
-		IFactAcquire(typedAtom.atom);
-		break;
-
-		case AT_NAME:
-		NameAcquire(typedAtom.atom);
-		break;
-	}
+	AcquireAtom(typedAtom.atom, typedAtom.type);
 }
 
 
 void ReleaseTypedAtom(TypedAtom typedAtom)
 {
-	switch(typedAtom.type) {
-		case AT_ID:
-		IFactRelease(typedAtom.atom);
-		break;
-
-		case AT_NAME:
-		NameRelease(typedAtom.atom);
-		break;
-	}
+	ReleaseAtom(typedAtom.atom, typedAtom.type);
 }
 
 
@@ -78,7 +55,7 @@ bool SameTypedAtoms(TypedAtom typedAtom1, TypedAtom typedAtom2)
 
 
 /**
- * Canonical ordering of typed atoms. This is used by CompareTuples()
+ * Canonical ordering of typed atoms. This is used by TypedTupleCompare()
  * which is used to order tuple storage in RelationBTree
  * 
  * NOTE: this orders atoms by the atom 64-bit value, which means
@@ -96,7 +73,7 @@ int8 CompareTypedAtoms(TypedAtom typedAtom1, TypedAtom typedAtom2)
 }
 
 
-static int8 quickSortCompareAtoms(void const * item1, void const * item2, size32 itemSize)
+static int8 quickSortCompareTypedAtoms(void const * item1, void const * item2, size32 itemSize)
 {
 	ASSERT(itemSize = sizeof(TypedAtom));
 	TypedAtom typedAtom1 = *((const TypedAtom *) item1);
@@ -107,7 +84,7 @@ static int8 quickSortCompareAtoms(void const * item1, void const * item2, size32
 
 void SortTypedAtoms(TypedAtom * typedAtoms, size32 nAtoms)
 {
-	QuickSort(typedAtoms, nAtoms, sizeof(TypedAtom), quickSortCompareAtoms);
+	QuickSort(typedAtoms, nAtoms, sizeof(TypedAtom), quickSortCompareTypedAtoms);
 }
 
 
@@ -158,7 +135,7 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		break;
 
 	case AT_LETTER:
-		PrintLetter(typedAtom, LETTER_UPPERCASE);
+		PrintLetter(typedAtom.atom, LETTER_UPPERCASE);
 		break;
 
 	case AT_VARIABLE:
@@ -180,15 +157,14 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		// Here we somewhat arbitrarily try the "most specific" type predicate first
 		
 		// TODO: move this somewhere better
-		if(IsPair(typedAtom.atom)) {
-			if(IsFormula(typedAtom.atom))
-				PrintFormula(typedAtom.atom);
-			else if(IsQuote(typedAtom.atom))
-				PrintQuoted(typedAtom.atom);
-			else
-				PrintPair(typedAtom.atom);
-		}
-		else if(IsList(typedAtom.atom)) {
+		
+		// if(IsPair(typedAtom.atom)) {
+		// 	if(IsQuote(typedAtom.atom))
+		// 		PrintQuoted(typedAtom.atom);
+		// 	else
+		// 		PrintPair(typedAtom.atom);
+		// }
+		if(IsList(typedAtom.atom)) {
 			if(IsString(typedAtom.atom))
 				PrintString(typedAtom.atom);
 			else if(IsName(typedAtom))
@@ -207,7 +183,7 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		else if(IsTermForm(typedAtom.atom))
 			PrintTermForm(typedAtom.atom);
 		else
-			PrintIFact(typedAtom.atom);
+			IFactPrint(typedAtom.atom);
 		break;
 
 	default:

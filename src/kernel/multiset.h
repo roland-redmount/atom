@@ -6,12 +6,12 @@
 #ifndef MULTISET_H
 #define MULTISET_H
 
-#include "kernel/RelationBTree.h"
 #include "kernel/ifact.h"
+#include "kernel/service.h"
 
 
 typedef struct s_ElementMultiple {
-	TypedAtom element;
+	Atom element;
 	size32 multiple;
 } ElementMultiple;
 
@@ -21,18 +21,23 @@ typedef ElementMultiple (*MultisetElementGenerator)(index32 index, void const * 
 /**
  * Create an immutable multiset (AT_ID) using an element generator function
  */
-Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size32 nUniqueElements);
+Atom CreateMultiset(
+	MultisetElementGenerator generator, void const * data, size32 nUniqueElements, byte elementType);
 
-void AddMultisetToIFact(IFactDraft * draft, MultisetElementGenerator generator, void const * data, size32 nUniqueElements);
+void AddMultisetToIFact(
+	IFactDraft * draft,
+	MultisetElementGenerator generator, void const * data, size32 nUniqueElements, byte elementType);
 
 
 /**
  * Create a multiset from arrays of atoms (unique elements) and corresponding multiples.
  * The array order is not significant.
  */
-Atom CreateMultisetFromArrays(TypedAtom const * atoms, size32 const * multiples, size32 nUniqueElements);
+Atom CreateMultisetFromArrays(
+	Atom const atoms[], size32 const multiples[], size32 nUniqueElements, byte elementType);
 
-void AddMultisetToIFactFromArrays(IFactDraft * draft, TypedAtom const * atoms, size32 const * multiples, size32 nUniqueElements);
+void AddMultisetToIFactFromArrays(
+	IFactDraft * draft, Atom const atoms[], size32 const multiples[], size32 nUniqueElements, byte elementType);
 
 /**
  * Evaluate (multiset @atom)
@@ -42,19 +47,14 @@ bool IsMultiset(Atom atom);
 /**
  * Number of unique elements in the multiset, not including multiples
  */
-size32 MultisetNUniqueElements(Atom multiset);
+size32 MultisetNUniqueElements(Atom multiset, byte elementType);
 
 /**
  * Total number of elements in the multiset, including multiples
  */
-size32 MultisetSize(Atom multiset);
+size32 MultisetSize(Atom multiset, byte elementType);
 
-size32 MultisetGetElementMultiple(Atom multiset, TypedAtom element);
-
-/**
- * Assign values to a tuple of the (multiset element multiple) relation
- */
-void MultisetSetTuple(Tuple * tuple, TypedAtom multiset, TypedAtom element, TypedAtom multiple);
+size32 MultisetGetElementMultiple(Atom multiset, Atom element);
 
 /**
  * Find an order for a given array of elements consistent with
@@ -73,31 +73,33 @@ void MultisetSetTuple(Tuple * tuple, TypedAtom multiset, TypedAtom element, Type
  * 
  * NOTE: the length of elements and order arrays must equal MultisetSize()
  */
-void MultisetIterationOrder(Atom multiset, TypedAtom const * elements, index8 * order, size8 nElements);
-
+void MultisetIterationOrder(Atom multiset, byte elementType, Atom const elements[], index8 order[], size8 nElements);
 
 /**
  * Iteration over a multiset.
  * 
  * Although the multiset has no "semantic" ordering, this iterator
  * is guaranteed to produce tuples according to the order defined by
- * CompareTuples(), generating a stable ordering. This is used to
+ * TypedTupleCompare(), generating a stable ordering. This is used to
  * align the roles of a form with an ordered actor list by DT_FORMULA.
  */
 
 typedef struct s_MultisetIterator
 {
-	Tuple * queryTuple;
-	RelationBTreeIterator treeIterator;
+	Atom queryTuple[3];
+	ServiceContext * context;
 } MultisetIterator;
 
 
-void MultisetIterate(Atom multiset, MultisetIterator * iterator);
+void MultisetIterate(Atom multiset, byte elementType, MultisetIterator * iterator);
+
 bool MultisetIteratorNext(MultisetIterator * iterator);
+
 ElementMultiple MultisetIteratorGetElement(MultisetIterator const * iterator);
+
 void MultisetIteratorEnd(MultisetIterator * iterator);
 
 void PrintMultiset(Atom multiset);
 
 
-#endif	// MULTISET_GH
+#endif	// MULTISET_H

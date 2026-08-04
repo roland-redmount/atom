@@ -1,104 +1,157 @@
 /**
  * High level interface to relation tables, independent of implementation.
+ * A relation table is 1:1 with a (form, columns types) pair.
  * 
- * TODO: This is not in use yet.
+ * NOTE: the form is currently always a predicate form, which means we
+ * cannot have services for negated predicates like (! odd x). 
+ * It's not clear to me yet if this is a major limitation.
+ * 
+ * NOTE: in the future, we want to be able to hot-load implementations
+ * into a running atom process. This would involve loading code into
+ * executable memory and registering services with the appropriate
+ * callback pointers.
  */
 
 #ifndef RELATION_TABLE_H
 #define RELATION_TABLE_H
 
+#include "kernel/service.h"
 
-// Relation table implementations
-
-#define RELATION_BTREE			1		// RelationBTree.c
-#define RELATION_VAR_ARRAY		2
-
-// this overlaps with RegistryCreateTable(), RegistryDropTable()
-
-// void CreateRelationTable(Atom form);
-// void FreeRelationTable(RelationTable * table);
-
-size8 RelationTableNColumns(Atom form);
-size32 RelationTableNRows(Atom form);
-
-
-
-typedef struct s_RelationTableIterator {
-	// TODO
-} RelationTableIterator;
-
+typedef struct s_RelationTable RelationTable;
 
 /**
- * Initialize an iterator returning all tuples matching queryTuple,
- * or if queryTuple is 0, returning all tuples in the table.
- * After this call, the iterator will be positioned at the first tuple
- * matching the query, if any, and RelationTableIteratorHasTuple() may be called.
- * The table is locked to prevent modification while iterating.
- * 
- * NOTE: the iterator does not keep a copy of queryTuple,
- * so it must remain unchanged during the iteration.
+ * Description of a implementation provider, such as RelationBTree.
+ * One provider may provide multiple relation tables, sharing the same
+ * callbacks.
  */
-void RelationTableIterate(RelationTable const * table, Atom const * queryTuple, RelationTableIterator * iterator);
+typedef struct s_RelationTableProvider {
 
-/**
- * Test if the iterator has a next element.
- * If this function returns true, the tuple can be accessed by 
- * RelationTableIteratorGetTuple() or RelationTableIteratorGetAtom().
- */
-bool RelationTableIteratorHasTuple(RelationTableIterator const * iterator);
+	/** 
+	 * Create storage for a new relation table. 
+	 * The returned storage data pointer will be assigned to the RelationTable.storage field.
+	 * See also CreateRelationTable()
+	 * 
+	 * NOTE: the table implementation is currently not aware of the relation's predicate form,
+	 * but it could be useful for the implementation to know role multiples for column optimization?
+	 */
+	void * (*createStorage)(size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
 
-/**
- * Advance the iterator to the next tuple matching the query, if any
- */
-void RelationTableIteratorNext(RelationTableIterator * iterator);
+	/**
+	 * Add a tuple to storage, as returned by createTable()
+	 * The atom types are fixed, so providing an Atom array is sufficient.
+	 * If idPosition is > 0 it indicates the 1-based position of an identified
+	 * atom (the tuple is part of an ifact).
+	 */
+	byte (*addTuple)(void * storage, Atom const tuple[], uint8 idPosition);
 
-Atom RelationTableIteratorGetAtom(RelationTableIterator const * iterator, index8 i);
+	/**
+	 * Remove a specific tuple from the underlying relation.
+	 * If the stored tuplehad an identified atom, it must match the given idPosition,
+	 * or an error occurs.
+	 */
+	byte (*removeTuple)(void * storage, Atom const tuple[], uint8 idPosition);
 
-/**
- * Return a pointer to the current tuple.
- */
-Atom const * RelationTableIteratorGetTuple(RelationTableIterator const * iterator);
+	/**
+	 * Remove all tuples containing idAtom in the idPosition column (1-based)
+	 */
+	// void (*removeIFactTuples)(void * storage, Atom idAtom, uint8 idPosition);
 
-/**
- * Terminate the iterator.
- */
-void RelationTableIteratorEnd(RelationTableIterator * iterator);
+	/**
+	 * Return number of tuples in the relation table
+	 */
+	size32 (*numberOfTuples)(void * storage);
 
-/**
- * Query the relation and return a single tuple.
- * The relation table must have exactly one tuple matching the query.
- */
-Atom const * RelationTableQuerySingle(RelationTable const * table, Atom const * queryTuple);
+	/**
+	 * Free a relation table. Typically deallocates the underlying data structures.
+	 */
+	void (*free)(void * storage);
 
+} RelationTableProvider;
 
-/**
- * Add a aingle tuple to the relation, acquiring each atom in the tuple.
- * Does not add entries to lookup; see AssertFact()
- */
-byte RelationTableAddTuple(RelationTable * table, Atom const * tuple);
-
-
-// result codes for RelationTableAddTuple()
+// result codes for addTuple()
 #define TUPLE_ADDED			1
 #define TUPLE_EXISTS		2
-#define TUPLE_PROTECTED		3	// adding would violate an ifact definition
 
-
-/**
- * Remove tuples from the Table matching the query.
- * If queryTuple matches a tuple containing an atom with the ATOM_PROTECTED bit set,
- * it is not removed unless 
- */
-size32 RelationTableRemoveTuples(RelationTable * table, Atom const * queryTuple, uint8 mode);
-
-#define REMOVE_NORMAL		0
-#define REMOVE_PROTECTED	1
-
+// result codes for removeTuple()
+#define TUPLE_REMOVED		1
+#define TUPLE_NOT_FOUND		2
+#define TUPLE_PROTECTED		3
 
 /**
- * Print out an entire relation table, for debugging
+ * A relation table implementation record, identified by (form, atomTypes).
+ * 
+ * Each implementation must provide callbacks to support adding
+ * and removing tuples.
  */
-void RelationTableDump(RelationTable const * table);
+struct s_RelationTable {
+	Atom form;
+	// whether this table holds a reference to its form; see RelationTableReleaseForm()
+	bool ownsForm;
+	size8 nColumns;
+	byte * atomTypes;
+	index8 * indexColumns;
+	// provider may be 0 for computed relations
+	RelationTableProvider * provider;
+	void * storage;	// any implementation-dependent storage data
+};
+
+/**
+ * Create a relation table using the specified storage provider, or 0 if there is not storage
+ * (computed relations).
+ * 
+ * If not 0, indexColumns indicates the desired order of index columns, so that tuples are
+ * effectively ordered lexigraphically by indexColumns[0], ..., indexColumns[nColumns-1].
+ * Hence, lookup should be fast when leading columns are specified in this order, while
+ * out-of-order columns may lead to table scanning. For example, a relation with
+ * canonical order (element list position) and indexColumns = {1, 0, 2} will be ordered as
+ * (list position element), so that queries (@list _ _) and (@list @position _) are fast,
+ * but (_ _ @element) may be slow.
+ */
+RelationTable const * CreateRelationTable(
+	RelationTableProvider * provider, Atom form, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
+
+
+void FreeRelationTable(RelationTable const * table);
+
+/**
+ * Release the reference this table holds to its form, without freeing the table.
+ *
+ * This is only for shutting down the self-referential core tables, whose own
+ * defining facts are stored in those same tables. Such a table cannot be freed
+ * directly: FreeRelationTable() requires it to be empty, but the tuples are only
+ * retracted once the form's reference count drops to zero, which cannot happen
+ * while the table holds a reference. Detaching the reference first lets the
+ * ifact drain its tuples out of a table that is still alive and serviced.
+ *
+ * The table must still be registered (its form is the registry B-tree key) and
+ * must still have its services, which are used to locate the tuples to retract.
+ * It should be removed from the registry immediately afterwards.
+ */
+void RelationTableReleaseForm(RelationTable const * table);
+
+/**
+ * Return the number of rows in a relation table
+ */
+size32 RelationTableNRows(RelationTable const * table);
+
+/**
+ * Add a single tuple to the relation, acquiring each atom in the tuple.
+ * If idPosition is > 0 it indicates the 1-based position of an identified atom.
+ * Acquires a reference to each atom in the tuple, except an identified atom.
+ * Does not add lookup entries; see AssertFact()
+ */
+byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
+
+/**
+ * Remove the given tuple from the relation table.
+ * If the tuple must not contain an identified atom, its position must match
+ * the given idPosition to remove the tuple.
+ * Does not remove lookup entries; see RetractFact()
+ */
+byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
+
+// NOTE: RelationTableDump() is declared in ServiceRegistry.h, since dumping a
+// table requires a service to enumerate its tuples.
 
 
 #endif	// RELATION_TABLE_H

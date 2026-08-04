@@ -2,8 +2,11 @@
  #ifndef SERVICE_H
  #define SERVICE_H
 
-#include "kernel/tuple.h"
+ #include "kernel/typedtuple.h"
 
+
+typedef struct s_Service Service;
+typedef struct s_ServiceContext ServiceContext;
 
 /**
  * A machine service provider is an implementation of a particular type
@@ -12,9 +15,7 @@
  * various relations.
  */
  
-struct s_ServiceContext;
-
-typedef bool (*MachineServiceCall)(struct s_ServiceContext * context);
+typedef bool (*MachineServiceCall)(ServiceContext * context);
 
 typedef struct s_MachineServiceProvider {
 	/**
@@ -23,7 +24,7 @@ typedef struct s_MachineServiceProvider {
 	 * This method must return a pointer to its context (or 0 if none).
 	 * This context pointer will then be supplied to call() and finalizeContext().
 	 */
-	void (*setupContext)(struct s_ServiceContext * context);
+	void (*setupContext)(ServiceContext * context);
 
 	/**
 	 * Call (resume) an executing service, return true if a tuple was produced,
@@ -35,9 +36,16 @@ typedef struct s_MachineServiceProvider {
 	MachineServiceCall call;
 
 	/**
-	 * Any code that needs to run to finalize the service after termination
+	 * Finalize a service context after termination.
+	 * This pointer may be 0 if no finalization is required.
 	 */
-	void (*finalizeContext)(struct s_ServiceContext * context);
+	void (*finalizeContext)(ServiceContext * context);
+
+	/**
+	 * Finalize the machine service (deallocate data structures, &c).
+	 * This pointer may be 0 if no finalization is required.
+	 */
+	void (*finalizeService)(Service * service);
 
 	size32 contextSize;
 
@@ -92,8 +100,6 @@ typedef struct s_MachineServiceProvider {
 	SERVICE_MACHINE = 5,
 };
 
-typedef struct s_Service Service;
-
 struct s_Service {
 	enum ServiceType type;
 	// Number of arguments for this service
@@ -106,7 +112,7 @@ struct s_Service {
 		struct {
 			Service * childService;
 			// Stored constants
-			Tuple * constants;
+			TypedTuple * constants;
 			// 1-based indices of each child argument into the parent arguments,
 			// or 0 if the child argument is a constant.
 			// NOTE: the parent:child mapping is 1:n, a parent argument
@@ -136,7 +142,8 @@ struct s_Service {
 };
 
 /**
- * Create a permute service. The argumentMap array has length equal to childService->nArguments
+ * Create a permute service with the specified number of arguments.
+ * The argumentMap array has length equal to childService->nArguments
  * and specifies for each child argument either a 1-based index into the parent arguments tuple,
  * or 0 for a constant, in the order of the constants tuple. One parent argument may map to
  * multiple child arguments, in which case parent indices are repeated.
@@ -144,10 +151,10 @@ struct s_Service {
  * NOTE: If some parent argument positions are missing from argumentMap, those arguments will not be
  * updated by this service. This typically occurs when the permute service is a child of a join service.
  * 
- * NOTE: If child arguments are missing from the argumentMap, the resulting tuples may not be unique.
+ * NOTE: If child arguments are missing from the argumentMap, the tuples of the permute service may not be unique.
  */
 Service * CreatePermuteService(
-	size8 nArguments, Tuple const * constants, index8 const * argumentMap, Service * childService);
+	size8 nArguments, TypedTuple const * constants, index8 const * argumentMap, Service * childService);
 
 /**
  * Create a machine code service
@@ -155,13 +162,15 @@ Service * CreatePermuteService(
 Service * CreateMachineService(size8 nArguments, MachineServiceProvider * provider, void * providerData);
 
 /**
- * Setup a join service from two existing child services. The left child service
+ * Setup a JOIN service from two existing child services. The left child service
  * will execute first, and may determine input arguments for right child service.
  * The two child services must take the same arguments, in the same order.
  */
 Service * CreateJoinService(Service * leftChild, Service * rightChild);
 
-
+/**
+ * Setup a UNION service, returning the union of two relations.
+ */
 Service * CreateUnionService(Service * first, Service * second);
 
 /**
@@ -173,7 +182,6 @@ Service * CreateDeduplicateService(Service * childService);
  * Acquire a reference to a service.
  */
 void AcquireService(Service * service);
-
 
 /**
  * Remove one reference to the given service, deallocate if references reach zero.
@@ -187,19 +195,18 @@ void ReleaseService(Service * service);
  * Sub-services will have their own execution contexts, which are initialized
  * as necessary.
  */
-typedef struct s_ServiceContext {
+struct s_ServiceContext {
 	Service const * service;
-	Tuple * arguments;
+	Atom * arguments;
 	byte data[];
-} ServiceContext;
-
+};
 
  /**
   * Create and return an execution context for evaluating a service
   * with the given arguments tuple. Each ServiceCall() to this context
   * will write its result into the arguments tuple.
   */
-ServiceContext * ServiceCreateContext(Service const * service, Tuple * arguments);
+ServiceContext * ServiceCreateContext(Service const * service, Atom arguments[]);
 
 /**
  * Execute a service with a given context. Returns true if a tuple was produced,
@@ -213,7 +220,16 @@ bool ServiceCall(ServiceContext * context);
  */
 void ServiceFreeContext(ServiceContext * context);
 
+/**
+ * Initialize a service context, perform one call, and terminate.
+ * The service must produce at most one tuple for the given arguments.
+ * Return true if a tuple was produced.
+ */
+bool ServiceCallOnce(Service const * service, Atom arguments[]);
 
+/**
+ * Print service information.
+ */
 void PrintService(Service const * service);
 
 

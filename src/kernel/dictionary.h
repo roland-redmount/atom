@@ -5,14 +5,14 @@
 #ifndef DICTIONARY_H
 #define DICTIONARY_H
 
-#include "kernel/tuple.h"
-#include "lang/Atom.h"
+#include "kernel/typedtuple.h"
+#include "lang/Formula.h"
 #include "btree/btree.h"
 
 // This structure uniquely defines a dictionary entry
 typedef struct  s_DictionaryEntry {
 	Atom clauseForm;
-	Tuple * tuple;
+	TypedTuple * tuple;
 } DictionaryEntry;
 
 
@@ -26,7 +26,7 @@ void TeardownDictionary(void);
 /**
  * Add a clause (formula) to the dictionary.
  */
-DictionaryEntry DictionaryAddClause(Atom clause);
+DictionaryEntry DictionaryAddClause(Formula const * clause);
 
 /**
  * Parse a string into a clause (formula) and add it to the dictionary.
@@ -56,7 +56,7 @@ void DictionaryIterate(Atom clauseForm, DictionaryIterator * iterator);
 
 bool DictionaryIteratorNext(DictionaryIterator * iterator);
 
-Tuple const * DictionaryIteratorPeekActors(DictionaryIterator * iterator);
+TypedTuple const * DictionaryIteratorPeekActors(DictionaryIterator * iterator);
 
 void DictionaryIteratorEnd(DictionaryIterator * iterator);
 

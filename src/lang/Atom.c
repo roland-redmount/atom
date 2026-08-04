@@ -1,5 +1,6 @@
 
-#include "lang/Atom.h"
+#include "kernel/ifact.h"
+#include "lang/name.h"
 
 
 int8 CompareAtoms(Atom atom1, Atom atom2)
@@ -16,6 +17,21 @@ static void shiftAtomsArrayLeft(Atom * atoms, uint8 nDatums, uint8 steps)
 {
 	for(index8 i = 0; i < nDatums - steps; i++)
 		atoms[i] = atoms[i + steps];
+}
+
+
+static int8 quickSortCompareAtoms(void const * item1, void const * item2, size32 itemSize)
+{
+	ASSERT(itemSize = sizeof(Atom));
+	Atom atom1 = *((const Atom *) item1);
+	Atom atom2 = *((const Atom *) item2);
+	return CompareAtoms(atom1, atom2);
+}
+
+
+void SortAtoms(Atom atoms[], size32 nAtoms)
+{
+	QuickSort(atoms, nAtoms, sizeof(Atom), quickSortCompareAtoms);
 }
 
 
@@ -38,4 +54,34 @@ uint8 ReduceAtomsArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms)
 		}
 	}
 	return nAtoms;
+}
+
+
+void AcquireAtom(Atom atom, byte atomType)
+{
+	switch(atomType) {
+		case AT_ID:
+		IFactAcquire(atom);
+		break;
+
+		case AT_NAME:
+		NameAcquire(atom);
+		break;
+
+		// else nothing to do
+	}
+}
+
+
+void ReleaseAtom(Atom atom, byte atomType)
+{
+	switch(atomType) {
+		case AT_ID:
+		IFactRelease(atom);
+		break;
+
+		case AT_NAME:
+		NameRelease(atom);
+		break;
+	}
 }

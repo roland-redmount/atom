@@ -12,6 +12,7 @@
 				"isDefault": true
 			},
 			"presentation": {
+				"clear": true,
 				"reveal": "always"
 			},
 			"problemMatcher": "$gcc"
@@ -25,6 +26,7 @@
 				"isDefault": false
 			},
 			"presentation": {
+				"clear": true,
 				"reveal": "always"
 			},
 			"problemMatcher": "$gcc"
@@ -38,6 +40,7 @@
 				"isDefault": false
 			},
 			"presentation": {
+				"clear": true,
 				"reveal": "always"
 			},
 			"problemMatcher": "$gcc"
@@ -51,6 +54,7 @@
 				"isDefault": false
 			},
 			"presentation": {
+				"clear": true,
 				"reveal": "always"
 			},
 			"problemMatcher": "$gcc"

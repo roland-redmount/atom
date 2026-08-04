@@ -1,70 +1,107 @@
+#include "kernel/Parameter.h"
 #include "kernel/service.h"
 #include "kernel/ifact.h"
+#include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
-#include "lang/Formula.h"
+#include "lang/name.h"
+#include "lang/PredicateForm.h"
 #include "library/math.h"
 #include "memory/allocator.h"
 #include "parser/PredicateBuilder.h"
 
 
+#define ADD1_INDEX		0
+#define ADD2_INDEX		1
+// etc ...
+#define N_SERVICES 		2
+
+
+#define ADD_RELATION	0
+// ...
+#define N_RELATIONS		1
+
+#define MAX_RELATION_ARITY	3
+
+
+// List of created relation tables
+// These are needed by MathTeardown()
+RelationTable const * mathRelations[N_RELATIONS];
+
+// Precomputed argument indexes, in "reference" order
+// TODO: This is similar to kernel.corePredicateRoleIndex,
+// we should have a more general mechanism for handling "user order"
+static index8 relationArgumentIndex[N_RELATIONS][MAX_RELATION_ARITY];
+
 /**
- * The service (= z>INT + x<INT + y<INT)
+ * The service (+ x<INT + y<INT = z>INT )
  */
 static void add1(ServiceContext * context)
 {
-	// TODO: how to index into the tuple reliably?
-	// Currently we are hardcoding canonical positions of the x, y, z roles
-	int64 x = TupleGetAtom(context->arguments, 1)._int;
-	int64 y = TupleGetAtom(context->arguments, 2)._int;
-	// TODO: typed services really should not have to write argument types ...
-	TupleSetElement(context->arguments, 0, CreateTypedAtom(AT_INT, (Atom) {._int = x + y}));
+	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
+	int64 x = context->arguments[argumentIndex[0]]._int;
+	int64 y = context->arguments[argumentIndex[1]]._int;
+	context->arguments[argumentIndex[2]]._int = x + y;
+}
+
+static void setupAdd1(void)
+{
+	// Argument indices w.r.t. "user order" (+ + =)
+	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
+	byte parameterIO[3];
+	parameterIO[argumentIndex[0]] = PARAMETER_IN;
+	parameterIO[argumentIndex[1]] = PARAMETER_IN;
+	parameterIO[argumentIndex[2]] = PARAMETER_OUT;
+
+	Service * service = CreateMachineService(3, &mathServiceProvider, (void *) ADD1_INDEX);
+	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, service);
+	ReleaseService(service);
 }
 
 /**
- * The service (= z<INT + x<INT + y>INT)
+ * The service (+ x<INT + y>INT = z<INT)
  * This implements subtraction by solving the equation
  * z = x + y  <->  y = z - x
  */
 static void add2(ServiceContext * context)
 {
-	int64 x = TupleGetAtom(context->arguments, 1)._int;
-	int64 z = TupleGetAtom(context->arguments, 0)._int;
-	TupleSetElement(context->arguments, 2, CreateTypedAtom(AT_INT, (Atom) {._int = z - x}));
+	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
+	int64 x = context->arguments[argumentIndex[0]]._int;
+	int64 z = context->arguments[argumentIndex[2]]._int;
+	context->arguments[argumentIndex[1]]._int = z - x;
+}
+
+
+static void setupAdd2(void)
+{
+	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
+	byte parameterIO[3];
+	// add2() reads x and z and computes y, so y is the output
+	parameterIO[argumentIndex[0]] = PARAMETER_IN;
+	parameterIO[argumentIndex[1]] = PARAMETER_OUT;
+	parameterIO[argumentIndex[2]] = PARAMETER_IN;
+
+	Service * service = CreateMachineService(3, &mathServiceProvider, (void *) ADD2_INDEX);
+	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, service);
+	ReleaseService(service);	
+	// mathServices[ADD2_INDEX] = record;
 }
 
 /**
  * Lookup table for service functions.
  * We need this since we cannot store a function pointer directly in void * providerData
+ * (due to text/data segment issues)
  */
-
-#define ADD1_INDEX		0
-#define ADD2_INDEX		1
-// etc ...
-
-#define N_SERVICES 		2
-
 typedef void (*MathFunction)(ServiceContext * context);
-
-MathFunction functionTable[N_SERVICES] = {
-	&add1,
-	&add2,
-};
-
-// List of corresponding service record (keys)
-// These are needed by MathTeardown()
-ServiceRecord mathServices[N_SERVICES];
-
-
-/**
- * TODO: Argument index table, initialized during setup 
- */
-#define MAX_N_ARGUMENTS 3
-// index8 argumentIndexTable[N_SERVICES][MAX_N_ARGUMENTS];
 
 typedef struct s_MathContext {
 	MathFunction function;
 	bool hasBeenCalled;
 } MathContext;
+
+MathFunction functionTable[N_SERVICES] = {
+	&add1,
+	&add2,
+};
 
 
 /**
@@ -103,43 +140,33 @@ MachineServiceProvider mathServiceProvider = {
 };
 
 
-static void setupAdd1(void)
-{
-	// NOTE: this must be in canonical order and arguments numbered accordingly
-	Atom formula = CStringToPredicate("= @1>INT + @2<INT + @3<INT");
-	// PrintFormula(formula);
-	// PrintChar('\n');
-	// PredicateRoleIndex(form, roles[j]);
-
-	ServiceRecord record = {
-		.form = FormulaGetForm(formula),
-		.parameters = FormulaGetActors(formula),
-		.service = CreateMachineService(3, &mathServiceProvider, (void *) ADD1_INDEX)
-	};
-	RegistryAddService(&record);
-	ReleaseService(record.service);
-	mathServices[ADD1_INDEX] = record;
-	IFactRelease(formula);
-}
-
-
-static void setupAdd2(void)
-{
-	Atom formula = CStringToPredicate("= @1<INT + @2<INT + @3>INT");
-	ServiceRecord record = {
-		.form = FormulaGetForm(formula),
-		.parameters = FormulaGetActors(formula),
-		.service = CreateMachineService(3, &mathServiceProvider, (void *) ADD2_INDEX)
-	};
-	RegistryAddService(&record);
-	ReleaseService(record.service);
-	mathServices[ADD2_INDEX] = record;
-	IFactRelease(formula);
-}
-
-
 void MathSetup(void)
 {
+	// Create forms and setup argument indices
+	Atom plus = CreateNameFromCString("+");
+	Atom equals = CreateNameFromCString("=");
+	Atom addForm = CreatePredicateForm((Atom[]) {plus, plus, equals}, 3);
+	NameRelease(plus);
+	NameRelease(equals);
+	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
+	// Map roles in our "user order" (+ + =) to canonical order
+	argumentIndex[0] = PredicateRoleIndex(addForm, plus);
+	argumentIndex[1] = argumentIndex[0] + 1;
+	argumentIndex[2] = PredicateRoleIndex(addForm, equals);
+
+	// create relation tables
+	byte atomTypes[3];
+	atomTypes[argumentIndex[0]] = AT_INT;
+	atomTypes[argumentIndex[1]] = AT_INT;
+	atomTypes[argumentIndex[2]] = AT_INT;
+	// NOTE: no particular column index order here
+	mathRelations[ADD_RELATION] = CreateRelationTable(0, addForm, 3, atomTypes, 0);
+	// the table must be registered for dispatch to find it
+	RelationRegistryAdd(mathRelations[ADD_RELATION]);
+	// the table acquired its own reference to the form
+	IFactRelease(addForm);
+
+	// setup services
 	setupAdd1();
 	setupAdd2();
 }
@@ -147,6 +174,8 @@ void MathSetup(void)
 
 void MathTeardown(void)
 {
-	for(index32 i = 0; i < N_SERVICES; i++)
-		RegistryRemoveService(&mathServices[i]);
+	for(index32 i = 0; i < N_RELATIONS; i++) {
+		ServiceRegistryRemoveAll(mathRelations[i]);
+		RelationRegistryRemove(mathRelations[i]);
+	}
 }

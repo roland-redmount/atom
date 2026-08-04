@@ -107,6 +107,7 @@ static void freeNodeRecursive(BTree * btree, BTreeNode * node)
 
 void BTreeFree(BTree * btree)
 {
+	ASSERT(!BTreeIsWriteLocked(btree))
 	freeNodeRecursive(btree, btree->root);
 	btreeFree(btree->spareItem);
 	btreeFree(btree);
@@ -128,32 +129,32 @@ void BTreeWriteUnlock(BTree * btree)
 
 bool BTreeIsWriteLocked(BTree const * btree)
 {
-	return btree->writeLockCount >0;
+	return btree->writeLockCount > 0;
 }
 
 
-bool BTreeLock(BTree * btree)
-{
-	if(!btree->readLocked) {
-		btree->readLocked = true;
-		return true;
-	}
-	else
-		return false;
-}
+// bool BTreeLock(BTree * btree)
+// {
+// 	if(!btree->readLocked) {
+// 		btree->readLocked = true;
+// 		return true;
+// 	}
+// 	else
+// 		return false;
+// }
 
 
-void BTreeUnlock(BTree * btree)
-{
-	ASSERT(btree->readLocked);
-	btree->readLocked = false;
-}
+// void BTreeUnlock(BTree * btree)
+// {
+// 	ASSERT(btree->readLocked);
+// 	btree->readLocked = false;
+// }
 
 
-bool BTreeIsLocked(BTree const * btree)
-{
-	return btree->readLocked;
-}
+// bool BTreeIsLocked(BTree const * btree)
+// {
+// 	return btree->readLocked;
+// }
 
 
 size32 BTreeHeight(BTree const * btree)
@@ -204,11 +205,11 @@ void * BTreePeekItem(BTree * btree, void const * keyItem)
 }
 
 
-bool BTreeGetItem(BTree * btree, void * key)
+bool BTreeGetItem(BTree * btree, void const * key, void * item)
 {
-	void * item = BTreePeekItem(btree, key);
-	if(item) {
-		CopyMemory(item, key, btree->itemSize);
+	void * btreeItem = BTreePeekItem(btree, key);
+	if(btreeItem) {
+		CopyMemory(btreeItem, item, btree->itemSize);
 		return true;
 	}
 	else
@@ -312,6 +313,8 @@ static void splitChildNode(BTree const * btree, BTreeNode * parent, index32 chil
 
 BTreeInsertResult BTreeInsert(BTree * btree, void const * item)
 {
+	ASSERT(!BTreeIsWriteLocked(btree))
+
 	// insert a new item into a leaf node, possibly splitting parent nodes
 	BTreeNode * node = btree->root;
 	if(node->nItems == 0) {
@@ -456,7 +459,8 @@ typedef enum {
 } SearchMode;
 
 
-static BTreeDeleteResult btreeDeleteRecursive(BTree * btree, BTreeNode * node, SearchMode searchMode, void * item)
+static BTreeDeleteResult btreeDeleteRecursive(
+	BTree * btree, BTreeNode * node, SearchMode searchMode, void const * key, void * item)
 {
 	while(true) {
 		// find the appropriate pivot item, depending on searchMode
@@ -464,11 +468,11 @@ static BTreeDeleteResult btreeDeleteRecursive(BTree * btree, BTreeNode * node, S
 		bool match;
 		switch(searchMode) {
 		case BTREE_KEY:
-			pivotIndex = searchNodeItems(btree, node, item);
+			pivotIndex = searchNodeItems(btree, node, key);
 			if(pivotIndex < node->nItems) {
 				void * pivotItem = nodeGetItem(btree, node, pivotIndex);
 				// TODO: do we really need to compare the item here?
-				match = btree->compareItems(item, pivotItem, btree->itemSize) == 0;
+				match = btree->compareItems(key, pivotItem, btree->itemSize) == 0;
 			}
 			else
 				match = false;
@@ -483,8 +487,8 @@ static BTreeDeleteResult btreeDeleteRecursive(BTree * btree, BTreeNode * node, S
 			break;
 		}
 		if(match) {
-			// copy matching item
-			CopyMemory(nodeGetItem(btree, node, pivotIndex), item, btree->itemSize);
+			if(item)
+				CopyMemory(nodeGetItem(btree, node, pivotIndex), item, btree->itemSize);
 			if(isLeaf(node)) {
 				nodeDeleteItem(btree, node, pivotIndex);
 				btree->nItemsTotal--;
@@ -498,7 +502,7 @@ static BTreeDeleteResult btreeDeleteRecursive(BTree * btree, BTreeNode * node, S
 					// recursively delete the last item from the left child subtree,
 					// (which is the item immediately preceding the key)
 					// and replace the key item with it.
-					ASSERT(btreeDeleteRecursive(btree, leftChild, BTREE_MAX, btree->spareItem) == BTREE_DELETED);
+					ASSERT(btreeDeleteRecursive(btree, leftChild, BTREE_MAX, 0, btree->spareItem) == BTREE_DELETED);
 					nodeWriteItem(btree, node, pivotIndex, btree->spareItem);
 					return BTREE_DELETED;
 				}
@@ -507,7 +511,7 @@ static BTreeDeleteResult btreeDeleteRecursive(BTree * btree, BTreeNode * node, S
 					// recursively delete the last item from the right child subtree,
 					// (which is the item immediately succeding the key)
 					// and replace the key item with it.
-					ASSERT(btreeDeleteRecursive(btree, rightChild, BTREE_MIN, btree->spareItem) == BTREE_DELETED);
+					ASSERT(btreeDeleteRecursive(btree, rightChild, BTREE_MIN, 0, btree->spareItem) == BTREE_DELETED);
 					nodeWriteItem(btree, node, pivotIndex, btree->spareItem);
 					// recursively delete the first item from the right child subtree
 					return BTREE_DELETED;
@@ -516,7 +520,7 @@ static BTreeDeleteResult btreeDeleteRecursive(BTree * btree, BTreeNode * node, S
 				// merge the right child (subtree) into the left
 				mergeChildNodes(btree, node, pivotIndex);
 				// recursively delete the key item from the merged (left) child
-				ASSERT(btreeDeleteRecursive(btree, leftChild, BTREE_KEY, item) == BTREE_DELETED);
+				ASSERT(btreeDeleteRecursive(btree, leftChild, BTREE_KEY, key, item) == BTREE_DELETED);
 				return BTREE_DELETED;
 			}
 		}
@@ -559,14 +563,16 @@ static BTreeDeleteResult btreeDeleteRecursive(BTree * btree, BTreeNode * node, S
 }
 
 
-BTreeDeleteResult BTreeDelete(BTree * btree, void * item)
+BTreeDeleteResult BTreeDelete(BTree * btree, void const * key, void * item)
 {
-	return btreeDeleteRecursive(btree, btree->root, BTREE_KEY, item);
+	ASSERT(!BTreeIsWriteLocked(btree))
+	return btreeDeleteRecursive(btree, btree->root, BTREE_KEY, key, item);
 }
 
 
 void BTreeClear(BTree * btree)
 {
+	ASSERT(!BTreeIsWriteLocked(btree))
 	freeNodeRecursive(btree, btree->root);
 	// create new root node
 	btree->root = createNode();
