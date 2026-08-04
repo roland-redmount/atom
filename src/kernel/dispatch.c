@@ -95,7 +95,9 @@ static bool permutationMatch(
 }
 
 
-bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRecord * record, index8 * permutation)
+bool DispatchQueryAt(
+	Atom queryTermForm, TypedTuple const * queryActors, ServiceRecord * record,
+	index8 * permutation, index8 skip, bool * hasMore)
 {
 	ASSERT(IsTermForm(queryTermForm))
 	// TODO: currently, the service registry only supports non-negated predicates
@@ -103,10 +105,22 @@ bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRe
 	Atom predicateForm = TermFormGetPredicateForm(queryTermForm);
 
 	bool match = false;
-	// Iterate over relations matching the form
+	bool done = false;
+	// Number of matches seen so far, whether skipped or returned
+	index8 nMatches = 0;
+	if(hasMore)
+		*hasMore = false;
+	// permutationMatch() overwrites its permutation argument on every match,
+	// so probe into a scratch array to avoid clobbering the returned one.
+	size8 termArity = queryActors->nAtoms;
+	index8 candidatePermutation[termArity];
+
+	// Iterate over relations matching the form.
+	// NOTE: this iteration order must be deterministic, as the compiler
+	// identifies a choice point by the position of its match in this sequence.
 	RelationIterator relationIterator;
 	RelationRegistryIterate(predicateForm, &relationIterator);
-	while(!match && RelationIteratorNext(&relationIterator)) {
+	while(!done && RelationIteratorNext(&relationIterator)) {
 		RelationTable const * relation = RelationIteratorGet(&relationIterator);
 
 		// Iterate over candidate services for the relation table
@@ -114,13 +128,25 @@ bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRe
 		// atom types are compatible with the query, and only then iterate over services.
 		ServiceIterator serviceIterator;
 		ServiceRegistryIterate(relation, &serviceIterator);
-		while(ServiceIteratorNext(&serviceIterator)) {
+		while(!done && ServiceIteratorNext(&serviceIterator)) {
 			ServiceRecord const * currentRecord = ServiceIteratorPeekRecord(&serviceIterator);
-			if(permutationMatch(predicateForm, relation->atomTypes, currentRecord->parameterIO, queryActors, permutation)) {
+			if(!permutationMatch(
+				predicateForm, relation->atomTypes, currentRecord->parameterIO,
+				queryActors, candidatePermutation))
+				continue;
+
+			if(match) {
+				// a further match exists beyond the one we returned
+				*hasMore = true;
+				done = true;
+			}
+			else if(nMatches++ >= skip) {
 				match = true;
-				// copy the record to the caller
+				// copy the record and its permutation to the caller
 				*record = *currentRecord;
-				break;
+				CopyMemory(candidatePermutation, permutation, termArity * sizeof(index8));
+				// without a hasMore request we can stop at the first match
+				done = (hasMore == 0);
 			}
 		}
 		ServiceIteratorEnd(&serviceIterator);
@@ -128,6 +154,12 @@ bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRe
 	RelationIteratorEnd(&relationIterator);
 
 	return match;
+}
+
+
+bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRecord * record, index8 * permutation)
+{
+	return DispatchQueryAt(queryTermForm, queryActors, record, permutation, 0, 0);
 }
 
 
