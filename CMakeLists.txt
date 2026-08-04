@@ -95,6 +95,7 @@ add_library(atom SHARED
     # src/kernel/pair.c
     src/kernel/Parameter.c
     src/kernel/RelationBTree.c
+    src/kernel/RelationRegistry.c
     src/kernel/RelationTable.c
     src/kernel/service.c
     src/kernel/ServiceRegistry.c
@@ -163,6 +164,7 @@ set(ATOM_TESTS_TIER1        # core data structures, language elements
     test_multiset
     test_parsing
     test_relation_btree
+    test_relation_registry
     test_service
     test_service_registry
     test_string

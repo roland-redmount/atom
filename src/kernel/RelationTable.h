@@ -153,14 +153,8 @@ byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], u
 
 // void RelationTableRemoveIFactTuples(RelationTable const * table, Atom idAtom, uint8 idPosition);
 
-/**
- * Print out an entire relation table, for debugging
- * 
- * NOTE: this requires querying, should be part of a service provider?
- * Or should we treat queries without variables ("check tuple") differently,
- * as part of the table functionality?
- */
-void RelationTableDump(RelationTable const * table);
+// NOTE: RelationTableDump() is declared in ServiceRegistry.h, since dumping a
+// table requires a service to enumerate its tuples.
 
 
 #endif	// RELATION_TABLE_H

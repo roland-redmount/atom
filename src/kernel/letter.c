@@ -5,7 +5,6 @@
 #include "lang/Variable.h"
 #include "kernel/letter.h"
 #include "kernel/ifact.h"
-#include "kernel/ServiceRegistry.h"
 
 
 /**

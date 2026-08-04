@@ -1,6 +1,7 @@
 #include "kernel/Parameter.h"
 #include "kernel/service.h"
 #include "kernel/ifact.h"
+#include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
@@ -169,5 +170,5 @@ void MathSetup(void)
 void MathTeardown(void)
 {
 	for(index32 i = 0; i < N_RELATIONS; i++)
-		RegistryRemoveRelationTable(mathRelations[i]);
+		RelationRegistryRemove(mathRelations[i]);
 }

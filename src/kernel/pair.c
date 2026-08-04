@@ -3,7 +3,6 @@
 #include "kernel/pair.h"
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
-#include "kernel/ServiceRegistry.h"
 #include "lang/PredicateForm.h"
 
 static void pairSetTuple(TypedTuple * tuple, TypedAtom pair, TypedAtom left, TypedAtom right)

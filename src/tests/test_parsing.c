@@ -3,7 +3,6 @@
 #include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
-#include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"

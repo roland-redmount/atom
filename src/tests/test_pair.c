@@ -2,7 +2,6 @@
 #include "kernel/UInt.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
-#include "kernel/ServiceRegistry.h"
 #include "kernel/pair.h"
 #include "testing/testing.h"
 

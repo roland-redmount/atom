@@ -4,7 +4,6 @@
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
-#include "kernel/ServiceRegistry.h"
 #include "lang/TypedAtom.h"
 #include "lang/Formula.h"
 

@@ -3,7 +3,6 @@
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
-#include "kernel/ServiceRegistry.h"
 #include "kernel/multiset.h"
 #include "kernel/tuple.h"
 #include "lang/Atom.h"

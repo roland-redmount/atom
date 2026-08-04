@@ -6,7 +6,7 @@
 #include "kernel/kernel.h"
 #include "kernel/lookup.h"
 #include "kernel/multiset.h"
-#include "kernel/ServiceRegistry.h"
+#include "kernel/RelationRegistry.h"
 
 
 Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
@@ -24,7 +24,7 @@ Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
 	AddMultisetToIFactFromArrays(&draft, uniqueTermForms, multiplicities, nUniqueTermForms, AT_ID);
 
 	// (clause-form @form)
-	RelationTable const * clauseFormTable = FindRelationTable(
+	RelationTable const * clauseFormTable = RelationRegistryFind(
 		GetCorePredicateForm(FORM_CLAUSE_FORM),
 		1, (byte[]) {AT_ID}
 	);	

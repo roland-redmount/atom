@@ -5,7 +5,6 @@
 #include "kernel/list.h"
 #include "kernel/letter.h"
 #include "kernel/lookup.h"
-#include "kernel/ServiceRegistry.h"
 
 #include "testing/testing.h"
 

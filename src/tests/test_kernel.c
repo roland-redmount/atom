@@ -3,7 +3,7 @@
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
 #include "lang/name.h"
-#include "kernel/ServiceRegistry.h"
+#include "kernel/RelationRegistry.h"
 #include "kernel/string.h"
 #include "lang/PredicateForm.h"
 #include "memory/allocator.h"
@@ -20,7 +20,7 @@ void testAssertRetract(void)
 	NameRelease(roles[1]);
 	
 	// check that relation table does not already exist
-	ASSERT_NULL(FindRelationTable(form, 2, atomTypes))
+	ASSERT_NULL(RelationRegistryFind(form, 2, atomTypes))
 	
 	// asserting the first fact should create the service
 	Atom barf = CreateStringFromCString("barf");
@@ -33,7 +33,7 @@ void testAssertRetract(void)
 	);
 	AssertFact(form, actors1, 0);
 
-	RelationTable const * relation = FindRelationTable(form, 2, atomTypes);
+	RelationTable const * relation = RelationRegistryFind(form, 2, atomTypes);
 	ASSERT_NOT_NULL(relation)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(relation), 1)
 
@@ -53,7 +53,7 @@ void testAssertRetract(void)
 
 	// retracting the last fact should remove the service
 	RetractFact(form, actors1);
-	ASSERT_NULL(FindRelationTable(form, 2, atomTypes))
+	ASSERT_NULL(RelationRegistryFind(form, 2, atomTypes))
 	
 	FreeTypedTuple(actors1);
 	FreeTypedTuple(actors2);

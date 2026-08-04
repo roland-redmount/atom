@@ -8,7 +8,9 @@
 #include "kernel/ifact.h"
 #include "kernel/Parameter.h"
 #include "kernel/RelationBTree.h"
+#include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
+#include "kernel/ServiceRegistry.h"
 #include "kernel/typedtuple.h"
 #include "lang/TypedAtom.h"
 #include "lang/Variable.h"
@@ -415,7 +417,7 @@ RelationTable const * CreateRelationBTreeWithServices(
 {
 	// Create the B-tree storage and register as relation table
 	RelationTable const * table = CreateRelationTable(&btreeTableProvider, form, nColumns, atomTypes, indexColumns);
-	RegistryAddRelationTable(table);
+	RelationRegistryAdd(table);
 	
 	RelationBTree * relation = table->storage;
 

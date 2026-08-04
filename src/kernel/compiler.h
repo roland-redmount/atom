@@ -3,7 +3,7 @@
 #ifndef	COMPILER_H
 #define COMPILER_H
 
-#include "kernel/ServiceRegistry.h"
+#include "kernel/service.h"
 #include "lang/Formula.h"
 
 /**

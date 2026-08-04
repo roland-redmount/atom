@@ -1,16 +1,12 @@
 
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/multiset.h"
 #include "kernel/Parameter.h"
 #include "kernel/RelationBTree.h"
+#include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
-#include "lang/ConjunctionForm.h"
-#include "lang/Variable.h"
-#include "memory/allocator.h"
 #include "parser/PredicateBuilder.h"
-#include "parser/ConjunctionBuilder.h"
 #include "testing/testing.h"
 
 
@@ -19,6 +15,7 @@
 struct {
 	Atom form;		// a form
 	byte atomTypes[EXAMPLE_FORM_ARITY];
+	RelationTable const * table;
 } fixture;
 
 
@@ -30,34 +27,26 @@ static void setupFixture(void)
 	SetMemory(fixture.atomTypes, EXAMPLE_FORM_ARITY, AT_INT);
 	IFactAcquire(fixture.form);
 	FreeFormula(formula);
+
+	// services are registered per relation table, so we need one to test with
+	fixture.table = CreateRelationTable(
+		&btreeTableProvider, fixture.form, EXAMPLE_FORM_ARITY,
+		fixture.atomTypes, 0
+	);
+	RelationRegistryAdd(fixture.table);
 }
 
 
 static void teardownFixture(void)
 {
+	RelationRegistryRemove(fixture.table);
 	IFactRelease(fixture.form);
 }
 
 
-void testAddRemoveRelation(void)
+void testAddRemoveService(void)
 {
 	setupFixture();
-	size32 nTablesInitial = RegistryNRelations();
-
-	RelationTable const * createdTable = CreateRelationTable(
-		&btreeTableProvider, fixture.form, EXAMPLE_FORM_ARITY,
-		fixture.atomTypes, 0
-	);
-	ASSERT_UINT32_EQUAL(createdTable->nColumns, EXAMPLE_FORM_ARITY)
-
-	// Add relation table to the registry
-	RegistryAddRelationTable(createdTable);
-	ASSERT_UINT32_EQUAL(RegistryNRelations(), nTablesInitial + 1)
-
-	ASSERT_PTR_EQUAL(
-		FindRelationTable(fixture.form, EXAMPLE_FORM_ARITY, fixture.atomTypes),
-		createdTable
-	)
 
 	// Add a dummy service to the relation table
 	MachineServiceProvider dummyProvider = {
@@ -71,25 +60,19 @@ void testAddRemoveRelation(void)
 	Service * service = CreateMachineService(EXAMPLE_FORM_ARITY, &dummyProvider, 0);
 	byte parameterIO[EXAMPLE_FORM_ARITY] = {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT};
 	ASSERT_INT32_EQUAL(service->referenceCount, 1)
-	RelationAddService(createdTable, parameterIO, service);
+	RelationAddService(fixture.table, parameterIO, service);
 	ASSERT_INT32_EQUAL(service->referenceCount, 2)
 
 	ASSERT_PTR_EQUAL(
-		RegistryFindService(createdTable, parameterIO),
+		RegistryFindService(fixture.table, parameterIO),
 		service
 	);
 
 	// Remove the service
-	RelationRemoveService(createdTable, service);
+	RelationRemoveService(fixture.table, service);
 	ASSERT_INT32_EQUAL(service->referenceCount, 1)
 	ReleaseService(service);
 
-	// Remove the table
-	RegistryRemoveRelationTable(createdTable);
-	ASSERT_UINT32_EQUAL(RegistryNRelations(), nTablesInitial)
-
-	ASSERT_NULL(FindRelationTable(fixture.form, EXAMPLE_FORM_ARITY, fixture.atomTypes));
-	
 	teardownFixture();
 }
 
@@ -98,7 +81,7 @@ int main(void)
 {
 	KernelInitialize();
 
-	ExecuteTest(testAddRemoveRelation);
+	ExecuteTest(testAddRemoveService);
 
 	KernelShutdown();
 

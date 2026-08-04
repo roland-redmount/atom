@@ -11,6 +11,7 @@
 #include "kernel/Parameter.h"
 #include "kernel/RelationBTree.h"
 #include "kernel/RelationTable.h"
+#include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
@@ -362,7 +363,7 @@ RelationTable const * GetCoreRelationTable(index32 relationId)
 	byte atomTypes[CORE_FORMS_MAX_ARITY];
 	CoreFormSetByteArray(coreRelationFormId[relationId], coreRelationAtomTypes[relationId], atomTypes);
 	index32 formId = coreRelationFormId[relationId];
-	return FindRelationTable(
+	return RelationRegistryFind(
 		kernel.corePredicateForms[formId],
 		corePredicateArity[formId],
 		atomTypes
@@ -607,7 +608,8 @@ static void setupCoreServices(void)
 void KernelInitialize(void)
 {
 	SetupMemory();
-	SetupRegistry();
+	SetupRelationRegistry();
+	SetupServiceRegistry();
 	InitializeLookup();
 	InitializeIFacts();
 	SetupDictionary();
@@ -658,7 +660,7 @@ void KernelShutdown(void)
 	for(index32 relationId = N_CORE_RELATIONS; relationId > RELATION_PREDICATE_FORM; relationId--) {
 		RelationRemoveAllServices(kernel.coreRelations[relationId]);
 		// This releases the associated form
-		RegistryRemoveRelationTable(kernel.coreRelations[relationId]);
+		RelationRegistryRemove(kernel.coreRelations[relationId]);
 	}
 
 	/**
@@ -694,7 +696,7 @@ void KernelShutdown(void)
 
 	for(index32 relationId = RELATION_PREDICATE_FORM; relationId >= RELATION_MULTISET_NAME; relationId--) {
 		RelationRemoveAllServices(kernel.coreRelations[relationId]);
-		RegistryRemoveRelationTable(kernel.coreRelations[relationId]);
+		RelationRegistryRemove(kernel.coreRelations[relationId]);
 	}
 
 	// Verify ifact counts
@@ -710,7 +712,8 @@ void KernelShutdown(void)
 	TeardownDictionary();
 	FreeIFacts();
 	FreeLookup();
-	FreeRegistry();
+	FreeServiceRegistry();
+	FreeRelationRegistry();
 	FreeNameStorage();
 	CleanupMemory();
 }
@@ -723,7 +726,7 @@ void AssertFact(Atom predicateForm, TypedTuple const * actors, uint8 idPosition)
 	// NOTE: currently we only support creating predicates
 	ASSERT(IsPredicateForm(predicateForm));
 	Atom const * actorsArray = TypedTuplePeekAtoms(actors);
-	RelationTable const * table = FindRelationTable(predicateForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
+	RelationTable const * table = RelationRegistryFind(predicateForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
 	if(table)
 		RelationTableAddTuple(table, actorsArray, idPosition);
 	else {
@@ -736,7 +739,7 @@ void AssertFact(Atom predicateForm, TypedTuple const * actors, uint8 idPosition)
 
 void RetractFact(Atom predicateForm, TypedTuple * actors)
 {
-	RelationTable const * relation = FindRelationTable(predicateForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
+	RelationTable const * relation = RelationRegistryFind(predicateForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
 	// this will not remove defining facts
 	Atom const * actorsArray = TypedTuplePeekAtoms(actors);
 	RelationTableRemoveTuple(relation, actorsArray, 0);

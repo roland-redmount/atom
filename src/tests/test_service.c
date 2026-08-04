@@ -5,7 +5,6 @@
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/multiset.h"
-#include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "kernel/tuple.h"
 #include "lang/Formula.h"

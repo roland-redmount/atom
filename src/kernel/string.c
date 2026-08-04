@@ -7,7 +7,6 @@
 #include "kernel/kernel.h"
 #include "kernel/RelationBTree.h"
 #include "kernel/string.h"
-#include "kernel/ServiceRegistry.h"
 
 
 Atom stringElementGenerator(index32 index, void const * data)

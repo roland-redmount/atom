@@ -1,10 +1,11 @@
 /**
- * The registry keep track of available relations and their services.
- * Dispatch uses the registry to match queries to services.
+ * The service registry keeps track of the services available for each
+ * registered relation. Dispatch uses the registry to match queries to services.
+ * The relations themselves are registered separately; see RelationRegistry.h
  */
 
-#ifndef REGISTRY_H
-#define REGISTRY_H
+#ifndef SERVICE_REGISTRY_H
+#define SERVICE_REGISTRY_H
 
 #include "btree/btree.h"
 #include "kernel/service.h"
@@ -12,22 +13,9 @@
 
 
 /**
- * Setup an empty registry. Called during bootstrapping only.
+ * Setup an empty service registry. Called during bootstrapping only.
  */
-void SetupRegistry(void);
-
-/**
- * Add a relation table to the registry.
- * The registry takes ownership of the relation, and will call FreeRelationTable()
- * upon removal.
- */
-void RegistryAddRelationTable(RelationTable const * relation);
-
-/**
- * Remove a relation table, include all stored tuples (if any), and all associated services.
- * Calls FreeRelationTable()
- */
-void RegistryRemoveRelationTable(RelationTable const * relation);
+void SetupServiceRegistry(void);
 
 /**
  * Associated a service with a relation in the registry.
@@ -47,20 +35,10 @@ void RelationRemoveService(RelationTable const * relation, Service * service);
 void RelationRemoveAllServices(RelationTable const * relation);
 
 /**
- * Locate a relation table for given (form, column types).
- */
-RelationTable const * FindRelationTable(Atom form, size8 nColumns, byte const atomTypes[]);
-
-/**
  * Deallocate the registry. Before calling this function,
- * all relation tables and services must have been removed.
+ * all services must have been removed.
  */
-void FreeRegistry(void);
-
-/**
- * Number of registered relation tables.
- */
-size32 RegistryNRelations(void);
+void FreeServiceRegistry(void);
 
 /**
  * Total number of registered services.
@@ -121,4 +99,4 @@ void RelationTableDump(RelationTable const * table);
 void RegistryDumpServices(void);
 
 
-#endif  // REGISTRY_H
+#endif  // SERVICE_REGISTRY_H

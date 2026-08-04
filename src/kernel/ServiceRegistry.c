@@ -1,58 +1,20 @@
 
 #include "kernel/kernel.h"
-#include "kernel/list.h"
-#include "kernel/lookup.h"
 #include "kernel/Parameter.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/ServiceRegistry.h"
-#include "kernel/UInt.h"
+#include "kernel/tuple.h"
 #include "lang/TypedAtom.h"
 #include "lang/Form.h"
 #include "lang/Formula.h"
-#include "lang/PredicateForm.h"
 #include "memory/allocator.h"
-#include "memory/pool.h"
-#include "util/hashing.h"
-#include "util/ResizingArray.h"
 
 
 /**
- * The registry for both relations and their associated services.
- * We store RelationTable entries in a pool for stable allocation.
+ * The registry of services, as a B-tree storing ServiceRecord items.
+ * The relation tables these records refer to are registered separately;
+ * see RelationRegistry.h
  */
-struct {
-	// B-tree for lookup of relations by form, stores RelationTable * pointers as items
-	BTree * relationBTree;
-	// B-tree storing ServiceRecord items
-	BTree * services;
-} registry;
-
-
-static int8 compareRelations(RelationTable const * relation, RelationTable const * relationOrKey)
-{
-	// First compare forms
-	if(relation->form.hash < relationOrKey->form.hash)
-		return -1;
-	else if(relation->form.hash > relationOrKey->form.hash)
-		return 1;
-	else {
-		// then compare atom types
-		return CompareMemory(relation->atomTypes, relationOrKey->atomTypes, relation->nColumns);
-	}
-}
-
-
-static int8 btreeCompareRelations(void const * item, void const * itemOrKey, size32 itemSize)
-{
-	return compareRelations(*((RelationTable **) item), *((RelationTable **) itemOrKey));
-}
-
-
-static void btreeFreeRelation(void * item, size32 itemSize)
-{
-	RelationTable * relation = *((RelationTable **) item);
-	FreeRelationTable(relation);
-}
+static BTree * services;
 
 
 static void setupServiceRecord(
@@ -101,16 +63,10 @@ static int8 btreeCompareServiceRecords(void const * item, void const * itemOrKey
 }
 
 
-void SetupRegistry(void)
+void SetupServiceRegistry(void)
 {
-	// The lookup B-tree stores pointers to RelationTable records
-	registry.relationBTree = BTreeCreate(
-		sizeof(RelationTable *),
-		btreeCompareRelations,
-		btreeFreeRelation
-	);
 	// mapping relations -> services
-	registry.services = BTreeCreate(
+	services = BTreeCreate(
 		sizeof(ServiceRecord),
 		btreeCompareServiceRecords,
 		btreeFreeServiceRecord
@@ -118,22 +74,9 @@ void SetupRegistry(void)
 }
 
 
-void FreeRegistry(void)
+void FreeServiceRegistry(void)
 {
-	BTreeFree(registry.services);
-	BTreeFree(registry.relationBTree);
-}
-
-
-void RegistryAddRelationTable(RelationTable const * relation)
-{
-	ASSERT(BTreeInsert(registry.relationBTree, &relation) == BTREE_INSERTED)
-}
-
-
-void RegistryRemoveRelationTable(RelationTable const * relation)
-{
-	ASSERT(BTreeDelete(registry.relationBTree, &relation, 0))
+	BTreeFree(services);
 }
 
 
@@ -141,7 +84,7 @@ void RelationAddService(RelationTable const * relation, byte const parameterIO[]
 {
 	ServiceRecord record;
 	setupServiceRecord(&record, relation, parameterIO, service);
-	ASSERT(BTreeInsert(registry.services, &record) == BTREE_INSERTED)
+	ASSERT(BTreeInsert(services, &record) == BTREE_INSERTED)
 	AcquireService(service);
 }
 
@@ -152,7 +95,7 @@ void RelationRemoveService(RelationTable const * relation, Service * service)
 	setupServiceRecord(&key, relation, 0, service);
 	// find the corresponding service record
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, registry.services);
+	BTreeIterate(&iterator, services);
 	ServiceRecord const * record;
 	if(BTreeIteratorSeek(&iterator, &key)) {
 		do {
@@ -165,7 +108,7 @@ void RelationRemoveService(RelationTable const * relation, Service * service)
 	BTreeIteratorEnd(&iterator);
 	// TODO: this will fail if the B-tree is modified concurrently,
 	// invalidating the record pointer.
-	ASSERT(BTreeDelete(registry.services, record, 0) == BTREE_DELETED)
+	ASSERT(BTreeDelete(services, record, 0) == BTREE_DELETED)
 	ReleaseService(service);
 
 	btreeFreeServiceRecord(&key, 0);
@@ -177,8 +120,8 @@ void RelationRemoveAllServices(RelationTable const * relation)
 	ServiceRecord key;
 	setupServiceRecord(&key, relation, 0, 0);
 	ServiceRecord record;
-	while(BTreeGetItem(registry.services, &key, &record)) {
-	ASSERT(BTreeDelete(registry.services, &record, 0) == BTREE_DELETED)
+	while(BTreeGetItem(services, &key, &record)) {
+	ASSERT(BTreeDelete(services, &record, 0) == BTREE_DELETED)
 		ReleaseService(record.service);
 	}
 	btreeFreeServiceRecord(&key, 0);
@@ -186,42 +129,16 @@ void RelationRemoveAllServices(RelationTable const * relation)
 }
 
 
-size32 RegistryNRelations(void)
-{
-	return BTreeNItems(registry.relationBTree);
-}
-
-
 size32 RegistryNServices(void)
 {
-	return BTreeNItems(registry.services);
-}
-
-
-RelationTable const * FindRelationTable(Atom form, size8 nColumns, byte const atomTypes[])
-{
-	// make a copy to maintain const correctness
-	byte atomTypesCopy[nColumns];
-	CopyMemory(atomTypes, atomTypesCopy, nColumns);
-	RelationTable key = {
-		.form = form,
-		.nColumns = nColumns,
-		.atomTypes = atomTypesCopy
-	};
-	// the B-tree item nust be a pointer to the key structure
-	RelationTable *keyPtr = &key;
-	RelationTable ** relationPtr = BTreePeekItem(registry.relationBTree, &keyPtr);
-	if(relationPtr)
-		return *relationPtr;
-	else
-		return 0;
+	return BTreeNItems(services);
 }
 
 
 void RegistryIterate(RelationTable const * table, RegistryIterator * iterator)
 {
 	iterator->table = table;
-	BTreeIterate(&(iterator->btreeIterator), registry.services);
+	BTreeIterate(&(iterator->btreeIterator), services);
 }
 
 
@@ -266,7 +183,7 @@ Service * RegistryFindService(RelationTable const * relation, byte const paramet
 	setupServiceRecord(&key, relation, parameterIO, 0);
 
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, registry.services);
+	BTreeIterate(&iterator, services);
 	Service * service = 0;
 	if(BTreeIteratorSeek(&iterator, &key)) {
 		ServiceRecord * record = BTreeIteratorPeekItem(&iterator);
@@ -335,6 +252,6 @@ void RelationTableDump(RelationTable const * table)
 
 void RegistryDumpServices(void)
 {
-	BTreeTraversal(registry.services, &btreePrintCallback);
+	BTreeTraversal(services, &btreePrintCallback);
 }
 

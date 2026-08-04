@@ -1,7 +1,6 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
-#include "kernel/ServiceRegistry.h"
 #include "kernel/typedtuple.h"
 #include "lang/Form.h"
 #include "lang/Formula.h"

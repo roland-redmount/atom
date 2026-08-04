@@ -4,7 +4,7 @@
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
-#include "kernel/ServiceRegistry.h"
+#include "kernel/RelationRegistry.h"
 
 
 /**
@@ -24,7 +24,7 @@ Atom CreateConjunctionForm(Atom const * clauseForms, size8 nClauseForms)
 	AddMultisetToIFactFromArrays(&draft, uniqueClauseForms, multiplicities, nUniqueClauseForms, AT_ID);
 
 	// (conjunction-form @form)
-	RelationTable const * conjunctionFormTable = FindRelationTable(
+	RelationTable const * conjunctionFormTable = RelationRegistryFind(
 		GetCorePredicateForm(FORM_CONJUNCTION_FORM),
 		1, (byte[]) {AT_ID}
 	);	

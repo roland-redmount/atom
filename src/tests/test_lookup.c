@@ -2,7 +2,6 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/lookup.h"
-#include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"

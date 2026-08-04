@@ -6,6 +6,7 @@
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
 #include "kernel/RelationBTree.h"
+#include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/ClauseForm.h"
 #include "lang/Form.h"
@@ -102,7 +103,7 @@ bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRe
 	Atom predicateForm = TermFormGetPredicateForm(queryTermForm);
 
 	// find a matching relation
-	RelationTable const * relation = FindRelationTable(
+	RelationTable const * relation = RelationRegistryFind(
 		predicateForm, queryActors->nAtoms, TypedTuplePeekAtomTypes(queryActors)
 	);
 	if(!relation)

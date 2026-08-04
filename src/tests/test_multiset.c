@@ -2,7 +2,6 @@
 #include "kernel/UInt.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
-#include "kernel/ServiceRegistry.h"
 #include "lang/name.h"
 #include "testing/testing.h"
 

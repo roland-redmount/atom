@@ -8,6 +8,7 @@
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
 #include "kernel/RelationTable.h"
+#include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/AtomType.h"
 #include "lang/PredicateForm.h"
@@ -71,7 +72,7 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 			(byte[]) {AT_ID, AT_UINT, elementType},
 			atomTypes
 		);
-		RelationTable const * table = FindRelationTable(
+		RelationTable const * table = RelationRegistryFind(
 			GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT),
 			3, atomTypes
 		);
