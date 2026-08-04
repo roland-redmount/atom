@@ -75,8 +75,9 @@ static void setupAdd2(void)
 {
 	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
 	byte parameterIO[3];
-	parameterIO[argumentIndex[0]] = PARAMETER_OUT;
-	parameterIO[argumentIndex[1]] = PARAMETER_IN;
+	// add2() reads x and z and computes y, so y is the output
+	parameterIO[argumentIndex[0]] = PARAMETER_IN;
+	parameterIO[argumentIndex[1]] = PARAMETER_OUT;
 	parameterIO[argumentIndex[2]] = PARAMETER_IN;
 
 	Service * service = CreateMachineService(3, &mathServiceProvider, (void *) ADD2_INDEX);

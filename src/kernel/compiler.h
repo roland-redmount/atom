@@ -3,7 +3,7 @@
 #ifndef	COMPILER_H
 #define COMPILER_H
 
-#include "kernel/service.h"
+#include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
 
 /**
@@ -13,7 +13,7 @@
  * TODO: this should probably take a term form + a tuple; we don't need to
  * store a formula.
  */
-Service const * CompileService(Formula const * queryTerm);
+ServiceRecord CompileService(Formula const * queryTerm);
 
 
 #endif	// COMPILER_H

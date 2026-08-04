@@ -134,14 +134,13 @@ void RetractFact(Atom form, TypedTuple * actors);
 #define SERVICE_MULTISET_NAME				1	// (multiset <ID element >NAME multiple >UINT)
 #define SERVICE_PREDICATE_FORM				2	// (predicate-form >ID)
 #define SERVICE_MULTISET_ID					3	// (multiset <ID element >ID multiple >UINT)
-// TODO: this will not work, as it does not follow leading columns
-// #define SERVICE_MULTISET_ID_BY_ELEMENT		...	// (multiset >ID element <ID multiple >UINT)
-#define SERVICE_TERM_FORM					4	// (term-form <ID predicate-form >ID)
-#define SERVICE_LIST_LENGTH                 5	// (list <ID length >UINT)
-#define SERVICE_LIST_LETTER					6	// (list <ID position >UINT element >LETTER)	
-#define SERVICE_LIST_ID						7	// (list <ID position >UINT element >ID)	
+#define SERVICE_MULTISET_ID_ALL				4	// (multiset >ID element >ID multiple >UINT)
+#define SERVICE_TERM_FORM					5	// (term-form <ID predicate-form >ID)
+#define SERVICE_LIST_LENGTH                 6	// (list <ID length >UINT)
+#define SERVICE_LIST_LETTER					7	// (list <ID position >UINT element >LETTER)	
+#define SERVICE_LIST_ID						8	// (list <ID position >UINT element >ID)	
 
-#define N_CORE_SERVICES                     7
+#define N_CORE_SERVICES                     8
 
 /**
  * Lookup one of the "primitive" forms for core tables

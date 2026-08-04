@@ -80,12 +80,13 @@ void FreeServiceRegistry(void)
 }
 
 
-void ServiceRegistryAdd(RelationTable const * relation, byte const parameterIO[], Service * service)
+ServiceRecord ServiceRegistryAdd(RelationTable const * relation, byte const parameterIO[], Service * service)
 {
 	ServiceRecord record;
 	setupServiceRecord(&record, relation, parameterIO, service);
 	ASSERT(BTreeInsert(services, &record) == BTREE_INSERTED)
 	AcquireService(service);
+	return record;
 }
 
 

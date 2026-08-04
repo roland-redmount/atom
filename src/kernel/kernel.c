@@ -135,11 +135,11 @@ static const index32 coreServiceRelationId[N_CORE_SERVICES + 1] = {
 	RELATION_MULTISET_NAME,
 	// (predicate-form >ID)
 	RELATION_PREDICATE_FORM,
-	// (term-form <ID predicate-form >ID)
 	// (multiset <ID element >ID multiple >UINT)
 	RELATION_MULTISET_ID,
-	// (multiset >ID element <ID multiple >UINT)
-	// RELATION_MULTISET_ID,
+	// (multiset >ID element >ID multiple >UINT)
+	RELATION_MULTISET_ID,
+	// (term-form <ID predicate-form >ID)
 	RELATION_TERM_FORM,
 	// (list <ID length >UINT)
 	RELATION_LIST_LENGTH,
@@ -161,8 +161,8 @@ static const byte coreServiceParameterIO[N_CORE_SERVICES + 1][CORE_FORMS_MAX_ARI
 	{PARAMETER_IN},
 	// (multiset <ID element >ID multiple >UINT)
 	{PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT},
-	// (multiset >ID element <ID multiple >UINT)
-	// {PARAMETER_OUT, PARAMETER_IN, PARAMETER_OUT},
+	// (multiset >ID element >ID multiple >UINT)
+	{PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT},
 	// (term-form <ID predicate-form >ID sign >UINT)
 	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 	// (list <ID length >UINT)

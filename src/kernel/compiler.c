@@ -5,7 +5,7 @@
 #include "kernel/multiset.h"
 #include "kernel/service.h"
 #include "kernel/Parameter.h"
-#include "kernel/RelationTable.h"
+#include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/ClauseForm.h"
 #include "lang/Formula.h"
@@ -156,12 +156,16 @@
 
 
 /**
- * Replace non-variable atoms in the actors tuple with typed input parameters,
- * and variables with untyped output parameters. The output parameter types
- * must be discovered by matching against services. The genererated parameter
- * numbers are always equan to the tuple index + 1.
+ * Generate a parameters tuple from an actors tuple, such that each non-variable atom
+ * in the actors tuple corresponds to an input parameter (with type preserved),
+ * and each variable yields an output parameters. The output parameter types are
+ * unknown and must be discovered later by matching against services.
+ * The genererated parameter numbers are always equal to the tuple index (1-based).
+ * 
+ * NOTE: the parameters tuple could be an Atom[] as the type is constant, but this
+ * currently doesn't fit with compileService() and downstream functions.
  */
-static void atomsToParameters(TypedTuple const * actors, TypedTuple * replacedActors)
+static void actorsToParameters(TypedTuple const * actors, TypedTuple * parameters)
 {
 	for(index8 i = 0; i < actors->nAtoms; i++) {
 		TypedAtom typedAtom = TypedTupleGetElement(actors, i);
@@ -169,13 +173,13 @@ static void atomsToParameters(TypedTuple const * actors, TypedTuple * replacedAc
 			Atom parameter = {
 				.parameter = {.number = i + 1, .io = PARAMETER_OUT, .atomType = 0}
 			};
-			TypedTupleSetElement(replacedActors, i, CreateTypedAtom(AT_PARAMETER, parameter));
+			TypedTupleSetElement(parameters, i, CreateTypedAtom(AT_PARAMETER, parameter));
 		}
 		else {
 			Atom parameter = {
 				.parameter = {.number = i + 1, .io = PARAMETER_IN, .atomType = typedAtom.type}
 			};
-			TypedTupleSetElement(replacedActors, i, CreateTypedAtom(AT_PARAMETER, parameter));
+			TypedTupleSetElement(parameters, i, CreateTypedAtom(AT_PARAMETER, parameter));
 		}
 	}
 }
@@ -186,7 +190,7 @@ static void atomsToParameters(TypedTuple const * actors, TypedTuple * replacedAc
  * term actors defines the caller's parameter order; any non-parameter atoms
  * are stored in a "constants" tuple. If variables are present, a DEDUPLICATE
  * service is generated to ensure the resulting tuples are unique.
- * The serviceParameters tuple is set to the matched service parameters,
+ * The serviceParameters tuple is set to the matched service's parameters,
  * permuted to match the term actors order.
  */
 static Service * compileTerm(
@@ -218,12 +222,11 @@ static Service * compileTerm(
 				AT_PARAMETER,
 				(Atom) {
 					.parameter = {
-						.number = 0,
+						.number = i + 1,
 						.atomType = termServiceRecord.relation->atomTypes[i],
 						.io = termServiceRecord.parameterIO[i]
 					}
 				}
-				// termServiceRecord.parameters[i + 1])
 			)
 		);
 	}
@@ -304,7 +307,7 @@ static Service * compileConjunctionRecursive(
 			PrintChar('\n');
 
 			service = compileTerm(negatedTermForm, termActors, nArguments, serviceParameters);
-			PrintCString("serviceParameter = ");
+			PrintCString("serviceParameters = ");
 			TypedTuplePrint(serviceParameters);
 			PrintChar('\n');
 			if(service) {
@@ -429,7 +432,7 @@ static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
 
 	/**
 	 * To find rules (clauses) c that contains a matching term form,
-	 * we query (multiset c element @term-form multiple _),
+	 * we query (multiset c element @term-form multiple m),
 	 * 
 	 * If multiple rules match, we generate a UNION of
 	 * the resulting services. The first clause that yields a service
@@ -446,24 +449,23 @@ static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
 	 * 
 	 * NOTE: Recursive services are not guaranteed to terminate.
 	 */
-
 	Service * service = 0;
 
-	// TODO: here we need the service (multiset >ID element <ID multiple >UINT) where element is input
-	// Since the element role is not a leading column, RelationBTree does not support this.
-	// We will need a means of generating such a service, by table scanning + filter.
-	// Service const * multisetService = GetCoreService(SERVICE_MULTISET_ID_BY_ELEMENT);
-	Service const * multisetService = 0;
-	ASSERT(false)
+	/**
+	 * TODO: here we need the service (multiset >ID element <ID multiple >UINT) where element is input
+	 * Since the element role is not a leading column, RelationBTree does not support this.
+	 * For now, we simply scan the entire table and filter on matching terms. This is obviously
+	 * highly inefficient. A better solution would require multiple indexes on the relation table.
+	 */
+	Service const * multisetService = GetCoreService(SERVICE_MULTISET_ID_ALL);
 
 	Atom multisetQueryTuple[3];
-	CoreFormSetTuple(
-		FORM_MULTISET_ELEMENT_MULTIPLE,
-		(Atom[]) {(Atom) {0}, queryTermForm, (Atom) {0}},
-		multisetQueryTuple
-	);
 	ServiceContext * multisetContext = ServiceCreateContext(multisetService, multisetQueryTuple);
 	while(ServiceCall(multisetContext)) {
+		Atom termForm = multisetQueryTuple[
+			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
+		if(termForm.hash != queryTermForm.hash)
+			continue;
 		// Found a multiset where the term form occurs
 		Atom clauseForm = multisetQueryTuple[
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)];
@@ -476,7 +478,7 @@ static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
 		// Iterate over all rules (clauses) with this clause form.
 		DictionaryIterator dictIterator;
 		DictionaryIterate(clauseForm, &dictIterator);
-		TypedTuple * matchedTermActors = CreateTypedTuple(queryActors->nAtoms);
+		TypedTuple * matchedTermActors = CreateTypedTuple(termArity);
 		TypedTuple * substClauseActors = CreateTypedTuple(ClauseArity(clauseForm));
 		while(DictionaryIteratorNext(&dictIterator)) {
 			TypedTuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
@@ -536,25 +538,23 @@ static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
 }
 
 
-Service const * CompileService(Formula const * queryTerm)
+ServiceRecord CompileService(Formula const * queryTerm)
 {
 	ASSERT(IsTermForm(queryTerm->form))
-	// TypedTuple * queryActors = CreateTypedTuple(arity);
-	// CopyListToTuple(FormulaGetActors(queryTerm), queryActors);
 
 	// Generalize atoms in the query to parameters
-	// NOTE: the compilation process will determine the type
-	// of any output parameters. 
-	TypedTuple * generalizedActors = CreateTypedTuple(queryTerm->actors->nAtoms);
-	atomsToParameters(queryTerm->actors, generalizedActors);
+	TypedTuple * queryParameters = CreateTypedTuple(queryTerm->actors->nAtoms);
+	actorsToParameters(queryTerm->actors, queryParameters);
 
-	PrintCString("Generalized query: ");
-	PrintFormActorsAsFormula(queryTerm->form, generalizedActors);
+	PrintCString("queryParameters: ");
+	PrintFormActorsAsFormula(queryTerm->form, queryParameters);
 	PrintChar('\n');
 
-	Service * service = compileService(queryTerm->form, generalizedActors);
+	ServiceRecord record = {0};
+	Service * service = compileService(queryTerm->form, queryParameters);
 	if(service) {
-		Atom const * serviceParameters = TypedTuplePeekAtoms(generalizedActors);
+		// Output parameters types have now been updated by compileService()
+		Atom const * serviceParameters = TypedTuplePeekAtoms(queryParameters);
 		// extract parameter IO types from parameter list
 		size8 arity = queryTerm->actors->nAtoms;
 		byte parameterIO[arity];
@@ -565,9 +565,11 @@ Service const * CompileService(Formula const * queryTerm)
 		RelationTable const * relation = CreateRelationTable(
 			0, queryTerm->form, arity, parameterIO, 0
 		);
-		ServiceRegistryAdd(relation, parameterIO, service);
+		ASSERT(relation)
+		RelationRegistryAdd(relation);
+		record = ServiceRegistryAdd(relation, parameterIO, service);
 		ReleaseService(service);
 	}
-	FreeTypedTuple(generalizedActors);
-	return service;
+	FreeTypedTuple(queryParameters);
+	return record;
 }

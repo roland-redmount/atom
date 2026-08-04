@@ -13,15 +13,25 @@
 
 
 /**
+ * A service record links a relation to a service with a particular parameter IO
+ */
+typedef struct s_ServiceRecord {
+	RelationTable const * relation;
+	byte * parameterIO;
+	Service * service;	// cannot be const * if we want to do AcquireService(service)
+} ServiceRecord;
+
+/**
  * Setup an empty service registry. Called during bootstrapping only.
  */
 void SetupServiceRegistry(void);
 
 /**
- * Associated a service with a relation in the service registry.
- * Aquires a reference to the service.
+ * Associates a service with a relation in the service registry.
+ * Acquires a reference to the service.
+ * Returns a copy of the created service record.
  */
-void ServiceRegistryAdd(RelationTable const * relation, byte const parameterIO[], Service * service);
+ServiceRecord ServiceRegistryAdd(RelationTable const * relation, byte const parameterIO[], Service * service);
 
 /**
  * Dissociate the given service from a relation in the service registry.
@@ -44,15 +54,6 @@ void FreeServiceRegistry(void);
  * Total number of registered services.
  */
 size32 ServiceRegistryCount(void);
-
-/**
- * A service record links a relation to a service with a particular parameter IO
- */
-typedef struct s_ServiceRecord {
-	RelationTable const * relation;
-	byte * parameterIO;
-	Service * service;	// cannot be const * if we want to do AcquireService(service)
-} ServiceRecord;
 
 
 /**

@@ -422,7 +422,7 @@ RelationTable const * CreateRelationBTreeWithServices(
 	RelationBTree * relation = table->storage;
 
 	// register nColumns services with leading columns as inputs
-	for(index8 nInputs = 1; nInputs <= nColumns; nInputs++) {
+	for(index8 nInputs = 0; nInputs <= nColumns; nInputs++) {
 		Service * service = createBTreeService(relation, nInputs);
 		byte parameterIO[nColumns];
 		for(index8 i = 0; i < nColumns; i++) {
