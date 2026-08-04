@@ -160,6 +160,10 @@ void MathSetup(void)
 	atomTypes[argumentIndex[2]] = AT_INT;
 	// NOTE: no particular column index order here
 	mathRelations[ADD_RELATION] = CreateRelationTable(0, addForm, 3, atomTypes, 0);
+	// the table must be registered for dispatch to find it
+	RelationRegistryAdd(mathRelations[ADD_RELATION]);
+	// the table acquired its own reference to the form
+	IFactRelease(addForm);
 
 	// setup services
 	setupAdd1();
@@ -169,6 +173,8 @@ void MathSetup(void)
 
 void MathTeardown(void)
 {
-	for(index32 i = 0; i < N_RELATIONS; i++)
+	for(index32 i = 0; i < N_RELATIONS; i++) {
+		ServiceRegistryRemoveAll(mathRelations[i]);
 		RelationRegistryRemove(mathRelations[i]);
+	}
 }

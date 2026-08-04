@@ -65,7 +65,7 @@ void RelationRegistryAdd(RelationTable const * relation)
 
 void RelationRegistryRemove(RelationTable const * relation)
 {
-	ASSERT(BTreeDelete(relationRegistry, &relation, 0))
+	ASSERT(BTreeDelete(relationRegistry, &relation, 0) == BTREE_DELETED)
 }
 
 

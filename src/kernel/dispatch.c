@@ -102,27 +102,31 @@ bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRe
 	ASSERT(TermFormGetSign(queryTermForm))
 	Atom predicateForm = TermFormGetPredicateForm(queryTermForm);
 
-	// find a matching relation
-	RelationTable const * relation = RelationRegistryFind(
-		predicateForm, queryActors->nAtoms, TypedTuplePeekAtomTypes(queryActors)
-	);
-	if(!relation)
-		return 0;
-
-	// Iterate over candidate services for the service
-	ServiceIterator iterator;
-	ServiceRegistryIterate(relation, &iterator);
 	bool match = false;
-	while(ServiceIteratorNext(&iterator)) {
-		ServiceRecord const * currentRecord = ServiceIteratorPeekRecord(&iterator);
-		if(permutationMatch(predicateForm, relation->atomTypes, currentRecord->parameterIO, queryActors, permutation)) {
-			match = true;
-			// copy the record to the caller
-			*record = *currentRecord;
-			break;
+	// Iterate over relations matching the form
+	RelationIterator relationIterator;
+	RelationRegistryIterate(predicateForm, &relationIterator);
+	while(!match && RelationIteratorNext(&relationIterator)) {
+		RelationTable const * relation = RelationIteratorGet(&relationIterator);
+
+		// Iterate over candidate services for the relation table
+		// TODO: this is inefficient, would be better to test once if the relation table
+		// atom types are compatible with the query, and only then iterate over services.
+		ServiceIterator serviceIterator;
+		ServiceRegistryIterate(relation, &serviceIterator);
+		while(ServiceIteratorNext(&serviceIterator)) {
+			ServiceRecord const * currentRecord = ServiceIteratorPeekRecord(&serviceIterator);
+			if(permutationMatch(predicateForm, relation->atomTypes, currentRecord->parameterIO, queryActors, permutation)) {
+				match = true;
+				// copy the record to the caller
+				*record = *currentRecord;
+				break;
+			}
 		}
+		ServiceIteratorEnd(&serviceIterator);
 	}
-	ServiceIteratorEnd(&iterator);
+	RelationIteratorEnd(&relationIterator);
+
 	return match;
 }
 

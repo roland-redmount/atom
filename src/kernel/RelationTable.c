@@ -51,8 +51,11 @@ void RelationTableReleaseForm(RelationTable const * table)
 
 void FreeRelationTable(RelationTable const * table)
 {
-	ASSERT(RelationTableNRows(table) == 0)
-	table->provider->free(table->storage);
+	// a computed relation has no provider, and so no stored tuples
+	if(table->provider) {
+		ASSERT(RelationTableNRows(table) == 0)
+		table->provider->free(table->storage);
+	}
 	if(table->ownsForm)
 		IFactRelease(table->form);
 	Free(table->atomTypes);
