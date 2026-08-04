@@ -5,7 +5,6 @@
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
-#include "kernel/ServiceRegistry.h"
 #include "lang/TermForm.h"
 
 
@@ -84,7 +83,7 @@ bool TermFormGetSign(Atom termForm)
 {
 	Atom result[3];
 	termFormGetTuple(termForm, result);
-	Atom sign = result[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_PREDICATE_FORM)];
+	Atom sign = result[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_SIGN)];
 	return (sign._uint == 1);
 }
 

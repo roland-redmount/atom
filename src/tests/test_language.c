@@ -2,7 +2,6 @@
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/multiset.h"
-#include "kernel/ServiceRegistry.h"
 #include "lang/ClauseForm.h"
 #include "lang/Formula.h"
 #include "lang/FormPermutation.h"
@@ -86,19 +85,23 @@ static void testPredicateForm(void)
 
 static void testTermForm(void)
 {
-	// arrange, should be part of setup function
 	Atom predicateForm = examplePredicateForm();
 
-	Atom termForm = CreateTermForm(predicateForm, false);
-
+	Atom termForm = CreateTermForm(predicateForm, true);
 	ASSERT_TRUE(IsTermForm(termForm))
 	ASSERT_DATA64_EQUAL(TermFormGetPredicateForm(termForm).hash, predicateForm.hash)
-	ASSERT_FALSE(TermFormGetSign(termForm))
+	ASSERT_TRUE(TermFormGetSign(termForm))
 	ASSERT_UINT32_EQUAL(TermFormArity(termForm), PredicateArity(predicateForm))
 
-	IFactRelease(termForm);
+	Atom termFormNegated = CreateTermForm(predicateForm, false);
+	ASSERT_TRUE(IsTermForm(termFormNegated))
+	ASSERT_DATA64_EQUAL(TermFormGetPredicateForm(termFormNegated).hash, predicateForm.hash)
+	ASSERT_FALSE(TermFormGetSign(termFormNegated))
+	ASSERT_UINT32_EQUAL(TermFormArity(termFormNegated), PredicateArity(predicateForm))
 
-	// teardown
+	IFactRelease(termForm);
+	IFactRelease(termFormNegated);
+
 	IFactRelease(predicateForm);
 }
 
