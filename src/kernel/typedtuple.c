@@ -146,24 +146,6 @@ void TypedTupleSetAtom(TypedTuple * tuple, index8 index, Atom atom)
 }
 
 
-// void TypedTupleGetAtoms(TypedTuple const * tuple, Atom * atoms)
-// {
-// 	CopyMemory(tupleAtomArrayView(tuple), atoms, tuple->nAtoms * sizeof(Atom));
-// }
-
-
-// void TypedTupleSetAtoms(TypedTuple * tuple, Atom const * atoms)
-// {
-// 	CopyMemory(atoms, tupleAtomArray(tuple), tuple->nAtoms * sizeof(Atom));
-// }
-
-
-// byte TupleGetAtomType(TypedTuple const * tuple, index8 index)
-// {
-// 	return tupleTypeArrayView(tuple)[index];
-// }
-
-
 int8 TypedTupleCompare(TypedTuple const * tuple1, TypedTuple const * tuple2)
 {
 	ASSERT(tuple1->nAtoms == tuple1->nAtoms)
@@ -259,23 +241,6 @@ data64 TypedTupleHash(TypedTuple const * tuple, data64 initialHash)
 	return DJB2DoubleHashAdd(
 		TypedTuplePeekAtomTypes(tuple), TypedTupleNBytes(tuple->nAtoms) - sizeof(TypedTuple), hash);
 }
-
-
-// ItemComparator function for QuickSort
-static int8 quickSortCompareTuples(void const * tuple1, void const * tuple2, size32 tupleSize)
-{
-    return TypedTupleCompare((TypedTuple const *) tuple1, (TypedTuple const *) tuple2);
-}
-
-/**
- * NOTE: sorting order for tuples should be identical to the iteration order
- * of tuples in relation tables; see compareQuery() in RelationBTree.c
- */
-// void TypedTupleSort(TypedTuple * tuples, size32 nTuples)
-// {
-// 	ASSERT(nTuples > 0)
-//     QuickSort(tuples, nTuples, TypedTupleNBytes(tuples[0].nAtoms), quickSortCompareTuples);
-// }
 
 
 void TypedTuplePrint(TypedTuple const * tuple)

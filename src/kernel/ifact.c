@@ -236,31 +236,9 @@ void IFactBeginConjunction(IFactDraft * draft, RelationTable const * relation, i
 }
 
 /**
- * Conjunctions are ordered first by form, then by column types.
- * 
- * TODO: we currently use CompareMemory on the conjunction struct, but this ends
- * up comparing relation table pointers which could be brittle. Review this.
- */
-
-// static int8 compareConjunctions(void const * item1, void const * item2, size32 itemSize)
-// {
-// 	IFactConjunction const * conjunction1 = item1;
-// 	IFactConjunction const * conjunction2 = item2;
-// 	ASSERT(conjunction1->nColumns == conjunction2->nColumns)
-// 	if(conjunction1->predicateForm.hash < conjunction2->predicateForm.hash)
-// 		return -1;
-// 	else if(conjunction1->predicateForm.hash > conjunction2->predicateForm.hash)
-// 		return 1;
-// 	else {
-// 		return CompareMemory(conjunction1->columnTypes, conjunction2->columnTypes, conjunction1->nColumns);
-// 	}
-// }
-
-
-/**
  * Add the given tuple to the temporary tuple storage for the current conjunction.
  */
-void IFactAddTuple(IFactDraft * draft, Atom const * tuple)
+void IFactAddTuple(IFactDraft * draft, Atom const tuple[])
 {
 	ASSERT(draft->hasBegunConjunction);
 	IFactConjunction * conjunction = lastConjunction(&(draft->header));
@@ -576,19 +554,6 @@ void removeIFactTuples(IFactConjunction * conjunction, Atom idAtom)
 		ResizingArrayAppend(&tuplesArray, arguments);
 	ServiceFreeContext(context);
 
-	// Release all atoms referenced by tuples.
-	// NOTE: in general, this cannot be done while iterating over service,
-	// since iteration typically write-locks the storage.
-	// Note that IFactRelease() may call this function recursively.
-
-	// NOTE: we now do this in RelationTableRemoveTuple()
-	// for(index32 i = 0; i < tuplesArray.nElements; i++) {
-	// 	Atom * tuple = ResizingArrayGetElement(&tuplesArray, i);
-	// 	for(index32 j = 0; j < nColumns; j++) {
-	// 		if(j != conjunction->idColumn)
-	// 			ReleaseTypedAtom(CreateTypedAtom(table->atomTypes[j], tuple[j]));
-	// 	}
-	// }
 	// Delete tuples
 	for(index32 i = 0; i < tuplesArray.nElements; i++) {
 		Atom * tuple = ResizingArrayGetElement(&tuplesArray, i);

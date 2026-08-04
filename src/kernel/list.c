@@ -105,30 +105,6 @@ void ListBegin(IFactDraft * draft)
 	// we postpone starting  ()
 }
 
-/*
-static index32 listAddElement(IFactDraft * draft, Atom element)
-{
-	if(!draft->hasBegunConjunction) {
-		// first element, begin (ĺist position elements)
-		IFactBeginPredicateForm(
-			draft,
-			GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT),
-			RegistryGetCoreBTreeService(FORM_LIST_POSITION_ELEMENT),
-			CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST)
-		);
-	}
-
-	TypedTuple * listElementTuple = CreateTypedTuple(3);
-	index32 position = IFactDraftCurrentNTuples(draft) + 1;
-	ListSetTuple(
-		listElementTuple,
-		invalidAtom, CreateTypedAtom(AT_UINT, (Atom) {._uint = position}), element
-	);
-	IFactAddTuple(draft, listElementTuple);
-	FreeTypedTuple(listElementTuple);
-	return position;
-}
-*/
 
 Atom ListEnd(IFactDraft * draft)
 {
@@ -159,18 +135,6 @@ Atom CreateListFromArray(Atom const * atoms, byte elementType, size8 nAtoms)
 	return CreateList(arrayElementGenerator, atoms, elementType, nAtoms);
 }
 
-/*
-static TypedAtom tupleElementGenerator(index32 index, void const * data)
-{
-	TypedTuple const * tuple = (TypedTuple const *) data;
-	return TypedTupleGetElement(tuple, index);
-}
-
-Atom CreateListFromTuple(TypedTuple const * tuple)
-{
-	return CreateList(tupleElementGenerator, tuple, tuple->nAtoms);
-}
-*/
 
 bool IsList(Atom atom)
 {
@@ -233,19 +197,6 @@ Atom ListGetElement(Atom list, index32 position)
 	return arguments[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)];
 }
 
-/*
-void ListGetElementsArray(Atom list, TypedAtom * elements)
-{
-	ASSERT(IsList(list))
-	ListIterator iterator;
-	ListIterate(list, &iterator);
-	
-	for(index32 i = 0; ListIteratorNext(&iterator); i++) {
-		elements[i] = ListIteratorGetElement(&iterator);
-	}
-	ListIteratorEnd(&iterator);
-}
-*/
 
 index32 ListGetPosition(Atom list, Atom element)
 {
@@ -276,12 +227,6 @@ index32 ListGetPosition(Atom list, Atom element)
 }
 
 
-// lexical ordering of two lists
-// NOTE: it is currently not possible to use this
-// in the CompareTypedAtoms() function for
-// canonical ordering of list (and string) atoms
-// since this function depends on B-tree iteration,
-// which leads to infinite recursion when comparing B-tree ḱeys
 int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(Atom, Atom))
 {
 	if(list1.hash == list2.hash)

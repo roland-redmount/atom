@@ -57,11 +57,6 @@ size32 MultisetSize(Atom multiset, byte elementType);
 size32 MultisetGetElementMultiple(Atom multiset, Atom element);
 
 /**
- * Assign values to a tuple of the (multiset element multiple) relation
- */
-// void MultisetSetTuple(Atom * tuple, Atom multiset, Atom element, Atom multiple);
-
-/**
  * Find an order for a given array of elements consistent with
  * the iteration order obtained by MultisetIterate(), up to multiples.
  * For example, if the multi set iterates as {a b b c d d} and the elements array
@@ -79,7 +74,6 @@ size32 MultisetGetElementMultiple(Atom multiset, Atom element);
  * NOTE: the length of elements and order arrays must equal MultisetSize()
  */
 void MultisetIterationOrder(Atom multiset, byte elementType, Atom const elements[], index8 order[], size8 nElements);
-
 
 /**
  * Iteration over a multiset.
@@ -108,4 +102,4 @@ void MultisetIteratorEnd(MultisetIterator * iterator);
 void PrintMultiset(Atom multiset);
 
 
-#endif	// MULTISET_G
+#endif	// MULTISET_H

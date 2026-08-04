@@ -234,7 +234,7 @@ void PrintMultiset(Atom multiset)
 }
 
 
-void MultisetIterationOrder(Atom multiset, byte elementType, Atom const elements[], index8 * order, size8 nElements)
+void MultisetIterationOrder(Atom multiset, byte elementType, Atom const elements[], index8 order[], size8 nElements)
 {
 	MultisetIterator iterator;
 	MultisetIterate(multiset, elementType, &iterator);

@@ -150,9 +150,6 @@ byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint
  */
 byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
 
-
-// void RelationTableRemoveIFactTuples(RelationTable const * table, Atom idAtom, uint8 idPosition);
-
 // NOTE: RelationTableDump() is declared in ServiceRegistry.h, since dumping a
 // table requires a service to enumerate its tuples.
 

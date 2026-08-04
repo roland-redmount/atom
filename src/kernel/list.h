@@ -46,13 +46,6 @@ void AddListToIFact(
 void ListBegin(IFactDraft * draft);
 
 /**
- * Append one element to a draft list.
- * Returns the (1-based) position of the new element,
- * which is the same as the new length of the list.
- */
-// index32 ListAddElement(IFactDraft * draft, Atom element);
-
-/**
  * Finalize a draft list, returning the completed list atom.
  */
 Atom ListEnd(IFactDraft * draft);
@@ -77,17 +70,6 @@ size32 ListLength(Atom list);
 Atom ListGetElement(Atom list, index32 position);
 
 /**
- * Copy all list elements into a given array
- * (assumed to be large enough to hold the eleements)
- */
-// void ListGetElementsArray(Atom list, Atom * elements);
-
-/**
- * Set the elements of tuple according to the (list position element) form.
- */
-// void ListSetTuple(Atom * tuple, Atom list, Atom position, Atom element);
-
-/**
  * Return the first position p from the query
  * (list @list position p element @element)
  * or 0 if the element is not in the list.
@@ -95,15 +77,17 @@ Atom ListGetElement(Atom list, index32 position);
 index32 ListGetPosition(Atom list, Atom element);
 
 /**
- * Copy the elements of a list to a Tuple.
- * The Tuple must have the same number of elements.
- * 
- * NOTE: this is no longer well defined when the list element type is constant
+ * Print a list atom
  */
-// void CopyListToTuple(Atom list, TypedTuple * tuple);
-
 void PrintList(Atom list);
 
+/**
+ * Determine the lexical ordering of two lists.
+ * 
+ * NOTE: it is currently not possible to use this in for canonical ordering of list
+ * (and string) atoms, since this function depends on B-tree iteration,
+ * which leads to infinite recursion when comparing B-tree ḱeys.
+ */
 int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(Atom, Atom));
 
 

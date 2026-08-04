@@ -52,7 +52,6 @@ static const size8 corePredicateArity[N_CORE_PREDICATES + 1] = {
 	1,	// (conjunction-form)
 	3,	// (list position element)
 	2,	// (list length)
-	// 3,	// (pair left right)
 	2,	// (quote quoted)
 	1,	// (string)
 };
@@ -73,7 +72,6 @@ static const index32 coreFormRoleIds[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY
 	{ROLE_CONJUNCTION_FORM},
 	{ROLE_LIST, ROLE_POSITION, ROLE_ELEMENT},
 	{ROLE_LIST, ROLE_LENGTH},
-	// {ROLE_PAIR, ROLE_LEFT, ROLE_RIGHT},
 	{ROLE_QUOTE, ROLE_QUOTED},
 	{ROLE_STRING},
 };
@@ -272,15 +270,9 @@ static void setupCoreRoleNames(void)
 	kernel.coreRoleNames[ROLE_TERM_FORM] = CreateNameFromCString("term-form");
 	kernel.coreRoleNames[ROLE_CLAUSE_FORM] = CreateNameFromCString("clause-form");
 	kernel.coreRoleNames[ROLE_CONJUNCTION_FORM] = CreateNameFromCString("conjunction-form");
-
 	kernel.coreRoleNames[ROLE_LIST] = CreateNameFromCString("list");
 	kernel.coreRoleNames[ROLE_POSITION] = CreateNameFromCString("position");
 	kernel.coreRoleNames[ROLE_LENGTH] = CreateNameFromCString("length");
-
-	// kernel.coreRoleNames[ROLE_PAIR] = CreateNameFromCString("pair");
-	// kernel.coreRoleNames[ROLE_LEFT] = CreateNameFromCString("left");
-	// kernel.coreRoleNames[ROLE_RIGHT] = CreateNameFromCString("right");
-	
 	kernel.coreRoleNames[ROLE_QUOTE] = CreateNameFromCString("quote");
 	kernel.coreRoleNames[ROLE_QUOTED] = CreateNameFromCString("quoted");
 	kernel.coreRoleNames[ROLE_STRING] = CreateNameFromCString("string");
@@ -295,19 +287,6 @@ static void setupCoreRoleNames(void)
 #define MULTISET_ELEMENT_COLUMN		1
 #define MULTISET_MULTIPLE_COLUMN	0
 
-
-// static index32 getCorePredicateIndex(Atom predicateForm)
-// {
-// 	index32 formIndex = 0;
-// 	while(formIndex < N_CORE_PREDICATES) {
-// 		if(kernel.corePredicateForms[++formIndex].hash == predicateForm.hash)
-// 			break;
-// 	}
-// 	ASSERT(formIndex <= N_CORE_PREDICATES)
-// 	return formIndex;	
-// }
-
-
 /**
  * Permute an input given in "kernel order" into the canonical role order used
  * for relation table columns. Since corePredicateRoleIndex[formId][i] is the
@@ -320,22 +299,12 @@ void CoreFormSetTuple(index32 formId, Atom const inputTuple[], Atom tuple[])
 		tuple[kernel.corePredicateRoleIndex[formId][i]] = inputTuple[i];
 }
 
+
 void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
 {
 	for(index8 i = 0; i < corePredicateArity[formId]; i++)
 		array[kernel.corePredicateRoleIndex[formId][i]] = inputArray[i];
 }
-
-
-// void bootstrapAssertFact(Atom predicateForm, TypedTuple const * actors, uint8 identified)
-// {
-// 	// TODO: this now needs to retrieve an agent, not a service ...
-// 	// This is a quick hack to get the BTree * pointer)
-// 	index32 formIndex = getCorePredicateIndex(predicateForm);
-// 	ServiceRecord const * record = RegistryGetCoreServiceRecord(formIndex);
-// 	RelationBTree * btree = record->service->impl.machine.providerData;
-// 	RelationBTreeAddTuple(btree, TypedTuplePeekAtoms(actors), identified);
-// }
 
 
 /**
@@ -377,18 +346,6 @@ Service * GetCoreService(index32 serviceId)
 {
 	return kernel.coreServices[serviceId];
 }
-
-// TODO: 
-
-// static index32 findCoreService(Atom form)
-// {
-// 	for(index32 i = 1; i <= N_CORE_PREDICATES; i++) {
-// 		if(registry.coreServices[i].form.hash == form.hash)
-// 			return i;
-// 	}
-// 	return 0;
-// }
-
 
 /**
  * Setup core relation tables and associated services during bootstrap.

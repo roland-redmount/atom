@@ -15,22 +15,6 @@ static void termFormSetTuple(Atom * tuple, Atom termForm, Atom predicateForm, At
 	tuple[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_SIGN)] = sign;
 }
 
-/**
- * Construct a parameter list for the (term-form predicate-form sign) table
- * with the given I/O for each parameter
- */
-// static void termFormSetParameters(Atom * parameters, byte termIO, byte predicateIO, byte signIO)
-// {
-// 	index8 termIndex = CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM);
-// 	parameters[termIndex] = (Atom) {.parameter = {.number = termIndex + 1, .atomType = AT_ID, .io = termIO}};
-
-// 	index8 predicateIndex = CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_PREDICATE_FORM);
-// 	parameters[predicateIndex] = (Atom) {.parameter = {.number = predicateIndex + 1, .atomType = AT_ID, .io = predicateIO}};
-
-// 	index8 signIndex = CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_SIGN);
-// 	parameters[signIndex] = (Atom) {.parameter = {.number = signIndex + 1, .atomType = AT_ID, .io = signIO}};
-// }
-
 
 Atom CreateTermForm(Atom predicateForm, bool sign)
 {

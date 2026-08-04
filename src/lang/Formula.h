@@ -16,17 +16,24 @@ typedef struct s_Formula {
 
 
 /**
- * Create a new AT_FORMULA. The actors array is copied.
- * The new formula holds a reference to the form atom. 
+ * Create a Formula. The actors tuple is copied.
+ * The new formula acquires a reference to the form atom. 
  */
 Formula * CreateFormula(Atom form, TypedTuple const * actors);
 
-
+/**
+ * Create a Formula
+ */
 Formula * CreateFormulaFromArray(Atom form, TypedAtom const * actors);
 
-
+/**
+ * Compare two formulas for equality
+ */
 bool FormulaEqual(Formula const * formula1, Formula const * formula2);
 
+/**
+ * Deallocate a formula. Releases a reference to the form atom.
+ */
 void FreeFormula(Formula * formula);
 
 /**
@@ -88,12 +95,6 @@ bool FormulaIsClause(Formula const * formula);
 bool FormulaIsConjunction(Formula const * formula);
 
 uint8 FormulaArity(Formula const * formula);
-
-
-/**
- * Return the list of actors.  REMOVE
- */
-// Atom const * FormulaGetActors(Atom formula);
 
 /**
  * Return the index of the given name in the corresponding form

@@ -20,9 +20,11 @@
 struct s_ServiceRecord;
 
 /**
- * A conjunction is a set of predicates &'d together,
- * and is associated with a service 
- * specifying the predicate form and atom types.
+ * A conjunction is a set of facts from a single relation table.
+ * 
+ * TODO: perhaps rename this IFactRelation, as it corresponds 1:1 to
+ * a set of tuples from a specific (typed) relation.
+ * The entire IFact is a conjuction ...
  */
 typedef struct s_IFactConjunction {
 	// relation table storing tuples for this conjunction
@@ -122,7 +124,7 @@ Atom IFactEnd(IFactDraft * draft);
  * Here, a precomputed AT_ID hash must be provided, and the given assertFact()
  * is used to assert identifying facts instead of the standard AssertFact().
  */
-Atom IFactEndBootstrap(IFactDraft * draft, data64 hash); // , void (* assertFact)(Atom, TypedTuple const *, uint8));
+Atom IFactEndBootstrap(IFactDraft * draft, data64 hash);
 
 /**
  * Reserve an IFact header with a predefined hash, before its defining facts
@@ -161,28 +163,14 @@ uint32 IFactTotalReferenceCount(void);
  */
 uint32 IFactTotalCount(void);
 
-
 /**
- * Check if adding the given tuple to the BTree would violate an ifact definition.
- * This occurs if the tuple contains an IFact atom whose identifying fact also contains
- * a tuple with that same atom in the same column.
- * 
- * For example, if the (list postion element) relation contains the tuple
- * 
- * (@cat 1 'c')
- * 
- * where @cat is a IFact (with the ATOM_PROTECTED flag set), it is illegal to add a tuple
- * of the form (@cat _ _), but it is legal to add a tuple like where @cat is in a different column,
- * like (@my-cats 1 @cat).
- * 
- * This check does not apply to atoms with the ATOM_PROTECTED flag set, which are themselves
- * part of IFact tuples.
+ * Print an AT_ID atom
  */
-// bool IFactCheckTuple(BTree const * tree, TypedTuple const * tuple);
-
-
 void IFactPrint(Atom ifact);
 
+/**
+ * Dump all created IFacts, for debugging.
+ */
 void IFactDump(void);
 
 /**

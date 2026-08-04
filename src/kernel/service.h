@@ -162,13 +162,15 @@ Service * CreatePermuteService(
 Service * CreateMachineService(size8 nArguments, MachineServiceProvider * provider, void * providerData);
 
 /**
- * Setup a join service from two existing child services. The left child service
+ * Setup a JOIN service from two existing child services. The left child service
  * will execute first, and may determine input arguments for right child service.
  * The two child services must take the same arguments, in the same order.
  */
 Service * CreateJoinService(Service * leftChild, Service * rightChild);
 
-
+/**
+ * Setup a UNION service, returning the union of two relations.
+ */
 Service * CreateUnionService(Service * first, Service * second);
 
 /**
@@ -199,7 +201,6 @@ struct s_ServiceContext {
 	byte data[];
 };
 
-
  /**
   * Create and return an execution context for evaluating a service
   * with the given arguments tuple. Each ServiceCall() to this context
@@ -226,7 +227,9 @@ void ServiceFreeContext(ServiceContext * context);
  */
 bool ServiceCallOnce(Service const * service, Atom arguments[]);
 
-
+/**
+ * Print service information.
+ */
 void PrintService(Service const * service);
 
 

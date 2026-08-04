@@ -92,7 +92,6 @@ add_library(atom SHARED
     src/kernel/list.c
     src/kernel/lookup.c
     src/kernel/multiset.c
-    # src/kernel/pair.c
     src/kernel/Parameter.c
     src/kernel/RelationBTree.c
     src/kernel/RelationRegistry.c

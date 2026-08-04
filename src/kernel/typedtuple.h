@@ -1,6 +1,7 @@
 /**
  * A TypedTuple is an array of typed atoms, corresponding to actors in a formula.
- * Tuples do not keep references to the atoms they contain.
+ * It does not keep references to the atoms they contain.
+ * This structure is intended for transient storage of tuples in the kernel.
   */
 
  #ifndef TYPEDTUPLE_H
@@ -12,13 +13,10 @@ typedef struct s_TypedTuple {
 	size8 nAtoms;
 	size8 reserved;
 	/**
-	 * 1-based position of the protected atom, or 0 if no atom is protected.
-	 * a protected atom occurs only in tuples that are part of the IFact.
-	 * 
-	 * TODO: This should probably be removed from Tuple. Storage methods
-	 * like RelationBTree need to keep track of protected atoms to store
-	 * identifing facts, but they may represent tuples differently internally,
-	 * so the protected atom should be stored separately. I think.
+	 * We store the types and atoms array in a single contiguous block of memory.
+	 * This creates a lot of overhead code for addressing items; it seemed motivated
+	 * for efficiency when relation tables stored TypedTuple, but that is no longer true
+	 * when TypedTuple is mainly used for transient copies. We should simplify this.
 	 */ 
 	// byte types[]
 	// Atom atoms[]
@@ -56,6 +54,9 @@ TypedTuple * CreateTupleFromTuple(TypedTuple const * otherTuple);
  */
 void SetupTypedTuple(TypedTuple * tuple, size8 nAtoms);
 
+/**
+ * Deallocate a types tuple.
+ */
 void FreeTypedTuple(TypedTuple * tuple);
 
 /**
@@ -94,23 +95,6 @@ Atom const * TypedTuplePeekAtoms(TypedTuple const * tuple);
  * Return the tuple's atom types array
  */
 byte const * TypedTuplePeekAtomTypes(TypedTuple const * tuple);
-
-/**
- * Copy untyped atoms from the TypedTuple into the given Atom array
- */
-// void TypedTupleGetAtoms(TypedTuple const * tuple, Atom * atoms);
-
-/**
- * Copy the atoms array into the tuple's atom array,
- * while leaving the atom types unchanges.
- */
-// void TypedTupleSetAtoms(TypedTuple * tuple, Atom const* atoms);
-
-/**
- * Get the atom type of a tuple element
- */
-// byte TupleGetAtomType(TypedTuple const * tuple, index8 index);
-
 
 /**
  * Copy one tuple into another. The destination tuple must
@@ -157,11 +141,6 @@ bool TypedTupleEqual(TypedTuple const * tuple1, TypedTuple const * tuple2);
  * Canonical ordering of tuples
  */
 int8 TypedTupleCompare(TypedTuple const * tuple1, TypedTuple const * tuple2);
-
-/**
- * Sort a list of tuples
- */
-// void TypedTupleSort(TypedTuple * tuples, size32 nTuples);
 
 /**
  * Hash value of a tuple.

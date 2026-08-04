@@ -53,11 +53,6 @@ void AssertFact(Atom predicateForm, TypedTuple const * actors, uint8 idPosition)
 void RetractFact(Atom form, TypedTuple * actors);
 
 /**
- * Remove all facts of a given form
- */
-// void RetractAllFacts(Atom predicateForm);
-
-/**
  * Stable identifiers for core role names (satisfying (name @name))
  * 
  * NOTE: we now identify a role as a pair (predicate, role name).
@@ -77,12 +72,9 @@ void RetractFact(Atom form, TypedTuple * actors);
 #define ROLE_POSITION				9
 #define ROLE_LENGTH					10
 
-// #define ROLE_PAIR					11
-// #define ROLE_LEFT					12
-// #define ROLE_RIGHT					13
-
 #define	ROLE_QUOTE					11
 #define	ROLE_QUOTED					12
+
 #define	ROLE_STRING					13		// not really core language
 #define ROLE_SIGN					14
 
@@ -181,6 +173,3 @@ byte const * GetCorePredicateAtomTypes(index32 formId);
  * Find the index in "canonical order" of a role in the given core predicate form.
  */
 index8 CorePredicateRoleIndex(index32 formId, index32 roleId);
-
-
-void RegistryTeardownCoreServices(void);
