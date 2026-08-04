@@ -147,35 +147,35 @@ enable_testing()
 #
 # To move a test between tiers, just move its name to a different list.
 
-set(ATOM_TESTS_TIER0        # fundamentals — everything depends on these
-    test_atomtypes
+set(ATOM_TESTS_TIER0        # fundamentals
     test_btree
-    test_kernel
     test_memory
     test_persistence
-    test_relation_btree
-    test_service
-    test_service_registry
     test_utilities
 )
 
-set(ATOM_TESTS_TIER1        # core data structures
-    test_dictionary
+set(ATOM_TESTS_TIER1        # core data structures, language elements
+    test_atomtypes
+	test_kernel
+    test_language
     test_list
     test_lookup
-    test_math
     test_multiset
+    test_parsing
+    test_relation_btree
+    test_service
+    test_service_registry
     test_string
+    test_tokenizer
     test_tuple
 )
 
-set(ATOM_TESTS_TIER2        # language / relations / services
+set(ATOM_TESTS_TIER2        # higher level kernel procedures
+    test_dictionary
     test_compiler
     test_dispatch
-    test_language
-    test_parsing
-    test_tokenizer
     test_unification
+    test_math
 )
 
 set(ATOM_TESTS

@@ -21,6 +21,7 @@ Formula * CreateFormula(Atom form, TypedTuple const * actors)
 	formula->form = form;
 	formula->actors = CreateTypedTuple(actors->nAtoms);
 	TypedTupleCopy(actors, formula->actors);
+	TypedTupleAcquire(formula->actors);
 	IFactAcquire(form);
 	return formula;
 }
@@ -31,6 +32,7 @@ Formula * CreateFormulaFromArray(Atom form, TypedAtom const * actors)
 	Formula * formula = Allocate(sizeof(Formula));
 	formula->form = form;
 	formula->actors = CreateTypedTupleFromArray(actors, FormArity(form));
+	TypedTupleAcquire(formula->actors);
 	IFactAcquire(form);
 	return formula;
 }
@@ -46,6 +48,7 @@ bool FormulaEqual(Formula const * formula1, Formula const * formula2)
 void FreeFormula(Formula * formula)
 {
 	IFactRelease(formula->form);
+	TypedTupleRelease(formula->actors);
 	FreeTypedTuple(formula->actors);
 	Free(formula);
 }

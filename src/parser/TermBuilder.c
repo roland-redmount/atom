@@ -59,6 +59,9 @@ Formula * TermBuilderCreateFormula(TermBuilder const * builder)
 	ASSERT(builder->isValid);
 	Formula * predicate = PredicateBuilderCreateFormula(&(builder->predicateBuilder));
 	Formula * term = CreateTerm(predicate, builder->sign);
+	// CreateTerm() copies the actors, so the intermediate predicate formula
+	// is no longer needed here.
+	FreeFormula(predicate);
 	return term;
 }
 
