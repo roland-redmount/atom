@@ -157,7 +157,7 @@
 
 /**
  * A query term that leaves an output parameter untyped may match several
- * services, one per relation table registered for its form (the element type
+ * services, one per relation table matching its form (the element type
  * of a list, say, is not determined by the query). Each such term is a choice
  * point, and each combination of choices yields a separately typed service.
  *
@@ -171,10 +171,10 @@
 #define MAX_CHOICE_POINTS	8
 
 typedef struct s_ChoicePoints {
-	// which match to take at each choice point
-	index8 chosen[MAX_CHOICE_POINTS];
-	// whether that choice point had further matches available
-	bool hasMore[MAX_CHOICE_POINTS];
+	// which match to take from DispatchQueryAt() at each choice point (0, 1, ...)
+	index8 matchIndex[MAX_CHOICE_POINTS];
+	// whether there is another match available at each choice point
+	bool hasNextMatch[MAX_CHOICE_POINTS];
 	// number of choice points encountered in the current run
 	index8 depth;
 } ChoicePoints;
@@ -182,28 +182,24 @@ typedef struct s_ChoicePoints {
 
 static void resetChoicePoints(ChoicePoints * choices)
 {
-	for(index8 i = 0; i < MAX_CHOICE_POINTS; i++) {
-		choices->chosen[i] = 0;
-		choices->hasMore[i] = false;
-	}
-	choices->depth = 0;
+	SetMemory(choices, sizeof(ChoicePoints), 0);
 }
 
 
 /**
  * Advance to the next combination of choices, depth first: take the deepest
- * choice point that still has an untried alternative, and restart the choices
+ * choice point that still has an untried alternative, and reset the choice points
  * below it. Returns false once all combinations have been visited.
  */
 static bool nextChoiceBranch(ChoicePoints * choices)
 {
 	for(index8 i = choices->depth; i > 0; i--) {
 		index8 d = i - 1;
-		if(choices->hasMore[d]) {
-			choices->chosen[d]++;
-			for(index8 j = d + 1; j < MAX_CHOICE_POINTS; j++) {
-				choices->chosen[j] = 0;
-				choices->hasMore[j] = false;
+		if(choices->hasNextMatch[d]) {
+			choices->matchIndex[d]++;
+			for(index8 j = i; j < MAX_CHOICE_POINTS; j++) {
+				choices->matchIndex[j] = 0;
+				choices->hasNextMatch[j] = false;
 			}
 			choices->depth = 0;
 			return true;
@@ -219,13 +215,13 @@ static bool nextChoiceBranch(ChoicePoints * choices)
  */
 static bool dispatchAtChoicePoint(
 	Atom termForm, TypedTuple const * termActors, ServiceRecord * record,
-	index8 * permutation, ChoicePoints * choices)
+	index8 permutation[], ChoicePoints * choices)
 {
 	ASSERT(choices->depth < MAX_CHOICE_POINTS)
 	index8 d = choices->depth++;
 	return DispatchQueryAt(
 		termForm, termActors, record, permutation,
-		choices->chosen[d], &(choices->hasMore[d])
+		choices->matchIndex[d], &(choices->hasNextMatch[d])
 	);
 }
 

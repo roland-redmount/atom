@@ -97,7 +97,7 @@ static bool permutationMatch(
 
 bool DispatchQueryAt(
 	Atom queryTermForm, TypedTuple const * queryActors, ServiceRecord * record,
-	index8 * permutation, index8 skip, bool * hasMore)
+	index8 permutation[], size8 nSkip, bool * hasNextMatch)
 {
 	ASSERT(IsTermForm(queryTermForm))
 	// TODO: currently, the service registry only supports non-negated predicates
@@ -108,8 +108,8 @@ bool DispatchQueryAt(
 	bool done = false;
 	// Number of matches seen so far, whether skipped or returned
 	index8 nMatches = 0;
-	if(hasMore)
-		*hasMore = false;
+	if(hasNextMatch)
+		*hasNextMatch = false;
 	// permutationMatch() overwrites its permutation argument on every match,
 	// so probe into a scratch array to avoid clobbering the returned one.
 	size8 termArity = queryActors->nAtoms;
@@ -136,17 +136,17 @@ bool DispatchQueryAt(
 				continue;
 
 			if(match) {
-				// a further match exists beyond the one we returned
-				*hasMore = true;
+				// An additional match exists beyond the one we will return
+				*hasNextMatch = true;
 				done = true;
 			}
-			else if(nMatches++ >= skip) {
+			else if(nMatches++ >= nSkip) {
 				match = true;
 				// copy the record and its permutation to the caller
 				*record = *currentRecord;
 				CopyMemory(candidatePermutation, permutation, termArity * sizeof(index8));
 				// without a hasMore request we can stop at the first match
-				done = (hasMore == 0);
+				done = (hasNextMatch == 0);
 			}
 		}
 		ServiceIteratorEnd(&serviceIterator);
@@ -157,7 +157,7 @@ bool DispatchQueryAt(
 }
 
 
-bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRecord * record, index8 * permutation)
+bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRecord * record, index8 permutation[])
 {
 	return DispatchQueryAt(queryTermForm, queryActors, record, permutation, 0, 0);
 }
