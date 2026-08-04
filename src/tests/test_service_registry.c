@@ -60,16 +60,16 @@ void testAddRemoveService(void)
 	Service * service = CreateMachineService(EXAMPLE_FORM_ARITY, &dummyProvider, 0);
 	byte parameterIO[EXAMPLE_FORM_ARITY] = {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT};
 	ASSERT_INT32_EQUAL(service->referenceCount, 1)
-	RelationAddService(fixture.table, parameterIO, service);
+	ServiceRegistryAdd(fixture.table, parameterIO, service);
 	ASSERT_INT32_EQUAL(service->referenceCount, 2)
 
 	ASSERT_PTR_EQUAL(
-		RegistryFindService(fixture.table, parameterIO),
+		ServiceRegistryFind(fixture.table, parameterIO),
 		service
 	);
 
 	// Remove the service
-	RelationRemoveService(fixture.table, service);
+	ServiceRegistryRemove(fixture.table, service);
 	ASSERT_INT32_EQUAL(service->referenceCount, 1)
 	ReleaseService(service);
 

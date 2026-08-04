@@ -53,7 +53,7 @@ static void setupAdd1(void)
 	parameterIO[argumentIndex[2]] = PARAMETER_OUT;
 
 	Service * service = CreateMachineService(3, &mathServiceProvider, (void *) ADD1_INDEX);
-	RelationAddService(mathRelations[ADD_RELATION], parameterIO, service);
+	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, service);
 	ReleaseService(service);
 }
 
@@ -80,7 +80,7 @@ static void setupAdd2(void)
 	parameterIO[argumentIndex[2]] = PARAMETER_IN;
 
 	Service * service = CreateMachineService(3, &mathServiceProvider, (void *) ADD2_INDEX);
-	RelationAddService(mathRelations[ADD_RELATION], parameterIO, service);
+	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, service);
 	ReleaseService(service);	
 	// mathServices[ADD2_INDEX] = record;
 }

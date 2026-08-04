@@ -229,7 +229,7 @@ void IFactBeginConjunction(IFactDraft * draft, RelationTable const * relation, i
 	for(index8 i = 0; i < conjunction->table->nColumns; i++) {
 		parameterIO[i] = (i == idColumn) ? PARAMETER_IN : PARAMETER_OUT;
 	}
-	conjunction->service = RegistryFindService(relation, parameterIO);
+	conjunction->service = ServiceRegistryFind(relation, parameterIO);
 	ASSERT(conjunction->service)
 
 	draft->hasBegunConjunction = true;

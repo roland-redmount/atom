@@ -221,7 +221,7 @@ Atom ListGetElement(Atom list, index32 position)
 		(byte[]) {PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT},
 		parameterIO
 	);
-	Service const * service = RegistryFindService(relation, parameterIO);
+	Service const * service = ServiceRegistryFind(relation, parameterIO);
 
 	Atom arguments[3];
 	CoreFormSetTuple(
@@ -262,7 +262,7 @@ index32 ListGetPosition(Atom list, Atom element)
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_IN},
 		parameterIO
 	);
-	Service const * service = RegistryFindService(relation, parameterIO);
+	Service const * service = ServiceRegistryFind(relation, parameterIO);
 	ASSERT(service)
 
 	Atom arguments[3];
@@ -357,7 +357,7 @@ void ListIterate(Atom list, ListIterator * iterator)
 			(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 			parameterIO
 		);
-		Service const * service = RegistryFindService(relation, parameterIO);
+		Service const * service = ServiceRegistryFind(relation, parameterIO);
 		iterator->context = ServiceCreateContext(service, iterator->queryTuple);
 	}
 	else

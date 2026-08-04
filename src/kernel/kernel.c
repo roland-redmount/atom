@@ -596,7 +596,7 @@ static void setupCoreServices(void)
 			coreServiceParameterIO[i],
 			parameterIO
 		);
-		kernel.coreServices[i] = RegistryFindService(
+		kernel.coreServices[i] = ServiceRegistryFind(
 			kernel.coreRelations[relationId],
 			parameterIO
 		);
@@ -658,7 +658,7 @@ void KernelShutdown(void)
 	 // Remove all relations and services except for RELATION_PREDICATE_FORM
 	 // and RELATION_MULTISET_NAME. This also removes the associated predicate forms
 	for(index32 relationId = N_CORE_RELATIONS; relationId > RELATION_PREDICATE_FORM; relationId--) {
-		RelationRemoveAllServices(kernel.coreRelations[relationId]);
+		ServiceRegistryRemoveAll(kernel.coreRelations[relationId]);
 		// This releases the associated form
 		RelationRegistryRemove(kernel.coreRelations[relationId]);
 	}
@@ -695,7 +695,7 @@ void KernelShutdown(void)
 	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_MULTISET_NAME]) == 0)
 
 	for(index32 relationId = RELATION_PREDICATE_FORM; relationId >= RELATION_MULTISET_NAME; relationId--) {
-		RelationRemoveAllServices(kernel.coreRelations[relationId]);
+		ServiceRegistryRemoveAll(kernel.coreRelations[relationId]);
 		RelationRegistryRemove(kernel.coreRelations[relationId]);
 	}
 

@@ -431,7 +431,7 @@ RelationTable const * CreateRelationBTreeWithServices(
 			else
 				parameterIO[indexColumns[i]] = PARAMETER_OUT;
 		}
-		RelationAddService(table, parameterIO, service);
+		ServiceRegistryAdd(table, parameterIO, service);
 		// The registry now holds the reference to the service
 		ReleaseService(service);
 	}

@@ -110,11 +110,11 @@ bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRe
 		return 0;
 
 	// Iterate over candidate services for the service
-	RegistryIterator iterator;
-	RegistryIterate(relation, &iterator);
+	ServiceIterator iterator;
+	ServiceRegistryIterate(relation, &iterator);
 	bool match = false;
-	while(RegistryIteratorNext(&iterator)) {
-		ServiceRecord const * currentRecord = RegistryIteratorPeekRecord(&iterator);
+	while(ServiceIteratorNext(&iterator)) {
+		ServiceRecord const * currentRecord = ServiceIteratorPeekRecord(&iterator);
 		if(permutationMatch(predicateForm, relation->atomTypes, currentRecord->parameterIO, queryActors, permutation)) {
 			match = true;
 			// copy the record to the caller
@@ -122,7 +122,7 @@ bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRe
 			break;
 		}
 	}
-	RegistryIteratorEnd(&iterator);
+	ServiceIteratorEnd(&iterator);
 	return match;
 }
 

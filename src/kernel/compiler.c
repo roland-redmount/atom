@@ -565,7 +565,7 @@ Service const * CompileService(Formula const * queryTerm)
 		RelationTable const * relation = CreateRelationTable(
 			0, queryTerm->form, arity, parameterIO, 0
 		);
-		RelationAddService(relation, parameterIO, service);
+		ServiceRegistryAdd(relation, parameterIO, service);
 		ReleaseService(service);
 	}
 	FreeTypedTuple(generalizedActors);

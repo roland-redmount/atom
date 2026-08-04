@@ -80,7 +80,7 @@ void FreeServiceRegistry(void)
 }
 
 
-void RelationAddService(RelationTable const * relation, byte const parameterIO[], Service * service)
+void ServiceRegistryAdd(RelationTable const * relation, byte const parameterIO[], Service * service)
 {
 	ServiceRecord record;
 	setupServiceRecord(&record, relation, parameterIO, service);
@@ -89,7 +89,7 @@ void RelationAddService(RelationTable const * relation, byte const parameterIO[]
 }
 
 
-void RelationRemoveService(RelationTable const * relation, Service * service)
+void ServiceRegistryRemove(RelationTable const * relation, Service * service)
 {
 	ServiceRecord key;
 	setupServiceRecord(&key, relation, 0, service);
@@ -115,7 +115,7 @@ void RelationRemoveService(RelationTable const * relation, Service * service)
 }
 
 
-void RelationRemoveAllServices(RelationTable const * relation)
+void ServiceRegistryRemoveAll(RelationTable const * relation)
 {
 	ServiceRecord key;
 	setupServiceRecord(&key, relation, 0, 0);
@@ -129,26 +129,26 @@ void RelationRemoveAllServices(RelationTable const * relation)
 }
 
 
-size32 RegistryNServices(void)
+size32 ServiceRegistryCount(void)
 {
 	return BTreeNItems(services);
 }
 
 
-void RegistryIterate(RelationTable const * table, RegistryIterator * iterator)
+void ServiceRegistryIterate(RelationTable const * table, ServiceIterator * iterator)
 {
 	iterator->table = table;
 	BTreeIterate(&(iterator->btreeIterator), services);
 }
 
 
-ServiceRecord const * RegistryIteratorPeekRecord(RegistryIterator const * iterator)
+ServiceRecord const * ServiceIteratorPeekRecord(ServiceIterator const * iterator)
 {
 	return BTreeIteratorPeekItem(&(iterator->btreeIterator));
 }
 
 
-bool RegistryIteratorNext(RegistryIterator * iterator)
+bool ServiceIteratorNext(ServiceIterator * iterator)
 {
 	ServiceRecord key = {
 		.relation = iterator->table,
@@ -171,13 +171,13 @@ bool RegistryIteratorNext(RegistryIterator * iterator)
 }
 
 
-void RegistryIteratorEnd(RegistryIterator * iterator)
+void ServiceIteratorEnd(ServiceIterator * iterator)
 {
 	BTreeIteratorEnd(&(iterator->btreeIterator));
 }
 
 
-Service * RegistryFindService(RelationTable const * relation, byte const parameterIO[])
+Service * ServiceRegistryFind(RelationTable const * relation, byte const parameterIO[])
 {
 	ServiceRecord key;
 	setupServiceRecord(&key, relation, parameterIO, 0);
@@ -231,7 +231,7 @@ void RelationTableDump(RelationTable const * table)
 	byte parameterIO[table->nColumns];
 	for(index8 i = 0; i < table->nColumns; i++)
 		parameterIO[i] = PARAMETER_OUT;
-	Service const * service = RegistryFindService(table, parameterIO);
+	Service const * service = ServiceRegistryFind(table, parameterIO);
 	
 	PrintF("Table %u columns\n", table->nColumns);
 
@@ -250,7 +250,7 @@ void RelationTableDump(RelationTable const * table)
 }
 
 
-void RegistryDumpServices(void)
+void ServiceRegistryDump(void)
 {
 	BTreeTraversal(services, &btreePrintCallback);
 }
