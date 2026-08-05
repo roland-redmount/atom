@@ -65,7 +65,9 @@ void testAssertRetract(void)
 
 int main(int argc, char * argv[])
 {
+#ifdef DEBUG_ALLOCATE
 	SetAllocationLogging(true);
+#endif
 
 	KernelInitialize();
 

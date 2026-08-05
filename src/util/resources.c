@@ -1,7 +1,6 @@
 /**
  * Path handling
  * 
- * TODO: make this platform independent, now only Linux
  * TODO: we should encapsulate the path strings to ensure
  *   they have been allocated correctly
  */
