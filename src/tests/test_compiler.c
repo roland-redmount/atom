@@ -3,10 +3,14 @@
 #include "kernel/dictionary.h"
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
+#include "kernel/letter.h"
 #include "kernel/list.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/tuple.h"
 #include "lang/Formula.h"
+#include "lang/name.h"
+#include "lang/PredicateForm.h"
+#include "lang/TermForm.h"
 #include "library/math.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/TermBuilder.h"
@@ -98,13 +102,19 @@ void testCompilePermute3(void)
 	// The element role is an untyped output, so the term matches every
 	// (list position element) relation: one per element type. We therefore
 	// get one compiled service per element type, and must enumerate them all.
+	// Only the LETTER-element service yields tuples, as "alibaba" is a string;
+	// the ID-element service is registered but matches nothing.
 	ServiceRecord records[MAX_COMPILED_SERVICES];
 	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nRecords, 2)
 
-	// Only the LETTER-element service yields tuples, as "alibaba" is a string;
-	// the ID-element service is registered but matches nothing.
-	size8 nElements = 0;
+	// The unique letters of "alibaba"
+	char uniqueLetters[4] = "abil";
+	index8 elementRoleIndex = PredicateRoleIndex(
+		TermFormGetPredicateForm(queryTerm->form),
+		CreateNameFromCString("element")
+	);
+	int k = 0;
 	for(index8 i = 0; i < nRecords; i++) {
 		ASSERT_NOT_NULL(records[i].relation)
 		ASSERT_NOT_NULL(records[i].service)
@@ -113,14 +123,16 @@ void testCompilePermute3(void)
 		TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
 		void * context = ServiceCreateContext(records[i].service, arguments);
 		while(ServiceCall(context)) {
-			PrintTuple(records[i].relation->atomTypes, arguments, 2);
-			PrintChar('\n');
-			nElements++;
+			ASSERT(k < 4)
+			ASSERT_CHAR_EQUAL(
+				LetterToChar(arguments[elementRoleIndex], LETTER_LOWERCASE),
+				uniqueLetters[k]
+			)
+			k++;
 		}
 		ServiceFreeContext(context);
 	}
-	// the unique letters of "alibaba"
-	ASSERT_UINT32_EQUAL(nElements, 4);
+	ASSERT_UINT32_EQUAL(k, 4);
 
 	for(index8 i = 0; i < nRecords; i++) {
 		ServiceRegistryRemove(records[i].relation, records[i].service);
