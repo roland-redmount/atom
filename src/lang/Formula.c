@@ -2,7 +2,6 @@
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "kernel/typedtuple.h"
-#include "lang/Form.h"
 #include "lang/Formula.h"
 #include "lang/name.h"
 #include "lang/ClauseForm.h"
@@ -12,6 +11,23 @@
 #include "memory/allocator.h"
 #include "util/hashing.h"
 #include "util/sort.h"
+
+
+static size8 FormArity(Atom form)
+{
+	if(IsPredicateForm(form))
+		return PredicateArity(form);
+	else if(IsTermForm(form))
+		return TermFormArity(form);
+	else if(IsClauseForm(form))
+		return ClauseArity(form);
+	else if(IsConjunctionForm(form))
+		return ConjunctionFormArity(form);
+	else {
+		ASSERT(false);
+		return 0;
+	}
+}
 
 
 Formula * CreateFormula(Atom form, TypedTuple const * actors)

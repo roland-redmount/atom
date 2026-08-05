@@ -4,7 +4,6 @@
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "lang/TypedAtom.h"
-#include "lang/Form.h"
 #include "lang/Formula.h"
 #include "memory/allocator.h"
 
