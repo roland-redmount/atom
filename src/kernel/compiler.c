@@ -334,16 +334,18 @@ static Service * compileTerm(
 
 
 /**
- * Compile a JOIN service from the conjuction obtained by negating
- * the given clause. We iterate over all negated terms until we find
- * a term that resolve to a known service; we then create a JOIN
+ * Compile a JOIN service from the conjuction obtained by negating the given clause
+ * (clauseForm, clauseActors). The term indicated by matchedTermIndex matched the
+ * query and is not considered. Any term t that has already been compiled is indicated
+ * by termExcluded[t] = true. We iterate over all negated terms until we find
+ * a term that dispatches to a known service; we then return a JOIN service
  * between this service and the service obtained by recursively
- * compiling the remaining terms. If there is only 1 term to consider,
+ * compiling the remaining terms. If the clause contains only 1 term,
  * we emit its service directly without a JOIN, terminating recursion.
  */
 static Service * compileConjunctionRecursive(
 	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 nArguments,
-	bool * termExcluded, uint8 nTermsExcluded, index8 const * termActorsIndices,
+	bool termExcluded[], uint8 nTermsExcluded, index8 const * termActorsIndices,
 	ChoicePoints * choices)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
@@ -378,12 +380,13 @@ static Service * compileConjunctionRecursive(
 			PrintCString("Term: ");
 			PrintFormActorsAsFormula(negatedTermForm, termActors);
 			PrintChar('\n');
-
+			// Attempt to compile this term to a Service
 			service = compileTerm(
 				negatedTermForm, termActors, nArguments, serviceParameters, choices);
 			PrintCString("serviceParameters = ");
 			TypedTuplePrint(serviceParameters);
 			PrintChar('\n');
+
 			if(service) {
 				termExcluded[termIndex] = true;
 				nTermsExcluded++;
@@ -507,7 +510,7 @@ typedef struct s_CompiledVariant {
 
 /**
  * Two parameter tuples denote the same service signature if they agree on
- * the type and direction of every parameter.
+ * the type and direction of every parameter; parameter numbers are ignored here.
  */
 static bool sameParameterSignature(TypedTuple const * first, TypedTuple const * second)
 {
@@ -639,6 +642,7 @@ static size8 compileService(
 							continue;
 						// Recover the unified parameters from the clause actors
 						TypedTupleCopyAt(substClauseActors, matchedTermActorsIndex, resolvedParameters);
+						// Check for previously compiled service with the same signature
 						CompiledVariant * variant = findVariant(variants, nVariants, resolvedParameters);
 						if(variant) {
 							// Another clause yielded the same signature: union them
@@ -689,14 +693,14 @@ size8 CompileService(Formula const * queryTerm, ServiceRecord records[], size8 m
 	CompiledVariant variants[maxRecords];
 	size8 nVariants = compileService(queryTerm->form, queryParameters, variants, maxRecords);
 
-	for(index8 v = 0; v < nVariants; v++) {
+	for(index8 i = 0; i < nVariants; i++) {
 		// Parameter types were resolved by compileService()
-		Atom const * serviceParameters = TypedTuplePeekAtoms(variants[v].parameters);
+		Atom const * serviceParameters = TypedTuplePeekAtoms(variants[i].parameters);
 		byte atomTypes[arity];
 		byte parameterIO[arity];
-		for(index8 i = 0; i < arity; i++) {
-			atomTypes[i] = serviceParameters[i].parameter.atomType;
-			parameterIO[i] = serviceParameters[i].parameter.io;
+		for(index8 j = 0; j < arity; j++) {
+			atomTypes[j] = serviceParameters[j].parameter.atomType;
+			parameterIO[j] = serviceParameters[j].parameter.io;
 		}
 		// Reuse the relation table if this signature has been compiled before
 		RelationTable const * relation = RelationRegistryFind(queryTerm->form, arity, atomTypes);
@@ -705,9 +709,9 @@ size8 CompileService(Formula const * queryTerm, ServiceRecord records[], size8 m
 			ASSERT(relation)
 			RelationRegistryAdd(relation);
 		}
-		records[v] = ServiceRegistryAdd(relation, parameterIO, variants[v].service);
-		ReleaseService(variants[v].service);
-		FreeTypedTuple(variants[v].parameters);
+		records[i] = ServiceRegistryAdd(relation, parameterIO, variants[i].service);
+		ReleaseService(variants[i].service);
+		FreeTypedTuple(variants[i].parameters);
 	}
 	FreeTypedTuple(queryParameters);
 	return nVariants;
