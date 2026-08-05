@@ -73,10 +73,16 @@ typedef uint64_t addr64;
 /**
  * The ASSERT() macro is used to ensure conditions hold at various points
  * throughout the code base. It is defined only in DEBUG builds.
+ *
+ * NOTE: the condition is tested with an empty branch rather than negated,
+ * so that it stays where the compiler can warn about an assignment used as
+ * a condition. Writing if(!(condition)) puts the assignment in parentheses,
+ * which tells the compiler we meant it, and hides typos like ASSERT(a = b).
  */
 #ifdef DEBUG
 #define ASSERT(condition) {\
-	if(!(condition)) {\
+	if(condition) {}\
+	else {\
 		PrintF("ASSERT() fail in %s(), %s:%d.\n", __func__, __FILE__, __LINE__);\
 		AbortProgram();\
 	}\

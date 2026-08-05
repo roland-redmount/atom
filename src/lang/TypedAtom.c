@@ -75,7 +75,7 @@ int8 CompareTypedAtoms(TypedAtom typedAtom1, TypedAtom typedAtom2)
 
 static int8 quickSortCompareTypedAtoms(void const * item1, void const * item2, size32 itemSize)
 {
-	ASSERT(itemSize = sizeof(TypedAtom));
+	ASSERT(itemSize == sizeof(TypedAtom));
 	TypedAtom typedAtom1 = *((const TypedAtom *) item1);
 	TypedAtom typedAtom2 = *((const TypedAtom *) item2);
 	return CompareTypedAtoms(typedAtom1, typedAtom2);
