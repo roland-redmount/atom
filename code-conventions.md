@@ -62,9 +62,11 @@ For indexing we use unsigned integers with aliases `index8`, `index16`, `index32
 
 ## Error handling
 
-Functions generally assume that they are provided valid arguments -- that data structures are properly filled in, pointers are not null, array indexes are within range, &c. We do not test for such errors, but we use the `ASSERT()` macro to verify assumptions in debug builds. Hence, functions do not have to return error codes, and callers don't have to test for error codes. It is assumed that functions work correctly when given correct arguments, and it is the callers responsibility to provide correct arguments.
+Functions generally assume that they are provided valid arguments -- that data structures are properly filled in, pointers are not null, array indexes are within range, &c. We use the `ASSERT()` macro to verify such assumptions in debug builds; violation of the condition of an `ASSERT()` is considered programmer error, and should never occur. Functions do not have to test for programmer errors, return error codes, and callers don't have to test for error codes. It is assumed that functions work correctly when given correct arguments, and it is the callers responsibility to provide correct arguments. In release builds, a violated `ASSERT()` will lead to undefined behavior.
 
-There are of course situations where a function will not be able to do what the caller requested, for example `AssertFact(fact)` will abort and return `false` when `fact` contradicts an existing fact. This is not an error: it is a normal outcome, since the caller cannot know whether the fact is valid before attempting to assert it, and `AssertFact` is the function that decides whether the fact is valid or not. User input may be invalid in various ways, but rejecting such input is normal behavior, not a program error.
+There are of course situations where a function will not be able to do what the caller requested due to bad input, for example `AssertFact(fact)` will abort and return `false` when `fact` contradicts an existing fact. This is not an error: it is a normal outcome, since the caller cannot know whether the fact is valid before attempting to assert it, and `AssertFact` is the function that decides whether the fact is valid or not. User input may be invalid in various ways, but rejecting such input is normal behavior, not a program error.
+
+The third category of errors are irrecoverable failures, such as the OS failing to provide resources that are absolutely necessary (like memory pages). These are not programmer errors, and should not be handled with the `Panic()` function, not `ASSERT`.
 
 
 ## Memory allocation conventions
