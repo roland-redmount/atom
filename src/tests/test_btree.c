@@ -53,17 +53,23 @@ static bool testItemsEqual(TestItem const * item, TestItem const * item2)
 }
 
 
+// NOTE: the B-tree verification functions only exist in debug builds,
+// so these checks are simply skipped elsewhere
 void validateBTree(BTree const * btree)
 {
+#ifdef DEBUG
     ASSERT_TRUE(BTreeIsBalanced(btree))
     ASSERT_TRUE(BTreeDeepCount(btree) == btree->nItemsTotal)
     ASSERT_TRUE(BTreeVerifyBounds(btree))
     ASSERT_TRUE(BTreeVerifyItemOrder(btree))
+#endif
 }
 
 void printTestBTree(BTree const * btree)
 {
+#ifdef DEBUG
 	BTreePrint(btree, printTestItemKey);
+#endif
 }
 
 

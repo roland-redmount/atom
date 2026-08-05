@@ -275,9 +275,12 @@ const char * checkTypeNames[3] = {"Setup", "Test", "Teardown"};
 
 static void executeCheckReferences(void (*function)(void), CheckType checkType)
 {
-	uint32 initialRefCount;
-	uint32 initialIFactCount;
-	if(IFactsInitialized()) {
+	// NOTE: the function may initialize IFacts, so we can only compare against
+	// a baseline we actually took before calling it
+	uint32 initialRefCount = 0;
+	uint32 initialIFactCount = 0;
+	bool ifactsInitialized = IFactsInitialized();
+	if(ifactsInitialized) {
 		initialRefCount = IFactTotalReferenceCount();
 		initialIFactCount = IFactTotalCount();
 		IFactsEnableFlagging();
@@ -286,7 +289,7 @@ static void executeCheckReferences(void (*function)(void), CheckType checkType)
 
 	function();
 
-	if(IFactsInitialized()) {
+	if(ifactsInitialized) {
 		int32 refCountDiff = IFactTotalReferenceCount() - initialRefCount;
 		if(checkType != CHECK_TEARDOWN && refCountDiff < 0)
 			PrintF("%s: Lost %d IFact references.\n", checkTypeNames[checkType], refCountDiff);

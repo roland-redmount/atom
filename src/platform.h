@@ -91,6 +91,24 @@ typedef uint64_t addr64;
 #define ASSERT(condition) {if(condition) {}}
 #endif
 
+/**
+ * ASSUME() states a condition that callers are required to meet, in a form
+ * the compiler can make use of. It is checked like ASSERT() in debug builds,
+ * while in release builds it tells the compiler the condition holds, so that
+ * it does not reason about a case that cannot occur.
+ *
+ * Use it only where ASSERT() would be the alternative anyway, that is, where
+ * a false condition means the caller has a bug: unlike ASSERT(), a violated
+ * ASSUME() is undefined behavior rather than merely undetected.
+ */
+#ifdef DEBUG
+#define ASSUME(condition) ASSERT(condition)
+#elif defined(__GNUC__)
+#define ASSUME(condition) {if(condition) {} else __builtin_unreachable();}
+#else
+#define ASSUME(condition) {if(condition) {}}
+#endif
+
 
 uint8 GetHighestSetBit(data32 x);
 
