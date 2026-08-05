@@ -3,15 +3,22 @@
 #include "kernel/dictionary.h"
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
+#include "kernel/letter.h"
 #include "kernel/list.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/tuple.h"
 #include "lang/Formula.h"
+#include "lang/name.h"
+#include "lang/PredicateForm.h"
+#include "lang/TermForm.h"
 #include "library/math.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
 
+
+// Upper bound on the number of services a single query may compile to
+#define MAX_COMPILED_SERVICES	4
 
 
 void testCompilePermute1(void)
@@ -22,9 +29,10 @@ void testCompilePermute1(void)
 	Formula * queryTerm = CStringToTerm("+ 7 - 4 = _d");
 
 	// This will yield a new service from the existing (+ + =) service
-	ServiceRecord record = CompileService(queryTerm);
-	ASSERT_NOT_NULL(record.relation)
-	ASSERT_NOT_NULL(record.service)
+	ServiceRecord records[MAX_COMPILED_SERVICES];
+	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nRecords, 1)
+	ServiceRecord record = records[0];
 
 	// TODO: verify the compiled service atom types are correct
 
@@ -54,9 +62,10 @@ void testCompilePermute2(void)
 	DictionaryEntry entry = DictionaryAddClauseFromCString("number _x addtwo _y | ! + _x + 2 = _y");
 	Formula * queryTerm = CStringToTerm("number 3 addtwo _z");
 
-	ServiceRecord record = CompileService(queryTerm);
-	ASSERT_NOT_NULL(record.relation)
-	ASSERT_NOT_NULL(record.service)
+	ServiceRecord records[MAX_COMPILED_SERVICES];
+	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nRecords, 1)
+	ServiceRecord record = records[0];
 
 	// Call the service
 	Atom arguments[3];
@@ -90,23 +99,45 @@ void testCompilePermute3(void)
 		"set _s element _e | ! list _s position _ element _e");
 	Formula * queryTerm = CStringToTerm("set \"alibaba\" element _e");
 
-	ServiceRecord record = CompileService(queryTerm);
-	ASSERT_NOT_NULL(record.relation)
-	ASSERT_NOT_NULL(record.service)
+	// The element role is an untyped output, so the term matches every
+	// (list position element) relation: one per element type. We therefore
+	// get one compiled service per element type, and must enumerate them all.
+	// Only the LETTER-element service yields tuples, as "alibaba" is a string;
+	// the ID-element service is registered but matches nothing.
+	ServiceRecord records[MAX_COMPILED_SERVICES];
+	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nRecords, 2)
 
-	// Call the service
-	Atom arguments[2];
-	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
-	void * context = ServiceCreateContext(record.service, arguments);
-	size8 nElements = 0;
-	while(ServiceCall(context)) {
-		nElements++;
+	// The unique letters of "alibaba"
+	char uniqueLetters[4] = "abil";
+	index8 elementRoleIndex = PredicateRoleIndex(
+		TermFormGetPredicateForm(queryTerm->form),
+		CreateNameFromCString("element")
+	);
+	int k = 0;
+	for(index8 i = 0; i < nRecords; i++) {
+		ASSERT_NOT_NULL(records[i].relation)
+		ASSERT_NOT_NULL(records[i].service)
+
+		Atom arguments[2];
+		TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
+		void * context = ServiceCreateContext(records[i].service, arguments);
+		while(ServiceCall(context)) {
+			ASSERT(k < 4)
+			ASSERT_CHAR_EQUAL(
+				LetterToChar(arguments[elementRoleIndex], LETTER_LOWERCASE),
+				uniqueLetters[k]
+			)
+			k++;
+		}
+		ServiceFreeContext(context);
 	}
-	ASSERT_UINT32_EQUAL(nElements, 4);
-	ServiceFreeContext(context);
+	ASSERT_UINT32_EQUAL(k, 4);
 
-	ServiceRegistryRemove(record.relation, record.service);
-	RelationRegistryRemove(record.relation);
+	for(index8 i = 0; i < nRecords; i++) {
+		ServiceRegistryRemove(records[i].relation, records[i].service);
+		RelationRegistryRemove(records[i].relation);
+	}
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -120,9 +151,10 @@ void testCompileJoin1(void)
 		"first _x second _y third _z | ! + _x + 1 = _y | ! + _y + 1 = _z");
 	Formula * queryTerm = CStringToTerm("first 3 second _s third _t");
 
-	ServiceRecord record = CompileService(queryTerm);
-	ASSERT_NOT_NULL(record.relation)
-	ASSERT_NOT_NULL(record.service)
+	ServiceRecord records[MAX_COMPILED_SERVICES];
+	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nRecords, 1)
+	ServiceRecord record = records[0];
 
 	// Call the service
 	Atom arguments[3];
@@ -157,9 +189,10 @@ void testCompileUnion(void)
 		"number _x neighbor _y | ! = _x + _y + 1");
 	Formula * queryTerm = CStringToTerm("number 5 neighbor _y");
 
-	ServiceRecord record = CompileService(queryTerm);
-	ASSERT_NOT_NULL(record.relation)
-	ASSERT_NOT_NULL(record.service)
+	ServiceRecord records[MAX_COMPILED_SERVICES];
+	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nRecords, 1)
+	ServiceRecord record = records[0];
 	PrintCString("Service  = ");
 	PrintService(record.service);
 	PrintChar('\n');
@@ -199,12 +232,13 @@ void testCompileRecursiveJoin(void)
 	// TODO: Compile a recursive rule to a JOIN service
 	// number n faculty f <- + m + 1 = n & number m faculty e & * e * n = f
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"number _n faculty _f | ! + _m + 1 = _n | ! number _m faculty _e | * _e * _n = _f");
+		"number _n faculty _f | ! + _m + 1 = _n | ! number _m faculty _e | ! * _e * _n = _f");
 	Formula * queryTerm = CStringToTerm("number 4 faculty _f");
 
-	ServiceRecord record = CompileService(queryTerm);
-	ASSERT_NOT_NULL(record.relation)
-	ASSERT_NOT_NULL(record.service)
+	ServiceRecord records[MAX_COMPILED_SERVICES];
+	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nRecords, 1)
+	ServiceRecord record = records[0];
 
 	// Call the service
 	Atom arguments[3];
@@ -232,10 +266,10 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testCompilePermute1);
 	ExecuteTest(testCompilePermute2);
-	// TODO: this one requires migrating to typed relation tables
-	// ExecuteTest(testCompilePermute3);
+	ExecuteTest(testCompilePermute3);
 	ExecuteTest(testCompileJoin1);
 	ExecuteTest(testCompileUnion);
+	// ExecuteTest(testCompileRecursiveJoin);
 
 	MathTeardown();
 	TestSummary();

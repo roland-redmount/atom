@@ -156,6 +156,77 @@
 
 
 /**
+ * A query term that leaves an output parameter untyped may match several
+ * services, one per relation table matching its form (the element type
+ * of a list, say, is not determined by the query). Each such term is a choice
+ * point, and each combination of choices yields a separately typed service.
+ *
+ * Rather than making every compilation step multi-valued, we keep them
+ * single-valued and re-run the whole compilation once per combination,
+ * forcing a different choice each time. A choice point is identified by the
+ * position at which it is encountered, which is well defined because
+ * DispatchQueryAt() enumerates candidates deterministically.
+ */
+
+#define MAX_CHOICE_POINTS	8
+
+typedef struct s_ChoicePoints {
+	// which match to take from DispatchQueryAt() at each choice point (0, 1, ...)
+	index8 matchIndex[MAX_CHOICE_POINTS];
+	// whether there is another match available at each choice point
+	bool hasNextMatch[MAX_CHOICE_POINTS];
+	// number of choice points encountered in the current run
+	index8 depth;
+} ChoicePoints;
+
+
+static void resetChoicePoints(ChoicePoints * choices)
+{
+	SetMemory(choices, sizeof(ChoicePoints), 0);
+}
+
+
+/**
+ * Advance to the next combination of choices, depth first: take the deepest
+ * choice point that still has an untried alternative, and reset the choice points
+ * below it. Returns false once all combinations have been visited.
+ */
+static bool nextChoiceBranch(ChoicePoints * choices)
+{
+	for(index8 i = choices->depth; i > 0; i--) {
+		index8 d = i - 1;
+		if(choices->hasNextMatch[d]) {
+			choices->matchIndex[d]++;
+			for(index8 j = i; j < MAX_CHOICE_POINTS; j++) {
+				choices->matchIndex[j] = 0;
+				choices->hasNextMatch[j] = false;
+			}
+			choices->depth = 0;
+			return true;
+		}
+	}
+	return false;
+}
+
+
+/**
+ * Dispatch a term at the next choice point, taking the alternative selected
+ * for the current branch and recording whether further alternatives exist.
+ */
+static bool dispatchAtChoicePoint(
+	Atom termForm, TypedTuple const * termActors, ServiceRecord * record,
+	index8 permutation[], ChoicePoints * choices)
+{
+	ASSERT(choices->depth < MAX_CHOICE_POINTS)
+	index8 d = choices->depth++;
+	return DispatchQueryAt(
+		termForm, termActors, record, permutation,
+		choices->matchIndex[d], &(choices->hasNextMatch[d])
+	);
+}
+
+
+/**
  * Generate a parameters tuple from an actors tuple, such that each non-variable atom
  * in the actors tuple corresponds to an input parameter (with type preserved),
  * and each variable yields an output parameters. The output parameter types are
@@ -194,13 +265,14 @@ static void actorsToParameters(TypedTuple const * actors, TypedTuple * parameter
  * permuted to match the term actors order.
  */
 static Service * compileTerm(
-	Atom termForm, TypedTuple const * termActors, size8 nArguments, TypedTuple * serviceParameters)
+	Atom termForm, TypedTuple const * termActors, size8 nArguments,
+	TypedTuple * serviceParameters, ChoicePoints * choices)
 {
 	// attempt to locate an service existing service
 	size8 termArity = termActors->nAtoms;
 	index8 permutation[termArity];
 	ServiceRecord termServiceRecord;
-	if(!DispatchQuery(termForm, termActors, &termServiceRecord, permutation))
+	if(!dispatchAtChoicePoint(termForm, termActors, &termServiceRecord, permutation, choices))
 		return 0;
 
 	// Compute argument map: 1-based index for each service parameter into the term actors,
@@ -262,16 +334,19 @@ static Service * compileTerm(
 
 
 /**
- * Compile a JOIN service from the conjuction obtained by negating
- * the given clause. We iterate over all negated terms until we find
- * a term that resolve to a known service; we then create a JOIN
+ * Compile a JOIN service from the conjuction obtained by negating the given clause
+ * (clauseForm, clauseActors). The term indicated by matchedTermIndex matched the
+ * query and is not considered. Any term t that has already been compiled is indicated
+ * by termExcluded[t] = true. We iterate over all negated terms until we find
+ * a term that dispatches to a known service; we then return a JOIN service
  * between this service and the service obtained by recursively
- * compiling the remaining terms. If there is only 1 term to consider,
+ * compiling the remaining terms. If the clause contains only 1 term,
  * we emit its service directly without a JOIN, terminating recursion.
  */
 static Service * compileConjunctionRecursive(
 	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 nArguments,
-	bool * termExcluded, uint8 nTermsExcluded, index8 const * termActorsIndices)
+	bool termExcluded[], uint8 nTermsExcluded, index8 const * termActorsIndices,
+	ChoicePoints * choices)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	Service * service = 0;
@@ -305,11 +380,13 @@ static Service * compileConjunctionRecursive(
 			PrintCString("Term: ");
 			PrintFormActorsAsFormula(negatedTermForm, termActors);
 			PrintChar('\n');
-
-			service = compileTerm(negatedTermForm, termActors, nArguments, serviceParameters);
+			// Attempt to compile this term to a Service
+			service = compileTerm(
+				negatedTermForm, termActors, nArguments, serviceParameters, choices);
 			PrintCString("serviceParameters = ");
 			TypedTuplePrint(serviceParameters);
 			PrintChar('\n');
+
 			if(service) {
 				termExcluded[termIndex] = true;
 				nTermsExcluded++;
@@ -380,7 +457,7 @@ static Service * compileConjunctionRecursive(
 		// Recurse on remaining terms
 		Service * nextService = compileConjunctionRecursive(
 			clauseForm, clauseActors, matchedTermIndex, nArguments,
-			termExcluded, nTermsExcluded, termActorsIndices
+			termExcluded, nTermsExcluded, termActorsIndices, choices
 		);
 		if(nextService) {
 			Service * joinService = CreateJoinService(service, nextService);
@@ -403,7 +480,8 @@ static Service * compileConjunctionRecursive(
 
 
 static Service * compileConjunction(
-	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 nArguments)
+	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 nArguments,
+	ChoicePoints * choices)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	index8 termActorsIndices[clauseNTerms + 1];
@@ -414,19 +492,65 @@ static Service * compileConjunction(
 
 	return compileConjunctionRecursive(
 		clauseForm, clauseActors, matchedTermIndex, nArguments,
-		termExcluded, 1, termActorsIndices);
+		termExcluded, 1, termActorsIndices, choices);
 }
 
 
 /**
- * Attempt to compile a service with the given form and actors.
- * The queryActors tuple must be a series of AT_PARAMETER atoms numbered 1, 2, ... 
- * Parameter types in the queryActors tuple will be updated.
- * Returns the compiled service if successful, else 0.
+ * A compiled service together with the query parameters it resolved to.
+ * One variant is emitted per distinct parameter signature; clauses that
+ * resolve to the same signature are combined into a UNION, as before.
  */
-static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
+typedef struct s_CompiledVariant {
+	// resolved query parameters, owned by the variant
+	TypedTuple * parameters;
+	Service * service;
+} CompiledVariant;
+
+
+/**
+ * Two parameter tuples denote the same service signature if they agree on
+ * the type and direction of every parameter; parameter numbers are ignored here.
+ */
+static bool sameParameterSignature(TypedTuple const * first, TypedTuple const * second)
+{
+	ASSERT(first->nAtoms == second->nAtoms)
+	for(index8 i = 0; i < first->nAtoms; i++) {
+		TypedAtom a = TypedTupleGetElement(first, i);
+		TypedAtom b = TypedTupleGetElement(second, i);
+		ASSERT((a.type == AT_PARAMETER) && (b.type == AT_PARAMETER))
+		if(a.atom.parameter.atomType != b.atom.parameter.atomType)
+			return false;
+		if(a.atom.parameter.io != b.atom.parameter.io)
+			return false;
+	}
+	return true;
+}
+
+
+static CompiledVariant * findVariant(
+	CompiledVariant * variants, size8 nVariants, TypedTuple const * parameters)
+{
+	for(index8 i = 0; i < nVariants; i++) {
+		if(sameParameterSignature(variants[i].parameters, parameters))
+			return &(variants[i]);
+	}
+	return 0;
+}
+
+
+/**
+ * Attempt to compile services with the given form and actors.
+ * The queryActors tuple must be a series of AT_PARAMETER atoms numbered 1, 2, ...
+ * and is not modified; each compiled variant carries its own resolved parameters.
+ * Returns the number of variants written to the variants array.
+ */
+static size8 compileService(
+	Atom queryTermForm, TypedTuple const * queryActors,
+	CompiledVariant * variants, size8 maxVariants)
 {
 	size8 termArity = TermFormArity(queryTermForm);
+	size8 nVariants = 0;
 
 	// TODO: query existing services matching the term
 
@@ -446,10 +570,9 @@ static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
  	 * TODO: it might happen that a generated UNION service has the same
 	 * signature as an existing service, which becomes part of the UNION.
 	 * In this case, the newly generated service should replace the existing one.
-	 * 
+	 *
 	 * NOTE: Recursive services are not guaranteed to terminate.
 	 */
-	Service * service = 0;
 
 	/**
 	 * TODO: here we need the service (multiset >ID element <ID multiple >UINT) where element is input
@@ -480,6 +603,7 @@ static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
 		DictionaryIterate(clauseForm, &dictIterator);
 		TypedTuple * matchedTermActors = CreateTypedTuple(termArity);
 		TypedTuple * substClauseActors = CreateTypedTuple(ClauseArity(clauseForm));
+		TypedTuple * resolvedParameters = CreateTypedTuple(termArity);
 		while(DictionaryIteratorNext(&dictIterator)) {
 			TypedTuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
 			PrintCString("Matched rule: ");
@@ -498,30 +622,43 @@ static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
 				Substitution termSubst;
 				foundTerm = UnifyTuples(queryActors, matchedTermActors, &querySubst, &termSubst);
 				if(foundTerm) {
-					SubstituteTuple(&termSubst, clauseActors, substClauseActors);
-					PrintCString("Unified rule: ");
-					PrintFormActorsAsFormula(clauseForm, substClauseActors);
-					PrintChar('\n');
-
 					index8 matchedTermIndex = ClauseGetTermIndex(clauseForm, queryTermForm, m);
-					Service * newService = compileConjunction(
-						clauseForm, substClauseActors, matchedTermIndex, termArity);
-					if(newService) {
-						// Update the query actors from the clause actors
-						// to recover unified parameters
-						// NOTE: when multiple services are matched, the resulting parameter tuple
-						// must be identical across all services (same parameter types)
-						TypedTupleCopyAt(substClauseActors, matchedTermActorsIndex, queryActors);
-						// handle unions
-						if(service) {
-							Service * unionService = CreateUnionService(service, newService);
-							ReleaseService(service);
+					// Compile once per combination of choices. A term that leaves
+					// an output parameter untyped may match several services, each
+					// yielding a differently typed variant of the query service.
+					ChoicePoints choices;
+					resetChoicePoints(&choices);
+					do {
+						// compileConjunction() updates parameter types in the clause
+						// actors, so re-derive them for each branch.
+						SubstituteTuple(&termSubst, clauseActors, substClauseActors);
+						PrintCString("Unified rule: ");
+						PrintFormActorsAsFormula(clauseForm, substClauseActors);
+						PrintChar('\n');
+
+						Service * newService = compileConjunction(
+							clauseForm, substClauseActors, matchedTermIndex, termArity, &choices);
+						if(!newService)
+							continue;
+						// Recover the unified parameters from the clause actors
+						TypedTupleCopyAt(substClauseActors, matchedTermActorsIndex, resolvedParameters);
+						// Check for previously compiled service with the same signature
+						CompiledVariant * variant = findVariant(variants, nVariants, resolvedParameters);
+						if(variant) {
+							// Another clause yielded the same signature: union them
+							Service * unionService = CreateUnionService(variant->service, newService);
+							ReleaseService(variant->service);
 							ReleaseService(newService);
-							service = unionService;
+							variant->service = unionService;
 						}
-						else
-							service = newService;
-					}
+						else {
+							ASSERT(nVariants < maxVariants)
+							variants[nVariants].parameters = CreateTypedTuple(termArity);
+							TypedTupleCopy(resolvedParameters, variants[nVariants].parameters);
+							variants[nVariants].service = newService;
+							nVariants++;
+						}
+					} while(nextChoiceBranch(&choices));
 				}
 				FreeSubstitution(&querySubst);
 				FreeSubstitution(&termSubst);
@@ -529,47 +666,53 @@ static Service * compileService(Atom queryTermForm, TypedTuple * queryActors)
 			}
 		}
 		DictionaryIteratorEnd(&dictIterator);
+		FreeTypedTuple(resolvedParameters);
 		FreeTypedTuple(substClauseActors);
 		FreeTypedTuple(matchedTermActors);
 	}
 	ServiceFreeContext(multisetContext);
 
-	return service;
+	return nVariants;
 }
 
 
-ServiceRecord CompileService(Formula const * queryTerm)
+size8 CompileService(Formula const * queryTerm, ServiceRecord records[], size8 maxRecords)
 {
 	ASSERT(IsTermForm(queryTerm->form))
+	ASSERT(maxRecords > 0)
 
 	// Generalize atoms in the query to parameters
-	TypedTuple * queryParameters = CreateTypedTuple(queryTerm->actors->nAtoms);
+	size8 arity = queryTerm->actors->nAtoms;
+	TypedTuple * queryParameters = CreateTypedTuple(arity);
 	actorsToParameters(queryTerm->actors, queryParameters);
 
 	PrintCString("queryParameters: ");
 	PrintFormActorsAsFormula(queryTerm->form, queryParameters);
 	PrintChar('\n');
 
-	ServiceRecord record = {0};
-	Service * service = compileService(queryTerm->form, queryParameters);
-	if(service) {
-		// Output parameters types have now been updated by compileService()
-		Atom const * serviceParameters = TypedTuplePeekAtoms(queryParameters);
-		// extract parameter IO types from parameter list
-		size8 arity = queryTerm->actors->nAtoms;
+	CompiledVariant variants[maxRecords];
+	size8 nVariants = compileService(queryTerm->form, queryParameters, variants, maxRecords);
+
+	for(index8 i = 0; i < nVariants; i++) {
+		// Parameter types were resolved by compileService()
+		Atom const * serviceParameters = TypedTuplePeekAtoms(variants[i].parameters);
+		byte atomTypes[arity];
 		byte parameterIO[arity];
-		for(index8 i = 0; i < arity; i++)
-			parameterIO[i] = serviceParameters[i].parameter.io;
-		// create table
-		// TODO: must check if table already exists!
-		RelationTable const * relation = CreateRelationTable(
-			0, queryTerm->form, arity, parameterIO, 0
-		);
-		ASSERT(relation)
-		RelationRegistryAdd(relation);
-		record = ServiceRegistryAdd(relation, parameterIO, service);
-		ReleaseService(service);
+		for(index8 j = 0; j < arity; j++) {
+			atomTypes[j] = serviceParameters[j].parameter.atomType;
+			parameterIO[j] = serviceParameters[j].parameter.io;
+		}
+		// Reuse the relation table if this signature has been compiled before
+		RelationTable const * relation = RelationRegistryFind(queryTerm->form, arity, atomTypes);
+		if(!relation) {
+			relation = CreateRelationTable(0, queryTerm->form, arity, atomTypes, 0);
+			ASSERT(relation)
+			RelationRegistryAdd(relation);
+		}
+		records[i] = ServiceRegistryAdd(relation, parameterIO, variants[i].service);
+		ReleaseService(variants[i].service);
+		FreeTypedTuple(variants[i].parameters);
 	}
 	FreeTypedTuple(queryParameters);
-	return record;
+	return nVariants;
 }
