@@ -10,7 +10,6 @@
 #include "kernel/ServiceRegistry.h"
 #include "kernel/typedtuple.h"
 #include "lang/PredicateForm.h"
-#include "lang/Form.h"
 #include "lang/Formula.h"
 #include "memory/paging.h"
 #include "memory/allocator.h"

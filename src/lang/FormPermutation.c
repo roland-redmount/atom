@@ -5,7 +5,6 @@
 #include "lang/ClauseForm.h"
 #include "lang/AtomType.h"
 #include "lang/ConjunctionForm.h"
-#include "lang/Form.h"
 #include "lang/FormPermutation.h"
 #include "lang/PredicateForm.h"
 #include "util/utilities.h"

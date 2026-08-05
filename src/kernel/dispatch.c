@@ -9,7 +9,6 @@
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/ClauseForm.h"
-#include "lang/Form.h"
 #include "lang/FormPermutation.h"
 #include "lang/Formula.h"
 #include "lang/SubstitutionList.h"
