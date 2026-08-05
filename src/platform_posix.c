@@ -258,6 +258,10 @@ void CStringPrepend(const char * prefix, char * buffer, size32 bufferSize)
 //------------------------ File IO ------------------------
 
 
+#if PATH_MAX > MAX_PATH_LENGTH
+#error "MAX_PATH_LENGTH is too small to be an upper bound on PATH_MAX"
+#endif
+
 uint32 maxPathLength = PATH_MAX;
 
 
@@ -431,6 +435,92 @@ void GetExecutablePath(char * buffer, size32 bufferSize)
 }
 
 
+void AppendPathComponent(char const * component, char * buffer, size32 bufferSize)
+{
+	size32 length = CStringLength(buffer);
+	if(length > 0 && buffer[length - 1] != '/')
+		CStringAppend("/", buffer, bufferSize);
+	CStringAppend(component, buffer, bufferSize);
+}
+
+
+bool DirectoryExists(char const * path)
+{
+	// NOTE: FileExists() uses access(), which is also true for directories
+	struct stat pathStatus;
+	if(stat(path, &pathStatus) != 0)
+		return false;
+	return S_ISDIR(pathStatus.st_mode);
+}
+
+
+/**
+ * Create a single directory, treating "already exists" as success.
+ */
+static bool createDirectory(char const * path)
+{
+	if(mkdir(path, S_IRWXU) == 0)
+		return true;
+	return (errno == EEXIST) && DirectoryExists(path);
+}
+
+
+bool EnsureDirectory(char const * path)
+{
+	// create each parent directory in turn by temporarily terminating the
+	// path string at every separator
+	char partialPath[maxPathLength + 1];
+	CStringCopyLimited(path, partialPath, maxPathLength + 1);
+	for(index32 i = 1; partialPath[i] != 0; i++) {
+		if(partialPath[i] != '/')
+			continue;
+		partialPath[i] = 0;
+		if(!createDirectory(partialPath))
+			return false;
+		partialPath[i] = '/';
+	}
+	return createDirectory(partialPath);
+}
+
+
+/**
+ * Get a user directory as specified by the XDG base directory standard:
+ * the given environment variable if set, otherwise the given path
+ * relative to the user's home directory.
+ *
+ * NOTE: on MacOS the native location would be ~/Library/Application Support,
+ * but we currently use the XDG locations on all POSIX platforms.
+ */
+static bool getUserDirectory(
+	char const * variableName, char const * relativePath, char * buffer, size32 bufferSize)
+{
+	char const * directoryPath = GetEnvironmentVariable(variableName);
+	if(directoryPath != 0 && directoryPath[0] != 0) {
+		CStringCopyLimited(directoryPath, buffer, bufferSize);
+		return true;
+	}
+
+	char const * homePath = GetEnvironmentVariable("HOME");
+	if(homePath == 0 || homePath[0] == 0)
+		return false;
+	CStringCopyLimited(homePath, buffer, bufferSize);
+	AppendPathComponent(relativePath, buffer, bufferSize);
+	return true;
+}
+
+
+bool GetUserConfigDirectory(char * buffer, size32 bufferSize)
+{
+	return getUserDirectory("XDG_CONFIG_HOME", ".config", buffer, bufferSize);
+}
+
+
+bool GetUserDataDirectory(char * buffer, size32 bufferSize)
+{
+	return getUserDirectory("XDG_DATA_HOME", ".local/share", buffer, bufferSize);
+}
+
+
 //---------------------- memory mapping ---------------------------
 
 static void mapFileToMemory(void * address, size_t size, int fileDescriptor)
@@ -464,8 +554,11 @@ static void mapFileToMemory(void * address, size_t size, int fileDescriptor)
 bool RestoreMappedMemory(void * address, char const * fileName, FileMapping * fileMapping)
 {
 	int fileDescriptor;
-	if(!openFile(fileName, &fileDescriptor))
+	if(!openFile(fileName, &fileDescriptor)) {
+		fileMapping->size = 0;
+		fileMapping->address = 0;
 		return false;
+	}
 
 	fileMapping->size = getFileSize(fileDescriptor);
 	fileMapping->address = address;
@@ -506,12 +599,17 @@ bool CreateOrRestoreMappedMemory(void * address, size64 size, char const * fileP
 
 void ReleaseFileMapping(FileMapping * fileMapping)
 {
+	if(fileMapping->address == 0)
+		return;
 	munmap(fileMapping->address, fileMapping->size);
 }
 
 
 void AbortProgram(void)
 {
+	// abort() does not flush, which would discard whatever we printed
+	// to explain why we are aborting
+	fflush(stdout);
 	abort();
 }
 
@@ -551,6 +649,11 @@ bool IsPrintableChar(char c)
 bool IsDigitChar(char c)
 {
 	return isdigit(c);
+}
+
+bool IsSpaceChar(char c)
+{
+	return isspace(c);
 }
 
 bool IsAlpha(char c)

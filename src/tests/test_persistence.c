@@ -8,10 +8,13 @@
 void testRestoreMapping(void)
 {
 	char mapFilePath[maxPathLength + 1];
-	GetResourceFilePath("testmapping.txt", mapFilePath, maxPathLength + 1);
+	ASSERT_TRUE(GetFixtureFilePath("testmapping.txt", mapFilePath, maxPathLength + 1))
 	FileMapping fileMapping;
 	bool mappingSuccess = RestoreMappedMemory(pageTable, mapFilePath, &fileMapping);
 	ASSERT_TRUE(mappingSuccess)
+	// assertions only log, so we must return explicitly before using the mapping
+	if(!mappingSuccess)
+		return;
 	ASSERT_UINT32_EQUAL(fileMapping.size, 10)
 
 	char* fileContents = (char *) fileMapping.address;
@@ -22,15 +25,15 @@ void testRestoreMapping(void)
 
 void testCreateMapping(void)
 {
-	// TODO: this should probably write to a temporary folder, not to resources
-	
 	char mapFilePath[maxPathLength + 1];
-	GetResourceFilePath("tmp_mapping.txt", mapFilePath, maxPathLength + 1);
+	ASSERT_TRUE(GetDataFilePath("tmp_mapping.txt", mapFilePath, maxPathLength + 1))
 	uint32 memorySize = 1 << 20;	// 1 Mb
 	FileMapping fileMapping;
 
 	bool mappingSuccess = CreateMappedMemory(pageTable, memorySize, mapFilePath, &fileMapping);
 	ASSERT_TRUE(mappingSuccess)
+	if(!mappingSuccess)
+		return;
 	ASSERT_UINT32_EQUAL(fileMapping.size, memorySize)
 
 	// write to mapped data

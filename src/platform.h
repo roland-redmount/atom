@@ -149,6 +149,11 @@ bool IsPrintableChar(char c);
 bool IsDigitChar(char c);
 
 /**
+ * Test if c is white space, such as a space, tab or newline
+ */
+bool IsSpaceChar(char c);
+
+/**
  * Test if c is an alphabet letter
  */
 bool IsAlpha(char c);
@@ -190,6 +195,13 @@ bool DeleteFile(char const * filePath);
 
 // path handling
 
+/**
+ * Upper bound on path lengths, for use where a compile time constant is
+ * required (static buffers). The actual limit is maxPathLength, which the
+ * platform layer guarantees is no larger than this.
+ */
+#define MAX_PATH_LENGTH 4096
+
 extern uint32 maxPathLength;
 
 void GetParentDirectory(char * path, size32 bufferSize);
@@ -200,6 +212,36 @@ void GetParentDirectory(char * path, size32 bufferSize);
 void GetExecutablePath(char * buffer, size32 bufferSize);
 
 /**
+ * Append a path component to the path in buffer, inserting a
+ * path separator if needed.
+ */
+void AppendPathComponent(char const * component, char * buffer, size32 bufferSize);
+
+/**
+ * Test whether the given path exists and is a directory.
+ */
+bool DirectoryExists(char const * path);
+
+/**
+ * Create the directory at the given path, including any missing parent
+ * directories. Succeeds if the directory already exists.
+ */
+bool EnsureDirectory(char const * path);
+
+/**
+ * Get the directory holding per-user configuration files, without trailing
+ * separator. Returns false if no such directory can be determined, which
+ * happens when the environment does not say where the user's home is.
+ */
+bool GetUserConfigDirectory(char * buffer, size32 bufferSize);
+
+/**
+ * Get the directory holding per-user application data, without trailing
+ * separator. Returns false as GetUserConfigDirectory() does.
+ */
+bool GetUserDataDirectory(char * buffer, size32 bufferSize);
+
+/**
  * Virtual memory
  */
 
@@ -208,10 +250,20 @@ typedef struct s_FileMapping {
 	size64 size;
 } FileMapping;
 
+/**
+ * Map a file into memory at the given address.
+ * A missing or unreadable file is a normal outcome, not a program error:
+ * these return false, and in that case the file mapping is zeroed, so that
+ * the caller can safely pass it to ReleaseFileMapping().
+ */
 bool RestoreMappedMemory(void * address, char const * filePath, FileMapping * fileMapping);
 bool CreateMappedMemory(void * address, size64 size, char const * filePath, FileMapping * fileMapping);
 bool CreateOrRestoreMappedMemory(void * address, size64 size, char const * filePath, FileMapping * fileMapping);
 
+/**
+ * Release a file mapping, writing any changes to disk.
+ * Releasing a zeroed (failed) mapping does nothing.
+ */
 void ReleaseFileMapping(FileMapping * fileMapping);
 
 /**
