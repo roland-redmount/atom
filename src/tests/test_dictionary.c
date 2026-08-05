@@ -27,7 +27,7 @@ void testDictionary(void)
 		ASSERT_TRUE(
 			SameTypedAtoms(
 				TypedTupleGetElement(actorsTuple, i),
-				TypedTupleGetElement(rule->actors, i + 1)
+				TypedTupleGetElement(rule->actors, i)
 			)
 		)
 	}
