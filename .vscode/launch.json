@@ -1,15 +1,17 @@
 {
 	// See https://code.visualstudio.com/docs/debugtest/debugging-configuration for documentation
 	//
-	// Both configs use ${fileBasenameNoExtension} as the program name, so opening any
-	// test_*.c file and pressing F5 launches the corresponding binary from build/bin/.
+	// All configs use ${fileBasenameNoExtension} as the program name, so opening any
+	// test_*.c file and pressing F5 launches the corresponding binary. Each build
+	// configuration has its own directory under build/ (see tasks.json), so pick the
+	// config matching the build you want to debug.
 	"version": "0.2.0",
 	"configurations": [
 		{
 			"name": "Debug test (macOS / lldb)",
 			"type": "cppdbg",
 			"request": "launch",
-			"program": "${workspaceFolder}/build/bin/${fileBasenameNoExtension}",
+			"program": "${workspaceFolder}/build/debug/bin/${fileBasenameNoExtension}",
 			"args": [],
 			"stopAtEntry": false,
 			"cwd": "${workspaceFolder}",
@@ -21,7 +23,43 @@
 			"name": "Debug test (Linux / gdb)",
 			"type": "cppdbg",
 			"request": "launch",
-			"program": "${workspaceFolder}/build/bin/${fileBasenameNoExtension}",
+			"program": "${workspaceFolder}/build/debug/bin/${fileBasenameNoExtension}",
+			"args": [],
+			"stopAtEntry": false,
+			"cwd": "${workspaceFolder}",
+			"environment": [],
+			"externalConsole": false,
+			"MIMode": "gdb",
+			"setupCommands": [
+				{
+					"description": "Enable pretty-printing for gdb",
+					"text": "-enable-pretty-printing",
+					"ignoreFailures": true
+				},
+				{
+					"description": "Set Disassembly Flavor to Intel",
+					"text": "-gdb-set disassembly-flavor intel",
+					"ignoreFailures": true
+				}
+			]
+		},
+		{
+			"name": "Debug test, debug-allocate (macOS / lldb)",
+			"type": "cppdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}/build/debug-allocate/bin/${fileBasenameNoExtension}",
+			"args": [],
+			"stopAtEntry": false,
+			"cwd": "${workspaceFolder}",
+			"environment": [],
+			"externalConsole": false,
+			"MIMode": "lldb"
+		},
+		{
+			"name": "Debug test, debug-allocate (Linux / gdb)",
+			"type": "cppdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}/build/debug-allocate/bin/${fileBasenameNoExtension}",
 			"args": [],
 			"stopAtEntry": false,
 			"cwd": "${workspaceFolder}",

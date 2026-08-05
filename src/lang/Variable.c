@@ -8,20 +8,18 @@ TypedAtom anonymousVariable = {.type = AT_VARIABLE, .atom = {0}};
 
 Atom CreateVariable(char name)
 {
-	// for now we just store a single lowercase character _x, _y, ...
 	ASSERT(IsAlpha(name));
 	return (Atom) {
-		.variable = {.name = name}
+		.variable = {.name = ToLower(name)}
 	};
 }
 
 
 Atom CreateTypedVariable(char name, byte type)
 {
-	// for now we just store a single lowercase character _x, _y, ...
 	ASSERT(IsAlpha(name));
 	return (Atom) {
-		.variable = {.name = name, .type = type}
+		.variable = {.name = ToLower(name), .type = type}
 	};
 }
 

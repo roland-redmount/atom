@@ -1,6 +1,7 @@
 
 #include "platform.h"
 #include "memory/paging.h"
+#include "util/resources.h"
 #include "util/utilities.h"
 
 #define BITFIELD_SIZE_BYTES		(MEMORY_N_PAGES / 8)
@@ -97,19 +98,13 @@ static index32 findFirstFreePages(index32 startPage, size32 nPages)
 	return firstFreePage;
 }
 
-static void getPageFilePath(char * buffer)
+/**
+ * The paging file lives in the data directory, which each test process
+ * overrides so that tests do not share one paging file. See util/resources.h.
+ */
+static bool getPageFilePath(char * buffer, size32 bufferSize)
 {
-	/**
-	 * TODO: we should figure out the appropriate place to store application data.
-	 * On Linux it seems to be the XDG standard.
-	 * We currently place the paging file in ~/.config/atom which is the typical
-	 * folder for application data on Linux. We should create this folder when
-	 * installing atom.
-	 */
-	const char * userHomePath = GetEnvironmentVariable("HOME");
-	CStringCopyLimited(userHomePath, buffer, maxPathLength);
-	CStringAppend("/.config/atom/", buffer, maxPathLength);
-	CStringAppend(PAGING_FILE_NAME, buffer, maxPathLength);
+	return GetDataFilePath(PAGING_FILE_NAME, buffer, bufferSize);
 }
 
 void InitializePaging(void)
@@ -122,10 +117,14 @@ void InitializePaging(void)
 	ASSERT((MEMORY_N_PAGES & 7) == 0);
 	
 	// create memory mapping
+	// NOTE: ASSERT() does evaluate its argument in release builds, but keeping
+	// these calls outside it makes us independent of that
 	char pageFilePath[maxPathLength + 1];
-	getPageFilePath(pageFilePath);
-	ASSERT(CreateOrRestoreMappedMemory(
-		(void *) BASE_ADDRESS, MEMORY_SIZE, pageFilePath, &(paging.globalFileMap)));
+	bool pathFound = getPageFilePath(pageFilePath, maxPathLength + 1);
+	ASSERT(pathFound);
+	bool mappingSuccess = CreateOrRestoreMappedMemory(
+		(void *) BASE_ADDRESS, MEMORY_SIZE, pageFilePath, &(paging.globalFileMap));
+	ASSERT(mappingSuccess);
 
 	// allocate bit field on first page(s)
 	SetMemory(pageTable, BITFIELD_SIZE_BYTES, 0);

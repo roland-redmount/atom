@@ -7,6 +7,9 @@
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
 #include "lang/Formula.h"
+#include "lang/name.h"
+#include "lang/PredicateForm.h"
+#include "lang/TermForm.h"
 #include "library/math.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
@@ -14,7 +17,7 @@
 
 void testAdd1(void)
 {
-	Formula * query = CStringToTerm("= _ + 2 + 3");
+	Formula * query = CStringToTerm("+ 2 + 3 = _");
 
 	ServiceRecord record;
 	index8 permutation[3];
@@ -25,8 +28,14 @@ void testAdd1(void)
 	
 	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
-	// TODO: here again we need a systematic way to address the "=" role
-	ASSERT_INT32_EQUAL(arguments[0]._int, 2 + 3);
+	
+	Atom equalsRole = CreateNameFromCString("=");
+	index8 equalsRoleIndex = PredicateRoleIndex(
+		TermFormGetPredicateForm(query->form),
+		equalsRole
+	);
+	NameRelease(equalsRole);
+	ASSERT_INT32_EQUAL(arguments[equalsRoleIndex]._int, 2 + 3);
 
 	ASSERT_FALSE(ServiceCall(context))
 	
@@ -48,7 +57,16 @@ void testAdd2(void)
 	
 	void * context = ServiceCreateContext(record.service, arguments);
 	ASSERT_TRUE(ServiceCall(context))
-	ASSERT_INT32_EQUAL(arguments[2]._uint, 7 - 4);
+
+	Atom plusRole = CreateNameFromCString("+");
+	// Get the index of the second '+' role actor in the canonical form
+	index8 plusRoleIndex = PredicateRoleIndex(
+		TermFormGetPredicateForm(query->form),
+		plusRole
+	) + 1;
+	NameRelease(plusRole);
+	// Account for dispatch argument permutation to pick the right actor
+	ASSERT_INT32_EQUAL(arguments[permutation[plusRoleIndex]]._uint, 7 - 4);
 
 	ASSERT_FALSE(ServiceCall(context))
 	

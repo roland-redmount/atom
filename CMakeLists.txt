@@ -130,6 +130,18 @@ add_library(atom SHARED
 target_include_directories(atom PUBLIC src)
 target_compile_definitions(atom PUBLIC $<$<CONFIG:Debug>:DEBUG>)
 
+# Default directories compiled into the binary, used when neither an
+# environment variable nor the user configuration file says otherwise.
+# See src/util/resources.h.
+#
+# NOTE: these are absolute paths into the source tree, so binaries built here
+# are not relocatable. That is correct for fixtures, which exist nowhere else.
+# ATOM_RESOURCE_DIR_DEFAULT is kept separate precisely so that it can become
+# ${CMAKE_INSTALL_PREFIX}/share/atom once there is an install target.
+target_compile_definitions(atom PUBLIC
+    ATOM_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src/tests/resources"
+    ATOM_RESOURCE_DIR_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/shaders")
+
 if(WIN32)
     target_link_libraries(atom PRIVATE mingw32 ws2_32)
 endif()
@@ -185,10 +197,26 @@ set(ATOM_TESTS
     ${ATOM_TESTS_TIER2}
 )
 
+# Every test gets its own scratch directory to write into, named after the
+# test, so that no two tests can collide and "ctest -j" is safe. The scratch
+# root lives in the build directory, giving each build configuration its own.
+# Directories are made when configuring, so nothing has to create them later.
+set(ATOM_TEST_SCRATCH_ROOT ${CMAKE_BINARY_DIR}/test-scratch)
+file(MAKE_DIRECTORY ${ATOM_TEST_SCRATCH_ROOT})
+
 foreach(T ${ATOM_TESTS})
     add_executable(${T} src/tests/${T}.c)
     target_link_libraries(${T} PRIVATE atom)
+    set(SCRATCH ${ATOM_TEST_SCRATCH_ROOT}/${T})
+    file(MAKE_DIRECTORY ${SCRATCH})
     add_test(NAME ${T} COMMAND ${T})
+    # A test only passes by exiting normally, so a reported failure has to be
+    # caught by matching the output until TestSummary() sets an exit code.
+    # WORKING_DIRECTORY keeps any stray relative path inside the scratch dir.
+    set_tests_properties(${T} PROPERTIES
+        ENVIRONMENT "ATOM_DATA_DIR=${SCRATCH}"
+        WORKING_DIRECTORY ${SCRATCH}
+        FAIL_REGULAR_EXPRESSION "FAIL")
 endforeach()
 
 # Wire up the fixture gating: each tier sets up a fixture that the next

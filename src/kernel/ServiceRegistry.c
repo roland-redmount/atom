@@ -97,16 +97,20 @@ void ServiceRegistryRemove(RelationTable const * relation, Service * service)
 	// find the corresponding service record
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, services);
-	ServiceRecord const * record;
+	// NOTE: record stays null unless we find the service, so that we do not
+	// mistake the last record we looked at for a match
+	ServiceRecord const * record = 0;
 	if(BTreeIteratorSeek(&iterator, &key)) {
 		do {
-			record = BTreeIteratorPeekItem(&iterator);
-			if(record->service == service) {
+			ServiceRecord const * candidate = BTreeIteratorPeekItem(&iterator);
+			if(candidate->service == service) {
+				record = candidate;
 				break;
 			}
 		} while(BTreeIteratorNext(&iterator));
 	}
 	BTreeIteratorEnd(&iterator);
+	ASSERT(record);
 	// TODO: this will fail if the B-tree is modified concurrently,
 	// invalidating the record pointer.
 	ASSERT(BTreeDelete(services, record, 0) == BTREE_DELETED)

@@ -36,8 +36,6 @@ Atom CreateVariable(char name);
  */
 Atom CreateTypedVariable(char name, byte type);
 
-byte VariableGetType(Atom variable);
-
 /**
  * The anonymous variable _
  * This is a bit of a hack.
@@ -47,8 +45,6 @@ byte VariableGetType(Atom variable);
  * with e.g. (foo '_)
  */
 extern TypedAtom anonymousVariable;
-
-bool IsVariable(TypedAtom atom);
 
 /**
  * Compare variables, such that the anonymous variable _

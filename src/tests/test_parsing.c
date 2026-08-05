@@ -291,16 +291,18 @@ static void testCStringToPredicate(void)
 {
 	char const * exampleString = "foo 123 baz \"foobar\" bar 456 bar 789";
 	Formula * predicate = CStringToPredicate(exampleString);
-	// PrintFormula(predicate);
-	// PrintChar('\n');
 
 	ASSERT_UINT32_EQUAL(PredicateArity(predicate->form), 4)
 	ASSERT_UINT32_EQUAL(predicate->actors->nAtoms, 4)
 
+	Atom baz = CreateNameFromCString("baz");
+	index8 bazRoleIndex = PredicateRoleIndex(predicate->form, baz);
+	NameRelease(baz);
+
 	Atom string = CreateStringFromCString("foobar");
 	ASSERT_TRUE(
 		SameTypedAtoms(
-			TypedTupleGetElement(predicate->actors, 1),
+			TypedTupleGetElement(predicate->actors, bazRoleIndex),
 			CreateTypedAtom(AT_ID, string)
 		)
 	)

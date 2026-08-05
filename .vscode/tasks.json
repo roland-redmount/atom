@@ -1,12 +1,17 @@
 {
 	// See https://go.microsoft.com/fwlink/?LinkId=733558
 	// for the documentation about the tasks.json format
+	//
+	// Each build configuration gets its own directory under build/, so that switching
+	// between them neither discards the CMake cache nor lets one config's cached
+	// options leak into another. Every configure line also states all options
+	// explicitly, so a build directory is fully described by the task that made it.
 	"version": "2.0.0",
 	"tasks": [
 		{
 			"label": "build debug",
 			"type": "shell",
-			"command": "cmake -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build",
+			"command": "cmake -B build/debug -DCMAKE_BUILD_TYPE=Debug -DDEBUG_ALLOCATE=OFF && cmake --build build/debug",
 			"group": {
 				"kind": "build",
 				"isDefault": true
@@ -20,7 +25,7 @@
 		{
 			"label": "build debug-allocate",
 			"type": "shell",
-			"command": "cmake -B build -DCMAKE_BUILD_TYPE=Debug -DDEBUG_ALLOCATE=ON && cmake --build build",
+			"command": "cmake -B build/debug-allocate -DCMAKE_BUILD_TYPE=Debug -DDEBUG_ALLOCATE=ON && cmake --build build/debug-allocate",
 			"group": {
 				"kind": "build",
 				"isDefault": false
@@ -34,7 +39,7 @@
 		{
 			"label": "build release",
 			"type": "shell",
-			"command": "cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build",
+			"command": "cmake -B build/release -DCMAKE_BUILD_TYPE=Release -DDEBUG_ALLOCATE=OFF && cmake --build build/release",
 			"group": {
 				"kind": "build",
 				"isDefault": false
@@ -46,9 +51,10 @@
 			"problemMatcher": "$gcc"
 		},
 		{
+			// Builds only the target named after the open file, in the debug build.
 			"label": "build target",
 			"type": "shell",
-			"command": "cmake --build build --target ${fileBasenameNoExtension}",
+			"command": "cmake --build build/debug --target ${fileBasenameNoExtension}",
 			"group": {
 				"kind": "build",
 				"isDefault": false
@@ -60,9 +66,79 @@
 			"problemMatcher": "$gcc"
 		},
 		{
+			// As "build target", but in the debug-allocate build.
+			"label": "build target debug-allocate",
+			"type": "shell",
+			"command": "cmake --build build/debug-allocate --target ${fileBasenameNoExtension}",
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			},
+			"presentation": {
+				"clear": true,
+				"reveal": "always"
+			},
+			"problemMatcher": "$gcc"
+		},
+		{
+			// Each "run tests" task depends on the matching build task, so the suite can
+			// never be run against a stale or differently-configured build. ctest needs
+			// --test-dir because it otherwise looks for CTestTestfile.cmake in the cwd.
+			// -j8 is safe despite the tier ordering: the tier fixtures still gate which
+			// tests run, so a tier-0 failure skips the later tiers as intended.
+			"label": "run tests",
+			"type": "shell",
+			"command": "ctest --test-dir build/debug -j8 --output-on-failure",
+			"dependsOn": "build debug",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"presentation": {
+				"clear": true,
+				"reveal": "always"
+			},
+			"problemMatcher": []
+		},
+		{
+			// As "run tests", but against the debug-allocate build.
+			"label": "run tests debug-allocate",
+			"type": "shell",
+			"command": "ctest --test-dir build/debug-allocate -j8 --output-on-failure",
+			"dependsOn": "build debug-allocate",
+			"group": {
+				"kind": "test",
+				"isDefault": false
+			},
+			"presentation": {
+				"clear": true,
+				"reveal": "always"
+			},
+			"problemMatcher": []
+		},
+		{
+			// Runs the test named after the open file, in the debug build. ctest also
+			// pulls in the tier fixtures the test requires, so a failing lower tier will
+			// still mark it "Not Run"; add -FA '.*' to ignore fixtures and run it alone.
+			"label": "run test target",
+			"type": "shell",
+			"command": "ctest --test-dir build/debug -R '^${fileBasenameNoExtension}$' --output-on-failure",
+			"dependsOn": "build target",
+			"group": {
+				"kind": "test",
+				"isDefault": false
+			},
+			"presentation": {
+				"clear": true,
+				"reveal": "always"
+			},
+			"problemMatcher": []
+		},
+		{
+			// Removes every build directory, so the next build reconfigures from scratch.
 			"label": "clean",
 			"type": "shell",
-			"command": "cmake --build build --target clean",
+			"command": "rm -rf build",
 			"group": {
 				"kind": "build",
 				"isDefault": false

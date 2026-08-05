@@ -71,16 +71,31 @@ typedef uint64_t addr64;
 #define TB   (MB * MB)
 
 /**
- * The ASSERT() macro is used to ensure conditions hold at various points
- * throughout the code base. It is defined only in DEBUG builds.
+ * The ASSERT() macro states a condition that must hold if the program is
+ * correct. Debug builds check it and stop when it does not hold; release
+ * builds tell the compiler it holds, so that it need not consider a case
+ * that cannot occur, and can warn us when it sees one that can.
+ *
+ * ASSERT() is therefore only for conditions that we get wrong by having a
+ * bug: a violated ASSERT() is undefined behavior in a release build. Errors
+ * we cannot rule out, such as the host running out of memory, belong in
+ * Panic(); invalid input belongs in an ordinary test and a false return.
+ *
+ * NOTE: the condition is tested with an empty branch rather than negated,
+ * so that it stays where the compiler can warn about an assignment used as
+ * a condition. Writing if(!(condition)) puts the assignment in parentheses,
+ * which tells the compiler we meant it, and hides typos like ASSERT(a = b).
  */
 #ifdef DEBUG
 #define ASSERT(condition) {\
-	if(!(condition)) {\
+	if(condition) {}\
+	else {\
 		PrintF("ASSERT() fail in %s(), %s:%d.\n", __func__, __FILE__, __LINE__);\
 		AbortProgram();\
 	}\
 }
+#elif defined(__GNUC__)
+#define ASSERT(condition) {if(condition) {} else __builtin_unreachable();}
 #else
 #define ASSERT(condition) {if(condition) {}}
 #endif
@@ -149,6 +164,11 @@ bool IsPrintableChar(char c);
 bool IsDigitChar(char c);
 
 /**
+ * Test if c is white space, such as a space, tab or newline
+ */
+bool IsSpaceChar(char c);
+
+/**
  * Test if c is an alphabet letter
  */
 bool IsAlpha(char c);
@@ -180,15 +200,33 @@ uint32 GetPrintIndent(void);
 
 typedef data64 FileHandle;
 
+/**
+ * Open a file for reading. Returns 0 if there is no such file, or it cannot
+ * be read: that is a normal outcome, so callers must check the handle.
+ */
 FileHandle OpenFile(char const * filePath);
+
 size64 GetFileSize(FileHandle fileHandle);
-void ReadFromFile(FileHandle fileHandle, void * buffer, size64 readSize);
+
+/**
+ * Read the given number of bytes. Returns false if that many could not
+ * be read, leaving the buffer contents unspecified.
+ */
+bool ReadFromFile(FileHandle fileHandle, void * buffer, size64 readSize);
+
 void CloseFile(FileHandle);
 
 bool FileExists(char const * filePath);
 bool DeleteFile(char const * filePath);
 
 // path handling
+
+/**
+ * Upper bound on path lengths, for use where a compile time constant is
+ * required (static buffers). The actual limit is maxPathLength, which the
+ * platform layer guarantees is no larger than this.
+ */
+#define MAX_PATH_LENGTH 4096
 
 extern uint32 maxPathLength;
 
@@ -200,6 +238,36 @@ void GetParentDirectory(char * path, size32 bufferSize);
 void GetExecutablePath(char * buffer, size32 bufferSize);
 
 /**
+ * Append a path component to the path in buffer, inserting a
+ * path separator if needed.
+ */
+void AppendPathComponent(char const * component, char * buffer, size32 bufferSize);
+
+/**
+ * Test whether the given path exists and is a directory.
+ */
+bool DirectoryExists(char const * path);
+
+/**
+ * Create the directory at the given path, including any missing parent
+ * directories. Succeeds if the directory already exists.
+ */
+bool EnsureDirectory(char const * path);
+
+/**
+ * Get the directory holding per-user configuration files, without trailing
+ * separator. Returns false if no such directory can be determined, which
+ * happens when the environment does not say where the user's home is.
+ */
+bool GetUserConfigDirectory(char * buffer, size32 bufferSize);
+
+/**
+ * Get the directory holding per-user application data, without trailing
+ * separator. Returns false as GetUserConfigDirectory() does.
+ */
+bool GetUserDataDirectory(char * buffer, size32 bufferSize);
+
+/**
  * Virtual memory
  */
 
@@ -208,10 +276,20 @@ typedef struct s_FileMapping {
 	size64 size;
 } FileMapping;
 
+/**
+ * Map a file into memory at the given address.
+ * A missing or unreadable file is a normal outcome, not a program error:
+ * these return false, and in that case the file mapping is zeroed, so that
+ * the caller can safely pass it to ReleaseFileMapping().
+ */
 bool RestoreMappedMemory(void * address, char const * filePath, FileMapping * fileMapping);
 bool CreateMappedMemory(void * address, size64 size, char const * filePath, FileMapping * fileMapping);
 bool CreateOrRestoreMappedMemory(void * address, size64 size, char const * filePath, FileMapping * fileMapping);
 
+/**
+ * Release a file mapping, writing any changes to disk.
+ * Releasing a zeroed (failed) mapping does nothing.
+ */
 void ReleaseFileMapping(FileMapping * fileMapping);
 
 /**
@@ -219,7 +297,22 @@ void ReleaseFileMapping(FileMapping * fileMapping);
  */
 
 char const * GetEnvironmentVariable(char const * variableName);
+
+#ifdef __GNUC__
+__attribute__((noreturn))
+#endif
 void AbortProgram(void);
+
+/**
+ * Report an irrecoverable error and stop the program, taking the same
+ * arguments as PrintF(). Unlike ASSERT(), Panic() is present in every build:
+ * it marks a failure we cannot continue from, such as the host refusing us
+ * memory, rather than a condition that would mean we have a bug.
+ */
+#ifdef __GNUC__
+__attribute__((noreturn))
+#endif
+void Panic(char const * formatString, ...);
 
 /**
  * Generate a pseudorandom integer in the internal [lowerBound, upperBound], inclusive.

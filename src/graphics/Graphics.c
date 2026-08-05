@@ -168,11 +168,11 @@ static void setup2DColorBuffers()
 {
 	// read and compile vertex shader
 	graphics.colorVertexShader = compileShaderFromFile(
-		"src/graphics/shaders/colorVertexShader.glsl", GL_VERTEX_SHADER);
+		"colorVertexShader.glsl", GL_VERTEX_SHADER);
 
 	// read and compile fragment shader
 	graphics.colorFragmentShader = compileShaderFromFile(
-		"src/graphics/shaders/colorFragmentShader.glsl", GL_FRAGMENT_SHADER);
+		"colorFragmentShader.glsl", GL_FRAGMENT_SHADER);
 
 	// create shader program
 	graphics.colorShaderProgram = glCreateProgram();
@@ -225,11 +225,11 @@ static void setupTextureBuffers()
 {
 	// read and compile vertex shader
 	graphics.textureVertexShader = compileShaderFromFile(
-		"src/graphics/shaders/textureVertexShader.glsl", GL_VERTEX_SHADER);
+		"textureVertexShader.glsl", GL_VERTEX_SHADER);
 
 	// read and compile fragment shader
 	graphics.textureFragmentShader = compileShaderFromFile(
-		"src/graphics/shaders/textureFragmentShader.glsl", GL_FRAGMENT_SHADER);
+		"textureFragmentShader.glsl", GL_FRAGMENT_SHADER);
 
 	// create shader program
 	graphics.textureShaderProgram = glCreateProgram();
@@ -293,16 +293,20 @@ void CloseGraphics()
 static GLuint compileShaderFromFile(const char * sourceFileName, GLenum shaderType)
 {
 	char sourceFilePath[maxPathLength + 1];
-	CStringCopyLimited(sourceFileName, sourceFilePath, maxPathLength + 1);
-	ToAbsolutePath(sourceFilePath, maxPathLength + 1);
+	if(!GetResourceFilePath(sourceFileName, sourceFilePath, maxPathLength + 1))
+		return 0;
 
 	// read source file
-	FileHandle fileHandle = OpenFile(sourceFileName);
+	FileHandle fileHandle = OpenFile(sourceFilePath);
+	if(fileHandle == 0)
+		return 0;
  	size64 fileSize = GetFileSize(fileHandle);
 	char source[fileSize + 1];
-    ReadFromFile(fileHandle, source, fileSize);
+    bool readSuccess = ReadFromFile(fileHandle, source, fileSize);
     CloseFile(fileHandle);
-    source[fileSize] = '\0';    // ensure string is null terminated 
+    if(!readSuccess)
+        return 0;
+    source[fileSize] = '\0';    // ensure string is null terminated
 
 	GLuint shader = compileShader(source, shaderType);
 	ASSERT(shader);

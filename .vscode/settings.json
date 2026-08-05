@@ -34,7 +34,9 @@
 	],
 	"todohighlight.defaultStyle": {},
 	"todohighlight.isCaseSensitive": true,
-	"cmake.buildDirectory": "${workspaceFolder}/build",
+	// Per-config build directories; see .vscode/tasks.json. This one is what the CMake
+	// Tools extension and IntelliSense read compile_commands.json from.
+	"cmake.buildDirectory": "${workspaceFolder}/build/debug",
 	"cmake.configureOnOpen": false,
 	"search.exclude": {
 		"coverage/**": true,

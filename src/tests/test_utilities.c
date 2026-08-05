@@ -82,10 +82,28 @@ void testLinkedList(void)
 
 void testResources(void)
 {
-	char relResourcePath[maxPathLength + 1];
-	GetResourceDirectory(relResourcePath, maxPathLength);
-	// TODO: test that string ends with /tests/resources ?
-	ASSERT_PTR_NOT_EQUAL(relResourcePath, 0)
+	// the fixture directory must exist and hold the fixtures we ship
+	char fixtureDirectory[maxPathLength + 1];
+	GetFixtureDirectory(fixtureDirectory, maxPathLength + 1);
+	ASSERT_TRUE(CStringLength(fixtureDirectory) > 0)
+	ASSERT_TRUE(DirectoryExists(fixtureDirectory))
+
+	char fixturePath[maxPathLength + 1];
+	ASSERT_TRUE(GetFixtureFilePath("testmapping.txt", fixturePath, maxPathLength + 1))
+
+	// a missing fixture is reported, not fatal
+	// NOTE: this prints a report on a passing run
+	char missingPath[maxPathLength + 1];
+	ASSERT_FALSE(GetFixtureFilePath("no_such_fixture.txt", missingPath, maxPathLength + 1))
+
+	// the data directory need not exist beforehand, but is created on demand
+	char dataDirectory[maxPathLength + 1];
+	GetDataDirectory(dataDirectory, maxPathLength + 1);
+	ASSERT_TRUE(CStringLength(dataDirectory) > 0)
+
+	char dataPath[maxPathLength + 1];
+	ASSERT_TRUE(GetDataFilePath("probe.tmp", dataPath, maxPathLength + 1))
+	ASSERT_TRUE(DirectoryExists(dataDirectory))
 }
 
 
