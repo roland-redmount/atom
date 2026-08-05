@@ -234,8 +234,10 @@ void SetupMemory(void)
 	InitializePaging();
 
 	// setup allocator
+	// running out of pages is not a bug on our part, so we cannot assume it away
 	kernel.allocatorArea = AllocatePages(ALLOCATOR_N_PAGES);
-	ASSERT(kernel.allocatorArea)
+	if(kernel.allocatorArea == 0)
+		Panic("cannot reserve %u pages for the allocator\n", ALLOCATOR_N_PAGES);
 	CreateAllocator(kernel.allocatorArea, LOG_ALLOCATOR_AREA_SIZE);
 }
 

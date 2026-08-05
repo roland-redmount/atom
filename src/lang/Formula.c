@@ -128,7 +128,7 @@ Atom TermGetRoleActor(Atom termForm, Atom const termActors[], const char * role,
 Formula * CreateClause(Formula const ** terms, size8 nTerms)
 {
 	// a clause without terms is meaningless, and would give zero length arrays below
-	ASSUME(nTerms > 0);
+	ASSERT(nTerms > 0);
 
 	// collect term forms and their arities
 	Atom termForms[nTerms];
@@ -169,7 +169,7 @@ Formula * CreateClause(Formula const ** terms, size8 nTerms)
 Formula * CreateConjunction(Formula const ** clauses, size8 nClauses)
 {
 	// as in CreateClause(), a conjunction without clauses is meaningless
-	ASSUME(nClauses > 0);
+	ASSERT(nClauses > 0);
 
 	// collect clause forms and their arities
 	Atom clauseForms[nClauses];

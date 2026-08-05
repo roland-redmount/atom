@@ -70,17 +70,19 @@ static bool readConfigFile(char * buffer, size32 bufferSize)
 	AppendPathComponent(CONFIG_FILE_NAME, configFilePath, maxPathLength + 1);
 
 	// having no configuration file is the normal case
-	if(!FileExists(configFilePath))
+	FileHandle configFile = OpenFile(configFilePath);
+	if(configFile == 0)
 		return false;
 
-	FileHandle configFile = OpenFile(configFilePath);
 	size64 configFileSize = GetFileSize(configFile);
 	if(configFileSize == 0 || configFileSize >= bufferSize) {
 		CloseFile(configFile);
 		return false;
 	}
-	ReadFromFile(configFile, buffer, configFileSize);
+	bool readSuccess = ReadFromFile(configFile, buffer, configFileSize);
 	CloseFile(configFile);
+	if(!readSuccess)
+		return false;
 	buffer[configFileSize] = 0;
 	return true;
 }

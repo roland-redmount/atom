@@ -298,11 +298,15 @@ static GLuint compileShaderFromFile(const char * sourceFileName, GLenum shaderTy
 
 	// read source file
 	FileHandle fileHandle = OpenFile(sourceFilePath);
+	if(fileHandle == 0)
+		return 0;
  	size64 fileSize = GetFileSize(fileHandle);
 	char source[fileSize + 1];
-    ReadFromFile(fileHandle, source, fileSize);
+    bool readSuccess = ReadFromFile(fileHandle, source, fileSize);
     CloseFile(fileHandle);
-    source[fileSize] = '\0';    // ensure string is null terminated 
+    if(!readSuccess)
+        return 0;
+    source[fileSize] = '\0';    // ensure string is null terminated
 
 	GLuint shader = compileShader(source, shaderType);
 	ASSERT(shader);

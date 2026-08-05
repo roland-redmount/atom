@@ -267,8 +267,8 @@ uint32 maxPathLength = PATH_MAX;
 
 FileHandle OpenFile(char const * fileName)
 {
+	// a file that is not there is a normal outcome, not a program error
 	FILE * file = fopen(fileName, "rb");
-	ASSERT(file);
 	return (FileHandle) file;
 }
 
@@ -285,10 +285,10 @@ size64 GetFileSize(FileHandle fileHandle)
 	return fileSize;
 }
 
-void ReadFromFile(FileHandle fileHandle, void * buffer, size64 readSize)
+bool ReadFromFile(FileHandle fileHandle, void * buffer, size64 readSize)
 {
 	FILE * file = (FILE *) fileHandle;
-	ASSERT(fread(buffer, readSize, 1, file) == 1);
+	return (fread(buffer, readSize, 1, file) == 1);
 }
 
 
@@ -351,7 +351,8 @@ static bool openFile(char const * fileName, int * fileDescriptor)
 static size_t getFileSize(int fileDescriptor)
 {
 	struct stat fileStatus;
-	ASSERT(fstat(fileDescriptor, &fileStatus) == 0);
+	if(fstat(fileDescriptor, &fileStatus) != 0)
+		Panic("cannot determine file size, errno = %d\n", errno);
 	return fileStatus.st_size;
 }
 
@@ -359,7 +360,8 @@ static void resizeFile(int fileDescriptor, size_t size)
 {
 #ifdef __linux__
 	int resultCode = posix_fallocate(fileDescriptor, 0, size);
-	ASSERT(resultCode == 0);
+	if(resultCode != 0)
+		Panic("cannot allocate %zu bytes of file space, error %d\n", size, resultCode);
 #elif defined(__APPLE__)
 	// pre-allocate space for the file
 	fstore_t store = {0};
@@ -373,13 +375,13 @@ static void resizeFile(int fileDescriptor, size_t size)
 		store.fst_flags = F_ALLOCATEALL;
 		if (fcntl(fileDescriptor, F_PREALLOCATE, &store) == -1) {
 			close(fileDescriptor);
-			ASSERT(false)
+			Panic("cannot allocate %zu bytes of file space, errno = %d\n", size, errno);
 		}
 	}
 	// Now actually set the file size
 	if(ftruncate(fileDescriptor, size) == -1) {
 		close(fileDescriptor);
-		ASSERT(false);
+		Panic("cannot set file size to %zu bytes, errno = %d\n", size, errno);
 	}
 #endif
 }
@@ -417,17 +419,20 @@ void GetExecutablePath(char * buffer, size32 bufferSize)
 #ifdef __linux__
 	// readlink does not append a zero terminator to the string, so we must have space for one
 	ssize_t pathLength = readlink("/proc/self/exe", buffer, bufferSize - 1);
-	ASSERT(pathLength != -1);
+	if(pathLength == -1)
+		Panic("cannot determine the executable path, errno = %d\n", errno);
 	buffer[pathLength] = '\0';
 
 #elif defined(__APPLE__)
 	char pathBuffer[PATH_MAX];
 	size32 pathBufferSize = PATH_MAX;
-	ASSERT(_NSGetExecutablePath(pathBuffer, &pathBufferSize) == 0)
+	if(_NSGetExecutablePath(pathBuffer, &pathBufferSize) != 0)
+		Panic("cannot determine the executable path\n");
 	// intermediate buffer to prevent overflow
 	char realPathBuffer[PATH_MAX];
 	// expand to absolute path
-	ASSERT(realpath(pathBuffer, realPathBuffer));
+	if(realpath(pathBuffer, realPathBuffer) == 0)
+		Panic("cannot resolve the executable path, errno = %d\n", errno);
 	size32 realPathLength = CStringLength(realPathBuffer);
 	ASSERT(realPathLength < bufferSize);
 	CStringCopy(realPathBuffer, buffer);
@@ -536,18 +541,13 @@ static void mapFileToMemory(void * address, size_t size, int fileDescriptor)
 		fileDescriptor,
 		0						// offset
 	);
-	if(actual_address == MAP_FAILED) {
-		int errorNumber = errno;
-		PrintF("mapping failed, errno = %d\n", errorNumber);
-		ASSERT(false);
-	}
-	if(actual_address != address) {
-		PrintF(
-			"mapping failed, expected address %lx, got %lx\n", 
+	if(actual_address == MAP_FAILED)
+		Panic("mapping failed, errno = %d\n", errno);
+	if(actual_address != address)
+		Panic(
+			"mapping failed, expected address %lx, got %lx\n",
 			(addr64) address, (addr64) actual_address
 		);
-		ASSERT(false);
-	}
 }
 
 
@@ -611,6 +611,17 @@ void AbortProgram(void)
 	// to explain why we are aborting
 	fflush(stdout);
 	abort();
+}
+
+
+void Panic(char const * formatString, ...)
+{
+	va_list args;
+	va_start(args, formatString);
+	PrintCString("PANIC: ");
+	vprintf(formatString, args);
+	va_end(args);
+	AbortProgram();
 }
 
 

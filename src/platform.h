@@ -71,8 +71,15 @@ typedef uint64_t addr64;
 #define TB   (MB * MB)
 
 /**
- * The ASSERT() macro is used to ensure conditions hold at various points
- * throughout the code base. It is defined only in DEBUG builds.
+ * The ASSERT() macro states a condition that must hold if the program is
+ * correct. Debug builds check it and stop when it does not hold; release
+ * builds tell the compiler it holds, so that it need not consider a case
+ * that cannot occur, and can warn us when it sees one that can.
+ *
+ * ASSERT() is therefore only for conditions that we get wrong by having a
+ * bug: a violated ASSERT() is undefined behavior in a release build. Errors
+ * we cannot rule out, such as the host running out of memory, belong in
+ * Panic(); invalid input belongs in an ordinary test and a false return.
  *
  * NOTE: the condition is tested with an empty branch rather than negated,
  * so that it stays where the compiler can warn about an assignment used as
@@ -87,26 +94,10 @@ typedef uint64_t addr64;
 		AbortProgram();\
 	}\
 }
+#elif defined(__GNUC__)
+#define ASSERT(condition) {if(condition) {} else __builtin_unreachable();}
 #else
 #define ASSERT(condition) {if(condition) {}}
-#endif
-
-/**
- * ASSUME() states a condition that callers are required to meet, in a form
- * the compiler can make use of. It is checked like ASSERT() in debug builds,
- * while in release builds it tells the compiler the condition holds, so that
- * it does not reason about a case that cannot occur.
- *
- * Use it only where ASSERT() would be the alternative anyway, that is, where
- * a false condition means the caller has a bug: unlike ASSERT(), a violated
- * ASSUME() is undefined behavior rather than merely undetected.
- */
-#ifdef DEBUG
-#define ASSUME(condition) ASSERT(condition)
-#elif defined(__GNUC__)
-#define ASSUME(condition) {if(condition) {} else __builtin_unreachable();}
-#else
-#define ASSUME(condition) {if(condition) {}}
 #endif
 
 
@@ -209,9 +200,20 @@ uint32 GetPrintIndent(void);
 
 typedef data64 FileHandle;
 
+/**
+ * Open a file for reading. Returns 0 if there is no such file, or it cannot
+ * be read: that is a normal outcome, so callers must check the handle.
+ */
 FileHandle OpenFile(char const * filePath);
+
 size64 GetFileSize(FileHandle fileHandle);
-void ReadFromFile(FileHandle fileHandle, void * buffer, size64 readSize);
+
+/**
+ * Read the given number of bytes. Returns false if that many could not
+ * be read, leaving the buffer contents unspecified.
+ */
+bool ReadFromFile(FileHandle fileHandle, void * buffer, size64 readSize);
+
 void CloseFile(FileHandle);
 
 bool FileExists(char const * filePath);
@@ -295,7 +297,22 @@ void ReleaseFileMapping(FileMapping * fileMapping);
  */
 
 char const * GetEnvironmentVariable(char const * variableName);
+
+#ifdef __GNUC__
+__attribute__((noreturn))
+#endif
 void AbortProgram(void);
+
+/**
+ * Report an irrecoverable error and stop the program, taking the same
+ * arguments as PrintF(). Unlike ASSERT(), Panic() is present in every build:
+ * it marks a failure we cannot continue from, such as the host refusing us
+ * memory, rather than a condition that would mean we have a bug.
+ */
+#ifdef __GNUC__
+__attribute__((noreturn))
+#endif
+void Panic(char const * formatString, ...);
 
 /**
  * Generate a pseudorandom integer in the internal [lowerBound, upperBound], inclusive.
