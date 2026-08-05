@@ -15,15 +15,6 @@ Atom CreateVariable(char name)
 }
 
 
-Atom CreateTypedVariable(char name, byte type)
-{
-	ASSERT(IsAlpha(name));
-	return (Atom) {
-		.variable = {.name = ToLower(name), .type = type}
-	};
-}
-
-
 char GetVariableName(Atom variable)
 {
 	if(variable.variable.name)
@@ -57,7 +48,6 @@ Atom QuoteVariable(Atom variable)
 	return (Atom) {
 		.variable = {
 			.name = variable.variable.name,
-			.type = variable.variable.type,
 			.quoteCount = variable.variable.quoteCount + 1
 		}
 	};
@@ -70,22 +60,21 @@ Atom UnquoteVariable(Atom variable)
 	return (Atom) {
 		.variable = {
 			.name = variable.variable.name,
-			.type = variable.variable.type,
 			.quoteCount = variable.variable.quoteCount - 1
 		}
 	};
 }
 
 
-bool VariableMatch(Atom variable, TypedAtom typedAtom)
-{
-	if(!variable.variable.name)
-		return true;	// anonymous variable
-	if(variable.variable.type)
-		return variable.variable.type == typedAtom.type;
-	else
-		return true;
-}
+// bool VariableMatch(Atom variable, TypedAtom typedAtom)
+// {
+// 	if(!variable.variable.name)
+// 		return true;	// anonymous variable
+// 	if(variable.variable.type)
+// 		return variable.variable.type == typedAtom.type;
+// 	else
+// 		return true;
+// }
 
 
 void PrintVariable(Atom variable)
@@ -96,7 +85,5 @@ void PrintVariable(Atom variable)
 		PrintChar(variable.variable.name);
 	else
 		PrintChar('_');
-	if(variable.variable.type)
-		PrintF(":%s", GetAtomTypeName(variable.variable.type));
 }
 

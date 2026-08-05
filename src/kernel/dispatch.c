@@ -18,13 +18,18 @@
 /**
  * Test whether a query tuple matches a service parameters list when permuted
  * according to the given permutation array (0-based indices). The query tuple
- * may contain parameters (used for compilation).
- * Each service input parameter must match a query atom or input parameter of the same type.
- * Each service output parameter must match a query variable or output parameter.
+ * may contain parameters (used by the compiler). Matching rules are:
+ * 
+ * 1) Each service input parameter must match (i) a query atom of the same type
+ *    as the service parameter atom type, or (ii) a query input parameter
+ *    of the same type or type == NONE.
+ * 2) Each service output parameter must match (1) a query variable, or
+ *    (ii) a query output parameter of the same type or type == NONE.
+ * 
  * Returns true if the tuples match.
  */
 static bool signatureQueryTupleMatch(
-	byte const * atomTypes, byte const * parameterIO, TypedTuple const * queryActors, index8 const * permutation)
+	byte const atomTypes[], byte const parameterIO[], TypedTuple const * queryActors, index8 const permutation[])
 {
 	// iterate over query tuple
 	for(index8 i = 0; i < queryActors->nAtoms; i++) {
@@ -32,9 +37,12 @@ static bool signatureQueryTupleMatch(
 		byte serviceParameterType = atomTypes[i];
 		switch(parameterIO[i]) {
 		case PARAMETER_IN:
+			// service has an input parameter
 			if(queryAtom.type == AT_PARAMETER) {
+				// query has a parameter; IO direction must match
 				if(queryAtom.atom.parameter.io != PARAMETER_IN)
 					return false;
+				// parameter atom type must match, or be absent
 				byte queryParameterType = queryAtom.atom.parameter.atomType;
 				if(queryParameterType && (queryParameterType != serviceParameterType))
 					return false;
@@ -47,6 +55,7 @@ static bool signatureQueryTupleMatch(
 			break;
 		
 		case PARAMETER_OUT:
+			// service has an output parameter
 			if(queryAtom.type == AT_PARAMETER) {
 				if(queryAtom.atom.parameter.io != PARAMETER_OUT)
 					return false;
@@ -55,13 +64,17 @@ static bool signatureQueryTupleMatch(
 					return false;
 			}
 			else {
-				if(queryAtom.type != AT_VARIABLE)
-					return false;
-				// if variable is typed, the type must match
-				// TODO: typed variables should go away, replaced with AT_PARAMETER
-				byte variableType = queryAtom.atom.variable.type;
-				if(variableType && (variableType != serviceParameterType))
-					return false;
+				if(queryAtom.type == AT_VARIABLE)
+					return true;
+				if(queryAtom.type == AT_PARAMETER) {
+					// query has a parameter; IO direction must match
+					if(queryAtom.atom.parameter.io != PARAMETER_OUT)
+						return false;
+					// parameter atom type must match, or be absent
+					byte queryParameterType = queryAtom.atom.parameter.atomType;
+					if(queryParameterType && (queryParameterType != serviceParameterType))
+						return false;
+				}
 			}
 			break;
 		}
@@ -76,8 +89,8 @@ static bool signatureQueryTupleMatch(
  * Returns true if a match is found.
  */
 static bool permutationMatch(
-	Atom predicateForm, byte const * atomTypes, byte const * parameterIO,
-	TypedTuple const * queryActors, index8 * permutation)
+	Atom predicateForm, byte const atomTypes[], byte const parameterIO[],
+	TypedTuple const * queryActors, index8 permutation[])
 {
 	// iterate over all permutations of the form
 	FormIterator * iter = CreateFormIterator(predicateForm);

@@ -158,8 +158,10 @@ void TypedTuplePrint(TypedTuple const * tuple);
  * 
  * TODO: this does not handle queries with multiplicities as it does not account
  * for permutations; for example the query (a x_ a 1) will not match the fact (a 1 a 2)
+ * 
+ * NOTE: I don't think this is being used anymore? See signatureQueryTupleMatch()
  */
-bool TypedTupleMatch(TypedTuple const * tuple, TypedTuple const * queryTuple);
+// bool TypedTupleMatch(TypedTuple const * tuple, TypedTuple const * queryTuple);
 
 bool TypedTupleContainsAtom(TypedTuple const * tuple, TypedAtom atom);
 
