@@ -66,16 +66,18 @@ typedef struct s_MachineServiceProvider {
  * do not enforce any particular order. It might be a good idea to provide an
  * array of column numbers specifying the ordering, so that e.g. a relation
  * with form (a b c) might specify ordering = {2, 1, 3} to order lexiographically
- * w.r.t columns (b a c). Knowing the tuple order helps optimize PROJECT.
- * 
+ * w.r.t columns (b a c). Knowing the tuple order helps optimize PROJECT: a child
+ * ordered on the columns PROJECT keeps lets it drop duplicates by comparing each
+ * tuple to its predecessor, instead of materializing the whole child relation.
+ *
  */
  enum ServiceType {
 	/**
 	 * PERMUTE calls a child service with its arguments reordered,
-	 * and may optionally include constants. This service may yield duplicate
-	 * tuples if the reordering drops one or more arguments from the child service.
-	 * 
-	 * TODO: this should be renamed -- not necessarily a permutation
+	 * and may optionally bind constants to child arguments.
+	 * Every child argument is either taken from a parent argument or bound to
+	 * a constant, so PERMUTE never drops a child argument and hence never
+	 * introduces duplicate tuples.
 	 */
 	SERVICE_PERMUTE = 1,
 	/**
@@ -91,9 +93,11 @@ typedef struct s_MachineServiceProvider {
 	 */
 	SERVICE_UNION = 3,
 	/**
-	 * Remove duplicates
+	 * PROJECT drops all but the first nArguments arguments of its child service
+	 * and removes the duplicate tuples that dropping may produce. Its tuples are
+	 * yielded in sorted order.
 	 */
-	SERVICE_DEDUPLICATE = 4,
+	SERVICE_PROJECT = 4,
 	/**
 	 * Call a machine code function
 	 */
@@ -129,10 +133,10 @@ struct s_Service {
 			Service * first;
 			Service * second;
 		} _union;
-		// for SERVICE_DEDUPLICATE
+		// for SERVICE_PROJECT
 		struct {
 			Service * childService;
-		} deduplicate;
+		} project;
 		// for SERVICE_MACHINE
 		struct {
 			MachineServiceProvider * provider;
@@ -149,9 +153,8 @@ struct s_Service {
  * multiple child arguments, in which case parent indices are repeated.
  * 
  * NOTE: If some parent argument positions are missing from argumentMap, those arguments will not be
- * updated by this service. This typically occurs when the permute service is a child of a join service.
- * 
- * NOTE: If child arguments are missing from the argumentMap, the tuples of the permute service may not be unique.
+ * updated by this service, so its tuples leave those arguments undefined. Such a permute service is
+ * only valid as a child of a join service, whose children together cover every parent argument.
  */
 Service * CreatePermuteService(
 	size8 nArguments, TypedTuple const * constants, index8 const * argumentMap, Service * childService);
@@ -174,9 +177,12 @@ Service * CreateJoinService(Service * leftChild, Service * rightChild);
 Service * CreateUnionService(Service * first, Service * second);
 
 /**
- * Create a DEDUPLICATE service
+ * Create a PROJECT service with the given number of arguments, which must be
+ * less than the number of arguments of the child service. The project service
+ * keeps the first nArguments arguments of the child service, drops the remaining
+ * ones, and removes any duplicate tuples resulting from this.
  */
-Service * CreateDeduplicateService(Service * childService);
+Service * CreateProjectService(Service * childService, size8 nArguments);
 
 /**
  * Acquire a reference to a service.

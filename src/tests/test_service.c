@@ -8,7 +8,6 @@
 #include "kernel/string.h"
 #include "kernel/tuple.h"
 #include "lang/Formula.h"
-#include "lang/Variable.h"
 #include "parser/PredicateBuilder.h"
 #include "testing/testing.h"
 
@@ -40,32 +39,33 @@ void testMachineService(void)
 
 
 /**
- * This tests using a PERMUTE service to marginalize the relation
- * (list position element) to (list element). This alone does not
- * remove duplicates and so does not provide a valid relation;
- * wrapping a DEDUPLICATE services around PERMUTE yields unique tuples.
+ * Reorder the relation (list position element) to (list element position).
+ * A PERMUTE service keeps every argument of its child service, so its
+ * tuples remain unique and it provides a valid relation.
  */
-void testPermuteService(void)
+static Service * createReorderedListService(void)
 {
 	// The service (list <ID position >UINT element >LETTER)
 	Service * listService = GetCoreService(SERVICE_LIST_LETTER);
-	// Reorder (list l position p element e) to (list l element e)
-	// by providing the variable p as a "constant"
-	TypedTuple * constants = CreateTypedTupleFromArray((TypedAtom[]) {anonymousVariable}, 1);
 	index8 argumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
-		(index8[]) {1, 0, 2},		// (l p e) -> (l e)
+		(index8[]) {1, 3, 2},		// (l p e) -> (l e p)
 		argumentMap
 	);
-	Service * permuteService = CreatePermuteService(2, constants, argumentMap, listService);
-	FreeTypedTuple(constants);
+	return CreatePermuteService(3, 0, argumentMap, listService);
+}
 
-	// Arguments tuple (@stringList _ ) for the marginalize service
+
+void testPermuteService(void)
+{
+	Service * permuteService = createReorderedListService();
+
+	// Arguments tuple (@stringList _ _) for the reordered service
 	Atom string = CreateStringFromCString("alibaba");
-	Atom arguments[2] = {string, (Atom) {0}};
+	Atom arguments[3] = {string, (Atom) {0}, (Atom) {0}};
 
-	// Call the PERMUTE service
+	// Call the PERMUTE service.
 	// This enumerates all elements of the string ("alibaba")
 	ServiceContext * context = ServiceCreateContext(permuteService, arguments);
 	size32 nElements = 0;
@@ -76,26 +76,41 @@ void testPermuteService(void)
 	}
 	ASSERT_INT32_EQUAL(nElements, 7)
 	ServiceFreeContext(context);
-	
-	// Create a DEDUPLICATE service from the PERMUTE service
-	Service * deduplicateService = CreateDeduplicateService(permuteService);
-	// Call the service
-	// This should yield the unique letters, sorted ("abil")
-	arguments[0] = string;
-	arguments[1] = (Atom) {0};
-	context = ServiceCreateContext(deduplicateService, arguments);
-	nElements = 0;
-	while(ServiceCall(context)) {
-		// PrintChar(LetterToChar(arguments[1], LETTER_LOWERCASE));
-		// PrintChar('\n');
-		nElements++;
-	}
-	ASSERT_INT32_EQUAL(nElements, 4)
-	ServiceFreeContext(context);
-	
+
 	IFactRelease(string);
-	ReleaseService(deduplicateService);
 	ReleaseService(permuteService);
+}
+
+
+/**
+ * This tests using a PROJECT service to marginalize the relation
+ * (list element position) to (list element), dropping the trailing
+ * position argument. Dropping it leaves duplicate tuples, which PROJECT
+ * removes, so that the result is again a valid relation.
+ */
+void testProjectService(void)
+{
+	Service * permuteService = createReorderedListService();
+	Service * projectService = CreateProjectService(permuteService, 2);
+	ReleaseService(permuteService);
+
+	// Arguments tuple (@stringList _) for the marginalize service
+	Atom string = CreateStringFromCString("alibaba");
+	Atom arguments[2] = {string, (Atom) {0}};
+
+	// Call the service.
+	// This should yield the unique letters, sorted ("abil")
+	ServiceContext * context = ServiceCreateContext(projectService, arguments);
+	char uniqueLetters[] = "abil";
+	for(index8 i = 0; i < 4; i++) {
+		ASSERT_TRUE(ServiceCall(context))
+		ASSERT_CHAR_EQUAL(LetterToChar(arguments[1], LETTER_LOWERCASE), uniqueLetters[i])
+	}
+	ASSERT_FALSE(ServiceCall(context))
+	ServiceFreeContext(context);
+
+	IFactRelease(string);
+	ReleaseService(projectService);
 }
 
 
@@ -289,6 +304,7 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testMachineService);
 	ExecuteTest(testPermuteService);
+	ExecuteTest(testProjectService);
 	ExecuteTest(testJoinService1);
 	ExecuteTest(testJoinService2);
 	ExecuteTest(testUnionService);

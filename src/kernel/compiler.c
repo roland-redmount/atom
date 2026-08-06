@@ -120,14 +120,22 @@
   * and query (number 1 plustwo a) the variable y must be discarded, and then
   * some tuples may become identical. This needs a PROJECT operation in addition
   * to the JOIN,
-  * 
+  *
   *   PROJECT(JOIN(+ x + 1 = y, + y + 1 = z), {x z})
-  * 
-  * The PROJECT(service, variables) operation requires checking for duplicate
-  * tuples (unless the variables are known to be a unique key for ther relation).
-  * This is problematic since we want the service to yield one tuple at a time.
-  * To enable efficient duplicate removal, the child service must yield tuples in
-  * sorted order w.r.t. {x z}. 
+  *
+  * Note that y cannot simply be left out of the compiled services: it is shared
+  * between the two terms, so the JOIN service needs it as an argument in order to
+  * constrain one term against the other. We therefore give every such clause-local
+  * variable an argument of its own, numbered after the query arguments, and compile
+  * the conjunction with this extended arguments tuple. Since the local variables
+  * are the trailing arguments, PROJECT need only keep a leading number of arguments.
+  *
+  * The PROJECT operation requires checking for duplicate tuples (unless the kept
+  * arguments are known to be a unique key for the relation). This is problematic
+  * since we want the service to yield one tuple at a time; currently PROJECT
+  * enumerates its entire child relation when its context is created.
+  * To enable efficient duplicate removal, the child service should yield tuples in
+  * sorted order w.r.t. {x z}.
   */
 
 
@@ -259,8 +267,11 @@ static void actorsToParameters(TypedTuple const * actors, TypedTuple * parameter
 /**
  * A term compiles to a PERMUTE service. The numbering of Parameters in the
  * term actors defines the caller's parameter order; any non-parameter atoms
- * are stored in a "constants" tuple. If variables are present, a DEDUPLICATE
- * service is generated to ensure the resulting tuples are unique.
+ * are constants restricting a child service argument, and are stored in a
+ * "constants" tuple. Every term actor is thus either a parameter or a constant,
+ * so no child argument is dropped and the resulting tuples remain unique.
+ * (Variables occurring in the clause but not in the query are given parameter
+ * numbers of their own by parameterizeLocalVariables() before we get here.)
  * The serviceParameters tuple is set to the matched service's parameters,
  * permuted to match the term actors order.
  */
@@ -303,32 +314,23 @@ static Service * compileTerm(
 		);
 	}
 	TypedTuple * constants = 0;
-	bool deduplicate = false;
-	Service * service;
 	if(nConstants > 0) {
 		constants = CreateTypedTuple(nConstants);
 		for(index8 i = 0, k = 0; i < termActors->nAtoms; i++) {
 			TypedAtom actor = TypedTupleGetElement(termActors, permutation[i]);
 			if(actor.type != AT_PARAMETER) {
+				ASSERT(actor.type != AT_VARIABLE)
 				TypedTupleSetElement(constants, k++, actor);
-				// TODO: we should only deduplicate if the "constant" is a variable?
-				deduplicate = true;
 			}
 		}
 	}
-	service = CreatePermuteService(
+	Service * service = CreatePermuteService(
 		nArguments, constants, argumentMap, termServiceRecord.service);
 	if(constants)
 		FreeTypedTuple(constants);
 
 	// TODO: if we have an identity argument map, we can just return the child service
 
-	// Wrap in a deduplicate service if needed
-	if(deduplicate) {
-		Service * deduplicateService = CreateDeduplicateService(service);
-		ReleaseService(service);
-		service = deduplicateService;
-	}
 	return service;
 }
 
@@ -350,6 +352,10 @@ static Service * compileConjunctionRecursive(
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	Service * service = 0;
+	// Arity of the query term, which is also the arity of the matched term.
+	// Parameters numbered beyond this one stand for clause-local variables,
+	// which by definition do not occur in the query term.
+	size8 queryArity = termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex];
 
 	// Find a term that can be compiled.
 	// First iterate over term forms in the clause form
@@ -418,9 +424,13 @@ static Service * compileConjunctionRecursive(
 									.atomType = parameterType
 								}
 							};
-							// Replace untyped output parameter in query matched term
-							index8 queryParameterIndex = termActorsIndices[matchedTermIndex] + queryTermParameterNr - 1;
-							TypedTupleSetAtom(clauseActors, queryParameterIndex, outputParameter);
+							// Replace untyped output parameter in query matched term.
+							// A clause-local parameter has no counterpart there.
+							if(queryTermParameterNr <= queryArity) {
+								index8 queryParameterIndex =
+									termActorsIndices[matchedTermIndex] + queryTermParameterNr - 1;
+								TypedTupleSetAtom(clauseActors, queryParameterIndex, outputParameter);
+							}
 							// Replace untyped parameter in compiled term
 							// NOTE: not necessary, this term is not used for anything at this point
 							TypedTupleSetAtom(
@@ -479,6 +489,57 @@ static Service * compileConjunctionRecursive(
 }
 
 
+/**
+ * Give every variable occurring in the clause but not in the query term a parameter
+ * of its own, numbered after the query parameters 1 .. queryArity. Such a variable is
+ * shared between the terms of the conjunction, so it must have a column in the
+ * arguments tuple for the JOIN service to constrain the terms against each other;
+ * the PROJECT service then drops these trailing columns again.
+ * Returns the number of local variables found.
+ *
+ * NOTE: each occurence of the anonymous variable _ is a variable of its own,
+ * and so obtains a parameter of its own. SameVariable() gives us this for free.
+ */
+static size8 parameterizeLocalVariables(
+	TypedTuple * clauseActors, index8 matchedTermIndex, index8 const * termActorsIndices,
+	size8 queryArity)
+{
+	index8 matchedTermBegin = termActorsIndices[matchedTermIndex];
+	index8 matchedTermEnd = termActorsIndices[matchedTermIndex + 1];
+	size8 nLocalVariables = 0;
+
+	for(index8 i = 0; i < clauseActors->nAtoms; i++) {
+		if((i >= matchedTermBegin) && (i < matchedTermEnd))
+			continue;
+		TypedAtom actor = TypedTupleGetElement(clauseActors, i);
+		if(actor.type != AT_VARIABLE)
+			continue;
+		// The parameter type is unknown here, and is resolved by
+		// compileConjunctionRecursive() once a term producing it has compiled.
+		TypedAtom parameter = CreateTypedAtom(
+			AT_PARAMETER,
+			(Atom) {
+				.parameter = {
+					.number = queryArity + (++nLocalVariables),
+					.io = PARAMETER_OUT,
+					.atomType = 0
+				}
+			}
+		);
+		// Replace this occurence of the variable, and any remaining ones
+		TypedTupleSetElement(clauseActors, i, parameter);
+		for(index8 j = i + 1; j < clauseActors->nAtoms; j++) {
+			if((j >= matchedTermBegin) && (j < matchedTermEnd))
+				continue;
+			TypedAtom other = TypedTupleGetElement(clauseActors, j);
+			if((other.type == AT_VARIABLE) && SameVariable(other.atom, actor.atom))
+				TypedTupleSetElement(clauseActors, j, parameter);
+		}
+	}
+	return nLocalVariables;
+}
+
+
 static Service * compileConjunction(
 	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 nArguments,
 	ChoicePoints * choices)
@@ -490,9 +551,22 @@ static Service * compileConjunction(
 	for(index8 i = 0; i < clauseNTerms; i++)
 		termExcluded[i] = (i == matchedTermIndex);
 
-	return compileConjunctionRecursive(
-		clauseForm, clauseActors, matchedTermIndex, nArguments,
+	// Clause-local variables become arguments beyond the query arguments,
+	// so the conjunction is compiled with an extended arguments tuple.
+	size8 nLocalVariables = parameterizeLocalVariables(
+		clauseActors, matchedTermIndex, termActorsIndices, nArguments);
+
+	Service * service = compileConjunctionRecursive(
+		clauseForm, clauseActors, matchedTermIndex, nArguments + nLocalVariables,
 		termExcluded, 1, termActorsIndices, choices);
+
+	// Drop the local variable arguments again, and any duplicate tuples this creates
+	if(service && nLocalVariables) {
+		Service * projectService = CreateProjectService(service, nArguments);
+		ReleaseService(service);
+		service = projectService;
+	}
+	return service;
 }
 
 
@@ -686,7 +760,7 @@ size8 CompileService(Formula const * queryTerm, ServiceRecord records[], size8 m
 	TypedTuple * queryParameters = CreateTypedTuple(arity);
 	actorsToParameters(queryTerm->actors, queryParameters);
 
-	PrintCString("queryParameters: ");
+	PrintCString("\nCompileService()\nqueryParameters: ");
 	PrintFormActorsAsFormula(queryTerm->form, queryParameters);
 	PrintChar('\n');
 
@@ -714,5 +788,12 @@ size8 CompileService(Formula const * queryTerm, ServiceRecord records[], size8 m
 		FreeTypedTuple(variants[i].parameters);
 	}
 	FreeTypedTuple(queryParameters);
+
+	PrintCString("-> compiled services:\n");
+	for(index8 i = 0; i < nVariants; i++) {
+		PrintServiceRecord(&records[i]);
+		PrintChar('\n');
+	}
+
 	return nVariants;
 }
