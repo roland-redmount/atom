@@ -23,6 +23,20 @@ bool TupleEqual(Atom const tuple1[], Atom const tuple2[], size8 nAtoms)
 }
 
 
+void TupleAcquire(byte const atomTypes[], Atom const tuple[], size8 nAtoms)
+{
+	for(index8 i = 0; i < nAtoms; i++)
+		AcquireAtom(tuple[i], atomTypes[i]);
+}
+
+
+void TupleRelease(byte const atomTypes[], Atom const tuple[], size8 nAtoms)
+{
+	for(index8 i = 0; i < nAtoms; i++)
+		ReleaseAtom(tuple[i], atomTypes[i]);
+}
+
+
 void PrintTuple(byte const atomTypes[], Atom const tuple[], size8 nAtoms)
 {
    for(index8 i = 0; i < nAtoms; i++) {

@@ -2,7 +2,7 @@
  #ifndef SERVICE_H
  #define SERVICE_H
 
- #include "kernel/typedtuple.h"
+ #include "lang/Atom.h"
 
 
 typedef struct s_Service Service;
@@ -115,8 +115,11 @@ struct s_Service {
 		// for SERVICE_PERMUTE
 		struct {
 			Service * childService;
-			// Stored constants
-			TypedTuple * constants;
+			// Stored constants and their atom types, one for each constant
+			// child argument, in argumentMap order
+			Atom * constants;
+			byte * constantTypes;
+			size8 nConstants;
 			// 1-based indices of each child argument into the parent arguments,
 			// or 0 if the child argument is a constant.
 			// NOTE: the parent:child mapping is 1:n, a parent argument
@@ -149,15 +152,19 @@ struct s_Service {
  * Create a permute service with the specified number of arguments.
  * The argumentMap array has length equal to childService->nArguments
  * and specifies for each child argument either a 1-based index into the parent arguments tuple,
- * or 0 for a constant, in the order of the constants tuple. One parent argument may map to
+ * or 0 for a constant, in the order of the constants array. One parent argument may map to
  * multiple child arguments, in which case parent indices are repeated.
- * 
+ *
+ * The constants and constantTypes arrays hold one entry for each zero entry in argumentMap,
+ * and may be 0 if there are none. The service acquires a reference to each constant.
+ *
  * NOTE: If some parent argument positions are missing from argumentMap, those arguments will not be
  * updated by this service, so its tuples leave those arguments undefined. Such a permute service is
  * only valid as a child of a join service, whose children together cover every parent argument.
  */
 Service * CreatePermuteService(
-	size8 nArguments, TypedTuple const * constants, index8 const * argumentMap, Service * childService);
+	size8 nArguments, Atom const * constants, byte const * constantTypes,
+	index8 const * argumentMap, Service * childService);
 
 /**
  * Create a machine code service

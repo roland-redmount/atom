@@ -53,7 +53,7 @@ static Service * createReorderedListService(void)
 		(index8[]) {1, 3, 2},		// (l p e) -> (l e p)
 		argumentMap
 	);
-	return CreatePermuteService(3, 0, argumentMap, listService);
+	return CreatePermuteService(3, 0, 0, argumentMap, listService);
 }
 
 
@@ -131,7 +131,7 @@ void testJoinService1(void)
 	// into the JOIN service.
 	Service * rightServiceChild = GetCoreService(SERVICE_PREDICATE_FORM);
 	// TODO: is this mapping correct?
-	Service * rightService = CreatePermuteService(3, 0, (index8[]) {3}, rightServiceChild);
+	Service * rightService = CreatePermuteService(3, 0, 0, (index8[]) {3}, rightServiceChild);
 	
 	// Create the JOIN service
 	Service * joinService = CreateJoinService(leftService, rightService);
@@ -190,8 +190,8 @@ void testJoinService2(void)
 		rightServiceArgumentMap
 	);
 
-	Service * leftService = CreatePermuteService(5, 0, leftServiceArgumentMap, listIdService);
-	Service * rightService = CreatePermuteService(5, 0, rightServiceArgumentMap, listLetterService);
+	Service * leftService = CreatePermuteService(5, 0, 0, leftServiceArgumentMap, listIdService);
+	Service * rightService = CreatePermuteService(5, 0, 0, rightServiceArgumentMap, listLetterService);
 
 	// Create the join service
 	Service * joinService = CreateJoinService(leftService, rightService);
@@ -253,10 +253,7 @@ void testUnionService(void)
 	// The UNION service (list @list1 position p element e) | (list @list2 position p element e)
 	Service * listService = GetCoreService(SERVICE_LIST_LETTER);
 
-	// use PERMUTE to drop the list role
-	TypedAtom string1 = CreateTypedAtom(AT_ID, CreateStringFromCString("foo"));
-	TypedTuple * constants1 = CreateTypedTupleFromArray((TypedAtom[]) {string1}, 1);
-
+	// use PERMUTE to bind the list role to a constant
 	index8 argumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
@@ -264,15 +261,15 @@ void testUnionService(void)
 		argumentMap
 	);
 
-	Service * service1 = CreatePermuteService(2, constants1, argumentMap, listService);
-	FreeTypedTuple(constants1);
-	ReleaseTypedAtom(string1);
+	Atom string1 = CreateStringFromCString("foo");
+	Service * service1 = CreatePermuteService(
+		2, (Atom[]) {string1}, (byte[]) {AT_ID}, argumentMap, listService);
+	IFactRelease(string1);
 
-	TypedAtom string2 = CreateTypedAtom(AT_ID, CreateStringFromCString("barf"));
-	TypedTuple * constants2 = CreateTypedTupleFromArray((TypedAtom[]) {string2}, 1);
-	Service * service2 = CreatePermuteService(2, constants2, argumentMap, listService);
-	FreeTypedTuple(constants2);
-	ReleaseTypedAtom(string2);
+	Atom string2 = CreateStringFromCString("barf");
+	Service * service2 = CreatePermuteService(
+		2, (Atom[]) {string2}, (byte[]) {AT_ID}, argumentMap, listService);
+	IFactRelease(string2);
 
 	Service * unionService = CreateUnionService(service1, service2);
 	ReleaseService(service1);

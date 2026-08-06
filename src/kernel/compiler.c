@@ -289,6 +289,8 @@ static Service * compileTerm(
 	// Compute argument map: 1-based index for each service parameter into the term actors,
 	// respecting the argument permutation obtained from DispatchQuery() above
 	index8 argumentMap[termArity];
+	Atom constants[termArity];
+	byte constantTypes[termArity];
 	size8 nConstants = 0;
 	// loop over service parameters
 	for(index8 i = 0; i < termArity; i++) {
@@ -297,7 +299,11 @@ static Service * compileTerm(
 			argumentMap[i] = actor.atom.parameter.number;
 		}
 		else {
+			// a constant restricting this child service argument
+			ASSERT(actor.type != AT_VARIABLE)
 			argumentMap[i] = 0;
+			constants[nConstants] = actor.atom;
+			constantTypes[nConstants] = actor.type;
 			nConstants++;
 		}
 		TypedTupleSetElement(serviceParameters, permutation[i],
@@ -313,21 +319,8 @@ static Service * compileTerm(
 			)
 		);
 	}
-	TypedTuple * constants = 0;
-	if(nConstants > 0) {
-		constants = CreateTypedTuple(nConstants);
-		for(index8 i = 0, k = 0; i < termActors->nAtoms; i++) {
-			TypedAtom actor = TypedTupleGetElement(termActors, permutation[i]);
-			if(actor.type != AT_PARAMETER) {
-				ASSERT(actor.type != AT_VARIABLE)
-				TypedTupleSetElement(constants, k++, actor);
-			}
-		}
-	}
 	Service * service = CreatePermuteService(
-		nArguments, constants, argumentMap, termServiceRecord.service);
-	if(constants)
-		FreeTypedTuple(constants);
+		nArguments, constants, constantTypes, argumentMap, termServiceRecord.service);
 
 	// TODO: if we have an identity argument map, we can just return the child service
 

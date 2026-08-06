@@ -2,7 +2,6 @@
 #include "btree/btree.h"
 #include "kernel/service.h"
 #include "kernel/tuple.h"
-#include "kernel/typedtuple.h"
 #include "memory/allocator.h"
 #include "util/utilities.h"
 
@@ -31,24 +30,33 @@ typedef struct s_PermuteContext {
 
 
 Service * CreatePermuteService(
-	size8 nArguments, TypedTuple const * constants, index8 const * argumentMap, Service * childService)
+	size8 nArguments, Atom const * constants, byte const * constantTypes,
+	index8 const * argumentMap, Service * childService)
 {
 	Service * service = createService(SERVICE_PERMUTE, nArguments, sizeof(PermuteContext));
 	service->impl.permute.childService = childService;
 	AcquireService(childService);
-	if(constants) {
-		service->impl.permute.constants = CreateTupleFromTuple(constants);
-		TypedTupleAcquire(service->impl.permute.constants);
-	}
-	else
-		service->impl.permute.constants = 0;
-		
-#ifdef DEBUG
-	// Bounds check the argument map: 1-based indices into the parent arguments tuple,
-	// or 0 to take the next constant.
-	for(index8 i = 0; i < childService->nArguments; i++)
+
+	// Count the constants, and bounds check the argument map: 1-based indices
+	// into the parent arguments tuple, or 0 to take the next constant.
+	size8 nConstants = 0;
+	for(index8 i = 0; i < childService->nArguments; i++) {
 		ASSERT(argumentMap[i] <= nArguments)
-#endif
+		if(!argumentMap[i])
+			nConstants++;
+	}
+	service->impl.permute.nConstants = nConstants;
+	if(nConstants) {
+		service->impl.permute.constants = Allocate(nConstants * sizeof(Atom));
+		CopyMemory(constants, service->impl.permute.constants, nConstants * sizeof(Atom));
+		service->impl.permute.constantTypes = Allocate(nConstants);
+		CopyMemory(constantTypes, service->impl.permute.constantTypes, nConstants);
+		TupleAcquire(constantTypes, constants, nConstants);
+	}
+	else {
+		service->impl.permute.constants = 0;
+		service->impl.permute.constantTypes = 0;
+	}
 
 	service->impl.permute.argumentMap = Allocate(childService->nArguments);
 	CopyMemory(argumentMap, service->impl.permute.argumentMap, childService->nArguments);
@@ -71,7 +79,7 @@ static void permuteServiceSetupContext(ServiceContext * context)
 		}
 		else {
 			// copy next constant
-			a = TypedTupleGetAtom(context->service->impl.permute.constants, k++);
+			a = context->service->impl.permute.constants[k++];
 		}
 		permuteContext->childArguments[i] = a;
 	}
@@ -106,9 +114,14 @@ static void teardownPermuteService(Service * service)
 {
 	ASSERT(service->type == SERVICE_PERMUTE)
 	ReleaseService(service->impl.permute.childService);
-	if(service->impl.permute.constants) {
-		TypedTupleRelease(service->impl.permute.constants);
-		FreeTypedTuple(service->impl.permute.constants);
+	if(service->impl.permute.nConstants) {
+		TupleRelease(
+			service->impl.permute.constantTypes,
+			service->impl.permute.constants,
+			service->impl.permute.nConstants
+		);
+		Free(service->impl.permute.constants);
+		Free(service->impl.permute.constantTypes);
 	}
 	Free(service->impl.permute.argumentMap);
 }
@@ -637,10 +650,13 @@ void PrintService(Service const * service)
 		PrintF("PERMUTE/%u(", service->nArguments);
 		for(index8 i = 0; i < service->impl.permute.childService->nArguments; i++)
 			PrintF("%u ", service->impl.permute.argumentMap[i]);
-		if(service->impl.permute.constants) {
-			TypedTuplePrint(service->impl.permute.constants);
-			PrintChar(' ');
-		}
+		PrintChar('{');
+		PrintTuple(
+			service->impl.permute.constantTypes,
+			service->impl.permute.constants,
+			service->impl.permute.nConstants
+		);
+		PrintCString("} ");
 		PrintService(service->impl.permute.childService);
 		PrintChar(')');
 		break;
