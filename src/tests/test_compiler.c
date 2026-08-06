@@ -96,7 +96,7 @@ void testCompilePermute3(void)
 	// which requires wrapping in a DEDUPLICATE service.
 	// set s element e <- list s position _ element e
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"set _s element _e | ! list _s position _ element _e");
+		"set _s element _e | ! list _s position _p element _e");
 	Formula * queryTerm = CStringToTerm("set \"alibaba\" element _e");
 
 	// The element role is an untyped output, so the term matches every
@@ -107,6 +107,10 @@ void testCompilePermute3(void)
 	ServiceRecord records[MAX_COMPILED_SERVICES];
 	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nRecords, 2)
+	for(index8 i = 0; i < nRecords; i++) {
+		PrintServiceRecord(&records[i]);
+		PrintChar('\n');
+	}
 
 	// The unique letters of "alibaba"
 	char uniqueLetters[4] = "abil";
@@ -123,11 +127,9 @@ void testCompilePermute3(void)
 		TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
 		void * context = ServiceCreateContext(records[i].service, arguments);
 		while(ServiceCall(context)) {
+			char c = LetterToChar(arguments[elementRoleIndex], LETTER_LOWERCASE);
 			ASSERT(k < 4)
-			ASSERT_CHAR_EQUAL(
-				LetterToChar(arguments[elementRoleIndex], LETTER_LOWERCASE),
-				uniqueLetters[k]
-			)
+			ASSERT_CHAR_EQUAL(c, uniqueLetters[k])
 			k++;
 		}
 		ServiceFreeContext(context);
@@ -193,9 +195,9 @@ void testCompileUnion(void)
 	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nRecords, 1)
 	ServiceRecord record = records[0];
-	PrintCString("Service  = ");
-	PrintService(record.service);
-	PrintChar('\n');
+	// PrintCString("Service  = ");
+	// PrintService(record.service);
+	// PrintChar('\n');
 
 	// Call the service
 	Atom arguments[2];

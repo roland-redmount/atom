@@ -64,17 +64,8 @@ static bool signatureQueryTupleMatch(
 					return false;
 			}
 			else {
-				if(queryAtom.type == AT_VARIABLE)
-					return true;
-				if(queryAtom.type == AT_PARAMETER) {
-					// query has a parameter; IO direction must match
-					if(queryAtom.atom.parameter.io != PARAMETER_OUT)
-						return false;
-					// parameter atom type must match, or be absent
-					byte queryParameterType = queryAtom.atom.parameter.atomType;
-					if(queryParameterType && (queryParameterType != serviceParameterType))
-						return false;
-				}
+				if(queryAtom.type != AT_VARIABLE)
+					return false;
 			}
 			break;
 		}
