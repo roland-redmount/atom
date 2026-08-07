@@ -116,31 +116,32 @@ void testProjectService(void)
 
 /**
  * Test creating and executing a JOIN service
- * (element e multiset m multiple n) & (predicate-form p)
- * with parent arguments (m, e, n)
+ * (multiset p element e multiple n) & (predicate-form p)
+ * with parent arguments (p, e, n)
  */
 void testJoinService1(void)
 {
-	// Left child service (multiset m element e multiple n) from the registry
+	// Left child service (multiset p element e multiple n) from the registry
 	Service * leftService = GetCoreService(SERVICE_MULTISET_NAME);
-	// The right child service (predicate-form p) provides only the third argument
-	// TODO: is this mapping correct?
+	index8 leftArgumentMap[3];
+	CoreFormSetByteArray(
+		FORM_MULTISET_ELEMENT_MULTIPLE,
+		(index8[]) {0, 1, 2},
+		leftArgumentMap
+	);
+	// The right child service (predicate-form p)
 	Service * rightService = GetCoreService(SERVICE_PREDICATE_FORM);
+	index8 rightArgumentMap[1] = {0};
 
 	// Create the JOIN service
 	Service * joinService = CreateJoinService(
 		3,
-		leftService, (index8[]) {0, 1, 2},
-		rightService, (index8[]) {2}
+		leftService, leftArgumentMap,
+		rightService, rightArgumentMap
 	);
 
 	// Evaluate with arguments (@list-form, _ , _)
-	Atom arguments[3];
-	CoreFormSetTuple(
-		FORM_MULTISET_ELEMENT_MULTIPLE,
-		(Atom[]) {GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT), (Atom) {0}, (Atom) {0}},
-		arguments
-	);
+	Atom arguments[3] = {GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT), (Atom) {0}, (Atom) {0}};
 	// Setup execution context
 	ServiceContext * context = ServiceCreateContext(joinService, arguments);
 
@@ -149,8 +150,6 @@ void testJoinService1(void)
  	// since the right child service (predicate-form @multiset-form) matches a single tuple.
 	size32 nElements = 0;
 	while(ServiceCall(context)) {
-		// TypedTuplePrint(arguments);
-		// PrintChar('\n');
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 3);
