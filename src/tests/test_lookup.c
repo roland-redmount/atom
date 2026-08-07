@@ -2,6 +2,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/lookup.h"
+#include "kernel/RelationTable.h"
 #include "kernel/string.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
@@ -42,6 +43,48 @@ void testLookup(void)
 	ASSERT_FALSE(AtomHasRole(string, stringRelation, stringRole))
 
 	IFactRelease(string);
+}
+
+
+/**
+ * Adding and removing the roles of a predicate must visit the same columns.
+ * Only AT_ID columns obtain a lookup record, so a relation with a column of
+ * another type tells the two apart.
+ */
+void testLookupPredicateRoles(void)
+{
+	Atom roles[2] = {
+		CreateNameFromCString("node"),
+		CreateNameFromCString("weight")
+	};
+	Atom form = CreatePredicateForm(roles, 2);
+	index8 nodeIndex = PredicateRoleIndex(form, roles[0]);
+	index8 weightIndex = PredicateRoleIndex(form, roles[1]);
+
+	byte atomTypes[2];
+	atomTypes[nodeIndex] = AT_ID;
+	atomTypes[weightIndex] = AT_UINT;
+	// a computed relation, as we only need it to describe the columns
+	RelationTable const * relation = CreateRelationTable(0, form, 2, atomTypes, 0);
+
+	Atom node = CreateStringFromCString("foo");
+	Atom actors[2];
+	actors[nodeIndex] = node;
+	actors[weightIndex] = (Atom) {._uint = 42};
+
+	// only the node column obtains a lookup record
+	LookupAddPredicateRoles(relation, actors);
+	ASSERT_TRUE(AtomHasRole(node, relation, roles[0]))
+	ASSERT_FALSE(AtomHasRole(node, relation, roles[1]))
+
+	LookupRemovePredicateRoles(relation, actors);
+	ASSERT_FALSE(AtomHasRole(node, relation, roles[0]))
+
+	IFactRelease(node);
+	FreeRelationTable(relation);
+	IFactRelease(form);
+	NameRelease(roles[0]);
+	NameRelease(roles[1]);
 }
 
 
@@ -144,6 +187,7 @@ int main(int argc, char * argv[])
 	KernelInitialize();
 
 	ExecuteTest(testLookup);
+	ExecuteTest(testLookupPredicateRoles);
 	ExecuteTest(testLookupIterator);
 	// ExecuteTest(testRemoveAllPredicateRoles);
 

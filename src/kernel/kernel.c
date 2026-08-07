@@ -699,12 +699,15 @@ void AssertFact(Atom predicateForm, TypedTuple const * actors, uint8 idPosition)
 void RetractFact(Atom predicateForm, TypedTuple * actors)
 {
 	RelationTable const * relation = RelationRegistryFind(predicateForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
-	// this will not remove defining facts
 	Atom const * actorsArray = TypedTuplePeekAtoms(actors);
-	RelationTableRemoveTuple(relation, actorsArray, 0);
+	// Remove the lookup entries before the tuple: removing the tuple releases the
+	// relation's reference to each of its atoms, and releasing the last reference
+	// to an atom takes all of its lookup entries with it.
 	// NOTE: the below does not accept variables in the actors tuple,
 	// so we can only retract 1 fact at a time.
 	LookupRemovePredicateRoles(relation, actorsArray);
+	// this will not remove defining facts
+	RelationTableRemoveTuple(relation, actorsArray, 0);
 
 	// TODO: remove service if empty?
 }

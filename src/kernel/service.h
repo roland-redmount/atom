@@ -71,37 +71,75 @@ typedef struct s_MachineServiceProvider {
  * tuple to its predecessor, instead of materializing the whole child relation.
  *
  */
+
+/**
+ * Apart from machine services, which provide the stored and computed relations
+ * at the leaves of a service tree, every service is an operator of relational
+ * algebra applied to the relations of its child services:
+ *
+ *   PERMUTE      rename, and restrict on a constant argument     rho, sigma
+ *   CONSTRAIN    restrict on an equality between arguments       sigma
+ *   JOIN         inner join                                      join
+ *   PROJECT      projection                                      pi
+ *   UNION        set union                                       union
+ *
+ * The three operators taking an argument map differ in what their map may do:
+ * a permute service may take a child argument from a constant, a constrain
+ * service may take several child arguments from one argument, and a join
+ * service does neither.
+ *
+ * Every service provides all of its arguments and yields distinct tuples, so
+ * every service yields a valid relation, and an operator can be applied to any
+ * service without regard for how that service was composed.
+ */
  enum ServiceType {
 	/**
-	 * PERMUTE calls a child service with its arguments reordered,
-	 * and may optionally bind constants to child arguments.
+	 * PERMUTE is a rename composed with a restriction on constant arguments:
+	 * it calls a child service with its arguments reordered, and may bind
+	 * constants to child arguments.
 	 * Every child argument is either taken from a parent argument or bound to
 	 * a constant, so PERMUTE never drops a child argument and hence never
 	 * introduces duplicate tuples.
 	 */
 	SERVICE_PERMUTE = 1,
 	/**
-	 * inner join between two "child" services
+	 * JOIN is the inner join of the relations of two child services, on the
+	 * arguments they have in common. Each child service has its own argument map
+	 * and so keeps its own arity; an argument occurring in both maps is a join
+	 * argument, whose value the left child determines and the right child is then
+	 * constrained by.
 	 */
 	SERVICE_JOIN = 2,
 	/**
-	 * UNION gives a union of the tuple sets from two child services.
+	 * UNION gives the set union of the tuple sets from two child services.
 	 * It is assumed that each child service produces tuples in sorted order.
-	 * 
+	 *
 	 * NOTE: if services are required to be distinct (using preconditions)
 	 * then we should never have duplicate tuples in a UNION.
 	 */
 	SERVICE_UNION = 3,
 	/**
-	 * PROJECT drops all but the first nArguments arguments of its child service
-	 * and removes the duplicate tuples that dropping may produce. Its tuples are
-	 * yielded in sorted order.
+	 * PROJECT is the projection onto the first nArguments arguments of its child
+	 * service: it drops the remaining ones and removes the duplicate tuples that
+	 * dropping may produce. Its tuples are yielded in sorted order.
 	 */
 	SERVICE_PROJECT = 4,
 	/**
-	 * Call a machine code function
+	 * Call a machine code function. Machine services are the leaves of a service
+	 * tree, providing the relations that the operators above are applied to.
 	 */
 	SERVICE_MACHINE = 5,
+	/**
+	 * CONSTRAIN is a restriction on an equality between arguments: it yields those
+	 * tuples of its child service in which all child arguments taken from the same
+	 * argument of this service are equal. This expresses the equality constraint of
+	 * a variable occurring more than once in a query, such as (edge e from x to x)
+	 * asking for the self edges of a graph.
+	 *
+	 * NOTE: this is the only service whose call may consume several child tuples,
+	 * as it can only test the constraint once the child service has produced a tuple.
+	 */
+	SERVICE_CONSTRAIN = 6,
 };
 
 struct s_Service {
@@ -115,21 +153,25 @@ struct s_Service {
 		// for SERVICE_PERMUTE
 		struct {
 			Service * childService;
-			// Stored constants and their atom types, one for each constant
-			// child argument, in argumentMap order
+			// Stored constants and their atom types, addressed by the argument map
 			Atom * constants;
 			byte * constantTypes;
 			size8 nConstants;
-			// 1-based indices of each child argument into the parent arguments,
-			// or 0 if the child argument is a constant.
-			// NOTE: the parent:child mapping is 1:n, a parent argument
-			// may be repeated at multiple positions in the child arguments tuple
+			// Source of each child argument: an index below nArguments is a parent
+			// argument, an index of nArguments or above is constants[index - nArguments].
+			// Each parent argument occurs once; taking several child arguments from
+			// one argument is what a constrain service expresses.
 			index8 * argumentMap;
 		} permute;
 		// for SERVICE_JOIN
 		struct {
 			Service * left;
-			Service * right; 
+			Service * right;
+			// Indices of each child argument into the parent arguments.
+			// Unlike a permute service, every child argument maps to a parent
+			// argument: a join service neither binds constants nor drops arguments.
+			index8 * leftMap;
+			index8 * rightMap;
 		} join;
 		// for SERVICE_UNION
 		struct {
@@ -140,6 +182,14 @@ struct s_Service {
 		struct {
 			Service * childService;
 		} project;
+		// for SERVICE_CONSTRAIN
+		struct {
+			Service * childService;
+			// Index of each child argument into the parent arguments. Unlike the
+			// other argument maps this one is not injective: child arguments
+			// sharing an index are the ones constrained to be equal.
+			index8 * argumentMap;
+		} constrain;
 		// for SERVICE_MACHINE
 		struct {
 			MachineServiceProvider * provider;
@@ -150,20 +200,21 @@ struct s_Service {
 
 /**
  * Create a permute service with the specified number of arguments.
- * The argumentMap array has length equal to childService->nArguments
- * and specifies for each child argument either a 1-based index into the parent arguments tuple,
- * or 0 for a constant, in the order of the constants array. One parent argument may map to
- * multiple child arguments, in which case parent indices are repeated.
+ * The argumentMap array has length equal to childService->nArguments and gives the
+ * source of each child argument: an index below nArguments is the index of a parent
+ * argument, an index of nArguments or above refers to constants[index - nArguments].
  *
- * The constants and constantTypes arrays hold one entry for each zero entry in argumentMap,
- * and may be 0 if there are none. The service acquires a reference to each constant.
+ * The constants and constantTypes arrays have length nConstants, and may be 0 if
+ * there are none. The service acquires a reference to each constant.
  *
- * NOTE: If some parent argument positions are missing from argumentMap, those arguments will not be
- * updated by this service, so its tuples leave those arguments undefined. Such a permute service is
- * only valid as a child of a join service, whose children together cover every parent argument.
+ * The child service must provide every parent argument exactly once, so that every
+ * parent argument occurs in argumentMap, and none occurs twice. An argument this
+ * service does not write would be left at whatever the caller had in the arguments
+ * tuple, and so would not be part of a relation; taking several child arguments from
+ * one argument is what a constrain service expresses.
  */
 Service * CreatePermuteService(
-	size8 nArguments, Atom const * constants, byte const * constantTypes,
+	size8 nArguments, Atom const * constants, byte const * constantTypes, size8 nConstants,
 	index8 const * argumentMap, Service * childService);
 
 /**
@@ -172,16 +223,43 @@ Service * CreatePermuteService(
 Service * CreateMachineService(size8 nArguments, MachineServiceProvider * provider, void * providerData);
 
 /**
- * Setup a JOIN service from two existing child services. The left child service
- * will execute first, and may determine input arguments for right child service.
- * The two child services must take the same arguments, in the same order.
+ * Setup a JOIN service with the specified number of arguments, from two existing
+ * child services. The left child service will execute first, and may determine
+ * input arguments for the right child service.
+ *
+ * The leftMap and rightMap arrays have length equal to the number of arguments of
+ * the respective child service, and give for each child argument its index
+ * into the parent arguments tuple. An argument occurring in both maps is a join
+ * argument: the left child service determines its value, which then constrains
+ * the right child service.
+ *
+ * The two child services must together provide every parent argument, so that every
+ * parent argument occurs in leftMap or rightMap: an argument neither child writes
+ * would be left at whatever the caller had in the arguments tuple. Neither map may
+ * contain the same argument twice; taking several child arguments from one argument
+ * is what a constrain service expresses.
  */
-Service * CreateJoinService(Service * leftChild, Service * rightChild);
+Service * CreateJoinService(
+	size8 nArguments,
+	Service * leftChild, index8 const * leftMap,
+	Service * rightChild, index8 const * rightMap);
 
 /**
  * Setup a UNION service, returning the union of two relations.
  */
 Service * CreateUnionService(Service * first, Service * second);
+
+/**
+ * Create a CONSTRAIN service with the given number of arguments.
+ * The argumentMap array has length equal to childService->nArguments and gives the
+ * index of each child argument into the arguments of this service. Child arguments
+ * sharing an index are constrained to be equal: only those tuples of the child
+ * service in which they are equal are yielded.
+ *
+ * The child service must provide every argument, as for a permute service.
+ */
+Service * CreateConstrainService(
+	size8 nArguments, index8 const * argumentMap, Service * childService);
 
 /**
  * Create a PROJECT service with the given number of arguments, which must be

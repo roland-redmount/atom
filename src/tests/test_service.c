@@ -50,10 +50,10 @@ static Service * createReorderedListService(void)
 	index8 argumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
-		(index8[]) {1, 3, 2},		// (l p e) -> (l e p)
+		(index8[]) {0, 2, 1},		// (l p e) -> (l e p)
 		argumentMap
 	);
-	return CreatePermuteService(3, 0, 0, argumentMap, listService);
+	return CreatePermuteService(3, 0, 0, 0, argumentMap, listService);
 }
 
 
@@ -116,34 +116,32 @@ void testProjectService(void)
 
 /**
  * Test creating and executing a JOIN service
- * (element e multiset m multiple n) & (predicate-form p)
- * with parent arguments (m, e, n)
+ * (multiset p element e multiple n) & (predicate-form p)
+ * with parent arguments (p, e, n)
  */
 void testJoinService1(void)
 {
-	// Left child service (multiset m element e multiple n) from the registry
+	// Left child service (multiset p element e multiple n) from the registry
 	Service * leftService = GetCoreService(SERVICE_MULTISET_NAME);
-	// Right service is permuted (predicate m) -> (multiset m element _ multiple _)
-	// where arguments _ are not filled in.
-	// TODO: this is not really a valid service, as some values in the resulting tuples
-	// are left undefined, This works as input for JOIN, but we should probably require
-	// that every service yields a valid relation. Therefore, we should move this reindexing
-	// into the JOIN service.
-	Service * rightServiceChild = GetCoreService(SERVICE_PREDICATE_FORM);
-	// TODO: is this mapping correct?
-	Service * rightService = CreatePermuteService(3, 0, 0, (index8[]) {3}, rightServiceChild);
-	
+	index8 leftArgumentMap[3];
+	CoreFormSetByteArray(
+		FORM_MULTISET_ELEMENT_MULTIPLE,
+		(index8[]) {0, 1, 2},
+		leftArgumentMap
+	);
+	// The right child service (predicate-form p)
+	Service * rightService = GetCoreService(SERVICE_PREDICATE_FORM);
+	index8 rightArgumentMap[1] = {0};
+
 	// Create the JOIN service
-	Service * joinService = CreateJoinService(leftService, rightService);
-	ReleaseService(rightService);
+	Service * joinService = CreateJoinService(
+		3,
+		leftService, leftArgumentMap,
+		rightService, rightArgumentMap
+	);
 
 	// Evaluate with arguments (@list-form, _ , _)
-	Atom arguments[3];
-	CoreFormSetTuple(
-		FORM_MULTISET_ELEMENT_MULTIPLE,
-		(Atom[]) {GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT), (Atom) {0}, (Atom) {0}},
-		arguments
-	);
+	Atom arguments[3] = {GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT), (Atom) {0}, (Atom) {0}};
 	// Setup execution context
 	ServiceContext * context = ServiceCreateContext(joinService, arguments);
 
@@ -152,8 +150,6 @@ void testJoinService1(void)
  	// since the right child service (predicate-form @multiset-form) matches a single tuple.
 	size32 nElements = 0;
 	while(ServiceCall(context)) {
-		// TypedTuplePrint(arguments);
-		// PrintChar('\n');
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 3);
@@ -180,23 +176,23 @@ void testJoinService2(void)
 	index8 leftServiceArgumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
-		(index8[]) {1, 2, 3},		// (l p s) -> (l p s q e)
+		(index8[]) {0, 1, 2},		// (l p s) -> (l p s q e)
 		leftServiceArgumentMap
 	);
 	index8 rightServiceArgumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
-		(index8[]) {3, 4, 5},		// (s q e) -> (l p s q e)
+		(index8[]) {2, 3, 4},		// (s q e) -> (l p s q e)
 		rightServiceArgumentMap
 	);
 
-	Service * leftService = CreatePermuteService(5, 0, 0, leftServiceArgumentMap, listIdService);
-	Service * rightService = CreatePermuteService(5, 0, 0, rightServiceArgumentMap, listLetterService);
-
-	// Create the join service
-	Service * joinService = CreateJoinService(leftService, rightService);
-	ReleaseService(leftService);
-	ReleaseService(rightService);
+	// Create the join service. The two child services are used directly:
+	// the join service places their arguments into its own arguments tuple.
+	Service * joinService = CreateJoinService(
+		5,
+		listIdService, leftServiceArgumentMap,
+		listLetterService, rightServiceArgumentMap
+	);
 
 	// test case, a list of two strings (two lists of letters)
 	Atom string1 = CreateStringFromCString("foo");
@@ -219,9 +215,9 @@ void testJoinService2(void)
 	byte const * rightArgumentTypes = GetCoreRelationTable(RELATION_LIST_LETTER)->atomTypes;
 	byte joinArgumentTypes[5];
 	for(index8 i = 0; i < 3; i++)
-		joinArgumentTypes[leftServiceArgumentMap[i] - 1] = leftArgumentTypes[i];
+		joinArgumentTypes[leftServiceArgumentMap[i]] = leftArgumentTypes[i];
 	for(index8 i = 0; i < 3; i++)
-		joinArgumentTypes[rightServiceArgumentMap[i] - 1] = rightArgumentTypes[i];
+		joinArgumentTypes[rightServiceArgumentMap[i]] = rightArgumentTypes[i];
 
 	// Setup execution context
 	ServiceContext * context = ServiceCreateContext(joinService, arguments);
@@ -237,12 +233,76 @@ void testJoinService2(void)
 	while(ServiceCall(context)) {
 		// PrintTuple(joinArgumentTypes, arguments, 5);
 		// PrintChar('\n');
+		// The two child services together provide every argument of the join service,
+		// so no argument is left at the zero atom we started out with
+		for(index8 i = 0; i < 5; i++)
+			ASSERT_TRUE(arguments[i]._uint != 0)
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 2 * 3)
 	ServiceFreeContext(context);
 	IFactRelease(stringList);
 	ReleaseService(joinService);
+}
+
+
+/**
+ * Test a CONSTRAIN service over the JOIN service of testJoinService2().
+ * Constraining the two position arguments of (l p s q e) to be equal gives the
+ * letter at position p of the p'th string of a list of strings.
+ */
+void testConstrainService(void)
+{
+	Service * listIdService = GetCoreService(SERVICE_LIST_ID);
+	Service * listLetterService = GetCoreService(SERVICE_LIST_LETTER);
+
+	index8 leftServiceArgumentMap[3];
+	CoreFormSetByteArray(
+		FORM_LIST_POSITION_ELEMENT,
+		(index8[]) {0, 1, 2},		// (l p s) -> (l p s q e)
+		leftServiceArgumentMap
+	);
+	index8 rightServiceArgumentMap[3];
+	CoreFormSetByteArray(
+		FORM_LIST_POSITION_ELEMENT,
+		(index8[]) {2, 3, 4},		// (s q e) -> (l p s q e)
+		rightServiceArgumentMap
+	);
+	Service * joinService = CreateJoinService(
+		5,
+		listIdService, leftServiceArgumentMap,
+		listLetterService, rightServiceArgumentMap
+	);
+	// Both position arguments take argument 1, so only tuples where they are equal
+	// are yielded: (l p s q e) -> (l p s e)
+	Service * constrainService = CreateConstrainService(
+		4, (index8[]) {0, 1, 2, 1, 3}, joinService);
+	ReleaseService(joinService);
+
+	// test case, a list of two strings (two lists of letters)
+	Atom string1 = CreateStringFromCString("foo");
+	Atom string2 = CreateStringFromCString("bar");
+	Atom stringList = CreateListFromArray((Atom[]) {string1, string2}, AT_ID, 2);
+	IFactRelease(string1);
+	IFactRelease(string2);
+
+	// Arguments tuple (@stringList _ _ _)
+	Atom arguments[4] = {stringList, (Atom) {0}, (Atom) {0}, (Atom) {0}};
+	ServiceContext * context = ServiceCreateContext(constrainService, arguments);
+
+	// The join service yields 2 * 3 tuples, of which we expect the two with p == q:
+	// the 1st letter of "foo" and the 2nd letter of "bar"
+	char expectedLetters[] = "fa";
+	for(index8 i = 0; i < 2; i++) {
+		ASSERT_TRUE(ServiceCall(context))
+		ASSERT_UINT64_EQUAL(arguments[1]._uint, i + 1)
+		ASSERT_CHAR_EQUAL(LetterToChar(arguments[3], LETTER_LOWERCASE), expectedLetters[i])
+	}
+	ASSERT_FALSE(ServiceCall(context))
+	ServiceFreeContext(context);
+
+	IFactRelease(stringList);
+	ReleaseService(constrainService);
 }
 
 
@@ -257,18 +317,18 @@ void testUnionService(void)
 	index8 argumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
-		(index8[]) {0, 1, 2},		// (@list p s) -> (p s)
+		(index8[]) {2, 0, 1},		// (@list p s) -> (p s), the list is constant 0
 		argumentMap
 	);
 
 	Atom string1 = CreateStringFromCString("foo");
 	Service * service1 = CreatePermuteService(
-		2, (Atom[]) {string1}, (byte[]) {AT_ID}, argumentMap, listService);
+		2, (Atom[]) {string1}, (byte[]) {AT_ID}, 1, argumentMap, listService);
 	IFactRelease(string1);
 
 	Atom string2 = CreateStringFromCString("barf");
 	Service * service2 = CreatePermuteService(
-		2, (Atom[]) {string2}, (byte[]) {AT_ID}, argumentMap, listService);
+		2, (Atom[]) {string2}, (byte[]) {AT_ID}, 1, argumentMap, listService);
 	IFactRelease(string2);
 
 	Service * unionService = CreateUnionService(service1, service2);
@@ -304,6 +364,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testProjectService);
 	ExecuteTest(testJoinService1);
 	ExecuteTest(testJoinService2);
+	ExecuteTest(testConstrainService);
 	ExecuteTest(testUnionService);
 
 	KernelShutdown();

@@ -265,19 +265,68 @@ static void actorsToParameters(TypedTuple const * actors, TypedTuple * parameter
 
 
 /**
- * A term compiles to a PERMUTE service. The numbering of Parameters in the
- * term actors defines the caller's parameter order; any non-parameter atoms
- * are constants restricting a child service argument, and are stored in a
- * "constants" tuple. Every term actor is thus either a parameter or a constant,
- * so no child argument is dropped and the resulting tuples remain unique.
+ * Merge the arguments of a compiled term that provide the same clause argument,
+ * which happens when a variable occurs more than once in the term. Emits a
+ * CONSTRAIN service yielding only those tuples in which the merged arguments are
+ * equal, and compacts clauseMap accordingly, so that the clause arguments a term
+ * provides are distinct. Takes over the caller's reference to the service.
+ *
+ * For example, a term whose four arguments provide the clause arguments
+ * {2, 0, 2, 1} has its first and third argument merged, as both provide clause
+ * argument 2. The constrain service then takes the argument map {0, 1, 0, 2}
+ * and has three arguments, providing the clause arguments {2, 0, 1}.
+ */
+static Service * constrainRepeatedArguments(Service * service, index8 clauseMap[])
+{
+	size8 nChildArguments = service->nArguments;
+	// The clause arguments as provided by the compiled term. We compact clauseMap
+	// in place below, so we cannot look up earlier arguments in it.
+	index8 termClauseMap[nChildArguments];
+	CopyMemory(clauseMap, termClauseMap, nChildArguments * sizeof(index8));
+
+	index8 argumentMap[nChildArguments];
+	size8 nArguments = 0;
+	for(index8 i = 0; i < nChildArguments; i++) {
+		// an earlier argument providing the same clause argument shares its index
+		argumentMap[i] = nArguments;
+		for(index8 j = 0; j < i; j++) {
+			if(termClauseMap[j] == termClauseMap[i]) {
+				argumentMap[i] = argumentMap[j];
+				break;
+			}
+		}
+		if(argumentMap[i] == nArguments)
+			clauseMap[nArguments++] = termClauseMap[i];
+	}
+	if(nArguments == nChildArguments)
+		return service;
+
+	Service * constrainService = CreateConstrainService(nArguments, argumentMap, service);
+	ReleaseService(service);
+	return constrainService;
+}
+
+
+/**
+ * A term compiles to the service that dispatch matches to it, taking only the
+ * arguments of the term itself. Any non-parameter actor is a constant restricting
+ * one argument of that service, and is bound by a PERMUTE service wrapped around it;
+ * a term without constants compiles to the matched service directly. The permutation
+ * obtained from dispatch needs no service of its own: it is carried by the clauseMap.
  * (Variables occurring in the clause but not in the query are given parameter
  * numbers of their own by parameterizeLocalVariables() before we get here.)
+ *
+ * The clauseMap array is set to the clause argument provided by each argument of the
+ * compiled service, and so has length equal to its nArguments. The caller places
+ * those arguments into the clause arguments tuple, either as a child of a JOIN
+ * service or, for a single term, with a PERMUTE service.
+ *
  * The serviceParameters tuple is set to the matched service's parameters,
  * permuted to match the term actors order.
  */
 static Service * compileTerm(
-	Atom termForm, TypedTuple const * termActors, size8 nArguments,
-	TypedTuple * serviceParameters, ChoicePoints * choices)
+	Atom termForm, TypedTuple const * termActors,
+	TypedTuple * serviceParameters, index8 clauseMap[], ChoicePoints * choices)
 {
 	// attempt to locate an service existing service
 	size8 termArity = termActors->nAtoms;
@@ -286,25 +335,38 @@ static Service * compileTerm(
 	if(!dispatchAtChoicePoint(termForm, termActors, &termServiceRecord, permutation, choices))
 		return 0;
 
-	// Compute argument map: 1-based index for each service parameter into the term actors,
-	// respecting the argument permutation obtained from DispatchQuery() above
+	// Count the constants first: a permute service indexes its constants after
+	// its arguments, so we need the number of arguments before we can map them.
+	size8 nConstants = 0;
+	for(index8 i = 0; i < termArity; i++) {
+		if(TypedTupleGetElement(termActors, permutation[i]).type != AT_PARAMETER)
+			nConstants++;
+	}
+	size8 nArguments = termArity - nConstants;
+
+	// Compute the argument map for each service parameter, respecting the argument
+	// permutation obtained from DispatchQuery() above
 	index8 argumentMap[termArity];
 	Atom constants[termArity];
 	byte constantTypes[termArity];
-	size8 nConstants = 0;
+	size8 nMapped = 0;
+	size8 nMappedConstants = 0;
 	// loop over service parameters
 	for(index8 i = 0; i < termArity; i++) {
 		TypedAtom actor = TypedTupleGetElement(termActors, permutation[i]);
 		if(actor.type == AT_PARAMETER) {
-			argumentMap[i] = actor.atom.parameter.number;
+			argumentMap[i] = nMapped;
+			// parameter numbers are 1-based positions, argument maps are 0-based indices
+			clauseMap[nMapped] = actor.atom.parameter.number - 1;
+			nMapped++;
 		}
 		else {
-			// a constant restricting this child service argument
+			// a constant restricting this service argument
 			ASSERT(actor.type != AT_VARIABLE)
-			argumentMap[i] = 0;
-			constants[nConstants] = actor.atom;
-			constantTypes[nConstants] = actor.type;
-			nConstants++;
+			argumentMap[i] = nArguments + nMappedConstants;
+			constants[nMappedConstants] = actor.atom;
+			constantTypes[nMappedConstants] = actor.type;
+			nMappedConstants++;
 		}
 		TypedTupleSetElement(serviceParameters, permutation[i],
 			CreateTypedAtom(
@@ -319,36 +381,90 @@ static Service * compileTerm(
 			)
 		);
 	}
-	Service * service = CreatePermuteService(
-		nArguments, constants, constantTypes, argumentMap, termServiceRecord.service);
+	ASSERT(nMapped == nArguments)
 
-	// TODO: if we have an identity argument map, we can just return the child service
+	Service * service;
+	if(!nConstants) {
+		// Without constants to bind, the matched service is used as it is
+		AcquireService(termServiceRecord.service);
+		service = termServiceRecord.service;
+	}
+	else {
+		service = CreatePermuteService(
+			nArguments, constants, constantTypes, nConstants, argumentMap,
+			termServiceRecord.service);
+	}
+	// A variable occurring more than once in the term constrains the arguments
+	// providing it to be equal
+	return constrainRepeatedArguments(service, clauseMap);
+}
 
-	return service;
+
+/**
+ * Determine the arguments of a JOIN service from the clause arguments its two child
+ * services provide, and compute the argument map of each child into the join arguments
+ * tuple. A join numbers its arguments by the clause arguments it covers, in ascending
+ * order, so that the outermost join of a conjunction ends up with the clause arguments
+ * in their own order. Returns the number of join arguments.
+ */
+static size8 setupJoinArgumentMaps(
+	size8 clauseNArguments,
+	index8 const leftClauseMap[], size8 nLeftArguments,
+	index8 const rightClauseMap[], size8 nRightArguments,
+	index8 clauseMap[], index8 leftMap[], index8 rightMap[])
+{
+	bool covered[clauseNArguments];
+	SetMemory(covered, clauseNArguments * sizeof(bool), 0);
+	for(index8 i = 0; i < nLeftArguments; i++)
+		covered[leftClauseMap[i]] = true;
+	for(index8 i = 0; i < nRightArguments; i++)
+		covered[rightClauseMap[i]] = true;
+
+	// Number the covered clause arguments in ascending order
+	index8 joinArgument[clauseNArguments];
+	size8 nArguments = 0;
+	for(index8 i = 0; i < clauseNArguments; i++) {
+		if(covered[i]) {
+			joinArgument[i] = nArguments;
+			clauseMap[nArguments] = i;
+			nArguments++;
+		}
+	}
+	for(index8 i = 0; i < nLeftArguments; i++)
+		leftMap[i] = joinArgument[leftClauseMap[i]];
+	for(index8 i = 0; i < nRightArguments; i++)
+		rightMap[i] = joinArgument[rightClauseMap[i]];
+	return nArguments;
 }
 
 
 /**
  * Compile a JOIN service from the conjuction obtained by negating the given clause
- * (clauseForm, clauseActors). The query-matched term indicated by matchedTermIndex 
+ * (clauseForm, clauseActors). The query-matched term indicated by matchedTermIndex
  * is excluded from compilation; also, any term t that has already been compiled
  * is indicated by termExcluded[t] = true.
- * nArguments is the total number of parameters in the clause, including "local" variables.
- * 
+ * clauseNArguments is the total number of parameters in the clause, including "local" variables.
+ *
  * We iterate over all terms (negated) until we find a term that dispatches to a known service;
  * we then return a JOIN service between this service and the service obtained by recursively
  * compiling the remaining terms.
  * If the clause contains only 1 term besides the query term, we emit its service directly
  * without a JOIN, terminating the recursion.
+ *
+ * The compiled service takes only the clause arguments its terms provide, and the
+ * clauseMap array is set to the clause argument provided by each of its arguments.
  */
 static Service * compileConjunctionRecursive(
-	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 nArguments,
+	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 clauseNArguments,
 	bool termExcluded[], uint8 nTermsExcluded, index8 const termActorsIndices[],
-	ChoicePoints * choices)
+	index8 clauseMap[], ChoicePoints * choices)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	ASSERT(clauseNTerms >= 2)
 	Service * service = 0;
+	// Clause arguments provided by the compiled term. A term may refer to the same
+	// clause argument more than once, so it may have more arguments than the clause.
+	index8 termClauseMap[clauseActors->nAtoms];
 	// Arity of the query-matched term. Parameters with number > matchedTermArity
 	// are clause-local variables that not occur in the query term.
 	size8 matchedTermArity = termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex];
@@ -384,7 +500,7 @@ static Service * compileConjunctionRecursive(
 			PrintChar('\n');
 			// Attempt to compile this term to a Service
 			service = compileTerm(
-				negatedTermForm, termActors, nArguments, serviceParameters, choices);
+				negatedTermForm, termActors, serviceParameters, termClauseMap, choices);
 			PrintCString("serviceParameters = ");
 			TypedTuplePrint(serviceParameters);
 			PrintChar('\n');
@@ -459,14 +575,31 @@ static Service * compileConjunctionRecursive(
 	}
 	MultisetIteratorEnd(&termFormIterator);
 
+	if(!service) {
+		// No remaining term could be dispatched
+		return 0;
+	}
+
 	if(nTermsExcluded < clauseNTerms) {
-		// Recurse on remaining terms. 
+		// Recurse on remaining terms.
+		index8 nextClauseMap[clauseActors->nAtoms];
 		Service * nextService = compileConjunctionRecursive(
-			clauseForm, clauseActors, matchedTermIndex, nArguments,
-			termExcluded, nTermsExcluded, termActorsIndices, choices
+			clauseForm, clauseActors, matchedTermIndex, clauseNArguments,
+			termExcluded, nTermsExcluded, termActorsIndices, nextClauseMap, choices
 		);
 		if(nextService) {
-			Service * joinService = CreateJoinService(service, nextService);
+			// The two child services provide the clause arguments of their own terms,
+			// which the argument maps place into the join arguments tuple
+			index8 leftMap[service->nArguments];
+			index8 rightMap[nextService->nArguments];
+			size8 nJoinArguments = setupJoinArgumentMaps(
+				clauseNArguments,
+				termClauseMap, service->nArguments,
+				nextClauseMap, nextService->nArguments,
+				clauseMap, leftMap, rightMap
+			);
+			Service * joinService = CreateJoinService(
+				nJoinArguments, service, leftMap, nextService, rightMap);
 			ReleaseService(service);
 			ReleaseService(nextService);
 			return joinService;
@@ -479,7 +612,8 @@ static Service * compileConjunctionRecursive(
 	}
 	else {
 		// No more terms to consider, return the left child service
-		// NOTE: this ends the recursion. 
+		// NOTE: this ends the recursion.
+		CopyMemory(termClauseMap, clauseMap, service->nArguments * sizeof(index8));
 		return service;
 	}
 }
@@ -537,6 +671,45 @@ static size8 parameterizeLocalVariables(
 
 
 /**
+ * Rearrange the arguments of a compiled conjunction into the clause argument order,
+ * emitting a PERMUTE service unless they are in that order already. Takes over the
+ * caller's reference to the given service; the caller instead obtains a reference
+ * to the returned Service.
+ *
+ * The terms of the conjunction must together provide every clause argument. If they
+ * do not, the clause cannot yield a valid relation: the arguments no term provides
+ * would be left undefined. This is not a program error but an invalid rule, so we
+ * release the service and return 0.
+ */
+static Service * permuteToClauseArguments(
+	Service * service, index8 const clauseMap[], size8 clauseNArguments)
+{
+	bool covered[clauseNArguments];
+	SetMemory(covered, clauseNArguments * sizeof(bool), 0);
+	bool ordered = (service->nArguments == clauseNArguments);
+	for(index8 i = 0; i < service->nArguments; i++) {
+		covered[clauseMap[i]] = true;
+		if(clauseMap[i] != i)
+			ordered = false;
+	}
+	for(index8 i = 0; i < clauseNArguments; i++) {
+		if(!covered[i]) {
+			PrintCString("Clause does not provide every argument\n");
+			ReleaseService(service);
+			return 0;
+		}
+	}
+	if(ordered)
+		return service;
+
+	Service * permuteService = CreatePermuteService(
+		clauseNArguments, 0, 0, 0, clauseMap, service);
+	ReleaseService(service);
+	return permuteService;
+}
+
+
+/**
  * Compile the conjunction formed by negating the given clause (clauseForm, clauseActors),
  * excepting the term matching the query, indicated by matchedTermIndex.
  */
@@ -556,10 +729,17 @@ static Service * compileConjunction(
 	// and the conjunction is compiled with this extended arguments tuple.
 	size8 nLocalVariables = parameterizeLocalVariables(
 		clauseActors, matchedTermIndex, termActorsIndices, nArguments);
+	size8 clauseNArguments = nArguments + nLocalVariables;
 
+	index8 clauseMap[clauseActors->nAtoms];
 	Service * service = compileConjunctionRecursive(
-		clauseForm, clauseActors, matchedTermIndex, nArguments + nLocalVariables,
-		termExcluded, 1, termActorsIndices, choices);
+		clauseForm, clauseActors, matchedTermIndex, clauseNArguments,
+		termExcluded, 1, termActorsIndices, clauseMap, choices);
+	if(!service)
+		return 0;
+
+	// The compiled terms provide the clause arguments in their own order
+	service = permuteToClauseArguments(service, clauseMap, clauseNArguments);
 
 	// Drop the local variable arguments again, and any duplicate tuples this creates
 	if(service && nLocalVariables) {

@@ -35,12 +35,41 @@ void testDispatchToService(void)
 }
 
 
+/**
+ * A variable occurring at several positions of a query denotes one atom, so it
+ * can only match service parameters of the same type.
+ */
+void testDispatchRepeatedVariable(void)
+{
+	ServiceRecord record;
+	index8 permutation[3];
+	Formula * query;
+
+	// The service (list <ID position >UINT element >LETTER) has a position of a
+	// different type than an element, so no atom can be both
+	query = CStringToTerm("list \"ab\" position _x element _x");
+	ASSERT_FALSE(DispatchQueryFormula(query, &record, permutation))
+	FreeFormula(query);
+
+	// Distinct variables at those same positions match as before
+	query = CStringToTerm("list \"ab\" position _p element _e");
+	ASSERT_TRUE(DispatchQueryFormula(query, &record, permutation))
+	FreeFormula(query);
+
+	// Each occurence of the anonymous variable is a variable of its own
+	query = CStringToTerm("list \"ab\" position _ element _");
+	ASSERT_TRUE(DispatchQueryFormula(query, &record, permutation))
+	FreeFormula(query);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
 	MathSetup();
 
 	ExecuteTest(testDispatchToService);
+	ExecuteTest(testDispatchRepeatedVariable);
 
 	MathTeardown();
 	KernelShutdown();

@@ -16,16 +16,38 @@
 #include "lang/unification.h"
 
 /**
+ * Test whether two query atoms denote the same atom, so that they can only match
+ * service parameters of the same type. Only variables and parameters can do so;
+ * any other atom is matched against the service parameter type directly.
+ *
+ * NOTE: each occurence of the anonymous variable _ is a variable of its own,
+ * which SameVariable() gives us.
+ */
+static bool sameQueryAtom(TypedAtom first, TypedAtom second)
+{
+	if(first.type != second.type)
+		return false;
+	if(first.type == AT_VARIABLE)
+		return SameVariable(first.atom, second.atom);
+	if(first.type == AT_PARAMETER)
+		return first.atom.parameter.number == second.atom.parameter.number;
+	return false;
+}
+
+
+/**
  * Test whether a query tuple matches a service parameters list when permuted
  * according to the given permutation array (0-based indices). The query tuple
  * may contain parameters (used by the compiler). Matching rules are:
- * 
+ *
  * 1) Each service input parameter must match (i) a query atom of the same type
  *    as the service parameter atom type, or (ii) a query input parameter
  *    of the same type or type == NONE.
  * 2) Each service output parameter must match (1) a query variable, or
  *    (ii) a query output parameter of the same type or type == NONE.
- * 
+ * 3) A variable or parameter occurring at several positions of the query denotes
+ *    one atom, and so must match service parameters of the same type.
+ *
  * Returns true if the tuples match.
  */
 static bool signatureQueryTupleMatch(
@@ -35,6 +57,15 @@ static bool signatureQueryTupleMatch(
 	for(index8 i = 0; i < queryActors->nAtoms; i++) {
 		TypedAtom queryAtom = TypedTupleGetElement(queryActors, permutation[i]);
 		byte serviceParameterType = atomTypes[i];
+
+		// An earlier occurence of this query atom must have matched the same type,
+		// or no single atom could satisfy the query
+		for(index8 j = 0; j < i; j++) {
+			if(sameQueryAtom(queryAtom, TypedTupleGetElement(queryActors, permutation[j]))
+				&& (atomTypes[j] != serviceParameterType))
+				return false;
+		}
+
 		switch(parameterIO[i]) {
 		case PARAMETER_IN:
 			// service has an input parameter
