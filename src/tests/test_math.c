@@ -1,5 +1,5 @@
 #include "kernel/dispatch.h"
-#include "kernel/service.h"
+#include "kernel/operator.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
@@ -19,15 +19,15 @@ void testAdd1(void)
 {
 	Formula * query = CStringToTerm("+ 2 + 3 = _");
 
-	ServiceRecord record;
+	Service record;
 	index8 permutation[3];
 	ASSERT(DispatchQueryFormula(query, &record, permutation))
 
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(query->actors), arguments, 3);
 	
-	void * context = ServiceCreateContext(record.service, arguments);
-	ASSERT_TRUE(ServiceCall(context))
+	void * context = OperatorCreateContext(record.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
 	
 	Atom equalsRole = CreateNameFromCString("=");
 	index8 equalsRoleIndex = PredicateRoleIndex(
@@ -37,9 +37,9 @@ void testAdd1(void)
 	NameRelease(equalsRole);
 	ASSERT_INT32_EQUAL(arguments[equalsRoleIndex]._int, 2 + 3);
 
-	ASSERT_FALSE(ServiceCall(context))
+	ASSERT_FALSE(OperatorCall(context))
 	
-	ServiceFreeContext(context);
+	OperatorFreeContext(context);
 	FreeFormula(query);
 }
 
@@ -48,15 +48,15 @@ void testAdd2(void)
 {
 	Formula * query = CStringToTerm("= 7 + 4 + _");
 
-	ServiceRecord record;
+	Service record;
 	index8 permutation[3];
 	ASSERT(DispatchQueryFormula(query, &record, permutation))
 
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(query->actors), arguments, 3);
 	
-	void * context = ServiceCreateContext(record.service, arguments);
-	ASSERT_TRUE(ServiceCall(context))
+	void * context = OperatorCreateContext(record.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
 
 	Atom plusRole = CreateNameFromCString("+");
 	// Get the index of the second '+' role actor in the canonical form
@@ -68,9 +68,9 @@ void testAdd2(void)
 	// Account for dispatch argument permutation to pick the right actor
 	ASSERT_INT32_EQUAL(arguments[permutation[plusRoleIndex]]._uint, 7 - 4);
 
-	ASSERT_FALSE(ServiceCall(context))
+	ASSERT_FALSE(OperatorCall(context))
 	
-	ServiceFreeContext(context);
+	OperatorFreeContext(context);
 	FreeFormula(query);
 }
 

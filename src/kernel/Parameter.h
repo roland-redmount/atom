@@ -19,7 +19,7 @@
 #include "lang/Atom.h"
 
 /**
- * Service parameters can be input, output.
+ * Operator parameters can be input, output.
  * In syntax, we denote input parameters by @, output by $.
  * (Maybe < and > are more intuitive after all? Output feel
  *  like going right-to-left so should be >, consistent with

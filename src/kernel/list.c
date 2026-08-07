@@ -150,7 +150,7 @@ bool IsList(Atom atom)
 
 size32 ListLength(Atom list)
 {
-	Service const * service = GetCoreService(SERVICE_LIST_LENGTH);
+	Operator const * op = GetCoreOperator(SERVICE_LIST_LENGTH);
 
 	Atom arguments[2];
 	CoreFormSetTuple(
@@ -158,7 +158,7 @@ size32 ListLength(Atom list)
 		(Atom[]) {list, (Atom) {0}},
 		arguments
 	);
-	ASSERT(ServiceCallOnce(service, arguments))
+	ASSERT(OperatorCallOnce(op, arguments))
 	return (size32) arguments[CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LENGTH)]._uint;
 }
 
@@ -185,7 +185,7 @@ Atom ListGetElement(Atom list, index32 position)
 		(byte[]) {PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT},
 		parameterIO
 	);
-	Service const * service = ServiceRegistryFind(relation, parameterIO);
+	Operator const * op = ServiceRegistryFind(relation, parameterIO);
 
 	Atom arguments[3];
 	CoreFormSetTuple(
@@ -193,7 +193,7 @@ Atom ListGetElement(Atom list, index32 position)
 		(Atom []) {list, (Atom) {._uint = position}, (Atom) {0}},
 		arguments
 	);
-	ASSERT(ServiceCallOnce(service, arguments))
+	ASSERT(OperatorCallOnce(op, arguments))
 	return arguments[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)];
 }
 
@@ -204,7 +204,7 @@ index32 ListGetPosition(Atom list, Atom element)
 	RelationTable const * relation = lookupListElementRelation(list);
 	ASSERT(relation)
 
-	// TODO: this service is not provided by the B-tree relation provider
+	// TODO: this operator is not provided by the B-tree relation provider
 	// as the keys are not in leading columns. Calling this function will
 	// trigger the ASSERT below.
 	byte parameterIO[3];
@@ -213,8 +213,8 @@ index32 ListGetPosition(Atom list, Atom element)
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_IN},
 		parameterIO
 	);
-	Service const * service = ServiceRegistryFind(relation, parameterIO);
-	ASSERT(service)
+	Operator const * op = ServiceRegistryFind(relation, parameterIO);
+	ASSERT(op)
 
 	Atom arguments[3];
 	CoreFormSetTuple(
@@ -222,7 +222,7 @@ index32 ListGetPosition(Atom list, Atom element)
 		(Atom []) {list, (Atom) {0}, element},
 		arguments
 	);
-	ASSERT(ServiceCallOnce(service, arguments))
+	ASSERT(OperatorCallOnce(op, arguments))
 	return arguments[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION)]._uint;
 }
 
@@ -302,8 +302,8 @@ void ListIterate(Atom list, ListIterator * iterator)
 			(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 			parameterIO
 		);
-		Service const * service = ServiceRegistryFind(relation, parameterIO);
-		iterator->context = ServiceCreateContext(service, iterator->queryTuple);
+		Operator const * op = ServiceRegistryFind(relation, parameterIO);
+		iterator->context = OperatorCreateContext(op, iterator->queryTuple);
 	}
 	else
 		iterator->context = 0;
@@ -313,7 +313,7 @@ void ListIterate(Atom list, ListIterator * iterator)
 bool ListIteratorNext(ListIterator * iterator)
 {
 	if(iterator->context)
-		return ServiceCall(iterator->context);
+		return OperatorCall(iterator->context);
 	else
 		return false;
 }
@@ -330,7 +330,7 @@ Atom ListIteratorGetElement(ListIterator const * iterator)
 void ListIteratorEnd(ListIterator * iterator)
 {
 	if(iterator->context)
-		ServiceFreeContext(iterator->context);
+		OperatorFreeContext(iterator->context);
 	SetMemory(iterator, sizeof(ListIterator), 0);
 }
 

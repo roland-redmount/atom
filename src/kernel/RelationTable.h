@@ -15,7 +15,7 @@
 #ifndef RELATION_TABLE_H
 #define RELATION_TABLE_H
 
-#include "kernel/service.h"
+#include "kernel/operator.h"
 
 typedef struct s_RelationTable RelationTable;
 

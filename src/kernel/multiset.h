@@ -7,7 +7,7 @@
 #define MULTISET_H
 
 #include "kernel/ifact.h"
-#include "kernel/service.h"
+#include "kernel/operator.h"
 
 
 typedef struct s_ElementMultiple {
@@ -87,7 +87,7 @@ void MultisetIterationOrder(Atom multiset, byte elementType, Atom const elements
 typedef struct s_MultisetIterator
 {
 	Atom queryTuple[3];
-	ServiceContext * context;
+	OperatorContext * context;
 } MultisetIterator;
 
 

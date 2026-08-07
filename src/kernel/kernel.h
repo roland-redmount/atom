@@ -4,7 +4,7 @@
 
 #include "kernel/typedtuple.h"
 #include "kernel/RelationTable.h"
-#include "kernel/service.h"
+#include "kernel/operator.h"
 #include "platform.h"
 
 
@@ -160,9 +160,9 @@ Atom GetCoreRoleName(index32 roleId);
 RelationTable const * GetCoreRelationTable(index32 relationId);
 
 /**
- * Return a core service.
+ * Return the operator of a core service, given a SERVICE_* id.
  */
-Service * GetCoreService(index32 serviceId);
+Operator * GetCoreOperator(index32 serviceId);
 
 /**
  * Get the atom types array for the given core predicate form/table

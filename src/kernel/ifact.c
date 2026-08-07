@@ -228,8 +228,8 @@ void IFactBeginConjunction(IFactDraft * draft, RelationTable const * relation, i
 	for(index8 i = 0; i < conjunction->table->nColumns; i++) {
 		parameterIO[i] = (i == idColumn) ? PARAMETER_IN : PARAMETER_OUT;
 	}
-	conjunction->service = ServiceRegistryFind(relation, parameterIO);
-	ASSERT(conjunction->service)
+	conjunction->op = ServiceRegistryFind(relation, parameterIO);
+	ASSERT(conjunction->op)
 
 	draft->hasBegunConjunction = true;
 }
@@ -381,15 +381,15 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 		// NOTE: The service may return tuples a different order than the tupleStorage array.
 		Atom arguments[nColumns];
 		setupQueryTuple(arguments, nColumns, (Atom) {.hash = draft->header.hash}, conjunction->idColumn);
-		ServiceContext * context = ServiceCreateContext(conjunction->service, arguments);
-		while(ServiceCall(context)) {
+		OperatorContext * context = OperatorCreateContext(conjunction->op, arguments);
+		while(OperatorCall(context)) {
 			// The id column is still zero in the draft tuple and must not affect the comparison.
 			arguments[conjunction->idColumn] = draftTuples[conjunction->idColumn];
 			// Find the tuple in the draft tuple storage for this conjunction
 			if(!BinarySearch(arguments, draftTuples, nRows, nColumns * sizeof(Atom), CompareMemory))
 				return false;
 		}
-		ServiceFreeContext(context);
+		OperatorFreeContext(context);
 		draftTuples += conjunction->nRows * nColumns;
 	}
 	return true;
@@ -548,10 +548,10 @@ void removeIFactTuples(IFactConjunction * conjunction, Atom idAtom)
 	CreateResizingArray(&tuplesArray, nColumns * sizeof(Atom), 10);
 	Atom arguments[nColumns];
 	setupQueryTuple(arguments, nColumns, idAtom, conjunction->idColumn);
-	ServiceContext * context = ServiceCreateContext(conjunction->service, arguments);
-	while(ServiceCall(context))
+	OperatorContext * context = OperatorCreateContext(conjunction->op, arguments);
+	while(OperatorCall(context))
 		ResizingArrayAppend(&tuplesArray, arguments);
-	ServiceFreeContext(context);
+	OperatorFreeContext(context);
 
 	// Delete tuples
 	for(index32 i = 0; i < tuplesArray.nElements; i++) {

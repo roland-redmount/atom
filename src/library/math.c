@@ -1,5 +1,5 @@
 #include "kernel/Parameter.h"
-#include "kernel/service.h"
+#include "kernel/operator.h"
 #include "kernel/ifact.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
@@ -34,9 +34,9 @@ RelationTable const * mathRelations[N_RELATIONS];
 static index8 relationArgumentIndex[N_RELATIONS][MAX_RELATION_ARITY];
 
 /**
- * The service (+ x<INT + y<INT = z>INT )
+ * The operator (+ x<INT + y<INT = z>INT )
  */
-static void add1(ServiceContext * context)
+static void add1(OperatorContext * context)
 {
 	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
 	int64 x = context->arguments[argumentIndex[0]]._int;
@@ -53,17 +53,17 @@ static void setupAdd1(void)
 	parameterIO[argumentIndex[1]] = PARAMETER_IN;
 	parameterIO[argumentIndex[2]] = PARAMETER_OUT;
 
-	Service * service = CreateMachineService(3, &mathServiceProvider, (void *) ADD1_INDEX);
-	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, service);
-	ReleaseService(service);
+	Operator * op = CreateMachineOperator(3, &mathProvider, (void *) ADD1_INDEX);
+	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, op);
+	ReleaseOperator(op);
 }
 
 /**
- * The service (+ x<INT + y>INT = z<INT)
+ * The operator (+ x<INT + y>INT = z<INT)
  * This implements subtraction by solving the equation
  * z = x + y  <->  y = z - x
  */
-static void add2(ServiceContext * context)
+static void add2(OperatorContext * context)
 {
 	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
 	int64 x = context->arguments[argumentIndex[0]]._int;
@@ -80,16 +80,16 @@ static void setupAdd2(void)
 	parameterIO[argumentIndex[1]] = PARAMETER_OUT;
 	parameterIO[argumentIndex[2]] = PARAMETER_IN;
 
-	Service * service = CreateMachineService(3, &mathServiceProvider, (void *) ADD2_INDEX);
-	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, service);
-	ReleaseService(service);	
+	Operator * op = CreateMachineOperator(3, &mathProvider, (void *) ADD2_INDEX);
+	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, op);
+	ReleaseOperator(op);	
 }
 
 
 /**
- * The service (* x<INT * y<INT = z>INT )
+ * The operator (* x<INT * y<INT = z>INT )
  */
-static void mul1(ServiceContext * context)
+static void mul1(OperatorContext * context)
 {
 	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
 	int64 x = context->arguments[argumentIndex[0]]._int;
@@ -106,18 +106,18 @@ static void setupMul1(void)
 	parameterIO[argumentIndex[1]] = PARAMETER_IN;
 	parameterIO[argumentIndex[2]] = PARAMETER_OUT;
 
-	Service * service = CreateMachineService(3, &mathServiceProvider, (void *) MUL1_INDEX);
-	ServiceRegistryAdd(mathRelations[MUL_RELATION], parameterIO, service);
-	ReleaseService(service);
+	Operator * op = CreateMachineOperator(3, &mathProvider, (void *) MUL1_INDEX);
+	ServiceRegistryAdd(mathRelations[MUL_RELATION], parameterIO, op);
+	ReleaseOperator(op);
 }
 
 
 /**
- * Lookup table for service functions.
+ * Lookup table for operator functions.
  * We need this since we cannot store a function pointer directly in void * providerData
  * (due to text/data segment issues)
  */
-typedef void (*MathFunction)(ServiceContext * context);
+typedef void (*MathFunction)(OperatorContext * context);
 
 typedef struct s_MathContext {
 	MathFunction function;
@@ -132,18 +132,18 @@ MathFunction functionTable[N_SERVICES] = {
 
 
 /**
- * Stubs for the service provider
+ * Stubs for the operator provider
  */
-static void serviceSetupContext(ServiceContext * context)
+static void btreeSetupContext(OperatorContext * context)
 {
 	MathContext * mathContext = (MathContext *) &context->data;
-	index32 functionIndex = (data64) context->service->impl.machine.providerData;
+	index32 functionIndex = (data64) context->op->impl.machine.providerData;
 	mathContext->function = functionTable[functionIndex];
 	mathContext->hasBeenCalled = false;
 }
 
 
-static bool serviceCall(ServiceContext * context)
+static bool btreeCall(OperatorContext * context)
 {
 	MathContext * mathContext = (MathContext *) &context->data;
 	if(mathContext->hasBeenCalled)
@@ -154,16 +154,16 @@ static bool serviceCall(ServiceContext * context)
 }
 
 
-static void serviceFinalizeContext(ServiceContext * context)
+static void btreeFinalizeContext(OperatorContext * context)
 {
 	// Nothing to do
 }
 
 
-MachineServiceProvider mathServiceProvider = {
-	.setupContext = &serviceSetupContext,
-	.call = &serviceCall,
-	.finalizeContext = &serviceFinalizeContext,
+MachineProvider mathProvider = {
+	.setupContext = &btreeSetupContext,
+	.call = &btreeCall,
+	.finalizeContext = &btreeFinalizeContext,
 };
 
 
@@ -212,7 +212,7 @@ void MathSetup(void)
 	// the table must be registered for dispatch to find it
 	RelationRegistryAdd(mathRelations[MUL_RELATION]);
 
-	// setup services
+	// setup operators
 	setupAdd1();
 	setupAdd2();
 	setupMul1();

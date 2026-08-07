@@ -1,10 +1,10 @@
 /**
  * A relation table based on a B-tree. Relies on btree.c for implemention.
- * Provides both services (query) and agents (assert)
+ * Provides both operators (query) and agents (assert)
  */
 
 #include "btree/btree.h"
-#include "kernel/service.h"
+#include "kernel/operator.h"
 #include "kernel/ifact.h"
 #include "kernel/Parameter.h"
 #include "kernel/RelationBTree.h"
@@ -195,10 +195,10 @@ RelationTableProvider btreeTableProvider = {
  * ignored by the B-tree comparison function.
  * 
  * NOTE: This does not support queries with repeated variables like (a x b y z y) !
- * For this, the service must identify parameters, e.g. (a @1 b @2 c @2) so that
+ * For this, the operator must identify parameters, e.g. (a @1 b @2 c @2) so that
  * we can check for equality.
  * We might handle this with a permutation, (a @1 b@1) <- (a @1 b @2 c @2) ?
- * Not clear to me if there is a value in having services with repeated parameters
+ * Not clear to me if there is a value in having operators with repeated parameters
  * (as opposed to rules with repeated variables, which is necessary for joins).
  */
 
@@ -260,7 +260,7 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator)
 	SetMemory(iterator, sizeof(RelationBTreeIterator), 0);
 }
 
-/*  TODO: these convenience functions might be moved to service / service registry? */
+/*  TODO: these convenience functions might be moved to the service registry? */
 
 // void RelationBTreeQuerySingle(RelationTable * table, Atom const queryTuple[], size8 nInputs, Atom resultTuple[])
 // {
@@ -296,14 +296,14 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator)
  * 
  * (list @l element e position p) : retract (list @l element e position p)
  *
- * This should compile to a loop where for each tuple provided by the service,
+ * This should compile to a loop where for each tuple provided by the operator,
  * the retract "agent" removes the tuple. A practical problem with this is that
  * many data structures (including our B-tree) does not support deleting elements during
  * iteration; and even if it is supported, it may be very slow, for example in array
  * storage where each delete requires moving O(N) elements, so that deleting the full
  * array is O(N^2). We could implement a special case in RelationTable for removing the
  * entire storage structure though, as this does not require variables.
- * This is a fundamental problem when separating read/write operations into services and agents.
+ * This is a fundamental problem when separating read/write operations into operators and agents.
  * 
  * Removing multiple elements also occurs when releasing an ifact; see open issue in IFactRelease()
  * There is also the thorny issue of recursive deletions via IFactRelease().
@@ -349,28 +349,28 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator)
 
 
 /**
- * Stubs for the B-tree service provider.
+ * Stubs for the B-tree operator provider.
  * 
- * The service context data holds a RelationBTreeIterator.
+ * The operator context data holds a RelationBTreeIterator.
  */
 
-// Could not fit this in the 8-byte Service.impl.machine.providerData field :-/
-typedef struct s_RelationBTreeServiceProviderData {
+// Could not fit this in the 8-byte Operator.impl.machine.providerData field :-/
+typedef struct s_RelationBTreeProviderData {
 	RelationBTree * relation;
 	index8 nInputs;
-} RelationBTreeServiceProviderData;
+} RelationBTreeProviderData;
 
 
-static void serviceSetupContext(ServiceContext * context)
+static void btreeSetupContext(OperatorContext * context)
 {
-	RelationBTreeServiceProviderData * serviceData = context->service->impl.machine.providerData;
-	// Initialize the RelationBTreeIterator, allocated by ServiceCreateContext()
+	RelationBTreeProviderData * providerData = context->op->impl.machine.providerData;
+	// Initialize the RelationBTreeIterator, allocated by OperatorCreateContext()
 	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
-	RelationBTreeIterate(serviceData->relation, context->arguments, serviceData->nInputs, iterator);
+	RelationBTreeIterate(providerData->relation, context->arguments, providerData->nInputs, iterator);
 }
 
 
-static bool serviceCall(ServiceContext * context)
+static bool btreeCall(OperatorContext * context)
 {
 	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
 	bool hasTuple = RelationBTreeIteratorNext(iterator);
@@ -380,35 +380,35 @@ static bool serviceCall(ServiceContext * context)
 }
 
 
-static void serviceFinalizeContext(ServiceContext * context)
+static void btreeFinalizeContext(OperatorContext * context)
 {
 	RelationBTreeIterator * iterator = (RelationBTreeIterator *) context->data;
 	RelationBTreeIteratorEnd(iterator);
 }
 
-static void finalizeBTreeService(Service * service)
+static void finalizeBTreeOperator(Operator * op)
 {
-	Free(service->impl.machine.providerData);
+	Free(op->impl.machine.providerData);
 }
 
-MachineServiceProvider bTreeServiceProvider = {
-	.setupContext = &serviceSetupContext,
-	.call = &serviceCall,
-	.finalizeContext = &serviceFinalizeContext,
-	.finalizeService = &finalizeBTreeService,
+MachineProvider bTreeProvider = {
+	.setupContext = &btreeSetupContext,
+	.call = &btreeCall,
+	.finalizeContext = &btreeFinalizeContext,
+	.finalizeOperator = &finalizeBTreeOperator,
 	.contextSize = sizeof(RelationBTreeIterator)
 };
 
 
 /**
- * Create a B-tree service with nInputs leadning input parameters
+ * Create a B-tree operator with nInputs leadning input parameters
  */
-static Service * createBTreeService(RelationBTree * relation, size8 nInputs)
+static Operator * createBTreeOperator(RelationBTree * relation, size8 nInputs)
 {
-	RelationBTreeServiceProviderData * providerData = Allocate(sizeof(RelationBTreeServiceProviderData));
+	RelationBTreeProviderData * providerData = Allocate(sizeof(RelationBTreeProviderData));
 	providerData->relation = relation;
 	providerData->nInputs = nInputs;
-	return CreateMachineService(relation->nColumns, &bTreeServiceProvider, providerData);
+	return CreateMachineOperator(relation->nColumns, &bTreeProvider, providerData);
 }
 
 
@@ -421,9 +421,9 @@ RelationTable const * CreateRelationBTreeWithServices(
 	
 	RelationBTree * relation = table->storage;
 
-	// register nColumns services with leading columns as inputs
+	// register nColumns operators with leading columns as inputs
 	for(index8 nInputs = 0; nInputs <= nColumns; nInputs++) {
-		Service * service = createBTreeService(relation, nInputs);
+		Operator * op = createBTreeOperator(relation, nInputs);
 		byte parameterIO[nColumns];
 		for(index8 i = 0; i < nColumns; i++) {
 			if(i < nInputs)
@@ -431,9 +431,9 @@ RelationTable const * CreateRelationBTreeWithServices(
 			else
 				parameterIO[indexColumns[i]] = PARAMETER_OUT;
 		}
-		ServiceRegistryAdd(table, parameterIO, service);
-		// The registry now holds the reference to the service
-		ReleaseService(service);
+		ServiceRegistryAdd(table, parameterIO, op);
+		// The registry now holds the reference to the operator
+		ReleaseOperator(op);
 	}
 	return table;
 }

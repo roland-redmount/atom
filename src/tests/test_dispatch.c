@@ -14,14 +14,14 @@
  */
 void testDispatchToService(void)
 {
-	ServiceRecord record;
+	Service record;
 	Formula * query;
 	
 	// this query matches with the identity permutation
 	query = CStringToTerm("+ 3 + 4 = _");
 	index8 permutation[3];
 	ASSERT_TRUE(DispatchQueryFormula(query, &record, permutation))
-	ASSERT_UINT32_EQUAL(record.service->type, SERVICE_MACHINE)
+	ASSERT_UINT32_EQUAL(record.op->type, OPERATOR_MACHINE)
 	FreeFormula(query);
 
 	// one the following two queries requires form permutation to match
@@ -41,7 +41,7 @@ void testDispatchToService(void)
  */
 void testDispatchRepeatedVariable(void)
 {
-	ServiceRecord record;
+	Service record;
 	index8 permutation[3];
 	Formula * query;
 

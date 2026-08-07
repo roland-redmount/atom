@@ -13,7 +13,7 @@
 
 #include "lang/TypedAtom.h"
 #include "kernel/ifact.h"
-#include "kernel/service.h"
+#include "kernel/operator.h"
 
 
 /**
@@ -94,7 +94,7 @@ int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(Atom, Atom));
 typedef struct s_ListIterator
 {
 	Atom queryTuple[3];
-	ServiceContext * context;
+	OperatorContext * context;
 } ListIterator;
 
 

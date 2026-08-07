@@ -1,7 +1,7 @@
 
 #include "kernel/dispatch.h"
 #include "kernel/letter.h"
-#include "kernel/service.h"
+#include "kernel/operator.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/multiset.h"
@@ -12,13 +12,13 @@
 #include "testing/testing.h"
 
 
-void testMachineService(void)
+void testMachineOperator(void)
 {
-	// Test calling the B-tree service
+	// Test calling the B-tree operator
 	// (multiset @list-predicate-form element _ position _)
-	Service * service = GetCoreService(SERVICE_MULTISET_NAME);
-	ASSERT(service)
-	ASSERT(service->type == SERVICE_MACHINE)
+	Operator * op = GetCoreOperator(SERVICE_MULTISET_NAME);
+	ASSERT(op)
+	ASSERT(op->type == OPERATOR_MACHINE)
 
 	Atom arguments[3];
 	CoreFormSetTuple(
@@ -26,172 +26,172 @@ void testMachineService(void)
 		(Atom[]) {GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT), (Atom) {0}, (Atom) {0}},
 		arguments
 	);
-	void * context = ServiceCreateContext(service, arguments);
+	void * context = OperatorCreateContext(op, arguments);
 
 	// this should yield 3 elements corresponding to the 3 roles of (list position element)
 	size32 nElements = 0;
-	while(ServiceCall(context))
+	while(OperatorCall(context))
 		nElements++;
 	ASSERT_INT32_EQUAL(nElements, 3);
 
-	ServiceFreeContext(context);
+	OperatorFreeContext(context);
 }
 
 
 /**
  * Reorder the relation (list position element) to (list element position).
- * A PERMUTE service keeps every argument of its child service, so its
+ * A PERMUTE operator keeps every argument of its child operator, so its
  * tuples remain unique and it provides a valid relation.
  */
-static Service * createReorderedListService(void)
+static Operator * createReorderedListOperator(void)
 {
-	// The service (list <ID position >UINT element >LETTER)
-	Service * listService = GetCoreService(SERVICE_LIST_LETTER);
+	// The operator (list <ID position >UINT element >LETTER)
+	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
 	index8 argumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
 		(index8[]) {0, 2, 1},		// (l p e) -> (l e p)
 		argumentMap
 	);
-	return CreatePermuteService(3, 0, 0, 0, argumentMap, listService);
+	return CreatePermuteOperator(3, 0, 0, 0, argumentMap, listOperator);
 }
 
 
-void testPermuteService(void)
+void testPermuteOperator(void)
 {
-	Service * permuteService = createReorderedListService();
+	Operator * permuteOperator = createReorderedListOperator();
 
-	// Arguments tuple (@stringList _ _) for the reordered service
+	// Arguments tuple (@stringList _ _) for the reordered operator
 	Atom string = CreateStringFromCString("alibaba");
 	Atom arguments[3] = {string, (Atom) {0}, (Atom) {0}};
 
-	// Call the PERMUTE service.
+	// Call the PERMUTE operator.
 	// This enumerates all elements of the string ("alibaba")
-	ServiceContext * context = ServiceCreateContext(permuteService, arguments);
+	OperatorContext * context = OperatorCreateContext(permuteOperator, arguments);
 	size32 nElements = 0;
-	while(ServiceCall(context)) {
+	while(OperatorCall(context)) {
 		// PrintChar(LetterToChar(arguments[1], LETTER_LOWERCASE));
 		// PrintChar('\n');
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 7)
-	ServiceFreeContext(context);
+	OperatorFreeContext(context);
 
 	IFactRelease(string);
-	ReleaseService(permuteService);
+	ReleaseOperator(permuteOperator);
 }
 
 
 /**
- * This tests using a PROJECT service to marginalize the relation
+ * This tests using a PROJECT operator to marginalize the relation
  * (list element position) to (list element), dropping the trailing
  * position argument. Dropping it leaves duplicate tuples, which PROJECT
  * removes, so that the result is again a valid relation.
  */
-void testProjectService(void)
+void testProjectOperator(void)
 {
-	Service * permuteService = createReorderedListService();
-	Service * projectService = CreateProjectService(permuteService, 2);
-	ReleaseService(permuteService);
+	Operator * permuteOperator = createReorderedListOperator();
+	Operator * projectOperator = CreateProjectOperator(permuteOperator, 2);
+	ReleaseOperator(permuteOperator);
 
-	// Arguments tuple (@stringList _) for the marginalize service
+	// Arguments tuple (@stringList _) for the marginalize operator
 	Atom string = CreateStringFromCString("alibaba");
 	Atom arguments[2] = {string, (Atom) {0}};
 
-	// Call the service.
+	// Call the operator.
 	// This should yield the unique letters, sorted ("abil")
-	ServiceContext * context = ServiceCreateContext(projectService, arguments);
+	OperatorContext * context = OperatorCreateContext(projectOperator, arguments);
 	char uniqueLetters[] = "abil";
 	for(index8 i = 0; i < 4; i++) {
-		ASSERT_TRUE(ServiceCall(context))
+		ASSERT_TRUE(OperatorCall(context))
 		ASSERT_CHAR_EQUAL(LetterToChar(arguments[1], LETTER_LOWERCASE), uniqueLetters[i])
 	}
-	ASSERT_FALSE(ServiceCall(context))
-	ServiceFreeContext(context);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
 
 	IFactRelease(string);
-	ReleaseService(projectService);
+	ReleaseOperator(projectOperator);
 }
 
 
 /**
- * Test creating and executing a JOIN service
+ * Test creating and executing a JOIN operator
  * (multiset p element e multiple n) & (predicate-form p)
  * with parent arguments (p, e, n)
  */
-void testJoinService1(void)
+void testJoinOperator1(void)
 {
-	// Left child service (multiset p element e multiple n) from the registry
-	Service * leftService = GetCoreService(SERVICE_MULTISET_NAME);
+	// Left child operator (multiset p element e multiple n) from the registry
+	Operator * leftOperator = GetCoreOperator(SERVICE_MULTISET_NAME);
 	index8 leftArgumentMap[3];
 	CoreFormSetByteArray(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
 		(index8[]) {0, 1, 2},
 		leftArgumentMap
 	);
-	// The right child service (predicate-form p)
-	Service * rightService = GetCoreService(SERVICE_PREDICATE_FORM);
+	// The right child operator (predicate-form p)
+	Operator * rightOperator = GetCoreOperator(SERVICE_PREDICATE_FORM);
 	index8 rightArgumentMap[1] = {0};
 
-	// Create the JOIN service
-	Service * joinService = CreateJoinService(
+	// Create the JOIN operator
+	Operator * joinOperator = CreateJoinOperator(
 		3,
-		leftService, leftArgumentMap,
-		rightService, rightArgumentMap
+		leftOperator, leftArgumentMap,
+		rightOperator, rightArgumentMap
 	);
 
 	// Evaluate with arguments (@list-form, _ , _)
 	Atom arguments[3] = {GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT), (Atom) {0}, (Atom) {0}};
 	// Setup execution context
-	ServiceContext * context = ServiceCreateContext(joinService, arguments);
+	OperatorContext * context = OperatorCreateContext(joinOperator, arguments);
 
-	// Call the service.
+	// Call the operator.
 	// This should yield 3 tuples corresponding to the 3 roles of (list position element),
- 	// since the right child service (predicate-form @multiset-form) matches a single tuple.
+ 	// since the right child operator (predicate-form @multiset-form) matches a single tuple.
 	size32 nElements = 0;
-	while(ServiceCall(context)) {
+	while(OperatorCall(context)) {
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 3);
-	ServiceFreeContext(context);
-	// This frees the child services
-	ReleaseService(joinService);
+	OperatorFreeContext(context);
+	// This frees the child operators
+	ReleaseOperator(joinOperator);
 }
 
 
 /**
- * Test evaluating the JOIN service
+ * Test evaluating the JOIN operator
  * (list l position p element s) & (list s position q element e)
  * with arguments (l p s q e)
  */
-void testJoinService2(void)
+void testJoinOperator2(void)
 {
 	// The left child enumerates the outer list (a list of strings, i.e. of ID
 	// elements); the right child enumerates each string (a list of letters).
-	// So they use different machine services, with different argument maps.
-	// The argument map determines the join service argument order.
-	Service * listIdService = GetCoreService(SERVICE_LIST_ID);
-	Service * listLetterService = GetCoreService(SERVICE_LIST_LETTER);
+	// So they use different machine operators, with different argument maps.
+	// The argument map determines the join operator argument order.
+	Operator * listIdOperator = GetCoreOperator(SERVICE_LIST_ID);
+	Operator * listLetterOperator = GetCoreOperator(SERVICE_LIST_LETTER);
 
-	index8 leftServiceArgumentMap[3];
+	index8 leftArgumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
 		(index8[]) {0, 1, 2},		// (l p s) -> (l p s q e)
-		leftServiceArgumentMap
+		leftArgumentMap
 	);
-	index8 rightServiceArgumentMap[3];
+	index8 rightArgumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
 		(index8[]) {2, 3, 4},		// (s q e) -> (l p s q e)
-		rightServiceArgumentMap
+		rightArgumentMap
 	);
 
-	// Create the join service. The two child services are used directly:
-	// the join service places their arguments into its own arguments tuple.
-	Service * joinService = CreateJoinService(
+	// Create the join operator. The two child operators are used directly:
+	// the join operator places their arguments into its own arguments tuple.
+	Operator * joinOperator = CreateJoinOperator(
 		5,
-		listIdService, leftServiceArgumentMap,
-		listLetterService, rightServiceArgumentMap
+		listIdOperator, leftArgumentMap,
+		listLetterOperator, rightArgumentMap
 	);
 
 	// test case, a list of two strings (two lists of letters)
@@ -208,21 +208,21 @@ void testJoinService2(void)
 		arguments[i] = (Atom) {0};
 
 	// Create argument types for printing tuples.
-	// (The created join service does not keep track of its argument types,
-	//  but they could be inferred recursively from its child services, since
-	//  a "leaf" service must be a MachineService with specific argument types.)
+	// (The created join operator does not keep track of its argument types,
+	//  but they could be inferred recursively from its child operators, since
+	//  a "leaf" operator must be a machine operator with specific argument types.)
 	byte const * leftArgumentTypes = GetCoreRelationTable(RELATION_LIST_ID)->atomTypes;
 	byte const * rightArgumentTypes = GetCoreRelationTable(RELATION_LIST_LETTER)->atomTypes;
 	byte joinArgumentTypes[5];
 	for(index8 i = 0; i < 3; i++)
-		joinArgumentTypes[leftServiceArgumentMap[i]] = leftArgumentTypes[i];
+		joinArgumentTypes[leftArgumentMap[i]] = leftArgumentTypes[i];
 	for(index8 i = 0; i < 3; i++)
-		joinArgumentTypes[rightServiceArgumentMap[i]] = rightArgumentTypes[i];
+		joinArgumentTypes[rightArgumentMap[i]] = rightArgumentTypes[i];
 
 	// Setup execution context
-	ServiceContext * context = ServiceCreateContext(joinService, arguments);
+	OperatorContext * context = OperatorCreateContext(joinOperator, arguments);
 
-	// Call the join service.  We expect the tuples
+	// Call the join operator.  We expect the tuples
 	//  (@stringList 1 @string1 1 'f')
 	//  (@stringList 1 @string1 2 'o')
 	//  (@stringList 1 @string1 3 'o')
@@ -230,54 +230,54 @@ void testJoinService2(void)
 	//  (@stringList 2 @string2 2 'a')
 	//  (@stringList 2 @string2 3 '3')
 	size32 nElements = 0;
-	while(ServiceCall(context)) {
+	while(OperatorCall(context)) {
 		// PrintTuple(joinArgumentTypes, arguments, 5);
 		// PrintChar('\n');
-		// The two child services together provide every argument of the join service,
+		// The two child operators together provide every argument of the join operator,
 		// so no argument is left at the zero atom we started out with
 		for(index8 i = 0; i < 5; i++)
 			ASSERT_TRUE(arguments[i]._uint != 0)
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 2 * 3)
-	ServiceFreeContext(context);
+	OperatorFreeContext(context);
 	IFactRelease(stringList);
-	ReleaseService(joinService);
+	ReleaseOperator(joinOperator);
 }
 
 
 /**
- * Test a CONSTRAIN service over the JOIN service of testJoinService2().
+ * Test a CONSTRAIN operator over the JOIN operator of testJoinOperator2().
  * Constraining the two position arguments of (l p s q e) to be equal gives the
  * letter at position p of the p'th string of a list of strings.
  */
-void testConstrainService(void)
+void testConstrainOperator(void)
 {
-	Service * listIdService = GetCoreService(SERVICE_LIST_ID);
-	Service * listLetterService = GetCoreService(SERVICE_LIST_LETTER);
+	Operator * listIdOperator = GetCoreOperator(SERVICE_LIST_ID);
+	Operator * listLetterOperator = GetCoreOperator(SERVICE_LIST_LETTER);
 
-	index8 leftServiceArgumentMap[3];
+	index8 leftArgumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
 		(index8[]) {0, 1, 2},		// (l p s) -> (l p s q e)
-		leftServiceArgumentMap
+		leftArgumentMap
 	);
-	index8 rightServiceArgumentMap[3];
+	index8 rightArgumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
 		(index8[]) {2, 3, 4},		// (s q e) -> (l p s q e)
-		rightServiceArgumentMap
+		rightArgumentMap
 	);
-	Service * joinService = CreateJoinService(
+	Operator * joinOperator = CreateJoinOperator(
 		5,
-		listIdService, leftServiceArgumentMap,
-		listLetterService, rightServiceArgumentMap
+		listIdOperator, leftArgumentMap,
+		listLetterOperator, rightArgumentMap
 	);
 	// Both position arguments take argument 1, so only tuples where they are equal
 	// are yielded: (l p s q e) -> (l p s e)
-	Service * constrainService = CreateConstrainService(
-		4, (index8[]) {0, 1, 2, 1, 3}, joinService);
-	ReleaseService(joinService);
+	Operator * constrainOperator = CreateConstrainOperator(
+		4, (index8[]) {0, 1, 2, 1, 3}, joinOperator);
+	ReleaseOperator(joinOperator);
 
 	// test case, a list of two strings (two lists of letters)
 	Atom string1 = CreateStringFromCString("foo");
@@ -288,30 +288,30 @@ void testConstrainService(void)
 
 	// Arguments tuple (@stringList _ _ _)
 	Atom arguments[4] = {stringList, (Atom) {0}, (Atom) {0}, (Atom) {0}};
-	ServiceContext * context = ServiceCreateContext(constrainService, arguments);
+	OperatorContext * context = OperatorCreateContext(constrainOperator, arguments);
 
-	// The join service yields 2 * 3 tuples, of which we expect the two with p == q:
+	// The join operator yields 2 * 3 tuples, of which we expect the two with p == q:
 	// the 1st letter of "foo" and the 2nd letter of "bar"
 	char expectedLetters[] = "fa";
 	for(index8 i = 0; i < 2; i++) {
-		ASSERT_TRUE(ServiceCall(context))
+		ASSERT_TRUE(OperatorCall(context))
 		ASSERT_UINT64_EQUAL(arguments[1]._uint, i + 1)
 		ASSERT_CHAR_EQUAL(LetterToChar(arguments[3], LETTER_LOWERCASE), expectedLetters[i])
 	}
-	ASSERT_FALSE(ServiceCall(context))
-	ServiceFreeContext(context);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
 
 	IFactRelease(stringList);
-	ReleaseService(constrainService);
+	ReleaseOperator(constrainOperator);
 }
 
 
 #define TEST_UNION_N_ELEMENTS 	(3 + 4)
 
-void testUnionService(void)
+void testUnionOperator(void)
 {
-	// The UNION service (list @list1 position p element e) | (list @list2 position p element e)
-	Service * listService = GetCoreService(SERVICE_LIST_LETTER);
+	// The UNION operator (list @list1 position p element e) | (list @list2 position p element e)
+	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
 
 	// use PERMUTE to bind the list role to a constant
 	index8 argumentMap[3];
@@ -322,36 +322,36 @@ void testUnionService(void)
 	);
 
 	Atom string1 = CreateStringFromCString("foo");
-	Service * service1 = CreatePermuteService(
-		2, (Atom[]) {string1}, (byte[]) {AT_ID}, 1, argumentMap, listService);
+	Operator * service1 = CreatePermuteOperator(
+		2, (Atom[]) {string1}, (byte[]) {AT_ID}, 1, argumentMap, listOperator);
 	IFactRelease(string1);
 
 	Atom string2 = CreateStringFromCString("barf");
-	Service * service2 = CreatePermuteService(
-		2, (Atom[]) {string2}, (byte[]) {AT_ID}, 1, argumentMap, listService);
+	Operator * service2 = CreatePermuteOperator(
+		2, (Atom[]) {string2}, (byte[]) {AT_ID}, 1, argumentMap, listOperator);
 	IFactRelease(string2);
 
-	Service * unionService = CreateUnionService(service1, service2);
-	ReleaseService(service1);
-	ReleaseService(service2);
+	Operator * unionOperator = CreateUnionOperator(service1, service2);
+	ReleaseOperator(service1);
+	ReleaseOperator(service2);
 
 	// Setup execution context
 	Atom arguments[2] = {0};
-	ServiceContext * context = ServiceCreateContext(unionService, arguments);
-	// Call union service
+	OperatorContext * context = OperatorCreateContext(unionOperator, arguments);
+	// Call union operator
 	uint32 expectedPositions[TEST_UNION_N_ELEMENTS] = {1, 1, 2, 2, 3, 3, 4};
 	char expectedCharacters[TEST_UNION_N_ELEMENTS] = "bfaoorf";
 	for(index32 i = 0; i < TEST_UNION_N_ELEMENTS; i++) {
-		ASSERT_TRUE(ServiceCall(context))
+		ASSERT_TRUE(OperatorCall(context))
 		ASSERT_INT32_EQUAL(arguments[0]._uint, expectedPositions[i])
 		ASSERT_CHAR_EQUAL(
 			LetterToChar(arguments[1], LETTER_LOWERCASE),
 			expectedCharacters[i]
 		)
 	}
-	ASSERT_FALSE(ServiceCall(context));
-	ServiceFreeContext(context);
-	ReleaseService(unionService);
+	ASSERT_FALSE(OperatorCall(context));
+	OperatorFreeContext(context);
+	ReleaseOperator(unionOperator);
 }
 
 
@@ -359,13 +359,13 @@ int main(int argc, char * argv[])
 {
 	KernelInitialize();
 
-	ExecuteTest(testMachineService);
-	ExecuteTest(testPermuteService);
-	ExecuteTest(testProjectService);
-	ExecuteTest(testJoinService1);
-	ExecuteTest(testJoinService2);
-	ExecuteTest(testConstrainService);
-	ExecuteTest(testUnionService);
+	ExecuteTest(testMachineOperator);
+	ExecuteTest(testPermuteOperator);
+	ExecuteTest(testProjectOperator);
+	ExecuteTest(testJoinOperator1);
+	ExecuteTest(testJoinOperator2);
+	ExecuteTest(testConstrainOperator);
+	ExecuteTest(testUnionOperator);
 
 	KernelShutdown();
 

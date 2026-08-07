@@ -17,7 +17,7 @@
 #include "kernel/typedtuple.h"
 
 
-struct s_ServiceRecord;
+struct s_Service;
 
 /**
  * A conjunction is a set of facts from a single relation table.
@@ -29,8 +29,8 @@ struct s_ServiceRecord;
 typedef struct s_IFactConjunction {
 	// relation table storing tuples for this conjunction
 	RelationTable const * table;
-	// service for retrieving existing tuples
-	Service const * service;
+	// operator for retrieving existing tuples
+	Operator const * op;
 	index8 idColumn;		// position of the identified atom in the tuple
 	byte pad;
 	size16 nRows;			// number of tuples in this conjunction

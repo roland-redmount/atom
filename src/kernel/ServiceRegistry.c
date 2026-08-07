@@ -9,15 +9,15 @@
 
 
 /**
- * The registry of services, as a B-tree storing ServiceRecord items.
+ * The registry of services, as a B-tree storing Service items.
  * The relation tables these records refer to are registered separately;
  * see RelationRegistry.h
  */
-static BTree * services;
+static BTree * operators;
 
 
-static void setupServiceRecord(
-	ServiceRecord * record, RelationTable const * relation, byte const parameterIO[], Service * service)
+static void setupService(
+	Service * record, RelationTable const * relation, byte const parameterIO[], Operator * op)
 {
 	record->relation = relation;
 	if(parameterIO) {
@@ -26,20 +26,20 @@ static void setupServiceRecord(
 	}
 	else
 		record->parameterIO = 0;
-	record->service = service;
+	record->op = op;
 }
 
 
-// callback to free the parameterIO allocation upon B-tree deletion of a ServiceRecord
-static void btreeFreeServiceRecord(void * item, size32 itemSize)
+// callback to free the parameterIO allocation upon B-tree deletion of a Service
+static void btreeFreeService(void * item, size32 itemSize)
 {
-	ServiceRecord * record = item;
+	Service * record = item;
 	if(record->parameterIO)
 		Free(record->parameterIO);
 }
 
 
-static int8 compareServiceRecords(ServiceRecord const * record, ServiceRecord const * recordOrKey)
+static int8 compareServices(Service const * record, Service const * recordOrKey)
 {
 	// First compare relations
 	if(record->relation < recordOrKey->relation)
@@ -56,53 +56,53 @@ static int8 compareServiceRecords(ServiceRecord const * record, ServiceRecord co
 }
 
 
-static int8 btreeCompareServiceRecords(void const * item, void const * itemOrKey, size32 itemSize)
+static int8 btreeCompareServices(void const * item, void const * itemOrKey, size32 itemSize)
 {
-	return compareServiceRecords((ServiceRecord *) item, (ServiceRecord *) itemOrKey);
+	return compareServices((Service *) item, (Service *) itemOrKey);
 }
 
 
 void SetupServiceRegistry(void)
 {
 	// mapping relations -> services
-	services = BTreeCreate(
-		sizeof(ServiceRecord),
-		btreeCompareServiceRecords,
-		btreeFreeServiceRecord
+	operators = BTreeCreate(
+		sizeof(Service),
+		btreeCompareServices,
+		btreeFreeService
 	);
 }
 
 
 void FreeServiceRegistry(void)
 {
-	BTreeFree(services);
+	BTreeFree(operators);
 }
 
 
-ServiceRecord ServiceRegistryAdd(RelationTable const * relation, byte const parameterIO[], Service * service)
+Service ServiceRegistryAdd(RelationTable const * relation, byte const parameterIO[], Operator * op)
 {
-	ServiceRecord record;
-	setupServiceRecord(&record, relation, parameterIO, service);
-	ASSERT(BTreeInsert(services, &record) == BTREE_INSERTED)
-	AcquireService(service);
+	Service record;
+	setupService(&record, relation, parameterIO, op);
+	ASSERT(BTreeInsert(operators, &record) == BTREE_INSERTED)
+	AcquireOperator(op);
 	return record;
 }
 
 
-void ServiceRegistryRemove(RelationTable const * relation, Service * service)
+void ServiceRegistryRemove(RelationTable const * relation, Operator * op)
 {
-	ServiceRecord key;
-	setupServiceRecord(&key, relation, 0, service);
+	Service key;
+	setupService(&key, relation, 0, op);
 	// find the corresponding service record
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, services);
+	BTreeIterate(&iterator, operators);
 	// NOTE: record stays null unless we find the service, so that we do not
 	// mistake the last record we looked at for a match
-	ServiceRecord const * record = 0;
+	Service const * record = 0;
 	if(BTreeIteratorSeek(&iterator, &key)) {
 		do {
-			ServiceRecord const * candidate = BTreeIteratorPeekItem(&iterator);
-			if(candidate->service == service) {
+			Service const * candidate = BTreeIteratorPeekItem(&iterator);
+			if(candidate->op == op) {
 				record = candidate;
 				break;
 			}
@@ -112,41 +112,41 @@ void ServiceRegistryRemove(RelationTable const * relation, Service * service)
 	ASSERT(record);
 	// TODO: this will fail if the B-tree is modified concurrently,
 	// invalidating the record pointer.
-	ASSERT(BTreeDelete(services, record, 0) == BTREE_DELETED)
-	ReleaseService(service);
+	ASSERT(BTreeDelete(operators, record, 0) == BTREE_DELETED)
+	ReleaseOperator(op);
 
-	btreeFreeServiceRecord(&key, 0);
+	btreeFreeService(&key, 0);
 }
 
 
 void ServiceRegistryRemoveAll(RelationTable const * relation)
 {
-	ServiceRecord key;
-	setupServiceRecord(&key, relation, 0, 0);
-	ServiceRecord record;
-	while(BTreeGetItem(services, &key, &record)) {
-	ASSERT(BTreeDelete(services, &record, 0) == BTREE_DELETED)
-		ReleaseService(record.service);
+	Service key;
+	setupService(&key, relation, 0, 0);
+	Service record;
+	while(BTreeGetItem(operators, &key, &record)) {
+	ASSERT(BTreeDelete(operators, &record, 0) == BTREE_DELETED)
+		ReleaseOperator(record.op);
 	}
-	btreeFreeServiceRecord(&key, 0);
+	btreeFreeService(&key, 0);
 	// record is shallow-copied by BTreeGetItem() and does not need deallocation
 }
 
 
 size32 ServiceRegistryCount(void)
 {
-	return BTreeNItems(services);
+	return BTreeNItems(operators);
 }
 
 
 void ServiceRegistryIterate(RelationTable const * table, ServiceIterator * iterator)
 {
 	iterator->table = table;
-	BTreeIterate(&(iterator->btreeIterator), services);
+	BTreeIterate(&(iterator->btreeIterator), operators);
 }
 
 
-ServiceRecord const * ServiceIteratorPeekRecord(ServiceIterator const * iterator)
+Service const * ServiceIteratorPeekService(ServiceIterator const * iterator)
 {
 	return BTreeIteratorPeekItem(&(iterator->btreeIterator));
 }
@@ -154,10 +154,10 @@ ServiceRecord const * ServiceIteratorPeekRecord(ServiceIterator const * iterator
 
 bool ServiceIteratorNext(ServiceIterator * iterator)
 {
-	ServiceRecord key = {
+	Service key = {
 		.relation = iterator->table,
 		.parameterIO = 0,
-		.service = 0
+		.op = 0
 	};
 	bool foundItem;
 	if(BTreeIteratorBeforeFirst(&iterator->btreeIterator)) {
@@ -167,8 +167,8 @@ bool ServiceIteratorNext(ServiceIterator * iterator)
 		foundItem = BTreeIteratorNext(&(iterator->btreeIterator));
 
 	if(foundItem) {
-		ServiceRecord const * btreeRecord = BTreeIteratorPeekItem(&(iterator->btreeIterator));
-		if(compareServiceRecords(btreeRecord, &key) == 0)
+		Service const * btreeRecord = BTreeIteratorPeekItem(&(iterator->btreeIterator));
+		if(compareServices(btreeRecord, &key) == 0)
 			return true;		
 	}
 	return false;
@@ -181,28 +181,28 @@ void ServiceIteratorEnd(ServiceIterator * iterator)
 }
 
 
-Service * ServiceRegistryFind(RelationTable const * relation, byte const parameterIO[])
+Operator * ServiceRegistryFind(RelationTable const * relation, byte const parameterIO[])
 {
-	ServiceRecord key;
-	setupServiceRecord(&key, relation, parameterIO, 0);
+	Service key;
+	setupService(&key, relation, parameterIO, 0);
 
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, services);
-	Service * service = 0;
+	BTreeIterate(&iterator, operators);
+	Operator * op = 0;
 	if(BTreeIteratorSeek(&iterator, &key)) {
-		ServiceRecord * record = BTreeIteratorPeekItem(&iterator);
-		service = record->service;
+		Service * record = BTreeIteratorPeekItem(&iterator);
+		op = record->op;
 	}
 	BTreeIteratorEnd(&iterator);
-	btreeFreeServiceRecord(&key, 0);
-	return service;
+	btreeFreeService(&key, 0);
+	return op;
 }
 
 
-void PrintServiceRecord(ServiceRecord const * record)
+void PrintService(Service const * record)
 {
-	TypedTuple * parameters = CreateTypedTuple(record->service->nArguments);
-	for(index8 i = 0; i < record->service->nArguments; i++) {
+	TypedTuple * parameters = CreateTypedTuple(record->op->nArguments);
+	for(index8 i = 0; i < record->op->nArguments; i++) {
 		TypedAtom parameter = CreateTypedAtom(
 			AT_PARAMETER,
 			(Atom) {
@@ -218,13 +218,13 @@ void PrintServiceRecord(ServiceRecord const * record)
 	PrintFormActorsAsFormula(record->relation->form, parameters);
 	FreeTypedTuple(parameters);
 	PrintCString(" => ");
-	PrintService(record->service);
+	PrintOperator(record->op);
 }
 
 
 static void btreePrintCallback(void const * item)
 {
-	PrintServiceRecord((ServiceRecord const *) item);
+	PrintService((Service const *) item);
 	PrintChar('\n');
 }
 
@@ -235,27 +235,27 @@ void RelationTableDump(RelationTable const * table)
 	byte parameterIO[table->nColumns];
 	for(index8 i = 0; i < table->nColumns; i++)
 		parameterIO[i] = PARAMETER_OUT;
-	Service const * service = ServiceRegistryFind(table, parameterIO);
+	Operator const * op = ServiceRegistryFind(table, parameterIO);
 	
 	PrintF("Table %u columns\n", table->nColumns);
 
 	Atom arguments[table->nColumns];
-	ServiceContext * context = ServiceCreateContext(service, arguments);
+	OperatorContext * context = OperatorCreateContext(op, arguments);
 	size32 nTuples = 0;
-	while(ServiceCall(context)) {
+	while(OperatorCall(context)) {
 		// TODO: we should probably not print the full representaiton
 		// of identified atoms, as it triggers repeated queries
 		PrintTuple(table->atomTypes, arguments, table->nColumns);
 		PrintChar('\n');
 		nTuples++;
 	}
-	ServiceFreeContext(context);
+	OperatorFreeContext(context);
 	PrintF("%u tuples\n", nTuples);
 }
 
 
 void ServiceRegistryDump(void)
 {
-	BTreeTraversal(services, &btreePrintCallback);
+	BTreeTraversal(operators, &btreePrintCallback);
 }
 

@@ -32,26 +32,26 @@ void testCompilePermute1(void)
 	Formula * queryTerm = CStringToTerm("+ 7 - 4 = _d");
 
 	// This will yield a new service from the existing (+ + =) service
-	ServiceRecord records[MAX_COMPILED_SERVICES];
+	Service records[MAX_COMPILED_SERVICES];
 	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nRecords, 1)
-	ServiceRecord record = records[0];
+	Service record = records[0];
 
 	// TODO: verify the compiled service atom types are correct
 
 	// Call the service
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 3);
-	void * context = ServiceCreateContext(record.service, arguments);
-	ASSERT_TRUE(ServiceCall(context))
+	void * context = OperatorCreateContext(record.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
 
 	Atom d = TermGetRoleActor(queryTerm->form, arguments, "=", 1);
 	ASSERT_UINT64_EQUAL(d._uint, 3);
 
-	ASSERT_FALSE(ServiceCall(context))
-	ServiceFreeContext(context);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(record.relation, record.service);
+	ServiceRegistryRemove(record.relation, record.op);
 	RelationRegistryRemove(record.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -67,16 +67,16 @@ void testCompilePermute2(void)
 	DictionaryEntry entry = DictionaryAddClauseFromCString("number _x addtwo _y | ! + _x + 2 = _y");
 	Formula * queryTerm = CStringToTerm("number 3 addtwo _z");
 
-	ServiceRecord records[MAX_COMPILED_SERVICES];
+	Service records[MAX_COMPILED_SERVICES];
 	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nRecords, 1)
-	ServiceRecord record = records[0];
+	Service record = records[0];
 
 	// Call the service
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 3);
-	void * context = ServiceCreateContext(record.service, arguments);
-	ASSERT_TRUE(ServiceCall(context))
+	void * context = OperatorCreateContext(record.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
 
 	Atom x = TermGetRoleActor(queryTerm->form, arguments, "number", 1);
 	ASSERT_UINT64_EQUAL(x._uint, 3);
@@ -85,10 +85,10 @@ void testCompilePermute2(void)
 	ASSERT_UINT64_EQUAL(y._uint, 5);
 
 	// Second call should fail (no more tuples)
-	ASSERT_FALSE(ServiceCall(context))
-	ServiceFreeContext(context);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(record.relation, record.service);
+	ServiceRegistryRemove(record.relation, record.op);
 	RelationRegistryRemove(record.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -110,7 +110,7 @@ void testCompileProject(void)
 	// get one compiled service per element type, and must enumerate them all.
 	// Only the LETTER-element service yields tuples, as "alibaba" is a string;
 	// the ID-element service is registered but matches nothing.
-	ServiceRecord records[MAX_COMPILED_SERVICES];
+	Service records[MAX_COMPILED_SERVICES];
 	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nRecords, 2)
 
@@ -123,23 +123,23 @@ void testCompileProject(void)
 	int k = 0;
 	for(index8 i = 0; i < nRecords; i++) {
 		ASSERT_NOT_NULL(records[i].relation)
-		ASSERT_NOT_NULL(records[i].service)
+		ASSERT_NOT_NULL(records[i].op)
 
 		Atom arguments[2];
 		TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
-		void * context = ServiceCreateContext(records[i].service, arguments);
-		while(ServiceCall(context)) {
+		void * context = OperatorCreateContext(records[i].op, arguments);
+		while(OperatorCall(context)) {
 			char c = LetterToChar(arguments[elementRoleIndex], LETTER_LOWERCASE);
 			ASSERT(k < 4)
 			ASSERT_CHAR_EQUAL(c, uniqueLetters[k])
 			k++;
 		}
-		ServiceFreeContext(context);
+		OperatorFreeContext(context);
 	}
 	ASSERT_UINT32_EQUAL(k, 4);
 
 	for(index8 i = 0; i < nRecords; i++) {
-		ServiceRegistryRemove(records[i].relation, records[i].service);
+		ServiceRegistryRemove(records[i].relation, records[i].op);
 		RelationRegistryRemove(records[i].relation);
 	}
 	FreeFormula(queryTerm);
@@ -159,12 +159,12 @@ void testCompileUnconstrainedHeadVariable(void)
 		"set _s element _e size _n | ! list _s position _p element _e");
 	Formula * queryTerm = CStringToTerm("set \"ab\" element _e size _z");
 
-	ServiceRecord records[MAX_COMPILED_SERVICES];
+	Service records[MAX_COMPILED_SERVICES];
 	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nRecords, 0)
 
 	for(index8 i = 0; i < nRecords; i++) {
-		ServiceRegistryRemove(records[i].relation, records[i].service);
+		ServiceRegistryRemove(records[i].relation, records[i].op);
 		RelationRegistryRemove(records[i].relation);
 	}
 	FreeFormula(queryTerm);
@@ -180,16 +180,16 @@ void testCompileJoin1(void)
 		"first _x second _y third _z | ! + _x + 1 = _y | ! + _y + 1 = _z");
 	Formula * queryTerm = CStringToTerm("first 3 second _s third _t");
 
-	ServiceRecord records[MAX_COMPILED_SERVICES];
+	Service records[MAX_COMPILED_SERVICES];
 	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nRecords, 1)
-	ServiceRecord record = records[0];
+	Service record = records[0];
 
 	// Call the service
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 3);
-	void * context = ServiceCreateContext(record.service, arguments);
-	ASSERT_TRUE(ServiceCall(context))
+	void * context = OperatorCreateContext(record.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
 
 	Atom y = TermGetRoleActor(queryTerm->form, arguments, "second", 1);
 	ASSERT_UINT64_EQUAL(y._uint, 4);
@@ -197,10 +197,10 @@ void testCompileJoin1(void)
 	Atom z = TermGetRoleActor(queryTerm->form, arguments, "third", 1);
 	ASSERT_UINT64_EQUAL(z._uint, 5);
 
-	ASSERT_FALSE(ServiceCall(context))
-	ServiceFreeContext(context);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(record.relation, record.service);
+	ServiceRegistryRemove(record.relation, record.op);
 	RelationRegistryRemove(record.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -219,24 +219,24 @@ void testCompileJoin2(void)
 		"first _x third _z | ! + _x + 1 = _y | ! + _y + 1 = _z");
 	Formula * queryTerm = CStringToTerm("first 3 third _t");
 
-	ServiceRecord records[MAX_COMPILED_SERVICES];
+	Service records[MAX_COMPILED_SERVICES];
 	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nRecords, 1)
-	ServiceRecord record = records[0];
+	Service record = records[0];
 
 	// Call the service
 	Atom arguments[2];
 	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
-	void * context = ServiceCreateContext(record.service, arguments);
-	ASSERT_TRUE(ServiceCall(context))
+	void * context = OperatorCreateContext(record.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
 
 	Atom t = TermGetRoleActor(queryTerm->form, arguments, "third", 1);
 	ASSERT_UINT64_EQUAL(t._uint, 5);
 
-	ASSERT_FALSE(ServiceCall(context))
-	ServiceFreeContext(context);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(record.relation, record.service);
+	ServiceRegistryRemove(record.relation, record.op);
 	RelationRegistryRemove(record.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -254,16 +254,16 @@ void testCompileUnion(void)
 		"number _x neighbor _y | ! = _x + _y + 1");
 	Formula * queryTerm = CStringToTerm("number 5 neighbor _y");
 
-	ServiceRecord records[MAX_COMPILED_SERVICES];
+	Service records[MAX_COMPILED_SERVICES];
 	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nRecords, 1)
-	ServiceRecord record = records[0];
+	Service record = records[0];
 
 	// Call the service
 	Atom arguments[2];
 	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
-	void * context = ServiceCreateContext(record.service, arguments);
-	ASSERT_TRUE(ServiceCall(context))
+	void * context = OperatorCreateContext(record.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
 
 	// The atom types are encoded in the relation table associated with
 	// the compiled service ...
@@ -272,16 +272,16 @@ void testCompileUnion(void)
 	Atom y = TermGetRoleActor(queryTerm->form, arguments, "neighbor", 1);
 	ASSERT_TRUE(y._uint == 4);
 
-	ASSERT_TRUE(ServiceCall(context))
+	ASSERT_TRUE(OperatorCall(context))
 	// PrintTuple(arguments, 3);
 	// PrintChar('\n');
 	y = TermGetRoleActor(queryTerm->form, arguments, "neighbor", 1);
 	ASSERT_TRUE(y._uint == 6);
 
-	ASSERT_FALSE(ServiceCall(context))
-	ServiceFreeContext(context);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(record.relation, record.service);
+	ServiceRegistryRemove(record.relation, record.op);
 	RelationRegistryRemove(record.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry1);
@@ -365,7 +365,7 @@ void testCompileConstrain(void)
 		"self _x | ! edge _e from _x to _x");
 	Formula * queryTerm = CStringToTerm("self _y");
 
-	ServiceRecord records[MAX_COMPILED_SERVICES];
+	Service records[MAX_COMPILED_SERVICES];
 	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nRecords, 1)
 
@@ -378,13 +378,13 @@ void testCompileConstrain(void)
 	size32 nTuples = 0;
 
 	Atom arguments[1] = {(Atom) {0}};
-	void * context = ServiceCreateContext(records[0].service, arguments);
-	while(ServiceCall(context)) {
+	void * context = OperatorCreateContext(records[0].op, arguments);
+	while(OperatorCall(context)) {
 		foundA = foundA || (arguments[0].hash == nodeA.hash);
 		foundB = foundB || (arguments[0].hash == nodeB.hash);
 		nTuples++;
 	}
-	ServiceFreeContext(context);
+	OperatorFreeContext(context);
 
 	ASSERT_UINT32_EQUAL(nTuples, 2)
 	ASSERT_TRUE(foundA)
@@ -392,7 +392,7 @@ void testCompileConstrain(void)
 
 	IFactRelease(nodeA);
 	IFactRelease(nodeB);
-	ServiceRegistryRemove(records[0].relation, records[0].service);
+	ServiceRegistryRemove(records[0].relation, records[0].op);
 	RelationRegistryRemove(records[0].relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -408,24 +408,24 @@ void testCompileRecursiveJoin(void)
 		"number _n faculty _f | ! + _m + 1 = _n | ! number _m faculty _e | ! * _e * _n = _f");
 	Formula * queryTerm = CStringToTerm("number 4 faculty _f");
 
-	ServiceRecord records[MAX_COMPILED_SERVICES];
+	Service records[MAX_COMPILED_SERVICES];
 	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nRecords, 1)
-	ServiceRecord record = records[0];
+	Service record = records[0];
 
 	// Call the service
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 3);
-	void * context = ServiceCreateContext(record.service, arguments);
-	ASSERT_TRUE(ServiceCall(context))
+	void * context = OperatorCreateContext(record.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
 
 	Atom f = TermGetRoleActor(queryTerm->form, arguments, "faculty", 1);
 	ASSERT_UINT64_EQUAL(f._uint, 24);
 
-	ASSERT_FALSE(ServiceCall(context))
-	ServiceFreeContext(context);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(record.relation, record.service);
+	ServiceRegistryRemove(record.relation, record.op);
 	RelationRegistryRemove(record.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);

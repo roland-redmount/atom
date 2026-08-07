@@ -8,18 +8,27 @@
 #define SERVICE_REGISTRY_H
 
 #include "btree/btree.h"
-#include "kernel/service.h"
+#include "kernel/operator.h"
 #include "kernel/RelationTable.h"
 
 
 /**
- * A service record links a relation to a service with a particular parameter IO
+ * A service is a relation with a particular parameter IO, together with the
+ * operator tree evaluating it: the analogue of a procedure in atom, and what
+ * dispatch matches a query against. Most operators are internal nodes of such a
+ * tree and have no signature of their own; see operator.h.
+ *
+ * NOTE: a service is a record naming an operator, not something to be created
+ * and freed: it is copied by value, and the registry owns the reference to its
+ * operator.
  */
-typedef struct s_ServiceRecord {
+typedef struct s_Service {
 	RelationTable const * relation;
 	byte * parameterIO;
-	Service * service;	// cannot be const * if we want to do AcquireService(service)
-} ServiceRecord;
+	// NOTE: cannot be const * if we want to do AcquireOperator(op).
+	// NOTE: not named "operator", which is a reserved word in C++
+	Operator * op;
+} Service;
 
 /**
  * Setup an empty service registry. Called during bootstrapping only.
@@ -27,17 +36,17 @@ typedef struct s_ServiceRecord {
 void SetupServiceRegistry(void);
 
 /**
- * Associates a service with a relation in the service registry.
- * Acquires a reference to the service.
- * Returns a copy of the created service record.
+ * Associates an operator with a relation in the service registry, giving a service.
+ * Acquires a reference to the operator.
+ * Returns a copy of the created service.
  */
-ServiceRecord ServiceRegistryAdd(RelationTable const * relation, byte const parameterIO[], Service * service);
+Service ServiceRegistryAdd(RelationTable const * relation, byte const parameterIO[], Operator * op);
 
 /**
- * Dissociate the given service from a relation in the service registry.
- * Releases a reference to the service.
+ * Dissociate the service of the given operator from a relation in the service
+ * registry. Releases the reference to the operator.
  */
-void ServiceRegistryRemove(RelationTable const * relation, Service * service);
+void ServiceRegistryRemove(RelationTable const * relation, Operator * op);
 
 /**
  * Dissociate all services from the given relation in the service registry.
@@ -71,21 +80,21 @@ void ServiceRegistryIterate(RelationTable const * table, ServiceIterator * itera
 
 bool ServiceIteratorNext(ServiceIterator * iterator);
 
-ServiceRecord const * ServiceIteratorPeekRecord(ServiceIterator const * iterator);
+Service const * ServiceIteratorPeekService(ServiceIterator const * iterator);
 
 void ServiceIteratorEnd(ServiceIterator * iterator);
 
 /**
- * Retrieve the service for the given form and parameters array,
- * which must be the same length as the form arity.
+ * Retrieve the operator of the service for the given relation and parameter IO
+ * array, which must be the same length as the relation arity.
  * If a matching service does not exist, returns 0
  */
-Service * ServiceRegistryFind(RelationTable const * relation, byte const parameterIO[]);
+Operator * ServiceRegistryFind(RelationTable const * relation, byte const parameterIO[]);
 
 /**
  * For debugging
  */
-void PrintServiceRecord(ServiceRecord const * record);
+void PrintService(Service const * record);
 
 /**
  * Dump all tuples in a the given relation table.

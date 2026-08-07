@@ -2,7 +2,7 @@
 #include "btree/btree.h"
 #include "kernel/ifact.h"
 #include "kernel/RelationTable.h"
-#include "kernel/service.h"
+#include "kernel/operator.h"
 #include "lang/TypedAtom.h"
 #include "memory/allocator.h"
 

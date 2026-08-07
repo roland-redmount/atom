@@ -1,6 +1,6 @@
 /**
  * Implementation of a RelationTable storing tuples in a B-tree data structure,
- * with services for searching on the leading columns.
+ * with operators for searching on the leading columns.
  * 
  * NOTE: in the future this should be a "plugin" module, should probably move
  * to a separate folder.
@@ -12,11 +12,11 @@
 #include "btree/btree.h"
 #include "kernel/RelationTable.h"
 #include "kernel/tuple.h"
-#include "kernel/service.h"
+#include "kernel/operator.h"
 
 
-// TODO: replace this with a service provider registry ...
-extern MachineServiceProvider bTreeServiceProvider;
+// TODO: replace this with a machine provider registry ...
+extern MachineProvider bTreeProvider;
 extern RelationTableProvider btreeTableProvider;
 
 // NOTE: "RelationBTree" sounds more like a B-tree of relations than a relation
@@ -73,14 +73,14 @@ typedef struct s_RelationBTreeIterator {
  * RelationBTreeIteratorNext() must be called before RelationBTreeIteratorHasTuple().
  * The tree is write-locked to prevent modification while iterating.
  * 
- * NOTE: iterating should usually be done by calling the appropriate service.
+ * NOTE: iterating should usually be done by calling the appropriate operator.
  */
 void RelationBTreeIterate(
 	RelationBTree * relation, Atom const queryTuple[], size8 nInputs, RelationBTreeIterator * iterator);
 
 /**
  * Advance the iterator to the next tuple matching the query, if any.
- * Returns true if an tuple was found, corresponding to a B-Tree service
+ * Returns true if an tuple was found, corresponding to a B-Tree operator
  * yielding a fact.
  */
 bool RelationBTreeIteratorNext(RelationBTreeIterator * iterator);
@@ -133,7 +133,7 @@ byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint
 
 /**
  * High-level method to create a RelationTable backed by a B-tree,
- * and register the associated services.
+ * and register the associated operators.
  */
 RelationTable const * CreateRelationBTreeWithServices(
 	Atom form, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);

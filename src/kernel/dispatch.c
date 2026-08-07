@@ -130,7 +130,7 @@ static bool permutationMatch(
 
 
 bool DispatchQueryAt(
-	Atom queryTermForm, TypedTuple const * queryActors, ServiceRecord * record,
+	Atom queryTermForm, TypedTuple const * queryActors, Service * record,
 	index8 permutation[], size8 nSkip, bool * hasNextMatch)
 {
 	ASSERT(IsTermForm(queryTermForm))
@@ -163,7 +163,7 @@ bool DispatchQueryAt(
 		ServiceIterator serviceIterator;
 		ServiceRegistryIterate(relation, &serviceIterator);
 		while(!done && ServiceIteratorNext(&serviceIterator)) {
-			ServiceRecord const * currentRecord = ServiceIteratorPeekRecord(&serviceIterator);
+			Service const * currentRecord = ServiceIteratorPeekService(&serviceIterator);
 			if(!permutationMatch(
 				predicateForm, relation->atomTypes, currentRecord->parameterIO,
 				queryActors, candidatePermutation))
@@ -191,13 +191,13 @@ bool DispatchQueryAt(
 }
 
 
-bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, ServiceRecord * record, index8 permutation[])
+bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, Service * record, index8 permutation[])
 {
 	return DispatchQueryAt(queryTermForm, queryActors, record, permutation, 0, 0);
 }
 
 
-bool DispatchQueryFormula(Formula * queryTerm, ServiceRecord * record, index8 * permutation)
+bool DispatchQueryFormula(Formula * queryTerm, Service * record, index8 * permutation)
 {
 	return DispatchQuery(queryTerm->form, queryTerm->actors, record, permutation);
 }
