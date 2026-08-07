@@ -140,20 +140,62 @@ static void permuteServiceFinalizeContext(ServiceContext * context)
 typedef struct s_JoinContext {
 	// Copy of the caller's arguments
 	Atom * argumentsCopy;
+	// Arguments tuples for the child services
+	Atom * leftArguments;
+	Atom * rightArguments;
 	// Left and right child contexts
 	ServiceContext * leftContext;
 	ServiceContext * rightContext;
 } JoinContext;
 
 
-Service * CreateJoinService(Service * leftChild, Service * rightChild)
+/**
+ * Copy parent arguments to a child arguments tuple, as given by an argument map.
+ */
+static void scatterArguments(
+	Atom const * arguments, Atom * childArguments, index8 const * argumentMap, size8 nChildArguments)
 {
-	ASSERT(leftChild->nArguments == rightChild->nArguments)
-	Service * service = createService(SERVICE_JOIN, leftChild->nArguments, sizeof(JoinContext));
+	for(index8 i = 0; i < nChildArguments; i++)
+		childArguments[i] = arguments[argumentMap[i] - 1];
+}
+
+
+/**
+ * Copy a child arguments tuple back to the parent arguments, as given by an argument map.
+ */
+static void gatherArguments(
+	Atom * arguments, Atom const * childArguments, index8 const * argumentMap, size8 nChildArguments)
+{
+	for(index8 i = 0; i < nChildArguments; i++)
+		arguments[argumentMap[i] - 1] = childArguments[i];
+}
+
+
+static index8 * copyJoinArgumentMap(
+	index8 const * argumentMap, size8 nChildArguments, size8 nArguments)
+{
+	index8 * copy = Allocate(nChildArguments);
+	for(index8 i = 0; i < nChildArguments; i++) {
+		// every child argument must map to a parent argument
+		ASSERT(argumentMap[i] && (argumentMap[i] <= nArguments))
+		copy[i] = argumentMap[i];
+	}
+	return copy;
+}
+
+
+Service * CreateJoinService(
+	size8 nArguments,
+	Service * leftChild, index8 const * leftMap,
+	Service * rightChild, index8 const * rightMap)
+{
+	Service * service = createService(SERVICE_JOIN, nArguments, sizeof(JoinContext));
 	service->impl.join.left = leftChild;
 	AcquireService(leftChild);
 	service->impl.join.right = rightChild;
 	AcquireService(rightChild);
+	service->impl.join.leftMap = copyJoinArgumentMap(leftMap, leftChild->nArguments, nArguments);
+	service->impl.join.rightMap = copyJoinArgumentMap(rightMap, rightChild->nArguments, nArguments);
 	return service;
 }
 
@@ -163,6 +205,8 @@ static void teardownJoinService(Service * service)
 	ASSERT(service->type == SERVICE_JOIN)
 	ReleaseService(service->impl.join.left);
 	ReleaseService(service->impl.join.right);
+	Free(service->impl.join.leftMap);
+	Free(service->impl.join.rightMap);
 }
 
 
@@ -173,22 +217,33 @@ static void teardownJoinService(Service * service)
 static bool joinServiceEvaluateLeft(ServiceContext * context)
 {
 	JoinContext * joinContext = (JoinContext *) &context->data;
+	Service const * service = context->service;
 	ASSERT(joinContext->leftContext)
-	// restore parent arguments tuple
-	CopyMemory(joinContext->argumentsCopy, context->arguments, context->service->nArguments * sizeof(Atom));
+	// Restore the parent arguments tuple. This matters for the arguments of the right
+	// child service: without it, they would be scattered from the previous right tuple
+	// below, rather than from the caller's input arguments.
+	CopyMemory(joinContext->argumentsCopy, context->arguments, service->nArguments * sizeof(Atom));
 
-	// Obtain next tuple from left service, if any.
-	// This will write directly to the context->arguments tuple
+	// Obtain next tuple from left service, if any
 	if(!ServiceCall(joinContext->leftContext)) {
 		// no more tuples, free left child context
 		ServiceFreeContext(joinContext->leftContext);
 		joinContext->leftContext = 0;
 		return false;
 	}
-	// start new evaluation of right service
+	gatherArguments(
+		context->arguments, joinContext->leftArguments,
+		service->impl.join.leftMap, service->impl.join.left->nArguments);
+
+	// Start a new evaluation of the right service. Its arguments are taken from the
+	// parent tuple, so the arguments it shares with the left service are now bound
+	// to the left tuple, which is what constrains the join.
+	scatterArguments(
+		context->arguments, joinContext->rightArguments,
+		service->impl.join.rightMap, service->impl.join.right->nArguments);
 	joinContext->rightContext = ServiceCreateContext(
-		context->service->impl.join.right,
-		context->arguments
+		service->impl.join.right,
+		joinContext->rightArguments
 	);
 	return true;
 }
@@ -197,12 +252,21 @@ static bool joinServiceEvaluateLeft(ServiceContext * context)
 static void joinServiceSetupContext(ServiceContext * context)
 {
 	JoinContext * joinContext = (JoinContext *) &context->data;
-	joinContext->argumentsCopy = Allocate(context->service->nArguments * sizeof(Atom));
-	CopyMemory(context->arguments, joinContext->argumentsCopy, context->service->nArguments * sizeof(Atom));
-	// call left service to prepare for iteration
+	Service const * service = context->service;
+	size8 nArguments = service->nArguments;
+
+	joinContext->argumentsCopy = Allocate(nArguments * sizeof(Atom));
+	CopyMemory(context->arguments, joinContext->argumentsCopy, nArguments * sizeof(Atom));
+	joinContext->leftArguments = Allocate(service->impl.join.left->nArguments * sizeof(Atom));
+	joinContext->rightArguments = Allocate(service->impl.join.right->nArguments * sizeof(Atom));
+
+	// The left child service takes its input arguments from the caller
+	scatterArguments(
+		context->arguments, joinContext->leftArguments,
+		service->impl.join.leftMap, service->impl.join.left->nArguments);
 	joinContext->leftContext = ServiceCreateContext(
-		context->service->impl.join.left,
-		context->arguments
+		service->impl.join.left,
+		joinContext->leftArguments
 	);
 	joinServiceEvaluateLeft(context);
 }
@@ -235,6 +299,9 @@ static bool joinServiceCall(ServiceContext * context)
 		}
 	}
 	// yield the resulting tuple
+	gatherArguments(
+		context->arguments, joinContext->rightArguments,
+		context->service->impl.join.rightMap, context->service->impl.join.right->nArguments);
 	return true;
 }
 
@@ -247,6 +314,8 @@ static void joinServiceFinalizeContext(ServiceContext * context)
 	if(joinContext->rightContext)
 		ServiceFreeContext(joinContext->rightContext);
 	Free(joinContext->argumentsCopy);
+	Free(joinContext->leftArguments);
+	Free(joinContext->rightArguments);
 }
 
 
@@ -663,7 +732,11 @@ void PrintService(Service const * service)
 
 	case SERVICE_JOIN:
 		PrintF("JOIN/%u(", service->nArguments);
+		for(index8 i = 0; i < service->impl.join.left->nArguments; i++)
+			PrintF("%u ", service->impl.join.leftMap[i]);
 		PrintService(service->impl.join.left);
+		for(index8 i = 0; i < service->impl.join.right->nArguments; i++)
+			PrintF("%u ", service->impl.join.rightMap[i]);
 		PrintService(service->impl.join.right);
 		PrintChar(')');
 		break;

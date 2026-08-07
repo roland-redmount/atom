@@ -466,7 +466,15 @@ static Service * compileConjunctionRecursive(
 			termExcluded, nTermsExcluded, termActorsIndices, choices
 		);
 		if(nextService) {
-			Service * joinService = CreateJoinService(service, nextService);
+			// TODO: compileTerm() still produces a service taking all of the clause
+			// arguments, so both child services map their arguments one to one.
+			// Once a term compiles to a service with only its own arguments, these
+			// maps will place those arguments into the clause arguments tuple.
+			index8 identityMap[nArguments];
+			for(index8 i = 0; i < nArguments; i++)
+				identityMap[i] = i + 1;
+			Service * joinService = CreateJoinService(
+				nArguments, service, identityMap, nextService, identityMap);
 			ReleaseService(service);
 			ReleaseService(nextService);
 			return joinService;

@@ -129,7 +129,12 @@ struct s_Service {
 		// for SERVICE_JOIN
 		struct {
 			Service * left;
-			Service * right; 
+			Service * right;
+			// 1-based indices of each child argument into the parent arguments.
+			// Unlike a permute service, every child argument maps to a parent
+			// argument: a join service neither binds constants nor drops arguments.
+			index8 * leftMap;
+			index8 * rightMap;
 		} join;
 		// for SERVICE_UNION
 		struct {
@@ -172,11 +177,23 @@ Service * CreatePermuteService(
 Service * CreateMachineService(size8 nArguments, MachineServiceProvider * provider, void * providerData);
 
 /**
- * Setup a JOIN service from two existing child services. The left child service
- * will execute first, and may determine input arguments for right child service.
- * The two child services must take the same arguments, in the same order.
+ * Setup a JOIN service with the specified number of arguments, from two existing
+ * child services. The left child service will execute first, and may determine
+ * input arguments for the right child service.
+ *
+ * The leftMap and rightMap arrays have length equal to the number of arguments of
+ * the respective child service, and give for each child argument its 1-based index
+ * into the parent arguments tuple. An argument occurring in both maps is a join
+ * argument: the left child service determines its value, which then constrains
+ * the right child service.
+ *
+ * NOTE: the two maps should together cover every parent argument, or the tuples
+ * of this service leave some arguments undefined.
  */
-Service * CreateJoinService(Service * leftChild, Service * rightChild);
+Service * CreateJoinService(
+	size8 nArguments,
+	Service * leftChild, index8 const * leftMap,
+	Service * rightChild, index8 const * rightMap);
 
 /**
  * Setup a UNION service, returning the union of two relations.

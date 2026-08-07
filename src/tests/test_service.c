@@ -114,6 +114,109 @@ void testProjectService(void)
 }
 
 
+// A value that no service can produce, used to see which arguments a service writes
+#define POISON		((Atom) {._uint = 0x0BADF00D})
+
+
+/**
+ * EXPECTED TO FAIL: a PERMUTE service that widens its child to a JOIN arguments
+ * tuple does not provide a valid relation. The arguments missing from its
+ * argumentMap are never written, so they still hold whatever the caller left there.
+ *
+ * NOTE: once CreatePermuteService() requires its argumentMap to cover every
+ * argument, this test must be removed rather than enabled: the service
+ * constructed below then becomes a programmer error, not a wrong result.
+ */
+void testPermuteArgumentsAreDefined(void)
+{
+	// (list l position p element e) widened to the 5-column tuple (l p s q e)
+	// of testJoinService2(), writing only arguments 1..3
+	Service * listService = GetCoreService(SERVICE_LIST_LETTER);
+	index8 argumentMap[3];
+	CoreFormSetByteArray(
+		FORM_LIST_POSITION_ELEMENT,
+		(index8[]) {1, 2, 3},		// (l p e) -> (l p e ? ?)
+		argumentMap
+	);
+	Service * permuteService = CreatePermuteService(5, 0, 0, argumentMap, listService);
+
+	Atom string = CreateStringFromCString("ab");
+	Atom arguments[5] = {string, (Atom) {0}, (Atom) {0}, POISON, POISON};
+	ServiceContext * context = ServiceCreateContext(permuteService, arguments);
+	size32 nElements = 0;
+	while(ServiceCall(context)) {
+		// Every argument must be part of the relation, not the caller's leftovers
+		ASSERT_TRUE(arguments[3]._uint != POISON._uint)
+		ASSERT_TRUE(arguments[4]._uint != POISON._uint)
+		nElements++;
+	}
+	ASSERT_INT32_EQUAL(nElements, 2)
+	ServiceFreeContext(context);
+
+	IFactRelease(string);
+	ReleaseService(permuteService);
+}
+
+
+/**
+ * EXPECTED TO FAIL: those undefined arguments reach the JOIN service itself as
+ * soon as the two children do not together cover every argument. The JOIN is then
+ * not a valid relation either: one of its columns is whatever the caller left in
+ * the tuple. This is testJoinService2() with one extra argument that no child
+ * provides, which is what the compiler emits for a rule whose head has a variable
+ * that does not occur in the body.
+ *
+ * NOTE: once CreateJoinService() requires its two argument maps to together cover
+ * every argument, this test must be removed rather than enabled: the service
+ * constructed below then becomes a programmer error, not a wrong result.
+ */
+void testJoinArgumentsAreDefined(void)
+{
+	Service * listIdService = GetCoreService(SERVICE_LIST_ID);
+	Service * listLetterService = GetCoreService(SERVICE_LIST_LETTER);
+
+	index8 leftServiceArgumentMap[3];
+	CoreFormSetByteArray(
+		FORM_LIST_POSITION_ELEMENT,
+		(index8[]) {1, 2, 3},		// (l p s) -> (l p s q e ?)
+		leftServiceArgumentMap
+	);
+	index8 rightServiceArgumentMap[3];
+	CoreFormSetByteArray(
+		FORM_LIST_POSITION_ELEMENT,
+		(index8[]) {3, 4, 5},		// (s q e) -> (l p s q e ?)
+		rightServiceArgumentMap
+	);
+	// Together the maps cover arguments 1..5 of a 6-column tuple, but nobody writes argument 6
+	Service * joinService = CreateJoinService(
+		6,
+		listIdService, leftServiceArgumentMap,
+		listLetterService, rightServiceArgumentMap
+	);
+
+	// A list of two strings, as in testJoinService2()
+	Atom string1 = CreateStringFromCString("foo");
+	Atom string2 = CreateStringFromCString("bar");
+	Atom stringList = CreateListFromArray((Atom[]) {string1, string2}, AT_ID, 2);
+	IFactRelease(string1);
+	IFactRelease(string2);
+
+	Atom arguments[6] = {stringList, (Atom) {0}, (Atom) {0}, (Atom) {0}, (Atom) {0}, POISON};
+	ServiceContext * context = ServiceCreateContext(joinService, arguments);
+	size32 nElements = 0;
+	while(ServiceCall(context)) {
+		// Every argument must be part of the relation, not the caller's leftovers
+		ASSERT_TRUE(arguments[5]._uint != POISON._uint)
+		nElements++;
+	}
+	ASSERT_INT32_EQUAL(nElements, 2 * 3)
+	ServiceFreeContext(context);
+
+	IFactRelease(stringList);
+	ReleaseService(joinService);
+}
+
+
 /**
  * Test creating and executing a JOIN service
  * (element e multiset m multiple n) & (predicate-form p)
@@ -123,19 +226,16 @@ void testJoinService1(void)
 {
 	// Left child service (multiset m element e multiple n) from the registry
 	Service * leftService = GetCoreService(SERVICE_MULTISET_NAME);
-	// Right service is permuted (predicate m) -> (multiset m element _ multiple _)
-	// where arguments _ are not filled in.
-	// TODO: this is not really a valid service, as some values in the resulting tuples
-	// are left undefined, This works as input for JOIN, but we should probably require
-	// that every service yields a valid relation. Therefore, we should move this reindexing
-	// into the JOIN service.
-	Service * rightServiceChild = GetCoreService(SERVICE_PREDICATE_FORM);
+	// The right child service (predicate-form p) provides only the third argument
 	// TODO: is this mapping correct?
-	Service * rightService = CreatePermuteService(3, 0, 0, (index8[]) {3}, rightServiceChild);
-	
+	Service * rightService = GetCoreService(SERVICE_PREDICATE_FORM);
+
 	// Create the JOIN service
-	Service * joinService = CreateJoinService(leftService, rightService);
-	ReleaseService(rightService);
+	Service * joinService = CreateJoinService(
+		3,
+		leftService, (index8[]) {1, 2, 3},
+		rightService, (index8[]) {3}
+	);
 
 	// Evaluate with arguments (@list-form, _ , _)
 	Atom arguments[3];
@@ -190,13 +290,13 @@ void testJoinService2(void)
 		rightServiceArgumentMap
 	);
 
-	Service * leftService = CreatePermuteService(5, 0, 0, leftServiceArgumentMap, listIdService);
-	Service * rightService = CreatePermuteService(5, 0, 0, rightServiceArgumentMap, listLetterService);
-
-	// Create the join service
-	Service * joinService = CreateJoinService(leftService, rightService);
-	ReleaseService(leftService);
-	ReleaseService(rightService);
+	// Create the join service. The two child services are used directly:
+	// the join service places their arguments into its own arguments tuple.
+	Service * joinService = CreateJoinService(
+		5,
+		listIdService, leftServiceArgumentMap,
+		listLetterService, rightServiceArgumentMap
+	);
 
 	// test case, a list of two strings (two lists of letters)
 	Atom string1 = CreateStringFromCString("foo");
@@ -302,6 +402,10 @@ int main(int argc, char * argv[])
 	ExecuteTest(testMachineService);
 	ExecuteTest(testPermuteService);
 	ExecuteTest(testProjectService);
+	// Expected to fail: PERMUTE and JOIN do not yet guarantee that every
+	// argument of a produced tuple is defined. See the notes at each test.
+	// ExecuteTest(testPermuteArgumentsAreDefined);
+	// ExecuteTest(testJoinArgumentsAreDefined);
 	ExecuteTest(testJoinService1);
 	ExecuteTest(testJoinService2);
 	ExecuteTest(testUnionService);

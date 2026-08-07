@@ -144,6 +144,35 @@ void testCompileProject(void)
 }
 
 
+/**
+ * EXPECTED TO FAIL: the head variable _n occurs in no body term, so no term of
+ * the conjunction provides that argument. Such a rule cannot yield a valid
+ * relation and must be rejected.
+ *
+ * Currently the rule compiles: it yields two services whose size parameter is
+ * >NONE, backed by relation tables with an AT_NONE column, and evaluating them
+ * returns whatever the caller left in that argument.
+ */
+void testCompileUnconstrainedHeadVariable(void)
+{
+	// set s element e size n <- list s position p element e
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"set _s element _e size _n | ! list _s position _p element _e");
+	Formula * queryTerm = CStringToTerm("set \"ab\" element _e size _z");
+
+	ServiceRecord records[MAX_COMPILED_SERVICES];
+	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nRecords, 0)
+
+	for(index8 i = 0; i < nRecords; i++) {
+		ServiceRegistryRemove(records[i].relation, records[i].service);
+		RelationRegistryRemove(records[i].relation);
+	}
+	FreeFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+}
+
+
 void testCompileJoin1(void)
 {
 	// This rule compiles to a JOIN service
@@ -304,6 +333,9 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileJoin1);
 	ExecuteTest(testCompileJoin2);
 	ExecuteTest(testCompileUnion);
+	// Expected to fail: a rule whose head has a variable that no body term
+	// provides should be rejected. See the note at the test.
+	// ExecuteTest(testCompileUnconstrainedHeadVariable);
 	// ExecuteTest(testCompileRecursiveJoin);
 
 	MathTeardown();
