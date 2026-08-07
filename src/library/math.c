@@ -12,13 +12,14 @@
 
 #define ADD1_INDEX		0
 #define ADD2_INDEX		1
-// etc ...
-#define N_SERVICES 		2
+#define MUL1_INDEX		2
 
+#define N_SERVICES 		3
 
 #define ADD_RELATION	0
-// ...
-#define N_RELATIONS		1
+#define MUL_RELATION	1
+
+#define N_RELATIONS		2
 
 #define MAX_RELATION_ARITY	3
 
@@ -70,7 +71,6 @@ static void add2(ServiceContext * context)
 	context->arguments[argumentIndex[1]]._int = z - x;
 }
 
-
 static void setupAdd2(void)
 {
 	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
@@ -83,8 +83,34 @@ static void setupAdd2(void)
 	Service * service = CreateMachineService(3, &mathServiceProvider, (void *) ADD2_INDEX);
 	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, service);
 	ReleaseService(service);	
-	// mathServices[ADD2_INDEX] = record;
 }
+
+
+/**
+ * The service (* x<INT * y<INT = z>INT )
+ */
+static void mul1(ServiceContext * context)
+{
+	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
+	int64 x = context->arguments[argumentIndex[0]]._int;
+	int64 y = context->arguments[argumentIndex[1]]._int;
+	context->arguments[argumentIndex[2]]._int = x * y;
+}
+
+static void setupMul1(void)
+{
+	// Argument indices w.r.t. "user order" (* * =)
+	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
+	byte parameterIO[3];
+	parameterIO[argumentIndex[0]] = PARAMETER_IN;
+	parameterIO[argumentIndex[1]] = PARAMETER_IN;
+	parameterIO[argumentIndex[2]] = PARAMETER_OUT;
+
+	Service * service = CreateMachineService(3, &mathServiceProvider, (void *) MUL1_INDEX);
+	ServiceRegistryAdd(mathRelations[MUL_RELATION], parameterIO, service);
+	ReleaseService(service);
+}
+
 
 /**
  * Lookup table for service functions.
@@ -101,6 +127,7 @@ typedef struct s_MathContext {
 MathFunction functionTable[N_SERVICES] = {
 	&add1,
 	&add2,
+	&mul1
 };
 
 
@@ -144,18 +171,23 @@ void MathSetup(void)
 {
 	// Create forms and setup argument indices
 	Atom plus = CreateNameFromCString("+");
+	Atom times = CreateNameFromCString("*");
 	Atom equals = CreateNameFromCString("=");
+
 	Atom addForm = CreatePredicateForm((Atom[]) {plus, plus, equals}, 3);
-	NameRelease(plus);
-	NameRelease(equals);
-	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
+	Atom mulForm = CreatePredicateForm((Atom[]) {times, times, equals}, 3);
+
+	byte atomTypes[3];
+	index8 * argumentIndex;
+
+	// create (+ + =) relation table
+
 	// Map roles in our "user order" (+ + =) to canonical order
+	argumentIndex = relationArgumentIndex[ADD_RELATION];
 	argumentIndex[0] = PredicateRoleIndex(addForm, plus);
 	argumentIndex[1] = argumentIndex[0] + 1;
 	argumentIndex[2] = PredicateRoleIndex(addForm, equals);
 
-	// create relation tables
-	byte atomTypes[3];
 	atomTypes[argumentIndex[0]] = AT_INT;
 	atomTypes[argumentIndex[1]] = AT_INT;
 	atomTypes[argumentIndex[2]] = AT_INT;
@@ -163,12 +195,33 @@ void MathSetup(void)
 	mathRelations[ADD_RELATION] = CreateRelationTable(0, addForm, 3, atomTypes, 0);
 	// the table must be registered for dispatch to find it
 	RelationRegistryAdd(mathRelations[ADD_RELATION]);
-	// the table acquired its own reference to the form
-	IFactRelease(addForm);
+
+	// create (* * =) relation table
+
+	// Map roles in our "user order" (+ + =) to canonical order
+	argumentIndex = relationArgumentIndex[MUL_RELATION];
+	argumentIndex[0] = PredicateRoleIndex(mulForm, times);
+	argumentIndex[1] = argumentIndex[0] + 1;
+	argumentIndex[2] = PredicateRoleIndex(mulForm, equals);
+
+	atomTypes[argumentIndex[0]] = AT_INT;
+	atomTypes[argumentIndex[1]] = AT_INT;
+	atomTypes[argumentIndex[2]] = AT_INT;
+	// NOTE: no particular column index order here
+	mathRelations[MUL_RELATION] = CreateRelationTable(0, mulForm, 3, atomTypes, 0);
+	// the table must be registered for dispatch to find it
+	RelationRegistryAdd(mathRelations[MUL_RELATION]);
 
 	// setup services
 	setupAdd1();
 	setupAdd2();
+	setupMul1();
+
+	IFactRelease(addForm);
+	IFactRelease(mulForm);
+	NameRelease(plus);
+	NameRelease(times);
+	NameRelease(equals);
 }
 
 

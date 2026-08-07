@@ -23,7 +23,6 @@ typedef union u_Atom {
 	// AT_VARIABLE
 	struct {
 		char name;
-		byte type;
 		uint8 quoteCount;
 	} variable;
 	// AT_PARAMETER

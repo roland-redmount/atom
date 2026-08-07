@@ -8,7 +8,6 @@
 #include "kernel/string.h"
 #include "kernel/tuple.h"
 #include "lang/Formula.h"
-#include "lang/Variable.h"
 #include "parser/PredicateBuilder.h"
 #include "testing/testing.h"
 
@@ -40,32 +39,33 @@ void testMachineService(void)
 
 
 /**
- * This tests using a PERMUTE service to marginalize the relation
- * (list position element) to (list element). This alone does not
- * remove duplicates and so does not provide a valid relation;
- * wrapping a DEDUPLICATE services around PERMUTE yields unique tuples.
+ * Reorder the relation (list position element) to (list element position).
+ * A PERMUTE service keeps every argument of its child service, so its
+ * tuples remain unique and it provides a valid relation.
  */
-void testPermuteService(void)
+static Service * createReorderedListService(void)
 {
 	// The service (list <ID position >UINT element >LETTER)
 	Service * listService = GetCoreService(SERVICE_LIST_LETTER);
-	// Reorder (list l position p element e) to (list l element e)
-	// by providing the variable p as a "constant"
-	TypedTuple * constants = CreateTypedTupleFromArray((TypedAtom[]) {anonymousVariable}, 1);
 	index8 argumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
-		(index8[]) {1, 0, 2},		// (l p e) -> (l e)
+		(index8[]) {1, 3, 2},		// (l p e) -> (l e p)
 		argumentMap
 	);
-	Service * permuteService = CreatePermuteService(2, constants, argumentMap, listService);
-	FreeTypedTuple(constants);
+	return CreatePermuteService(3, 0, 0, argumentMap, listService);
+}
 
-	// Arguments tuple (@stringList _ ) for the marginalize service
+
+void testPermuteService(void)
+{
+	Service * permuteService = createReorderedListService();
+
+	// Arguments tuple (@stringList _ _) for the reordered service
 	Atom string = CreateStringFromCString("alibaba");
-	Atom arguments[2] = {string, (Atom) {0}};
+	Atom arguments[3] = {string, (Atom) {0}, (Atom) {0}};
 
-	// Call the PERMUTE service
+	// Call the PERMUTE service.
 	// This enumerates all elements of the string ("alibaba")
 	ServiceContext * context = ServiceCreateContext(permuteService, arguments);
 	size32 nElements = 0;
@@ -76,26 +76,41 @@ void testPermuteService(void)
 	}
 	ASSERT_INT32_EQUAL(nElements, 7)
 	ServiceFreeContext(context);
-	
-	// Create a DEDUPLICATE service from the PERMUTE service
-	Service * deduplicateService = CreateDeduplicateService(permuteService);
-	// Call the service
-	// This should yield the unique letters, sorted ("abil")
-	arguments[0] = string;
-	arguments[1] = (Atom) {0};
-	context = ServiceCreateContext(deduplicateService, arguments);
-	nElements = 0;
-	while(ServiceCall(context)) {
-		// PrintChar(LetterToChar(arguments[1], LETTER_LOWERCASE));
-		// PrintChar('\n');
-		nElements++;
-	}
-	ASSERT_INT32_EQUAL(nElements, 4)
-	ServiceFreeContext(context);
-	
+
 	IFactRelease(string);
-	ReleaseService(deduplicateService);
 	ReleaseService(permuteService);
+}
+
+
+/**
+ * This tests using a PROJECT service to marginalize the relation
+ * (list element position) to (list element), dropping the trailing
+ * position argument. Dropping it leaves duplicate tuples, which PROJECT
+ * removes, so that the result is again a valid relation.
+ */
+void testProjectService(void)
+{
+	Service * permuteService = createReorderedListService();
+	Service * projectService = CreateProjectService(permuteService, 2);
+	ReleaseService(permuteService);
+
+	// Arguments tuple (@stringList _) for the marginalize service
+	Atom string = CreateStringFromCString("alibaba");
+	Atom arguments[2] = {string, (Atom) {0}};
+
+	// Call the service.
+	// This should yield the unique letters, sorted ("abil")
+	ServiceContext * context = ServiceCreateContext(projectService, arguments);
+	char uniqueLetters[] = "abil";
+	for(index8 i = 0; i < 4; i++) {
+		ASSERT_TRUE(ServiceCall(context))
+		ASSERT_CHAR_EQUAL(LetterToChar(arguments[1], LETTER_LOWERCASE), uniqueLetters[i])
+	}
+	ASSERT_FALSE(ServiceCall(context))
+	ServiceFreeContext(context);
+
+	IFactRelease(string);
+	ReleaseService(projectService);
 }
 
 
@@ -116,7 +131,7 @@ void testJoinService1(void)
 	// into the JOIN service.
 	Service * rightServiceChild = GetCoreService(SERVICE_PREDICATE_FORM);
 	// TODO: is this mapping correct?
-	Service * rightService = CreatePermuteService(3, 0, (index8[]) {3}, rightServiceChild);
+	Service * rightService = CreatePermuteService(3, 0, 0, (index8[]) {3}, rightServiceChild);
 	
 	// Create the JOIN service
 	Service * joinService = CreateJoinService(leftService, rightService);
@@ -175,8 +190,8 @@ void testJoinService2(void)
 		rightServiceArgumentMap
 	);
 
-	Service * leftService = CreatePermuteService(5, 0, leftServiceArgumentMap, listIdService);
-	Service * rightService = CreatePermuteService(5, 0, rightServiceArgumentMap, listLetterService);
+	Service * leftService = CreatePermuteService(5, 0, 0, leftServiceArgumentMap, listIdService);
+	Service * rightService = CreatePermuteService(5, 0, 0, rightServiceArgumentMap, listLetterService);
 
 	// Create the join service
 	Service * joinService = CreateJoinService(leftService, rightService);
@@ -238,10 +253,7 @@ void testUnionService(void)
 	// The UNION service (list @list1 position p element e) | (list @list2 position p element e)
 	Service * listService = GetCoreService(SERVICE_LIST_LETTER);
 
-	// use PERMUTE to drop the list role
-	TypedAtom string1 = CreateTypedAtom(AT_ID, CreateStringFromCString("foo"));
-	TypedTuple * constants1 = CreateTypedTupleFromArray((TypedAtom[]) {string1}, 1);
-
+	// use PERMUTE to bind the list role to a constant
 	index8 argumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
@@ -249,15 +261,15 @@ void testUnionService(void)
 		argumentMap
 	);
 
-	Service * service1 = CreatePermuteService(2, constants1, argumentMap, listService);
-	FreeTypedTuple(constants1);
-	ReleaseTypedAtom(string1);
+	Atom string1 = CreateStringFromCString("foo");
+	Service * service1 = CreatePermuteService(
+		2, (Atom[]) {string1}, (byte[]) {AT_ID}, argumentMap, listService);
+	IFactRelease(string1);
 
-	TypedAtom string2 = CreateTypedAtom(AT_ID, CreateStringFromCString("barf"));
-	TypedTuple * constants2 = CreateTypedTupleFromArray((TypedAtom[]) {string2}, 1);
-	Service * service2 = CreatePermuteService(2, constants2, argumentMap, listService);
-	FreeTypedTuple(constants2);
-	ReleaseTypedAtom(string2);
+	Atom string2 = CreateStringFromCString("barf");
+	Service * service2 = CreatePermuteService(
+		2, (Atom[]) {string2}, (byte[]) {AT_ID}, argumentMap, listService);
+	IFactRelease(string2);
 
 	Service * unionService = CreateUnionService(service1, service2);
 	ReleaseService(service1);
@@ -289,6 +301,7 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testMachineService);
 	ExecuteTest(testPermuteService);
+	ExecuteTest(testProjectService);
 	ExecuteTest(testJoinService1);
 	ExecuteTest(testJoinService2);
 	ExecuteTest(testUnionService);

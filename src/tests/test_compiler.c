@@ -57,7 +57,9 @@ void testCompilePermute1(void)
 
 void testCompilePermute2(void)
 {
-	// This rule compiles to a PERMUTE service with a constant 2
+	// This rule compiles to a PERMUTE service with a constant 2.
+	// The constant restricts an argument of the child service and cannot
+	// introduce duplicate tuples, so no PROJECT service is needed.
 	// number x addtwo y <- + x + 2 = y
 	DictionaryEntry entry = DictionaryAddClauseFromCString("number _x addtwo _y | ! + _x + 2 = _y");
 	Formula * queryTerm = CStringToTerm("number 3 addtwo _z");
@@ -90,13 +92,14 @@ void testCompilePermute2(void)
 }
 
 
-void testCompilePermute3(void)
+void testCompileProject(void)
 {
-	// This rule compiles to a PERMUTE service with a variable,
-	// which requires wrapping in a DEDUPLICATE service.
-	// set s element e <- list s position _ element e
+	// The variable p occurs in the clause but not in the query, so it obtains
+	// an argument of its own, which is then dropped again by a PROJECT service:
+	// the rule compiles to PROJECT(PERMUTE(...)).
+	// set s element e <- list s position p element e
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"set _s element _e | ! list _s position _ element _e");
+		"set _s element _e | ! list _s position _p element _e");
 	Formula * queryTerm = CStringToTerm("set \"alibaba\" element _e");
 
 	// The element role is an untyped output, so the term matches every
@@ -123,11 +126,9 @@ void testCompilePermute3(void)
 		TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
 		void * context = ServiceCreateContext(records[i].service, arguments);
 		while(ServiceCall(context)) {
+			char c = LetterToChar(arguments[elementRoleIndex], LETTER_LOWERCASE);
 			ASSERT(k < 4)
-			ASSERT_CHAR_EQUAL(
-				LetterToChar(arguments[elementRoleIndex], LETTER_LOWERCASE),
-				uniqueLetters[k]
-			)
+			ASSERT_CHAR_EQUAL(c, uniqueLetters[k])
 			k++;
 		}
 		ServiceFreeContext(context);
@@ -178,6 +179,42 @@ void testCompileJoin1(void)
 }
 
 
+void testCompileJoin2(void)
+{
+	// As testCompileJoin1, but the variable y linking the two terms does not
+	// occur in the query. It obtains an argument of its own so that the JOIN
+	// service can constrain the two terms against each other, and that argument
+	// is dropped again by a PROJECT service:
+	// PROJECT(JOIN(+ x + 1 = y, + y + 1 = z), 2)
+	// first x third z  <-  + x + 1 = y & + y + 1 = z
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"first _x third _z | ! + _x + 1 = _y | ! + _y + 1 = _z");
+	Formula * queryTerm = CStringToTerm("first 3 third _t");
+
+	ServiceRecord records[MAX_COMPILED_SERVICES];
+	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nRecords, 1)
+	ServiceRecord record = records[0];
+
+	// Call the service
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
+	void * context = ServiceCreateContext(record.service, arguments);
+	ASSERT_TRUE(ServiceCall(context))
+
+	Atom t = TermGetRoleActor(queryTerm->form, arguments, "third", 1);
+	ASSERT_UINT64_EQUAL(t._uint, 5);
+
+	ASSERT_FALSE(ServiceCall(context))
+	ServiceFreeContext(context);
+
+	ServiceRegistryRemove(record.relation, record.service);
+	RelationRegistryRemove(record.relation);
+	FreeFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+}
+
+
 void testCompileUnion(void)
 {
 	// Two rules resulting in a UNION service
@@ -193,9 +230,6 @@ void testCompileUnion(void)
 	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nRecords, 1)
 	ServiceRecord record = records[0];
-	PrintCString("Service  = ");
-	PrintService(record.service);
-	PrintChar('\n');
 
 	// Call the service
 	Atom arguments[2];
@@ -266,8 +300,9 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testCompilePermute1);
 	ExecuteTest(testCompilePermute2);
-	ExecuteTest(testCompilePermute3);
+	ExecuteTest(testCompileProject);
 	ExecuteTest(testCompileJoin1);
+	ExecuteTest(testCompileJoin2);
 	ExecuteTest(testCompileUnion);
 	// ExecuteTest(testCompileRecursiveJoin);
 
