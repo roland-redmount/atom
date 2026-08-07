@@ -102,6 +102,16 @@ typedef struct s_MachineServiceProvider {
 	 * Call a machine code function
 	 */
 	SERVICE_MACHINE = 5,
+	/**
+	 * CONSTRAIN yields those tuples of its child service in which all child
+	 * arguments taken from the same argument of this service are equal. This
+	 * expresses the equality constraint of a variable occurring more than once
+	 * in a query, such as (edge e from x to x) asking for the self edges of a graph.
+	 *
+	 * NOTE: this is the only service whose call may consume several child tuples,
+	 * as it can only test the constraint once the child service has produced a tuple.
+	 */
+	SERVICE_CONSTRAIN = 6,
 };
 
 struct s_Service {
@@ -144,6 +154,14 @@ struct s_Service {
 		struct {
 			Service * childService;
 		} project;
+		// for SERVICE_CONSTRAIN
+		struct {
+			Service * childService;
+			// Index of each child argument into the parent arguments. Unlike the
+			// other argument maps this one is not injective: child arguments
+			// sharing an index are the ones constrained to be equal.
+			index8 * argumentMap;
+		} constrain;
 		// for SERVICE_MACHINE
 		struct {
 			MachineServiceProvider * provider;
@@ -200,6 +218,18 @@ Service * CreateJoinService(
  * Setup a UNION service, returning the union of two relations.
  */
 Service * CreateUnionService(Service * first, Service * second);
+
+/**
+ * Create a CONSTRAIN service with the given number of arguments.
+ * The argumentMap array has length equal to childService->nArguments and gives the
+ * index of each child argument into the arguments of this service. Child arguments
+ * sharing an index are constrained to be equal: only those tuples of the child
+ * service in which they are equal are yielded.
+ *
+ * The child service must provide every argument, as for a permute service.
+ */
+Service * CreateConstrainService(
+	size8 nArguments, index8 const * argumentMap, Service * childService);
 
 /**
  * Create a PROJECT service with the given number of arguments, which must be

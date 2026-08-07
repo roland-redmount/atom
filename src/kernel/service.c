@@ -21,6 +21,50 @@ static Service * createService(enum ServiceType type, size8 nArguments, size32 c
 	return service;
 }
 
+/**
+ * Copy parent arguments to a child arguments tuple, as given by an argument map.
+ */
+static void scatterArguments(
+	Atom const * arguments, Atom * childArguments, index8 const * argumentMap, size8 nChildArguments)
+{
+	for(index8 i = 0; i < nChildArguments; i++)
+		childArguments[i] = arguments[argumentMap[i]];
+}
+
+
+/**
+ * Copy a child arguments tuple back to the parent arguments, as given by an argument map.
+ */
+static void gatherArguments(
+	Atom * arguments, Atom const * childArguments, index8 const * argumentMap, size8 nChildArguments)
+{
+	for(index8 i = 0; i < nChildArguments; i++)
+		arguments[argumentMap[i]] = childArguments[i];
+}
+
+
+#ifdef DEBUG
+/**
+ * Verify that no two child arguments take the same argument of a service, ignoring
+ * child arguments taken from elsewhere (the constants of a permute service).
+ * Mapping several child arguments to one argument is what a constrain service
+ * expresses, and no other service does so.
+ */
+static void assertArgumentsAreDistinct(
+	index8 const * argumentMap, size8 nChildArguments, size8 nArguments)
+{
+	bool taken[nArguments];
+	SetMemory(taken, nArguments * sizeof(bool), 0);
+	for(index8 i = 0; i < nChildArguments; i++) {
+		if(argumentMap[i] >= nArguments)
+			continue;
+		ASSERT(!taken[argumentMap[i]])
+		taken[argumentMap[i]] = true;
+	}
+}
+#endif
+
+
 //------------------------------------- SERVICE_PERMUTE -----------------------------------------
 
 typedef struct s_PermuteContext {
@@ -66,6 +110,7 @@ Service * CreatePermuteService(
 	}
 	for(index8 i = 0; i < nArguments; i++)
 		ASSERT(provided[i])
+	assertArgumentsAreDistinct(argumentMap, childService->nArguments, nArguments);
 #endif
 
 	service->impl.permute.argumentMap = Allocate(childService->nArguments);
@@ -142,6 +187,115 @@ static void permuteServiceFinalizeContext(ServiceContext * context)
 }
 
 
+//----------------------------------- SERVICE_CONSTRAIN -----------------------------------------
+
+typedef struct s_ConstrainContext {
+	Atom * childArguments;
+	ServiceContext * childContext;
+} ConstrainContext;
+
+
+Service * CreateConstrainService(
+	size8 nArguments, index8 const * argumentMap, Service * childService)
+{
+	Service * service = createService(SERVICE_CONSTRAIN, nArguments, sizeof(ConstrainContext));
+	service->impl.constrain.childService = childService;
+	AcquireService(childService);
+
+#ifdef DEBUG
+	// Bounds check the argument map, and verify that the child service provides
+	// every argument, as an argument this service does not write would not be
+	// part of a relation
+	bool provided[nArguments];
+	SetMemory(provided, nArguments * sizeof(bool), 0);
+	for(index8 i = 0; i < childService->nArguments; i++) {
+		ASSERT(argumentMap[i] < nArguments)
+		provided[argumentMap[i]] = true;
+	}
+	for(index8 i = 0; i < nArguments; i++)
+		ASSERT(provided[i])
+#endif
+
+	service->impl.constrain.argumentMap = Allocate(childService->nArguments);
+	CopyMemory(argumentMap, service->impl.constrain.argumentMap, childService->nArguments);
+	return service;
+}
+
+
+static void constrainServiceSetupContext(ServiceContext * context)
+{
+	ConstrainContext * constrainContext = (ConstrainContext *) &context->data;
+	Service const * service = context->service;
+	size8 nChildArguments = service->impl.constrain.childService->nArguments;
+
+	// Constrained child arguments take the same parent argument, which is what
+	// enforces the constraint when the child service takes them as inputs
+	constrainContext->childArguments = Allocate(nChildArguments * sizeof(Atom));
+	scatterArguments(
+		context->arguments, constrainContext->childArguments,
+		service->impl.constrain.argumentMap, nChildArguments);
+
+	constrainContext->childContext = ServiceCreateContext(
+		service->impl.constrain.childService,
+		constrainContext->childArguments
+	);
+}
+
+
+/**
+ * Test whether the child arguments taken from the same parent argument are equal.
+ */
+static bool constrainedArgumentsAgree(
+	Atom const * childArguments, index8 const * argumentMap, size8 nChildArguments)
+{
+	for(index8 i = 0; i < nChildArguments; i++) {
+		for(index8 j = 0; j < i; j++) {
+			if((argumentMap[i] == argumentMap[j])
+				&& CompareAtoms(childArguments[i], childArguments[j]))
+				return false;
+		}
+	}
+	return true;
+}
+
+
+static bool constrainServiceCall(ServiceContext * context)
+{
+	ConstrainContext * constrainContext = (ConstrainContext *) &context->data;
+	Service const * service = context->service;
+	size8 nChildArguments = service->impl.constrain.childService->nArguments;
+
+	// Obtain tuples from the child service until one satisfies the constraint
+	while(ServiceCall(constrainContext->childContext)) {
+		if(constrainedArgumentsAgree(
+			constrainContext->childArguments,
+			service->impl.constrain.argumentMap, nChildArguments)) {
+			gatherArguments(
+				context->arguments, constrainContext->childArguments,
+				service->impl.constrain.argumentMap, nChildArguments);
+			return true;
+		}
+	}
+	return false;
+}
+
+
+static void teardownConstrainService(Service * service)
+{
+	ASSERT(service->type == SERVICE_CONSTRAIN)
+	ReleaseService(service->impl.constrain.childService);
+	Free(service->impl.constrain.argumentMap);
+}
+
+
+static void constrainServiceFinalizeContext(ServiceContext * context)
+{
+	ConstrainContext * constrainContext = (ConstrainContext *) &context->data;
+	ServiceFreeContext(constrainContext->childContext);
+	Free(constrainContext->childArguments);
+}
+
+
 //------------------------------------- SERVICE_JOIN -----------------------------------------
 
 typedef struct s_JoinContext {
@@ -154,28 +308,6 @@ typedef struct s_JoinContext {
 	ServiceContext * leftContext;
 	ServiceContext * rightContext;
 } JoinContext;
-
-
-/**
- * Copy parent arguments to a child arguments tuple, as given by an argument map.
- */
-static void scatterArguments(
-	Atom const * arguments, Atom * childArguments, index8 const * argumentMap, size8 nChildArguments)
-{
-	for(index8 i = 0; i < nChildArguments; i++)
-		childArguments[i] = arguments[argumentMap[i]];
-}
-
-
-/**
- * Copy a child arguments tuple back to the parent arguments, as given by an argument map.
- */
-static void gatherArguments(
-	Atom * arguments, Atom const * childArguments, index8 const * argumentMap, size8 nChildArguments)
-{
-	for(index8 i = 0; i < nChildArguments; i++)
-		arguments[argumentMap[i]] = childArguments[i];
-}
 
 
 static index8 * copyJoinArgumentMap(
@@ -215,6 +347,10 @@ Service * CreateJoinService(
 		provided[rightMap[i]] = true;
 	for(index8 i = 0; i < nArguments; i++)
 		ASSERT(provided[i])
+	// An argument occurring in both maps is a join argument, but neither child
+	// service may provide the same argument twice
+	assertArgumentsAreDistinct(leftMap, leftChild->nArguments, nArguments);
+	assertArgumentsAreDistinct(rightMap, rightChild->nArguments, nArguments);
 #endif
 
 	return service;
@@ -618,6 +754,10 @@ void ReleaseService(Service * service)
 			teardownProjectService(service);
 			break;
 
+		case SERVICE_CONSTRAIN:
+			teardownConstrainService(service);
+			break;
+
 		case SERVICE_MACHINE:
 			tearDownMachineService(service);
 			break;
@@ -656,6 +796,10 @@ ServiceContext * ServiceCreateContext(Service const * service, Atom arguments[])
 		projectSetupContext(context);
 		break;
 
+	case SERVICE_CONSTRAIN:
+		constrainServiceSetupContext(context);
+		break;
+
 	case SERVICE_MACHINE:
 		machineServiceSetupContext(context);
 		break;
@@ -682,6 +826,9 @@ bool ServiceCall(ServiceContext * context)
 
 	case SERVICE_PROJECT:
 		return projectCall(context);
+
+	case SERVICE_CONSTRAIN:
+		return constrainServiceCall(context);
 
 	case SERVICE_MACHINE:
 		return machineServiceCall(context);
@@ -710,6 +857,10 @@ void ServiceFreeContext(ServiceContext * context)
 
 	case SERVICE_PROJECT:
 		projectFinalizeContext(context);
+		break;
+
+	case SERVICE_CONSTRAIN:
+		constrainServiceFinalizeContext(context);
 		break;
 
 	case SERVICE_MACHINE:
@@ -772,6 +923,14 @@ void PrintService(Service const * service)
 	case SERVICE_PROJECT:
 		PrintF("PROJECT/%u(", service->nArguments);
 		PrintService(service->impl.project.childService);
+		PrintChar(')');
+		break;
+
+	case SERVICE_CONSTRAIN:
+		PrintF("CONSTRAIN/%u(", service->nArguments);
+		for(index8 i = 0; i < service->impl.constrain.childService->nArguments; i++)
+			PrintF("%u ", service->impl.constrain.argumentMap[i]);
+		PrintService(service->impl.constrain.childService);
 		PrintChar(')');
 		break;
 

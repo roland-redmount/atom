@@ -5,7 +5,10 @@
 #include "kernel/ifact.h"
 #include "kernel/letter.h"
 #include "kernel/list.h"
+#include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
+#include "kernel/ServiceRegistry.h"
+#include "kernel/string.h"
 #include "kernel/tuple.h"
 #include "lang/Formula.h"
 #include "lang/name.h"
@@ -286,6 +289,117 @@ void testCompileUnion(void)
 }
 
 
+// A directed graph (edge:ID from:ID to:ID), two of whose edges are self edges
+#define TEST_N_EDGES	4
+
+static struct {
+	Atom form;
+	RelationTable const * table;
+	TypedTuple * tuples[TEST_N_EDGES];
+} edgeFixture;
+
+
+static void setupEdgeFixture(void)
+{
+	Atom roles[3] = {
+		CreateNameFromCString("edge"),
+		CreateNameFromCString("from"),
+		CreateNameFromCString("to")
+	};
+	edgeFixture.form = CreatePredicateForm(roles, 3);
+	index8 edgeIndex = PredicateRoleIndex(edgeFixture.form, roles[0]);
+	index8 fromIndex = PredicateRoleIndex(edgeFixture.form, roles[1]);
+	index8 toIndex = PredicateRoleIndex(edgeFixture.form, roles[2]);
+	for(index8 i = 0; i < 3; i++)
+		NameRelease(roles[i]);
+
+	byte atomTypes[3] = {AT_ID, AT_ID, AT_ID};
+	edgeFixture.table = CreateRelationBTreeWithServices(
+		edgeFixture.form, 3, atomTypes, (index8[]) {0, 1, 2});
+
+	// The graph a -> b, a -> a, b -> b, b -> c. Strings are lists of letters,
+	// so the edges are named ep..es rather than e1..e4, and their letters are
+	// kept clear of the node names.
+	char const * edgeNames[TEST_N_EDGES] = {"ep", "eq", "er", "es"};
+	char const * fromNames[TEST_N_EDGES] = {"a", "a", "b", "b"};
+	char const * toNames[TEST_N_EDGES] = {"b", "a", "b", "c"};
+	for(index8 i = 0; i < TEST_N_EDGES; i++) {
+		TypedAtom actors[3];
+		actors[edgeIndex] = CreateTypedAtom(AT_ID, CreateStringFromCString(edgeNames[i]));
+		actors[fromIndex] = CreateTypedAtom(AT_ID, CreateStringFromCString(fromNames[i]));
+		actors[toIndex] = CreateTypedAtom(AT_ID, CreateStringFromCString(toNames[i]));
+		edgeFixture.tuples[i] = CreateTypedTupleFromArray(actors, 3);
+		// the relation table now holds a reference to each atom
+		AssertFact(edgeFixture.form, edgeFixture.tuples[i], 0);
+		for(index8 j = 0; j < 3; j++)
+			ReleaseTypedAtom(actors[j]);
+	}
+}
+
+
+static void teardownEdgeFixture(void)
+{
+	// the relation table must be empty before it can be removed
+	for(index8 i = 0; i < TEST_N_EDGES; i++) {
+		RetractFact(edgeFixture.form, edgeFixture.tuples[i]);
+		FreeTypedTuple(edgeFixture.tuples[i]);
+	}
+	ServiceRegistryRemoveAll(edgeFixture.table);
+	RelationRegistryRemove(edgeFixture.table);
+	IFactRelease(edgeFixture.form);
+}
+
+
+/**
+ * The variable x occurs twice in the term (edge e from x to x), which constrains
+ * the two arguments providing it to be equal: the rule asks for the nodes of the
+ * graph that have a self edge. The term compiles to a CONSTRAIN service, and e,
+ * which does not occur in the query, is dropped again by a PROJECT service.
+ */
+void testCompileConstrain(void)
+{
+	setupEdgeFixture();
+
+	// self x <- edge e from x to x
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"self _x | ! edge _e from _x to _x");
+	Formula * queryTerm = CStringToTerm("self _y");
+
+	ServiceRecord records[MAX_COMPILED_SERVICES];
+	size8 nRecords = CompileService(queryTerm, records, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nRecords, 1)
+
+	// Only a and b have a self edge. The tuples are sorted by atom, so we do not
+	// know in which order they arrive.
+	Atom nodeA = CreateStringFromCString("a");
+	Atom nodeB = CreateStringFromCString("b");
+	bool foundA = false;
+	bool foundB = false;
+	size32 nTuples = 0;
+
+	Atom arguments[1] = {(Atom) {0}};
+	void * context = ServiceCreateContext(records[0].service, arguments);
+	while(ServiceCall(context)) {
+		foundA = foundA || (arguments[0].hash == nodeA.hash);
+		foundB = foundB || (arguments[0].hash == nodeB.hash);
+		nTuples++;
+	}
+	ServiceFreeContext(context);
+
+	ASSERT_UINT32_EQUAL(nTuples, 2)
+	ASSERT_TRUE(foundA)
+	ASSERT_TRUE(foundB)
+
+	IFactRelease(nodeA);
+	IFactRelease(nodeB);
+	ServiceRegistryRemove(records[0].relation, records[0].service);
+	RelationRegistryRemove(records[0].relation);
+	FreeFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+	teardownEdgeFixture();
+}
+
+
 void testCompileRecursiveJoin(void)
 {
 	// TODO: Compile a recursive rule to a JOIN service
@@ -330,6 +444,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileJoin2);
 	ExecuteTest(testCompileUnion);
 	ExecuteTest(testCompileUnconstrainedHeadVariable);
+	ExecuteTest(testCompileConstrain);
 	// ExecuteTest(testCompileRecursiveJoin);
 
 	MathTeardown();

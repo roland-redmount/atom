@@ -247,6 +247,66 @@ void testJoinService2(void)
 }
 
 
+/**
+ * Test a CONSTRAIN service over the JOIN service of testJoinService2().
+ * Constraining the two position arguments of (l p s q e) to be equal gives the
+ * letter at position p of the p'th string of a list of strings.
+ */
+void testConstrainService(void)
+{
+	Service * listIdService = GetCoreService(SERVICE_LIST_ID);
+	Service * listLetterService = GetCoreService(SERVICE_LIST_LETTER);
+
+	index8 leftServiceArgumentMap[3];
+	CoreFormSetByteArray(
+		FORM_LIST_POSITION_ELEMENT,
+		(index8[]) {0, 1, 2},		// (l p s) -> (l p s q e)
+		leftServiceArgumentMap
+	);
+	index8 rightServiceArgumentMap[3];
+	CoreFormSetByteArray(
+		FORM_LIST_POSITION_ELEMENT,
+		(index8[]) {2, 3, 4},		// (s q e) -> (l p s q e)
+		rightServiceArgumentMap
+	);
+	Service * joinService = CreateJoinService(
+		5,
+		listIdService, leftServiceArgumentMap,
+		listLetterService, rightServiceArgumentMap
+	);
+	// Both position arguments take argument 1, so only tuples where they are equal
+	// are yielded: (l p s q e) -> (l p s e)
+	Service * constrainService = CreateConstrainService(
+		4, (index8[]) {0, 1, 2, 1, 3}, joinService);
+	ReleaseService(joinService);
+
+	// test case, a list of two strings (two lists of letters)
+	Atom string1 = CreateStringFromCString("foo");
+	Atom string2 = CreateStringFromCString("bar");
+	Atom stringList = CreateListFromArray((Atom[]) {string1, string2}, AT_ID, 2);
+	IFactRelease(string1);
+	IFactRelease(string2);
+
+	// Arguments tuple (@stringList _ _ _)
+	Atom arguments[4] = {stringList, (Atom) {0}, (Atom) {0}, (Atom) {0}};
+	ServiceContext * context = ServiceCreateContext(constrainService, arguments);
+
+	// The join service yields 2 * 3 tuples, of which we expect the two with p == q:
+	// the 1st letter of "foo" and the 2nd letter of "bar"
+	char expectedLetters[] = "fa";
+	for(index8 i = 0; i < 2; i++) {
+		ASSERT_TRUE(ServiceCall(context))
+		ASSERT_UINT64_EQUAL(arguments[1]._uint, i + 1)
+		ASSERT_CHAR_EQUAL(LetterToChar(arguments[3], LETTER_LOWERCASE), expectedLetters[i])
+	}
+	ASSERT_FALSE(ServiceCall(context))
+	ServiceFreeContext(context);
+
+	IFactRelease(stringList);
+	ReleaseService(constrainService);
+}
+
+
 #define TEST_UNION_N_ELEMENTS 	(3 + 4)
 
 void testUnionService(void)
@@ -305,6 +365,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testProjectService);
 	ExecuteTest(testJoinService1);
 	ExecuteTest(testJoinService2);
+	ExecuteTest(testConstrainService);
 	ExecuteTest(testUnionService);
 
 	KernelShutdown();

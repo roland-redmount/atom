@@ -197,13 +197,12 @@ void LookupRemovePredicateRoles(RelationTable const * relation, Atom const * act
 	index8 index = 0;
 	while(MultisetIteratorNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
-		for(index8 i = 0; i < em.multiple; i++) {
-			if(relation->atomTypes[i] != AT_ID)
+		for(index8 i = 0; i < em.multiple; i++, index++) {
+			if(relation->atomTypes[index] != AT_ID)
 				continue;
 			record.atom = actors[index];
 			record.role = em.element;
 			removeRecord(&record);
-			index++;
 		}
 	}
 	MultisetIteratorEnd(&formIterator);

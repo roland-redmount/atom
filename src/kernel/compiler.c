@@ -265,6 +265,49 @@ static void actorsToParameters(TypedTuple const * actors, TypedTuple * parameter
 
 
 /**
+ * Merge the arguments of a compiled term that provide the same clause argument,
+ * which happens when a variable occurs more than once in the term. Emits a
+ * CONSTRAIN service yielding only those tuples in which the merged arguments are
+ * equal, and compacts clauseMap accordingly, so that the clause arguments a term
+ * provides are distinct. Takes over the caller's reference to the service.
+ *
+ * For example, a term whose four arguments provide the clause arguments
+ * {2, 0, 2, 1} has its first and third argument merged, as both provide clause
+ * argument 2. The constrain service then takes the argument map {0, 1, 0, 2}
+ * and has three arguments, providing the clause arguments {2, 0, 1}.
+ */
+static Service * constrainRepeatedArguments(Service * service, index8 clauseMap[])
+{
+	size8 nChildArguments = service->nArguments;
+	// The clause arguments as provided by the compiled term. We compact clauseMap
+	// in place below, so we cannot look up earlier arguments in it.
+	index8 termClauseMap[nChildArguments];
+	CopyMemory(clauseMap, termClauseMap, nChildArguments * sizeof(index8));
+
+	index8 argumentMap[nChildArguments];
+	size8 nArguments = 0;
+	for(index8 i = 0; i < nChildArguments; i++) {
+		// an earlier argument providing the same clause argument shares its index
+		argumentMap[i] = nArguments;
+		for(index8 j = 0; j < i; j++) {
+			if(termClauseMap[j] == termClauseMap[i]) {
+				argumentMap[i] = argumentMap[j];
+				break;
+			}
+		}
+		if(argumentMap[i] == nArguments)
+			clauseMap[nArguments++] = termClauseMap[i];
+	}
+	if(nArguments == nChildArguments)
+		return service;
+
+	Service * constrainService = CreateConstrainService(nArguments, argumentMap, service);
+	ReleaseService(service);
+	return constrainService;
+}
+
+
+/**
  * A term compiles to the service that dispatch matches to it, taking only the
  * arguments of the term itself. Any non-parameter actor is a constant restricting
  * one argument of that service, and is bound by a PERMUTE service wrapped around it;
@@ -340,13 +383,20 @@ static Service * compileTerm(
 	}
 	ASSERT(nMapped == nArguments)
 
-	// Without constants to bind, the matched service is used as it is
+	Service * service;
 	if(!nConstants) {
+		// Without constants to bind, the matched service is used as it is
 		AcquireService(termServiceRecord.service);
-		return termServiceRecord.service;
+		service = termServiceRecord.service;
 	}
-	return CreatePermuteService(
-		nArguments, constants, constantTypes, nConstants, argumentMap, termServiceRecord.service);
+	else {
+		service = CreatePermuteService(
+			nArguments, constants, constantTypes, nConstants, argumentMap,
+			termServiceRecord.service);
+	}
+	// A variable occurring more than once in the term constrains the arguments
+	// providing it to be equal
+	return constrainRepeatedArguments(service, clauseMap);
 }
 
 
