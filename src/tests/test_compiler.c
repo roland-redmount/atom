@@ -145,13 +145,9 @@ void testCompileProject(void)
 
 
 /**
- * EXPECTED TO FAIL: the head variable _n occurs in no body term, so no term of
- * the conjunction provides that argument. Such a rule cannot yield a valid
- * relation and must be rejected.
- *
- * Currently the rule compiles: it yields two services whose size parameter is
- * >NONE, backed by relation tables with an AT_NONE column, and evaluating them
- * returns whatever the caller left in that argument.
+ * The head variable _n occurs in no body term, so no term of the conjunction
+ * provides that argument. Such a rule cannot yield a valid relation, as that
+ * argument would be left undefined, and so must be rejected.
  */
 void testCompileUnconstrainedHeadVariable(void)
 {
@@ -333,9 +329,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileJoin1);
 	ExecuteTest(testCompileJoin2);
 	ExecuteTest(testCompileUnion);
-	// Expected to fail: a rule whose head has a variable that no body term
-	// provides should be rejected. See the note at the test.
-	// ExecuteTest(testCompileUnconstrainedHeadVariable);
+	ExecuteTest(testCompileUnconstrainedHeadVariable);
 	// ExecuteTest(testCompileRecursiveJoin);
 
 	MathTeardown();
