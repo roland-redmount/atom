@@ -673,7 +673,8 @@ static size8 parameterizeLocalVariables(
 /**
  * Rearrange the arguments of a compiled conjunction into the clause argument order,
  * emitting a PERMUTE service unless they are in that order already. Takes over the
- * caller's reference to the given service.
+ * caller's reference to the given service; the caller instead obtains a reference
+ * to the returned Service.
  *
  * The terms of the conjunction must together provide every clause argument. If they
  * do not, the clause cannot yield a valid relation: the arguments no term provides
