@@ -50,10 +50,10 @@ static Service * createReorderedListService(void)
 	index8 argumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
-		(index8[]) {1, 3, 2},		// (l p e) -> (l e p)
+		(index8[]) {0, 2, 1},		// (l p e) -> (l e p)
 		argumentMap
 	);
-	return CreatePermuteService(3, 0, 0, argumentMap, listService);
+	return CreatePermuteService(3, 0, 0, 0, argumentMap, listService);
 }
 
 
@@ -135,10 +135,10 @@ void testPermuteArgumentsAreDefined(void)
 	index8 argumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
-		(index8[]) {1, 2, 3},		// (l p e) -> (l p e ? ?)
+		(index8[]) {0, 1, 2},		// (l p e) -> (l p e ? ?)
 		argumentMap
 	);
-	Service * permuteService = CreatePermuteService(5, 0, 0, argumentMap, listService);
+	Service * permuteService = CreatePermuteService(5, 0, 0, 0, argumentMap, listService);
 
 	Atom string = CreateStringFromCString("ab");
 	Atom arguments[5] = {string, (Atom) {0}, (Atom) {0}, POISON, POISON};
@@ -178,13 +178,13 @@ void testJoinArgumentsAreDefined(void)
 	index8 leftServiceArgumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
-		(index8[]) {1, 2, 3},		// (l p s) -> (l p s q e ?)
+		(index8[]) {0, 1, 2},		// (l p s) -> (l p s q e ?)
 		leftServiceArgumentMap
 	);
 	index8 rightServiceArgumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
-		(index8[]) {3, 4, 5},		// (s q e) -> (l p s q e ?)
+		(index8[]) {2, 3, 4},		// (s q e) -> (l p s q e ?)
 		rightServiceArgumentMap
 	);
 	// Together the maps cover arguments 1..5 of a 6-column tuple, but nobody writes argument 6
@@ -233,8 +233,8 @@ void testJoinService1(void)
 	// Create the JOIN service
 	Service * joinService = CreateJoinService(
 		3,
-		leftService, (index8[]) {1, 2, 3},
-		rightService, (index8[]) {3}
+		leftService, (index8[]) {0, 1, 2},
+		rightService, (index8[]) {2}
 	);
 
 	// Evaluate with arguments (@list-form, _ , _)
@@ -280,13 +280,13 @@ void testJoinService2(void)
 	index8 leftServiceArgumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
-		(index8[]) {1, 2, 3},		// (l p s) -> (l p s q e)
+		(index8[]) {0, 1, 2},		// (l p s) -> (l p s q e)
 		leftServiceArgumentMap
 	);
 	index8 rightServiceArgumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
-		(index8[]) {3, 4, 5},		// (s q e) -> (l p s q e)
+		(index8[]) {2, 3, 4},		// (s q e) -> (l p s q e)
 		rightServiceArgumentMap
 	);
 
@@ -319,9 +319,9 @@ void testJoinService2(void)
 	byte const * rightArgumentTypes = GetCoreRelationTable(RELATION_LIST_LETTER)->atomTypes;
 	byte joinArgumentTypes[5];
 	for(index8 i = 0; i < 3; i++)
-		joinArgumentTypes[leftServiceArgumentMap[i] - 1] = leftArgumentTypes[i];
+		joinArgumentTypes[leftServiceArgumentMap[i]] = leftArgumentTypes[i];
 	for(index8 i = 0; i < 3; i++)
-		joinArgumentTypes[rightServiceArgumentMap[i] - 1] = rightArgumentTypes[i];
+		joinArgumentTypes[rightServiceArgumentMap[i]] = rightArgumentTypes[i];
 
 	// Setup execution context
 	ServiceContext * context = ServiceCreateContext(joinService, arguments);
@@ -357,18 +357,18 @@ void testUnionService(void)
 	index8 argumentMap[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
-		(index8[]) {0, 1, 2},		// (@list p s) -> (p s)
+		(index8[]) {2, 0, 1},		// (@list p s) -> (p s), the list is constant 0
 		argumentMap
 	);
 
 	Atom string1 = CreateStringFromCString("foo");
 	Service * service1 = CreatePermuteService(
-		2, (Atom[]) {string1}, (byte[]) {AT_ID}, argumentMap, listService);
+		2, (Atom[]) {string1}, (byte[]) {AT_ID}, 1, argumentMap, listService);
 	IFactRelease(string1);
 
 	Atom string2 = CreateStringFromCString("barf");
 	Service * service2 = CreatePermuteService(
-		2, (Atom[]) {string2}, (byte[]) {AT_ID}, argumentMap, listService);
+		2, (Atom[]) {string2}, (byte[]) {AT_ID}, 1, argumentMap, listService);
 	IFactRelease(string2);
 
 	Service * unionService = CreateUnionService(service1, service2);

@@ -296,12 +296,13 @@ static Service * compileTerm(
 	for(index8 i = 0; i < termArity; i++) {
 		TypedAtom actor = TypedTupleGetElement(termActors, permutation[i]);
 		if(actor.type == AT_PARAMETER) {
-			argumentMap[i] = actor.atom.parameter.number;
+			// parameter numbers are 1-based positions, argument maps are 0-based indices
+			argumentMap[i] = actor.atom.parameter.number - 1;
 		}
 		else {
 			// a constant restricting this child service argument
 			ASSERT(actor.type != AT_VARIABLE)
-			argumentMap[i] = 0;
+			argumentMap[i] = nArguments + nConstants;
 			constants[nConstants] = actor.atom;
 			constantTypes[nConstants] = actor.type;
 			nConstants++;
@@ -320,7 +321,7 @@ static Service * compileTerm(
 		);
 	}
 	Service * service = CreatePermuteService(
-		nArguments, constants, constantTypes, argumentMap, termServiceRecord.service);
+		nArguments, constants, constantTypes, nConstants, argumentMap, termServiceRecord.service);
 
 	// TODO: if we have an identity argument map, we can just return the child service
 
@@ -472,7 +473,7 @@ static Service * compileConjunctionRecursive(
 			// maps will place those arguments into the clause arguments tuple.
 			index8 identityMap[nArguments];
 			for(index8 i = 0; i < nArguments; i++)
-				identityMap[i] = i + 1;
+				identityMap[i] = i;
 			Service * joinService = CreateJoinService(
 				nArguments, service, identityMap, nextService, identityMap);
 			ReleaseService(service);

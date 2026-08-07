@@ -115,13 +115,12 @@ struct s_Service {
 		// for SERVICE_PERMUTE
 		struct {
 			Service * childService;
-			// Stored constants and their atom types, one for each constant
-			// child argument, in argumentMap order
+			// Stored constants and their atom types, addressed by the argument map
 			Atom * constants;
 			byte * constantTypes;
 			size8 nConstants;
-			// 1-based indices of each child argument into the parent arguments,
-			// or 0 if the child argument is a constant.
+			// Source of each child argument: an index below nArguments is a parent
+			// argument, an index of nArguments or above is constants[index - nArguments].
 			// NOTE: the parent:child mapping is 1:n, a parent argument
 			// may be repeated at multiple positions in the child arguments tuple
 			index8 * argumentMap;
@@ -130,7 +129,7 @@ struct s_Service {
 		struct {
 			Service * left;
 			Service * right;
-			// 1-based indices of each child argument into the parent arguments.
+			// Indices of each child argument into the parent arguments.
 			// Unlike a permute service, every child argument maps to a parent
 			// argument: a join service neither binds constants nor drops arguments.
 			index8 * leftMap;
@@ -155,20 +154,21 @@ struct s_Service {
 
 /**
  * Create a permute service with the specified number of arguments.
- * The argumentMap array has length equal to childService->nArguments
- * and specifies for each child argument either a 1-based index into the parent arguments tuple,
- * or 0 for a constant, in the order of the constants array. One parent argument may map to
- * multiple child arguments, in which case parent indices are repeated.
+ * The argumentMap array has length equal to childService->nArguments and gives the
+ * source of each child argument: an index below nArguments is the index of a parent
+ * argument, an index of nArguments or above refers to constants[index - nArguments].
+ * One parent argument may be the source of multiple child arguments, in which case
+ * its index is repeated.
  *
- * The constants and constantTypes arrays hold one entry for each zero entry in argumentMap,
- * and may be 0 if there are none. The service acquires a reference to each constant.
+ * The constants and constantTypes arrays have length nConstants, and may be 0 if
+ * there are none. The service acquires a reference to each constant.
  *
- * NOTE: If some parent argument positions are missing from argumentMap, those arguments will not be
+ * NOTE: If some parent arguments are missing from argumentMap, those arguments will not be
  * updated by this service, so its tuples leave those arguments undefined. Such a permute service is
  * only valid as a child of a join service, whose children together cover every parent argument.
  */
 Service * CreatePermuteService(
-	size8 nArguments, Atom const * constants, byte const * constantTypes,
+	size8 nArguments, Atom const * constants, byte const * constantTypes, size8 nConstants,
 	index8 const * argumentMap, Service * childService);
 
 /**
@@ -182,7 +182,7 @@ Service * CreateMachineService(size8 nArguments, MachineServiceProvider * provid
  * input arguments for the right child service.
  *
  * The leftMap and rightMap arrays have length equal to the number of arguments of
- * the respective child service, and give for each child argument its 1-based index
+ * the respective child service, and give for each child argument its index
  * into the parent arguments tuple. An argument occurring in both maps is a join
  * argument: the left child service determines its value, which then constrains
  * the right child service.

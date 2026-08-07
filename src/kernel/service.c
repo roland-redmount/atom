@@ -30,21 +30,16 @@ typedef struct s_PermuteContext {
 
 
 Service * CreatePermuteService(
-	size8 nArguments, Atom const * constants, byte const * constantTypes,
+	size8 nArguments, Atom const * constants, byte const * constantTypes, size8 nConstants,
 	index8 const * argumentMap, Service * childService)
 {
+	// The argument map indexes the parent arguments and the constants in turn,
+	// so together they must be addressable by an index8
+	ASSERT(nArguments + nConstants <= 256)
 	Service * service = createService(SERVICE_PERMUTE, nArguments, sizeof(PermuteContext));
 	service->impl.permute.childService = childService;
 	AcquireService(childService);
 
-	// Count the constants, and bounds check the argument map: 1-based indices
-	// into the parent arguments tuple, or 0 to take the next constant.
-	size8 nConstants = 0;
-	for(index8 i = 0; i < childService->nArguments; i++) {
-		ASSERT(argumentMap[i] <= nArguments)
-		if(!argumentMap[i])
-			nConstants++;
-	}
 	service->impl.permute.nConstants = nConstants;
 	if(nConstants) {
 		service->impl.permute.constants = Allocate(nConstants * sizeof(Atom));
@@ -58,6 +53,12 @@ Service * CreatePermuteService(
 		service->impl.permute.constantTypes = 0;
 	}
 
+#ifdef DEBUG
+	// Bounds check the argument map against the parent arguments and the constants
+	for(index8 i = 0; i < childService->nArguments; i++)
+		ASSERT(argumentMap[i] < nArguments + nConstants)
+#endif
+
 	service->impl.permute.argumentMap = Allocate(childService->nArguments);
 	CopyMemory(argumentMap, service->impl.permute.argumentMap, childService->nArguments);
 	return service;
@@ -67,25 +68,21 @@ Service * CreatePermuteService(
 static void permuteServiceSetupContext(ServiceContext * context)
 {
 	PermuteContext * permuteContext = (PermuteContext *) &context->data;
-	size8 nChildArguments = context->service->impl.permute.childService->nArguments;
-	
+	Service const * service = context->service;
+	size8 nArguments = service->nArguments;
+	size8 nChildArguments = service->impl.permute.childService->nArguments;
+
 	permuteContext->childArguments = Allocate(nChildArguments * sizeof(Atom));
-	for(index8 i = 0, k = 0; i < nChildArguments; i++) {
-		int parentIndex = context->service->impl.permute.argumentMap[i];
-		Atom a;
-		if(parentIndex) {
-			// copy parent argument to child, permuted
-			a = context->arguments[parentIndex - 1];
-		}
-		else {
-			// copy next constant
-			a = context->service->impl.permute.constants[k++];
-		}
-		permuteContext->childArguments[i] = a;
+	for(index8 i = 0; i < nChildArguments; i++) {
+		// take the child argument from the parent arguments, permuted, or from the constants
+		index8 index = service->impl.permute.argumentMap[i];
+		permuteContext->childArguments[i] = (index < nArguments)
+			? context->arguments[index]
+			: service->impl.permute.constants[index - nArguments];
 	}
 	// setup child context
 	permuteContext->childContext = ServiceCreateContext(
-		context->service->impl.permute.childService,
+		service->impl.permute.childService,
 		permuteContext->childArguments
 	);
 }
@@ -96,14 +93,15 @@ static bool permuteServiceCall(ServiceContext * context)
 	PermuteContext * permuteContext = (PermuteContext *) &context->data;
 	bool success = ServiceCall(permuteContext->childContext);
 	if(success) {
-		size8 nChildArguments = context->service->impl.permute.childService->nArguments;
-		// copy child result tuple back to parent arguments, permuted
+		Service const * service = context->service;
+		size8 nArguments = service->nArguments;
+		size8 nChildArguments = service->impl.permute.childService->nArguments;
+		// copy child result tuple back to parent arguments, permuted.
+		// Constant child arguments have no parent argument to copy to.
 		for(index8 i = 0; i < nChildArguments; i++) {
-			int parentIndex = context->service->impl.permute.argumentMap[i];
-			if(parentIndex) {
-				// copy parent argument to child, permuted
-				context->arguments[parentIndex - 1] = permuteContext->childArguments[i];
-			}
+			index8 index = service->impl.permute.argumentMap[i];
+			if(index < nArguments)
+				context->arguments[index] = permuteContext->childArguments[i];
 		}
 	}
 	return success;
@@ -156,7 +154,7 @@ static void scatterArguments(
 	Atom const * arguments, Atom * childArguments, index8 const * argumentMap, size8 nChildArguments)
 {
 	for(index8 i = 0; i < nChildArguments; i++)
-		childArguments[i] = arguments[argumentMap[i] - 1];
+		childArguments[i] = arguments[argumentMap[i]];
 }
 
 
@@ -167,7 +165,7 @@ static void gatherArguments(
 	Atom * arguments, Atom const * childArguments, index8 const * argumentMap, size8 nChildArguments)
 {
 	for(index8 i = 0; i < nChildArguments; i++)
-		arguments[argumentMap[i] - 1] = childArguments[i];
+		arguments[argumentMap[i]] = childArguments[i];
 }
 
 
@@ -177,7 +175,7 @@ static index8 * copyJoinArgumentMap(
 	index8 * copy = Allocate(nChildArguments);
 	for(index8 i = 0; i < nChildArguments; i++) {
 		// every child argument must map to a parent argument
-		ASSERT(argumentMap[i] && (argumentMap[i] <= nArguments))
+		ASSERT(argumentMap[i] < nArguments)
 		copy[i] = argumentMap[i];
 	}
 	return copy;
