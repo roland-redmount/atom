@@ -54,9 +54,18 @@ Service * CreatePermuteService(
 	}
 
 #ifdef DEBUG
-	// Bounds check the argument map against the parent arguments and the constants
-	for(index8 i = 0; i < childService->nArguments; i++)
+	// Bounds check the argument map against the parent arguments and the constants,
+	// and verify that the child service provides every parent argument: a permute
+	// service that leaves an argument unwritten does not yield a valid relation.
+	bool provided[nArguments];
+	SetMemory(provided, nArguments * sizeof(bool), 0);
+	for(index8 i = 0; i < childService->nArguments; i++) {
 		ASSERT(argumentMap[i] < nArguments + nConstants)
+		if(argumentMap[i] < nArguments)
+			provided[argumentMap[i]] = true;
+	}
+	for(index8 i = 0; i < nArguments; i++)
+		ASSERT(provided[i])
 #endif
 
 	service->impl.permute.argumentMap = Allocate(childService->nArguments);
@@ -194,6 +203,20 @@ Service * CreateJoinService(
 	AcquireService(rightChild);
 	service->impl.join.leftMap = copyJoinArgumentMap(leftMap, leftChild->nArguments, nArguments);
 	service->impl.join.rightMap = copyJoinArgumentMap(rightMap, rightChild->nArguments, nArguments);
+
+#ifdef DEBUG
+	// The two child services must together provide every argument: a join service
+	// that leaves an argument unwritten does not yield a valid relation.
+	bool provided[nArguments];
+	SetMemory(provided, nArguments * sizeof(bool), 0);
+	for(index8 i = 0; i < leftChild->nArguments; i++)
+		provided[leftMap[i]] = true;
+	for(index8 i = 0; i < rightChild->nArguments; i++)
+		provided[rightMap[i]] = true;
+	for(index8 i = 0; i < nArguments; i++)
+		ASSERT(provided[i])
+#endif
+
 	return service;
 }
 

@@ -163,9 +163,9 @@ struct s_Service {
  * The constants and constantTypes arrays have length nConstants, and may be 0 if
  * there are none. The service acquires a reference to each constant.
  *
- * NOTE: If some parent arguments are missing from argumentMap, those arguments will not be
- * updated by this service, so its tuples leave those arguments undefined. Such a permute service is
- * only valid as a child of a join service, whose children together cover every parent argument.
+ * The child service must provide every parent argument, so that every parent argument
+ * occurs in argumentMap: an argument this service does not write would be left at
+ * whatever the caller had in the arguments tuple, and so would not be part of a relation.
  */
 Service * CreatePermuteService(
 	size8 nArguments, Atom const * constants, byte const * constantTypes, size8 nConstants,
@@ -187,8 +187,9 @@ Service * CreateMachineService(size8 nArguments, MachineServiceProvider * provid
  * argument: the left child service determines its value, which then constrains
  * the right child service.
  *
- * NOTE: the two maps should together cover every parent argument, or the tuples
- * of this service leave some arguments undefined.
+ * The two child services must together provide every parent argument, so that every
+ * parent argument occurs in leftMap or rightMap: an argument neither child writes
+ * would be left at whatever the caller had in the arguments tuple.
  */
 Service * CreateJoinService(
 	size8 nArguments,
