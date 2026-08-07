@@ -330,25 +330,28 @@ static Service * compileTerm(
 
 /**
  * Compile a JOIN service from the conjuction obtained by negating the given clause
- * (clauseForm, clauseActors). The term indicated by matchedTermIndex matched the
- * query and is not considered. Any term t that has already been compiled is indicated
- * by termExcluded[t] = true. We iterate over all negated terms until we find
- * a term that dispatches to a known service; we then return a JOIN service
- * between this service and the service obtained by recursively
- * compiling the remaining terms. If the clause contains only 1 term,
- * we emit its service directly without a JOIN, terminating recursion.
+ * (clauseForm, clauseActors). The query-matched term indicated by matchedTermIndex 
+ * is excluded from compilation; also, any term t that has already been compiled
+ * is indicated by termExcluded[t] = true.
+ * nArguments is the total number of parameters in the clause, including "local" variables.
+ * 
+ * We iterate over all terms (negated) until we find a term that dispatches to a known service;
+ * we then return a JOIN service between this service and the service obtained by recursively
+ * compiling the remaining terms.
+ * If the clause contains only 1 term besides the query term, we emit its service directly
+ * without a JOIN, terminating the recursion.
  */
 static Service * compileConjunctionRecursive(
 	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 nArguments,
-	bool termExcluded[], uint8 nTermsExcluded, index8 const * termActorsIndices,
+	bool termExcluded[], uint8 nTermsExcluded, index8 const termActorsIndices[],
 	ChoicePoints * choices)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
+	ASSERT(clauseNTerms >= 2)
 	Service * service = 0;
-	// Arity of the query term, which is also the arity of the matched term.
-	// Parameters numbered beyond this one stand for clause-local variables,
-	// which by definition do not occur in the query term.
-	size8 queryArity = termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex];
+	// Arity of the query-matched term. Parameters with number > matchedTermArity
+	// are clause-local variables that not occur in the query term.
+	size8 matchedTermArity = termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex];
 
 	// Find a term that can be compiled.
 	// First iterate over term forms in the clause form
@@ -419,7 +422,7 @@ static Service * compileConjunctionRecursive(
 							};
 							// Replace untyped output parameter in query matched term.
 							// A clause-local parameter has no counterpart there.
-							if(queryTermParameterNr <= queryArity) {
+							if(queryTermParameterNr <= matchedTermArity) {
 								index8 queryParameterIndex =
 									termActorsIndices[matchedTermIndex] + queryTermParameterNr - 1;
 								TypedTupleSetAtom(clauseActors, queryParameterIndex, outputParameter);
@@ -457,7 +460,7 @@ static Service * compileConjunctionRecursive(
 	MultisetIteratorEnd(&termFormIterator);
 
 	if(nTermsExcluded < clauseNTerms) {
-		// Recurse on remaining terms
+		// Recurse on remaining terms. 
 		Service * nextService = compileConjunctionRecursive(
 			clauseForm, clauseActors, matchedTermIndex, nArguments,
 			termExcluded, nTermsExcluded, termActorsIndices, choices
@@ -483,11 +486,11 @@ static Service * compileConjunctionRecursive(
 
 
 /**
- * Give every variable occurring in the clause but not in the query term a parameter
- * of its own, numbered after the query parameters 1 .. queryArity. Such a variable is
- * shared between the terms of the conjunction, so it must have a column in the
- * arguments tuple for the JOIN service to constrain the terms against each other;
- * the PROJECT service then drops these trailing columns again.
+ * Create parameters for every "local" variable occurring in the clause but not in the
+ * query-matched term. The new parametesr are numbered consecutively after the query parameters.
+ * Local variables are shared between the terms of the conjunction, and so must have a column in the
+ * arguments tuple so that the JOIN service can constrain terms against each other.
+ * After compiling the JOIN, a PROJECT service is used to drop these trailing columns.
  * Returns the number of local variables found.
  *
  * NOTE: each occurence of the anonymous variable _ is a variable of its own,
@@ -495,7 +498,7 @@ static Service * compileConjunctionRecursive(
  */
 static size8 parameterizeLocalVariables(
 	TypedTuple * clauseActors, index8 matchedTermIndex, index8 const * termActorsIndices,
-	size8 queryArity)
+	size8 matchedTermArity)
 {
 	index8 matchedTermBegin = termActorsIndices[matchedTermIndex];
 	index8 matchedTermEnd = termActorsIndices[matchedTermIndex + 1];
@@ -513,7 +516,7 @@ static size8 parameterizeLocalVariables(
 			AT_PARAMETER,
 			(Atom) {
 				.parameter = {
-					.number = queryArity + (++nLocalVariables),
+					.number = matchedTermArity + (++nLocalVariables),
 					.io = PARAMETER_OUT,
 					.atomType = 0
 				}
@@ -533,6 +536,10 @@ static size8 parameterizeLocalVariables(
 }
 
 
+/**
+ * Compile the conjunction formed by negating the given clause (clauseForm, clauseActors),
+ * excepting the term matching the query, indicated by matchedTermIndex.
+ */
 static Service * compileConjunction(
 	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 nArguments,
 	ChoicePoints * choices)
@@ -544,8 +551,9 @@ static Service * compileConjunction(
 	for(index8 i = 0; i < clauseNTerms; i++)
 		termExcluded[i] = (i == matchedTermIndex);
 
-	// Clause-local variables become arguments beyond the query arguments,
-	// so the conjunction is compiled with an extended arguments tuple.
+	// Clause-local variables are variables (AT_VARIABLE atoms) in the clause actors
+	// that are not present in the query-matched term. These become additional parameters,
+	// and the conjunction is compiled with this extended arguments tuple.
 	size8 nLocalVariables = parameterizeLocalVariables(
 		clauseActors, matchedTermIndex, termActorsIndices, nArguments);
 
@@ -616,7 +624,7 @@ static size8 compileService(
 	Atom queryTermForm, TypedTuple const * queryActors,
 	CompiledVariant * variants, size8 maxVariants)
 {
-	size8 termArity = TermFormArity(queryTermForm);
+	size8 queryTermArity = TermFormArity(queryTermForm);
 	size8 nVariants = 0;
 
 	// TODO: query existing services matching the term
@@ -668,9 +676,9 @@ static size8 compileService(
 		// Iterate over all rules (clauses) with this clause form.
 		DictionaryIterator dictIterator;
 		DictionaryIterate(clauseForm, &dictIterator);
-		TypedTuple * matchedTermActors = CreateTypedTuple(termArity);
+		TypedTuple * matchedTermActors = CreateTypedTuple(queryTermArity);
 		TypedTuple * substClauseActors = CreateTypedTuple(ClauseArity(clauseForm));
-		TypedTuple * resolvedParameters = CreateTypedTuple(termArity);
+		TypedTuple * resolvedParameters = CreateTypedTuple(queryTermArity);
 		while(DictionaryIteratorNext(&dictIterator)) {
 			TypedTuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
 			PrintCString("Matched rule: ");
@@ -686,8 +694,8 @@ static size8 compileService(
 				TypedTupleCopyAt(clauseActors, matchedTermActorsIndex, matchedTermActors);
 				// unify the query with the matched term
 				Substitution querySubst;
-				Substitution termSubst;
-				foundTerm = UnifyTuples(queryActors, matchedTermActors, &querySubst, &termSubst);
+				Substitution matchedTermSubst;
+				foundTerm = UnifyTuples(queryActors, matchedTermActors, &querySubst, &matchedTermSubst);
 				if(foundTerm) {
 					index8 matchedTermIndex = ClauseGetTermIndex(clauseForm, queryTermForm, m);
 					// Compile once per combination of choices. A term that leaves
@@ -698,13 +706,13 @@ static size8 compileService(
 					do {
 						// compileConjunction() updates parameter types in the clause
 						// actors, so re-derive them for each branch.
-						SubstituteTuple(&termSubst, clauseActors, substClauseActors);
+						SubstituteTuple(&matchedTermSubst, clauseActors, substClauseActors);
 						PrintCString("Unified rule: ");
 						PrintFormActorsAsFormula(clauseForm, substClauseActors);
 						PrintChar('\n');
 
 						Service * newService = compileConjunction(
-							clauseForm, substClauseActors, matchedTermIndex, termArity, &choices);
+							clauseForm, substClauseActors, matchedTermIndex, queryTermArity, &choices);
 						if(!newService)
 							continue;
 						// Recover the unified parameters from the clause actors
@@ -720,7 +728,7 @@ static size8 compileService(
 						}
 						else {
 							ASSERT(nVariants < maxVariants)
-							variants[nVariants].parameters = CreateTypedTuple(termArity);
+							variants[nVariants].parameters = CreateTypedTuple(queryTermArity);
 							TypedTupleCopy(resolvedParameters, variants[nVariants].parameters);
 							variants[nVariants].service = newService;
 							nVariants++;
@@ -728,8 +736,8 @@ static size8 compileService(
 					} while(nextChoiceBranch(&choices));
 				}
 				FreeSubstitution(&querySubst);
-				FreeSubstitution(&termSubst);
-				matchedTermActorsIndex += termArity;
+				FreeSubstitution(&matchedTermSubst);
+				matchedTermActorsIndex += queryTermArity;
 			}
 		}
 		DictionaryIteratorEnd(&dictIterator);
