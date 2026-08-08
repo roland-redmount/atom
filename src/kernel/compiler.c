@@ -3,7 +3,7 @@
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/multiset.h"
-#include "kernel/service.h"
+#include "kernel/operator.h"
 #include "kernel/Parameter.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
@@ -44,20 +44,20 @@
  * (In general, negating yields a conjunction of predicates.) We then recurse
  * by dispatching the query (4). During dispatch, parameters behave as any atom
  * of the given type, so this query matches the service (+ 1<INT + 2>INT = 3<INT)
- * which points to an EXPRESSION_MACHINE. Unifying the service signature with (3)
+ * which points to an OPERATOR_MACHINE. Unifying the service signature with (3)
  * and renumbering parameters yields the substitution { d -> 3>INT }, and applying
  * this to (3) yields
  * 
  *  + 1<INT - 2<INT = 3>INT                 (5)
  *
  * which becomes the signature of the new service. As we have no more clauses, the
- * found EXPRESSION_MACHINE is the final compilation result, and we create a new
- * service record mapping (5) to this service, which essentally becomes a synonym for
+ * found OPERATOR_MACHINE is the final compilation result, and we create a new
+ * service mapping (5) to this operator; this service essentally becomes a synonym for
  * (+ 1<INT + 2>INT = 3<INT).
  */
 
 /**
- * Compiling a join service: dictionary contains the rule
+ * Compiling a join: dictionary contains the rule
  * 
  *   number x plusone y plustwo z <- + x + 1 = y & + y + 1 = z 
  * 
@@ -75,35 +75,35 @@
  * 
  *   + 1<INT + 1 = a & + a + 1 = b              (3)
  * 
- * A conjunction will always compile to a JOIN service. We initialize the join
- * service with two terms from (3),
+ * A conjunction will always compile to an OPERATOR_JOIN. We initialize the join
+ * operator with two terms from (3),
  * 
  *   JOIN(+ 1<INT + 1 = a, + a + 1 = b)         (4)
  * 
- * The JOIN service will compute sequentially from left to right, To find the left and
- * right child services of the join, we must dispatch the two terms of (4) separaterly.
+ * The JOIN operator will compute sequentially from left to right, To find the left and
+ * right child operators of the join, we must dispatch the two terms of (4) separaterly.
  * (If we have > 2 terms we can do a series of joins.) Starting (arbitrarily) with
  * the left term, dispatch matches the service (+ 1<INT + 2<INT = 3>INT) which maps
- * to a MACHINE_EXPRESSION. After renumbering we obtain the substitution { a -> 2>INT }
+ * to a OPERATOR_MACHING. After renumbering we obtain the substitution { a -> 2>INT }
  * that we apply to the _left_ term; for the right term, the output parameter 2 must
- * become an input. So that our JOIN service is now
+ * become an input. So that our JOIN operator is now
  * 
  *   JOIN(+ 1<INT + 1 = 2>INT, + 2<INT + 1 = b)       (5)
  * 
- * When later executing this compiled service, we will evaluate the left child service
+ * When later executing this compiled service, we will evaluate the left child operator
  * to obtain values for parameter 2, which will then be copied to input parameter 2 in
- * the right child service.
+ * the right child operator.
  * 
  * (If we would have started with the right term, dispatch would not match the service
  * since the variable a does not match the input parameter 2<INT; in this case we
  * would have to postpone this term.)
  * 
  * Continuing with the right term, dispatch again matches (+ 1<INT + 2<INT = 3>INT)
- * yielding the substitution { b -> 3>INT}, and our JOIN service becomes
+ * yielding the substitution { b -> 3>INT}, and our JOIN operator becomes
  * 
  *   JOIN(+ 1<INT + 1 = 2>INT, + 2<INT + 1 = 3>INT)     (6)
  *
- * Which is now complete as both child services have been resolved. 
+ * Which is now complete as both child operators have been resolved. 
  * Backsubstituting to (2) gives the compiled service signature
  * 
  *   number 1<INT plusone 2>INT plustwo 3>INT           (7)
@@ -123,8 +123,8 @@
   *
   *   PROJECT(JOIN(+ x + 1 = y, + y + 1 = z), {x z})
   *
-  * Note that y cannot simply be left out of the compiled services: it is shared
-  * between the two terms, so the JOIN service needs it as an argument in order to
+  * Note that y cannot simply be left out of the compiled operators: it is shared
+  * between the two terms, so the JOIN operator needs it as an argument in order to
   * constrain one term against the other. We therefore give every such clause-local
   * variable an argument of its own, numbered after the query arguments, and compile
   * the conjunction with this extended arguments tuple. Since the local variables
@@ -132,9 +132,9 @@
   *
   * The PROJECT operation requires checking for duplicate tuples (unless the kept
   * arguments are known to be a unique key for the relation). This is problematic
-  * since we want the service to yield one tuple at a time; currently PROJECT
+  * since we want the operator to yield one tuple at a time; currently PROJECT
   * enumerates its entire child relation when its context is created.
-  * To enable efficient duplicate removal, the child service should yield tuples in
+  * To enable efficient duplicate removal, the child operator should yield tuples in
   * sorted order w.r.t. {x z}.
   */
 
@@ -152,14 +152,15 @@
   * so it must be considered by dispatch somehow.
   * 
   * We will compile the query (integer 1<INT factorial f). To construct the first 
-  * JOIN service we will need two resolved terms. The first term (+ m + 1 = n)
+  * JOIN operator we will need two resolved terms. The first term (+ m + 1 = n)
   * matches service (+ 1>INT + 2<INT = 3<INT) and we obtain
   * 
   *   JOIN(+ 2>INT + 1 = $1>INT, ...)
   * 
   * the second term is then (integer 2<INT factorial e). We cannot match this to
-  * the current service however, since we do not yet know the type of the 
-  * 
+  * the current service however, since we do not yet know the type of the argument e.
+  * TODO: this will likely require a separate OPERATOR_RECURSE or similar that is
+  * treated specially by the compiler.
   */
 
 
@@ -222,13 +223,13 @@ static bool nextChoiceBranch(ChoicePoints * choices)
  * for the current branch and recording whether further alternatives exist.
  */
 static bool dispatchAtChoicePoint(
-	Atom termForm, TypedTuple const * termActors, ServiceRecord * record,
+	Atom termForm, TypedTuple const * termActors, Service * service,
 	index8 permutation[], ChoicePoints * choices)
 {
 	ASSERT(choices->depth < MAX_CHOICE_POINTS)
 	index8 d = choices->depth++;
 	return DispatchQueryAt(
-		termForm, termActors, record, permutation,
+		termForm, termActors, service, permutation,
 		choices->matchIndex[d], &(choices->hasNextMatch[d])
 	);
 }
@@ -267,18 +268,18 @@ static void actorsToParameters(TypedTuple const * actors, TypedTuple * parameter
 /**
  * Merge the arguments of a compiled term that provide the same clause argument,
  * which happens when a variable occurs more than once in the term. Emits a
- * CONSTRAIN service yielding only those tuples in which the merged arguments are
+ * CONSTRAIN operator yielding only those tuples in which the merged arguments are
  * equal, and compacts clauseMap accordingly, so that the clause arguments a term
- * provides are distinct. Takes over the caller's reference to the service.
+ * provides are distinct. Takes over the caller's reference to the operator.
  *
  * For example, a term whose four arguments provide the clause arguments
  * {2, 0, 2, 1} has its first and third argument merged, as both provide clause
- * argument 2. The constrain service then takes the argument map {0, 1, 0, 2}
+ * argument 2. The constrain operator then takes the argument map {0, 1, 0, 2}
  * and has three arguments, providing the clause arguments {2, 0, 1}.
  */
-static Service * constrainRepeatedArguments(Service * service, index8 clauseMap[])
+static Operator * constrainRepeatedArguments(Operator * op, index8 clauseMap[])
 {
-	size8 nChildArguments = service->nArguments;
+	size8 nChildArguments = op->nArguments;
 	// The clause arguments as provided by the compiled term. We compact clauseMap
 	// in place below, so we cannot look up earlier arguments in it.
 	index8 termClauseMap[nChildArguments];
@@ -299,43 +300,43 @@ static Service * constrainRepeatedArguments(Service * service, index8 clauseMap[
 			clauseMap[nArguments++] = termClauseMap[i];
 	}
 	if(nArguments == nChildArguments)
-		return service;
+		return op;
 
-	Service * constrainService = CreateConstrainService(nArguments, argumentMap, service);
-	ReleaseService(service);
-	return constrainService;
+	Operator * constrainOperator = CreateConstrainOperator(nArguments, argumentMap, op);
+	ReleaseOperator(op);
+	return constrainOperator;
 }
 
 
 /**
  * A term compiles to the service that dispatch matches to it, taking only the
  * arguments of the term itself. Any non-parameter actor is a constant restricting
- * one argument of that service, and is bound by a PERMUTE service wrapped around it;
+ * one argument of that service, and is bound by a PERMUTE operator wrapped around it;
  * a term without constants compiles to the matched service directly. The permutation
- * obtained from dispatch needs no service of its own: it is carried by the clauseMap.
+ * obtained from dispatch needs no operator of its own: it is carried by the clauseMap.
  * (Variables occurring in the clause but not in the query are given parameter
  * numbers of their own by parameterizeLocalVariables() before we get here.)
  *
  * The clauseMap array is set to the clause argument provided by each argument of the
- * compiled service, and so has length equal to its nArguments. The caller places
+ * compiled operator, and so has length equal to its nArguments. The caller places
  * those arguments into the clause arguments tuple, either as a child of a JOIN
- * service or, for a single term, with a PERMUTE service.
+ * operator or, for a single term, with a PERMUTE operator.
  *
  * The serviceParameters tuple is set to the matched service's parameters,
  * permuted to match the term actors order.
  */
-static Service * compileTerm(
+static Operator * compileTerm(
 	Atom termForm, TypedTuple const * termActors,
 	TypedTuple * serviceParameters, index8 clauseMap[], ChoicePoints * choices)
 {
-	// attempt to locate an service existing service
+	// attempt to locate an existing service
 	size8 termArity = termActors->nAtoms;
 	index8 permutation[termArity];
-	ServiceRecord termServiceRecord;
-	if(!dispatchAtChoicePoint(termForm, termActors, &termServiceRecord, permutation, choices))
+	Service termService;
+	if(!dispatchAtChoicePoint(termForm, termActors, &termService, permutation, choices))
 		return 0;
 
-	// Count the constants first: a permute service indexes its constants after
+	// Count the constants first: a permute operator indexes its constants after
 	// its arguments, so we need the number of arguments before we can map them.
 	size8 nConstants = 0;
 	for(index8 i = 0; i < termArity; i++) {
@@ -374,8 +375,8 @@ static Service * compileTerm(
 				(Atom) {
 					.parameter = {
 						.number = i + 1,
-						.atomType = termServiceRecord.relation->atomTypes[i],
-						.io = termServiceRecord.parameterIO[i]
+						.atomType = termService.relation->atomTypes[i],
+						.io = termService.parameterIO[i]
 					}
 				}
 			)
@@ -383,25 +384,25 @@ static Service * compileTerm(
 	}
 	ASSERT(nMapped == nArguments)
 
-	Service * service;
+	Operator * op;
 	if(!nConstants) {
 		// Without constants to bind, the matched service is used as it is
-		AcquireService(termServiceRecord.service);
-		service = termServiceRecord.service;
+		AcquireOperator(termService.op);
+		op = termService.op;
 	}
 	else {
-		service = CreatePermuteService(
+		op = CreatePermuteOperator(
 			nArguments, constants, constantTypes, nConstants, argumentMap,
-			termServiceRecord.service);
+			termService.op);
 	}
 	// A variable occurring more than once in the term constrains the arguments
 	// providing it to be equal
-	return constrainRepeatedArguments(service, clauseMap);
+	return constrainRepeatedArguments(op, clauseMap);
 }
 
 
 /**
- * Determine the arguments of a JOIN service from the clause arguments its two child
+ * Determine the arguments of a JOIN operator from the clause arguments its two child
  * services provide, and compute the argument map of each child into the join arguments
  * tuple. A join numbers its arguments by the clause arguments it covers, in ascending
  * order, so that the outermost join of a conjunction ends up with the clause arguments
@@ -439,14 +440,14 @@ static size8 setupJoinArgumentMaps(
 
 
 /**
- * Compile a JOIN service from the conjuction obtained by negating the given clause
+ * Compile a JOIN operator from the conjuction obtained by negating the given clause
  * (clauseForm, clauseActors). The query-matched term indicated by matchedTermIndex
  * is excluded from compilation; also, any term t that has already been compiled
  * is indicated by termExcluded[t] = true.
  * clauseNArguments is the total number of parameters in the clause, including "local" variables.
  *
  * We iterate over all terms (negated) until we find a term that dispatches to a known service;
- * we then return a JOIN service between this service and the service obtained by recursively
+ * we then return a JOIN operator between this operator and the operator obtained by recursively
  * compiling the remaining terms.
  * If the clause contains only 1 term besides the query term, we emit its service directly
  * without a JOIN, terminating the recursion.
@@ -454,14 +455,14 @@ static size8 setupJoinArgumentMaps(
  * The compiled service takes only the clause arguments its terms provide, and the
  * clauseMap array is set to the clause argument provided by each of its arguments.
  */
-static Service * compileConjunctionRecursive(
+static Operator * compileConjunctionRecursive(
 	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 clauseNArguments,
 	bool termExcluded[], uint8 nTermsExcluded, index8 const termActorsIndices[],
 	index8 clauseMap[], ChoicePoints * choices)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	ASSERT(clauseNTerms >= 2)
-	Service * service = 0;
+	Operator * op = 0;
 	// Clause arguments provided by the compiled term. A term may refer to the same
 	// clause argument more than once, so it may have more arguments than the clause.
 	index8 termClauseMap[clauseActors->nAtoms];
@@ -474,7 +475,7 @@ static Service * compileConjunctionRecursive(
 	MultisetIterator termFormIterator;
 	MultisetIterate(clauseForm, AT_ID, &termFormIterator);
 	size8 termIndex = 0;
-	while(!service && nTermsExcluded < clauseNTerms && MultisetIteratorNext(&termFormIterator)) {
+	while(!op && nTermsExcluded < clauseNTerms && MultisetIteratorNext(&termFormIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
 		if(termIndex == matchedTermIndex) {
 			termIndex += em.multiple;
@@ -498,14 +499,14 @@ static Service * compileConjunctionRecursive(
 			PrintCString("Term: ");
 			PrintFormActorsAsFormula(negatedTermForm, termActors);
 			PrintChar('\n');
-			// Attempt to compile this term to a Service
-			service = compileTerm(
+			// Attempt to compile this term to an Service
+			op = compileTerm(
 				negatedTermForm, termActors, serviceParameters, termClauseMap, choices);
 			PrintCString("serviceParameters = ");
 			TypedTuplePrint(serviceParameters);
 			PrintChar('\n');
 
-			if(service) {
+			if(op) {
 				termExcluded[termIndex] = true;
 				nTermsExcluded++;
 				// Update parameter types for output parameter in the query term,
@@ -575,7 +576,7 @@ static Service * compileConjunctionRecursive(
 	}
 	MultisetIteratorEnd(&termFormIterator);
 
-	if(!service) {
+	if(!op) {
 		// No remaining term could be dispatched
 		return 0;
 	}
@@ -583,38 +584,38 @@ static Service * compileConjunctionRecursive(
 	if(nTermsExcluded < clauseNTerms) {
 		// Recurse on remaining terms.
 		index8 nextClauseMap[clauseActors->nAtoms];
-		Service * nextService = compileConjunctionRecursive(
+		Operator * nextOperator = compileConjunctionRecursive(
 			clauseForm, clauseActors, matchedTermIndex, clauseNArguments,
 			termExcluded, nTermsExcluded, termActorsIndices, nextClauseMap, choices
 		);
-		if(nextService) {
-			// The two child services provide the clause arguments of their own terms,
+		if(nextOperator) {
+			// The two child operators provide the clause arguments of their own terms,
 			// which the argument maps place into the join arguments tuple
-			index8 leftMap[service->nArguments];
-			index8 rightMap[nextService->nArguments];
+			index8 leftMap[op->nArguments];
+			index8 rightMap[nextOperator->nArguments];
 			size8 nJoinArguments = setupJoinArgumentMaps(
 				clauseNArguments,
-				termClauseMap, service->nArguments,
-				nextClauseMap, nextService->nArguments,
+				termClauseMap, op->nArguments,
+				nextClauseMap, nextOperator->nArguments,
 				clauseMap, leftMap, rightMap
 			);
-			Service * joinService = CreateJoinService(
-				nJoinArguments, service, leftMap, nextService, rightMap);
-			ReleaseService(service);
-			ReleaseService(nextService);
-			return joinService;
+			Operator * joinOperator = CreateJoinOperator(
+				nJoinArguments, op, leftMap, nextOperator, rightMap);
+			ReleaseOperator(op);
+			ReleaseOperator(nextOperator);
+			return joinOperator;
 		}
 		else {
 			// Failed to compile the rest of the cojnunction
-			ReleaseService(service);
+			ReleaseOperator(op);
 			return 0;
 		}
 	}
 	else {
-		// No more terms to consider, return the left child service
+		// No more terms to consider, return the left child operator
 		// NOTE: this ends the recursion.
-		CopyMemory(termClauseMap, clauseMap, service->nArguments * sizeof(index8));
-		return service;
+		CopyMemory(termClauseMap, clauseMap, op->nArguments * sizeof(index8));
+		return op;
 	}
 }
 
@@ -623,8 +624,8 @@ static Service * compileConjunctionRecursive(
  * Create parameters for every "local" variable occurring in the clause but not in the
  * query-matched term. The new parametesr are numbered consecutively after the query parameters.
  * Local variables are shared between the terms of the conjunction, and so must have a column in the
- * arguments tuple so that the JOIN service can constrain terms against each other.
- * After compiling the JOIN, a PROJECT service is used to drop these trailing columns.
+ * arguments tuple so that the JOIN operator can constrain terms against each other.
+ * After compiling the JOIN, a PROJECT operator is used to drop these trailing columns.
  * Returns the number of local variables found.
  *
  * NOTE: each occurence of the anonymous variable _ is a variable of its own,
@@ -672,7 +673,7 @@ static size8 parameterizeLocalVariables(
 
 /**
  * Rearrange the arguments of a compiled conjunction into the clause argument order,
- * emitting a PERMUTE service unless they are in that order already. Takes over the
+ * emitting a PERMUTE operator unless they are in that order already. Takes over the
  * caller's reference to the given service; the caller instead obtains a reference
  * to the returned Service.
  *
@@ -681,13 +682,13 @@ static size8 parameterizeLocalVariables(
  * would be left undefined. This is not a program error but an invalid rule, so we
  * release the service and return 0.
  */
-static Service * permuteToClauseArguments(
-	Service * service, index8 const clauseMap[], size8 clauseNArguments)
+static Operator * permuteToClauseArguments(
+	Operator * op, index8 const clauseMap[], size8 clauseNArguments)
 {
 	bool covered[clauseNArguments];
 	SetMemory(covered, clauseNArguments * sizeof(bool), 0);
-	bool ordered = (service->nArguments == clauseNArguments);
-	for(index8 i = 0; i < service->nArguments; i++) {
+	bool ordered = (op->nArguments == clauseNArguments);
+	for(index8 i = 0; i < op->nArguments; i++) {
 		covered[clauseMap[i]] = true;
 		if(clauseMap[i] != i)
 			ordered = false;
@@ -695,17 +696,17 @@ static Service * permuteToClauseArguments(
 	for(index8 i = 0; i < clauseNArguments; i++) {
 		if(!covered[i]) {
 			PrintCString("Clause does not provide every argument\n");
-			ReleaseService(service);
+			ReleaseOperator(op);
 			return 0;
 		}
 	}
 	if(ordered)
-		return service;
+		return op;
 
-	Service * permuteService = CreatePermuteService(
-		clauseNArguments, 0, 0, 0, clauseMap, service);
-	ReleaseService(service);
-	return permuteService;
+	Operator * permuteOperator = CreatePermuteOperator(
+		clauseNArguments, 0, 0, 0, clauseMap, op);
+	ReleaseOperator(op);
+	return permuteOperator;
 }
 
 
@@ -713,7 +714,7 @@ static Service * permuteToClauseArguments(
  * Compile the conjunction formed by negating the given clause (clauseForm, clauseActors),
  * excepting the term matching the query, indicated by matchedTermIndex.
  */
-static Service * compileConjunction(
+static Operator * compileConjunction(
 	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 nArguments,
 	ChoicePoints * choices)
 {
@@ -732,22 +733,22 @@ static Service * compileConjunction(
 	size8 clauseNArguments = nArguments + nLocalVariables;
 
 	index8 clauseMap[clauseActors->nAtoms];
-	Service * service = compileConjunctionRecursive(
+	Operator * op = compileConjunctionRecursive(
 		clauseForm, clauseActors, matchedTermIndex, clauseNArguments,
 		termExcluded, 1, termActorsIndices, clauseMap, choices);
-	if(!service)
+	if(!op)
 		return 0;
 
 	// The compiled terms provide the clause arguments in their own order
-	service = permuteToClauseArguments(service, clauseMap, clauseNArguments);
+	op = permuteToClauseArguments(op, clauseMap, clauseNArguments);
 
 	// Drop the local variable arguments again, and any duplicate tuples this creates
-	if(service && nLocalVariables) {
-		Service * projectService = CreateProjectService(service, nArguments);
-		ReleaseService(service);
-		service = projectService;
+	if(op && nLocalVariables) {
+		Operator * projectOperator = CreateProjectOperator(op, nArguments);
+		ReleaseOperator(op);
+		op = projectOperator;
 	}
-	return service;
+	return op;
 }
 
 
@@ -759,7 +760,7 @@ static Service * compileConjunction(
 typedef struct s_CompiledVariant {
 	// resolved query parameters, owned by the variant
 	TypedTuple * parameters;
-	Service * service;
+	Operator * op;
 } CompiledVariant;
 
 
@@ -835,11 +836,11 @@ static size8 compileService(
 	 * For now, we simply scan the entire table and filter on matching terms. This is obviously
 	 * highly inefficient. A better solution would require multiple indexes on the relation table.
 	 */
-	Service const * multisetService = GetCoreService(SERVICE_MULTISET_ID_ALL);
+	Operator const * multisetOperator = GetCoreOperator(SERVICE_MULTISET_ID_ALL);
 
 	Atom multisetQueryTuple[3];
-	ServiceContext * multisetContext = ServiceCreateContext(multisetService, multisetQueryTuple);
-	while(ServiceCall(multisetContext)) {
+	OperatorContext * multisetContext = OperatorCreateContext(multisetOperator, multisetQueryTuple);
+	while(OperatorCall(multisetContext)) {
 		Atom termForm = multisetQueryTuple[
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
 		if(termForm.hash != queryTermForm.hash)
@@ -891,7 +892,7 @@ static size8 compileService(
 						PrintFormActorsAsFormula(clauseForm, substClauseActors);
 						PrintChar('\n');
 
-						Service * newService = compileConjunction(
+						Operator * newService = compileConjunction(
 							clauseForm, substClauseActors, matchedTermIndex, queryTermArity, &choices);
 						if(!newService)
 							continue;
@@ -901,16 +902,16 @@ static size8 compileService(
 						CompiledVariant * variant = findVariant(variants, nVariants, resolvedParameters);
 						if(variant) {
 							// Another clause yielded the same signature: union them
-							Service * unionService = CreateUnionService(variant->service, newService);
-							ReleaseService(variant->service);
-							ReleaseService(newService);
-							variant->service = unionService;
+							Operator * unionOperator = CreateUnionOperator(variant->op, newService);
+							ReleaseOperator(variant->op);
+							ReleaseOperator(newService);
+							variant->op = unionOperator;
 						}
 						else {
 							ASSERT(nVariants < maxVariants)
 							variants[nVariants].parameters = CreateTypedTuple(queryTermArity);
 							TypedTupleCopy(resolvedParameters, variants[nVariants].parameters);
-							variants[nVariants].service = newService;
+							variants[nVariants].op = newService;
 							nVariants++;
 						}
 					} while(nextChoiceBranch(&choices));
@@ -925,16 +926,16 @@ static size8 compileService(
 		FreeTypedTuple(substClauseActors);
 		FreeTypedTuple(matchedTermActors);
 	}
-	ServiceFreeContext(multisetContext);
+	OperatorFreeContext(multisetContext);
 
 	return nVariants;
 }
 
 
-size8 CompileService(Formula const * queryTerm, ServiceRecord records[], size8 maxRecords)
+size8 CompileService(Formula const * queryTerm, Service services[], size8 maxServices)
 {
 	ASSERT(IsTermForm(queryTerm->form))
-	ASSERT(maxRecords > 0)
+	ASSERT(maxServices > 0)
 
 	// Generalize atoms in the query to parameters
 	size8 arity = queryTerm->actors->nAtoms;
@@ -945,8 +946,8 @@ size8 CompileService(Formula const * queryTerm, ServiceRecord records[], size8 m
 	PrintFormActorsAsFormula(queryTerm->form, queryParameters);
 	PrintChar('\n');
 
-	CompiledVariant variants[maxRecords];
-	size8 nVariants = compileService(queryTerm->form, queryParameters, variants, maxRecords);
+	CompiledVariant variants[maxServices];
+	size8 nVariants = compileService(queryTerm->form, queryParameters, variants, maxServices);
 
 	for(index8 i = 0; i < nVariants; i++) {
 		// Parameter types were resolved by compileService()
@@ -964,15 +965,15 @@ size8 CompileService(Formula const * queryTerm, ServiceRecord records[], size8 m
 			ASSERT(relation)
 			RelationRegistryAdd(relation);
 		}
-		records[i] = ServiceRegistryAdd(relation, parameterIO, variants[i].service);
-		ReleaseService(variants[i].service);
+		services[i] = ServiceRegistryAdd(relation, parameterIO, variants[i].op);
+		ReleaseOperator(variants[i].op);
 		FreeTypedTuple(variants[i].parameters);
 	}
 	FreeTypedTuple(queryParameters);
 
-	PrintCString("-> compiled services:\n");
+	PrintCString("-> compiled operators:\n");
 	for(index8 i = 0; i < nVariants; i++) {
-		PrintServiceRecord(&records[i]);
+		PrintService(&services[i]);
 		PrintChar('\n');
 	}
 

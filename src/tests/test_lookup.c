@@ -169,7 +169,7 @@ void testLookupIterator(void)
 // 	RelationBTreeRemoveTuples(tree, 0, REMOVE_NORMAL);
 
 // 	// drop the relation table
-// 	ServiceRecord record = RegistryFindUntypedService(form);
+// 	Service record = RegistryFindUntypedService(form);
 // 	RegistryRemoveService(&record);
 // 	FreeRelationBTree(tree);
 

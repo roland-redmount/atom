@@ -186,7 +186,7 @@ static struct s_Kernel {
 	index8 corePredicateRoleIndex[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY];
 	// Corresponding core relations and services
 	RelationTable const * coreRelations[N_CORE_RELATIONS + 1];
-	Service * coreServices[N_CORE_SERVICES + 1];
+	Operator * coreOperators[N_CORE_SERVICES + 1];
 
 	// number of ifacts abnd references created by bootstrapping
 	size32 nCoreIFacts;
@@ -344,9 +344,9 @@ RelationTable const * GetCoreRelationTable(index32 relationId)
 
 // ----------------- Core services, moved from ServiceRegistry.c -----------------------
 
-Service * GetCoreService(index32 serviceId)
+Operator * GetCoreOperator(index32 serviceId)
 {
-	return kernel.coreServices[serviceId];
+	return kernel.coreOperators[serviceId];
 }
 
 /**
@@ -546,7 +546,7 @@ static void setupCoreServices(void)
 		IFactRelease(kernel.corePredicateForms[i]);
 
 	// Lookup core services and store in array
-	kernel.coreServices[0] = 0;
+	kernel.coreOperators[0] = 0;
 	byte parameterIO[CORE_FORMS_MAX_ARITY];
 	for(index32 i = 1; i <= N_CORE_SERVICES; i++) {
 		uint8 relationId = coreServiceRelationId[i];
@@ -555,11 +555,11 @@ static void setupCoreServices(void)
 			coreServiceParameterIO[i],
 			parameterIO
 		);
-		kernel.coreServices[i] = ServiceRegistryFind(
+		kernel.coreOperators[i] = ServiceRegistryFind(
 			kernel.coreRelations[relationId],
 			parameterIO
 		);
-		ASSERT(kernel.coreServices[i])
+		ASSERT(kernel.coreOperators[i])
 	}
 }
 

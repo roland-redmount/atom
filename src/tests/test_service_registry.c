@@ -49,29 +49,29 @@ void testAddRemoveService(void)
 	setupFixture();
 
 	// Add a dummy service to the relation table
-	MachineServiceProvider dummyProvider = {
+	MachineProvider dummyProvider = {
 		.setupContext = 0,
 		.call = 0,
 		.finalizeContext = 0,
-		.finalizeService = 0,
+		.finalizeOperator = 0,
 		.contextSize = 0
 	};
 
-	Service * service = CreateMachineService(EXAMPLE_FORM_ARITY, &dummyProvider, 0);
+	Operator * op = CreateMachineOperator(EXAMPLE_FORM_ARITY, &dummyProvider, 0);
 	byte parameterIO[EXAMPLE_FORM_ARITY] = {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT};
-	ASSERT_INT32_EQUAL(service->referenceCount, 1)
-	ServiceRegistryAdd(fixture.table, parameterIO, service);
-	ASSERT_INT32_EQUAL(service->referenceCount, 2)
+	ASSERT_INT32_EQUAL(op->referenceCount, 1)
+	ServiceRegistryAdd(fixture.table, parameterIO, op);
+	ASSERT_INT32_EQUAL(op->referenceCount, 2)
 
 	ASSERT_PTR_EQUAL(
 		ServiceRegistryFind(fixture.table, parameterIO),
-		service
+		op
 	);
 
 	// Remove the service
-	ServiceRegistryRemove(fixture.table, service);
-	ASSERT_INT32_EQUAL(service->referenceCount, 1)
-	ReleaseService(service);
+	ServiceRegistryRemove(fixture.table, op);
+	ASSERT_INT32_EQUAL(op->referenceCount, 1)
+	ReleaseOperator(op);
 
 	teardownFixture();
 }

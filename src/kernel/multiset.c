@@ -141,19 +141,19 @@ void MultisetIterate(Atom multiset, byte elementType, MultisetIterator * iterato
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 		parameterIO
 	);
-	Service const * service = ServiceRegistryFind(relation, parameterIO);
+	Operator const * op = ServiceRegistryFind(relation, parameterIO);
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
 		(Atom[]) {multiset, (Atom) {0}, (Atom) {0}},
 		iterator->queryTuple
 	);
-	iterator->context = ServiceCreateContext(service, iterator->queryTuple);
+	iterator->context = OperatorCreateContext(op, iterator->queryTuple);
 }
 
 
 bool MultisetIteratorNext(MultisetIterator * iterator)
 {
-	return ServiceCall(iterator->context);
+	return OperatorCall(iterator->context);
 }
 
 
@@ -170,7 +170,7 @@ ElementMultiple MultisetIteratorGetElement(MultisetIterator const * iterator)
 
 void MultisetIteratorEnd(MultisetIterator * iterator)
 {
-	ServiceFreeContext(iterator->context);
+	OperatorFreeContext(iterator->context);
 	SetMemory(iterator, sizeof(MultisetIterator), 0);
 }
 

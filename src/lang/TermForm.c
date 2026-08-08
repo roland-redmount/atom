@@ -46,13 +46,13 @@ bool IsTermForm(Atom atom)
 // matching the given term form atom
 static void termFormGetTuple(Atom termForm, Atom tuple[])
 {
-	Service const * service = GetCoreService(SERVICE_TERM_FORM);
+	Operator const * op = GetCoreOperator(SERVICE_TERM_FORM);
 	CoreFormSetTuple(
 		FORM_TERM_FORM,
 		(Atom[]) {termForm, (Atom) {0}, (Atom) {0}},
 		tuple
 	);
-	ServiceCallOnce(service, tuple);
+	OperatorCallOnce(op, tuple);
 }
 
 Atom TermFormGetPredicateForm(Atom termForm)
