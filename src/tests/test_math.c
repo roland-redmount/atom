@@ -19,14 +19,14 @@ void testAdd1(void)
 {
 	Formula * query = CStringToTerm("+ 2 + 3 = _");
 
-	Service record;
+	Service service;
 	index8 permutation[3];
-	ASSERT(DispatchQueryFormula(query, &record, permutation))
+	ASSERT(DispatchQueryFormula(query, &service, permutation))
 
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(query->actors), arguments, 3);
 	
-	void * context = OperatorCreateContext(record.op, arguments);
+	void * context = OperatorCreateContext(service.op, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 	
 	Atom equalsRole = CreateNameFromCString("=");
@@ -48,14 +48,14 @@ void testAdd2(void)
 {
 	Formula * query = CStringToTerm("= 7 + 4 + _");
 
-	Service record;
+	Service service;
 	index8 permutation[3];
-	ASSERT(DispatchQueryFormula(query, &record, permutation))
+	ASSERT(DispatchQueryFormula(query, &service, permutation))
 
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(query->actors), arguments, 3);
 	
-	void * context = OperatorCreateContext(record.op, arguments);
+	void * context = OperatorCreateContext(service.op, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom plusRole = CreateNameFromCString("+");

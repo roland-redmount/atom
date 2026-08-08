@@ -18,13 +18,14 @@
  * dispatch matches a query against. Most operators are internal nodes of such a
  * tree and have no signature of their own; see operator.h.
  *
- * NOTE: a service is a record naming an operator, not something to be created
- * and freed: it is copied by value, and the registry owns the reference to its
- * operator.
+ * NOTE: the Service structure is stored in the registry, and is copied by value
+ * since we cannot return pointers into the B-tree storage structure (they may
+ * change over time). The registry holds a reference to Service.operator.
  */
 typedef struct s_Service {
 	RelationTable const * relation;
 	byte * parameterIO;
+	// Pointer to the root of the operator tree defining this service.
 	// NOTE: cannot be const * if we want to do AcquireOperator(op).
 	// NOTE: not named "operator", which is a reserved word in C++
 	Operator * op;
@@ -74,7 +75,7 @@ typedef struct {
 } ServiceIterator;
 
 /**
- * Create iterator over all service records for a given relation table
+ * Create iterator over all services for a given relation table
  */
 void ServiceRegistryIterate(RelationTable const * table, ServiceIterator * iterator);
 
@@ -94,7 +95,7 @@ Operator * ServiceRegistryFind(RelationTable const * relation, byte const parame
 /**
  * For debugging
  */
-void PrintService(Service const * record);
+void PrintService(Service const * service);
 
 /**
  * Dump all tuples in a the given relation table.

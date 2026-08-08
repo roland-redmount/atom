@@ -14,23 +14,23 @@
  */
 void testDispatchToService(void)
 {
-	Service record;
+	Service service;
 	Formula * query;
 	
 	// this query matches with the identity permutation
 	query = CStringToTerm("+ 3 + 4 = _");
 	index8 permutation[3];
-	ASSERT_TRUE(DispatchQueryFormula(query, &record, permutation))
-	ASSERT_UINT32_EQUAL(record.op->type, OPERATOR_MACHINE)
+	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
+	ASSERT_UINT32_EQUAL(service.op->type, OPERATOR_MACHINE)
 	FreeFormula(query);
 
 	// one the following two queries requires form permutation to match
 	query = CStringToTerm("+ 3 + _ = 7");
-	ASSERT_TRUE(DispatchQueryFormula(query, &record, permutation))
+	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
 	FreeFormula(query);
 
 	query = CStringToTerm("+ _ + 3 = 7");
-	ASSERT_TRUE(DispatchQueryFormula(query, &record, permutation))
+	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
 	FreeFormula(query);
 }
 
@@ -41,24 +41,24 @@ void testDispatchToService(void)
  */
 void testDispatchRepeatedVariable(void)
 {
-	Service record;
+	Service service;
 	index8 permutation[3];
 	Formula * query;
 
 	// The service (list <ID position >UINT element >LETTER) has a position of a
 	// different type than an element, so no atom can be both
 	query = CStringToTerm("list \"ab\" position _x element _x");
-	ASSERT_FALSE(DispatchQueryFormula(query, &record, permutation))
+	ASSERT_FALSE(DispatchQueryFormula(query, &service, permutation))
 	FreeFormula(query);
 
 	// Distinct variables at those same positions match as before
 	query = CStringToTerm("list \"ab\" position _p element _e");
-	ASSERT_TRUE(DispatchQueryFormula(query, &record, permutation))
+	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
 	FreeFormula(query);
 
 	// Each occurence of the anonymous variable is a variable of its own
 	query = CStringToTerm("list \"ab\" position _ element _");
-	ASSERT_TRUE(DispatchQueryFormula(query, &record, permutation))
+	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
 	FreeFormula(query);
 }
 

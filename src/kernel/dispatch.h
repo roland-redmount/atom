@@ -18,7 +18,7 @@
  * 
  * NOTE: do we have to return an Service? Or just an Service?
  */
-bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, Service * record, index8 permutation[]);
+bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, Service * service, index8 permutation[]);
 
 /**
  * Similar to DispatchQuery(), but skips the nSkip first matching services instead of
@@ -31,13 +31,13 @@ bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, Service *
  * one service per candidate; see compiler.c.
  */
 bool DispatchQueryAt(
-	Atom queryTermForm, TypedTuple const * queryActors, Service * record,
+	Atom queryTermForm, TypedTuple const * queryActors, Service * service,
 	index8 permutation[], size8 nSkip, bool * hasNextMatch);
 
 /**
  * Same, using a term (formula) instead of a termform and actors tuple
  */
-bool DispatchQueryFormula(Formula * queryTerm, Service * record, index8 * permutation);
+bool DispatchQueryFormula(Formula * queryTerm, Service * service, index8 * permutation);
 
 
 #endif	// DISPATCH_H

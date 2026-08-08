@@ -130,7 +130,7 @@ static bool permutationMatch(
 
 
 bool DispatchQueryAt(
-	Atom queryTermForm, TypedTuple const * queryActors, Service * record,
+	Atom queryTermForm, TypedTuple const * queryActors, Service * service,
 	index8 permutation[], size8 nSkip, bool * hasNextMatch)
 {
 	ASSERT(IsTermForm(queryTermForm))
@@ -163,9 +163,9 @@ bool DispatchQueryAt(
 		ServiceIterator serviceIterator;
 		ServiceRegistryIterate(relation, &serviceIterator);
 		while(!done && ServiceIteratorNext(&serviceIterator)) {
-			Service const * currentRecord = ServiceIteratorPeekService(&serviceIterator);
+			Service const * currentService = ServiceIteratorPeekService(&serviceIterator);
 			if(!permutationMatch(
-				predicateForm, relation->atomTypes, currentRecord->parameterIO,
+				predicateForm, relation->atomTypes, currentService->parameterIO,
 				queryActors, candidatePermutation))
 				continue;
 
@@ -176,8 +176,8 @@ bool DispatchQueryAt(
 			}
 			else if(nMatches++ >= nSkip) {
 				match = true;
-				// copy the record and its permutation to the caller
-				*record = *currentRecord;
+				// copy the service struct and its permutation to the caller
+				*service = *currentService;
 				CopyMemory(candidatePermutation, permutation, termArity * sizeof(index8));
 				// without a hasMore request we can stop at the first match
 				done = (hasNextMatch == 0);
@@ -191,14 +191,14 @@ bool DispatchQueryAt(
 }
 
 
-bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, Service * record, index8 permutation[])
+bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, Service * service, index8 permutation[])
 {
-	return DispatchQueryAt(queryTermForm, queryActors, record, permutation, 0, 0);
+	return DispatchQueryAt(queryTermForm, queryActors, service, permutation, 0, 0);
 }
 
 
-bool DispatchQueryFormula(Formula * queryTerm, Service * record, index8 * permutation)
+bool DispatchQueryFormula(Formula * queryTerm, Service * service, index8 * permutation)
 {
-	return DispatchQuery(queryTerm->form, queryTerm->actors, record, permutation);
+	return DispatchQuery(queryTerm->form, queryTerm->actors, service, permutation);
 }
 

@@ -44,20 +44,20 @@
  * (In general, negating yields a conjunction of predicates.) We then recurse
  * by dispatching the query (4). During dispatch, parameters behave as any atom
  * of the given type, so this query matches the service (+ 1<INT + 2>INT = 3<INT)
- * which points to an EXPRESSION_MACHINE. Unifying the service signature with (3)
+ * which points to an OPERATOR_MACHINE. Unifying the service signature with (3)
  * and renumbering parameters yields the substitution { d -> 3>INT }, and applying
  * this to (3) yields
  * 
  *  + 1<INT - 2<INT = 3>INT                 (5)
  *
  * which becomes the signature of the new service. As we have no more clauses, the
- * found EXPRESSION_MACHINE is the final compilation result, and we create a new
- * service record mapping (5) to this service, which essentally becomes a synonym for
+ * found OPERATOR_MACHINE is the final compilation result, and we create a new
+ * service mapping (5) to this operator; this service essentally becomes a synonym for
  * (+ 1<INT + 2>INT = 3<INT).
  */
 
 /**
- * Compiling a join operator: dictionary contains the rule
+ * Compiling a join: dictionary contains the rule
  * 
  *   number x plusone y plustwo z <- + x + 1 = y & + y + 1 = z 
  * 
@@ -75,7 +75,7 @@
  * 
  *   + 1<INT + 1 = a & + a + 1 = b              (3)
  * 
- * A conjunction will always compile to a JOIN operator. We initialize the join
+ * A conjunction will always compile to an OPERATOR_JOIN. We initialize the join
  * operator with two terms from (3),
  * 
  *   JOIN(+ 1<INT + 1 = a, + a + 1 = b)         (4)
@@ -84,7 +84,7 @@
  * right child operators of the join, we must dispatch the two terms of (4) separaterly.
  * (If we have > 2 terms we can do a series of joins.) Starting (arbitrarily) with
  * the left term, dispatch matches the service (+ 1<INT + 2<INT = 3>INT) which maps
- * to a MACHINE_EXPRESSION. After renumbering we obtain the substitution { a -> 2>INT }
+ * to a OPERATOR_MACHING. After renumbering we obtain the substitution { a -> 2>INT }
  * that we apply to the _left_ term; for the right term, the output parameter 2 must
  * become an input. So that our JOIN operator is now
  * 
@@ -158,8 +158,9 @@
   *   JOIN(+ 2>INT + 1 = $1>INT, ...)
   * 
   * the second term is then (integer 2<INT factorial e). We cannot match this to
-  * the current service however, since we do not yet know the type of the 
-  * 
+  * the current service however, since we do not yet know the type of the argument e.
+  * TODO: this will likely require a separate OPERATOR_RECURSE or similar that is
+  * treated specially by the compiler.
   */
 
 
@@ -222,13 +223,13 @@ static bool nextChoiceBranch(ChoicePoints * choices)
  * for the current branch and recording whether further alternatives exist.
  */
 static bool dispatchAtChoicePoint(
-	Atom termForm, TypedTuple const * termActors, Service * record,
+	Atom termForm, TypedTuple const * termActors, Service * service,
 	index8 permutation[], ChoicePoints * choices)
 {
 	ASSERT(choices->depth < MAX_CHOICE_POINTS)
 	index8 d = choices->depth++;
 	return DispatchQueryAt(
-		termForm, termActors, record, permutation,
+		termForm, termActors, service, permutation,
 		choices->matchIndex[d], &(choices->hasNextMatch[d])
 	);
 }
@@ -931,10 +932,10 @@ static size8 compileService(
 }
 
 
-size8 CompileService(Formula const * queryTerm, Service records[], size8 maxRecords)
+size8 CompileService(Formula const * queryTerm, Service services[], size8 maxServices)
 {
 	ASSERT(IsTermForm(queryTerm->form))
-	ASSERT(maxRecords > 0)
+	ASSERT(maxServices > 0)
 
 	// Generalize atoms in the query to parameters
 	size8 arity = queryTerm->actors->nAtoms;
@@ -945,8 +946,8 @@ size8 CompileService(Formula const * queryTerm, Service records[], size8 maxReco
 	PrintFormActorsAsFormula(queryTerm->form, queryParameters);
 	PrintChar('\n');
 
-	CompiledVariant variants[maxRecords];
-	size8 nVariants = compileService(queryTerm->form, queryParameters, variants, maxRecords);
+	CompiledVariant variants[maxServices];
+	size8 nVariants = compileService(queryTerm->form, queryParameters, variants, maxServices);
 
 	for(index8 i = 0; i < nVariants; i++) {
 		// Parameter types were resolved by compileService()
@@ -964,7 +965,7 @@ size8 CompileService(Formula const * queryTerm, Service records[], size8 maxReco
 			ASSERT(relation)
 			RelationRegistryAdd(relation);
 		}
-		records[i] = ServiceRegistryAdd(relation, parameterIO, variants[i].op);
+		services[i] = ServiceRegistryAdd(relation, parameterIO, variants[i].op);
 		ReleaseOperator(variants[i].op);
 		FreeTypedTuple(variants[i].parameters);
 	}
@@ -972,7 +973,7 @@ size8 CompileService(Formula const * queryTerm, Service records[], size8 maxReco
 
 	PrintCString("-> compiled operators:\n");
 	for(index8 i = 0; i < nVariants; i++) {
-		PrintService(&records[i]);
+		PrintService(&services[i]);
 		PrintChar('\n');
 	}
 
