@@ -462,6 +462,10 @@ void testCompileRecursiveJoin1(void)
  */
 #define TEST_N_PREC_SUCC_EDGES	5
 
+// Tuples in the transitive closure of the whole graph: three from each of a, b and c,
+// and the single edge of the other component
+#define TEST_N_CLOSURE_TUPLES	10
+
 static struct {
 	Atom form;
 	index8 precIndex;
@@ -630,6 +634,65 @@ void testCompileRecursiveReachable(void)
 }
 
 
+/**
+ * The same rules with both roles left free, which asks for the whole relation: the
+ * transitive closure of the entire graph, both of its components included.
+ *
+ * The closure holds (b b) and (c c), as b and c lie on a cycle and so come after
+ * themselves, but not (a a), as no edge leads back to a.
+ */
+void testCompileRecursiveClosure(void)
+{
+	setupPrecSuccFixture();
+	DictionaryEntry entry1;
+	DictionaryEntry entry2;
+	addTransitiveClosureRules(&entry1, &entry2);
+
+	Formula * queryTerm = CStringToTerm("before _x after _y");
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Service service = services[0];
+
+	char const * expectedBefore[TEST_N_CLOSURE_TUPLES] = {
+		"a", "a", "a", "b", "b", "b", "c", "c", "c", "e"};
+	char const * expectedAfter[TEST_N_CLOSURE_TUPLES] = {
+		"b", "c", "d", "b", "c", "d", "b", "c", "d", "f"};
+	bool found[TEST_N_CLOSURE_TUPLES] = {false};
+
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
+	void * context = OperatorCreateContext(service.op, arguments);
+	size32 nTuples = 0;
+	while(OperatorCall(context)) {
+		Atom before = TermGetRoleActor(queryTerm->form, arguments, "before", 1);
+		Atom after = TermGetRoleActor(queryTerm->form, arguments, "after", 1);
+		for(index8 i = 0; i < TEST_N_CLOSURE_TUPLES; i++) {
+			Atom expectedBeforeNode = CreateStringFromCString(expectedBefore[i]);
+			Atom expectedAfterNode = CreateStringFromCString(expectedAfter[i]);
+			if((before.hash == expectedBeforeNode.hash)
+				&& (after.hash == expectedAfterNode.hash))
+				found[i] = true;
+			IFactRelease(expectedBeforeNode);
+			IFactRelease(expectedAfterNode);
+		}
+		nTuples++;
+	}
+	OperatorFreeContext(context);
+
+	ASSERT_UINT32_EQUAL(nTuples, TEST_N_CLOSURE_TUPLES)
+	for(index8 i = 0; i < TEST_N_CLOSURE_TUPLES; i++)
+		ASSERT_TRUE(found[i])
+
+	ServiceRegistryRemove(service.relation, service.op);
+	RelationRegistryRemove(service.relation);
+	FreeFormula(queryTerm);
+	DictionaryRemoveClause(&entry2);
+	DictionaryRemoveClause(&entry1);
+	teardownPrecSuccFixture();
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -646,6 +709,7 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testCompileRecursiveJoin2);
 	ExecuteTest(testCompileRecursiveReachable);
+	ExecuteTest(testCompileRecursiveClosure);
 
 	// TODO: compiling a recursive rule over an infinite domain. The relation has no
 	// finite fixpoint and the call bindings n = 4, 3, 2, 1, 0, -1, -2, ... do not

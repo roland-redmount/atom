@@ -890,9 +890,11 @@ typedef struct s_CompiledVariant {
 	// The relation this variant compiles to, registered before the recursive clauses
 	// compile so that their recursive term has something to dispatch to
 	RelationTable const * relation;
-	// The operator standing in for the relation while the recursive clauses compile,
-	// removed again by completeRecursiveVariant(); see compileService()
-	Operator * recurseOperator;
+	// The operators standing in for the relation while the recursive clauses compile,
+	// one per binding pattern, removed again by completeRecursiveVariant().
+	// See setupRecursiveVariant().
+	Operator ** recurseOperators;
+	size32 nRecurseOperators;
 	// whether a recursive clause compiled into this variant
 	bool isRecursive;
 } CompiledVariant;
@@ -1230,15 +1232,31 @@ static void setupVariantRelation(
 }
 
 
+// Most arguments a query leaves as outputs, for the temporary services of a recursive
+// variant. The number of those services is exponential in this; see below.
+#define MAX_RECURSIVE_OUTPUT_ARGUMENTS	8
+
+
 /**
- * Register a temporary service for a variant, so that the recursive clauses have
+ * Register the temporary services of a variant, so that the recursive clauses have
  * something to dispatch their recursive term to. That term asks for the relation being
  * compiled, whose real service does not exist until compilation finishes.
  *
- * The temporary service is evaluated by a recurse operator, and completeRecursiveVariant()
- * removes it again once the recursive clauses have compiled. Only the service is
- * temporary: the relation it is registered against is the one the finished service
- * provides.
+ * A recursive term does not have the binding pattern of the query. A join binds the
+ * arguments its other terms provide, so a term may take as an input what the query leaves
+ * as an output: the query (before x after y) compiles a rule whose recursive term is
+ * (before z after y) with z bound. One service is therefore registered per pattern that
+ * binds the arguments of the query and any of the ones it leaves free, as those are the
+ * patterns a recursive term can ask for. Only one or two are used in practice, but which
+ * ones is not known until the clauses compile.
+ *
+ * A pattern binding fewer arguments than the query is not among them. The derivation is
+ * keyed on the arguments the query binds, so a term asking for less than that has no call
+ * binding to name it, which CreateRecurseOperator() asserts against.
+ *
+ * Each service is evaluated by a recurse operator, and completeRecursiveVariant() removes
+ * them again once the recursive clauses have compiled. Only the services are temporary:
+ * the relation they are registered against is the one the finished service provides.
  */
 static void setupRecursiveVariant(
 	CompiledVariant * variant, Atom queryTermForm, size8 arity)
@@ -1246,28 +1264,54 @@ static void setupRecursiveVariant(
 	setupVariantRelation(variant, queryTermForm, arity);
 
 	byte atomTypes[arity];
-	byte parameterIO[arity];
-	findVariantSignature(variant, atomTypes, parameterIO);
-	index8 inputArguments[arity];
-	size8 nInputs = findInputArguments(parameterIO, arity, inputArguments);
+	byte queryParameterIO[arity];
+	findVariantSignature(variant, atomTypes, queryParameterIO);
 
-	variant->recurseOperator = CreateRecurseOperator(arity, inputArguments, nInputs);
-	ServiceRegistryAdd(variant->relation, parameterIO, variant->recurseOperator);
+	// The arguments the query leaves free, which a recursive term may bind
+	index8 outputArguments[arity];
+	size8 nOutputs = 0;
+	for(index8 i = 0; i < arity; i++) {
+		if(queryParameterIO[i] != PARAMETER_IN)
+			outputArguments[nOutputs++] = i;
+	}
+	ASSERT(nOutputs <= MAX_RECURSIVE_OUTPUT_ARGUMENTS)
+
+	// One service per subset of those arguments, the subset giving the ones it binds
+	variant->nRecurseOperators = ((size32) 1) << nOutputs;
+	variant->recurseOperators = Allocate(variant->nRecurseOperators * sizeof(Operator *));
+	for(index32 boundOutputs = 0; boundOutputs < variant->nRecurseOperators; boundOutputs++) {
+		byte parameterIO[arity];
+		CopyMemory(queryParameterIO, parameterIO, arity);
+		for(index8 i = 0; i < nOutputs; i++) {
+			if(boundOutputs & (((index32) 1) << i))
+				parameterIO[outputArguments[i]] = PARAMETER_IN;
+		}
+		index8 inputArguments[arity];
+		size8 nInputs = findInputArguments(parameterIO, arity, inputArguments);
+
+		Operator * recurseOperator = CreateRecurseOperator(arity, inputArguments, nInputs);
+		ServiceRegistryAdd(variant->relation, parameterIO, recurseOperator);
+		variant->recurseOperators[boundOutputs] = recurseOperator;
+	}
 }
 
 
 /**
- * Remove the temporary service again, now that the recursive clauses have compiled, and
+ * Remove the temporary services again, now that the recursive clauses have compiled, and
  * wrap a variant that one of them compiled into in a fixpoint operator. That operator
  * derives the relation, and the recurse operators below it read the tuples it derives.
  */
 static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
 {
-	if(!variant->recurseOperator)
+	if(!variant->recurseOperators)
 		return;
-	ServiceRegistryRemove(variant->relation, variant->recurseOperator);
-	ReleaseOperator(variant->recurseOperator);
-	variant->recurseOperator = 0;
+	for(index32 i = 0; i < variant->nRecurseOperators; i++) {
+		ServiceRegistryRemove(variant->relation, variant->recurseOperators[i]);
+		ReleaseOperator(variant->recurseOperators[i]);
+	}
+	Free(variant->recurseOperators);
+	variant->recurseOperators = 0;
+	variant->nRecurseOperators = 0;
 	if(!variant->isRecursive)
 		return;
 
