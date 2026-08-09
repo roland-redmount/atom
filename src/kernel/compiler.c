@@ -16,231 +16,15 @@
 #include "memory/allocator.h"
 
 
-/*
- * A compilation example: say the dictionary contains the rule
- * 
- *   ! + x + y = z | + z - x = y             (1)
- * 
- * and we have a service (+ 1<INT + 2>INT = 3<INT). The query
- * 
- *   + 7 - 4 = d                             (2)
- * 
- * does not match any service, so we need to compile a new service.
- * 
- * To compile a service, we first replace any non-variables in the query
- * with typed, numbered input parameters, so that (2) becomes
- * 
- *   + 1<INT - 2<INT = d                    (3)
- * 
- * This has form (+ - =) which is found in the clause form (! + + = | + - =).
- * Iterating over matching clauses gives the clause (1).
- * Unifying the matched predicate (+ z - x = y) with (+ 1<INT - 2<INT = d)
- * yields the substitution { z -> 1<INT, x -> 2<INT, y -> d }. We then drop the matched
- * predicate, apply this substitution to the remainder of the clause and negate it,
- * which in this case yields
- * 
- *   + 2<INT + d = 1<INT                    (4)
- * 
- * (In general, negating yields a conjunction of predicates.) We then recurse
- * by dispatching the query (4). During dispatch, parameters behave as any atom
- * of the given type, so this query matches the service (+ 1<INT + 2>INT = 3<INT)
- * which points to an OPERATOR_MACHINE. Unifying the service signature with (3)
- * and renumbering parameters yields the substitution { d -> 3>INT }, and applying
- * this to (3) yields
- * 
- *  + 1<INT - 2<INT = 3>INT                 (5)
- *
- * which becomes the signature of the new service. As we have no more clauses, the
- * found OPERATOR_MACHINE is the final compilation result, and we create a new
- * service mapping (5) to this operator; this service essentally becomes a synonym for
- * (+ 1<INT + 2>INT = 3<INT).
- */
-
 /**
- * Compiling a join: dictionary contains the rule
- * 
- *   number x plusone y plustwo z <- + x + 1 = y & + y + 1 = z 
- * 
- * or, in CNF
- * 
- *   ! + x + 1 = y | ! + y + 1 = z | number x plusone y plustwo z  (1)
- * 
- * and we have the query (number 3 plusone a plustwo b). We first replace the atom
- * 3 with a parameter 1<INT to give the query
- * 
- *   number 1<INT plusone a plustwo b           (2)
- * 
- * The first round of matching gives the substitution
- * {x -> 1<INT, y -> a, z -> b} and the conjunction
- * 
- *   + 1<INT + 1 = a & + a + 1 = b              (3)
- * 
- * A conjunction will always compile to an OPERATOR_JOIN. We initialize the join
- * operator with two terms from (3),
- * 
- *   JOIN(+ 1<INT + 1 = a, + a + 1 = b)         (4)
- * 
- * The JOIN operator will compute sequentially from left to right, To find the left and
- * right child operators of the join, we must dispatch the two terms of (4) separaterly.
- * (If we have > 2 terms we can do a series of joins.) Starting (arbitrarily) with
- * the left term, dispatch matches the service (+ 1<INT + 2<INT = 3>INT) which maps
- * to a OPERATOR_MACHING. After renumbering we obtain the substitution { a -> 2>INT }
- * that we apply to the _left_ term; for the right term, the output parameter 2 must
- * become an input. So that our JOIN operator is now
- * 
- *   JOIN(+ 1<INT + 1 = 2>INT, + 2<INT + 1 = b)       (5)
- * 
- * When later executing this compiled service, we will evaluate the left child operator
- * to obtain values for parameter 2, which will then be copied to input parameter 2 in
- * the right child operator.
- * 
- * (If we would have started with the right term, dispatch would not match the service
- * since the variable a does not match the input parameter 2<INT; in this case we
- * would have to postpone this term.)
- * 
- * Continuing with the right term, dispatch again matches (+ 1<INT + 2<INT = 3>INT)
- * yielding the substitution { b -> 3>INT}, and our JOIN operator becomes
- * 
- *   JOIN(+ 1<INT + 1 = 2>INT, + 2<INT + 1 = 3>INT)     (6)
+ * The compiler turns a query that no service answers into a new service, by resolving it
+ * against the rules in the dictionary and compiling the result into an operator tree.
+ * CompileService() is the entry point.
  *
- * Which is now complete as both child operators have been resolved. 
- * Backsubstituting to (2) gives the compiled service signature
- * 
- *   number 1<INT plusone 2>INT plustwo 3>INT           (7)
- * 
+ * See compiler.md in the repository root for what the compiler does and why: the worked
+ * examples behind each operator it emits, how a recursive rule compiles to a fixpoint,
+ * and what is known not to work yet.
  */
-
-
- /**
-  * In the previous example all variables in the rule were present in the query.
-  * On the other hand, with the rule
-  * 
-  *   number x plustwo z <- + x + 1 = y & + y + 1 = z 
-  *
-  * and query (number 1 plustwo a) the variable y must be discarded, and then
-  * some tuples may become identical. This needs a PROJECT operation in addition
-  * to the JOIN,
-  *
-  *   PROJECT(JOIN(+ x + 1 = y, + y + 1 = z), {x z})
-  *
-  * Note that y cannot simply be left out of the compiled operators: it is shared
-  * between the two terms, so the JOIN operator needs it as an argument in order to
-  * constrain one term against the other. We therefore give every such clause-local
-  * variable an argument of its own, numbered after the query arguments, and compile
-  * the conjunction with this extended arguments tuple. Since the local variables
-  * are the trailing arguments, PROJECT need only keep a leading number of arguments.
-  *
-  * The PROJECT operation requires checking for duplicate tuples (unless the kept
-  * arguments are known to be a unique key for the relation). This is problematic
-  * since we want the operator to yield one tuple at a time; currently PROJECT
-  * enumerates its entire child relation when its context is created.
-  * To enable efficient duplicate removal, the child operator should yield tuples in
-  * sorted order w.r.t. {x z}.
-  */
-
-
- /**
-  * Compiling a recursive service: consider the classic
-  *
-  *   integer n factorial f <-
-  *     + m + 1 = n & integer m factorial e & * n * e = f
-  *
-  * Together with the fact (integer 0 factorial 1) terminating the recursion.
-  * (We will need a precondition ? < n > 0: to ensure unique dispatch, but we
-  * ignore this for now.) When compiling this service, the child service
-  * (integer m factorial e) will require the service we are currently compiling,
-  * so it must be considered by dispatch somehow.
-  *
-  * We will compile the query (integer 1<INT factorial f). To construct the first
-  * JOIN operator we will need two resolved terms. The first term (+ m + 1 = n)
-  * matches service (+ 1>INT + 2<INT = 3<INT) and we obtain
-  *
-  *   JOIN(+ 2>INT + 1 = $1>INT, ...)
-  *
-  * the second term is then (integer 2<INT factorial e). We cannot match this to
-  * the current service however, since we do not yet know the type of the argument e.
-  * TODO: this will likely require a separate OPERATOR_RECURSE or similar that is
-  * treated specially by the compiler.
-  */
-
-
- /**
-  * The shape of a recursive operator tree. A recursive rule gives an operator
-  * tree that is a graph rather than a tree: some leaf of it refers back to the
-  * operator at its root. The compiled (integer n factorial f) would be
-  *
-  *   UNION(base clause, PROJECT(JOIN(..., JOIN(RECURSE, ...))))
-  *
-  * Note that the cycle is in the plan, not in any one evaluation of it: the
-  * recursion terminates on the values, as in any recursive procedure.
-  *
-  * What blocks this today is not the cycle but OperatorCreateContext(), which
-  * builds the whole context tree eagerly: a permute context creates its child
-  * context, a join context creates its left context and calls it, a union
-  * context creates both and takes a lookahead tuple, and a project context
-  * drains its entire child relation. On a cyclic graph that recursion never
-  * bottoms out, and it does so at construction time, where there are no values
-  * to terminate on.
-  *
-  * Creating each child context lazily, on the first call that needs a tuple
-  * from it, fixes exactly that. Contexts then become what stack frames are to
-  * a recursive procedure: one per active invocation, created as the recursion
-  * descends and freed as it unwinds. Nothing else about the split between
-  * operators and contexts needs to change, as an operator is immutable once
-  * constructed and all evaluation state already lives in the context. Contexts
-  * are already per-invocation rather than per-operator: a join operator creates
-  * a fresh right context for every left tuple, while its left context is live.
-  *
-  * The back edge should be an operator of its own rather than a pointer from
-  * some existing operator back to the root, so that every traversal
-  * (PrintOperator(), teardown, any later optimization) can see the cycle
-  * instead of following it forever. Its reference to the root must not be
-  * counted, or the reference count of a recursive service could never reach
-  * zero; the service registry holds the one owning reference, and removing the
-  * service tears the whole cycle down. The pointer is only known once
-  * compilation completes, so it is back-patched at the end.
-  *
-  * Giving a context a pointer to its parent context would also be worth having:
-  * it gives a recursion depth for a guard against runaway recursion, and
-  * something to print when a query misbehaves.
-  */
-
-
- /**
-  * Terminating a recursive service. Two problems remain once the tree above can
-  * be evaluated at all, and neither is solved by the operator alone.
-  *
-  * The first is evaluation order. A UNION operator merges two sorted children
-  * and so must hold a lookahead tuple from each, which means it enters the
-  * recursive branch even when the base clause alone would answer the query.
-  * That is the opposite of Prolog, where clause order lets the base case answer
-  * without the recursive clause ever being tried. A recursive union may
-  * therefore want to be an ordered concatenation of its children instead, with
-  * duplicate removal left to an enclosing PROJECT. This also matters because
-  * the sortedness a UNION assumes of its children is not something a recursive
-  * branch obviously provides.
-  *
-  * The second is that nothing guarantees termination. For the factorial rule
-  * above, the fact (integer 0 factorial 1) is not by itself enough: evaluating
-  * the query for n = 0 finds the fact, but the recursive clause is also tried,
-  * computing m = -1 and descending forever. The recursive clause needs a
-  * guard -- the precondition noted above -- or an evaluation order that answers
-  * from the base clause first.
-  *
-  * Rules over a finite stored relation are a different case. With
-  *
-  *   before x after y <- prec x succ y
-  *   before x after y <- prec x succ z & before z after y
-  *
-  * the answer is a fixpoint: start from the base relation and apply the rule
-  * body to the tuples found so far until no new tuple appears. That terminates
-  * without any guard, and is what a bottom-up OPERATOR_FIXPOINT would compute,
-  * whereas the factorial rule wants the top-down evaluation described above,
-  * as its domain is infinite and only one argument value is of interest.
-  * We will likely want both, with memoization of computed tuples as the bridge:
-  * PROJECT already materializes its child into a B-tree, and a memo keyed by
-  * the bound input arguments is a small step from that.
-  */
 
 
 /**
@@ -1339,8 +1123,8 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
  * clause of the same signature; on its own it simply fails to compile, which the choice
  * point machinery already tolerates.
  *
- * NOTE: a recursive service is not guaranteed to terminate; see the notes on terminating
- * a recursive service at the top of this file.
+ * NOTE: a recursive service is not guaranteed to terminate; see the notes on termination
+ * in compiler.md.
  */
 static size8 compileService(
 	Atom queryTermForm, TypedTuple const * queryActors,

@@ -133,9 +133,10 @@ typedef struct s_MachineProvider {
 	 */
 	OPERATOR_UNION = 3,
 	/**
-	 * PROJECT is the projection onto the first nArguments arguments of its child
-	 * operator: it drops the remaining ones and removes the duplicate tuples that
-	 * dropping may produce. Its tuples are yielded in sorted order.
+	 * PROJECT is the projection onto the child arguments named by its argument map:
+	 * it drops the remaining ones and removes the duplicate tuples that dropping may
+	 * produce. Its tuples are yielded in sorted order. Keeping every child argument
+	 * drops nothing, and sorts the child; see CreateProjectOperator().
 	 */
 	OPERATOR_PROJECT = 4,
 	/**
@@ -170,8 +171,8 @@ typedef struct s_MachineProvider {
 	 * signature over it.
 	 *
 	 * NOTE: nothing here guarantees termination. A relation over an infinite domain
-	 * has no finite fixpoint, and needs the query bindings pushed into the derivation
-	 * to terminate; see the notes on recursion in compiler.c.
+	 * has no finite fixpoint, and needs the recursive rule guarded by a precondition
+	 * to terminate; see the notes on termination in compiler.md.
 	 */
 	OPERATOR_FIXPOINT = 7,
 	/**

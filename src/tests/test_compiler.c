@@ -714,7 +714,7 @@ int main(int argc, char * argv[])
 	// TODO: compiling a recursive rule over an infinite domain. The relation has no
 	// finite fixpoint and the call bindings n = 4, 3, 2, 1, 0, -1, -2, ... do not
 	// terminate either, so this needs the precondition ? < n > 0: to guard the
-	// recursive clause; see the notes on terminating a recursive service in compiler.c.
+	// recursive clause; see the notes on termination in compiler.md.
 	// ExecuteTest(testCompileRecursiveJoin1);
 
 	MathTeardown();

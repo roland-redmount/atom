@@ -24,7 +24,7 @@ We use C99 as the implementation language to stay close to the machine and avoid
 
 ## Documentation
 
-Currently maintained separately.
+Currently maintained separately. The compiler, which turns a query into an executable operator tree, is documented in [this document](compiler.md).
 
 ## Code conventions
 
