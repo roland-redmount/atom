@@ -840,7 +840,7 @@ static void teardownProjectOperator(Operator * op)
 Operator * CreateProjectOperator(
 	Operator * childOperator, size8 nArguments, index8 const * argumentMap)
 {
-	ASSERT(nArguments < childOperator->nArguments)
+	ASSERT(nArguments <= childOperator->nArguments)
 	Operator * op = createOperator(OPERATOR_PROJECT, nArguments, sizeof(ProjectContext));
 	op->impl.project.childOperator = childOperator;
 	AcquireOperator(childOperator);

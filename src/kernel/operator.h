@@ -341,16 +341,20 @@ Operator * CreateConstrainOperator(
 	size8 nArguments, index8 const * argumentMap, Operator * childOperator);
 
 /**
- * Create a PROJECT operator with the given number of arguments, which must be less than
- * the number of arguments of the child operator. The argumentMap array has length
- * nArguments and gives for each argument the index of the child argument it keeps;
- * the child arguments it does not name are dropped, as are the duplicate tuples that
- * dropping may produce.
+ * Create a PROJECT operator with the given number of arguments, which may not exceed the
+ * number of arguments of the child operator. The argumentMap array has length nArguments
+ * and gives for each argument the index of the child argument it keeps; the child
+ * arguments it does not name are dropped, as are the duplicate tuples that dropping may
+ * produce.
  *
  * Dropping an argument reorders the ones the child ordered below it, so a projection
  * cannot in general be streamed. This operator therefore materializes its child into a
  * B-tree, which both removes the duplicates and gives the operator its index order,
  * which is the identity permutation.
+ *
+ * Keeping every child argument is allowed, and drops nothing: it sorts the child into
+ * the identity index order, which is how two relations ordered differently are brought
+ * into the one order that UNION can merge them in.
  */
 Operator * CreateProjectOperator(
 	Operator * childOperator, size8 nArguments, index8 const * argumentMap);

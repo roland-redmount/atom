@@ -451,37 +451,123 @@ void testCompileRecursiveJoin1(void)
 }
 
 /**
- * Compile the query term (before x after y) under the rules
- * 
+ * The relation (prec x succ y), x immediately preceding y, holding the graph
+ *
+ *   a -> b -> c -> d      with c -> b closing a cycle
+ *   e -> f                a component nothing reaches from a
+ *
+ * The nodes are strings, and so are written quoted in a query: an actor must be a
+ * literal, and a bare word is a role name to the parser. The relation is stored ordered
+ * by the prec role, so that it can be looked up on it.
+ */
+#define TEST_N_PREC_SUCC_EDGES	5
+
+static struct {
+	Atom form;
+	index8 precIndex;
+	index8 succIndex;
+	RelationTable const * table;
+	TypedTuple * tuples[TEST_N_PREC_SUCC_EDGES];
+} precSuccFixture;
+
+
+static void setupPrecSuccFixture(void)
+{
+	Atom roles[2] = {
+		CreateNameFromCString("prec"),
+		CreateNameFromCString("succ")
+	};
+	precSuccFixture.form = CreatePredicateForm(roles, 2);
+	precSuccFixture.precIndex = PredicateRoleIndex(precSuccFixture.form, roles[0]);
+	precSuccFixture.succIndex = PredicateRoleIndex(precSuccFixture.form, roles[1]);
+	for(index8 i = 0; i < 2; i++)
+		NameRelease(roles[i]);
+
+	precSuccFixture.table = CreateRelationBTreeWithServices(
+		precSuccFixture.form, 2, (byte[]) {AT_ID, AT_ID},
+		(index8[]) {precSuccFixture.precIndex, precSuccFixture.succIndex});
+
+	char const * precNames[TEST_N_PREC_SUCC_EDGES] = {"a", "b", "c", "c", "e"};
+	char const * succNames[TEST_N_PREC_SUCC_EDGES] = {"b", "c", "d", "b", "f"};
+	for(index8 i = 0; i < TEST_N_PREC_SUCC_EDGES; i++) {
+		TypedAtom actors[2];
+		actors[precSuccFixture.precIndex] =
+			CreateTypedAtom(AT_ID, CreateStringFromCString(precNames[i]));
+		actors[precSuccFixture.succIndex] =
+			CreateTypedAtom(AT_ID, CreateStringFromCString(succNames[i]));
+		precSuccFixture.tuples[i] = CreateTypedTupleFromArray(actors, 2);
+		AssertFact(precSuccFixture.form, precSuccFixture.tuples[i], 0);
+		for(index8 j = 0; j < 2; j++)
+			ReleaseTypedAtom(actors[j]);
+	}
+}
+
+
+static void teardownPrecSuccFixture(void)
+{
+	for(index8 i = 0; i < TEST_N_PREC_SUCC_EDGES; i++) {
+		RetractFact(precSuccFixture.form, precSuccFixture.tuples[i]);
+		FreeTypedTuple(precSuccFixture.tuples[i]);
+	}
+	ServiceRegistryRemoveAll(precSuccFixture.table);
+	RelationRegistryRemove(precSuccFixture.table);
+	IFactRelease(precSuccFixture.form);
+}
+
+
+// The rules defining (before after) as the transitive closure of (prec succ)
+static void addTransitiveClosureRules(DictionaryEntry * base, DictionaryEntry * recursive)
+{
+	*base = DictionaryAddClauseFromCString(
+		"before _x after _y | ! prec _x succ _y");
+	*recursive = DictionaryAddClauseFromCString(
+		"before _x after _y | ! prec _x succ _z | ! before _z after _y");
+}
+
+
+/**
+ * Compile the query term (before a after d) under the rules
+ *
  *  before x after y <- prec x succ y
-  * before x after y <- prec x succ z & before z after y
-  * 
-  * where the relation (prec x succ y) indicates x is immediately preceding y
-  * (and y is immediately succeding x). This relation can be stored or computed.
- ** This query is a typical example of fixpoint semantics a'la Datalog.
+ *  before x after y <- prec x succ z & before z after y
+ *
+ * where the relation (prec x succ y) indicates x immediately preceding y. The second
+ * rule is recursive, so the query compiles to a FIXPOINT operator deriving the relation.
+ * This is a typical example of fixpoint semantics a'la Datalog, and the graph has a
+ * cycle, which a top-down resolution a'la Prolog would descend forever.
+ *
+ * Both roles of the query are bound, so the compiled service answers whether d comes
+ * after a, which it does through the path a -> b -> c -> d.
  */
 void testCompileRecursiveJoin2(void)
 {
-	DictionaryEntry entry1 = DictionaryAddClauseFromCString(
-		"before _x after _y | ! prec _x succ _y");
-	DictionaryEntry entry2 = DictionaryAddClauseFromCString(
-		"before _x after _y | ! prec _x succ _z | ! before _z after _y");
+	setupPrecSuccFixture();
+	DictionaryEntry entry1;
+	DictionaryEntry entry2;
+	addTransitiveClosureRules(&entry1, &entry2);
 
-	Formula * queryTerm = CStringToTerm("before a after d");
-	// TODO: add some tuples for the (before after) relation
-
+	Formula * queryTerm = CStringToTerm("before \"a\" after \"d\"");
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
-	// Call the service
-	Atom arguments[3];
-	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 3);
+	// Call the service. Both arguments are bound, so it yields the query tuple itself
+	// if the relation holds it, and nothing otherwise.
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
 	void * context = OperatorCreateContext(service.op, arguments);
 	ASSERT_TRUE(OperatorCall(context))
-	// TODO: check correct tuples
-	
+
+	Atom before = TermGetRoleActor(queryTerm->form, arguments, "before", 1);
+	Atom after = TermGetRoleActor(queryTerm->form, arguments, "after", 1);
+	Atom nodeA = CreateStringFromCString("a");
+	Atom nodeD = CreateStringFromCString("d");
+	ASSERT_UINT64_EQUAL(before.hash, nodeA.hash)
+	ASSERT_UINT64_EQUAL(after.hash, nodeD.hash)
+	IFactRelease(nodeA);
+	IFactRelease(nodeD);
+
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
@@ -490,6 +576,57 @@ void testCompileRecursiveJoin2(void)
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
+	teardownPrecSuccFixture();
+}
+
+
+/**
+ * The same rules with the after role left free, asking for every node reaching d from a.
+ * This is the query the derivation is driven by its call bindings for: the nodes after a
+ * are b, c and d, and the component e -> f is never derived, as nothing calls for it.
+ */
+void testCompileRecursiveReachable(void)
+{
+	setupPrecSuccFixture();
+	DictionaryEntry entry1;
+	DictionaryEntry entry2;
+	addTransitiveClosureRules(&entry1, &entry2);
+
+	Formula * queryTerm = CStringToTerm("before \"a\" after _y");
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Service service = services[0];
+
+	// The nodes after a, which the fixpoint yields in its own order
+	char const * expectedNodes[3] = {"b", "c", "d"};
+	bool found[3] = {false, false, false};
+
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
+	void * context = OperatorCreateContext(service.op, arguments);
+	size32 nTuples = 0;
+	while(OperatorCall(context)) {
+		Atom after = TermGetRoleActor(queryTerm->form, arguments, "after", 1);
+		for(index8 i = 0; i < 3; i++) {
+			Atom node = CreateStringFromCString(expectedNodes[i]);
+			found[i] = found[i] || (after.hash == node.hash);
+			IFactRelease(node);
+		}
+		nTuples++;
+	}
+	OperatorFreeContext(context);
+
+	ASSERT_UINT32_EQUAL(nTuples, 3)
+	for(index8 i = 0; i < 3; i++)
+		ASSERT_TRUE(found[i])
+
+	ServiceRegistryRemove(service.relation, service.op);
+	RelationRegistryRemove(service.relation);
+	FreeFormula(queryTerm);
+	DictionaryRemoveClause(&entry2);
+	DictionaryRemoveClause(&entry1);
+	teardownPrecSuccFixture();
 }
 
 
@@ -507,9 +644,14 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileUnconstrainedHeadVariable);
 	ExecuteTest(testCompileConstrain);
 
-	// TODO: Compiling recursive rules
+	ExecuteTest(testCompileRecursiveJoin2);
+	ExecuteTest(testCompileRecursiveReachable);
+
+	// TODO: compiling a recursive rule over an infinite domain. The relation has no
+	// finite fixpoint and the call bindings n = 4, 3, 2, 1, 0, -1, -2, ... do not
+	// terminate either, so this needs the precondition ? < n > 0: to guard the
+	// recursive clause; see the notes on terminating a recursive service in compiler.c.
 	// ExecuteTest(testCompileRecursiveJoin1);
-	// ExecuteTest(testCompileRecursiveJoin2);
 
 	MathTeardown();
 	TestSummary();
