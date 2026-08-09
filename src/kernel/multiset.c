@@ -38,6 +38,32 @@ RelationTable const * findMultisetRelation(byte elementType)
 }
 
 
+/**
+ * Find the relation associated with a multiset, which is the inverse of
+ * findMultisetRelation() and tells us the element type of an existing multiset.
+ */
+static RelationTable const * lookupMultisetRelation(Atom multiset)
+{
+	return LookupFindRelation(
+		multiset,
+		GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE),
+		GetCoreRoleName(ROLE_MULTISET)
+	);
+}
+
+
+/**
+ * The atom type of the elements of an existing multiset, which its relation determines.
+ */
+static byte findMultisetElementType(Atom multiset)
+{
+	RelationTable const * relation = lookupMultisetRelation(multiset);
+	return relation->atomTypes[
+		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)
+	];
+}
+
+
 void AddMultisetToIFact(
 	IFactDraft * draft,
 	MultisetElementGenerator generator, void const * data, size32 nUniqueElements, byte elementType)
@@ -123,9 +149,16 @@ bool IsMultiset(Atom atom)
 
 size32 MultisetGetElementMultiple(Atom multiset, Atom element)
 {
-	// TODO
-	ASSERT(false);
-	return 0;
+	MultisetIterator iterator;
+	MultisetIterate(multiset, findMultisetElementType(multiset), &iterator);
+	size32 multiple = 0;
+	while(!multiple && MultisetIteratorNext(&iterator)) {
+		ElementMultiple em = MultisetIteratorGetElement(&iterator);
+		if(em.element.hash == element.hash)
+			multiple = em.multiple;
+	}
+	MultisetIteratorEnd(&iterator);
+	return multiple;
 }
 
 
@@ -201,25 +234,9 @@ size32 MultisetSize(Atom multiset, byte elementType)
 	return size;
 }
 
-/**
- * Find the relation associated with a multiset.
- * This can be used to determine the element type.
- */
-static RelationTable const * lookupMultisetRelation(Atom multiset)
-{
-	return LookupFindRelation(
-		multiset,
-		GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE),
-		GetCoreRoleName(ROLE_MULTISET)
-	);
-}
-
 void PrintMultiset(Atom multiset)
 {
-	RelationTable const * relation = lookupMultisetRelation(multiset);
-	byte elementType = relation->atomTypes[
-		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)
-	];
+	byte elementType = findMultisetElementType(multiset);
 	PrintChar('{');
 	MultisetIterator iterator;
 	MultisetIterate(multiset, elementType, &iterator);
@@ -227,7 +244,6 @@ void PrintMultiset(Atom multiset)
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		PrintTypedAtom(CreateTypedAtom(elementType, em.element));
 		PrintF("(%u)", em.multiple);
-		MultisetIteratorNext(&iterator);
 	}
 	MultisetIteratorEnd(&iterator);
 	PrintChar('}');

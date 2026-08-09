@@ -43,7 +43,14 @@ static void testMultiset(void)
 	}
 	ASSERT_FALSE(MultisetIteratorNext(&iterator))
 	MultisetIteratorEnd(&iterator);
- 
+
+	// the multiple of each element, and zero for an element the multiset does not hold
+	for(index32 i = 0; i < TEST_MULTISET_N_UNIQUE; i++)
+		ASSERT_UINT32_EQUAL(MultisetGetElementMultiple(multiset, elements[i]), multiples[i])
+	Atom four = CreateNameFromCString("four");
+	ASSERT_UINT32_EQUAL(MultisetGetElementMultiple(multiset, four), 0)
+	NameRelease(four);
+
 	// creating again from the same elements should yield the same atom, with one additional reference
 	Atom multiset2 = CreateMultisetFromArrays(elements, multiples, TEST_MULTISET_N_UNIQUE, AT_NAME);
 	ASSERT_DATA64_EQUAL(multiset.hash, multiset2.hash)

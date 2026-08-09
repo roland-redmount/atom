@@ -1015,16 +1015,7 @@ static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
 		TermFormGetPredicateForm(queryTermForm),
 		!TermFormGetSign(queryTermForm)
 	);
-	// NOTE: MultisetGetElementMultiple() would say this directly, but is not implemented
-	bool recursive = false;
-	MultisetIterator termFormIterator;
-	MultisetIterate(clauseForm, AT_ID, &termFormIterator);
-	while(!recursive && MultisetIteratorNext(&termFormIterator)) {
-		ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
-		recursive = (em.element.hash == recursiveTermForm.hash);
-	}
-	MultisetIteratorEnd(&termFormIterator);
-
+	bool recursive = MultisetGetElementMultiple(clauseForm, recursiveTermForm) > 0;
 	IFactRelease(recursiveTermForm);
 	return recursive;
 }
