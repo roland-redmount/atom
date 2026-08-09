@@ -1538,6 +1538,25 @@ static void printOperatorHead(Operator const * op, char const * name)
 }
 
 
+/**
+ * Print the arguments a caller binds when calling a fixpoint or recurse operator, as
+ * "<0 2>", following the convention that marks an input parameter of a service. An
+ * operator binding none prints nothing.
+ */
+static void printInputArguments(index8 const * inputArguments, size8 nInputs)
+{
+	if(!nInputs)
+		return;
+	PrintChar('<');
+	for(index8 i = 0; i < nInputs; i++) {
+		if(i)
+			PrintChar(' ');
+		PrintF("%u", inputArguments[i]);
+	}
+	PrintChar('>');
+}
+
+
 void PrintOperator(Operator const * op)
 {
 	switch(op->type) {
@@ -1597,6 +1616,8 @@ void PrintOperator(Operator const * op)
 
 	case OPERATOR_FIXPOINT:
 		printOperatorHead(op, "FIXPOINT");
+		printInputArguments(
+			op->impl.fixpoint.inputArguments, op->impl.fixpoint.nInputs);
 		PrintChar('(');
 		PrintOperator(op->impl.fixpoint.childOperator);
 		PrintChar(')');
@@ -1604,6 +1625,8 @@ void PrintOperator(Operator const * op)
 
 	case OPERATOR_RECURSE:
 		printOperatorHead(op, "RECURSE");
+		printInputArguments(
+			op->impl.recurse.inputArguments, op->impl.recurse.nInputs);
 		break;
 
 	case OPERATOR_MACHINE:
