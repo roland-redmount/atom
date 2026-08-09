@@ -73,8 +73,8 @@ void testCompilePermute2(void)
 	Service service = services[0];
 
 	// Call the service
-	Atom arguments[3];
-	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 3);
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
 	void * context = OperatorCreateContext(service.op, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
@@ -400,14 +400,29 @@ void testCompileConstrain(void)
 }
 
 
-void testCompileRecursiveJoin(void)
+/**
+ * Compile the query term (number 4 faculty f) under the recursive rule
+ * 
+ *  number n faculty f <- + m + 1 = n & number m faculty e & * e * n = f
+ * 
+ * with the fact (number 0 faculty 1) terminating the recursion.
+ * This query is typical of recursive logical resolution a'la Prolog.
+ */
+void testCompileRecursiveJoin1(void)
 {
-	// TODO: Compile a recursive rule to a JOIN service
-	// number n faculty f <- + m + 1 = n & number m faculty e & * e * n = f
+	// The recursive rule
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
 		"number _n faculty _f | ! + _m + 1 = _n | ! number _m faculty _e | ! * _e * _n = _f");
+	// Create terminating fact, provide by a B-tree service
+	Formula * terminatingFact = CStringToTerm("number 0 faculty 1");	
+	RelationTable const * table = CreateRelationBTreeWithServices(
+		terminatingFact->form, 2,
+		TypedTuplePeekAtomTypes(terminatingFact->actors),
+		(index8[]) {0, 1}
+	);
+	AssertFact(terminatingFact->form, terminatingFact->actors, 0);
+	// Compile the query
 	Formula * queryTerm = CStringToTerm("number 4 faculty _f");
-
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
@@ -428,7 +443,53 @@ void testCompileRecursiveJoin(void)
 	ServiceRegistryRemove(service.relation, service.op);
 	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
+	RetractFact(terminatingFact->form, terminatingFact->actors);
+	ServiceRegistryRemoveAll(table);
+	RelationRegistryRemove(table);
+	FreeFormula(terminatingFact);
 	DictionaryRemoveClause(&entry);
+}
+
+/**
+ * Compile the query term (before x after y) under the rules
+ * 
+ *  before x after y <- prec x succ y
+  * before x after y <- prec x succ z & before z after y
+  * 
+  * where the relation (prec x succ y) indicates x is immediately preceding y
+  * (and y is immediately succeding x). This relation can be stored or computed.
+ ** This query is a typical example of fixpoint semantics a'la Datalog.
+ */
+void testCompileRecursiveJoin2(void)
+{
+	DictionaryEntry entry1 = DictionaryAddClauseFromCString(
+		"before _x after _y | ! prec _x succ _y");
+	DictionaryEntry entry2 = DictionaryAddClauseFromCString(
+		"before _x after _y | ! prec _x succ _z | ! before _z after _y");
+
+	Formula * queryTerm = CStringToTerm("before a after d");
+	// TODO: add some tuples for the (before after) relation
+
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Service service = services[0];
+
+	// Call the service
+	Atom arguments[3];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 3);
+	void * context = OperatorCreateContext(service.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	// TODO: check correct tuples
+	
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	ServiceRegistryRemove(service.relation, service.op);
+	RelationRegistryRemove(service.relation);
+	FreeFormula(queryTerm);
+	DictionaryRemoveClause(&entry2);
+	DictionaryRemoveClause(&entry1);
 }
 
 
@@ -445,7 +506,10 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileUnion);
 	ExecuteTest(testCompileUnconstrainedHeadVariable);
 	ExecuteTest(testCompileConstrain);
-	// ExecuteTest(testCompileRecursiveJoin);
+
+	// TODO: Compiling recursive rules
+	// ExecuteTest(testCompileRecursiveJoin1);
+	// ExecuteTest(testCompileRecursiveJoin2);
 
 	MathTeardown();
 	TestSummary();

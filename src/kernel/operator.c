@@ -7,7 +7,8 @@
 
 
 /**
- * Create an Operator and setup common fields.
+ * Create an Operator and setup common fields. The index order is left undeclared,
+ * for the caller to derive from its children or take from its provider.
  * The caller obtains a reference to the created operator.
  */
 static Operator * createOperator(enum OperatorType type, size8 nArguments, size32 contextSize)
@@ -18,8 +19,84 @@ static Operator * createOperator(enum OperatorType type, size8 nArguments, size3
 	op->nArguments = nArguments;
 	op->referenceCount = 1;
 	op->contextSize = contextSize;
+	op->indexOrder = 0;
 	return op;
 }
+
+
+/**
+ * Allocate the index order of an operator, for a caller that is about to fill it in.
+ */
+static index8 * allocateIndexOrder(Operator * op)
+{
+	ASSERT(!op->indexOrder)
+	op->indexOrder = op->nArguments ? Allocate(op->nArguments) : 0;
+	return op->indexOrder;
+}
+
+
+/**
+ * The index order to derive from when a child declares none, being an operator that
+ * yields at most one tuple: the natural order is then as valid as any other.
+ * Written into the given array, which must have room for the child's arguments.
+ */
+static index8 const * effectiveIndexOrder(Operator const * childOperator, index8 naturalOrder[])
+{
+	if(childOperator->indexOrder)
+		return childOperator->indexOrder;
+	for(index8 i = 0; i < childOperator->nArguments; i++)
+		naturalOrder[i] = i;
+	return naturalOrder;
+}
+
+
+#ifdef DEBUG
+/**
+ * Verify that an index order is a permutation of the argument indices.
+ */
+static void assertIsIndexOrder(index8 const * indexOrder, size8 nArguments)
+{
+	bool present[nArguments];
+	SetMemory(present, nArguments * sizeof(bool), 0);
+	for(index8 i = 0; i < nArguments; i++) {
+		ASSERT(indexOrder[i] < nArguments)
+		ASSERT(!present[indexOrder[i]])
+		present[indexOrder[i]] = true;
+	}
+}
+#endif
+
+
+/**
+ * Derive the index order of an operator that relabels its child arguments, by taking
+ * the child arguments in the child's order and mapping each to the argument it provides.
+ * A child argument taken from elsewhere (the constants of a permute operator) has no
+ * argument to contribute, and one whose argument was already contributed by an earlier
+ * child argument (the collapsed arguments of a constrain operator) contributes nothing
+ * further, being equal to it in every yielded tuple.
+ *
+ * Relabeling the arguments of a relation of at most one tuple gives a relation of at
+ * most one tuple, so a child declaring no order leaves this operator undeclared too.
+ */
+static void deriveIndexOrderFromChild(
+	Operator * op, Operator const * childOperator, index8 const * argumentMap)
+{
+	if(!childOperator->indexOrder)
+		return;
+	index8 * indexOrder = allocateIndexOrder(op);
+	bool contributed[op->nArguments];
+	SetMemory(contributed, op->nArguments * sizeof(bool), 0);
+	size8 nOrdered = 0;
+	for(index8 i = 0; i < childOperator->nArguments; i++) {
+		index8 argument = argumentMap[childOperator->indexOrder[i]];
+		if((argument >= op->nArguments) || contributed[argument])
+			continue;
+		contributed[argument] = true;
+		indexOrder[nOrdered++] = argument;
+	}
+	ASSERT(nOrdered == op->nArguments)
+}
+
 
 /**
  * Copy parent arguments to a child arguments tuple, as given by an argument map.
@@ -115,6 +192,7 @@ Operator * CreatePermuteOperator(
 
 	op->impl.permute.argumentMap = Allocate(childOperator->nArguments);
 	CopyMemory(argumentMap, op->impl.permute.argumentMap, childOperator->nArguments);
+	deriveIndexOrderFromChild(op, childOperator, argumentMap);
 	return op;
 }
 
@@ -218,6 +296,7 @@ Operator * CreateConstrainOperator(
 
 	op->impl.constrain.argumentMap = Allocate(childOperator->nArguments);
 	CopyMemory(argumentMap, op->impl.constrain.argumentMap, childOperator->nArguments);
+	deriveIndexOrderFromChild(op, childOperator, argumentMap);
 	return op;
 }
 
@@ -352,6 +431,35 @@ Operator * CreateJoinOperator(
 	assertArgumentsAreDistinct(leftMap, leftChild->nArguments, nArguments);
 	assertArgumentsAreDistinct(rightMap, rightChild->nArguments, nArguments);
 #endif
+
+	// The left child gives the major key: it yields ascending and the join keeps every
+	// one of its arguments. The join arguments are then constant within one left tuple,
+	// so the right child orders only the arguments it does not share with the left.
+	// Joining two relations of at most one tuple gives at most one tuple, and only then
+	// is the join left undeclared.
+	if(leftChild->indexOrder || rightChild->indexOrder) {
+		index8 leftNaturalOrder[leftChild->nArguments];
+		index8 rightNaturalOrder[rightChild->nArguments];
+		index8 const * leftOrder = effectiveIndexOrder(leftChild, leftNaturalOrder);
+		index8 const * rightOrder = effectiveIndexOrder(rightChild, rightNaturalOrder);
+		index8 * indexOrder = allocateIndexOrder(op);
+		bool ordered[nArguments];
+		SetMemory(ordered, nArguments * sizeof(bool), 0);
+		size8 nOrdered = 0;
+		for(index8 i = 0; i < leftChild->nArguments; i++) {
+			index8 argument = leftMap[leftOrder[i]];
+			ordered[argument] = true;
+			indexOrder[nOrdered++] = argument;
+		}
+		for(index8 i = 0; i < rightChild->nArguments; i++) {
+			index8 argument = rightMap[rightOrder[i]];
+			if(ordered[argument])
+				continue;
+			ordered[argument] = true;
+			indexOrder[nOrdered++] = argument;
+		}
+		ASSERT(nOrdered == nArguments)
+	}
 
 	return op;
 }
@@ -490,6 +598,20 @@ Operator * CreateUnionOperator(Operator * first, Operator * second)
 {
 	ASSERT(first->nArguments == second->nArguments)
 	Operator * op = createOperator(OPERATOR_UNION, first->nArguments, sizeof(UnionContext));
+
+	// Merging two ordered relations is only meaningful if they are ordered alike. A child
+	// declaring no order yields at most one tuple and so is ordered alike with any other;
+	// if neither declares one, the union of the two may still hold two tuples, and the
+	// natural order serves to merge them.
+	index8 naturalOrder[first->nArguments];
+	index8 const * indexOrder = first->indexOrder
+		? first->indexOrder
+		: effectiveIndexOrder(second, naturalOrder);
+	ASSERT(
+		!first->indexOrder || !second->indexOrder
+		|| (CompareMemory(first->indexOrder, second->indexOrder, first->nArguments) == 0)
+	)
+	CopyMemory(indexOrder, allocateIndexOrder(op), first->nArguments);
 	op->impl._union.first = first;
 	AcquireOperator(first);
 	op->impl._union.second = second;
@@ -558,12 +680,16 @@ static bool unionCall(OperatorContext * context)
 		return true;
 	}
 
-	// Compare the newly obtained arguments tuple with the lookahead tuple 
-	int8 order = TupleCompare(context->arguments, unionContext->lookahead, nArguments);
+	// Compare the newly obtained arguments tuple with the lookahead tuple, in the order
+	// the two child operators agree on
+	index8 const * indexOrder = context->op->indexOrder;
+	int8 order = TupleCompareInOrder(
+		context->arguments, unionContext->lookahead, indexOrder, nArguments);
 	if(order == 0) {
 		// Duplicate tuple, acquire next (only one tuple can be equal)
 		if(OperatorCall(unionContext->nextContext)) {
-			order = TupleCompare(context->arguments, unionContext->lookahead, nArguments);
+			order = TupleCompareInOrder(
+				context->arguments, unionContext->lookahead, indexOrder, nArguments);
 			ASSERT(order > 0)
 		}
 	}
@@ -592,11 +718,12 @@ static void unionFinalizeContext(OperatorContext * context)
 //------------------------------------- OPERATOR_PROJECT -----------------------------------------
 
 /**
- * PROJECT keeps the first nArguments arguments of its child operator and drops the rest.
+ * PROJECT keeps the child arguments named by its argument map and drops the rest.
  * Dropping arguments may leave duplicate tuples, so we enumerate the entire child relation
  * into a B-tree keyed on the kept arguments, which both removes duplicates and orders the
- * result. As the kept arguments are a prefix of the child arguments tuple, the B-tree key
- * is simply the leading part of that tuple and needs no rearranging.
+ * result. Materializing is what a projection generally requires: dropping an argument
+ * reorders the arguments the child ordered below it, so the child's order does not carry
+ * over to the projected tuples.
  */
 typedef struct s_ProjectContext {
 	// B-tree holding the unique, ordered tuples
@@ -615,26 +742,32 @@ static void projectSetupContext(OperatorContext * context)
 {
 	ProjectContext * projectContext = (ProjectContext *) &context->data;
 
-	Operator * childOperator = context->op->impl.project.childOperator;
-	size8 nArguments = context->op->nArguments;
+	Operator const * op = context->op;
+	Operator * childOperator = op->impl.project.childOperator;
+	size8 nArguments = op->nArguments;
 	size8 nChildArguments = childOperator->nArguments;
 
-	// The child arguments tuple takes the caller's input arguments in its leading
-	// positions; the dropped arguments are left unbound so the child enumerates them.
+	// The child arguments tuple takes the caller's input arguments in the kept positions;
+	// the dropped arguments are left unbound so the child enumerates them.
 	Atom * childArguments = Allocate(nChildArguments * sizeof(Atom));
-	CopyMemory(context->arguments, childArguments, nArguments * sizeof(Atom));
-	SetMemory(&childArguments[nArguments], (nChildArguments - nArguments) * sizeof(Atom), 0);
+	SetMemory(childArguments, nChildArguments * sizeof(Atom), 0);
+	for(index8 i = 0; i < nArguments; i++)
+		childArguments[op->impl.project.argumentMap[i]] = context->arguments[i];
 
 	OperatorContext * childContext = OperatorCreateContext(childOperator, childArguments);
-	// Retrieve all tuples from the child relation, keeping the leading arguments only
+	// Retrieve all tuples from the child relation, gathering the kept arguments
 	projectContext->btree = BTreeCreate(
 		nArguments * sizeof(Atom),
 		btreeCompareTuples,
 		0
 	);
+	Atom * projectedTuple = Allocate(nArguments * sizeof(Atom));
 	while(OperatorCall(childContext)) {
-		BTreeInsert(projectContext->btree, childArguments);
+		for(index8 i = 0; i < nArguments; i++)
+			projectedTuple[i] = childArguments[op->impl.project.argumentMap[i]];
+		BTreeInsert(projectContext->btree, projectedTuple);
 	}
+	Free(projectedTuple);
 	OperatorFreeContext(childContext);
 	Free(childArguments);
 	// Setup B-tree iterator
@@ -671,15 +804,35 @@ static void teardownProjectOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_PROJECT)
 	ReleaseOperator(op->impl.project.childOperator);
+	Free(op->impl.project.argumentMap);
 }
 
 
-Operator * CreateProjectOperator(Operator * childOperator, size8 nArguments)
+Operator * CreateProjectOperator(
+	Operator * childOperator, size8 nArguments, index8 const * argumentMap)
 {
 	ASSERT(nArguments < childOperator->nArguments)
 	Operator * op = createOperator(OPERATOR_PROJECT, nArguments, sizeof(ProjectContext));
 	op->impl.project.childOperator = childOperator;
 	AcquireOperator(childOperator);
+
+#ifdef DEBUG
+	// Each kept argument must name a distinct child argument
+	bool kept[childOperator->nArguments];
+	SetMemory(kept, childOperator->nArguments * sizeof(bool), 0);
+	for(index8 i = 0; i < nArguments; i++) {
+		ASSERT(argumentMap[i] < childOperator->nArguments)
+		ASSERT(!kept[argumentMap[i]])
+		kept[argumentMap[i]] = true;
+	}
+#endif
+
+	op->impl.project.argumentMap = Allocate(nArguments);
+	CopyMemory(argumentMap, op->impl.project.argumentMap, nArguments);
+	// The B-tree orders the projected tuples as they are laid out
+	index8 * indexOrder = allocateIndexOrder(op);
+	for(index8 i = 0; i < nArguments; i++)
+		indexOrder[i] = i;
 	return op;
 }
 
@@ -707,11 +860,19 @@ static void machineFinalizeContext(OperatorContext * context)
 }
 
 
-Operator * CreateMachineOperator(size8 nArguments, MachineProvider * provider, void * providerData)
+Operator * CreateMachineOperator(
+	size8 nArguments, index8 const * indexOrder, MachineProvider * provider, void * providerData)
 {
 	Operator * op = createOperator(OPERATOR_MACHINE, nArguments, provider->contextSize);
 	op->impl.machine.provider = provider;
 	op->impl.machine.providerData = providerData;
+	// A provider yielding at most one tuple declares no order
+	if(indexOrder) {
+		CopyMemory(indexOrder, allocateIndexOrder(op), nArguments);
+#ifdef DEBUG
+		assertIsIndexOrder(op->indexOrder, nArguments);
+#endif
+	}
 	return op;
 }
 
@@ -766,6 +927,8 @@ void ReleaseOperator(Operator * op)
 			ASSERT(false)
 			break;
 		}
+		if(op->indexOrder)
+			Free(op->indexOrder);
 		Free(op);
 	}
 }
@@ -812,31 +975,69 @@ OperatorContext * OperatorCreateContext(Operator const * op, Atom arguments[])
 }
 
 
+#ifdef DEBUG
+/**
+ * Verify that the tuple just yielded ascends strictly with respect to the operator's
+ * index order, which is the ordering contract every operator must uphold; see operator.h.
+ * A machine operator failing this is a fault in its provider, which declared an order
+ * it does not yield in.
+ */
+static void assertTupleAscends(OperatorContext * context)
+{
+	Operator const * op = context->op;
+	if(!op->nArguments)
+		return;
+	if(context->previousTuple) {
+		// An operator declaring no index order claims to yield at most one tuple
+		ASSERT(op->indexOrder)
+		ASSERT(TupleCompareInOrder(
+			context->previousTuple, context->arguments, op->indexOrder, op->nArguments) < 0)
+	}
+	else
+		context->previousTuple = Allocate(op->nArguments * sizeof(Atom));
+	CopyMemory(context->arguments, context->previousTuple, op->nArguments * sizeof(Atom));
+}
+#endif
+
+
 bool OperatorCall(OperatorContext * context)
 {
+	bool success;
 	switch(context->op->type) {
 	case OPERATOR_PERMUTE:
-		return permuteCall(context);
+		success = permuteCall(context);
+		break;
 
 	case OPERATOR_JOIN:
-		return joinCall(context);
+		success = joinCall(context);
+		break;
 
 	case OPERATOR_UNION:
-		return unionCall(context);
+		success = unionCall(context);
+		break;
 
 	case OPERATOR_PROJECT:
-		return projectCall(context);
+		success = projectCall(context);
+		break;
 
 	case OPERATOR_CONSTRAIN:
-		return constrainCall(context);
+		success = constrainCall(context);
+		break;
 
 	case OPERATOR_MACHINE:
-		return machineCall(context);
-	
+		success = machineCall(context);
+		break;
+
 	default:
 		ASSERT(false)
-		return false;
+		success = false;
+		break;
 	}
+#ifdef DEBUG
+	if(success)
+		assertTupleAscends(context);
+#endif
+	return success;
 }
 
 
@@ -871,6 +1072,10 @@ void OperatorFreeContext(OperatorContext * context)
 		ASSERT(false)
 		break;
 	}
+#ifdef DEBUG
+	if(context->previousTuple)
+		Free(context->previousTuple);
+#endif
 	Free(context);
 }
 
@@ -884,11 +1089,31 @@ bool OperatorCallOnce(Operator const * op, Atom arguments[])
 }
 
 
+/**
+ * Print the name and arity of an operator, followed by the order in which it yields
+ * its tuples, as "JOIN/3[0 2 1]". An operator that declares no order, yielding at most
+ * one tuple, prints an empty "[]".
+ */
+static void printOperatorHead(Operator const * op, char const * name)
+{
+	PrintF("%s/%u[", name, op->nArguments);
+	if(op->indexOrder) {
+		for(index8 i = 0; i < op->nArguments; i++) {
+			if(i)
+				PrintChar(' ');
+			PrintF("%u", op->indexOrder[i]);
+		}
+	}
+	PrintChar(']');
+}
+
+
 void PrintOperator(Operator const * op)
 {
 	switch(op->type) {
 	case OPERATOR_PERMUTE:
-		PrintF("PERMUTE/%u(", op->nArguments);
+		printOperatorHead(op, "PERMUTE");
+		PrintChar('(');
 		for(index8 i = 0; i < op->impl.permute.childOperator->nArguments; i++)
 			PrintF("%u ", op->impl.permute.argumentMap[i]);
 		PrintChar('{');
@@ -903,7 +1128,8 @@ void PrintOperator(Operator const * op)
 		break;
 
 	case OPERATOR_JOIN:
-		PrintF("JOIN/%u(", op->nArguments);
+		printOperatorHead(op, "JOIN");
+		PrintChar('(');
 		for(index8 i = 0; i < op->impl.join.left->nArguments; i++)
 			PrintF("%u ", op->impl.join.leftMap[i]);
 		PrintOperator(op->impl.join.left);
@@ -914,20 +1140,25 @@ void PrintOperator(Operator const * op)
 		break;
 
 	case OPERATOR_UNION:
-		PrintF("UNION/%u(", op->nArguments);
+		printOperatorHead(op, "UNION");
+		PrintChar('(');
 		PrintOperator(op->impl._union.first);
 		PrintOperator(op->impl._union.second);
 		PrintChar(')');
 		break;
 
 	case OPERATOR_PROJECT:
-		PrintF("PROJECT/%u(", op->nArguments);
+		printOperatorHead(op, "PROJECT");
+		PrintChar('(');
+		for(index8 i = 0; i < op->nArguments; i++)
+			PrintF("%u ", op->impl.project.argumentMap[i]);
 		PrintOperator(op->impl.project.childOperator);
 		PrintChar(')');
 		break;
 
 	case OPERATOR_CONSTRAIN:
-		PrintF("CONSTRAIN/%u(", op->nArguments);
+		printOperatorHead(op, "CONSTRAIN");
+		PrintChar('(');
 		for(index8 i = 0; i < op->impl.constrain.childOperator->nArguments; i++)
 			PrintF("%u ", op->impl.constrain.argumentMap[i]);
 		PrintOperator(op->impl.constrain.childOperator);
@@ -935,7 +1166,7 @@ void PrintOperator(Operator const * op)
 		break;
 
 	case OPERATOR_MACHINE:
-		PrintF("MACHINE/%u", op->nArguments);
+		printOperatorHead(op, "MACHINE");
 		break;
 
 	default:

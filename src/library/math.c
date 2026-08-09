@@ -28,6 +28,10 @@
 // These are needed by MathTeardown()
 RelationTable const * mathRelations[N_RELATIONS];
 
+// Every math operator computes a single tuple from its inputs, and so declares no
+// index order; see the ordering contract in operator.h
+static index8 const * mathIndexOrder = 0;
+
 // Precomputed argument indexes, in "reference" order
 // TODO: This is similar to kernel.corePredicateRoleIndex,
 // we should have a more general mechanism for handling "user order"
@@ -53,7 +57,7 @@ static void setupAdd1(void)
 	parameterIO[argumentIndex[1]] = PARAMETER_IN;
 	parameterIO[argumentIndex[2]] = PARAMETER_OUT;
 
-	Operator * op = CreateMachineOperator(3, &mathProvider, (void *) ADD1_INDEX);
+	Operator * op = CreateMachineOperator(3, mathIndexOrder, &mathProvider, (void *) ADD1_INDEX);
 	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, op);
 	ReleaseOperator(op);
 }
@@ -80,7 +84,7 @@ static void setupAdd2(void)
 	parameterIO[argumentIndex[1]] = PARAMETER_OUT;
 	parameterIO[argumentIndex[2]] = PARAMETER_IN;
 
-	Operator * op = CreateMachineOperator(3, &mathProvider, (void *) ADD2_INDEX);
+	Operator * op = CreateMachineOperator(3, mathIndexOrder, &mathProvider, (void *) ADD2_INDEX);
 	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, op);
 	ReleaseOperator(op);	
 }
@@ -106,7 +110,7 @@ static void setupMul1(void)
 	parameterIO[argumentIndex[1]] = PARAMETER_IN;
 	parameterIO[argumentIndex[2]] = PARAMETER_OUT;
 
-	Operator * op = CreateMachineOperator(3, &mathProvider, (void *) MUL1_INDEX);
+	Operator * op = CreateMachineOperator(3, mathIndexOrder, &mathProvider, (void *) MUL1_INDEX);
 	ServiceRegistryAdd(mathRelations[MUL_RELATION], parameterIO, op);
 	ReleaseOperator(op);
 }

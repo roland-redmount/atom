@@ -141,26 +141,105 @@
 
  /**
   * Compiling a recursive service: consider the classic
-  * 
+  *
   *   integer n factorial f <-
   *     + m + 1 = n & integer m factorial e & * n * e = f
-  * 
+  *
   * Together with the fact (integer 0 factorial 1) terminating the recursion.
   * (We will need a precondition ? < n > 0: to ensure unique dispatch, but we
   * ignore this for now.) When compiling this service, the child service
   * (integer m factorial e) will require the service we are currently compiling,
   * so it must be considered by dispatch somehow.
-  * 
-  * We will compile the query (integer 1<INT factorial f). To construct the first 
+  *
+  * We will compile the query (integer 1<INT factorial f). To construct the first
   * JOIN operator we will need two resolved terms. The first term (+ m + 1 = n)
   * matches service (+ 1>INT + 2<INT = 3<INT) and we obtain
-  * 
+  *
   *   JOIN(+ 2>INT + 1 = $1>INT, ...)
-  * 
+  *
   * the second term is then (integer 2<INT factorial e). We cannot match this to
   * the current service however, since we do not yet know the type of the argument e.
   * TODO: this will likely require a separate OPERATOR_RECURSE or similar that is
   * treated specially by the compiler.
+  */
+
+
+ /**
+  * The shape of a recursive operator tree. A recursive rule gives an operator
+  * tree that is a graph rather than a tree: some leaf of it refers back to the
+  * operator at its root. The compiled (integer n factorial f) would be
+  *
+  *   UNION(base clause, PROJECT(JOIN(..., JOIN(RECURSE, ...))))
+  *
+  * Note that the cycle is in the plan, not in any one evaluation of it: the
+  * recursion terminates on the values, as in any recursive procedure.
+  *
+  * What blocks this today is not the cycle but OperatorCreateContext(), which
+  * builds the whole context tree eagerly: a permute context creates its child
+  * context, a join context creates its left context and calls it, a union
+  * context creates both and takes a lookahead tuple, and a project context
+  * drains its entire child relation. On a cyclic graph that recursion never
+  * bottoms out, and it does so at construction time, where there are no values
+  * to terminate on.
+  *
+  * Creating each child context lazily, on the first call that needs a tuple
+  * from it, fixes exactly that. Contexts then become what stack frames are to
+  * a recursive procedure: one per active invocation, created as the recursion
+  * descends and freed as it unwinds. Nothing else about the split between
+  * operators and contexts needs to change, as an operator is immutable once
+  * constructed and all evaluation state already lives in the context. Contexts
+  * are already per-invocation rather than per-operator: a join operator creates
+  * a fresh right context for every left tuple, while its left context is live.
+  *
+  * The back edge should be an operator of its own rather than a pointer from
+  * some existing operator back to the root, so that every traversal
+  * (PrintOperator(), teardown, any later optimization) can see the cycle
+  * instead of following it forever. Its reference to the root must not be
+  * counted, or the reference count of a recursive service could never reach
+  * zero; the service registry holds the one owning reference, and removing the
+  * service tears the whole cycle down. The pointer is only known once
+  * compilation completes, so it is back-patched at the end.
+  *
+  * Giving a context a pointer to its parent context would also be worth having:
+  * it gives a recursion depth for a guard against runaway recursion, and
+  * something to print when a query misbehaves.
+  */
+
+
+ /**
+  * Terminating a recursive service. Two problems remain once the tree above can
+  * be evaluated at all, and neither is solved by the operator alone.
+  *
+  * The first is evaluation order. A UNION operator merges two sorted children
+  * and so must hold a lookahead tuple from each, which means it enters the
+  * recursive branch even when the base clause alone would answer the query.
+  * That is the opposite of Prolog, where clause order lets the base case answer
+  * without the recursive clause ever being tried. A recursive union may
+  * therefore want to be an ordered concatenation of its children instead, with
+  * duplicate removal left to an enclosing PROJECT. This also matters because
+  * the sortedness a UNION assumes of its children is not something a recursive
+  * branch obviously provides.
+  *
+  * The second is that nothing guarantees termination. For the factorial rule
+  * above, the fact (integer 0 factorial 1) is not by itself enough: evaluating
+  * the query for n = 0 finds the fact, but the recursive clause is also tried,
+  * computing m = -1 and descending forever. The recursive clause needs a
+  * guard -- the precondition noted above -- or an evaluation order that answers
+  * from the base clause first.
+  *
+  * Rules over a finite stored relation are a different case. With
+  *
+  *   before x after y <- prec x succ y
+  *   before x after y <- prec x succ z & before z after y
+  *
+  * the answer is a fixpoint: start from the base relation and apply the rule
+  * body to the tuples found so far until no new tuple appears. That terminates
+  * without any guard, and is what a bottom-up OPERATOR_FIXPOINT would compute,
+  * whereas the factorial rule wants the top-down evaluation described above,
+  * as its domain is infinite and only one argument value is of interest.
+  * We will likely want both, with memoization of computed tuples as the bridge:
+  * PROJECT already materializes its child into a B-tree, and a memo keyed by
+  * the bound input arguments is a small step from that.
   */
 
 
@@ -742,9 +821,14 @@ static Operator * compileConjunction(
 	// The compiled terms provide the clause arguments in their own order
 	op = permuteToClauseArguments(op, clauseMap, clauseNArguments);
 
-	// Drop the local variable arguments again, and any duplicate tuples this creates
+	// Drop the local variable arguments again, and any duplicate tuples this creates.
+	// permuteToClauseArguments() has put the arguments in clause order, so the ones
+	// to keep are the leading query arguments.
 	if(op && nLocalVariables) {
-		Operator * projectOperator = CreateProjectOperator(op, nArguments);
+		index8 keptArguments[nArguments];
+		for(index8 i = 0; i < nArguments; i++)
+			keptArguments[i] = i;
+		Operator * projectOperator = CreateProjectOperator(op, nArguments, keptArguments);
 		ReleaseOperator(op);
 		op = projectOperator;
 	}
@@ -821,13 +905,25 @@ static size8 compileService(
 	 * 
 	 * If the term occurs negated in a clause, then the clause is recursive.
 	 * A recursive clause must always occur in a UNION with a least one
-	 * non-recursive clause that provides the parameter types. 
-	 * 
+	 * non-recursive clause that provides the parameter types.
+	 *
+	 * That is also what resolves the ordering problem a recursive rule poses
+	 * for compileTerm(): dispatch cannot match the recursive term, as the
+	 * service it needs is the one being compiled and so is not yet registered.
+	 * Taking the clauses in two passes settles it. The non-recursive clauses
+	 * compile first and fix the parameter types, exactly as they do now; the
+	 * recursive clauses are then compiled under the hypothesis that their
+	 * recursive term has that same signature, so that compileTerm() can emit
+	 * the back edge for it instead of dispatching. Should the hypothesis turn
+	 * out inconsistent, the clause simply fails to compile, which the choice
+	 * point machinery already tolerates.
+	 *
  	 * TODO: it might happen that a generated UNION service has the same
 	 * signature as an existing service, which becomes part of the UNION.
 	 * In this case, the newly generated service should replace the existing one.
 	 *
-	 * NOTE: Recursive services are not guaranteed to terminate.
+	 * NOTE: Recursive services are not guaranteed to terminate; see the notes
+	 * on terminating a recursive service at the top of this file.
 	 */
 
 	/**

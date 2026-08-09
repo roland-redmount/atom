@@ -17,6 +17,19 @@ int8 TupleCompare(Atom const tuple1[], Atom const tuple2[], size8 nAtoms)
     return 0;
 }
 
+int8 TupleCompareInOrder(
+    Atom const tuple1[], Atom const tuple2[], index8 const indexOrder[], size8 nAtoms)
+{
+    for(index8 i = 0; i < nAtoms; i++) {
+        index8 index = indexOrder[i];
+        int8 atomOrder = CompareAtoms(tuple1[index], tuple2[index]);
+        if(atomOrder != 0)
+            return atomOrder;
+    }
+    return 0;
+}
+
+
 bool TupleEqual(Atom const tuple1[], Atom const tuple2[], size8 nAtoms)
 {
 	return CompareMemory(tuple1, tuple2, nAtoms * sizeof(Atom)) == 0;

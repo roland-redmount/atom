@@ -12,6 +12,15 @@ void TupleCopy(Atom const sourceTuple[], Atom destinationTuple[], size8 nAtoms);
 
 int8 TupleCompare(Atom const tuple1[], Atom const tuple2[], size8 nAtoms);
 
+/**
+ * Compare two tuples lexiographically with respect to an index order, which is a
+ * permutation of the tuple indices giving the significance of each atom: the atoms
+ * at index indexOrder[0] are compared first, then those at indexOrder[1], and so on.
+ * With the identity permutation this is TupleCompare().
+ */
+int8 TupleCompareInOrder(
+	Atom const tuple1[], Atom const tuple2[], index8 const indexOrder[], size8 nAtoms);
+
 bool TupleEqual(Atom const tuple1[], Atom const tuple2[], size8 nAtoms);
 
 /**

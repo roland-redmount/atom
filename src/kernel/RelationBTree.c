@@ -408,7 +408,10 @@ static Operator * createBTreeOperator(RelationBTree * relation, size8 nInputs)
 	RelationBTreeProviderData * providerData = Allocate(sizeof(RelationBTreeProviderData));
 	providerData->relation = relation;
 	providerData->nInputs = nInputs;
-	return CreateMachineOperator(relation->nColumns, &bTreeProvider, providerData);
+	// Tuples are stored permuted into index column order, so that is the order
+	// in which the B-tree yields them
+	return CreateMachineOperator(
+		relation->nColumns, relation->indexColumns, &bTreeProvider, providerData);
 }
 
 

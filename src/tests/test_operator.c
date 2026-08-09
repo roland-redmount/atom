@@ -91,7 +91,7 @@ void testPermuteOperator(void)
 void testProjectOperator(void)
 {
 	Operator * permuteOperator = createReorderedListOperator();
-	Operator * projectOperator = CreateProjectOperator(permuteOperator, 2);
+	Operator * projectOperator = CreateProjectOperator(permuteOperator, 2, (index8[]) {0, 1});
 	ReleaseOperator(permuteOperator);
 
 	// Arguments tuple (@stringList _) for the marginalize operator
@@ -355,6 +355,83 @@ void testUnionOperator(void)
 }
 
 
+/**
+ * Every operator declares the order in which it yields its tuples, deriving it from
+ * its children rather than being told; see the ordering contract in operator.h.
+ * A relation stored in a particular column order propagates that order upwards through
+ * the operators applied to it.
+ */
+void testIndexOrder(void)
+{
+	// A B-tree operator yields its tuples in the index column order of its relation
+	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	RelationTable const * listRelation = GetCoreRelationTable(RELATION_LIST_LETTER);
+	ASSERT_NOT_NULL(listOperator->indexOrder)
+	for(index8 i = 0; i < 3; i++)
+		ASSERT_UINT32_EQUAL(listOperator->indexOrder[i], listRelation->indexColumns[i])
+
+	// The relation is stored in the kernel order (list position element), so reordering
+	// it to (list element position) yields tuples ordered by argument 0 (the list),
+	// then argument 2 (the position), then argument 1 (the element)
+	Operator * permuteOperator = createReorderedListOperator();
+	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[0], 0)
+	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[1], 2)
+	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[2], 1)
+
+	// PROJECT materializes into a B-tree keyed on the arguments it keeps,
+	// so it yields them in their own order
+	Operator * projectOperator = CreateProjectOperator(permuteOperator, 2, (index8[]) {0, 1});
+	ASSERT_UINT32_EQUAL(projectOperator->indexOrder[0], 0)
+	ASSERT_UINT32_EQUAL(projectOperator->indexOrder[1], 1)
+
+	// A JOIN takes the left child's order, then the right child's minus the arguments
+	// the two share. Mapping the left child (list position element) to the arguments
+	// (2 0 1) and the right child to (2 3 4), they share argument 2, which the left
+	// child orders first.
+	index8 leftMap[3];
+	CoreFormSetByteArray(FORM_LIST_POSITION_ELEMENT, (index8[]) {2, 0, 1}, leftMap);
+	index8 rightMap[3];
+	CoreFormSetByteArray(FORM_LIST_POSITION_ELEMENT, (index8[]) {2, 3, 4}, rightMap);
+	Operator * joinOperator = CreateJoinOperator(
+		5, listOperator, leftMap, GetCoreOperator(SERVICE_LIST_ID), rightMap);
+	index8 expectedJoinOrder[5] = {2, 0, 1, 3, 4};
+	for(index8 i = 0; i < 5; i++)
+		ASSERT_UINT32_EQUAL(joinOperator->indexOrder[i], expectedJoinOrder[i])
+
+	// An operator yielding at most one tuple declares no order, as any order it named
+	// would be arbitrary, and an operator relabeling its arguments declares none either
+	MachineProvider singleTupleProvider = {
+		.setupContext = 0,
+		.call = 0,
+		.finalizeContext = 0,
+		.finalizeOperator = 0,
+		.contextSize = 0
+	};
+	Operator * singleTupleOperator = CreateMachineOperator(2, 0, &singleTupleProvider, 0);
+	ASSERT_NULL(singleTupleOperator->indexOrder)
+	Operator * singleTuplePermute = CreatePermuteOperator(
+		2, 0, 0, 0, (index8[]) {1, 0}, singleTupleOperator);
+	ASSERT_NULL(singleTuplePermute->indexOrder)
+
+	// Such an operator is ordered alike with any other, so a union takes the order
+	// of its sibling whichever side it is on
+	Operator * unionOperator = CreateUnionOperator(projectOperator, singleTuplePermute);
+	ASSERT_UINT32_EQUAL(unionOperator->indexOrder[0], 0)
+	ASSERT_UINT32_EQUAL(unionOperator->indexOrder[1], 1)
+	Operator * reversedUnionOperator = CreateUnionOperator(singleTuplePermute, projectOperator);
+	ASSERT_UINT32_EQUAL(reversedUnionOperator->indexOrder[0], 0)
+	ASSERT_UINT32_EQUAL(reversedUnionOperator->indexOrder[1], 1)
+
+	ReleaseOperator(reversedUnionOperator);
+	ReleaseOperator(unionOperator);
+	ReleaseOperator(singleTuplePermute);
+	ReleaseOperator(singleTupleOperator);
+	ReleaseOperator(joinOperator);
+	ReleaseOperator(projectOperator);
+	ReleaseOperator(permuteOperator);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -366,6 +443,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testJoinOperator2);
 	ExecuteTest(testConstrainOperator);
 	ExecuteTest(testUnionOperator);
+	ExecuteTest(testIndexOrder);
 
 	KernelShutdown();
 

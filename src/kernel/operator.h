@@ -61,15 +61,29 @@ typedef struct s_MachineProvider {
  * An operator is evaluated stepwise, at each call yielding one tuple,
  * similar to a co-routine.
  *
- * TODO: operators should specify how their tuples are ordered when enumerating.
- * Currently, B-Tree operators order tuples lexiographically, and machine operators
- * do not enforce any particular order. It might be a good idea to provide an
- * array of column numbers specifying the ordering, so that e.g. a relation
- * with form (a b c) might specify ordering = {2, 1, 3} to order lexiographically
- * w.r.t columns (b a c). Knowing the tuple order helps optimize PROJECT: a child
- * ordered on the columns PROJECT keeps lets it drop duplicates by comparing each
- * tuple to its predecessor, instead of materializing the whole child relation.
+ * Every operator declares an index order: a permutation of its argument indices
+ * giving the significance of each argument when ordering tuples, so that an operator
+ * with arguments (a b c) and index order {1, 0, 2} orders its tuples lexiographically
+ * w.r.t. (b a c). The tuples an operator yields must be distinct and strictly
+ * ascending in its index order; this is the contract every operator both relies on
+ * and must uphold, and it is what lets UNION merge two relations, and what a future
+ * streaming PROJECT or merge JOIN would rely on.
  *
+ * The relational operators derive their index order from their children, so only
+ * machine operators declare one of their own. That declaration cannot be verified
+ * statically, and is the responsibility of whoever implements the machine provider;
+ * a provider whose tuples do not ascend must sort them before yielding. In DEBUG
+ * builds OperatorCall() verifies the ascent of every operator, which catches a
+ * violation at the operator that committed it.
+ *
+ * An operator yielding at most one tuple satisfies the contract under every index
+ * order, and so has no order worth declaring: it leaves indexOrder null rather than
+ * pick one arbitrarily. This matters because an arbitrary choice would propagate
+ * through the operators above and be taken for a real constraint, so that two
+ * relations orderable alike could appear not to be. An operator deriving its order
+ * from such a child substitutes the natural order, which is as valid as any other,
+ * and only stays undeclared itself if it too yields at most one tuple. DEBUG builds
+ * verify the claim by asserting that a second tuple is never yielded.
  */
 
 /**
@@ -146,6 +160,10 @@ struct s_Operator {
 	enum OperatorType type;
 	// Number of arguments for this operator
 	size8 nArguments;
+	// Permutation of the argument indices giving the order in which this operator
+	// yields its tuples; see the ordering contract above. Length nArguments,
+	// or null if this operator yields at most one tuple and so declares no order.
+	index8 * indexOrder;
 	// Context size, in addition to sizeof(Context)
 	size32 contextSize;
 	size32 referenceCount;
@@ -181,6 +199,9 @@ struct s_Operator {
 		// for OPERATOR_PROJECT
 		struct {
 			Operator * childOperator;
+			// Index of the child argument kept by each argument of this operator.
+			// The child arguments it does not name are the dropped ones.
+			index8 * argumentMap;
 		} project;
 		// for OPERATOR_CONSTRAIN
 		struct {
@@ -212,15 +233,21 @@ struct s_Operator {
  * operator does not write would be left at whatever the caller had in the arguments
  * tuple, and so would not be part of a relation; taking several child arguments from
  * one argument is what a constrain operator expresses.
+ *
+ * The index order is the child's, relabeled through the argument map; child arguments
+ * bound to a constant drop out of it, being equal in every tuple.
  */
 Operator * CreatePermuteOperator(
 	size8 nArguments, Atom const * constants, byte const * constantTypes, size8 nConstants,
 	index8 const * argumentMap, Operator * childOperator);
 
 /**
- * Create a machine code operator
+ * Create a machine code operator. The indexOrder array has length nArguments and gives
+ * the order in which the provider yields its tuples; see the ordering contract above.
+ * A provider yielding at most one tuple declares no order and passes 0.
  */
-Operator * CreateMachineOperator(size8 nArguments, MachineProvider * provider, void * providerData);
+Operator * CreateMachineOperator(
+	size8 nArguments, index8 const * indexOrder, MachineProvider * provider, void * providerData);
 
 /**
  * Setup a JOIN operator with the specified number of arguments, from two existing
@@ -238,6 +265,11 @@ Operator * CreateMachineOperator(size8 nArguments, MachineProvider * provider, v
  * would be left at whatever the caller had in the arguments tuple. Neither map may
  * contain the same argument twice; taking several child arguments from one argument
  * is what a constrain operator expresses.
+ *
+ * The index order is the left child's order, followed by the right child's order minus
+ * the join arguments: the left child determines the major key, as it yields ascending
+ * and the join drops none of its arguments, while within one left tuple the join
+ * arguments are constant and the right child orders the remainder.
  */
 Operator * CreateJoinOperator(
 	size8 nArguments,
@@ -246,6 +278,9 @@ Operator * CreateJoinOperator(
 
 /**
  * Setup a UNION operator, returning the union of two relations.
+ * Merging two ordered relations requires that they are ordered alike, so the two child
+ * operators must have the same index order, which this operator adopts. A child
+ * declaring no order is ordered alike with any other, and takes the order of its sibling.
  */
 Operator * CreateUnionOperator(Operator * first, Operator * second);
 
@@ -257,17 +292,27 @@ Operator * CreateUnionOperator(Operator * first, Operator * second);
  * operator in which they are equal are yielded.
  *
  * The child operator must provide every argument, as for a permute operator.
+ *
+ * The index order is the child's, with the arguments collapsed by the constraint
+ * appearing once: they are equal in every yielded tuple.
  */
 Operator * CreateConstrainOperator(
 	size8 nArguments, index8 const * argumentMap, Operator * childOperator);
 
 /**
- * Create a PROJECT operator with the given number of arguments, which must be
- * less than the number of arguments of the child operator. The project operator
- * keeps the first nArguments arguments of the child operator, drops the remaining
- * ones, and removes any duplicate tuples resulting from this.
+ * Create a PROJECT operator with the given number of arguments, which must be less than
+ * the number of arguments of the child operator. The argumentMap array has length
+ * nArguments and gives for each argument the index of the child argument it keeps;
+ * the child arguments it does not name are dropped, as are the duplicate tuples that
+ * dropping may produce.
+ *
+ * Dropping an argument reorders the ones the child ordered below it, so a projection
+ * cannot in general be streamed. This operator therefore materializes its child into a
+ * B-tree, which both removes the duplicates and gives the operator its index order,
+ * which is the identity permutation.
  */
-Operator * CreateProjectOperator(Operator * childOperator, size8 nArguments);
+Operator * CreateProjectOperator(
+	Operator * childOperator, size8 nArguments, index8 const * argumentMap);
 
 /**
  * Acquire a reference to an operator.
@@ -289,6 +334,11 @@ void ReleaseOperator(Operator * op);
 struct s_OperatorContext {
 	Operator const * op;
 	Atom * arguments;
+#ifdef DEBUG
+	// The previously yielded tuple, kept to verify that this operator upholds the
+	// ordering contract; see OperatorCall(). Null until the first tuple is yielded.
+	Atom * previousTuple;
+#endif
 	byte data[];
 };
 
