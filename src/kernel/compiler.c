@@ -519,11 +519,103 @@ static size8 setupJoinArgumentMaps(
 
 
 /**
- * Compile a JOIN operator from the conjuction obtained by negating the given clause
- * (clauseForm, clauseActors). The query-matched term indicated by matchedTermIndex
- * is excluded from compilation; also, any term t that has already been compiled
- * is indicated by termExcluded[t] = true.
- * clauseNArguments is the total number of parameters in the clause, including "local" variables.
+ * The state of compiling one clause into a conjunction of operators, shared by the
+ * recursion over its terms. Both the actors and the excluded flags are updated as terms
+ * compile: an actor is given its atom type once a term providing it has dispatched, and
+ * a term is marked excluded once it has been compiled.
+ */
+typedef struct s_ClauseCompileState {
+	Atom form;
+	TypedTuple * actors;
+	// Index into actors of the first actor of each term, with a final entry for the end
+	index8 const * termActorsIndices;
+	uint8 nTerms;
+	// Total number of clause arguments, including the local variables
+	size8 nArguments;
+	// The term the query matched, which is not part of the conjunction
+	index8 matchedTermIndex;
+	// Arity of that term. A parameter numbered beyond it is a clause-local variable,
+	// which does not occur in the query term.
+	size8 matchedTermArity;
+	// The terms compiled so far, together with the matched term
+	bool * termExcluded;
+	ChoicePoints * choices;
+} ClauseCompileState;
+
+
+/**
+ * Write the parameter types a compiled term resolved back into the clause. Dispatching a
+ * term gives its untyped output parameters the types of the service that matched, and the
+ * terms sharing those parameters need to know them:
+ *
+ *  - in the query-matched term the parameter stays an output, and so gives the service
+ *    being compiled its signature;
+ *  - in the terms not yet compiled it becomes an input, as the term that just compiled
+ *    is what provides it.
+ *
+ * The term that compiled must already be marked excluded, so that it is not mistaken for
+ * one of the terms still to come.
+ */
+static void propagateTermParameterTypes(
+	ClauseCompileState * clauseState, index8 termIndex,
+	TypedTuple const * termActors, TypedTuple const * serviceParameters)
+{
+	ASSERT(clauseState->termExcluded[termIndex])
+	for(index8 i = 0; i < termActors->nAtoms; i++) {
+		TypedAtom termActor = TypedTupleGetElement(termActors, i);
+		if((termActor.type != AT_PARAMETER) || termActor.atom.parameter.atomType)
+			continue;
+
+		// The corresponding service parameter must be a typed output
+		TypedAtom serviceParameter = TypedTupleGetElement(serviceParameters, i);
+		ASSERT(serviceParameter.type == AT_PARAMETER)
+		ASSERT(serviceParameter.atom.parameter.io == PARAMETER_OUT)
+		byte parameterType = serviceParameter.atom.parameter.atomType;
+		ASSERT(parameterType)
+
+		index8 parameterNumber = termActor.atom.parameter.number;
+		Atom inputParameter = {
+			.parameter = {
+				.number = parameterNumber, .io = PARAMETER_IN, .atomType = parameterType
+			}
+		};
+		Atom outputParameter = {
+			.parameter = {
+				.number = parameterNumber, .io = PARAMETER_OUT, .atomType = parameterType
+			}
+		};
+
+		// Type the parameter in the query-matched term, unless it is a clause-local
+		// variable, which has no counterpart there
+		if(parameterNumber <= clauseState->matchedTermArity) {
+			index8 matchedParameterIndex =
+				clauseState->termActorsIndices[clauseState->matchedTermIndex] + parameterNumber - 1;
+			TypedTupleSetAtom(clauseState->actors, matchedParameterIndex, outputParameter);
+		}
+		// Type the parameter in the term that compiled
+		// NOTE: not necessary, this term is not used for anything at this point
+		TypedTupleSetAtom(
+			clauseState->actors, clauseState->termActorsIndices[termIndex] + i, outputParameter);
+
+		// The terms still to compile take the parameter as an input
+		for(index8 j = 0; j < clauseState->nTerms; j++) {
+			if(clauseState->termExcluded[j])
+				continue;
+			index8 termEnd = clauseState->termActorsIndices[j + 1];
+			for(index8 k = clauseState->termActorsIndices[j]; k < termEnd; k++) {
+				TypedAtom actor = TypedTupleGetElement(clauseState->actors, k);
+				if(SameTypedAtoms(actor, termActor))
+					TypedTupleSetAtom(clauseState->actors, k, inputParameter);
+			}
+		}
+	}
+}
+
+
+/**
+ * Compile a JOIN operator from the conjuction obtained by negating the clause being
+ * compiled, excluding the term the query matched and any term compiled already.
+ * nTermsExcluded counts those terms.
  *
  * We iterate over all terms (negated) until we find a term that dispatches to a known service;
  * we then return a JOIN operator between this operator and the operator obtained by recursively
@@ -535,28 +627,22 @@ static size8 setupJoinArgumentMaps(
  * clauseMap array is set to the clause argument provided by each of its arguments.
  */
 static Operator * compileConjunctionRecursive(
-	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 clauseNArguments,
-	bool termExcluded[], uint8 nTermsExcluded, index8 const termActorsIndices[],
-	index8 clauseMap[], ChoicePoints * choices)
+	ClauseCompileState * clauseState, uint8 nTermsExcluded, index8 clauseMap[])
 {
-	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
-	ASSERT(clauseNTerms >= 2)
+	ASSERT(clauseState->nTerms >= 2)
 	Operator * op = 0;
 	// Clause arguments provided by the compiled term. A term may refer to the same
 	// clause argument more than once, so it may have more arguments than the clause.
-	index8 termClauseMap[clauseActors->nAtoms];
-	// Arity of the query-matched term. Parameters with number > matchedTermArity
-	// are clause-local variables that not occur in the query term.
-	size8 matchedTermArity = termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex];
+	index8 termClauseMap[clauseState->actors->nAtoms];
 
 	// Find a term that can be compiled.
 	// First iterate over term forms in the clause form
 	MultisetIterator termFormIterator;
-	MultisetIterate(clauseForm, AT_ID, &termFormIterator);
+	MultisetIterate(clauseState->form, AT_ID, &termFormIterator);
 	size8 termIndex = 0;
-	while(!op && nTermsExcluded < clauseNTerms && MultisetIteratorNext(&termFormIterator)) {
+	while(!op && nTermsExcluded < clauseState->nTerms && MultisetIteratorNext(&termFormIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
-		if(termIndex == matchedTermIndex) {
+		if(termIndex == clauseState->matchedTermIndex) {
 			termIndex += em.multiple;
 			continue;
 		}
@@ -571,84 +657,30 @@ static Operator * compileConjunctionRecursive(
 		TypedTuple * termActors = CreateTypedTuple(termArity);
 		TypedTuple * serviceParameters = CreateTypedTuple(termArity);
 		for(index8 m = 0; m < em.multiple; m++, termIndex++) {
-			if(termExcluded[termIndex])
+			if(clauseState->termExcluded[termIndex])
 				continue;
 			// Extract term actors
-			TypedTupleCopyAt(clauseActors, termActorsIndices[termIndex], termActors);
+			TypedTupleCopyAt(clauseState->actors, clauseState->termActorsIndices[termIndex], termActors);
 			PrintCString("Term: ");
 			PrintFormActorsAsFormula(negatedTermForm, termActors);
 			PrintChar('\n');
 			// Attempt to compile this term to an Service
 			op = compileTerm(
-				negatedTermForm, termActors, serviceParameters, termClauseMap, choices);
+				negatedTermForm, termActors, serviceParameters, termClauseMap, clauseState->choices);
 			PrintCString("serviceParameters = ");
 			TypedTuplePrint(serviceParameters);
 			PrintChar('\n');
 
 			if(op) {
-				termExcluded[termIndex] = true;
+				clauseState->termExcluded[termIndex] = true;
 				nTermsExcluded++;
-				// Update parameter types for output parameter in the query term,
-				// and for all other terms flip matched outputs to inputs.
-				for(index8 i = 0; i < termArity; i++) {
-					TypedAtom termActor = TypedTupleGetElement(termActors, i);
-					if(termActor.type == AT_PARAMETER) {
-						if(!termActor.atom.parameter.atomType) {
-							// Corresponding service parameter must be a typed output
-							TypedAtom serviceParameter = TypedTupleGetElement(serviceParameters, i);
-							ASSERT(serviceParameter.type == AT_PARAMETER)
-							ASSERT(serviceParameter.atom.parameter.io == PARAMETER_OUT)
-							byte parameterType = serviceParameter.atom.parameter.atomType;
-							ASSERT(parameterType)
-							// Updated parameters
-							index8 queryTermParameterNr = termActor.atom.parameter.number;
-							Atom inputParameter = {
-								.parameter = {
-									.number = queryTermParameterNr,
-									.io = PARAMETER_IN,
-									.atomType = parameterType
-								}
-							};
-							Atom outputParameter = {
-								.parameter = {
-									.number = queryTermParameterNr,
-									.io = PARAMETER_OUT,
-									.atomType = parameterType
-								}
-							};
-							// Replace untyped output parameter in query matched term.
-							// A clause-local parameter has no counterpart there.
-							if(queryTermParameterNr <= matchedTermArity) {
-								index8 queryParameterIndex =
-									termActorsIndices[matchedTermIndex] + queryTermParameterNr - 1;
-								TypedTupleSetAtom(clauseActors, queryParameterIndex, outputParameter);
-							}
-							// Replace untyped parameter in compiled term
-							// NOTE: not necessary, this term is not used for anything at this point
-							TypedTupleSetAtom(
-								clauseActors, termActorsIndices[termIndex] + i, outputParameter);
-							
-							// Replace matching parameters in all other non-excluded terms
-							for(index8 i = 0; i < clauseNTerms; i++) {
-								if(termExcluded[i])
-									continue;
-								for(index8 j = termActorsIndices[i]; j < termActorsIndices[i + 1]; j++) {
-									TypedAtom actor = TypedTupleGetElement(clauseActors, j);
-									if(SameTypedAtoms(actor, termActor))
-										TypedTupleSetAtom(clauseActors, j, inputParameter);
-								}
-							}
-						}
-					}
-				}
+				propagateTermParameterTypes(clauseState, termIndex, termActors, serviceParameters);
+				PrintCString("Updated clause: ");
+				PrintFormActorsAsFormula(clauseState->form, clauseState->actors);
+				PrintChar('\n');
 				break;
 			}
-
 		}
-		PrintCString("Updated clause: ");
-		PrintFormActorsAsFormula(clauseForm, clauseActors);
-		PrintChar('\n');
-
 		FreeTypedTuple(serviceParameters);
 		FreeTypedTuple(termActors);
 		IFactRelease(negatedTermForm);
@@ -660,20 +692,18 @@ static Operator * compileConjunctionRecursive(
 		return 0;
 	}
 
-	if(nTermsExcluded < clauseNTerms) {
+	if(nTermsExcluded < clauseState->nTerms) {
 		// Recurse on remaining terms.
-		index8 nextClauseMap[clauseActors->nAtoms];
+		index8 nextClauseMap[clauseState->actors->nAtoms];
 		Operator * nextOperator = compileConjunctionRecursive(
-			clauseForm, clauseActors, matchedTermIndex, clauseNArguments,
-			termExcluded, nTermsExcluded, termActorsIndices, nextClauseMap, choices
-		);
+			clauseState, nTermsExcluded, nextClauseMap);
 		if(nextOperator) {
 			// The two child operators provide the clause arguments of their own terms,
 			// which the argument maps place into the join arguments tuple
 			index8 leftMap[op->nArguments];
 			index8 rightMap[nextOperator->nArguments];
 			size8 nJoinArguments = setupJoinArgumentMaps(
-				clauseNArguments,
+				clauseState->nArguments,
 				termClauseMap, op->nArguments,
 				nextClauseMap, nextOperator->nArguments,
 				clauseMap, leftMap, rightMap
@@ -809,17 +839,29 @@ static Operator * compileConjunction(
 	// and the conjunction is compiled with this extended arguments tuple.
 	size8 nLocalVariables = parameterizeLocalVariables(
 		clauseActors, matchedTermIndex, termActorsIndices, nArguments);
-	size8 clauseNArguments = nArguments + nLocalVariables;
+
+	ClauseCompileState clauseState = {
+		.form = clauseForm,
+		.actors = clauseActors,
+		.termActorsIndices = termActorsIndices,
+		.nTerms = clauseNTerms,
+		.nArguments = nArguments + nLocalVariables,
+		.matchedTermIndex = matchedTermIndex,
+		.matchedTermArity =
+			termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex],
+		.termExcluded = termExcluded,
+		.choices = choices
+	};
 
 	index8 clauseMap[clauseActors->nAtoms];
-	Operator * op = compileConjunctionRecursive(
-		clauseForm, clauseActors, matchedTermIndex, clauseNArguments,
-		termExcluded, 1, termActorsIndices, clauseMap, choices);
+	// The matched term is excluded from the conjunction, and is the one term excluded
+	// when the recursion over the remaining terms begins
+	Operator * op = compileConjunctionRecursive(&clauseState, 1, clauseMap);
 	if(!op)
 		return 0;
 
 	// The compiled terms provide the clause arguments in their own order
-	op = permuteToClauseArguments(op, clauseMap, clauseNArguments);
+	op = permuteToClauseArguments(op, clauseMap, clauseState.nArguments);
 
 	// Drop the local variable arguments again, and any duplicate tuples this creates.
 	// permuteToClauseArguments() has put the arguments in clause order, so the ones
