@@ -670,6 +670,24 @@ static void unionSetupContext(OperatorContext * context)
 }
 
 
+/**
+ * Yield the lookahead tuple once the other child operator has been exhausted, and
+ * continue with the child operator the lookahead came from. That operator is left as
+ * the next context, so that later calls reach it through the case below.
+ */
+static bool unionYieldRemainingLookahead(OperatorContext * context)
+{
+	UnionContext * unionContext = (UnionContext *) &context->data;
+	OperatorFreeContext(unionContext->nextContext);
+	unionContext->nextContext = 0;
+	swapContexts(unionContext);
+	CopyMemory(
+		unionContext->lookahead, context->arguments,
+		context->op->nArguments * sizeof(Atom));
+	return true;
+}
+
+
 static bool unionCall(OperatorContext * context)
 {
 	UnionContext * unionContext = (UnionContext *) &context->data;
@@ -677,21 +695,15 @@ static bool unionCall(OperatorContext * context)
 	// We interleave tuples provided by the two operators to maintain sorted order,
 	// and skip any identical tuples. At each call, we have a "lookahead" tuple from
 	// one of the child operators, and we try to obtain a new tuple from the other
-	// operator. If one exists, we compare it to the lookahead tuple and return the'
+	// operator. If one exists, we compare it to the lookahead tuple and return the
 	// preceding one; else we have exhausted one operator.
 	if(!unionContext->lookaheadContext) {
 		// no lookahead operator, call other operator directly
 		return OperatorCall(unionContext->nextContext);
 	}
-	
-	if(!OperatorCall(unionContext->nextContext)) {
-		// no more lookahead, swap contexts 
-		OperatorFreeContext(unionContext->nextContext);
-		unionContext->nextContext = 0;
-		swapContexts(unionContext);
-		CopyMemory(unionContext->lookahead, context->arguments, nArguments * sizeof(Atom));
-		return true;
-	}
+
+	if(!OperatorCall(unionContext->nextContext))
+		return unionYieldRemainingLookahead(context);
 
 	// Compare the newly obtained arguments tuple with the lookahead tuple, in the order
 	// the two child operators agree on
@@ -699,12 +711,16 @@ static bool unionCall(OperatorContext * context)
 	int8 order = TupleCompareInOrder(
 		context->arguments, unionContext->lookahead, indexOrder, nArguments);
 	if(order == 0) {
-		// Duplicate tuple, acquire next (only one tuple can be equal)
-		if(OperatorCall(unionContext->nextContext)) {
-			order = TupleCompareInOrder(
-				context->arguments, unionContext->lookahead, indexOrder, nArguments);
-			ASSERT(order > 0)
-		}
+		// Both operators produced this tuple and the union yields it once, so we take
+		// another from this operator. Only one tuple can be equal, as each operator
+		// yields distinct tuples. Should this operator be exhausted, the lookahead tuple
+		// is still to be yielded, and yielding it here is what keeps it from being
+		// yielded a second time as the lookahead of the remaining operator.
+		if(!OperatorCall(unionContext->nextContext))
+			return unionYieldRemainingLookahead(context);
+		order = TupleCompareInOrder(
+			context->arguments, unionContext->lookahead, indexOrder, nArguments);
+		ASSERT(order > 0)
 	}
 	if(order < 0) {
 		return true;
@@ -853,14 +869,25 @@ Operator * CreateProjectOperator(
 //------------------------------ OPERATOR_FIXPOINT, OPERATOR_RECURSE -----------------------------
 
 /**
- * A fixpoint operator derives its relation by rounds. The tuples derived by the rounds
- * so far are held in a B-tree, which the RECURSE operators below read as they go; a
- * round therefore collects into a second B-tree, as those readers hold the derived
- * tuples locked against modification, and the two are merged when the round completes.
+ * A fixpoint operator derives its relation by rounds, from the argument bindings it has
+ * been called with rather than over the whole relation. The call bindings start as what
+ * the caller bound, and each round applies the rule bodies to every binding known so far;
+ * a RECURSE operator asked for a binding not seen before adds it, so that the derivation
+ * reaches exactly the bindings the query depends on. A round adding neither a tuple nor
+ * a call binding is the fixpoint.
+ *
+ * Both tables are read while a round runs -- the derived tuples by the RECURSE operators
+ * and the call bindings by the round itself -- and a B-tree being read is locked against
+ * modification. Each therefore has a second B-tree that the round collects into, merged
+ * once the round completes.
  */
 typedef struct s_FixpointContext {
 	BTree * derived;
 	BTree * pending;
+	// Argument bindings the relation has been called with, as tuples holding the bound
+	// arguments with the remaining ones zeroed
+	BTree * calls;
+	BTree * pendingCalls;
 	BTreeIterator iterator;
 	Atom * childArguments;
 } FixpointContext;
@@ -991,22 +1018,58 @@ static void teardownRecurseOperator(Operator * op)
 
 
 /**
- * Merge the tuples derived by a completed round into the derived relation, returning
- * the number that were not already there. A round deriving no new tuple is the fixpoint.
+ * Merge what a completed round collected into the table it belongs to, returning the
+ * number of items that were not already there. A round adding nothing to either of the
+ * two tables is the fixpoint.
  */
-static size32 mergePendingTuples(FixpointContext * fixpointContext)
+static size32 mergePendingItems(BTree * pending, BTree * table)
 {
-	size32 nNewTuples = 0;
+	size32 nNewItems = 0;
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, fixpointContext->pending);
+	BTreeIterate(&iterator, pending);
 	while(BTreeIteratorNext(&iterator)) {
-		if(BTreeInsert(fixpointContext->derived, BTreeIteratorPeekItem(&iterator))
-			== BTREE_INSERTED)
-			nNewTuples++;
+		if(BTreeInsert(table, BTreeIteratorPeekItem(&iterator)) == BTREE_INSERTED)
+			nNewItems++;
 	}
 	BTreeIteratorEnd(&iterator);
-	BTreeClear(fixpointContext->pending);
-	return nNewTuples;
+	BTreeClear(pending);
+	return nNewItems;
+}
+
+
+/**
+ * Build the call binding an arguments tuple represents, being the bound arguments with
+ * the remaining ones zeroed, so that bindings compare and store as ordinary tuples.
+ */
+static void setupCallBinding(
+	Atom * binding, Atom const * arguments,
+	index8 const * inputArguments, size8 nInputs, size8 nArguments)
+{
+	SetMemory(binding, nArguments * sizeof(Atom), 0);
+	for(index8 i = 0; i < nInputs; i++)
+		binding[inputArguments[i]] = arguments[inputArguments[i]];
+}
+
+
+/**
+ * Apply the rule bodies to one call binding, collecting what they derive.
+ */
+static void deriveFromCallBinding(
+	OperatorContext * context, Atom const * binding)
+{
+	FixpointContext * fixpointContext = (FixpointContext *) &context->data;
+	Operator const * op = context->op;
+	size32 tupleSize = op->nArguments * sizeof(Atom);
+
+	// The child takes the bound arguments of this call, and enumerates the rest
+	CopyMemory(binding, fixpointContext->childArguments, tupleSize);
+	OperatorContext * childContext = createChildContext(
+		context, op->impl.fixpoint.childOperator, fixpointContext->childArguments);
+	while(OperatorCall(childContext))
+		BTreeInsert(fixpointContext->pending, fixpointContext->childArguments);
+	// Freeing the child contexts closes the RECURSE iterators into the derived relation,
+	// which must be unlocked before the round can be merged into it
+	OperatorFreeContext(childContext);
 }
 
 
@@ -1014,27 +1077,38 @@ static void fixpointSetupContext(OperatorContext * context)
 {
 	FixpointContext * fixpointContext = (FixpointContext *) &context->data;
 	Operator const * op = context->op;
-	size32 tupleSize = op->nArguments * sizeof(Atom);
+	size8 nArguments = op->nArguments;
+	size32 tupleSize = nArguments * sizeof(Atom);
 
 	fixpointContext->derived = BTreeCreate(tupleSize, btreeCompareTuples, 0);
 	fixpointContext->pending = BTreeCreate(tupleSize, btreeCompareTuples, 0);
+	fixpointContext->calls = BTreeCreate(tupleSize, btreeCompareTuples, 0);
+	fixpointContext->pendingCalls = BTreeCreate(tupleSize, btreeCompareTuples, 0);
 	fixpointContext->childArguments = Allocate(tupleSize);
 
-	// Apply the rule bodies to the tuples derived so far until a round derives nothing
-	// new. The child derives the whole relation, so it runs with every argument unbound;
-	// what the caller bound restricts the tuples yielded, in fixpointCall().
-	size32 nNewTuples;
+	// The derivation starts from the binding the caller asked for. With no bound
+	// arguments this is the empty binding, and the relation is derived in full.
+	Atom * binding = Allocate(tupleSize);
+	setupCallBinding(
+		binding, context->arguments,
+		op->impl.fixpoint.inputArguments, op->impl.fixpoint.nInputs, nArguments);
+	BTreeInsert(fixpointContext->calls, binding);
+	Free(binding);
+
+	// Each round applies the rule bodies to every call binding known so far. The RECURSE
+	// operators below add the bindings they are asked for, so the rounds reach exactly
+	// the bindings the query depends on, and no more.
+	size32 nNewItems;
 	do {
-		SetMemory(fixpointContext->childArguments, tupleSize, 0);
-		OperatorContext * childContext = createChildContext(
-			context, op->impl.fixpoint.childOperator, fixpointContext->childArguments);
-		while(OperatorCall(childContext))
-			BTreeInsert(fixpointContext->pending, fixpointContext->childArguments);
-		// Freeing the child contexts closes the RECURSE iterators into the derived
-		// relation, which must be unlocked before the round can be merged into it
-		OperatorFreeContext(childContext);
-		nNewTuples = mergePendingTuples(fixpointContext);
-	} while(nNewTuples);
+		BTreeIterator callIterator;
+		BTreeIterate(&callIterator, fixpointContext->calls);
+		while(BTreeIteratorNext(&callIterator))
+			deriveFromCallBinding(context, BTreeIteratorPeekItem(&callIterator));
+		BTreeIteratorEnd(&callIterator);
+
+		nNewItems = mergePendingItems(fixpointContext->pending, fixpointContext->derived);
+		nNewItems += mergePendingItems(fixpointContext->pendingCalls, fixpointContext->calls);
+	} while(nNewItems);
 
 	BTreeIterate(&fixpointContext->iterator, fixpointContext->derived);
 }
@@ -1049,10 +1123,19 @@ static bool fixpointCall(OperatorContext * context)
 }
 
 
+size32 FixpointNDerivedTuples(OperatorContext const * context)
+{
+	ASSERT(context->op->type == OPERATOR_FIXPOINT)
+	return BTreeNItems(((FixpointContext const *) &context->data)->derived);
+}
+
+
 static void fixpointFinalizeContext(OperatorContext * context)
 {
 	FixpointContext * fixpointContext = (FixpointContext *) &context->data;
 	BTreeIteratorEnd(&fixpointContext->iterator);
+	BTreeFree(fixpointContext->pendingCalls);
+	BTreeFree(fixpointContext->calls);
 	BTreeFree(fixpointContext->pending);
 	BTreeFree(fixpointContext->derived);
 	Free(fixpointContext->childArguments);
@@ -1073,17 +1156,58 @@ static OperatorContext * findFixpointContext(OperatorContext * context)
 }
 
 
+#ifdef DEBUG
+/**
+ * Verify that a recurse operator binds every argument the fixpoint operator does.
+ * Call bindings are keyed on the fixpoint's input arguments, so a recursive term must
+ * bind at least those to name the call it is making. It may bind more, which only
+ * restricts the tuples it yields.
+ *
+ * A recursive term binding fewer of them asks for something broader than any call keyed
+ * this way can express, and needs a table of its own binding pattern.
+ */
+static void assertCallBindingIsNamed(Operator const * recurse, Operator const * fixpoint)
+{
+	for(index8 i = 0; i < fixpoint->impl.fixpoint.nInputs; i++) {
+		bool bound = false;
+		for(index8 j = 0; j < recurse->impl.recurse.nInputs; j++)
+			bound = bound
+				|| (fixpoint->impl.fixpoint.inputArguments[i]
+					== recurse->impl.recurse.inputArguments[j]);
+		ASSERT(bound)
+	}
+}
+#endif
+
+
 static void recurseSetupContext(OperatorContext * context)
 {
 	RecurseContext * recurseContext = (RecurseContext *) &context->data;
-	OperatorContext * fixpointContext = findFixpointContext(context);
+	Operator const * op = context->op;
+	OperatorContext * fixpointOperatorContext = findFixpointContext(context);
 	// A recurse operator only occurs in the child subtree of a fixpoint operator
-	ASSERT(fixpointContext)
-	ASSERT(fixpointContext->op->nArguments == context->op->nArguments)
-	BTreeIterate(
-		&recurseContext->iterator,
-		((FixpointContext *) &fixpointContext->data)->derived
-	);
+	ASSERT(fixpointOperatorContext)
+	Operator const * fixpointOperator = fixpointOperatorContext->op;
+	ASSERT(fixpointOperator->nArguments == op->nArguments)
+#ifdef DEBUG
+	assertCallBindingIsNamed(op, fixpointOperator);
+#endif
+	FixpointContext * fixpointContext =
+		(FixpointContext *) &fixpointOperatorContext->data;
+
+	// Record the binding this term is asking for, so that a later round derives it.
+	// The binding takes the fixpoint's input arguments, as that is what the derivation
+	// is keyed on: a term binding more arguments than the derivation distinguishes asks
+	// for a call already covered by a broader one, and only filters what it yields.
+	Atom * binding = Allocate(op->nArguments * sizeof(Atom));
+	setupCallBinding(
+		binding, context->arguments,
+		fixpointOperator->impl.fixpoint.inputArguments,
+		fixpointOperator->impl.fixpoint.nInputs, op->nArguments);
+	BTreeInsert(fixpointContext->pendingCalls, binding);
+	Free(binding);
+
+	BTreeIterate(&recurseContext->iterator, fixpointContext->derived);
 }
 
 

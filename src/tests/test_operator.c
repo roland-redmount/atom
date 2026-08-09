@@ -364,6 +364,57 @@ void testUnionOperator(void)
 
 
 /**
+ * A tuple both child operators provide is yielded once, including when providing it
+ * exhausts one of them. That tuple is then the lookahead of the operator still running,
+ * and yielding it has to be what completes the duplicate, or it is yielded a second
+ * time when the remaining operator is drained.
+ *
+ * Here the letters of "fo" are a prefix of those of "foo", so the shorter operator is
+ * exhausted by the duplicate (2 'o').
+ */
+void testUnionDuplicateAtExhaustion(void)
+{
+	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	index8 argumentMap[3];
+	CoreFormSetByteArray(
+		FORM_LIST_POSITION_ELEMENT,
+		(index8[]) {2, 0, 1},		// (@list p s) -> (p s), the list is constant 0
+		argumentMap
+	);
+
+	Atom shortString = CreateStringFromCString("fo");
+	Operator * shortService = CreatePermuteOperator(
+		2, (Atom[]) {shortString}, (byte[]) {AT_ID}, 1, argumentMap, listOperator);
+	IFactRelease(shortString);
+
+	Atom longString = CreateStringFromCString("foo");
+	Operator * longService = CreatePermuteOperator(
+		2, (Atom[]) {longString}, (byte[]) {AT_ID}, 1, argumentMap, listOperator);
+	IFactRelease(longString);
+
+	Operator * unionOperator = CreateUnionOperator(shortService, longService);
+	ReleaseOperator(shortService);
+	ReleaseOperator(longService);
+
+	Atom arguments[2] = {0};
+	OperatorContext * context = OperatorCreateContext(unionOperator, arguments);
+	uint32 expectedPositions[3] = {1, 2, 3};
+	char expectedCharacters[3] = "foo";
+	for(index32 i = 0; i < 3; i++) {
+		ASSERT_TRUE(OperatorCall(context))
+		ASSERT_INT32_EQUAL(arguments[0]._uint, expectedPositions[i])
+		ASSERT_CHAR_EQUAL(
+			LetterToChar(arguments[1], LETTER_LOWERCASE),
+			expectedCharacters[i]
+		)
+	}
+	ASSERT_FALSE(OperatorCall(context));
+	OperatorFreeContext(context);
+	ReleaseOperator(unionOperator);
+}
+
+
+/**
  * Every operator declares the order in which it yields its tuples, deriving it from
  * its children rather than being told; see the ordering contract in operator.h.
  * A relation stored in a particular column order propagates that order upwards through
@@ -441,10 +492,15 @@ void testIndexOrder(void)
 
 
 /**
- * A directed graph (prec:ID succ:ID) holding the cycle a -> b -> c -> a, stored so
- * that the tuples are ordered by the prec column first.
+ * A directed graph (prec:ID succ:ID) holding the cycle a -> b -> c -> a, together with
+ * the path d -> e -> f, which is disconnected from it. The tuples are stored ordered by
+ * the prec column, so that the relation can be looked up on it.
  */
-#define TEST_N_EDGES	3
+#define TEST_N_EDGES	5
+
+// Tuples in the transitive closure of each component
+#define TEST_N_CYCLE_CLOSURE	(3 * 3)
+#define TEST_N_PATH_CLOSURE		3
 
 static struct {
 	Atom form;
@@ -468,10 +524,11 @@ static void setupGraphFixture(void)
 		NameRelease(roles[i]);
 
 	graphFixture.table = CreateRelationBTreeWithServices(
-		graphFixture.form, 2, (byte[]) {AT_ID, AT_ID}, (index8[]) {0, 1});
+		graphFixture.form, 2, (byte[]) {AT_ID, AT_ID},
+		(index8[]) {graphFixture.precIndex, graphFixture.succIndex});
 
-	char const * precNames[TEST_N_EDGES] = {"a", "b", "c"};
-	char const * succNames[TEST_N_EDGES] = {"b", "c", "a"};
+	char const * precNames[TEST_N_EDGES] = {"a", "b", "c", "d", "e"};
+	char const * succNames[TEST_N_EDGES] = {"b", "c", "a", "e", "f"};
 	for(index8 i = 0; i < TEST_N_EDGES; i++) {
 		TypedAtom actors[2];
 		actors[graphFixture.precIndex] =
@@ -499,48 +556,69 @@ static void teardownGraphFixture(void)
 
 
 /**
- * Build the transitive closure of the graph fixture, as the operator tree
+ * Build the transitive closure of the graph fixture, define by the rules
  *
- *   FIXPOINT(UNION(edges, PROJECT(JOIN(edges, RECURSE))))
+ *  (1) before x after y  <-  prec x succ y
+ *  (2) before x after y  <-  prec x succ z & before z after y
+ * 
+ * This corresponds to the operator tree
+ * 
+ *	FIXPOINT/2[0 1](
+ *		UNION/2[0 1](
+ *			MACHINE/2[0 1]				// (succ y prec x) in canonical order
+ *			PROJECT/2[0 1](
+ *				0 1
+ *				JOIN/3[2 1 0](			// join argument order is (x y z)
+ *					2 1 MACHINE/2[0 1]
+ *					0 2 RECURSE/2[0 1]))))
  *
- * which is the rule pair
- *
- *   closure x to y  <-  prec x succ y
- *   closure x to y  <-  prec x succ z & closure z to y
- *
- * The closure relation takes the argument layout of the graph relation, so that the
- * two branches of the union agree. The caller obtains a reference to the operator.
+ * The (before after) relation shares the argument order of the (prec succ) relation, so that the
+ * two branches of the union agree. The RECURSE operator corresponds to the recursive call
+ * (before z after y) in rule (2).
+ * The caller obtains a reference to the operator.
  */
 static Operator * createClosureOperator(index8 const * inputArguments, size8 nInputs)
 {
 	index8 precIndex = graphFixture.precIndex;
 	index8 succIndex = graphFixture.succIndex;
 
-	// The graph relation with both arguments output, enumerating every edge
-	Operator * edgeOperator = ServiceRegistryFind(
-		graphFixture.table, (byte[]) {PARAMETER_OUT, PARAMETER_OUT});
+	// Both rule bodies take the graph relation looked up on x when the caller bound it,
+	// which is what confines the derivation to the reachable part of the graph, and
+	// enumerate every edge when it did not. This is the choice dispatch makes for a
+	// compiled rule, from the parameters the query leaves bound.
+	byte parameterIO[2];
+	parameterIO[precIndex] = nInputs ? PARAMETER_IN : PARAMETER_OUT;
+	parameterIO[succIndex] = PARAMETER_OUT;
+	Operator * edgeOperator = ServiceRegistryFind(graphFixture.table, parameterIO);
 	ASSERT_NOT_NULL(edgeOperator)
 
-	// The join arguments are (x y z), with x and y laid out as the closure relation
-	// and the shared z last. The left child provides (x z) and the right child (z y),
-	// so the right child takes z as an input.
-	index8 edgeMap[2];
-	edgeMap[precIndex] = precIndex;
-	edgeMap[succIndex] = 2;
-	index8 recurseMap[2];
-	recurseMap[precIndex] = 2;
-	recurseMap[succIndex] = succIndex;
+	// Rule (1), the graph relation itself, with the edge arguments taken into the
+	// closure argument order (x y)
+	index8 edgeToClosureMap[2];
+	edgeToClosureMap[precIndex] = 0;
+	edgeToClosureMap[succIndex] = 1;
+	Operator * baseOperator = CreatePermuteOperator(
+		2, 0, 0, 0, edgeToClosureMap, edgeOperator);
 
-	Operator * recurseOperator = CreateRecurseOperator(2, (index8[]) {precIndex}, 1);
+	// Rule (2). The join arguments are (x y z), so that (x y) agree with the closure
+	// and the shared z comes last. The left child provides (x z) and the right child
+	// (z y), so the right child takes its first argument as an input.
+	index8 edgeToJoinMap[2];
+	edgeToJoinMap[precIndex] = 0;
+	edgeToJoinMap[succIndex] = 2;
+	index8 recurseMap[2] = {2, 1};
+
+	Operator * recurseOperator = CreateRecurseOperator(2, (index8[]) {0}, 1);
 	Operator * joinOperator = CreateJoinOperator(
-		3, edgeOperator, edgeMap, recurseOperator, recurseMap);
+		3, edgeOperator, edgeToJoinMap, recurseOperator, recurseMap);
 	ReleaseOperator(recurseOperator);
 
 	// Drop the shared z, keeping the closure arguments
 	Operator * projectOperator = CreateProjectOperator(joinOperator, 2, (index8[]) {0, 1});
 	ReleaseOperator(joinOperator);
 
-	Operator * unionOperator = CreateUnionOperator(edgeOperator, projectOperator);
+	Operator * unionOperator = CreateUnionOperator(baseOperator, projectOperator);
+	ReleaseOperator(baseOperator);
 	ReleaseOperator(projectOperator);
 
 	Operator * fixpointOperator = CreateFixpointOperator(
@@ -553,7 +631,8 @@ static Operator * createClosureOperator(index8 const * inputArguments, size8 nIn
 /**
  * A FIXPOINT operator derives a recursive relation by rounds, and terminates on the
  * cyclic graph of the fixture, where a top-down evaluation would descend forever.
- * The closure of a -> b -> c -> a is every pair of the three nodes.
+ * A caller binding nothing asks for the whole relation, which is the closure of both
+ * components of the graph.
  */
 void testFixpointOperator(void)
 {
@@ -565,8 +644,8 @@ void testFixpointOperator(void)
 	size32 nTuples = 0;
 	while(OperatorCall(context))
 		nTuples++;
+	ASSERT_UINT32_EQUAL(nTuples, TEST_N_CYCLE_CLOSURE + TEST_N_PATH_CLOSURE)
 	OperatorFreeContext(context);
-	ASSERT_UINT32_EQUAL(nTuples, 3 * 3)
 
 	ReleaseOperator(closureOperator);
 	teardownGraphFixture();
@@ -574,28 +653,32 @@ void testFixpointOperator(void)
 
 
 /**
- * The arguments a caller binds restrict the tuples a FIXPOINT operator yields, and not
- * the ones it derives: asking for the nodes reachable from a gives all three nodes.
+ * The derivation is driven by the bindings the query asks for, and not run over the
+ * whole relation and filtered afterwards. Asking for the nodes after a reaches the
+ * three nodes of its cycle, and derives nothing for the component a cannot reach.
  */
-void testFixpointInputArgument(void)
+void testFixpointCallBinding(void)
 {
 	setupGraphFixture();
-	index8 precIndex = graphFixture.precIndex;
-	Operator * closureOperator = createClosureOperator((index8[]) {precIndex}, 1);
+	Operator * closureOperator = createClosureOperator((index8[]) {0}, 1);
 
 	Atom nodeA = CreateStringFromCString("a");
-	Atom arguments[2] = {(Atom) {0}, (Atom) {0}};
-	arguments[precIndex] = nodeA;
+	Atom arguments[2] = {nodeA, (Atom) {0}};
 
 	OperatorContext * context = OperatorCreateContext(closureOperator, arguments);
 	size32 nTuples = 0;
 	while(OperatorCall(context)) {
 		// every tuple yielded keeps the argument the caller bound
-		ASSERT_UINT64_EQUAL(arguments[precIndex].hash, nodeA.hash)
+		ASSERT_UINT64_EQUAL(arguments[0].hash, nodeA.hash)
 		nTuples++;
 	}
-	OperatorFreeContext(context);
 	ASSERT_UINT32_EQUAL(nTuples, 3)
+
+	// The tuples yielded would be the same either way, so what distinguishes a derivation
+	// driven by the call bindings is how much of the relation it had to derive: the
+	// closure of the cycle a belongs to, and nothing of the component it cannot reach.
+	ASSERT_UINT32_EQUAL(FixpointNDerivedTuples(context), TEST_N_CYCLE_CLOSURE)
+	OperatorFreeContext(context);
 
 	IFactRelease(nodeA);
 	ReleaseOperator(closureOperator);
@@ -614,9 +697,10 @@ int main(int argc, char * argv[])
 	ExecuteTest(testJoinOperator2);
 	ExecuteTest(testConstrainOperator);
 	ExecuteTest(testUnionOperator);
+	ExecuteTest(testUnionDuplicateAtExhaustion);
 	ExecuteTest(testIndexOrder);
 	ExecuteTest(testFixpointOperator);
-	ExecuteTest(testFixpointInputArgument);
+	ExecuteTest(testFixpointCallBinding);
 
 	KernelShutdown();
 

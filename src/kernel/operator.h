@@ -389,6 +389,16 @@ Operator * CreateRecurseOperator(
 	size8 nArguments, index8 const * inputArguments, size8 nInputs);
 
 /**
+ * Number of tuples a fixpoint operator context has derived, which is how much of the
+ * relation the query it is answering depended on. The context must not have been freed.
+ *
+ * This is what distinguishes a derivation driven by the call bindings from one that
+ * derives the whole relation and filters, as the two yield the same tuples; it is
+ * otherwise not observable from outside. Intended for tests.
+ */
+size32 FixpointNDerivedTuples(OperatorContext const * context);
+
+/**
  * Acquire a reference to an operator.
  */
 void AcquireOperator(Operator * op);
