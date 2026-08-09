@@ -1,13 +1,21 @@
 
 #include "kernel/dispatch.h"
+#include "kernel/ifact.h"
 #include "kernel/letter.h"
 #include "kernel/operator.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/multiset.h"
+#include "kernel/Parameter.h"
+#include "kernel/RelationBTree.h"
+#include "kernel/RelationRegistry.h"
+#include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
 #include "lang/Formula.h"
+#include "lang/name.h"
+#include "lang/PredicateForm.h"
 #include "parser/PredicateBuilder.h"
 #include "testing/testing.h"
 
@@ -432,6 +440,169 @@ void testIndexOrder(void)
 }
 
 
+/**
+ * A directed graph (prec:ID succ:ID) holding the cycle a -> b -> c -> a, stored so
+ * that the tuples are ordered by the prec column first.
+ */
+#define TEST_N_EDGES	3
+
+static struct {
+	Atom form;
+	index8 precIndex;
+	index8 succIndex;
+	RelationTable const * table;
+	TypedTuple * tuples[TEST_N_EDGES];
+} graphFixture;
+
+
+static void setupGraphFixture(void)
+{
+	Atom roles[2] = {
+		CreateNameFromCString("prec"),
+		CreateNameFromCString("succ")
+	};
+	graphFixture.form = CreatePredicateForm(roles, 2);
+	graphFixture.precIndex = PredicateRoleIndex(graphFixture.form, roles[0]);
+	graphFixture.succIndex = PredicateRoleIndex(graphFixture.form, roles[1]);
+	for(index8 i = 0; i < 2; i++)
+		NameRelease(roles[i]);
+
+	graphFixture.table = CreateRelationBTreeWithServices(
+		graphFixture.form, 2, (byte[]) {AT_ID, AT_ID}, (index8[]) {0, 1});
+
+	char const * precNames[TEST_N_EDGES] = {"a", "b", "c"};
+	char const * succNames[TEST_N_EDGES] = {"b", "c", "a"};
+	for(index8 i = 0; i < TEST_N_EDGES; i++) {
+		TypedAtom actors[2];
+		actors[graphFixture.precIndex] =
+			CreateTypedAtom(AT_ID, CreateStringFromCString(precNames[i]));
+		actors[graphFixture.succIndex] =
+			CreateTypedAtom(AT_ID, CreateStringFromCString(succNames[i]));
+		graphFixture.tuples[i] = CreateTypedTupleFromArray(actors, 2);
+		AssertFact(graphFixture.form, graphFixture.tuples[i], 0);
+		for(index8 j = 0; j < 2; j++)
+			ReleaseTypedAtom(actors[j]);
+	}
+}
+
+
+static void teardownGraphFixture(void)
+{
+	for(index8 i = 0; i < TEST_N_EDGES; i++) {
+		RetractFact(graphFixture.form, graphFixture.tuples[i]);
+		FreeTypedTuple(graphFixture.tuples[i]);
+	}
+	ServiceRegistryRemoveAll(graphFixture.table);
+	RelationRegistryRemove(graphFixture.table);
+	IFactRelease(graphFixture.form);
+}
+
+
+/**
+ * Build the transitive closure of the graph fixture, as the operator tree
+ *
+ *   FIXPOINT(UNION(edges, PROJECT(JOIN(edges, RECURSE))))
+ *
+ * which is the rule pair
+ *
+ *   closure x to y  <-  prec x succ y
+ *   closure x to y  <-  prec x succ z & closure z to y
+ *
+ * The closure relation takes the argument layout of the graph relation, so that the
+ * two branches of the union agree. The caller obtains a reference to the operator.
+ */
+static Operator * createClosureOperator(index8 const * inputArguments, size8 nInputs)
+{
+	index8 precIndex = graphFixture.precIndex;
+	index8 succIndex = graphFixture.succIndex;
+
+	// The graph relation with both arguments output, enumerating every edge
+	Operator * edgeOperator = ServiceRegistryFind(
+		graphFixture.table, (byte[]) {PARAMETER_OUT, PARAMETER_OUT});
+	ASSERT_NOT_NULL(edgeOperator)
+
+	// The join arguments are (x y z), with x and y laid out as the closure relation
+	// and the shared z last. The left child provides (x z) and the right child (z y),
+	// so the right child takes z as an input.
+	index8 edgeMap[2];
+	edgeMap[precIndex] = precIndex;
+	edgeMap[succIndex] = 2;
+	index8 recurseMap[2];
+	recurseMap[precIndex] = 2;
+	recurseMap[succIndex] = succIndex;
+
+	Operator * recurseOperator = CreateRecurseOperator(2, (index8[]) {precIndex}, 1);
+	Operator * joinOperator = CreateJoinOperator(
+		3, edgeOperator, edgeMap, recurseOperator, recurseMap);
+	ReleaseOperator(recurseOperator);
+
+	// Drop the shared z, keeping the closure arguments
+	Operator * projectOperator = CreateProjectOperator(joinOperator, 2, (index8[]) {0, 1});
+	ReleaseOperator(joinOperator);
+
+	Operator * unionOperator = CreateUnionOperator(edgeOperator, projectOperator);
+	ReleaseOperator(projectOperator);
+
+	Operator * fixpointOperator = CreateFixpointOperator(
+		unionOperator, inputArguments, nInputs);
+	ReleaseOperator(unionOperator);
+	return fixpointOperator;
+}
+
+
+/**
+ * A FIXPOINT operator derives a recursive relation by rounds, and terminates on the
+ * cyclic graph of the fixture, where a top-down evaluation would descend forever.
+ * The closure of a -> b -> c -> a is every pair of the three nodes.
+ */
+void testFixpointOperator(void)
+{
+	setupGraphFixture();
+	Operator * closureOperator = createClosureOperator(0, 0);
+
+	Atom arguments[2] = {(Atom) {0}, (Atom) {0}};
+	OperatorContext * context = OperatorCreateContext(closureOperator, arguments);
+	size32 nTuples = 0;
+	while(OperatorCall(context))
+		nTuples++;
+	OperatorFreeContext(context);
+	ASSERT_UINT32_EQUAL(nTuples, 3 * 3)
+
+	ReleaseOperator(closureOperator);
+	teardownGraphFixture();
+}
+
+
+/**
+ * The arguments a caller binds restrict the tuples a FIXPOINT operator yields, and not
+ * the ones it derives: asking for the nodes reachable from a gives all three nodes.
+ */
+void testFixpointInputArgument(void)
+{
+	setupGraphFixture();
+	index8 precIndex = graphFixture.precIndex;
+	Operator * closureOperator = createClosureOperator((index8[]) {precIndex}, 1);
+
+	Atom nodeA = CreateStringFromCString("a");
+	Atom arguments[2] = {(Atom) {0}, (Atom) {0}};
+	arguments[precIndex] = nodeA;
+
+	OperatorContext * context = OperatorCreateContext(closureOperator, arguments);
+	size32 nTuples = 0;
+	while(OperatorCall(context)) {
+		// every tuple yielded keeps the argument the caller bound
+		ASSERT_UINT64_EQUAL(arguments[precIndex].hash, nodeA.hash)
+		nTuples++;
+	}
+	OperatorFreeContext(context);
+	ASSERT_UINT32_EQUAL(nTuples, 3)
+
+	IFactRelease(nodeA);
+	ReleaseOperator(closureOperator);
+	teardownGraphFixture();
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -444,6 +615,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testConstrainOperator);
 	ExecuteTest(testUnionOperator);
 	ExecuteTest(testIndexOrder);
+	ExecuteTest(testFixpointOperator);
+	ExecuteTest(testFixpointInputArgument);
 
 	KernelShutdown();
 

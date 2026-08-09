@@ -154,6 +154,34 @@ typedef struct s_MachineProvider {
 	 * as it can only test the constraint once the child operator has produced a tuple.
 	 */
 	OPERATOR_CONSTRAIN = 6,
+	/**
+	 * FIXPOINT evaluates a recursive relation. It applies its child operator, which
+	 * is the rule bodies deriving the relation, to the tuples derived so far, over
+	 * and over, until a round derives nothing new. The tuples are accumulated in a
+	 * B-tree, which the RECURSE operators in the child subtree read.
+	 *
+	 * The recursion is therefore a loop in this operator rather than a cycle in the
+	 * operator tree, and it terminates whenever the derived relation is finite --
+	 * including over cyclic data, which a top-down evaluation cannot handle.
+	 *
+	 * The child derives the whole relation and so runs with every argument unbound.
+	 * The arguments the caller binds restrict the tuples this operator yields, not
+	 * the ones it derives, which is why one derived relation can serve every
+	 * signature over it.
+	 *
+	 * NOTE: nothing here guarantees termination. A relation over an infinite domain
+	 * has no finite fixpoint, and needs the query bindings pushed into the derivation
+	 * to terminate; see the notes on recursion in compiler.c.
+	 */
+	OPERATOR_FIXPOINT = 7,
+	/**
+	 * RECURSE is the recursive occurrence of the relation that an enclosing FIXPOINT
+	 * operator is deriving: it enumerates the tuples derived by the rounds so far.
+	 * It is a leaf, and holds no reference to the fixpoint operator; the fixpoint is
+	 * found through the context chain when the recursion is evaluated, so that the
+	 * operator tree stays a tree.
+	 */
+	OPERATOR_RECURSE = 8,
 };
 
 struct s_Operator {
@@ -211,6 +239,19 @@ struct s_Operator {
 			// sharing an index are the ones constrained to be equal.
 			index8 * argumentMap;
 		} constrain;
+		// for OPERATOR_FIXPOINT
+		struct {
+			Operator * childOperator;
+			// Indices of the arguments the caller binds, restricting the tuples yielded
+			index8 * inputArguments;
+			size8 nInputs;
+		} fixpoint;
+		// for OPERATOR_RECURSE
+		struct {
+			// Indices of the arguments the caller binds, as for a fixpoint operator
+			index8 * inputArguments;
+			size8 nInputs;
+		} recurse;
 		// for OPERATOR_MACHINE
 		struct {
 			MachineProvider * provider;
@@ -315,6 +356,39 @@ Operator * CreateProjectOperator(
 	Operator * childOperator, size8 nArguments, index8 const * argumentMap);
 
 /**
+ * Create a FIXPOINT operator deriving a recursive relation from the given child
+ * operator, which computes the rule bodies and must have the arity of the relation.
+ * The child is applied to the tuples derived so far until a round derives nothing new;
+ * the RECURSE operators in its subtree read those tuples.
+ *
+ * The inputArguments array holds the indices of the nInputs arguments the caller binds,
+ * and may be 0 if there are none. Those arguments restrict the tuples yielded, and not
+ * the ones derived: the child always derives the whole relation.
+ *
+ * The derived tuples are accumulated in a B-tree, so this operator yields them
+ * distinct and in the identity index order.
+ */
+Operator * CreateFixpointOperator(
+	Operator * childOperator, index8 const * inputArguments, size8 nInputs);
+
+/**
+ * Create a RECURSE operator enumerating the tuples derived so far by the FIXPOINT
+ * operator enclosing it, which must have the same arity. The enclosing fixpoint is the
+ * nearest one above this operator when the recursion is evaluated, so this operator
+ * needs no reference to it.
+ *
+ * The inputArguments array holds the indices of the nInputs arguments the caller binds,
+ * as for a fixpoint operator; a recursive term with a bound argument, which is the usual
+ * case below a join, takes those indices here.
+ *
+ * NOTE: taking the nearest enclosing fixpoint is what makes one recursive relation work.
+ * Relations recursive through one another will need this operator to name which fixpoint
+ * it belongs to.
+ */
+Operator * CreateRecurseOperator(
+	size8 nArguments, index8 const * inputArguments, size8 nInputs);
+
+/**
  * Acquire a reference to an operator.
  */
 void AcquireOperator(Operator * op);
@@ -334,6 +408,10 @@ void ReleaseOperator(Operator * op);
 struct s_OperatorContext {
 	Operator const * op;
 	Atom * arguments;
+	// The context that created this one, or null for a context created by a caller
+	// outside the operator tree. A RECURSE operator follows this chain to reach the
+	// FIXPOINT operator deriving the relation it enumerates.
+	OperatorContext * parent;
 #ifdef DEBUG
 	// The previously yielded tuple, kept to verify that this operator upholds the
 	// ordering contract; see OperatorCall(). Null until the first tuple is yielded.

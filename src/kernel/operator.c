@@ -7,6 +7,15 @@
 
 
 /**
+ * Create an execution context for a child of the given context, which the child
+ * records as its parent. Contexts created by a caller outside the operator tree have
+ * no parent; see OperatorCreateContext().
+ */
+static OperatorContext * createChildContext(
+	OperatorContext * parent, Operator const * op, Atom arguments[]);
+
+
+/**
  * Create an Operator and setup common fields. The index order is left undeclared,
  * for the caller to derive from its children or take from its provider.
  * The caller obtains a reference to the created operator.
@@ -213,7 +222,8 @@ static void permuteSetupContext(OperatorContext * context)
 			: op->impl.permute.constants[index - nArguments];
 	}
 	// setup child context
-	permuteContext->childContext = OperatorCreateContext(
+	permuteContext->childContext = createChildContext(
+		context,
 		op->impl.permute.childOperator,
 		permuteContext->childArguments
 	);
@@ -314,7 +324,8 @@ static void constrainSetupContext(OperatorContext * context)
 		context->arguments, constrainContext->childArguments,
 		op->impl.constrain.argumentMap, nChildArguments);
 
-	constrainContext->childContext = OperatorCreateContext(
+	constrainContext->childContext = createChildContext(
+		context,
 		op->impl.constrain.childOperator,
 		constrainContext->childArguments
 	);
@@ -506,7 +517,8 @@ static bool joinEvaluateLeft(OperatorContext * context)
 	scatterArguments(
 		context->arguments, joinContext->rightArguments,
 		op->impl.join.rightMap, op->impl.join.right->nArguments);
-	joinContext->rightContext = OperatorCreateContext(
+	joinContext->rightContext = createChildContext(
+		context,
 		op->impl.join.right,
 		joinContext->rightArguments
 	);
@@ -529,7 +541,8 @@ static void joinSetupContext(OperatorContext * context)
 	scatterArguments(
 		context->arguments, joinContext->leftArguments,
 		op->impl.join.leftMap, op->impl.join.left->nArguments);
-	joinContext->leftContext = OperatorCreateContext(
+	joinContext->leftContext = createChildContext(
+		context,
 		op->impl.join.left,
 		joinContext->leftArguments
 	);
@@ -641,10 +654,10 @@ static void unionSetupContext(OperatorContext * context)
 	unionContext->lookahead = Allocate(context->op->nArguments * sizeof(Atom));
 	// Arbitratily assign child operators to previous and next
 	// both child operators write to the arguments tuple
-	unionContext->lookaheadContext = OperatorCreateContext(
-		context->op->impl._union.first, context->arguments);
-	unionContext->nextContext = OperatorCreateContext(
-		context->op->impl._union.second, context->arguments);
+	unionContext->lookaheadContext = createChildContext(
+		context, context->op->impl._union.first, context->arguments);
+	unionContext->nextContext = createChildContext(
+		context, context->op->impl._union.second, context->arguments);
 	// Obtain the lookahead tuple
 	if(OperatorCall(unionContext->lookaheadContext)) {
 		CopyMemory(context->arguments, unionContext->lookahead, context->op->nArguments * sizeof(Atom));
@@ -754,7 +767,7 @@ static void projectSetupContext(OperatorContext * context)
 	for(index8 i = 0; i < nArguments; i++)
 		childArguments[op->impl.project.argumentMap[i]] = context->arguments[i];
 
-	OperatorContext * childContext = OperatorCreateContext(childOperator, childArguments);
+	OperatorContext * childContext = createChildContext(context, childOperator, childArguments);
 	// Retrieve all tuples from the child relation, gathering the kept arguments
 	projectContext->btree = BTreeCreate(
 		nArguments * sizeof(Atom),
@@ -834,6 +847,259 @@ Operator * CreateProjectOperator(
 	for(index8 i = 0; i < nArguments; i++)
 		indexOrder[i] = i;
 	return op;
+}
+
+
+//------------------------------ OPERATOR_FIXPOINT, OPERATOR_RECURSE -----------------------------
+
+/**
+ * A fixpoint operator derives its relation by rounds. The tuples derived by the rounds
+ * so far are held in a B-tree, which the RECURSE operators below read as they go; a
+ * round therefore collects into a second B-tree, as those readers hold the derived
+ * tuples locked against modification, and the two are merged when the round completes.
+ */
+typedef struct s_FixpointContext {
+	BTree * derived;
+	BTree * pending;
+	BTreeIterator iterator;
+	Atom * childArguments;
+} FixpointContext;
+
+
+typedef struct s_RecurseContext {
+	BTreeIterator iterator;
+} RecurseContext;
+
+
+/**
+ * Store the indices of the arguments a caller binds, shared by the two operators
+ * reading a derived relation.
+ */
+static void setupInputArguments(
+	index8 ** storedInputArguments, size8 * storedNInputs,
+	index8 const * inputArguments, size8 nInputs, size8 nArguments)
+{
+	*storedNInputs = nInputs;
+	if(!nInputs) {
+		*storedInputArguments = 0;
+		return;
+	}
+#ifdef DEBUG
+	bool bound[nArguments];
+	SetMemory(bound, nArguments * sizeof(bool), 0);
+	for(index8 i = 0; i < nInputs; i++) {
+		ASSERT(inputArguments[i] < nArguments)
+		ASSERT(!bound[inputArguments[i]])
+		bound[inputArguments[i]] = true;
+	}
+#endif
+	*storedInputArguments = Allocate(nInputs);
+	CopyMemory(inputArguments, *storedInputArguments, nInputs);
+}
+
+
+/**
+ * Test whether a derived tuple agrees with the arguments the caller bound.
+ */
+static bool tupleMatchesInputArguments(
+	Atom const * tuple, Atom const * arguments, index8 const * inputArguments, size8 nInputs)
+{
+	for(index8 i = 0; i < nInputs; i++) {
+		index8 argument = inputArguments[i];
+		if(CompareAtoms(tuple[argument], arguments[argument]))
+			return false;
+	}
+	return true;
+}
+
+
+/**
+ * Yield the next tuple of a derived relation that agrees with the arguments the caller
+ * bound, copying it to the arguments tuple. Returns false once the relation is exhausted.
+ *
+ * NOTE: the bound arguments are filtered rather than sought, so a query over a derived
+ * relation scans it. Seeking would need the bound arguments to be a leading part of the
+ * index order, as it does for a B-tree relation.
+ */
+static bool yieldDerivedTuple(
+	OperatorContext * context, BTreeIterator * iterator,
+	index8 const * inputArguments, size8 nInputs)
+{
+	size8 nArguments = context->op->nArguments;
+	while(BTreeIteratorNext(iterator)) {
+		Atom const * tuple = BTreeIteratorPeekItem(iterator);
+		if(!tupleMatchesInputArguments(tuple, context->arguments, inputArguments, nInputs))
+			continue;
+		CopyMemory(tuple, context->arguments, nArguments * sizeof(Atom));
+		return true;
+	}
+	return false;
+}
+
+
+Operator * CreateFixpointOperator(
+	Operator * childOperator, index8 const * inputArguments, size8 nInputs)
+{
+	size8 nArguments = childOperator->nArguments;
+	Operator * op = createOperator(OPERATOR_FIXPOINT, nArguments, sizeof(FixpointContext));
+	op->impl.fixpoint.childOperator = childOperator;
+	AcquireOperator(childOperator);
+	setupInputArguments(
+		&(op->impl.fixpoint.inputArguments), &(op->impl.fixpoint.nInputs),
+		inputArguments, nInputs, nArguments);
+
+	// The derived tuples are accumulated in a B-tree ordered as they are laid out
+	index8 * indexOrder = allocateIndexOrder(op);
+	for(index8 i = 0; i < nArguments; i++)
+		indexOrder[i] = i;
+	return op;
+}
+
+
+Operator * CreateRecurseOperator(
+	size8 nArguments, index8 const * inputArguments, size8 nInputs)
+{
+	Operator * op = createOperator(OPERATOR_RECURSE, nArguments, sizeof(RecurseContext));
+	setupInputArguments(
+		&(op->impl.recurse.inputArguments), &(op->impl.recurse.nInputs),
+		inputArguments, nInputs, nArguments);
+
+	// This operator enumerates the tuples derived by the enclosing fixpoint operator,
+	// and so yields them in the order that operator accumulated them
+	index8 * indexOrder = allocateIndexOrder(op);
+	for(index8 i = 0; i < nArguments; i++)
+		indexOrder[i] = i;
+	return op;
+}
+
+
+static void teardownFixpointOperator(Operator * op)
+{
+	ASSERT(op->type == OPERATOR_FIXPOINT)
+	ReleaseOperator(op->impl.fixpoint.childOperator);
+	if(op->impl.fixpoint.inputArguments)
+		Free(op->impl.fixpoint.inputArguments);
+}
+
+
+static void teardownRecurseOperator(Operator * op)
+{
+	ASSERT(op->type == OPERATOR_RECURSE)
+	if(op->impl.recurse.inputArguments)
+		Free(op->impl.recurse.inputArguments);
+}
+
+
+/**
+ * Merge the tuples derived by a completed round into the derived relation, returning
+ * the number that were not already there. A round deriving no new tuple is the fixpoint.
+ */
+static size32 mergePendingTuples(FixpointContext * fixpointContext)
+{
+	size32 nNewTuples = 0;
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, fixpointContext->pending);
+	while(BTreeIteratorNext(&iterator)) {
+		if(BTreeInsert(fixpointContext->derived, BTreeIteratorPeekItem(&iterator))
+			== BTREE_INSERTED)
+			nNewTuples++;
+	}
+	BTreeIteratorEnd(&iterator);
+	BTreeClear(fixpointContext->pending);
+	return nNewTuples;
+}
+
+
+static void fixpointSetupContext(OperatorContext * context)
+{
+	FixpointContext * fixpointContext = (FixpointContext *) &context->data;
+	Operator const * op = context->op;
+	size32 tupleSize = op->nArguments * sizeof(Atom);
+
+	fixpointContext->derived = BTreeCreate(tupleSize, btreeCompareTuples, 0);
+	fixpointContext->pending = BTreeCreate(tupleSize, btreeCompareTuples, 0);
+	fixpointContext->childArguments = Allocate(tupleSize);
+
+	// Apply the rule bodies to the tuples derived so far until a round derives nothing
+	// new. The child derives the whole relation, so it runs with every argument unbound;
+	// what the caller bound restricts the tuples yielded, in fixpointCall().
+	size32 nNewTuples;
+	do {
+		SetMemory(fixpointContext->childArguments, tupleSize, 0);
+		OperatorContext * childContext = createChildContext(
+			context, op->impl.fixpoint.childOperator, fixpointContext->childArguments);
+		while(OperatorCall(childContext))
+			BTreeInsert(fixpointContext->pending, fixpointContext->childArguments);
+		// Freeing the child contexts closes the RECURSE iterators into the derived
+		// relation, which must be unlocked before the round can be merged into it
+		OperatorFreeContext(childContext);
+		nNewTuples = mergePendingTuples(fixpointContext);
+	} while(nNewTuples);
+
+	BTreeIterate(&fixpointContext->iterator, fixpointContext->derived);
+}
+
+
+static bool fixpointCall(OperatorContext * context)
+{
+	FixpointContext * fixpointContext = (FixpointContext *) &context->data;
+	return yieldDerivedTuple(
+		context, &fixpointContext->iterator,
+		context->op->impl.fixpoint.inputArguments, context->op->impl.fixpoint.nInputs);
+}
+
+
+static void fixpointFinalizeContext(OperatorContext * context)
+{
+	FixpointContext * fixpointContext = (FixpointContext *) &context->data;
+	BTreeIteratorEnd(&fixpointContext->iterator);
+	BTreeFree(fixpointContext->pending);
+	BTreeFree(fixpointContext->derived);
+	Free(fixpointContext->childArguments);
+}
+
+
+/**
+ * Find the fixpoint operator context deriving the relation that a recurse operator
+ * enumerates, being the nearest one enclosing it.
+ */
+static OperatorContext * findFixpointContext(OperatorContext * context)
+{
+	for(OperatorContext * ancestor = context->parent; ancestor; ancestor = ancestor->parent) {
+		if(ancestor->op->type == OPERATOR_FIXPOINT)
+			return ancestor;
+	}
+	return 0;
+}
+
+
+static void recurseSetupContext(OperatorContext * context)
+{
+	RecurseContext * recurseContext = (RecurseContext *) &context->data;
+	OperatorContext * fixpointContext = findFixpointContext(context);
+	// A recurse operator only occurs in the child subtree of a fixpoint operator
+	ASSERT(fixpointContext)
+	ASSERT(fixpointContext->op->nArguments == context->op->nArguments)
+	BTreeIterate(
+		&recurseContext->iterator,
+		((FixpointContext *) &fixpointContext->data)->derived
+	);
+}
+
+
+static bool recurseCall(OperatorContext * context)
+{
+	RecurseContext * recurseContext = (RecurseContext *) &context->data;
+	return yieldDerivedTuple(
+		context, &recurseContext->iterator,
+		context->op->impl.recurse.inputArguments, context->op->impl.recurse.nInputs);
+}
+
+
+static void recurseFinalizeContext(OperatorContext * context)
+{
+	RecurseContext * recurseContext = (RecurseContext *) &context->data;
+	BTreeIteratorEnd(&recurseContext->iterator);
 }
 
 
@@ -919,6 +1185,14 @@ void ReleaseOperator(Operator * op)
 			teardownConstrainOperator(op);
 			break;
 
+		case OPERATOR_FIXPOINT:
+			teardownFixpointOperator(op);
+			break;
+
+		case OPERATOR_RECURSE:
+			teardownRecurseOperator(op);
+			break;
+
 		case OPERATOR_MACHINE:
 			teardownMachineOperator(op);
 			break;
@@ -934,14 +1208,16 @@ void ReleaseOperator(Operator * op)
 }
 
 
-OperatorContext * OperatorCreateContext(Operator const * op, Atom arguments[])
+static OperatorContext * createChildContext(
+	OperatorContext * parent, Operator const * op, Atom arguments[])
 {
 	size32 contextSize = sizeof(OperatorContext) + op->contextSize;
 	OperatorContext * context = Allocate(contextSize);
 	SetMemory(context, contextSize, 0);
 	context->op = op;
 	context->arguments = arguments;
-	
+	context->parent = parent;
+
 	switch(op->type) {
 	case OPERATOR_PERMUTE:
 		permuteSetupContext(context);
@@ -963,6 +1239,14 @@ OperatorContext * OperatorCreateContext(Operator const * op, Atom arguments[])
 		constrainSetupContext(context);
 		break;
 
+	case OPERATOR_FIXPOINT:
+		fixpointSetupContext(context);
+		break;
+
+	case OPERATOR_RECURSE:
+		recurseSetupContext(context);
+		break;
+
 	case OPERATOR_MACHINE:
 		machineSetupContext(context);
 		break;
@@ -972,6 +1256,12 @@ OperatorContext * OperatorCreateContext(Operator const * op, Atom arguments[])
 		break;
 	}
 	return context;
+}
+
+
+OperatorContext * OperatorCreateContext(Operator const * op, Atom arguments[])
+{
+	return createChildContext(0, op, arguments);
 }
 
 
@@ -1024,6 +1314,14 @@ bool OperatorCall(OperatorContext * context)
 		success = constrainCall(context);
 		break;
 
+	case OPERATOR_FIXPOINT:
+		success = fixpointCall(context);
+		break;
+
+	case OPERATOR_RECURSE:
+		success = recurseCall(context);
+		break;
+
 	case OPERATOR_MACHINE:
 		success = machineCall(context);
 		break;
@@ -1062,6 +1360,14 @@ void OperatorFreeContext(OperatorContext * context)
 
 	case OPERATOR_CONSTRAIN:
 		constrainFinalizeContext(context);
+		break;
+
+	case OPERATOR_FIXPOINT:
+		fixpointFinalizeContext(context);
+		break;
+
+	case OPERATOR_RECURSE:
+		recurseFinalizeContext(context);
 		break;
 
 	case OPERATOR_MACHINE:
@@ -1163,6 +1469,17 @@ void PrintOperator(Operator const * op)
 			PrintF("%u ", op->impl.constrain.argumentMap[i]);
 		PrintOperator(op->impl.constrain.childOperator);
 		PrintChar(')');
+		break;
+
+	case OPERATOR_FIXPOINT:
+		printOperatorHead(op, "FIXPOINT");
+		PrintChar('(');
+		PrintOperator(op->impl.fixpoint.childOperator);
+		PrintChar(')');
+		break;
+
+	case OPERATOR_RECURSE:
+		printOperatorHead(op, "RECURSE");
 		break;
 
 	case OPERATOR_MACHINE:
