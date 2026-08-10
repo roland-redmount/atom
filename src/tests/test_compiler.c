@@ -33,7 +33,7 @@ void testCompilePermute1(void)
 
 	// This will yield a new service from the existing (+ + =) service
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -68,7 +68,7 @@ void testCompilePermute2(void)
 	Formula * queryTerm = CStringToTerm("number 3 addtwo _z");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -111,7 +111,7 @@ void testCompileProject(void)
 	// Only the LETTER-element service yields tuples, as "alibaba" is a string;
 	// the ID-element service is registered but matches nothing.
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 2)
 
 	// The unique letters of "alibaba"
@@ -160,7 +160,7 @@ void testCompileUnconstrainedHeadVariable(void)
 	Formula * queryTerm = CStringToTerm("set \"ab\" element _e size _z");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 0)
 
 	for(index8 i = 0; i < nServices; i++) {
@@ -181,7 +181,7 @@ void testCompileJoin1(void)
 	Formula * queryTerm = CStringToTerm("first 3 second _s third _t");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -220,7 +220,7 @@ void testCompileJoin2(void)
 	Formula * queryTerm = CStringToTerm("first 3 third _t");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -255,7 +255,7 @@ void testCompileUnion(void)
 	Formula * queryTerm = CStringToTerm("number 5 neighbor _y");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -366,7 +366,7 @@ void testCompileConstrain(void)
 	Formula * queryTerm = CStringToTerm("self _y");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
 	// Only a and b have a self edge. The tuples are sorted by atom, so we do not
@@ -424,7 +424,7 @@ void testCompileRecursiveJoin1(void)
 	// Compile the query
 	Formula * queryTerm = CStringToTerm("number 4 faculty _f");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -552,7 +552,7 @@ void testCompileRecursiveJoin2(void)
 
 	Formula * queryTerm = CStringToTerm("before \"a\" after \"d\"");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -598,7 +598,7 @@ void testCompileRecursiveReachable(void)
 
 	Formula * queryTerm = CStringToTerm("before \"a\" after _y");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -650,7 +650,7 @@ void testCompileRecursiveClosure(void)
 
 	Formula * queryTerm = CStringToTerm("before _x after _y");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileService(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 

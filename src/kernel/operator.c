@@ -1185,7 +1185,7 @@ static void recurseSetupContext(OperatorContext * context)
 	RecurseContext * recurseContext = (RecurseContext *) &context->data;
 	Operator const * op = context->op;
 	OperatorContext * fixpointOperatorContext = findFixpointContext(context);
-	// A recurse operator only occurs in the child subtree of a fixpoint operator
+	// A recurse operator may only occur in the subtree of a fixpoint operator
 	ASSERT(fixpointOperatorContext)
 	Operator const * fixpointOperator = fixpointOperatorContext->op;
 	ASSERT(fixpointOperator->nArguments == op->nArguments)

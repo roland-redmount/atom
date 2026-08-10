@@ -178,9 +178,9 @@ typedef struct s_MachineProvider {
 	/**
 	 * RECURSE is the recursive occurrence of the relation that an enclosing FIXPOINT
 	 * operator is deriving: it enumerates the tuples derived by the rounds so far.
-	 * It is a leaf, and holds no reference to the fixpoint operator; the fixpoint is
-	 * found through the context chain when the recursion is evaluated, so that the
-	 * operator tree stays a tree.
+	 * It is always a leaf, and holds no reference to the fixpoint operator, so that the
+	 * operator tree stays a tree. The enclosing FIXPOINT operator is found via the
+	 * chain of parent pointers in the operator context when the recursion is evaluated.
 	 */
 	OPERATOR_RECURSE = 8,
 };

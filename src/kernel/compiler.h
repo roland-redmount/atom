@@ -20,7 +20,7 @@
  * TODO: this should probably take a term form + a tuple; we don't need to
  * store a formula.
  */
-size8 CompileService(Formula const * queryTerm, Service services[], size8 maxServices);
+size8 CompileQuery(Formula const * queryTerm, Service services[], size8 maxServices);
 
 
 #endif	// COMPILER_H
