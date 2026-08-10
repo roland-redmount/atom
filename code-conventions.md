@@ -17,6 +17,10 @@ The build system is a plain makefile, intended for Linux GCC or Mingw/GCC on Win
 
 ## Naming
 
+Naming things is the hardest thing in computer science.
+
+### Loop counters
+
 Loop counters should be named `i`, `j`, `k`, `l` in order of nesting, unless there is a better name. If you need more than four levels of nested loops you should probably refactor the function.
 
 
@@ -51,6 +55,19 @@ Allocate and initialize a structure. The caller is responsible for deallocation 
 
 `FreeSomething()`
 A deallocation procedure for complex malloc'ed data structures. Generally calls `free()` on all components of the structure.
+
+### Use as general names as possible
+
+Functions should be given a name that describes what it does in full generality, rather than some special case application of it. When factoring out a helper function from a larger function, it may be tempting to name the helper according to its role in the larger function, but this is misleading as it adds connotations that the helper function really does not have. For example, when factoring out a helper function from the `FIXPOINT` operator that handled merging a set of pending operator calls into another list, the helper was named
+```
+static size32 mergePendingCalls(BTree * pendingCalls, BTree * calls)
+```
+However, this function knows nothing about operator calls, but simply adds all items from the
+`pendingCalls` B-tree to the `calls` B-tree. A better function signature is
+```
+static size32 mergeBTrees(BTree * source, BTree * destination)
+```
+which makes clear that this function is purely about B-tree manipulation (and might perhaps belong in `btree.c`).
 
 
 ## Type names

@@ -556,19 +556,17 @@ static void teardownGraphFixture(void)
 
 
 /**
- * Build the transitive closure of the graph fixture, defined by the rules
+ * Build an operator evalutaing (before x after y) defined by the rules
  *
  *  (1) before x after y  <-  succ y prec x
  *  (2) before x after y  <-  succ z prec x & before z after y
  *
- * The graph relation is written here in its canonical role order, which is (succ prec)
- * and not the (prec succ) it is named for, so that its roles line up with the argument
- * indices below: argument 0 is the succ role and argument 1 the prec role. Canonical
- * order follows from hashing the role names and is otherwise arbitrary, so it is worth
- * writing terms out this way wherever argument indices have to be read.
+ * The graph relation is written here in its canonical role order (succ prec), so that
+ * its roles line up with the argument indices below: argument 0 is the succ role and
+ * argument 1 the prec role.
  *
- * The closure relation is built here rather than compiled, and takes the argument order
- * (x y) of the rule heads. Called with x bound, the rules give the operator tree
+ * The (before after) relation is a FIXPOINT/2 operator with argument order (x y).
+ * Called with x bound, the rules give the operator tree
  *
  *	FIXPOINT/2[0 1]<0>(                      // derives (before after), x bound
  *		UNION/2[0 1](
@@ -579,11 +577,9 @@ static void teardownGraphFixture(void)
  *					2 0 MACHINE/2[1 0]       // (succ z prec x), looked up on x
  *					2 1 RECURSE/2[0 1]<0>))))// (before z after y), z bound
  *
- * An operator prints as its name and arity, then the order in which it yields its tuples
- * in brackets, then the arguments its caller binds in angle brackets, and then its
- * argument maps and child operators. So the MACHINE operators yield the graph ordered by
- * argument 1 (prec) before argument 0 (succ), and rule (1) maps their argument 0 (y) to
- * closure argument 1 and their argument 1 (x) to closure argument 0.
+ * The MACHINE operators yield the graph ordered by argument 1 (prec) before argument 0 (succ),
+ * and rule (1) maps their argument 0 (y) to query argument 1 and their argument 1 (x)
+ * to query argument 0.
  *
  * Both MACHINE operators are one and the same service. Their argument maps differ only
  * because rule (2) takes the succ role into the shared z rather than into y, which is

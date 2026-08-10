@@ -21,7 +21,10 @@ Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size3
 }
 
 
-// currently we only support multisets of ID or NAME atoms
+/**
+ * Find the RelationTable for (multiset m element e multiple n) where 
+ * e has the given atom type. Currently we only support multisets of ID or NAME atoms.
+ */
 RelationTable const * findMultisetRelation(byte elementType)
 {
 	switch(elementType) {
@@ -39,8 +42,7 @@ RelationTable const * findMultisetRelation(byte elementType)
 
 
 /**
- * Find the relation associated with a multiset, which is the inverse of
- * findMultisetRelation() and tells us the element type of an existing multiset.
+ * Find the RelationTable associated with a multiset.
  */
 static RelationTable const * lookupMultisetRelation(Atom multiset)
 {
@@ -53,7 +55,7 @@ static RelationTable const * lookupMultisetRelation(Atom multiset)
 
 
 /**
- * The atom type of the elements of an existing multiset, which its relation determines.
+ * Find the atom type of the elements of an existing multiset.
  */
 static byte findMultisetElementType(Atom multiset)
 {
