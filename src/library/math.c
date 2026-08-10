@@ -11,56 +11,62 @@
 #include "parser/PredicateBuilder.h"
 
 
-#define ADD1_INDEX		0
-#define ADD2_INDEX		1
-#define MUL1_INDEX		2
-
-#define N_SERVICES 		3
-
-#define ADD_RELATION	0
-#define MUL_RELATION	1
+// relations
+#define RELATION_ADD	0
+#define RELATION_MUL	1
 
 #define N_RELATIONS		2
 
-#define MAX_RELATION_ARITY	3
+static size8 mathRelationArity[N_RELATIONS] = {
+	3,		// ADD1
+	3,		// MUL1
+};
 
+#define MAX_RELATION_ARITY	3
 
 // List of created relation tables
 // These are needed by MathTeardown()
 RelationTable const * mathRelations[N_RELATIONS];
 
-// Every math operator computes a single tuple from its inputs, and so declares no
-// index order; see the ordering contract in operator.h
-static index8 const * mathIndexOrder = 0;
-
-// Precomputed argument indexes, in "reference" order
+// Precomputed argument indexes, such that relationArgumentIndex[i][j] is
+// the canonical index of "user order" argument j for service relation i.
 // TODO: This is similar to kernel.corePredicateRoleIndex,
-// we should have a more general mechanism for handling "user order"
+// we should have a more general mechanism for handling "user order".
 static index8 relationArgumentIndex[N_RELATIONS][MAX_RELATION_ARITY];
+
+// services
+#define SERVICE_ADD1		0
+#define SERVICE_ADD2		1
+#define SERVICE_MUL1		2
+
+#define N_SERVICES 		3
+
+// Parameter IO for each service
+static byte mathParameterIO[N_SERVICES][MAX_RELATION_ARITY] = {
+	// ADD1
+	{PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT},
+	// ADD2
+	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_IN},
+	// MUL1
+	{PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT},
+};
+
+// Relation index for search service
+static index32 mathServiceRelation[N_SERVICES] = {
+	RELATION_ADD,		// ADD1
+	RELATION_ADD,		// ADD2
+	RELATION_MUL,		// MUL1
+};
 
 /**
  * The operator (+ x<INT + y<INT = z>INT )
  */
 static void add1(OperatorContext * context)
 {
-	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
+	index8 * argumentIndex = relationArgumentIndex[RELATION_ADD];
 	int64 x = context->arguments[argumentIndex[0]]._int;
 	int64 y = context->arguments[argumentIndex[1]]._int;
 	context->arguments[argumentIndex[2]]._int = x + y;
-}
-
-static void setupAdd1(void)
-{
-	// Argument indices w.r.t. "user order" (+ + =)
-	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
-	byte parameterIO[3];
-	parameterIO[argumentIndex[0]] = PARAMETER_IN;
-	parameterIO[argumentIndex[1]] = PARAMETER_IN;
-	parameterIO[argumentIndex[2]] = PARAMETER_OUT;
-
-	Operator * op = CreateMachineOperator(3, mathIndexOrder, &mathProvider, (void *) ADD1_INDEX);
-	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, op);
-	ReleaseOperator(op);
 }
 
 /**
@@ -70,50 +76,21 @@ static void setupAdd1(void)
  */
 static void add2(OperatorContext * context)
 {
-	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
+	index8 * argumentIndex = relationArgumentIndex[RELATION_ADD];
 	int64 x = context->arguments[argumentIndex[0]]._int;
 	int64 z = context->arguments[argumentIndex[2]]._int;
 	context->arguments[argumentIndex[1]]._int = z - x;
 }
-
-static void setupAdd2(void)
-{
-	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
-	byte parameterIO[3];
-	// add2() reads x and z and computes y, so y is the output
-	parameterIO[argumentIndex[0]] = PARAMETER_IN;
-	parameterIO[argumentIndex[1]] = PARAMETER_OUT;
-	parameterIO[argumentIndex[2]] = PARAMETER_IN;
-
-	Operator * op = CreateMachineOperator(3, mathIndexOrder, &mathProvider, (void *) ADD2_INDEX);
-	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, op);
-	ReleaseOperator(op);	
-}
-
 
 /**
  * The operator (* x<INT * y<INT = z>INT )
  */
 static void mul1(OperatorContext * context)
 {
-	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
+	index8 * argumentIndex = relationArgumentIndex[RELATION_ADD];
 	int64 x = context->arguments[argumentIndex[0]]._int;
 	int64 y = context->arguments[argumentIndex[1]]._int;
 	context->arguments[argumentIndex[2]]._int = x * y;
-}
-
-static void setupMul1(void)
-{
-	// Argument indices w.r.t. "user order" (* * =)
-	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
-	byte parameterIO[3];
-	parameterIO[argumentIndex[0]] = PARAMETER_IN;
-	parameterIO[argumentIndex[1]] = PARAMETER_IN;
-	parameterIO[argumentIndex[2]] = PARAMETER_OUT;
-
-	Operator * op = CreateMachineOperator(3, mathIndexOrder, &mathProvider, (void *) MUL1_INDEX);
-	ServiceRegistryAdd(mathRelations[MUL_RELATION], parameterIO, op);
-	ReleaseOperator(op);
 }
 
 
@@ -139,7 +116,7 @@ MathFunction functionTable[N_SERVICES] = {
 /**
  * Stubs for the operator provider
  */
-static void btreeSetupContext(OperatorContext * context)
+static void mathSetupContext(OperatorContext * context)
 {
 	MathContext * mathContext = (MathContext *) &context->data;
 	index32 functionIndex = (data64) context->op->impl.machine.providerData;
@@ -148,7 +125,7 @@ static void btreeSetupContext(OperatorContext * context)
 }
 
 
-static bool btreeCall(OperatorContext * context)
+static bool mathCall(OperatorContext * context)
 {
 	MathContext * mathContext = (MathContext *) &context->data;
 	if(mathContext->hasBeenCalled)
@@ -159,18 +136,35 @@ static bool btreeCall(OperatorContext * context)
 }
 
 
-static void btreeFinalizeContext(OperatorContext * context)
+static void mathFinalizeContext(OperatorContext * context)
 {
 	// Nothing to do
 }
 
 
 MachineProvider mathProvider = {
-	.setupContext = &btreeSetupContext,
-	.call = &btreeCall,
-	.finalizeContext = &btreeFinalizeContext,
+	.setupContext = &mathSetupContext,
+	.call = &mathCall,
+	.finalizeContext = &mathFinalizeContext,
 };
 
+
+static void registerMathService(index32 serviceIndex)
+{
+	index32 relationIndex = mathServiceRelation[serviceIndex];
+	Operator * op = CreateMachineOperator(
+		mathRelationArity[relationIndex],
+		0,	// indexOrder, assuming single tuple relations for now
+		&mathProvider,
+		(void *) ((data64) serviceIndex)
+	);
+	ServiceRegistryAdd(
+		mathRelations[relationIndex],
+		mathParameterIO[serviceIndex],
+		op
+	);
+	ReleaseOperator(op);
+}
 
 void MathSetup(void)
 {
@@ -191,7 +185,7 @@ void MathSetup(void)
 	// create (+ + =) relation table
 
 	// Map roles in our "user order" (+ + =) to canonical order
-	argumentIndex = relationArgumentIndex[ADD_RELATION];
+	argumentIndex = relationArgumentIndex[RELATION_ADD];
 	argumentIndex[0] = PredicateRoleIndex(addForm, plus);
 	argumentIndex[1] = argumentIndex[0] + 1;
 	argumentIndex[2] = PredicateRoleIndex(addForm, equals);
@@ -200,14 +194,14 @@ void MathSetup(void)
 	atomTypes[argumentIndex[1]] = AT_INT;
 	atomTypes[argumentIndex[2]] = AT_INT;
 	// NOTE: no particular column index order here
-	mathRelations[ADD_RELATION] = CreateRelationTable(0, addTermForm, 3, atomTypes, 0);
+	mathRelations[RELATION_ADD] = CreateRelationTable(0, addTermForm, 3, atomTypes, 0);
 	// the table must be registered for dispatch to find it
-	RelationRegistryAdd(mathRelations[ADD_RELATION]);
+	RelationRegistryAdd(mathRelations[RELATION_ADD]);
 
 	// create (* * =) relation table
 
 	// Map roles in our "user order" (+ + =) to canonical order
-	argumentIndex = relationArgumentIndex[MUL_RELATION];
+	argumentIndex = relationArgumentIndex[RELATION_MUL];
 	argumentIndex[0] = PredicateRoleIndex(mulForm, times);
 	argumentIndex[1] = argumentIndex[0] + 1;
 	argumentIndex[2] = PredicateRoleIndex(mulForm, equals);
@@ -216,14 +210,13 @@ void MathSetup(void)
 	atomTypes[argumentIndex[1]] = AT_INT;
 	atomTypes[argumentIndex[2]] = AT_INT;
 	// NOTE: no particular column index order here
-	mathRelations[MUL_RELATION] = CreateRelationTable(0, mulTermForm, 3, atomTypes, 0);
+	mathRelations[RELATION_MUL] = CreateRelationTable(0, mulTermForm, 3, atomTypes, 0);
 	// the table must be registered for dispatch to find it
-	RelationRegistryAdd(mathRelations[MUL_RELATION]);
+	RelationRegistryAdd(mathRelations[RELATION_MUL]);
 
 	// setup operators
-	setupAdd1();
-	setupAdd2();
-	setupMul1();
+	for(index32 serviceIndex = 0; serviceIndex < N_SERVICES; serviceIndex++)
+		registerMathService(serviceIndex);
 
 	// the relation tables now hold the references to their forms
 	IFactRelease(addTermForm);
