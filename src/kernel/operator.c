@@ -3,6 +3,7 @@
 #include "kernel/operator.h"
 #include "kernel/tuple.h"
 #include "memory/allocator.h"
+#include "util/ResizingArray.h"
 #include "util/utilities.h"
 
 
@@ -888,14 +889,24 @@ Operator * CreateProjectOperator(
  *
  * Both tables are read during an iteration -- the derived tuples by the RECURSE operators
  * and the call bindings by the round itself -- and a B-tree being read is locked against
- * modification. Each therefore has a second B-tree that the round collects into, merged
+ * modification. Each therefore has somewhere else for the round to collect into, merged
  * once the round completes.
- * 
- * TODO: could the pendingTuples be a ResizingArray? Does it need to manage duplicate tuples?
+ *
+ * A round collects its tuples into a plain array, as it has no duplicates to remove: an
+ * operator yields distinct tuples, and the rounds of two different call bindings are each
+ * constrained by their binding, so they derive disjoint tuples. The call bindings do have
+ * duplicates to remove, and collect into a B-tree: a RECURSE operator registers the
+ * binding it is asked for whenever a context is created for it, which is once per tuple of
+ * the join above it, so the same binding arrives many times over.
  */
+// Tuples a round of the fixpoint iteration is expected to derive, before the array holding
+// them has to grow
+#define FIXPOINT_INITIAL_PENDING_TUPLES		64
+
+
 typedef struct s_FixpointContext {
 	BTree * tuples;
-	BTree * pendingTuples;
+	ResizingArray pendingTuples;
 	// Argument bindings the relation has been called with, as tuples holding the bound
 	// arguments with the remaining ones zeroed
 	BTree * calls;
@@ -1045,6 +1056,23 @@ static size32 mergeBTrees(BTree * source, BTree * destination)
 
 
 /**
+ * Merge the tuples a completed round collected into the relation derived so far,
+ * returning the number that were not already there.
+ */
+static size32 mergePendingTuples(ResizingArray * pendingTuples, BTree * tuples)
+{
+	size32 nNewTuples = 0;
+	size32 nPendingTuples = ResizingArrayNElements(pendingTuples);
+	for(index32 i = 0; i < nPendingTuples; i++) {
+		if(BTreeInsert(tuples, ResizingArrayGetElement(pendingTuples, i)) == BTREE_INSERTED)
+			nNewTuples++;
+	}
+	ResizingArrayReset(pendingTuples);
+	return nNewTuples;
+}
+
+
+/**
  * Build the call binding an arguments tuple represents, being the bound arguments with
  * the remaining ones zeroed, so that bindings compare and store as ordinary tuples.
  */
@@ -1058,9 +1086,28 @@ static void setupCallBinding(
 }
 
 
+#ifdef DEBUG
+/**
+ * Trace what a fixpoint operator derives. Each round re-applies the rule bodies to every
+ * call binding known so far, including the ones it has already derived tuples for, so the
+ * same tuples are derived over and over; only the ones a round adds are new.
+ *
+ * The atoms print as their hash, an operator not knowing the types of its arguments.
+ * Hardcoding a type here renders them readably when tracing a particular relation.
+ */
+static void printFixpointTuple(char const * label, Atom const * tuple, size8 nArguments)
+{
+	PrintCString(label);
+	for(index8 i = 0; i < nArguments; i++)
+		PrintF(" %llx", (unsigned long long) tuple[i].hash);
+	PrintChar('\n');
+}
+#endif
+
+
 /**
  * Apply the child operator to the given arguments and store the resulting
- * tuples in the pending tuples B-tree.
+ * tuples in the pending tuples array.
  */
 static void fixpointApplyChildOperator(OperatorContext * context, Atom const * arguments)
 {
@@ -1068,13 +1115,20 @@ static void fixpointApplyChildOperator(OperatorContext * context, Atom const * a
 	Operator const * op = context->op;
 	size32 tupleSize = op->nArguments * sizeof(Atom);
 
+#ifdef DEBUG
+	printFixpointTuple("  call", arguments, op->nArguments);
+#endif
 	CopyMemory(arguments, fixpointContext->childArguments, tupleSize);
 	OperatorContext * childContext = createChildContext(
 		context, op->impl.fixpoint.childOperator, fixpointContext->childArguments);
 	// Iterate over all tuples generate by the child operator and store them
 	// as pending tuples
-	while(OperatorCall(childContext))
-		BTreeInsert(fixpointContext->pendingTuples, fixpointContext->childArguments);
+	while(OperatorCall(childContext)) {
+#ifdef DEBUG
+		printFixpointTuple("    derived", fixpointContext->childArguments, op->nArguments);
+#endif
+		ResizingArrayAppend(&fixpointContext->pendingTuples, fixpointContext->childArguments);
+	}
 	// Freeing the child context closes the RECURSE iterators into the derived relation,
 	// which must be unlocked before the round can be merged into it
 	OperatorFreeContext(childContext);
@@ -1089,7 +1143,8 @@ static void fixpointSetupContext(OperatorContext * context)
 	size32 tupleSize = nArguments * sizeof(Atom);
 
 	fixpointContext->tuples = BTreeCreate(tupleSize, btreeCompareTuples, 0);
-	fixpointContext->pendingTuples = BTreeCreate(tupleSize, btreeCompareTuples, 0);
+	CreateResizingArray(
+		&fixpointContext->pendingTuples, tupleSize, FIXPOINT_INITIAL_PENDING_TUPLES);
 	fixpointContext->calls = BTreeCreate(tupleSize, btreeCompareTuples, 0);
 	fixpointContext->pendingCalls = BTreeCreate(tupleSize, btreeCompareTuples, 0);
 	fixpointContext->childArguments = Allocate(tupleSize);
@@ -1106,14 +1161,21 @@ static void fixpointSetupContext(OperatorContext * context)
 	// operators below add the bindings they are asked for, so the rounds reach exactly
 	// the bindings the query depends on, and no more.
 	size32 nNewItems;
+#ifdef DEBUG
+	size32 round = 0;
+#endif
 	do {
+#ifdef DEBUG
+		PrintF("FIXPOINT round %u, %u calls, %u tuples so far\n",
+			++round, BTreeNItems(fixpointContext->calls), BTreeNItems(fixpointContext->tuples));
+#endif
 		BTreeIterator callIterator;
 		BTreeIterate(&callIterator, fixpointContext->calls);
 		while(BTreeIteratorNext(&callIterator))
 			fixpointApplyChildOperator(context, BTreeIteratorPeekItem(&callIterator));
 		BTreeIteratorEnd(&callIterator);
 
-		nNewItems = mergeBTrees(fixpointContext->pendingTuples, fixpointContext->tuples);
+		nNewItems = mergePendingTuples(&fixpointContext->pendingTuples, fixpointContext->tuples);
 		nNewItems += mergeBTrees(fixpointContext->pendingCalls, fixpointContext->calls);
 	} while(nNewItems);
 
@@ -1143,7 +1205,7 @@ static void fixpointFinalizeContext(OperatorContext * context)
 	BTreeIteratorEnd(&fixpointContext->iterator);
 	BTreeFree(fixpointContext->pendingCalls);
 	BTreeFree(fixpointContext->calls);
-	BTreeFree(fixpointContext->pendingTuples);
+	FreeResizingArray(&fixpointContext->pendingTuples);
 	BTreeFree(fixpointContext->tuples);
 	Free(fixpointContext->childArguments);
 }

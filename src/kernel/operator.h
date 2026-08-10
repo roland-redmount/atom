@@ -180,6 +180,11 @@ typedef struct s_MachineProvider {
 	 * NOTE: nothing here guarantees termination. A relation over an infinite domain
 	 * has no finite fixpoint, and needs the recursive rule guarded by a precondition
 	 * to terminate; see the notes on termination in compiler.md.
+	 * 
+	 * NOTE: this is a naive iteration scheme, which typically re-evaluates the same call
+	 * many times over. Semi-naive iteration is an optimization used in Datalog that
+	 * would improve upon this. See for example
+	 * https://stackoverflow.com/questions/47043937/what-is-the-difference-between-naive-and-semi-naive-evaluation
 	 */
 	OPERATOR_FIXPOINT = 7,
 
