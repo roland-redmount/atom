@@ -17,6 +17,10 @@ The build system is a plain makefile, intended for Linux GCC or Mingw/GCC on Win
 
 ## Naming
 
+Naming things is the hardest thing in computer science.
+
+### Loop counters
+
 Loop counters should be named `i`, `j`, `k`, `l` in order of nesting, unless there is a better name. If you need more than four levels of nested loops you should probably refactor the function.
 
 
@@ -52,12 +56,47 @@ Allocate and initialize a structure. The caller is responsible for deallocation 
 `FreeSomething()`
 A deallocation procedure for complex malloc'ed data structures. Generally calls `free()` on all components of the structure.
 
+### Use as general names as possible
+
+Functions should be given a name that describes what it does in full generality, rather than some special case application of it. When factoring out a helper function from a larger function, it may be tempting to name the helper according to its role in the larger function, but this is misleading as it adds connotations that the helper function really does not have. For example, when factoring out a helper function from the `FIXPOINT` operator that handled merging a set of pending operator calls into another list, the helper was named
+```
+static size32 mergePendingCalls(BTree * pendingCalls, BTree * calls)
+```
+However, this function knows nothing about operator calls, but simply adds all items from the
+`pendingCalls` B-tree to the `calls` B-tree. A better function signature is
+```
+static size32 mergeBTrees(BTree * source, BTree * destination)
+```
+which makes clear that this function is purely about B-tree manipulation (and might perhaps belong in `btree.c`).
+
 
 ## Type names
 
 For clarity, we use a set of custom type names defined in `platform.h`. They largely mirror the standard C types, minus the `_t` suffix, so for example `int8_t` becomes just `int8`. For data types that do not necessarily encode integers, we use the aliases `data8`, `data16`, `data32`, `data64` to indicate word size, with `byte` as an additional alias for `data8`.
 
 For indexing we use unsigned integers with aliases `index8`, `index16`, `index32`; these are probably the most commonly used integer types, as indexing is so common. For data sizes we use `size8` through `size64`, also unsigned. There are [potential issues](https://c3-lang.org/blog/unsigned-sizes-a-five-year-mistake/) with unsigned types related to type conversion and overflow that we should watch out for, but I haven't has trouble so far.
+
+
+## Use of boolean flags
+
+Avoid using `bool` flags in function signatures as behavior switches, such as
+```
+int add2(int x, bool negate)
+{
+	return 2 + (negate ? -x : x);
+}
+```
+This makes the function call `add2(42, true)` difficult to understand without looking up the function definition. Instead, use an integer flag with `#define` values instead:
+```
+#define NEGATED			1
+#define NOT_NEGATED		2
+
+int add2(int x, int negate)
+{
+	return 2 + ((negate == NEGATE) ? -x : x);
+}
+```
+which allow for the more readable `add2(42, NEGATE)`. An `enum` type can also be used.
 
 
 ## Error handling
@@ -158,6 +197,8 @@ just write
 int currentTime;
 ```
 Cryptic computations can often be pulled out to a function so that they can be given a descriptive name.
+
+See also `CLAUDE.md` for guidance on language in documentation strings.
 
 
 

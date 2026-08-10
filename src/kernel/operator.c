@@ -3,11 +3,22 @@
 #include "kernel/operator.h"
 #include "kernel/tuple.h"
 #include "memory/allocator.h"
+#include "util/ResizingArray.h"
 #include "util/utilities.h"
 
 
 /**
- * Create an Operator and setup common fields.
+ * Create an execution context for a child of the given context, which the child
+ * records as its parent. Contexts created by a caller outside the operator tree have
+ * no parent; see OperatorCreateContext().
+ */
+static OperatorContext * createChildContext(
+	OperatorContext * parent, Operator const * op, Atom arguments[]);
+
+
+/**
+ * Create an Operator and setup common fields. The index order is left undeclared,
+ * for the caller to derive from its children or take from its provider.
  * The caller obtains a reference to the created operator.
  */
 static Operator * createOperator(enum OperatorType type, size8 nArguments, size32 contextSize)
@@ -18,8 +29,96 @@ static Operator * createOperator(enum OperatorType type, size8 nArguments, size3
 	op->nArguments = nArguments;
 	op->referenceCount = 1;
 	op->contextSize = contextSize;
+	op->indexOrder = 0;
 	return op;
 }
+
+
+/**
+ * Allocate the indexOrder[] array of an operator, for a caller that is about to fill it in.
+ */
+static void allocateIndexOrder(Operator * op)
+{
+	ASSERT(!op->indexOrder)
+	op->indexOrder = op->nArguments ? Allocate(op->nArguments) : 0;
+}
+
+
+/**
+ * Give an operator the identity index order, so that it yields its tuples ordered by
+ * argument 0 first. This is the order of an operator that materializes its tuples into a
+ * B-tree, the tuple itself being the key.
+ */
+static void setIdentityIndexOrder(Operator * op)
+{
+	allocateIndexOrder(op);
+	for(index8 i = 0; i < op->nArguments; i++)
+		op->indexOrder[i] = i;
+}
+
+
+/**
+ * The index order to derive from when a child declares none, being an operator that
+ * yields at most one tuple: the natural order is then as valid as any other.
+ * Written into the given array, which must have room for the child's arguments.
+ */
+static index8 const * effectiveIndexOrder(Operator const * childOperator, index8 naturalOrder[])
+{
+	if(childOperator->indexOrder)
+		return childOperator->indexOrder;
+	for(index8 i = 0; i < childOperator->nArguments; i++)
+		naturalOrder[i] = i;
+	return naturalOrder;
+}
+
+
+#ifdef DEBUG
+/**
+ * Verify that an index order is a permutation of the argument indices.
+ */
+static void assertIsIndexOrder(index8 const * indexOrder, size8 nArguments)
+{
+	bool present[nArguments];
+	SetMemory(present, nArguments * sizeof(bool), 0);
+	for(index8 i = 0; i < nArguments; i++) {
+		ASSERT(indexOrder[i] < nArguments)
+		ASSERT(!present[indexOrder[i]])
+		present[indexOrder[i]] = true;
+	}
+}
+#endif
+
+
+/**
+ * Derive the index order of an operator that relabels its child arguments, by taking
+ * the child arguments in the child's order and mapping each to the argument it provides.
+ * A child argument taken from elsewhere (the constants of a permute operator) has no
+ * argument to contribute, and one whose argument was already contributed by an earlier
+ * child argument (the collapsed arguments of a constrain operator) contributes nothing
+ * further, being equal to it in every yielded tuple.
+ *
+ * Relabeling the arguments of a relation of at most one tuple gives a relation of at
+ * most one tuple, so a child declaring no order leaves this operator undeclared too.
+ */
+static void deriveIndexOrderFromChild(
+	Operator * op, Operator const * childOperator, index8 const * argumentMap)
+{
+	if(!childOperator->indexOrder)
+		return;
+	allocateIndexOrder(op);
+	bool contributed[op->nArguments];
+	SetMemory(contributed, op->nArguments * sizeof(bool), 0);
+	size8 nOrdered = 0;
+	for(index8 i = 0; i < childOperator->nArguments; i++) {
+		index8 argument = argumentMap[childOperator->indexOrder[i]];
+		if((argument >= op->nArguments) || contributed[argument])
+			continue;
+		contributed[argument] = true;
+		op->indexOrder[nOrdered++] = argument;
+	}
+	ASSERT(nOrdered == op->nArguments)
+}
+
 
 /**
  * Copy parent arguments to a child arguments tuple, as given by an argument map.
@@ -115,6 +214,7 @@ Operator * CreatePermuteOperator(
 
 	op->impl.permute.argumentMap = Allocate(childOperator->nArguments);
 	CopyMemory(argumentMap, op->impl.permute.argumentMap, childOperator->nArguments);
+	deriveIndexOrderFromChild(op, childOperator, argumentMap);
 	return op;
 }
 
@@ -135,7 +235,8 @@ static void permuteSetupContext(OperatorContext * context)
 			: op->impl.permute.constants[index - nArguments];
 	}
 	// setup child context
-	permuteContext->childContext = OperatorCreateContext(
+	permuteContext->childContext = createChildContext(
+		context,
 		op->impl.permute.childOperator,
 		permuteContext->childArguments
 	);
@@ -218,6 +319,7 @@ Operator * CreateConstrainOperator(
 
 	op->impl.constrain.argumentMap = Allocate(childOperator->nArguments);
 	CopyMemory(argumentMap, op->impl.constrain.argumentMap, childOperator->nArguments);
+	deriveIndexOrderFromChild(op, childOperator, argumentMap);
 	return op;
 }
 
@@ -235,7 +337,8 @@ static void constrainSetupContext(OperatorContext * context)
 		context->arguments, constrainContext->childArguments,
 		op->impl.constrain.argumentMap, nChildArguments);
 
-	constrainContext->childContext = OperatorCreateContext(
+	constrainContext->childContext = createChildContext(
+		context,
 		op->impl.constrain.childOperator,
 		constrainContext->childArguments
 	);
@@ -353,6 +456,35 @@ Operator * CreateJoinOperator(
 	assertArgumentsAreDistinct(rightMap, rightChild->nArguments, nArguments);
 #endif
 
+	// The left child gives the major key: it yields ascending and the join keeps every
+	// one of its arguments. The join arguments are then constant within one left tuple,
+	// so the right child orders only the arguments it does not share with the left.
+	// Joining two relations of at most one tuple gives at most one tuple, and only then
+	// is the join left undeclared.
+	if(leftChild->indexOrder || rightChild->indexOrder) {
+		index8 leftNaturalOrder[leftChild->nArguments];
+		index8 rightNaturalOrder[rightChild->nArguments];
+		index8 const * leftOrder = effectiveIndexOrder(leftChild, leftNaturalOrder);
+		index8 const * rightOrder = effectiveIndexOrder(rightChild, rightNaturalOrder);
+		allocateIndexOrder(op);
+		bool ordered[nArguments];
+		SetMemory(ordered, nArguments * sizeof(bool), 0);
+		size8 nOrdered = 0;
+		for(index8 i = 0; i < leftChild->nArguments; i++) {
+			index8 argument = leftMap[leftOrder[i]];
+			ordered[argument] = true;
+			op->indexOrder[nOrdered++] = argument;
+		}
+		for(index8 i = 0; i < rightChild->nArguments; i++) {
+			index8 argument = rightMap[rightOrder[i]];
+			if(ordered[argument])
+				continue;
+			ordered[argument] = true;
+			op->indexOrder[nOrdered++] = argument;
+		}
+		ASSERT(nOrdered == nArguments)
+	}
+
 	return op;
 }
 
@@ -398,7 +530,8 @@ static bool joinEvaluateLeft(OperatorContext * context)
 	scatterArguments(
 		context->arguments, joinContext->rightArguments,
 		op->impl.join.rightMap, op->impl.join.right->nArguments);
-	joinContext->rightContext = OperatorCreateContext(
+	joinContext->rightContext = createChildContext(
+		context,
 		op->impl.join.right,
 		joinContext->rightArguments
 	);
@@ -421,7 +554,8 @@ static void joinSetupContext(OperatorContext * context)
 	scatterArguments(
 		context->arguments, joinContext->leftArguments,
 		op->impl.join.leftMap, op->impl.join.left->nArguments);
-	joinContext->leftContext = OperatorCreateContext(
+	joinContext->leftContext = createChildContext(
+		context,
 		op->impl.join.left,
 		joinContext->leftArguments
 	);
@@ -490,6 +624,21 @@ Operator * CreateUnionOperator(Operator * first, Operator * second)
 {
 	ASSERT(first->nArguments == second->nArguments)
 	Operator * op = createOperator(OPERATOR_UNION, first->nArguments, sizeof(UnionContext));
+
+	// Merging two ordered relations is only meaningful if they are ordered alike. A child
+	// declaring no order yields at most one tuple and so is ordered alike with any other;
+	// if neither declares one, the union of the two may still hold two tuples, and the
+	// natural order serves to merge them.
+	index8 naturalOrder[first->nArguments];
+	index8 const * indexOrder = first->indexOrder
+		? first->indexOrder
+		: effectiveIndexOrder(second, naturalOrder);
+	ASSERT(
+		!first->indexOrder || !second->indexOrder
+		|| (CompareMemory(first->indexOrder, second->indexOrder, first->nArguments) == 0)
+	)
+	allocateIndexOrder(op);
+	CopyMemory(indexOrder, op->indexOrder, first->nArguments);
 	op->impl._union.first = first;
 	AcquireOperator(first);
 	op->impl._union.second = second;
@@ -519,10 +668,10 @@ static void unionSetupContext(OperatorContext * context)
 	unionContext->lookahead = Allocate(context->op->nArguments * sizeof(Atom));
 	// Arbitratily assign child operators to previous and next
 	// both child operators write to the arguments tuple
-	unionContext->lookaheadContext = OperatorCreateContext(
-		context->op->impl._union.first, context->arguments);
-	unionContext->nextContext = OperatorCreateContext(
-		context->op->impl._union.second, context->arguments);
+	unionContext->lookaheadContext = createChildContext(
+		context, context->op->impl._union.first, context->arguments);
+	unionContext->nextContext = createChildContext(
+		context, context->op->impl._union.second, context->arguments);
 	// Obtain the lookahead tuple
 	if(OperatorCall(unionContext->lookaheadContext)) {
 		CopyMemory(context->arguments, unionContext->lookahead, context->op->nArguments * sizeof(Atom));
@@ -535,6 +684,24 @@ static void unionSetupContext(OperatorContext * context)
 }
 
 
+/**
+ * Yield the lookahead tuple once the other child operator has been exhausted, and
+ * continue with the child operator the lookahead came from. That operator is left as
+ * the next context, so that later calls reach it through the case below.
+ */
+static bool unionYieldRemainingLookahead(OperatorContext * context)
+{
+	UnionContext * unionContext = (UnionContext *) &context->data;
+	OperatorFreeContext(unionContext->nextContext);
+	unionContext->nextContext = 0;
+	swapContexts(unionContext);
+	CopyMemory(
+		unionContext->lookahead, context->arguments,
+		context->op->nArguments * sizeof(Atom));
+	return true;
+}
+
+
 static bool unionCall(OperatorContext * context)
 {
 	UnionContext * unionContext = (UnionContext *) &context->data;
@@ -542,30 +709,32 @@ static bool unionCall(OperatorContext * context)
 	// We interleave tuples provided by the two operators to maintain sorted order,
 	// and skip any identical tuples. At each call, we have a "lookahead" tuple from
 	// one of the child operators, and we try to obtain a new tuple from the other
-	// operator. If one exists, we compare it to the lookahead tuple and return the'
+	// operator. If one exists, we compare it to the lookahead tuple and return the
 	// preceding one; else we have exhausted one operator.
 	if(!unionContext->lookaheadContext) {
 		// no lookahead operator, call other operator directly
 		return OperatorCall(unionContext->nextContext);
 	}
-	
-	if(!OperatorCall(unionContext->nextContext)) {
-		// no more lookahead, swap contexts 
-		OperatorFreeContext(unionContext->nextContext);
-		unionContext->nextContext = 0;
-		swapContexts(unionContext);
-		CopyMemory(unionContext->lookahead, context->arguments, nArguments * sizeof(Atom));
-		return true;
-	}
 
-	// Compare the newly obtained arguments tuple with the lookahead tuple 
-	int8 order = TupleCompare(context->arguments, unionContext->lookahead, nArguments);
+	if(!OperatorCall(unionContext->nextContext))
+		return unionYieldRemainingLookahead(context);
+
+	// Compare the newly obtained arguments tuple with the lookahead tuple, in the order
+	// the two child operators agree on
+	index8 const * indexOrder = context->op->indexOrder;
+	int8 order = TupleCompareInOrder(
+		context->arguments, unionContext->lookahead, indexOrder, nArguments);
 	if(order == 0) {
-		// Duplicate tuple, acquire next (only one tuple can be equal)
-		if(OperatorCall(unionContext->nextContext)) {
-			order = TupleCompare(context->arguments, unionContext->lookahead, nArguments);
-			ASSERT(order > 0)
-		}
+		// Both operators produced this tuple and the union yields it once, so we take
+		// another from this operator. Only one tuple can be equal, as each operator
+		// yields distinct tuples. Should this operator be exhausted, the lookahead tuple
+		// is still to be yielded, and yielding it here is what keeps it from being
+		// yielded a second time as the lookahead of the remaining operator.
+		if(!OperatorCall(unionContext->nextContext))
+			return unionYieldRemainingLookahead(context);
+		order = TupleCompareInOrder(
+			context->arguments, unionContext->lookahead, indexOrder, nArguments);
+		ASSERT(order > 0)
 	}
 	if(order < 0) {
 		return true;
@@ -592,11 +761,12 @@ static void unionFinalizeContext(OperatorContext * context)
 //------------------------------------- OPERATOR_PROJECT -----------------------------------------
 
 /**
- * PROJECT keeps the first nArguments arguments of its child operator and drops the rest.
+ * PROJECT keeps the child arguments named by its argument map and drops the rest.
  * Dropping arguments may leave duplicate tuples, so we enumerate the entire child relation
  * into a B-tree keyed on the kept arguments, which both removes duplicates and orders the
- * result. As the kept arguments are a prefix of the child arguments tuple, the B-tree key
- * is simply the leading part of that tuple and needs no rearranging.
+ * result. Materializing is what a projection generally requires: dropping an argument
+ * reorders the arguments the child ordered below it, so the child's order does not carry
+ * over to the projected tuples.
  */
 typedef struct s_ProjectContext {
 	// B-tree holding the unique, ordered tuples
@@ -615,26 +785,32 @@ static void projectSetupContext(OperatorContext * context)
 {
 	ProjectContext * projectContext = (ProjectContext *) &context->data;
 
-	Operator * childOperator = context->op->impl.project.childOperator;
-	size8 nArguments = context->op->nArguments;
+	Operator const * op = context->op;
+	Operator * childOperator = op->impl.project.childOperator;
+	size8 nArguments = op->nArguments;
 	size8 nChildArguments = childOperator->nArguments;
 
-	// The child arguments tuple takes the caller's input arguments in its leading
-	// positions; the dropped arguments are left unbound so the child enumerates them.
+	// The child arguments tuple takes the caller's input arguments in the kept positions;
+	// the dropped arguments are left unbound so the child enumerates them.
 	Atom * childArguments = Allocate(nChildArguments * sizeof(Atom));
-	CopyMemory(context->arguments, childArguments, nArguments * sizeof(Atom));
-	SetMemory(&childArguments[nArguments], (nChildArguments - nArguments) * sizeof(Atom), 0);
+	SetMemory(childArguments, nChildArguments * sizeof(Atom), 0);
+	for(index8 i = 0; i < nArguments; i++)
+		childArguments[op->impl.project.argumentMap[i]] = context->arguments[i];
 
-	OperatorContext * childContext = OperatorCreateContext(childOperator, childArguments);
-	// Retrieve all tuples from the child relation, keeping the leading arguments only
+	OperatorContext * childContext = createChildContext(context, childOperator, childArguments);
+	// Retrieve all tuples from the child relation, gathering the kept arguments
 	projectContext->btree = BTreeCreate(
 		nArguments * sizeof(Atom),
 		btreeCompareTuples,
 		0
 	);
+	Atom * projectedTuple = Allocate(nArguments * sizeof(Atom));
 	while(OperatorCall(childContext)) {
-		BTreeInsert(projectContext->btree, childArguments);
+		for(index8 i = 0; i < nArguments; i++)
+			projectedTuple[i] = childArguments[op->impl.project.argumentMap[i]];
+		BTreeInsert(projectContext->btree, projectedTuple);
 	}
+	Free(projectedTuple);
 	OperatorFreeContext(childContext);
 	Free(childArguments);
 	// Setup B-tree iterator
@@ -671,16 +847,452 @@ static void teardownProjectOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_PROJECT)
 	ReleaseOperator(op->impl.project.childOperator);
+	Free(op->impl.project.argumentMap);
 }
 
 
-Operator * CreateProjectOperator(Operator * childOperator, size8 nArguments)
+Operator * CreateProjectOperator(
+	Operator * childOperator, size8 nArguments, index8 const * argumentMap)
 {
-	ASSERT(nArguments < childOperator->nArguments)
+	ASSERT(nArguments <= childOperator->nArguments)
 	Operator * op = createOperator(OPERATOR_PROJECT, nArguments, sizeof(ProjectContext));
 	op->impl.project.childOperator = childOperator;
 	AcquireOperator(childOperator);
+
+#ifdef DEBUG
+	// Each kept argument must name a distinct child argument
+	bool kept[childOperator->nArguments];
+	SetMemory(kept, childOperator->nArguments * sizeof(bool), 0);
+	for(index8 i = 0; i < nArguments; i++) {
+		ASSERT(argumentMap[i] < childOperator->nArguments)
+		ASSERT(!kept[argumentMap[i]])
+		kept[argumentMap[i]] = true;
+	}
+#endif
+
+	op->impl.project.argumentMap = Allocate(nArguments);
+	CopyMemory(argumentMap, op->impl.project.argumentMap, nArguments);
+	// The B-tree orders the projected tuples as they are laid out
+	setIdentityIndexOrder(op);
 	return op;
+}
+
+
+//------------------------------ OPERATOR_FIXPOINT, OPERATOR_RECURSE -----------------------------
+
+/**
+ * A fixpoint operator computes its relation iteratively. The calls B-tree stores all
+ * caller arguments from each recursive call made so far. In each iteration, we apply
+ * the child operator (representing the recursive clause) to every call. When a descendant
+ * RECURSE operator is called with arguments not seen before, it adds it (??).
+ * A round adding neither a tuple nor a new call (fixpoint) terminates the iteration.
+ *
+ * Both tables are read during an iteration -- the derived tuples by the RECURSE operators
+ * and the call bindings by the round itself -- and a B-tree being read is locked against
+ * modification. Each therefore has somewhere else for the round to collect into, merged
+ * once the round completes.
+ *
+ * A round collects its tuples into a plain array, as it has no duplicates to remove: an
+ * operator yields distinct tuples, and the rounds of two different call bindings are each
+ * constrained by their binding, so they derive disjoint tuples. The call bindings do have
+ * duplicates to remove, and collect into a B-tree: a RECURSE operator registers the
+ * binding it is asked for whenever a context is created for it, which is once per tuple of
+ * the join above it, so the same binding arrives many times over.
+ */
+// Tuples a round of the fixpoint iteration is expected to derive, before the array holding
+// them has to grow
+#define FIXPOINT_INITIAL_PENDING_TUPLES		64
+
+
+typedef struct s_FixpointContext {
+	BTree * tuples;
+	ResizingArray pendingTuples;
+	// Argument bindings the relation has been called with, as tuples holding the bound
+	// arguments with the remaining ones zeroed
+	BTree * calls;
+	BTree * pendingCalls;
+	BTreeIterator iterator;
+	Atom * childArguments;
+} FixpointContext;
+
+
+typedef struct s_RecurseContext {
+	BTreeIterator iterator;
+} RecurseContext;
+
+
+/**
+ * Store the indices of the arguments a caller binds, shared by the two operators
+ * reading a derived relation.
+ */
+static void setupInputArguments(
+	index8 ** storedInputArguments, size8 * storedNInputs,
+	index8 const * inputArguments, size8 nInputs, size8 nArguments)
+{
+	*storedNInputs = nInputs;
+	if(!nInputs) {
+		*storedInputArguments = 0;
+		return;
+	}
+#ifdef DEBUG
+	bool bound[nArguments];
+	SetMemory(bound, nArguments * sizeof(bool), 0);
+	for(index8 i = 0; i < nInputs; i++) {
+		ASSERT(inputArguments[i] < nArguments)
+		ASSERT(!bound[inputArguments[i]])
+		bound[inputArguments[i]] = true;
+	}
+#endif
+	*storedInputArguments = Allocate(nInputs);
+	CopyMemory(inputArguments, *storedInputArguments, nInputs);
+}
+
+
+/**
+ * Test whether a derived tuple agrees with the arguments the caller bound.
+ */
+static bool tupleMatchesInputArguments(
+	Atom const * tuple, Atom const * arguments, index8 const * inputArguments, size8 nInputs)
+{
+	for(index8 i = 0; i < nInputs; i++) {
+		index8 argument = inputArguments[i];
+		if(CompareAtoms(tuple[argument], arguments[argument]))
+			return false;
+	}
+	return true;
+}
+
+
+/**
+ * Yield the next tuple of a derived relation that agrees with the arguments the caller
+ * bound, copying it to the arguments tuple. Returns false once the relation is exhausted.
+ *
+ * NOTE: the bound arguments are filtered rather than sought, so a query over a derived
+ * relation scans it. Seeking would need the bound arguments to be a leading part of the
+ * index order, as it does for a B-tree relation.
+ */
+static bool yieldDerivedTuple(
+	OperatorContext * context, BTreeIterator * iterator,
+	index8 const * inputArguments, size8 nInputs)
+{
+	size8 nArguments = context->op->nArguments;
+	while(BTreeIteratorNext(iterator)) {
+		Atom const * tuple = BTreeIteratorPeekItem(iterator);
+		if(!tupleMatchesInputArguments(tuple, context->arguments, inputArguments, nInputs))
+			continue;
+		CopyMemory(tuple, context->arguments, nArguments * sizeof(Atom));
+		return true;
+	}
+	return false;
+}
+
+
+Operator * CreateFixpointOperator(
+	Operator * childOperator, index8 const * inputArguments, size8 nInputs)
+{
+	size8 nArguments = childOperator->nArguments;
+	Operator * op = createOperator(OPERATOR_FIXPOINT, nArguments, sizeof(FixpointContext));
+	op->impl.fixpoint.childOperator = childOperator;
+	AcquireOperator(childOperator);
+	setupInputArguments(
+		&(op->impl.fixpoint.inputArguments), &(op->impl.fixpoint.nInputs),
+		inputArguments, nInputs, nArguments);
+
+	// The derived tuples are accumulated in a B-tree ordered as they are laid out
+	setIdentityIndexOrder(op);
+	return op;
+}
+
+
+Operator * CreateRecurseOperator(
+	size8 nArguments, index8 const * inputArguments, size8 nInputs)
+{
+	Operator * op = createOperator(OPERATOR_RECURSE, nArguments, sizeof(RecurseContext));
+	setupInputArguments(
+		&(op->impl.recurse.inputArguments), &(op->impl.recurse.nInputs),
+		inputArguments, nInputs, nArguments);
+
+	// This operator enumerates the tuples derived by the enclosing fixpoint operator,
+	// and so yields them in the order that operator accumulated them
+	setIdentityIndexOrder(op);
+	return op;
+}
+
+
+static void teardownFixpointOperator(Operator * op)
+{
+	ASSERT(op->type == OPERATOR_FIXPOINT)
+	ReleaseOperator(op->impl.fixpoint.childOperator);
+	if(op->impl.fixpoint.inputArguments)
+		Free(op->impl.fixpoint.inputArguments);
+}
+
+
+static void teardownRecurseOperator(Operator * op)
+{
+	ASSERT(op->type == OPERATOR_RECURSE)
+	if(op->impl.recurse.inputArguments)
+		Free(op->impl.recurse.inputArguments);
+}
+
+
+/**
+ * Add all items in the source BTree to the destination BTree,
+ * so that the destiniation becomes the union of the two tuple sets.
+ */
+static size32 mergeBTrees(BTree * source, BTree * destination)
+{
+	size32 nNewItems = 0;
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, source);
+	while(BTreeIteratorNext(&iterator)) {
+		if(BTreeInsert(destination, BTreeIteratorPeekItem(&iterator)) == BTREE_INSERTED)
+			nNewItems++;
+	}
+	BTreeIteratorEnd(&iterator);
+	BTreeClear(source);
+	return nNewItems;
+}
+
+
+/**
+ * Merge the tuples a completed round collected into the relation derived so far,
+ * returning the number that were not already there.
+ */
+static size32 mergePendingTuples(ResizingArray * pendingTuples, BTree * tuples)
+{
+	size32 nNewTuples = 0;
+	size32 nPendingTuples = ResizingArrayNElements(pendingTuples);
+	for(index32 i = 0; i < nPendingTuples; i++) {
+		if(BTreeInsert(tuples, ResizingArrayGetElement(pendingTuples, i)) == BTREE_INSERTED)
+			nNewTuples++;
+	}
+	ResizingArrayReset(pendingTuples);
+	return nNewTuples;
+}
+
+
+/**
+ * Build the call binding an arguments tuple represents, being the bound arguments with
+ * the remaining ones zeroed, so that bindings compare and store as ordinary tuples.
+ */
+static void setupCallBinding(
+	Atom * binding, Atom const * arguments,
+	index8 const * inputArguments, size8 nInputs, size8 nArguments)
+{
+	SetMemory(binding, nArguments * sizeof(Atom), 0);
+	for(index8 i = 0; i < nInputs; i++)
+		binding[inputArguments[i]] = arguments[inputArguments[i]];
+}
+
+
+#ifdef DEBUG
+/**
+ * Trace what a fixpoint operator derives. Each round re-applies the rule bodies to every
+ * call binding known so far, including the ones it has already derived tuples for, so the
+ * same tuples are derived over and over; only the ones a round adds are new.
+ *
+ * The atoms print as their hash, an operator not knowing the types of its arguments.
+ * Hardcoding a type here renders them readably when tracing a particular relation.
+ */
+static void printFixpointTuple(char const * label, Atom const * tuple, size8 nArguments)
+{
+	PrintCString(label);
+	for(index8 i = 0; i < nArguments; i++)
+		PrintF(" %llx", (unsigned long long) tuple[i].hash);
+	PrintChar('\n');
+}
+#endif
+
+
+/**
+ * Apply the child operator to the given arguments and store the resulting
+ * tuples in the pending tuples array.
+ */
+static void fixpointApplyChildOperator(OperatorContext * context, Atom const * arguments)
+{
+	FixpointContext * fixpointContext = (FixpointContext *) &context->data;
+	Operator const * op = context->op;
+	size32 tupleSize = op->nArguments * sizeof(Atom);
+
+#ifdef DEBUG
+	printFixpointTuple("  call", arguments, op->nArguments);
+#endif
+	CopyMemory(arguments, fixpointContext->childArguments, tupleSize);
+	OperatorContext * childContext = createChildContext(
+		context, op->impl.fixpoint.childOperator, fixpointContext->childArguments);
+	// Iterate over all tuples generate by the child operator and store them
+	// as pending tuples
+	while(OperatorCall(childContext)) {
+#ifdef DEBUG
+		printFixpointTuple("    derived", fixpointContext->childArguments, op->nArguments);
+#endif
+		ResizingArrayAppend(&fixpointContext->pendingTuples, fixpointContext->childArguments);
+	}
+	// Freeing the child context closes the RECURSE iterators into the derived relation,
+	// which must be unlocked before the round can be merged into it
+	OperatorFreeContext(childContext);
+}
+
+
+static void fixpointSetupContext(OperatorContext * context)
+{
+	FixpointContext * fixpointContext = (FixpointContext *) &context->data;
+	Operator const * op = context->op;
+	size8 nArguments = op->nArguments;
+	size32 tupleSize = nArguments * sizeof(Atom);
+
+	fixpointContext->tuples = BTreeCreate(tupleSize, btreeCompareTuples, 0);
+	CreateResizingArray(
+		&fixpointContext->pendingTuples, tupleSize, FIXPOINT_INITIAL_PENDING_TUPLES);
+	fixpointContext->calls = BTreeCreate(tupleSize, btreeCompareTuples, 0);
+	fixpointContext->pendingCalls = BTreeCreate(tupleSize, btreeCompareTuples, 0);
+	fixpointContext->childArguments = Allocate(tupleSize);
+
+	// Add the caller's argument as the first call tuple. With no 
+	// arguments this is the empty binding, and the relation is derived in full.
+	Atom binding[nArguments];
+	setupCallBinding(
+		binding, context->arguments,
+		op->impl.fixpoint.inputArguments, op->impl.fixpoint.nInputs, nArguments);
+	BTreeInsert(fixpointContext->calls, binding);
+	
+	// Each round applies the rule bodies to every call binding known so far. The RECURSE
+	// operators below add the bindings they are asked for, so the rounds reach exactly
+	// the bindings the query depends on, and no more.
+	size32 nNewItems;
+#ifdef DEBUG
+	size32 round = 0;
+#endif
+	do {
+#ifdef DEBUG
+		PrintF("FIXPOINT round %u, %u calls, %u tuples so far\n",
+			++round, BTreeNItems(fixpointContext->calls), BTreeNItems(fixpointContext->tuples));
+#endif
+		BTreeIterator callIterator;
+		BTreeIterate(&callIterator, fixpointContext->calls);
+		while(BTreeIteratorNext(&callIterator))
+			fixpointApplyChildOperator(context, BTreeIteratorPeekItem(&callIterator));
+		BTreeIteratorEnd(&callIterator);
+
+		nNewItems = mergePendingTuples(&fixpointContext->pendingTuples, fixpointContext->tuples);
+		nNewItems += mergeBTrees(fixpointContext->pendingCalls, fixpointContext->calls);
+	} while(nNewItems);
+
+	BTreeIterate(&fixpointContext->iterator, fixpointContext->tuples);
+}
+
+
+static bool fixpointCall(OperatorContext * context)
+{
+	FixpointContext * fixpointContext = (FixpointContext *) &context->data;
+	return yieldDerivedTuple(
+		context, &fixpointContext->iterator,
+		context->op->impl.fixpoint.inputArguments, context->op->impl.fixpoint.nInputs);
+}
+
+
+size32 FixpointNDerivedTuples(OperatorContext const * context)
+{
+	ASSERT(context->op->type == OPERATOR_FIXPOINT)
+	return BTreeNItems(((FixpointContext const *) &context->data)->tuples);
+}
+
+
+static void fixpointFinalizeContext(OperatorContext * context)
+{
+	FixpointContext * fixpointContext = (FixpointContext *) &context->data;
+	BTreeIteratorEnd(&fixpointContext->iterator);
+	BTreeFree(fixpointContext->pendingCalls);
+	BTreeFree(fixpointContext->calls);
+	FreeResizingArray(&fixpointContext->pendingTuples);
+	BTreeFree(fixpointContext->tuples);
+	Free(fixpointContext->childArguments);
+}
+
+
+/**
+ * Find the fixpoint operator context deriving the relation that a recurse operator
+ * enumerates, being the nearest one enclosing it.
+ */
+static OperatorContext * findFixpointContext(OperatorContext * context)
+{
+	for(OperatorContext * ancestor = context->parent; ancestor; ancestor = ancestor->parent) {
+		if(ancestor->op->type == OPERATOR_FIXPOINT)
+			return ancestor;
+	}
+	return 0;
+}
+
+
+#ifdef DEBUG
+/**
+ * Verify that a recurse operator binds every argument the fixpoint operator does.
+ * Call bindings are keyed on the fixpoint's input arguments, so a recursive term must
+ * bind at least those to name the call it is making. It may bind more, which only
+ * restricts the tuples it yields.
+ *
+ * A recursive term binding fewer of them asks for something broader than any call keyed
+ * this way can express, and needs a table of its own binding pattern.
+ */
+static void assertCallBindingIsNamed(Operator const * recurse, Operator const * fixpoint)
+{
+	for(index8 i = 0; i < fixpoint->impl.fixpoint.nInputs; i++) {
+		bool bound = false;
+		for(index8 j = 0; j < recurse->impl.recurse.nInputs; j++)
+			bound = bound
+				|| (fixpoint->impl.fixpoint.inputArguments[i]
+					== recurse->impl.recurse.inputArguments[j]);
+		ASSERT(bound)
+	}
+}
+#endif
+
+
+static void recurseSetupContext(OperatorContext * context)
+{
+	RecurseContext * recurseContext = (RecurseContext *) &context->data;
+	Operator const * op = context->op;
+	OperatorContext * fixpointOperatorContext = findFixpointContext(context);
+	// A recurse operator may only occur in the subtree of a fixpoint operator
+	ASSERT(fixpointOperatorContext)
+	Operator const * fixpointOperator = fixpointOperatorContext->op;
+	ASSERT(fixpointOperator->nArguments == op->nArguments)
+#ifdef DEBUG
+	assertCallBindingIsNamed(op, fixpointOperator);
+#endif
+	FixpointContext * fixpointContext =
+		(FixpointContext *) &fixpointOperatorContext->data;
+
+	// Record the binding this term is asking for, so that a later round derives it.
+	// The binding takes the fixpoint's input arguments, as that is what the derivation
+	// is keyed on: a term binding more arguments than the derivation distinguishes asks
+	// for a call already covered by a broader one, and only filters what it yields.
+	Atom * binding = Allocate(op->nArguments * sizeof(Atom));
+	setupCallBinding(
+		binding, context->arguments,
+		fixpointOperator->impl.fixpoint.inputArguments,
+		fixpointOperator->impl.fixpoint.nInputs, op->nArguments);
+	BTreeInsert(fixpointContext->pendingCalls, binding);
+	Free(binding);
+
+	BTreeIterate(&recurseContext->iterator, fixpointContext->tuples);
+}
+
+
+static bool recurseCall(OperatorContext * context)
+{
+	RecurseContext * recurseContext = (RecurseContext *) &context->data;
+	return yieldDerivedTuple(
+		context, &recurseContext->iterator,
+		context->op->impl.recurse.inputArguments, context->op->impl.recurse.nInputs);
+}
+
+
+static void recurseFinalizeContext(OperatorContext * context)
+{
+	RecurseContext * recurseContext = (RecurseContext *) &context->data;
+	BTreeIteratorEnd(&recurseContext->iterator);
 }
 
 
@@ -707,11 +1319,20 @@ static void machineFinalizeContext(OperatorContext * context)
 }
 
 
-Operator * CreateMachineOperator(size8 nArguments, MachineProvider * provider, void * providerData)
+Operator * CreateMachineOperator(
+	size8 nArguments, index8 const * indexOrder, MachineProvider * provider, void * providerData)
 {
 	Operator * op = createOperator(OPERATOR_MACHINE, nArguments, provider->contextSize);
 	op->impl.machine.provider = provider;
 	op->impl.machine.providerData = providerData;
+	// A provider yielding at most one tuple declares no order
+	if(indexOrder) {
+		allocateIndexOrder(op);
+		CopyMemory(indexOrder, op->indexOrder, nArguments);
+#ifdef DEBUG
+		assertIsIndexOrder(op->indexOrder, nArguments);
+#endif
+	}
 	return op;
 }
 
@@ -758,6 +1379,14 @@ void ReleaseOperator(Operator * op)
 			teardownConstrainOperator(op);
 			break;
 
+		case OPERATOR_FIXPOINT:
+			teardownFixpointOperator(op);
+			break;
+
+		case OPERATOR_RECURSE:
+			teardownRecurseOperator(op);
+			break;
+
 		case OPERATOR_MACHINE:
 			teardownMachineOperator(op);
 			break;
@@ -766,19 +1395,23 @@ void ReleaseOperator(Operator * op)
 			ASSERT(false)
 			break;
 		}
+		if(op->indexOrder)
+			Free(op->indexOrder);
 		Free(op);
 	}
 }
 
 
-OperatorContext * OperatorCreateContext(Operator const * op, Atom arguments[])
+static OperatorContext * createChildContext(
+	OperatorContext * parent, Operator const * op, Atom arguments[])
 {
 	size32 contextSize = sizeof(OperatorContext) + op->contextSize;
 	OperatorContext * context = Allocate(contextSize);
 	SetMemory(context, contextSize, 0);
 	context->op = op;
 	context->arguments = arguments;
-	
+	context->parent = parent;
+
 	switch(op->type) {
 	case OPERATOR_PERMUTE:
 		permuteSetupContext(context);
@@ -800,6 +1433,14 @@ OperatorContext * OperatorCreateContext(Operator const * op, Atom arguments[])
 		constrainSetupContext(context);
 		break;
 
+	case OPERATOR_FIXPOINT:
+		fixpointSetupContext(context);
+		break;
+
+	case OPERATOR_RECURSE:
+		recurseSetupContext(context);
+		break;
+
 	case OPERATOR_MACHINE:
 		machineSetupContext(context);
 		break;
@@ -812,31 +1453,83 @@ OperatorContext * OperatorCreateContext(Operator const * op, Atom arguments[])
 }
 
 
+OperatorContext * OperatorCreateContext(Operator const * op, Atom arguments[])
+{
+	return createChildContext(0, op, arguments);
+}
+
+
+#ifdef DEBUG
+/**
+ * Verify that the tuple just yielded ascends strictly with respect to the operator's
+ * index order, which is the ordering contract every operator must uphold; see operator.h.
+ * A machine operator failing this is a fault in its provider, which declared an order
+ * it does not yield in.
+ */
+static void assertTupleAscends(OperatorContext * context)
+{
+	Operator const * op = context->op;
+	if(!op->nArguments)
+		return;
+	if(context->previousTuple) {
+		// An operator declaring no index order claims to yield at most one tuple
+		ASSERT(op->indexOrder)
+		ASSERT(TupleCompareInOrder(
+			context->previousTuple, context->arguments, op->indexOrder, op->nArguments) < 0)
+	}
+	else
+		context->previousTuple = Allocate(op->nArguments * sizeof(Atom));
+	CopyMemory(context->arguments, context->previousTuple, op->nArguments * sizeof(Atom));
+}
+#endif
+
+
 bool OperatorCall(OperatorContext * context)
 {
+	bool success;
 	switch(context->op->type) {
 	case OPERATOR_PERMUTE:
-		return permuteCall(context);
+		success = permuteCall(context);
+		break;
 
 	case OPERATOR_JOIN:
-		return joinCall(context);
+		success = joinCall(context);
+		break;
 
 	case OPERATOR_UNION:
-		return unionCall(context);
+		success = unionCall(context);
+		break;
 
 	case OPERATOR_PROJECT:
-		return projectCall(context);
+		success = projectCall(context);
+		break;
 
 	case OPERATOR_CONSTRAIN:
-		return constrainCall(context);
+		success = constrainCall(context);
+		break;
+
+	case OPERATOR_FIXPOINT:
+		success = fixpointCall(context);
+		break;
+
+	case OPERATOR_RECURSE:
+		success = recurseCall(context);
+		break;
 
 	case OPERATOR_MACHINE:
-		return machineCall(context);
-	
+		success = machineCall(context);
+		break;
+
 	default:
 		ASSERT(false)
-		return false;
+		success = false;
+		break;
 	}
+#ifdef DEBUG
+	if(success)
+		assertTupleAscends(context);
+#endif
+	return success;
 }
 
 
@@ -863,6 +1556,14 @@ void OperatorFreeContext(OperatorContext * context)
 		constrainFinalizeContext(context);
 		break;
 
+	case OPERATOR_FIXPOINT:
+		fixpointFinalizeContext(context);
+		break;
+
+	case OPERATOR_RECURSE:
+		recurseFinalizeContext(context);
+		break;
+
 	case OPERATOR_MACHINE:
 		machineFinalizeContext(context);
 		break;
@@ -871,6 +1572,10 @@ void OperatorFreeContext(OperatorContext * context)
 		ASSERT(false)
 		break;
 	}
+#ifdef DEBUG
+	if(context->previousTuple)
+		Free(context->previousTuple);
+#endif
 	Free(context);
 }
 
@@ -884,11 +1589,50 @@ bool OperatorCallOnce(Operator const * op, Atom arguments[])
 }
 
 
+/**
+ * Print the name and arity of an operator, followed by the order in which it yields
+ * its tuples, as "JOIN/3[0 2 1]". An operator that declares no order, yielding at most
+ * one tuple, prints an empty "[]".
+ */
+static void printOperatorHead(Operator const * op, char const * name)
+{
+	PrintF("%s/%u[", name, op->nArguments);
+	if(op->indexOrder) {
+		for(index8 i = 0; i < op->nArguments; i++) {
+			if(i)
+				PrintChar(' ');
+			PrintF("%u", op->indexOrder[i]);
+		}
+	}
+	PrintChar(']');
+}
+
+
+/**
+ * Print the arguments a caller binds when calling a fixpoint or recurse operator, as
+ * "<0 2>", following the convention that marks an input parameter of a service. An
+ * operator binding none prints nothing.
+ */
+static void printInputArguments(index8 const * inputArguments, size8 nInputs)
+{
+	if(!nInputs)
+		return;
+	PrintChar('<');
+	for(index8 i = 0; i < nInputs; i++) {
+		if(i)
+			PrintChar(' ');
+		PrintF("%u", inputArguments[i]);
+	}
+	PrintChar('>');
+}
+
+
 void PrintOperator(Operator const * op)
 {
 	switch(op->type) {
 	case OPERATOR_PERMUTE:
-		PrintF("PERMUTE/%u(", op->nArguments);
+		printOperatorHead(op, "PERMUTE");
+		PrintChar('(');
 		for(index8 i = 0; i < op->impl.permute.childOperator->nArguments; i++)
 			PrintF("%u ", op->impl.permute.argumentMap[i]);
 		PrintChar('{');
@@ -903,7 +1647,8 @@ void PrintOperator(Operator const * op)
 		break;
 
 	case OPERATOR_JOIN:
-		PrintF("JOIN/%u(", op->nArguments);
+		printOperatorHead(op, "JOIN");
+		PrintChar('(');
 		for(index8 i = 0; i < op->impl.join.left->nArguments; i++)
 			PrintF("%u ", op->impl.join.leftMap[i]);
 		PrintOperator(op->impl.join.left);
@@ -914,28 +1659,48 @@ void PrintOperator(Operator const * op)
 		break;
 
 	case OPERATOR_UNION:
-		PrintF("UNION/%u(", op->nArguments);
+		printOperatorHead(op, "UNION");
+		PrintChar('(');
 		PrintOperator(op->impl._union.first);
 		PrintOperator(op->impl._union.second);
 		PrintChar(')');
 		break;
 
 	case OPERATOR_PROJECT:
-		PrintF("PROJECT/%u(", op->nArguments);
+		printOperatorHead(op, "PROJECT");
+		PrintChar('(');
+		for(index8 i = 0; i < op->nArguments; i++)
+			PrintF("%u ", op->impl.project.argumentMap[i]);
 		PrintOperator(op->impl.project.childOperator);
 		PrintChar(')');
 		break;
 
 	case OPERATOR_CONSTRAIN:
-		PrintF("CONSTRAIN/%u(", op->nArguments);
+		printOperatorHead(op, "CONSTRAIN");
+		PrintChar('(');
 		for(index8 i = 0; i < op->impl.constrain.childOperator->nArguments; i++)
 			PrintF("%u ", op->impl.constrain.argumentMap[i]);
 		PrintOperator(op->impl.constrain.childOperator);
 		PrintChar(')');
 		break;
 
+	case OPERATOR_FIXPOINT:
+		printOperatorHead(op, "FIXPOINT");
+		printInputArguments(
+			op->impl.fixpoint.inputArguments, op->impl.fixpoint.nInputs);
+		PrintChar('(');
+		PrintOperator(op->impl.fixpoint.childOperator);
+		PrintChar(')');
+		break;
+
+	case OPERATOR_RECURSE:
+		printOperatorHead(op, "RECURSE");
+		printInputArguments(
+			op->impl.recurse.inputArguments, op->impl.recurse.nInputs);
+		break;
+
 	case OPERATOR_MACHINE:
-		PrintF("MACHINE/%u", op->nArguments);
+		printOperatorHead(op, "MACHINE");
 		break;
 
 	default:

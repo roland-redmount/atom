@@ -61,15 +61,29 @@ typedef struct s_MachineProvider {
  * An operator is evaluated stepwise, at each call yielding one tuple,
  * similar to a co-routine.
  *
- * TODO: operators should specify how their tuples are ordered when enumerating.
- * Currently, B-Tree operators order tuples lexiographically, and machine operators
- * do not enforce any particular order. It might be a good idea to provide an
- * array of column numbers specifying the ordering, so that e.g. a relation
- * with form (a b c) might specify ordering = {2, 1, 3} to order lexiographically
- * w.r.t columns (b a c). Knowing the tuple order helps optimize PROJECT: a child
- * ordered on the columns PROJECT keeps lets it drop duplicates by comparing each
- * tuple to its predecessor, instead of materializing the whole child relation.
+ * Every operator declares an index order, which is a permutation of its arguments
+ * such that tuples are lexiographically ordered. For example, an operator
+ * with arguments (a b c) and index order {1, 0, 2} orders its tuples lexiographically
+ * w.r.t. (b a c). The tuples an operator yields must be distinct and strictly
+ * ascending w.r.t. its index order. This lets UNION merge two relations "streaming"
+ * (without materializing the entire union relation), and could in the future allow
+ * streaming PROJECT or merge JOIN operators.
  *
+ * The relational operators derive their index order from their children; only
+ * MACHINE operators specify index order explicitly. Correctness of index order declared
+ * by a MACHINE operator cannot be verified statically; it is the responsibility of whoever
+ * implements the machine provider to produce correctly ordered relations. In DEBUG
+ * builds, OperatorCall() verifies the ascent of every operator, which catches a
+ * violation at the operator that committed it.
+ *
+ * An operator yielding at most one tuple satisfies the contract under every index
+ * order, and so has no order worth declaring: in this case indexOrder should be set to 0
+ * rather than picking an arbitrary order. This matters because an arbitrary choice would
+ * propagate through the operators above and be mistaken for a real constraint, so that two
+ * relations orderable alike could appear not to be. An operator deriving its order
+ * from a child with indexOrder == 0 uses the natural ordering, unless it too yields at
+ * most one tuple. DEBUG builds verify the indexOrder == 0 claim by asserting that at most
+ * one tuple is produced.
  */
 
 /**
@@ -94,22 +108,22 @@ typedef struct s_MachineProvider {
  */
  enum OperatorType {
 	/**
-	 * PERMUTE is a rename composed with a restriction on constant arguments:
-	 * it calls a child operator with its arguments reordered, and may bind
-	 * constants to child arguments.
-	 * Every child argument is either taken from a parent argument or bound to
-	 * a constant, so PERMUTE never drops a child argument and hence never
+	 * PERMUTE calls a child operator with its arguments reordered, and may bind
+	 * constants to child arguments. Every child argument is either taken from a parent
+	 * argument or a constant, so PERMUTE never drops a child argument and hence never
 	 * introduces duplicate tuples.
 	 */
 	OPERATOR_PERMUTE = 1,
+	
 	/**
-	 * JOIN is the inner join of the relations of two child operators, on the
-	 * arguments they have in common. Each child operator has its own argument map
-	 * and so keeps its own arity; an argument occurring in both maps is a join
+	 * JOIN is the inner join of the relations of two child operators, with equality
+	 * constraint on the arguments they have in common. Each child operator has its own
+	 * argument map and so keeps its own arity; an argument occurring in both maps is a join
 	 * argument, whose value the left child determines and the right child is then
 	 * constrained by.
 	 */
 	OPERATOR_JOIN = 2,
+
 	/**
 	 * UNION gives the set union of the tuple sets from two child operators.
 	 * It is assumed that each child operator produces tuples in sorted order.
@@ -118,17 +132,22 @@ typedef struct s_MachineProvider {
 	 * then we should never have duplicate tuples in a UNION.
 	 */
 	OPERATOR_UNION = 3,
+
 	/**
-	 * PROJECT is the projection onto the first nArguments arguments of its child
-	 * operator: it drops the remaining ones and removes the duplicate tuples that
-	 * dropping may produce. Its tuples are yielded in sorted order.
+	 * PROJECT is the projection onto the child arguments named by its argument map:
+	 * it drops the remaining ones and removes the duplicate tuples that dropping may
+	 * produce. Its tuples are yielded in sorted order. If all child arguments are kept,
+	 * PROJECT merely sorts the child tuples according to the new index order;
+	 * see CreateProjectOperator().
 	 */
 	OPERATOR_PROJECT = 4,
+
 	/**
 	 * Call a machine code function. Machine operators are the leaves of an operator
 	 * tree, providing the relations that the operators above are applied to.
 	 */
 	OPERATOR_MACHINE = 5,
+
 	/**
 	 * CONSTRAIN is a restriction on an equality between arguments: it yields those
 	 * tuples of its child operator in which all child arguments taken from the same
@@ -140,12 +159,53 @@ typedef struct s_MachineProvider {
 	 * as it can only test the constraint once the child operator has produced a tuple.
 	 */
 	OPERATOR_CONSTRAIN = 6,
+
+	/**
+	 * FIXPOINT evaluates a recursive clause. Its child operator must contains a RECURSE
+	 * operator as a descendant. It repeatedly applies its child operator to the tuples
+	 * derived so far and accumulates the results in a B-tree, until no new tuples are produced.
+	 * 
+	 * until nothing new
+	 * tuple. The tuples are accumulated in a
+	 * B-tree, which the RECURSE operators in the child subtree read.
+	 *
+	 * Recursion is therefore a loop rather than a cycle in the operator tree, and terminates
+	 * whenever the derived relation is finite.
+	 *
+	 * The child derives the whole relation and so runs with every argument unbound.
+	 * The arguments the caller binds restrict the tuples this operator yields, not
+	 * the ones it derives, which is why one derived relation can serve every
+	 * signature over it.
+	 *
+	 * NOTE: nothing here guarantees termination. A relation over an infinite domain
+	 * has no finite fixpoint, and needs the recursive rule guarded by a precondition
+	 * to terminate; see the notes on termination in compiler.md.
+	 * 
+	 * NOTE: this is a naive iteration scheme, which typically re-evaluates the same call
+	 * many times over. Semi-naive iteration is an optimization used in Datalog that
+	 * would improve upon this. See for example
+	 * https://stackoverflow.com/questions/47043937/what-is-the-difference-between-naive-and-semi-naive-evaluation
+	 */
+	OPERATOR_FIXPOINT = 7,
+
+	/**
+	 * RECURSE is the recursive occurrence of the relation that an enclosing FIXPOINT
+	 * operator is deriving: it enumerates the tuples derived by the rounds so far.
+	 * It is always a leaf, and holds no reference to the fixpoint operator, so that the
+	 * operator tree stays a tree. The enclosing FIXPOINT operator is found via the
+	 * chain of parent pointers in the operator context when the recursion is evaluated.
+	 */
+	OPERATOR_RECURSE = 8,
 };
 
 struct s_Operator {
 	enum OperatorType type;
 	// Number of arguments for this operator
 	size8 nArguments;
+	// Permutation of the argument indices giving the order in which this operator
+	// yields its tuples; see the ordering contract above. Length nArguments,
+	// or null if this operator yields at most one tuple and so declares no order.
+	index8 * indexOrder;
 	// Context size, in addition to sizeof(Context)
 	size32 contextSize;
 	size32 referenceCount;
@@ -181,6 +241,9 @@ struct s_Operator {
 		// for OPERATOR_PROJECT
 		struct {
 			Operator * childOperator;
+			// Index of the child argument kept by each argument of this operator.
+			// The child arguments it does not name are the dropped ones.
+			index8 * argumentMap;
 		} project;
 		// for OPERATOR_CONSTRAIN
 		struct {
@@ -190,6 +253,19 @@ struct s_Operator {
 			// sharing an index are the ones constrained to be equal.
 			index8 * argumentMap;
 		} constrain;
+		// for OPERATOR_FIXPOINT
+		struct {
+			Operator * childOperator;
+			// Indices of the arguments the caller binds, restricting the tuples yielded
+			index8 * inputArguments;
+			size8 nInputs;
+		} fixpoint;
+		// for OPERATOR_RECURSE
+		struct {
+			// Indices of the arguments the caller binds, as for a fixpoint operator
+			index8 * inputArguments;
+			size8 nInputs;
+		} recurse;
 		// for OPERATOR_MACHINE
 		struct {
 			MachineProvider * provider;
@@ -212,15 +288,21 @@ struct s_Operator {
  * operator does not write would be left at whatever the caller had in the arguments
  * tuple, and so would not be part of a relation; taking several child arguments from
  * one argument is what a constrain operator expresses.
+ *
+ * The index order is the child's, relabeled through the argument map; child arguments
+ * bound to a constant drop out of it, being equal in every tuple.
  */
 Operator * CreatePermuteOperator(
 	size8 nArguments, Atom const * constants, byte const * constantTypes, size8 nConstants,
 	index8 const * argumentMap, Operator * childOperator);
 
 /**
- * Create a machine code operator
+ * Create a machine code operator. The indexOrder array has length nArguments and gives
+ * the order in which the provider yields its tuples; see the ordering contract above.
+ * A provider yielding at most one tuple declares no order and passes 0.
  */
-Operator * CreateMachineOperator(size8 nArguments, MachineProvider * provider, void * providerData);
+Operator * CreateMachineOperator(
+	size8 nArguments, index8 const * indexOrder, MachineProvider * provider, void * providerData);
 
 /**
  * Setup a JOIN operator with the specified number of arguments, from two existing
@@ -238,6 +320,11 @@ Operator * CreateMachineOperator(size8 nArguments, MachineProvider * provider, v
  * would be left at whatever the caller had in the arguments tuple. Neither map may
  * contain the same argument twice; taking several child arguments from one argument
  * is what a constrain operator expresses.
+ *
+ * The index order is the left child's order, followed by the right child's order minus
+ * the join arguments: the left child determines the major key, as it yields ascending
+ * and the join drops none of its arguments, while within one left tuple the join
+ * arguments are constant and the right child orders the remainder.
  */
 Operator * CreateJoinOperator(
 	size8 nArguments,
@@ -246,6 +333,9 @@ Operator * CreateJoinOperator(
 
 /**
  * Setup a UNION operator, returning the union of two relations.
+ * Merging two ordered relations requires that they are ordered alike, so the two child
+ * operators must have the same index order, which this operator adopts. A child
+ * declaring no order is ordered alike with any other, and takes the order of its sibling.
  */
 Operator * CreateUnionOperator(Operator * first, Operator * second);
 
@@ -257,17 +347,69 @@ Operator * CreateUnionOperator(Operator * first, Operator * second);
  * operator in which they are equal are yielded.
  *
  * The child operator must provide every argument, as for a permute operator.
+ *
+ * The index order is the child's, with the arguments collapsed by the constraint
+ * appearing once: they are equal in every yielded tuple.
  */
 Operator * CreateConstrainOperator(
 	size8 nArguments, index8 const * argumentMap, Operator * childOperator);
 
 /**
- * Create a PROJECT operator with the given number of arguments, which must be
- * less than the number of arguments of the child operator. The project operator
- * keeps the first nArguments arguments of the child operator, drops the remaining
- * ones, and removes any duplicate tuples resulting from this.
+ * Create a PROJECT operator with the given number of arguments, which may not exceed the
+ * number of arguments of the child operator. The argumentMap array has length nArguments,
+ * and argument i of the returned PROJECT operator will map to argumentMap[i] of childOperator. 
+ * Child arguments that are not in the argumentMap will be dropped, and any resulting duplicate
+ * tuples will be dropped as well. The index order of the PROJECT operator is always identity.
+ * If argumentMap contains all child arguments, PROJECT merely sorts the child tuples w.r.t.
+ * the identity index order.
+ *
+ * NOTE: dropping an argument reorders the ones the child ordered below it, so a projection
+ * cannot in general be streamed. This operator therefore materializes its child into a
+ * B-tree, which both removes the duplicates and sorts tuples.
  */
-Operator * CreateProjectOperator(Operator * childOperator, size8 nArguments);
+Operator * CreateProjectOperator(
+	Operator * childOperator, size8 nArguments, index8 const * argumentMap);
+
+/**
+ * Create a FIXPOINT operator deriving a recursive relation from the given child
+ * operator, which computes the rule bodies and must have the arity of the relation.
+ * The child is applied to the tuples derived so far until a round derives nothing new;
+ * the RECURSE operators in its subtree read those tuples.
+ *
+ * The inputArguments array holds the indices of the nInputs arguments the caller binds,
+ * and may be 0 if there are none. Those arguments restrict the tuples yielded, and not
+ * the ones derived: the child always derives the whole relation.
+ *
+ * The derived tuples are accumulated in a B-tree, so this operator yields them
+ * distinct and in the identity index order.
+ */
+Operator * CreateFixpointOperator(
+	Operator * childOperator, index8 const * inputArguments, size8 nInputs);
+
+/**
+ * Create a RECURSE operator enumerating the tuples derived so far by the nearest FIXPOINT
+ * operator enclosing it, which must have the same arity.
+ *
+ * The inputArguments array holds the indices of the nInputs arguments the caller binds,
+ * as for a fixpoint operator; a recursive term with a bound argument, which is the usual
+ * case below a join, takes those indices here.
+ *
+ * NOTE: taking the nearest enclosing fixpoint is what makes one recursive relation work.
+ * Relations recursive through one another will need this operator to name which fixpoint
+ * it belongs to.
+ */
+Operator * CreateRecurseOperator(
+	size8 nArguments, index8 const * inputArguments, size8 nInputs);
+
+/**
+ * Number of tuples a fixpoint operator context has derived, which is how much of the
+ * relation the query it is answering depended on. The context must not have been freed.
+ *
+ * This is what distinguishes a derivation driven by the call bindings from one that
+ * derives the whole relation and filters, as the two yield the same tuples; it is
+ * otherwise not observable from outside. Intended for tests.
+ */
+size32 FixpointNDerivedTuples(OperatorContext const * context);
 
 /**
  * Acquire a reference to an operator.
@@ -289,6 +431,15 @@ void ReleaseOperator(Operator * op);
 struct s_OperatorContext {
 	Operator const * op;
 	Atom * arguments;
+	// The context that created this one, or null for a context created by a caller
+	// outside the operator tree. A RECURSE operator follows this chain to reach the
+	// FIXPOINT operator deriving the relation it enumerates.
+	OperatorContext * parent;
+#ifdef DEBUG
+	// The previously yielded tuple, kept to verify that this operator upholds the
+	// ordering contract; see OperatorCall(). Null until the first tuple is yielded.
+	Atom * previousTuple;
+#endif
 	byte data[];
 };
 

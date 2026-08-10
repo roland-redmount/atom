@@ -1,13 +1,21 @@
 
 #include "kernel/dispatch.h"
+#include "kernel/ifact.h"
 #include "kernel/letter.h"
 #include "kernel/operator.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
 #include "kernel/multiset.h"
+#include "kernel/Parameter.h"
+#include "kernel/RelationBTree.h"
+#include "kernel/RelationRegistry.h"
+#include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "kernel/tuple.h"
+#include "kernel/typedtuple.h"
 #include "lang/Formula.h"
+#include "lang/name.h"
+#include "lang/PredicateForm.h"
 #include "parser/PredicateBuilder.h"
 #include "testing/testing.h"
 
@@ -91,7 +99,7 @@ void testPermuteOperator(void)
 void testProjectOperator(void)
 {
 	Operator * permuteOperator = createReorderedListOperator();
-	Operator * projectOperator = CreateProjectOperator(permuteOperator, 2);
+	Operator * projectOperator = CreateProjectOperator(permuteOperator, 2, (index8[]) {0, 1});
 	ReleaseOperator(permuteOperator);
 
 	// Arguments tuple (@stringList _) for the marginalize operator
@@ -355,6 +363,343 @@ void testUnionOperator(void)
 }
 
 
+/**
+ * A tuple both child operators provide is yielded once, including when providing it
+ * exhausts one of them. That tuple is then the lookahead of the operator still running,
+ * and yielding it has to be what completes the duplicate, or it is yielded a second
+ * time when the remaining operator is drained.
+ *
+ * Here the letters of "fo" are a prefix of those of "foo", so the shorter operator is
+ * exhausted by the duplicate (2 'o').
+ */
+void testUnionDuplicateAtExhaustion(void)
+{
+	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	index8 argumentMap[3];
+	CoreFormSetByteArray(
+		FORM_LIST_POSITION_ELEMENT,
+		(index8[]) {2, 0, 1},		// (@list p s) -> (p s), the list is constant 0
+		argumentMap
+	);
+
+	Atom shortString = CreateStringFromCString("fo");
+	Operator * shortService = CreatePermuteOperator(
+		2, (Atom[]) {shortString}, (byte[]) {AT_ID}, 1, argumentMap, listOperator);
+	IFactRelease(shortString);
+
+	Atom longString = CreateStringFromCString("foo");
+	Operator * longService = CreatePermuteOperator(
+		2, (Atom[]) {longString}, (byte[]) {AT_ID}, 1, argumentMap, listOperator);
+	IFactRelease(longString);
+
+	Operator * unionOperator = CreateUnionOperator(shortService, longService);
+	ReleaseOperator(shortService);
+	ReleaseOperator(longService);
+
+	Atom arguments[2] = {0};
+	OperatorContext * context = OperatorCreateContext(unionOperator, arguments);
+	uint32 expectedPositions[3] = {1, 2, 3};
+	char expectedCharacters[3] = "foo";
+	for(index32 i = 0; i < 3; i++) {
+		ASSERT_TRUE(OperatorCall(context))
+		ASSERT_INT32_EQUAL(arguments[0]._uint, expectedPositions[i])
+		ASSERT_CHAR_EQUAL(
+			LetterToChar(arguments[1], LETTER_LOWERCASE),
+			expectedCharacters[i]
+		)
+	}
+	ASSERT_FALSE(OperatorCall(context));
+	OperatorFreeContext(context);
+	ReleaseOperator(unionOperator);
+}
+
+
+/**
+ * Every operator declares the order in which it yields its tuples, deriving it from
+ * its children rather than being told; see the ordering contract in operator.h.
+ * A relation stored in a particular column order propagates that order upwards through
+ * the operators applied to it.
+ */
+void testIndexOrder(void)
+{
+	// A B-tree operator yields its tuples in the index column order of its relation
+	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	RelationTable const * listRelation = GetCoreRelationTable(RELATION_LIST_LETTER);
+	ASSERT_NOT_NULL(listOperator->indexOrder)
+	for(index8 i = 0; i < 3; i++)
+		ASSERT_UINT32_EQUAL(listOperator->indexOrder[i], listRelation->indexColumns[i])
+
+	// The relation is stored in the kernel order (list position element), so reordering
+	// it to (list element position) yields tuples ordered by argument 0 (the list),
+	// then argument 2 (the position), then argument 1 (the element)
+	Operator * permuteOperator = createReorderedListOperator();
+	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[0], 0)
+	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[1], 2)
+	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[2], 1)
+
+	// PROJECT materializes into a B-tree keyed on the arguments it keeps,
+	// so it yields them in their own order
+	Operator * projectOperator = CreateProjectOperator(permuteOperator, 2, (index8[]) {0, 1});
+	ASSERT_UINT32_EQUAL(projectOperator->indexOrder[0], 0)
+	ASSERT_UINT32_EQUAL(projectOperator->indexOrder[1], 1)
+
+	// A JOIN takes the left child's order, then the right child's minus the arguments
+	// the two share. Mapping the left child (list position element) to the arguments
+	// (2 0 1) and the right child to (2 3 4), they share argument 2, which the left
+	// child orders first.
+	index8 leftMap[3];
+	CoreFormSetByteArray(FORM_LIST_POSITION_ELEMENT, (index8[]) {2, 0, 1}, leftMap);
+	index8 rightMap[3];
+	CoreFormSetByteArray(FORM_LIST_POSITION_ELEMENT, (index8[]) {2, 3, 4}, rightMap);
+	Operator * joinOperator = CreateJoinOperator(
+		5, listOperator, leftMap, GetCoreOperator(SERVICE_LIST_ID), rightMap);
+	index8 expectedJoinOrder[5] = {2, 0, 1, 3, 4};
+	for(index8 i = 0; i < 5; i++)
+		ASSERT_UINT32_EQUAL(joinOperator->indexOrder[i], expectedJoinOrder[i])
+
+	// An operator yielding at most one tuple declares no order, as any order it named
+	// would be arbitrary, and an operator relabeling its arguments declares none either
+	MachineProvider singleTupleProvider = {
+		.setupContext = 0,
+		.call = 0,
+		.finalizeContext = 0,
+		.finalizeOperator = 0,
+		.contextSize = 0
+	};
+	Operator * singleTupleOperator = CreateMachineOperator(2, 0, &singleTupleProvider, 0);
+	ASSERT_NULL(singleTupleOperator->indexOrder)
+	Operator * singleTuplePermute = CreatePermuteOperator(
+		2, 0, 0, 0, (index8[]) {1, 0}, singleTupleOperator);
+	ASSERT_NULL(singleTuplePermute->indexOrder)
+
+	// Such an operator is ordered alike with any other, so a union takes the order
+	// of its sibling whichever side it is on
+	Operator * unionOperator = CreateUnionOperator(projectOperator, singleTuplePermute);
+	ASSERT_UINT32_EQUAL(unionOperator->indexOrder[0], 0)
+	ASSERT_UINT32_EQUAL(unionOperator->indexOrder[1], 1)
+	Operator * reversedUnionOperator = CreateUnionOperator(singleTuplePermute, projectOperator);
+	ASSERT_UINT32_EQUAL(reversedUnionOperator->indexOrder[0], 0)
+	ASSERT_UINT32_EQUAL(reversedUnionOperator->indexOrder[1], 1)
+
+	ReleaseOperator(reversedUnionOperator);
+	ReleaseOperator(unionOperator);
+	ReleaseOperator(singleTuplePermute);
+	ReleaseOperator(singleTupleOperator);
+	ReleaseOperator(joinOperator);
+	ReleaseOperator(projectOperator);
+	ReleaseOperator(permuteOperator);
+}
+
+
+/**
+ * A directed graph (prec:ID succ:ID) holding the cycle a -> b -> c -> a, together with
+ * the path d -> e -> f, which is disconnected from it. The tuples are stored ordered by
+ * the prec column, so that the relation can be looked up on it.
+ */
+#define TEST_N_EDGES	5
+
+// Tuples in the transitive closure of each component
+#define TEST_N_CYCLE_CLOSURE	(3 * 3)
+#define TEST_N_PATH_CLOSURE		3
+
+static struct {
+	Atom form;
+	index8 precIndex;
+	index8 succIndex;
+	RelationTable const * table;
+	TypedTuple * tuples[TEST_N_EDGES];
+} graphFixture;
+
+
+static void setupGraphFixture(void)
+{
+	Atom roles[2] = {
+		CreateNameFromCString("prec"),
+		CreateNameFromCString("succ")
+	};
+	graphFixture.form = CreatePredicateForm(roles, 2);
+	graphFixture.precIndex = PredicateRoleIndex(graphFixture.form, roles[0]);
+	graphFixture.succIndex = PredicateRoleIndex(graphFixture.form, roles[1]);
+	for(index8 i = 0; i < 2; i++)
+		NameRelease(roles[i]);
+
+	graphFixture.table = CreateRelationBTreeWithServices(
+		graphFixture.form, 2, (byte[]) {AT_ID, AT_ID},
+		(index8[]) {graphFixture.precIndex, graphFixture.succIndex});
+
+	char const * precNames[TEST_N_EDGES] = {"a", "b", "c", "d", "e"};
+	char const * succNames[TEST_N_EDGES] = {"b", "c", "a", "e", "f"};
+	for(index8 i = 0; i < TEST_N_EDGES; i++) {
+		TypedAtom actors[2];
+		actors[graphFixture.precIndex] =
+			CreateTypedAtom(AT_ID, CreateStringFromCString(precNames[i]));
+		actors[graphFixture.succIndex] =
+			CreateTypedAtom(AT_ID, CreateStringFromCString(succNames[i]));
+		graphFixture.tuples[i] = CreateTypedTupleFromArray(actors, 2);
+		AssertFact(graphFixture.form, graphFixture.tuples[i], 0);
+		for(index8 j = 0; j < 2; j++)
+			ReleaseTypedAtom(actors[j]);
+	}
+}
+
+
+static void teardownGraphFixture(void)
+{
+	for(index8 i = 0; i < TEST_N_EDGES; i++) {
+		RetractFact(graphFixture.form, graphFixture.tuples[i]);
+		FreeTypedTuple(graphFixture.tuples[i]);
+	}
+	ServiceRegistryRemoveAll(graphFixture.table);
+	RelationRegistryRemove(graphFixture.table);
+	IFactRelease(graphFixture.form);
+}
+
+
+/**
+ * Build an operator evalutaing (before x after y) defined by the rules
+ *
+ *  (1) before x after y  <-  succ y prec x
+ *  (2) before x after y  <-  succ z prec x & before z after y
+ *
+ * The graph relation is written here in its canonical role order (succ prec), so that
+ * its roles line up with the argument indices below: argument 0 is the succ role and
+ * argument 1 the prec role.
+ *
+ * The (before after) relation is a FIXPOINT/2 operator with argument order (x y).
+ * Called with x bound, the rules give the operator tree
+ *
+ *	FIXPOINT/2[0 1]<0>(                      // derives (before after), x bound
+ *		UNION/2[0 1](
+ *			PERMUTE/2[0 1](1 0 {}            // rule (1), reordering (y x) to (x y)
+ *				MACHINE/2[1 0])              // (succ y prec x), looked up on x
+ *			PROJECT/2[0 1](0 1               // rule (2), dropping the shared z
+ *				JOIN/3[0 2 1](               // join arguments are (x y z)
+ *					2 0 MACHINE/2[1 0]       // (succ z prec x), looked up on x
+ *					2 1 RECURSE/2[0 1]<0>))))// (before z after y), z bound
+ *
+ * The MACHINE operators yield the graph ordered by argument 1 (prec) before argument 0 (succ),
+ * and rule (1) maps their argument 0 (y) to query argument 1 and their argument 1 (x)
+ * to query argument 0.
+ *
+ * Both MACHINE operators are one and the same service. Their argument maps differ only
+ * because rule (2) takes the succ role into the shared z rather than into y, which is
+ * also why rule (1) needs a PERMUTE where rule (2) folds the reordering into the join.
+ *
+ * Called with nothing bound, the tree is the same except that the FIXPOINT operator binds
+ * no argument and the graph relation is enumerated rather than looked up. The RECURSE
+ * operator still binds z, as the join provides it either way.
+ *
+ * The caller obtains a reference to the operator.
+ */
+static Operator * createClosureOperator(index8 const * inputArguments, size8 nInputs)
+{
+	index8 precIndex = graphFixture.precIndex;
+	index8 succIndex = graphFixture.succIndex;
+
+	// Both rule bodies take the graph relation looked up on x when the caller bound it,
+	// which is what confines the derivation to the reachable part of the graph, and
+	// enumerate every edge when it did not. This is the choice dispatch makes for a
+	// compiled rule, from the parameters the query leaves bound.
+	byte parameterIO[2];
+	parameterIO[precIndex] = nInputs ? PARAMETER_IN : PARAMETER_OUT;
+	parameterIO[succIndex] = PARAMETER_OUT;
+	Operator * edgeOperator = ServiceRegistryFind(graphFixture.table, parameterIO);
+	ASSERT_NOT_NULL(edgeOperator)
+
+	// Rule (1), the graph relation itself, with the edge arguments taken into the
+	// closure argument order (x y)
+	index8 edgeToClosureMap[2];
+	edgeToClosureMap[precIndex] = 0;
+	edgeToClosureMap[succIndex] = 1;
+	Operator * baseOperator = CreatePermuteOperator(
+		2, 0, 0, 0, edgeToClosureMap, edgeOperator);
+
+	// Rule (2). The join arguments are (x y z), so that (x y) agree with the closure
+	// and the shared z comes last. The left child provides (x z) and the right child
+	// (z y), so the right child takes its first argument as an input.
+	index8 edgeToJoinMap[2];
+	edgeToJoinMap[precIndex] = 0;
+	edgeToJoinMap[succIndex] = 2;
+	index8 recurseMap[2] = {2, 1};
+
+	Operator * recurseOperator = CreateRecurseOperator(2, (index8[]) {0}, 1);
+	Operator * joinOperator = CreateJoinOperator(
+		3, edgeOperator, edgeToJoinMap, recurseOperator, recurseMap);
+	ReleaseOperator(recurseOperator);
+
+	// Drop the shared z, keeping the closure arguments
+	Operator * projectOperator = CreateProjectOperator(joinOperator, 2, (index8[]) {0, 1});
+	ReleaseOperator(joinOperator);
+
+	Operator * unionOperator = CreateUnionOperator(baseOperator, projectOperator);
+	ReleaseOperator(baseOperator);
+	ReleaseOperator(projectOperator);
+
+	Operator * fixpointOperator = CreateFixpointOperator(
+		unionOperator, inputArguments, nInputs);
+	ReleaseOperator(unionOperator);
+	return fixpointOperator;
+}
+
+
+/**
+ * A FIXPOINT operator derives a recursive relation by rounds, and terminates on the
+ * cyclic graph of the fixture, where a top-down evaluation would descend forever.
+ * A caller binding nothing asks for the whole relation, which is the closure of both
+ * components of the graph.
+ */
+void testFixpointOperator(void)
+{
+	setupGraphFixture();
+	Operator * closureOperator = createClosureOperator(0, 0);
+
+	Atom arguments[2] = {(Atom) {0}, (Atom) {0}};
+	OperatorContext * context = OperatorCreateContext(closureOperator, arguments);
+	size32 nTuples = 0;
+	while(OperatorCall(context))
+		nTuples++;
+	ASSERT_UINT32_EQUAL(nTuples, TEST_N_CYCLE_CLOSURE + TEST_N_PATH_CLOSURE)
+	OperatorFreeContext(context);
+
+	ReleaseOperator(closureOperator);
+	teardownGraphFixture();
+}
+
+
+/**
+ * The derivation is driven by the bindings the query asks for, and not run over the
+ * whole relation and filtered afterwards. Asking for the nodes after a reaches the
+ * three nodes of its cycle, and derives nothing for the component a cannot reach.
+ */
+void testFixpointCallBinding(void)
+{
+	setupGraphFixture();
+	Operator * closureOperator = createClosureOperator((index8[]) {0}, 1);
+
+	Atom nodeA = CreateStringFromCString("a");
+	Atom arguments[2] = {nodeA, (Atom) {0}};
+
+	OperatorContext * context = OperatorCreateContext(closureOperator, arguments);
+	size32 nTuples = 0;
+	while(OperatorCall(context)) {
+		// every tuple yielded keeps the argument the caller bound
+		ASSERT_UINT64_EQUAL(arguments[0].hash, nodeA.hash)
+		nTuples++;
+	}
+	ASSERT_UINT32_EQUAL(nTuples, 3)
+
+	// The tuples yielded would be the same either way, so what distinguishes a derivation
+	// driven by the call bindings is how much of the relation it had to derive: the
+	// closure of the cycle a belongs to, and nothing of the component it cannot reach.
+	ASSERT_UINT32_EQUAL(FixpointNDerivedTuples(context), TEST_N_CYCLE_CLOSURE)
+	OperatorFreeContext(context);
+
+	IFactRelease(nodeA);
+	ReleaseOperator(closureOperator);
+	teardownGraphFixture();
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -366,6 +711,10 @@ int main(int argc, char * argv[])
 	ExecuteTest(testJoinOperator2);
 	ExecuteTest(testConstrainOperator);
 	ExecuteTest(testUnionOperator);
+	ExecuteTest(testUnionDuplicateAtExhaustion);
+	ExecuteTest(testIndexOrder);
+	ExecuteTest(testFixpointOperator);
+	ExecuteTest(testFixpointCallBinding);
 
 	KernelShutdown();
 

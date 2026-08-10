@@ -16,152 +16,15 @@
 #include "memory/allocator.h"
 
 
-/*
- * A compilation example: say the dictionary contains the rule
- * 
- *   ! + x + y = z | + z - x = y             (1)
- * 
- * and we have a service (+ 1<INT + 2>INT = 3<INT). The query
- * 
- *   + 7 - 4 = d                             (2)
- * 
- * does not match any service, so we need to compile a new service.
- * 
- * To compile a service, we first replace any non-variables in the query
- * with typed, numbered input parameters, so that (2) becomes
- * 
- *   + 1<INT - 2<INT = d                    (3)
- * 
- * This has form (+ - =) which is found in the clause form (! + + = | + - =).
- * Iterating over matching clauses gives the clause (1).
- * Unifying the matched predicate (+ z - x = y) with (+ 1<INT - 2<INT = d)
- * yields the substitution { z -> 1<INT, x -> 2<INT, y -> d }. We then drop the matched
- * predicate, apply this substitution to the remainder of the clause and negate it,
- * which in this case yields
- * 
- *   + 2<INT + d = 1<INT                    (4)
- * 
- * (In general, negating yields a conjunction of predicates.) We then recurse
- * by dispatching the query (4). During dispatch, parameters behave as any atom
- * of the given type, so this query matches the service (+ 1<INT + 2>INT = 3<INT)
- * which points to an OPERATOR_MACHINE. Unifying the service signature with (3)
- * and renumbering parameters yields the substitution { d -> 3>INT }, and applying
- * this to (3) yields
- * 
- *  + 1<INT - 2<INT = 3>INT                 (5)
- *
- * which becomes the signature of the new service. As we have no more clauses, the
- * found OPERATOR_MACHINE is the final compilation result, and we create a new
- * service mapping (5) to this operator; this service essentally becomes a synonym for
- * (+ 1<INT + 2>INT = 3<INT).
- */
-
 /**
- * Compiling a join: dictionary contains the rule
- * 
- *   number x plusone y plustwo z <- + x + 1 = y & + y + 1 = z 
- * 
- * or, in CNF
- * 
- *   ! + x + 1 = y | ! + y + 1 = z | number x plusone y plustwo z  (1)
- * 
- * and we have the query (number 3 plusone a plustwo b). We first replace the atom
- * 3 with a parameter 1<INT to give the query
- * 
- *   number 1<INT plusone a plustwo b           (2)
- * 
- * The first round of matching gives the substitution
- * {x -> 1<INT, y -> a, z -> b} and the conjunction
- * 
- *   + 1<INT + 1 = a & + a + 1 = b              (3)
- * 
- * A conjunction will always compile to an OPERATOR_JOIN. We initialize the join
- * operator with two terms from (3),
- * 
- *   JOIN(+ 1<INT + 1 = a, + a + 1 = b)         (4)
- * 
- * The JOIN operator will compute sequentially from left to right, To find the left and
- * right child operators of the join, we must dispatch the two terms of (4) separaterly.
- * (If we have > 2 terms we can do a series of joins.) Starting (arbitrarily) with
- * the left term, dispatch matches the service (+ 1<INT + 2<INT = 3>INT) which maps
- * to a OPERATOR_MACHING. After renumbering we obtain the substitution { a -> 2>INT }
- * that we apply to the _left_ term; for the right term, the output parameter 2 must
- * become an input. So that our JOIN operator is now
- * 
- *   JOIN(+ 1<INT + 1 = 2>INT, + 2<INT + 1 = b)       (5)
- * 
- * When later executing this compiled service, we will evaluate the left child operator
- * to obtain values for parameter 2, which will then be copied to input parameter 2 in
- * the right child operator.
- * 
- * (If we would have started with the right term, dispatch would not match the service
- * since the variable a does not match the input parameter 2<INT; in this case we
- * would have to postpone this term.)
- * 
- * Continuing with the right term, dispatch again matches (+ 1<INT + 2<INT = 3>INT)
- * yielding the substitution { b -> 3>INT}, and our JOIN operator becomes
- * 
- *   JOIN(+ 1<INT + 1 = 2>INT, + 2<INT + 1 = 3>INT)     (6)
+ * The compiler turns a query that no service answers into a new service, by resolving it
+ * against the rules in the dictionary and compiling the result into an operator tree.
+ * CompileQuery() is the entry point.
  *
- * Which is now complete as both child operators have been resolved. 
- * Backsubstituting to (2) gives the compiled service signature
- * 
- *   number 1<INT plusone 2>INT plustwo 3>INT           (7)
- * 
+ * See compiler.md in the repository root for what the compiler does and why: the worked
+ * examples behind each operator it emits, how a recursive rule compiles to a fixpoint,
+ * and what is known not to work yet.
  */
-
-
- /**
-  * In the previous example all variables in the rule were present in the query.
-  * On the other hand, with the rule
-  * 
-  *   number x plustwo z <- + x + 1 = y & + y + 1 = z 
-  *
-  * and query (number 1 plustwo a) the variable y must be discarded, and then
-  * some tuples may become identical. This needs a PROJECT operation in addition
-  * to the JOIN,
-  *
-  *   PROJECT(JOIN(+ x + 1 = y, + y + 1 = z), {x z})
-  *
-  * Note that y cannot simply be left out of the compiled operators: it is shared
-  * between the two terms, so the JOIN operator needs it as an argument in order to
-  * constrain one term against the other. We therefore give every such clause-local
-  * variable an argument of its own, numbered after the query arguments, and compile
-  * the conjunction with this extended arguments tuple. Since the local variables
-  * are the trailing arguments, PROJECT need only keep a leading number of arguments.
-  *
-  * The PROJECT operation requires checking for duplicate tuples (unless the kept
-  * arguments are known to be a unique key for the relation). This is problematic
-  * since we want the operator to yield one tuple at a time; currently PROJECT
-  * enumerates its entire child relation when its context is created.
-  * To enable efficient duplicate removal, the child operator should yield tuples in
-  * sorted order w.r.t. {x z}.
-  */
-
-
- /**
-  * Compiling a recursive service: consider the classic
-  * 
-  *   integer n factorial f <-
-  *     + m + 1 = n & integer m factorial e & * n * e = f
-  * 
-  * Together with the fact (integer 0 factorial 1) terminating the recursion.
-  * (We will need a precondition ? < n > 0: to ensure unique dispatch, but we
-  * ignore this for now.) When compiling this service, the child service
-  * (integer m factorial e) will require the service we are currently compiling,
-  * so it must be considered by dispatch somehow.
-  * 
-  * We will compile the query (integer 1<INT factorial f). To construct the first 
-  * JOIN operator we will need two resolved terms. The first term (+ m + 1 = n)
-  * matches service (+ 1>INT + 2<INT = 3<INT) and we obtain
-  * 
-  *   JOIN(+ 2>INT + 1 = $1>INT, ...)
-  * 
-  * the second term is then (integer 2<INT factorial e). We cannot match this to
-  * the current service however, since we do not yet know the type of the argument e.
-  * TODO: this will likely require a separate OPERATOR_RECURSE or similar that is
-  * treated specially by the compiler.
-  */
 
 
 /**
@@ -243,7 +106,7 @@ static bool dispatchAtChoicePoint(
  * The genererated parameter numbers are always equal to the tuple index (1-based).
  * 
  * NOTE: the parameters tuple could be an Atom[] as the type is constant, but this
- * currently doesn't fit with compileService() and downstream functions.
+ * currently doesn't fit with compileQuery() and downstream functions.
  */
 static void actorsToParameters(TypedTuple const * actors, TypedTuple * parameters)
 {
@@ -440,11 +303,103 @@ static size8 setupJoinArgumentMaps(
 
 
 /**
- * Compile a JOIN operator from the conjuction obtained by negating the given clause
- * (clauseForm, clauseActors). The query-matched term indicated by matchedTermIndex
- * is excluded from compilation; also, any term t that has already been compiled
- * is indicated by termExcluded[t] = true.
- * clauseNArguments is the total number of parameters in the clause, including "local" variables.
+ * The state of compiling one clause into a conjunction of operators, shared by the
+ * recursion over its terms. Both the actors and the excluded flags are updated as terms
+ * compile: an actor is given its atom type once a term providing it has dispatched, and
+ * a term is marked excluded once it has been compiled.
+ */
+typedef struct s_ClauseCompileState {
+	Atom form;
+	TypedTuple * actors;
+	// Index into actors of the first actor of each term, with a final entry for the end
+	index8 const * termActorsIndices;
+	uint8 nTerms;
+	// Total number of clause arguments, including the local variables
+	size8 nArguments;
+	// The term the query matched, which is not part of the conjunction
+	index8 matchedTermIndex;
+	// Arity of that term. A parameter numbered beyond it is a clause-local variable,
+	// which does not occur in the query term.
+	size8 matchedTermArity;
+	// The terms compiled so far, together with the matched term
+	bool * termExcluded;
+	ChoicePoints * choices;
+} ClauseCompileState;
+
+
+/**
+ * Write the parameter types a compiled term resolved back into the clause. Dispatching a
+ * term gives its untyped output parameters the types of the service that matched, and the
+ * terms sharing those parameters need to know them:
+ *
+ *  - in the query-matched term the parameter stays an output, and so gives the service
+ *    being compiled its signature;
+ *  - in the terms not yet compiled it becomes an input, as the term that just compiled
+ *    is what provides it.
+ *
+ * The term that compiled must already be marked excluded, so that it is not mistaken for
+ * one of the terms still to come.
+ */
+static void propagateTermParameterTypes(
+	ClauseCompileState * clauseState, index8 termIndex,
+	TypedTuple const * termActors, TypedTuple const * serviceParameters)
+{
+	ASSERT(clauseState->termExcluded[termIndex])
+	for(index8 i = 0; i < termActors->nAtoms; i++) {
+		TypedAtom termActor = TypedTupleGetElement(termActors, i);
+		if((termActor.type != AT_PARAMETER) || termActor.atom.parameter.atomType)
+			continue;
+
+		// The corresponding service parameter must be a typed output
+		TypedAtom serviceParameter = TypedTupleGetElement(serviceParameters, i);
+		ASSERT(serviceParameter.type == AT_PARAMETER)
+		ASSERT(serviceParameter.atom.parameter.io == PARAMETER_OUT)
+		byte parameterType = serviceParameter.atom.parameter.atomType;
+		ASSERT(parameterType)
+
+		index8 parameterNumber = termActor.atom.parameter.number;
+		Atom inputParameter = {
+			.parameter = {
+				.number = parameterNumber, .io = PARAMETER_IN, .atomType = parameterType
+			}
+		};
+		Atom outputParameter = {
+			.parameter = {
+				.number = parameterNumber, .io = PARAMETER_OUT, .atomType = parameterType
+			}
+		};
+
+		// Type the parameter in the query-matched term, unless it is a clause-local
+		// variable, which has no counterpart there
+		if(parameterNumber <= clauseState->matchedTermArity) {
+			index8 matchedParameterIndex =
+				clauseState->termActorsIndices[clauseState->matchedTermIndex] + parameterNumber - 1;
+			TypedTupleSetAtom(clauseState->actors, matchedParameterIndex, outputParameter);
+		}
+		// Type the parameter in the term that compiled
+		// NOTE: not necessary, this term is not used for anything at this point
+		TypedTupleSetAtom(
+			clauseState->actors, clauseState->termActorsIndices[termIndex] + i, outputParameter);
+
+		// The terms still to compile take the parameter as an input
+		for(index8 j = 0; j < clauseState->nTerms; j++) {
+			if(clauseState->termExcluded[j])
+				continue;
+			index8 termEnd = clauseState->termActorsIndices[j + 1];
+			for(index8 k = clauseState->termActorsIndices[j]; k < termEnd; k++) {
+				TypedAtom actor = TypedTupleGetElement(clauseState->actors, k);
+				if(SameTypedAtoms(actor, termActor))
+					TypedTupleSetAtom(clauseState->actors, k, inputParameter);
+			}
+		}
+	}
+}
+
+
+/**
+ * Compile a JOIN operator from the conjuction obtained by negating the clause being
+ * compiled, excluding the term the query matched and any term compiled already.
+ * nTermsExcluded counts those terms.
  *
  * We iterate over all terms (negated) until we find a term that dispatches to a known service;
  * we then return a JOIN operator between this operator and the operator obtained by recursively
@@ -456,28 +411,22 @@ static size8 setupJoinArgumentMaps(
  * clauseMap array is set to the clause argument provided by each of its arguments.
  */
 static Operator * compileConjunctionRecursive(
-	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 clauseNArguments,
-	bool termExcluded[], uint8 nTermsExcluded, index8 const termActorsIndices[],
-	index8 clauseMap[], ChoicePoints * choices)
+	ClauseCompileState * clauseState, uint8 nTermsExcluded, index8 clauseMap[])
 {
-	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
-	ASSERT(clauseNTerms >= 2)
+	ASSERT(clauseState->nTerms >= 2)
 	Operator * op = 0;
 	// Clause arguments provided by the compiled term. A term may refer to the same
 	// clause argument more than once, so it may have more arguments than the clause.
-	index8 termClauseMap[clauseActors->nAtoms];
-	// Arity of the query-matched term. Parameters with number > matchedTermArity
-	// are clause-local variables that not occur in the query term.
-	size8 matchedTermArity = termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex];
+	index8 termClauseMap[clauseState->actors->nAtoms];
 
 	// Find a term that can be compiled.
 	// First iterate over term forms in the clause form
 	MultisetIterator termFormIterator;
-	MultisetIterate(clauseForm, AT_ID, &termFormIterator);
+	MultisetIterate(clauseState->form, AT_ID, &termFormIterator);
 	size8 termIndex = 0;
-	while(!op && nTermsExcluded < clauseNTerms && MultisetIteratorNext(&termFormIterator)) {
+	while(!op && nTermsExcluded < clauseState->nTerms && MultisetIteratorNext(&termFormIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
-		if(termIndex == matchedTermIndex) {
+		if(termIndex == clauseState->matchedTermIndex) {
 			termIndex += em.multiple;
 			continue;
 		}
@@ -492,84 +441,30 @@ static Operator * compileConjunctionRecursive(
 		TypedTuple * termActors = CreateTypedTuple(termArity);
 		TypedTuple * serviceParameters = CreateTypedTuple(termArity);
 		for(index8 m = 0; m < em.multiple; m++, termIndex++) {
-			if(termExcluded[termIndex])
+			if(clauseState->termExcluded[termIndex])
 				continue;
 			// Extract term actors
-			TypedTupleCopyAt(clauseActors, termActorsIndices[termIndex], termActors);
+			TypedTupleCopyAt(clauseState->actors, clauseState->termActorsIndices[termIndex], termActors);
 			PrintCString("Term: ");
 			PrintFormActorsAsFormula(negatedTermForm, termActors);
 			PrintChar('\n');
 			// Attempt to compile this term to an Service
 			op = compileTerm(
-				negatedTermForm, termActors, serviceParameters, termClauseMap, choices);
+				negatedTermForm, termActors, serviceParameters, termClauseMap, clauseState->choices);
 			PrintCString("serviceParameters = ");
 			TypedTuplePrint(serviceParameters);
 			PrintChar('\n');
 
 			if(op) {
-				termExcluded[termIndex] = true;
+				clauseState->termExcluded[termIndex] = true;
 				nTermsExcluded++;
-				// Update parameter types for output parameter in the query term,
-				// and for all other terms flip matched outputs to inputs.
-				for(index8 i = 0; i < termArity; i++) {
-					TypedAtom termActor = TypedTupleGetElement(termActors, i);
-					if(termActor.type == AT_PARAMETER) {
-						if(!termActor.atom.parameter.atomType) {
-							// Corresponding service parameter must be a typed output
-							TypedAtom serviceParameter = TypedTupleGetElement(serviceParameters, i);
-							ASSERT(serviceParameter.type == AT_PARAMETER)
-							ASSERT(serviceParameter.atom.parameter.io == PARAMETER_OUT)
-							byte parameterType = serviceParameter.atom.parameter.atomType;
-							ASSERT(parameterType)
-							// Updated parameters
-							index8 queryTermParameterNr = termActor.atom.parameter.number;
-							Atom inputParameter = {
-								.parameter = {
-									.number = queryTermParameterNr,
-									.io = PARAMETER_IN,
-									.atomType = parameterType
-								}
-							};
-							Atom outputParameter = {
-								.parameter = {
-									.number = queryTermParameterNr,
-									.io = PARAMETER_OUT,
-									.atomType = parameterType
-								}
-							};
-							// Replace untyped output parameter in query matched term.
-							// A clause-local parameter has no counterpart there.
-							if(queryTermParameterNr <= matchedTermArity) {
-								index8 queryParameterIndex =
-									termActorsIndices[matchedTermIndex] + queryTermParameterNr - 1;
-								TypedTupleSetAtom(clauseActors, queryParameterIndex, outputParameter);
-							}
-							// Replace untyped parameter in compiled term
-							// NOTE: not necessary, this term is not used for anything at this point
-							TypedTupleSetAtom(
-								clauseActors, termActorsIndices[termIndex] + i, outputParameter);
-							
-							// Replace matching parameters in all other non-excluded terms
-							for(index8 i = 0; i < clauseNTerms; i++) {
-								if(termExcluded[i])
-									continue;
-								for(index8 j = termActorsIndices[i]; j < termActorsIndices[i + 1]; j++) {
-									TypedAtom actor = TypedTupleGetElement(clauseActors, j);
-									if(SameTypedAtoms(actor, termActor))
-										TypedTupleSetAtom(clauseActors, j, inputParameter);
-								}
-							}
-						}
-					}
-				}
+				propagateTermParameterTypes(clauseState, termIndex, termActors, serviceParameters);
+				PrintCString("Updated clause: ");
+				PrintFormActorsAsFormula(clauseState->form, clauseState->actors);
+				PrintChar('\n');
 				break;
 			}
-
 		}
-		PrintCString("Updated clause: ");
-		PrintFormActorsAsFormula(clauseForm, clauseActors);
-		PrintChar('\n');
-
 		FreeTypedTuple(serviceParameters);
 		FreeTypedTuple(termActors);
 		IFactRelease(negatedTermForm);
@@ -581,20 +476,18 @@ static Operator * compileConjunctionRecursive(
 		return 0;
 	}
 
-	if(nTermsExcluded < clauseNTerms) {
+	if(nTermsExcluded < clauseState->nTerms) {
 		// Recurse on remaining terms.
-		index8 nextClauseMap[clauseActors->nAtoms];
+		index8 nextClauseMap[clauseState->actors->nAtoms];
 		Operator * nextOperator = compileConjunctionRecursive(
-			clauseForm, clauseActors, matchedTermIndex, clauseNArguments,
-			termExcluded, nTermsExcluded, termActorsIndices, nextClauseMap, choices
-		);
+			clauseState, nTermsExcluded, nextClauseMap);
 		if(nextOperator) {
 			// The two child operators provide the clause arguments of their own terms,
 			// which the argument maps place into the join arguments tuple
 			index8 leftMap[op->nArguments];
 			index8 rightMap[nextOperator->nArguments];
 			size8 nJoinArguments = setupJoinArgumentMaps(
-				clauseNArguments,
+				clauseState->nArguments,
 				termClauseMap, op->nArguments,
 				nextClauseMap, nextOperator->nArguments,
 				clauseMap, leftMap, rightMap
@@ -622,7 +515,7 @@ static Operator * compileConjunctionRecursive(
 
 /**
  * Create parameters for every "local" variable occurring in the clause but not in the
- * query-matched term. The new parametesr are numbered consecutively after the query parameters.
+ * query-matched term. The new parameters are numbered consecutively after the query parameters.
  * Local variables are shared between the terms of the conjunction, and so must have a column in the
  * arguments tuple so that the JOIN operator can constrain terms against each other.
  * After compiling the JOIN, a PROJECT operator is used to drop these trailing columns.
@@ -730,21 +623,38 @@ static Operator * compileConjunction(
 	// and the conjunction is compiled with this extended arguments tuple.
 	size8 nLocalVariables = parameterizeLocalVariables(
 		clauseActors, matchedTermIndex, termActorsIndices, nArguments);
-	size8 clauseNArguments = nArguments + nLocalVariables;
+
+	ClauseCompileState clauseState = {
+		.form = clauseForm,
+		.actors = clauseActors,
+		.termActorsIndices = termActorsIndices,
+		.nTerms = clauseNTerms,
+		.nArguments = nArguments + nLocalVariables,
+		.matchedTermIndex = matchedTermIndex,
+		.matchedTermArity =
+			termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex],
+		.termExcluded = termExcluded,
+		.choices = choices
+	};
 
 	index8 clauseMap[clauseActors->nAtoms];
-	Operator * op = compileConjunctionRecursive(
-		clauseForm, clauseActors, matchedTermIndex, clauseNArguments,
-		termExcluded, 1, termActorsIndices, clauseMap, choices);
+	// The matched term is excluded from the conjunction, and is the one term excluded
+	// when the recursion over the remaining terms begins
+	Operator * op = compileConjunctionRecursive(&clauseState, 1, clauseMap);
 	if(!op)
 		return 0;
 
 	// The compiled terms provide the clause arguments in their own order
-	op = permuteToClauseArguments(op, clauseMap, clauseNArguments);
+	op = permuteToClauseArguments(op, clauseMap, clauseState.nArguments);
 
-	// Drop the local variable arguments again, and any duplicate tuples this creates
+	// Drop the local variable arguments again, and any duplicate tuples this creates.
+	// permuteToClauseArguments() has put the arguments in clause order, so the ones
+	// to keep are the leading query arguments.
 	if(op && nLocalVariables) {
-		Operator * projectOperator = CreateProjectOperator(op, nArguments);
+		index8 keptArguments[nArguments];
+		for(index8 i = 0; i < nArguments; i++)
+			keptArguments[i] = i;
+		Operator * projectOperator = CreateProjectOperator(op, nArguments, keptArguments);
 		ReleaseOperator(op);
 		op = projectOperator;
 	}
@@ -753,14 +663,24 @@ static Operator * compileConjunction(
 
 
 /**
- * A compiled service together with the query parameters it resolved to.
+ * A compiled service together with its resolved query parameters (signature).
  * One variant is emitted per distinct parameter signature; clauses that
- * resolve to the same signature are combined into a UNION, as before.
+ * resolve to the same signature are combined with a UNION operator.
  */
 typedef struct s_CompiledVariant {
 	// resolved query parameters, owned by the variant
 	TypedTuple * parameters;
 	Operator * op;
+	// The relation this variant compiles to. Registered before the recursive clauses
+	// compile, so that their recursive term has something to dispatch to
+	RelationTable const * relation;
+	// Temporary operators standing in for the relation while the recursive clauses compile.
+	// One variant for each possible parameter IO pattern. Removed by completeRecursiveVariant().
+	// See registerTemporaryServices().
+	Operator ** recurseOperators;
+	size32 nRecurseOperators;
+	// whether a recursive clause compiled into this variant
+	bool isRecursive;
 } CompiledVariant;
 
 
@@ -784,6 +704,9 @@ static bool sameParameterSignature(TypedTuple const * first, TypedTuple const * 
 }
 
 
+/**
+ * Find a compiled variant whose signature matches the given parameters.
+ */
 static CompiledVariant * findVariant(
 	CompiledVariant * variants, size8 nVariants, TypedTuple const * parameters)
 {
@@ -796,38 +719,176 @@ static CompiledVariant * findVariant(
 
 
 /**
- * Attempt to compile services with the given form and actors.
+ * Copy the atom types and parameter IO arrays from the parameters of
+ * a compiled variant. Both arrays have the query term arity.
+ */
+static void getVariantSignature(
+	CompiledVariant const * variant, byte atomTypes[], byte parameterIO[])
+{
+	Atom const * parameters = TypedTuplePeekAtoms(variant->parameters);
+	for(index8 i = 0; i < variant->parameters->nAtoms; i++) {
+		atomTypes[i] = parameters[i].parameter.atomType;
+		parameterIO[i] = parameters[i].parameter.io;
+	}
+}
+
+
+/**
+ * Find the indices of the input parameters in the parameterIO array
+ * and write into the inputArguments array. Returns the number of inputs found.
+ */
+static size8 findInputArguments(
+	byte const parameterIO[], size8 arity, index8 inputArguments[])
+{
+	size8 nInputs = 0;
+	for(index8 i = 0; i < arity; i++) {
+		if(parameterIO[i] == PARAMETER_IN)
+			inputArguments[nInputs++] = i;
+	}
+	return nInputs;
+}
+
+
+/**
+ * Find the relation registered to the given signature if on exists
+ * (if this signature has been compiled before), or else create and register 
+ * a new relation table.
+ *
+ * TODO: The relation is now registered under its predicate form, not the term form.
+ * Dispatch also looks up relations by predicate form. We should migrate to using
+ * term forms for both, to support dispatch on negated predicates.
+ */
+static RelationTable const * findOrCreateRelation(
+	Atom queryTermForm, size8 arity, byte const atomTypes[])
+{
+	Atom predicateForm = TermFormGetPredicateForm(queryTermForm);
+	RelationTable const * relation = RelationRegistryFind(predicateForm, arity, atomTypes);
+	if(!relation) {
+		relation = CreateRelationTable(0, predicateForm, arity, atomTypes, 0);
+		ASSERT(relation)
+		RelationRegistryAdd(relation);
+	}
+	return relation;
+}
+
+
+/**
+ * Test whether two compiled operators have the same index order (order of tuple atoms).
+ * This is required to apply the UNION to the two operators. An operator with indexOrder == 0
+ * must yield at most one tuple, so that ordering is irrelevant.
+ */
+static bool sameIndexOrder(Operator const * first, Operator const * second)
+{
+	if(!first->indexOrder || !second->indexOrder)
+		return true;
+	return CompareMemory(first->indexOrder, second->indexOrder, first->nArguments) == 0;
+}
+
+
+/**
+ * Sort a compiled operator into the identity index order by wrapping a PROJECT() retaining
+ * all columns around the operator, unless the operator already is in identity index order.
+ * Takes over the caller's reference to the operator; the caller instead obtains a reference
+ * to the return Operator (which may or may not be be the same as the given operator).
+ */
+static Operator * sortOperatorToIndexOrder(Operator * op)
+{
+	if(!op->indexOrder)
+		return op;
+	bool ordered = true;
+	for(index8 i = 0; i < op->nArguments; i++)
+		ordered = ordered && (op->indexOrder[i] == i);
+	if(ordered)
+		return op;
+
+	index8 argumentMap[op->nArguments];
+	for(index8 i = 0; i < op->nArguments; i++)
+		argumentMap[i] = i;
+	Operator * sortOperator = CreateProjectOperator(op, op->nArguments, argumentMap);
+	ReleaseOperator(op);
+	return sortOperator;
+}
+
+
+/**
+ * Combine two branches of the same signature into their union, taking over the caller's
+ * reference to each. Two branches ordered differently are sorted alike first, as a union
+ * can only merge relations that agree on the order. Each clause of a rule compiles on its
+ * own, and inherits its order from the relations its own terms read, so two branches of
+ * one rule have no reason to agree.
+ */
+static Operator * unionBranches(Operator * first, Operator * second)
+{
+	if(!sameIndexOrder(first, second)) {
+		first = sortOperatorToIndexOrder(first);
+		second = sortOperatorToIndexOrder(second);
+	}
+	Operator * unionOperator = CreateUnionOperator(first, second);
+	ReleaseOperator(first);
+	ReleaseOperator(second);
+	return unionOperator;
+}
+
+
+/**
+ * Test whether a clause is recursive with respect to the query. This occurs when the
+ * clause contains the a term of the same form as the query term but with the opposite sign,
+ * but not necessarily negated. For example, given the query (! even x), the clause
+ * (odd x | even x) is recursive since it contains the term (even x).
+ */
+static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
+{
+	Atom recursiveTermForm = CreateTermForm(
+		TermFormGetPredicateForm(queryTermForm),
+		!TermFormGetSign(queryTermForm)
+	);
+	bool recursive = MultisetGetElementMultiple(clauseForm, recursiveTermForm) > 0;
+	IFactRelease(recursiveTermForm);
+	return recursive;
+}
+
+
+/**
+ * Find all clauses (rules) that match the given query term and compile them,
+ * producing one or more CompiledVariant. If multiple clauses resolve to the same signature,
+ * they are are combined with a UNION operaor. Returns the number of compiled variants.
+ *
  * The queryActors tuple must be a series of AT_PARAMETER atoms numbered 1, 2, ...
  * and is not modified; each compiled variant carries its own resolved parameters.
- * Returns the number of variants written to the variants array.
+ *
+ * The recursive clauses are taken in a second pass, once the non-recursive ones have
+ * fixed the parameter types and a service has been registered for their recursive term
+ * to dispatch to; see compileQuery().
+ *
+ * foundRecursiveClause is an output: it is set to true if any matching clause is recursive,
+ * and never cleared, so the caller initializes it. That is how compileQuery() knows whether
+ * the second pass is needed at all. The second pass sets it again, to no effect.
  */
-static size8 compileService(
-	Atom queryTermForm, TypedTuple const * queryActors,
-	CompiledVariant * variants, size8 maxVariants)
+
+#define NON_RECURSIVE_PASS	1
+#define RECURSIVE_PASS		2
+
+static size8 compileQueryClauses(
+	Atom queryTermForm, TypedTuple const * queryActors, int pass,
+	bool * foundRecursiveClause, CompiledVariant * variants, size8 nVariants, size8 maxVariants)
 {
 	size8 queryTermArity = TermFormArity(queryTermForm);
-	size8 nVariants = 0;
+	*foundRecursiveClause = false;
 
 	// TODO: query existing services matching the term
 
 	/**
 	 * To find rules (clauses) c that contains a matching term form,
 	 * we query (multiset c element @term-form multiple m),
-	 * 
+	 *
 	 * If multiple rules match, we generate a UNION of
 	 * the resulting services. The first clause that yields a service
 	 * will determine the query parameter types; all other clauses must
 	 * then yield services with those same types.
-	 * 
-	 * If the term occurs negated in a clause, then the clause is recursive.
-	 * A recursive clause must always occur in a UNION with a least one
-	 * non-recursive clause that provides the parameter types. 
-	 * 
+	 *
  	 * TODO: it might happen that a generated UNION service has the same
 	 * signature as an existing service, which becomes part of the UNION.
 	 * In this case, the newly generated service should replace the existing one.
-	 *
-	 * NOTE: Recursive services are not guaranteed to terminate.
 	 */
 
 	/**
@@ -852,6 +913,15 @@ static size8 compileService(
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)]._uint;
 		// Ensure the multiset is a clause form
 		if(!IsClauseForm(clauseForm))
+			continue;
+
+		// If the clause is recursive, we report this to the caller in foundRecursiveClause.
+		bool isRecursive = isRecursiveClauseForm(clauseForm, queryTermForm);
+		if(isRecursive)
+			*foundRecursiveClause = true;
+		// Compile only recursive clauses in the RECURSIVE_PASS, and only non-recursive ones
+		// in the NON_RECURSIVE_PASS
+		if(isRecursive != (pass == RECURSIVE_PASS))
 			continue;
 
 		// Iterate over all rules (clauses) with this clause form.
@@ -902,18 +972,19 @@ static size8 compileService(
 						CompiledVariant * variant = findVariant(variants, nVariants, resolvedParameters);
 						if(variant) {
 							// Another clause yielded the same signature: union them
-							Operator * unionOperator = CreateUnionOperator(variant->op, newService);
-							ReleaseOperator(variant->op);
-							ReleaseOperator(newService);
-							variant->op = unionOperator;
+							variant->op = unionBranches(variant->op, newService);
 						}
 						else {
 							ASSERT(nVariants < maxVariants)
-							variants[nVariants].parameters = CreateTypedTuple(queryTermArity);
-							TypedTupleCopy(resolvedParameters, variants[nVariants].parameters);
-							variants[nVariants].op = newService;
-							nVariants++;
+							variant = &(variants[nVariants++]);
+							SetMemory(variant, sizeof(CompiledVariant), 0);
+							variant->parameters = CreateTypedTuple(queryTermArity);
+							TypedTupleCopy(resolvedParameters, variant->parameters);
+							variant->op = newService;
 						}
+						// A variant a recursive clause compiled into needs a fixpoint
+						// operator to derive it
+						variant->isRecursive = variant->isRecursive || isRecursive;
 					} while(nextChoiceBranch(&choices));
 				}
 				FreeSubstitution(&querySubst);
@@ -932,7 +1003,171 @@ static size8 compileService(
 }
 
 
-size8 CompileService(Formula const * queryTerm, Service services[], size8 maxServices)
+/**
+ * Give a variant the relation it compiles to, which a service can then be registered
+ * against. Does nothing if the variant has one already.
+ */
+static void setupVariantRelation(
+	CompiledVariant * variant, Atom queryTermForm, size8 arity)
+{
+	if(variant->relation)
+		return;
+	byte atomTypes[arity];
+	byte parameterIO[arity];
+	getVariantSignature(variant, atomTypes, parameterIO);
+	variant->relation = findOrCreateRelation(queryTermForm, arity, atomTypes);
+}
+
+
+// Most arguments a query leaves as outputs, for the temporary services of a recursive
+// variant. The number of those services is exponential in this; see below.
+#define MAX_RECURSIVE_OUTPUT_ARGUMENTS	8
+
+
+/**
+ * Register temporary services for a compiled variant, so that a recursive clause
+ * can dispatch its recursive term to (one of) these services. (A recursive term will
+ * later dispatch to the relation being compiled, but this does not exist until compilation
+ * is finished.)
+ *
+ * The parameter IO patttern of a recursive term can differ from that of the query term.
+ * A join binds the output arguments from its left child to the inputs of its right child,
+ * so a recursive term may take as an input an argument that is an output it the query term.
+ * 
+ * For example, when compiling the query (before x after y) against the recursive clause
+ * 
+ *   before x after y | ! prec x succ z | ! before z after y
+ * 
+ * the query pattern will be (before 1>ID after 2>ID) with both x, y as outputs, but the
+ * recursive term (before z after y) will have pattern (before 1<ID after 2>ID) since z
+ * is produced by (prec x succ z) in a JOIN operation.
+ * 
+ * Since we cannot tell in advance what the IO pattern of the recursive term might be,
+ * we register one service for every possible IO pattern, with the constraint that query inputs
+ * are also inputs to the recursive term. Only one or two are used in practice, but which
+ * ones is not known until the clauses compile. Each temporary registered service is evaluated by
+ * a RECURSE operator. completeRecursiveVariant() removes all temporary services (but not the
+ * associated RelationTable) once the recursive clauses have compiled.
+ */
+static void registerTemporaryServices(
+	CompiledVariant * variant, Atom queryTermForm, size8 queryTermArity)
+{
+	setupVariantRelation(variant, queryTermForm, queryTermArity);
+
+	byte atomTypes[queryTermArity];
+	byte queryParameterIO[queryTermArity];
+	getVariantSignature(variant, atomTypes, queryParameterIO);
+
+	// Find the output arguments of the query, which a recursive term may bind
+	index8 outputArguments[queryTermArity];
+	size8 nOutputs = 0;
+	for(index8 i = 0; i < queryTermArity; i++) {
+		if(queryParameterIO[i] != PARAMETER_IN)
+			outputArguments[nOutputs++] = i;
+	}
+	ASSERT(nOutputs <= MAX_RECURSIVE_OUTPUT_ARGUMENTS)
+
+	// We register one temporary service per subset of the output arguments, covering
+	// all possible combinations of input/output arguments, so 2^nOutputs services total.
+	variant->nRecurseOperators = ((size32) 1) << nOutputs;
+	variant->recurseOperators = Allocate(variant->nRecurseOperators * sizeof(Operator *));
+	for(index32 boundOutputs = 0; boundOutputs < variant->nRecurseOperators; boundOutputs++) {
+		byte parameterIO[queryTermArity];
+		CopyMemory(queryParameterIO, parameterIO, queryTermArity);
+		// set the parameter IO of this service to reflect the binary pattern of 
+		for(index8 i = 0; i < nOutputs; i++) {
+			if(boundOutputs & (((index32) 1) << i))
+				parameterIO[outputArguments[i]] = PARAMETER_IN;
+		}
+		index8 inputArguments[queryTermArity];
+		size8 nInputs = findInputArguments(parameterIO, queryTermArity, inputArguments);
+
+		Operator * recurseOperator = CreateRecurseOperator(queryTermArity, inputArguments, nInputs);
+		ServiceRegistryAdd(variant->relation, parameterIO, recurseOperator);
+		variant->recurseOperators[boundOutputs] = recurseOperator;
+	}
+}
+
+
+/**
+ * Remove the temporary services again, now that the recursive clauses have compiled, and
+ * wrap a variant that one of them compiled into in a fixpoint operator. That operator
+ * derives the relation, and the recurse operators below it read the tuples it derives.
+ */
+static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
+{
+	if(!variant->recurseOperators)
+		return;
+	for(index32 i = 0; i < variant->nRecurseOperators; i++) {
+		ServiceRegistryRemove(variant->relation, variant->recurseOperators[i]);
+		ReleaseOperator(variant->recurseOperators[i]);
+	}
+	Free(variant->recurseOperators);
+	variant->recurseOperators = 0;
+	variant->nRecurseOperators = 0;
+	if(!variant->isRecursive)
+		return;
+
+	byte atomTypes[arity];
+	byte parameterIO[arity];
+	getVariantSignature(variant, atomTypes, parameterIO);
+	index8 inputArguments[arity];
+	size8 nInputs = findInputArguments(parameterIO, arity, inputArguments);
+
+	Operator * fixpointOperator = CreateFixpointOperator(
+		variant->op, inputArguments, nInputs);
+	ReleaseOperator(variant->op);
+	variant->op = fixpointOperator;
+}
+
+
+/**
+ * Attempt to compile a query into one or more services (variants).
+ * Returns the number of variants written to the variants array.
+ *
+ * Rules (clauses) matching the query are processed in two passes. Non-recursive clauses
+ * compile first, and determine the parameter types of the query for each compiled variant;
+ * these parameter types must be known before a recursive clause can compile, so that a
+ * temporary service can be registers that the recursive term can dispatches to during compilation.
+ * A recursive clause therefore must occur together with a non-recursive  clause of the same
+ * signature, else it will fail to compile.
+ *
+ * NOTE: a recursive service is not guaranteed to terminate; see the notes on termination
+ * in compiler.md.
+ */
+static size8 compileQuery(
+	Atom queryTermForm, TypedTuple const * queryActors,
+	CompiledVariant * variants, size8 maxVariants)
+{
+	bool foundRecursiveClause;
+	// First pass compilation for the non-recursive matching clauses
+	size8 nVariants = compileQueryClauses(
+		queryTermForm, queryActors, NON_RECURSIVE_PASS, &foundRecursiveClause, variants, 0, maxVariants);
+	size8 queryTermArity = TermFormArity(queryTermForm);
+
+	if(foundRecursiveClause) {
+		// Second pass for any variant that contained a recursive clause
+		for(index8 i = 0; i < nVariants; i++)
+			registerTemporaryServices(&variants[i], queryTermForm, queryTermArity);
+		nVariants = compileQueryClauses(
+			queryTermForm, queryActors, RECURSIVE_PASS, &foundRecursiveClause,
+			variants, nVariants, maxVariants);
+		for(index8 i = 0; i < nVariants; i++)
+			completeRecursiveVariant(&variants[i], queryTermArity);
+	}
+
+	// A service is registered against a relation, so every variant needs one. Compiling
+	// only needs the relation to exist beforehand when a clause is recursive, which is
+	// why registerTemporaryServices() above creates it in that case. Here we cover the rest:
+	// every variant when no clause was recursive, and any variant that first appeared
+	// while the recursive clauses compiled.
+	for(index8 i = 0; i < nVariants; i++)
+		setupVariantRelation(&variants[i], queryTermForm, queryTermArity);
+	return nVariants;
+}
+
+
+size8 CompileQuery(Formula const * queryTerm, Service services[], size8 maxServices)
 {
 	ASSERT(IsTermForm(queryTerm->form))
 	ASSERT(maxServices > 0)
@@ -942,30 +1177,19 @@ size8 CompileService(Formula const * queryTerm, Service services[], size8 maxSer
 	TypedTuple * queryParameters = CreateTypedTuple(arity);
 	actorsToParameters(queryTerm->actors, queryParameters);
 
-	PrintCString("\nCompileService()\nqueryParameters: ");
+	PrintCString("\nCompileQuery()\nqueryParameters: ");
 	PrintFormActorsAsFormula(queryTerm->form, queryParameters);
 	PrintChar('\n');
 
 	CompiledVariant variants[maxServices];
-	size8 nVariants = compileService(queryTerm->form, queryParameters, variants, maxServices);
+	size8 nVariants = compileQuery(queryTerm->form, queryParameters, variants, maxServices);
 
 	for(index8 i = 0; i < nVariants; i++) {
-		// Parameter types were resolved by compileService()
-		Atom const * serviceParameters = TypedTuplePeekAtoms(variants[i].parameters);
+		// Parameter types and the relation were resolved by compileQuery()
 		byte atomTypes[arity];
 		byte parameterIO[arity];
-		for(index8 j = 0; j < arity; j++) {
-			atomTypes[j] = serviceParameters[j].parameter.atomType;
-			parameterIO[j] = serviceParameters[j].parameter.io;
-		}
-		// Reuse the relation table if this signature has been compiled before
-		RelationTable const * relation = RelationRegistryFind(queryTerm->form, arity, atomTypes);
-		if(!relation) {
-			relation = CreateRelationTable(0, queryTerm->form, arity, atomTypes, 0);
-			ASSERT(relation)
-			RelationRegistryAdd(relation);
-		}
-		services[i] = ServiceRegistryAdd(relation, parameterIO, variants[i].op);
+		getVariantSignature(&variants[i], atomTypes, parameterIO);
+		services[i] = ServiceRegistryAdd(variants[i].relation, parameterIO, variants[i].op);
 		ReleaseOperator(variants[i].op);
 		FreeTypedTuple(variants[i].parameters);
 	}
