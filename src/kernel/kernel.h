@@ -39,8 +39,9 @@ void KernelShutdown(void);
  * The actors tuple may not contain variables.
  * To indicate an identifying fact, set idPosition to the 1-based position
  * of the identified atom.
+ * The form is a term form, so a fact can be asserted for a negated predicate.
  */
-void AssertFact(Atom predicateForm, TypedTuple const * actors, uint8 idPosition);
+void AssertFact(Atom termForm, TypedTuple const * actors, uint8 idPosition);
 
 /**
  * High level method to retract a fact.
@@ -49,8 +50,9 @@ void AssertFact(Atom predicateForm, TypedTuple const * actors, uint8 idPosition)
  * and removes corresponding entries from the lookup table.
  * This function should always succeed, as facts can always
  * be retracted at any time.
+ * The form is a term form; see AssertFact()
  */
-void RetractFact(Atom form, TypedTuple * actors);
+void RetractFact(Atom termForm, TypedTuple * actors);
 
 /**
  * Stable identifiers for core role names (satisfying (name @name))
@@ -139,6 +141,13 @@ void RetractFact(Atom form, TypedTuple * actors);
  * Returns an AT_ID atom.
  */
 Atom GetCorePredicateForm(index32 formId);
+
+/**
+ * Lookup the positive term form of one of the "primitive" forms for core tables.
+ * This is the key the core relation tables are registered under; see RelationRegistry.h
+ * Returns an AT_ID atom.
+ */
+Atom GetCoreTermForm(index32 formId);
 
 /**
  * Set a tuple in the canonical order for the indicated core form,

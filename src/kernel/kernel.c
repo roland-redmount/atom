@@ -2,6 +2,7 @@
 #include "kernel/UInt.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
+#include "lang/TermForm.h"
 #include "kernel/dictionary.h"
 #include "kernel/ifact.h"
 #include "kernel/letter.h"
@@ -178,6 +179,9 @@ static struct s_Kernel {
 
 	// Core predicate forms and roles, defined during bootstrapping
 	Atom corePredicateForms[N_CORE_PREDICATES + 1];
+	// The positive term form of each core predicate form, which is the key
+	// its relation tables are registered under
+	Atom coreTermForms[N_CORE_PREDICATES + 1];
 	Atom coreRoleNames[N_CORE_ROLES + 1];
 
 	// Mapping of roles from "kernel order" in canonical order, such that
@@ -201,6 +205,13 @@ Atom GetCorePredicateForm(index32 formId)
 {
 	ASSERT((formId >= 1) && (formId <= N_CORE_PREDICATES))
 	return kernel.corePredicateForms[formId];
+}
+
+
+Atom GetCoreTermForm(index32 formId)
+{
+	ASSERT((formId >= 1) && (formId <= N_CORE_PREDICATES))
+	return kernel.coreTermForms[formId];
 }
 
 
@@ -320,7 +331,10 @@ static RelationTable const * createCoreRelationTable(uint32 relationId)
 	CoreFormSetByteArray(coreRelationFormId[relationId], coreRelationAtomTypes[relationId], atomTypes);
 	index32 formId = coreRelationFormId[relationId];
 
-	return CreateRelationBTreeWithServices(
+	// The bootstrap variant is used throughout, since the predicate form is at hand
+	// and the earliest core tables are keyed by a term form that has no tuples yet
+	return CreateRelationBTreeWithServicesBootstrap(
+		kernel.coreTermForms[formId],
 		kernel.corePredicateForms[formId],
 		corePredicateArity[formId],
 		atomTypes,
@@ -335,10 +349,42 @@ RelationTable const * GetCoreRelationTable(index32 relationId)
 	CoreFormSetByteArray(coreRelationFormId[relationId], coreRelationAtomTypes[relationId], atomTypes);
 	index32 formId = coreRelationFormId[relationId];
 	return RelationRegistryFind(
-		kernel.corePredicateForms[formId],
+		kernel.coreTermForms[formId],
 		corePredicateArity[formId],
 		atomTypes
 	);
+}
+
+
+/**
+ * Create the positive term form of a predicate form during bootstrap, with a hash
+ * reserved by IFactReserve() rather than one computed from the defining fact.
+ * This is the CreateTermForm() of a form whose relation table must exist before
+ * the term form itself can be built; see setupCoreServices().
+ *
+ * The lookup entries are added here, since IFactEndBootstrap() with a fixed hash
+ * does not add them.
+ */
+static void bootstrapTermForm(Atom termForm, Atom predicateForm)
+{
+	RelationTable const * table = kernel.coreRelations[RELATION_TERM_FORM];
+
+	IFactDraft draft;
+	IFactBegin(&draft);
+	IFactBeginConjunction(&draft, table, CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM));
+	Atom tuple[3];
+	// the term form itself goes in the id column, which createFacts() fills in
+	CoreFormSetTuple(
+		FORM_TERM_FORM,
+		(Atom []) {(Atom) {0}, predicateForm, (Atom) {._uint = 1}},
+		tuple
+	);
+	IFactAddTuple(&draft, tuple);
+	IFactEndConjunction(&draft);
+	IFactEndBootstrap(&draft, termForm.hash);
+
+	AtomAddRole(termForm, table, GetCoreRoleName(ROLE_TERM_FORM));
+	AtomAddRole(predicateForm, table, GetCoreRoleName(ROLE_PREDICATE_FORM));
 }
 
 
@@ -392,6 +438,12 @@ static void setupCoreServices(void)
 	 * 
 	 * The current solution is to fix the hash value and create the corresponding IFact manually,
 	 * bypassing the hash computation step.
+	 *
+	 * A relation table is keyed by a term form rather than a predicate form, which extends
+	 * the circle. The defining fact of a term form is a tuple in the term form table,
+	 * and that table is itself keyed by a term form. So the positive term forms of
+	 * @multiset-form, @predicate-form and @term-form must be built by hand as well,
+	 * with fixed hash values of their own.
 	 */
 
 	// fixed values for @multiset-form and @predicate-form
@@ -400,6 +452,18 @@ static void setupCoreServices(void)
 	Atom predicateForm = (Atom) {.hash = 2};
 	kernel.corePredicateForms[FORM_PREDICATE_FORM] = predicateForm;
 
+	/*
+	 * Fixed values for the positive term form of each of the three forms whose tables
+	 * are needed before CreateTermForm() can run. @term-form itself is an ordinary
+	 * predicate form created further down, but its term form is circular in the same way.
+	 */
+	Atom multisetTermForm = (Atom) {.hash = 3};
+	kernel.coreTermForms[FORM_MULTISET_ELEMENT_MULTIPLE] = multisetTermForm;
+	Atom predicateTermForm = (Atom) {.hash = 4};
+	kernel.coreTermForms[FORM_PREDICATE_FORM] = predicateTermForm;
+	Atom termFormTermForm = (Atom) {.hash = 5};
+	kernel.coreTermForms[FORM_TERM_FORM] = termFormTermForm;
+
 	// Set role index arrays
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][0] = MULTISET_MULTISET_COLUMN;
 	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][1] = MULTISET_ELEMENT_COLUMN;
@@ -407,13 +471,16 @@ static void setupCoreServices(void)
 	kernel.corePredicateRoleIndex[FORM_PREDICATE_FORM][0] = 0;
 
 	/*
-	 * Reserve the IFact headers for the two forms, so that the relation tables
+	 * Reserve the IFact headers for the five forms, so that the relation tables
 	 * below can acquire a reference to their form even though the corresponding
 	 * defining facts cannot be built until those very tables exist.
 	 * The headers are finalized by the IFactEndBootstrap() calls further down.
 	 */
 	IFactReserve(multisetForm.hash);
 	IFactReserve(predicateForm.hash);
+	IFactReserve(multisetTermForm.hash);
+	IFactReserve(predicateTermForm.hash);
+	IFactReserve(termFormTermForm.hash);
 
 	// Create table for multisets of AT_NAME, used for predicate forms
 	kernel.coreRelations[RELATION_MULTISET_NAME] = createCoreRelationTable(RELATION_MULTISET_NAME);
@@ -523,27 +590,57 @@ static void setupCoreServices(void)
 
 	// We can now use CreatePredicateForm() and AssertFact()
 
+	Atom roles[CORE_FORMS_MAX_ARITY];
+
+	/*
+	 * Create @term-form = (term-form predicate-form sign) and its relation table,
+	 * which is what CreateTermForm() writes into. This form is created the ordinary way,
+	 * since the two tables holding its defining facts now exist. Only its own term form
+	 * is circular, and that one is built by hand just below.
+	 */
+	for(index8 j = 0; j < corePredicateArity[FORM_TERM_FORM]; j++)
+		roles[j] = kernel.coreRoleNames[coreFormRoleIds[FORM_TERM_FORM][j]];
+	kernel.corePredicateForms[FORM_TERM_FORM] =
+		CreatePredicateForm(roles, corePredicateArity[FORM_TERM_FORM]);
+	for(index8 j = 0; j < corePredicateArity[FORM_TERM_FORM]; j++)
+		kernel.corePredicateRoleIndex[FORM_TERM_FORM][j] =
+			PredicateRoleIndex(kernel.corePredicateForms[FORM_TERM_FORM], roles[j]);
+
+	kernel.coreRelations[RELATION_TERM_FORM] = createCoreRelationTable(RELATION_TERM_FORM);
+
+	/*
+	 * Build the three reserved term forms, now that there is a table to hold their
+	 * defining facts. Each gives 1 reference to its term form atom.
+	 */
+	bootstrapTermForm(multisetTermForm, multisetForm);
+	bootstrapTermForm(predicateTermForm, predicateForm);
+	bootstrapTermForm(termFormTermForm, kernel.corePredicateForms[FORM_TERM_FORM]);
+
+	// We can now use CreateTermForm()
+
 	// Create remaining forms
-	Atom roles[CORE_FORMS_MAX_ARITY];	
-	for(index32 formId = FORM_TERM_FORM; formId <= N_CORE_PREDICATES; formId++) {
+	for(index32 formId = FORM_CLAUSE_FORM; formId <= N_CORE_PREDICATES; formId++) {
 		for(index8 j = 0; j < corePredicateArity[formId]; j++)
 			roles[j] = kernel.coreRoleNames[coreFormRoleIds[formId][j]];
 		Atom form = CreatePredicateForm(roles, corePredicateArity[formId]);
 		kernel.corePredicateForms[formId] = form;
+		kernel.coreTermForms[formId] = CreateTermForm(form, true);
 		// precompute role indices (relation columns) for CorePredicateRoleIndex()
 		for(index8 j = 0; j < corePredicateArity[formId]; j++)
 			kernel.corePredicateRoleIndex[formId][j] = PredicateRoleIndex(form, roles[j]);
 	}
-	// NOTE: we now hold 1 reference to each of the core predicate forms.
+	// NOTE: we now hold 1 reference to each of the core predicate forms and term forms.
 
 	// Create remaining B-tree relation tables.
-	for(index32 i = RELATION_TERM_FORM; i <= N_CORE_RELATIONS; i++)
+	for(index32 i = RELATION_CLAUSE_FORM; i <= N_CORE_RELATIONS; i++)
 		kernel.coreRelations[i] = createCoreRelationTable(i);
 
-	// The relation table registry now holds references to each core predicate form,
-	// so we can release our references.
-	for(index32 i = 1; i <= N_CORE_PREDICATES; i++)
+	// The relation table registry now holds references to each core predicate form
+	// and term form, so we can release our references.
+	for(index32 i = 1; i <= N_CORE_PREDICATES; i++) {
 		IFactRelease(kernel.corePredicateForms[i]);
+		IFactRelease(kernel.coreTermForms[i]);
+	}
 
 	// Lookup core services and store in array
 	kernel.coreOperators[0] = 0;
@@ -614,45 +711,70 @@ void KernelShutdown(void)
 	 * But it can be useful to ensure we have no memory leaks.
 	 */
 
-	 // Remove all relations and services except for RELATION_PREDICATE_FORM
-	 // and RELATION_MULTISET_NAME. This also removes the associated predicate forms
-	for(index32 relationId = N_CORE_RELATIONS; relationId > RELATION_PREDICATE_FORM; relationId--) {
+	 // Remove all relations and services above RELATION_TERM_FORM. This also releases
+	 // the associated predicate form and term form of each.
+	for(index32 relationId = N_CORE_RELATIONS; relationId > RELATION_TERM_FORM; relationId--) {
 		ServiceRegistryRemoveAll(kernel.coreRelations[relationId]);
-		// This releases the associated form
+		// This releases the associated forms
 		RelationRegistryRemove(kernel.coreRelations[relationId]);
 	}
 
+	/*
+	 * RELATION_MULTISET_ID is not circular, but shares the term form of
+	 * RELATION_MULTISET_NAME, so it goes before the three tables handled below.
+	 */
+	ServiceRegistryRemoveAll(kernel.coreRelations[RELATION_MULTISET_ID]);
+	RelationRegistryRemove(kernel.coreRelations[RELATION_MULTISET_ID]);
+
 	/**
-	 * Remove RELATION_PREDICATE_FORM and RELATION_MULTISET_NAME.
+	 * Remove RELATION_TERM_FORM, RELATION_PREDICATE_FORM and RELATION_MULTISET_NAME.
 	 * These are circular by design. RELATION_PREDICATE_FORM now contains the tuples
 	 *
 	 *  (predicate-form @multiset-form)
 	 *  (predicate-form @predicate-form)
+	 *  (predicate-form @term-form)
 	 *
-	 * which are part of the defining facts for the atoms @predicate-form and @multiset-form.
-	 * Similarly, RELATION_MULTISET_NAME now contains the tuples
+	 * which are part of the defining facts for the atoms @predicate-form, @multiset-form
+	 * and @term-form. Similarly, RELATION_MULTISET_NAME now contains the tuples
 
 	 *  (multiset @multiset-form element @multiset-role multiple 1)
 	 *  (multiset @multiset-form element @element-role multiple 1)
 	 *  (multiset @multiset-form element @multiple-role multiple 1)
 	 *  (multiset @predicate-form element @predicate-form-role multiple 1)
+	 *  (multiset @term-form element @term-form-role multiple 1)
+	 *  (multiset @term-form element @predicate-form-role multiple 1)
+	 *  (multiset @term-form element @sign-role multiple 1)
 	 *
-	 * as created by setupCoreServices(). These two relation tables now carry the sole reference
-	 * to @multiset-form and @predicate-form, respectively. Neither of the above tuples holds
-	 * a reference to the form it defines, since the identified atom sits in the id column
-	 * and is not acquired by RelationTableAddTuple().
+	 * and RELATION_TERM_FORM contains the defining fact of the positive term form of
+	 * each of those three predicate forms,
 	 *
-	 * So we first detach the form reference held by each table, which is the only thing
-	 * keeping the two ifacts alive. Each release then retracts that ifact's defining facts
-	 * from both tables, which are still alive and serviced at this point. Once both are
-	 * detached, the two tables are empty and can be torn down in the usual way.
+	 *  (term-form @+multiset-form predicate-form @multiset-form sign 1)
+	 *  (term-form @+predicate-form predicate-form @predicate-form sign 1)
+	 *  (term-form @+term-form predicate-form @term-form sign 1)
+	 *
+	 * as created by setupCoreServices(). Each of these three tables now carries the sole
+	 * reference to the term form it is keyed by, and to that term form's predicate form.
+	 * No tuple above holds a reference to the form it defines, since the identified atom
+	 * sits in the id column and is not acquired by RelationTableAddTuple().
+	 *
+	 * So we first detach the references held by each table, which is the only thing keeping
+	 * those ifacts alive. Each release retracts the ifact's defining facts from tables that
+	 * are still alive and serviced at this point. RelationTableReleaseForm() releases the
+	 * term form before the predicate form, since the term form's defining fact refers to it.
+	 * RELATION_TERM_FORM goes first, so that the other two tables still have a table to
+	 * retract their own term form from. Once all three are detached, the tables are empty
+	 * and can be torn down in the usual way.
 	 */
+	RelationTableReleaseForm(kernel.coreRelations[RELATION_TERM_FORM]);
 	RelationTableReleaseForm(kernel.coreRelations[RELATION_MULTISET_NAME]);
 	RelationTableReleaseForm(kernel.coreRelations[RELATION_PREDICATE_FORM]);
 
+	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_TERM_FORM]) == 0)
 	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_PREDICATE_FORM]) == 0)
 	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_MULTISET_NAME]) == 0)
 
+	ServiceRegistryRemoveAll(kernel.coreRelations[RELATION_TERM_FORM]);
+	RelationRegistryRemove(kernel.coreRelations[RELATION_TERM_FORM]);
 	for(index32 relationId = RELATION_PREDICATE_FORM; relationId >= RELATION_MULTISET_NAME; relationId--) {
 		ServiceRegistryRemoveAll(kernel.coreRelations[relationId]);
 		RelationRegistryRemove(kernel.coreRelations[relationId]);
@@ -680,12 +802,11 @@ void KernelShutdown(void)
 
 // TODO: this should return a status code indicating whether the fact was created,
 // already existed, or if the assert failed due to logical inconsistency
-void AssertFact(Atom predicateForm, TypedTuple const * actors, uint8 idPosition)
+void AssertFact(Atom termForm, TypedTuple const * actors, uint8 idPosition)
 {
-	// NOTE: currently we only support creating predicates
-	ASSERT(IsPredicateForm(predicateForm));
+	ASSERT(IsTermForm(termForm));
 	Atom const * actorsArray = TypedTuplePeekAtoms(actors);
-	RelationTable const * table = RelationRegistryFind(predicateForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
+	RelationTable const * table = RelationRegistryFind(termForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
 	if(table)
 		RelationTableAddTuple(table, actorsArray, idPosition);
 	else {
@@ -696,9 +817,9 @@ void AssertFact(Atom predicateForm, TypedTuple const * actors, uint8 idPosition)
 }
 
 
-void RetractFact(Atom predicateForm, TypedTuple * actors)
+void RetractFact(Atom termForm, TypedTuple * actors)
 {
-	RelationTable const * relation = RelationRegistryFind(predicateForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
+	RelationTable const * relation = RelationRegistryFind(termForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
 	Atom const * actorsArray = TypedTuplePeekAtoms(actors);
 	// Remove the lookup entries before the tuple: removing the tuple releases the
 	// relation's reference to each of its atoms, and releasing the last reference

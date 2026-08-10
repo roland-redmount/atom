@@ -1,11 +1,11 @@
 /**
  * High level interface to relation tables, independent of implementation.
  * A relation table is 1:1 with a (form, columns types) pair.
- * 
- * NOTE: the form is currently always a predicate form, which means we
- * cannot have services for negated predicates like (! odd x). 
- * It's not clear to me yet if this is a major limitation.
- * 
+ *
+ * The form is a term form, so a relation carries a sign. This is what lets
+ * a negated predicate like (! odd x) have a relation table of its own,
+ * distinct from the one for (odd x).
+ *
  * NOTE: in the future, we want to be able to hot-load implementations
  * into a running atom process. This would involve loading code into
  * executable memory and registering services with the appropriate
@@ -79,13 +79,20 @@ typedef struct s_RelationTableProvider {
 
 /**
  * A relation table implementation record, identified by (form, atomTypes).
- * 
+ *
  * Each implementation must provide callbacks to support adding
  * and removing tuples.
  */
 struct s_RelationTable {
+	// term form; the key this table is registered under. See RelationRegistry.h
 	Atom form;
-	// whether this table holds a reference to its form; see RelationTableReleaseForm()
+	/**
+	 * The predicate form of the term form, cached here because the roles of a
+	 * relation are read on every tuple added or removed; see LookupAddPredicateRoles().
+	 * Reading it off the term form instead would mean a relation query each time.
+	 */
+	Atom predicateForm;
+	// whether this table holds a reference to its forms; see RelationTableReleaseForm()
 	bool ownsForm;
 	size8 nColumns;
 	byte * atomTypes;
@@ -110,18 +117,34 @@ struct s_RelationTable {
 RelationTable const * CreateRelationTable(
 	RelationTableProvider * provider, Atom form, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
 
+/**
+ * Create a relation table given its predicate form directly, rather than reading
+ * it off the term form. This is only for bootstrapping, where CreateRelationTable()
+ * cannot be used for two reasons. The first core tables are keyed by a term form
+ * reserved by IFactReserve(), which holds no tuples yet to read a predicate form from.
+ * And TermFormGetPredicateForm() calls SERVICE_TERM_FORM, which is not available until
+ * the term form table itself exists. See setupCoreServices() in kernel.c
+ */
+RelationTable const * CreateRelationTableBootstrap(
+	RelationTableProvider * provider, Atom termForm, Atom predicateForm,
+	size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
+
 
 void FreeRelationTable(RelationTable const * table);
 
 /**
- * Release the reference this table holds to its form, without freeing the table.
+ * Release the references this table holds to its term form and predicate form,
+ * without freeing the table.
  *
  * This is only for shutting down the self-referential core tables, whose own
  * defining facts are stored in those same tables. Such a table cannot be freed
  * directly: FreeRelationTable() requires it to be empty, but the tuples are only
  * retracted once the form's reference count drops to zero, which cannot happen
- * while the table holds a reference. Detaching the reference first lets the
+ * while the table holds a reference. Detaching the references first lets the
  * ifact drain its tuples out of a table that is still alive and serviced.
+ *
+ * The term form is released before the predicate form, since the defining fact of
+ * the term form holds a reference to the predicate form.
  *
  * The table must still be registered (its form is the registry B-tree key) and
  * must still have its services, which are used to locate the tuples to retract.

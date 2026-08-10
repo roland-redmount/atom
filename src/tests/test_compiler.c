@@ -306,10 +306,12 @@ static void setupEdgeFixture(void)
 		CreateNameFromCString("from"),
 		CreateNameFromCString("to")
 	};
-	edgeFixture.form = CreatePredicateForm(roles, 3);
-	index8 edgeIndex = PredicateRoleIndex(edgeFixture.form, roles[0]);
-	index8 fromIndex = PredicateRoleIndex(edgeFixture.form, roles[1]);
-	index8 toIndex = PredicateRoleIndex(edgeFixture.form, roles[2]);
+	Atom predicateForm = CreatePredicateForm(roles, 3);
+	edgeFixture.form = CreateTermForm(predicateForm, true);
+	index8 edgeIndex = PredicateRoleIndex(predicateForm, roles[0]);
+	index8 fromIndex = PredicateRoleIndex(predicateForm, roles[1]);
+	index8 toIndex = PredicateRoleIndex(predicateForm, roles[2]);
+	IFactRelease(predicateForm);
 	for(index8 i = 0; i < 3; i++)
 		NameRelease(roles[i]);
 
@@ -481,9 +483,11 @@ static void setupPrecSuccFixture(void)
 		CreateNameFromCString("prec"),
 		CreateNameFromCString("succ")
 	};
-	precSuccFixture.form = CreatePredicateForm(roles, 2);
-	precSuccFixture.precIndex = PredicateRoleIndex(precSuccFixture.form, roles[0]);
-	precSuccFixture.succIndex = PredicateRoleIndex(precSuccFixture.form, roles[1]);
+	Atom predicateForm = CreatePredicateForm(roles, 2);
+	precSuccFixture.form = CreateTermForm(predicateForm, true);
+	precSuccFixture.precIndex = PredicateRoleIndex(predicateForm, roles[0]);
+	precSuccFixture.succIndex = PredicateRoleIndex(predicateForm, roles[1]);
+	IFactRelease(predicateForm);
 	for(index8 i = 0; i < 2; i++)
 		NameRelease(roles[i]);
 

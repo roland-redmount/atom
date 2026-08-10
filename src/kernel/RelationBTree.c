@@ -10,6 +10,7 @@
 #include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
+#include "lang/TermForm.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/typedtuple.h"
 #include "lang/TypedAtom.h"
@@ -415,13 +416,14 @@ static Operator * createBTreeOperator(RelationBTree * relation, size8 nInputs)
 }
 
 
-RelationTable const * CreateRelationBTreeWithServices(
-	Atom form, size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
+RelationTable const * CreateRelationBTreeWithServicesBootstrap(
+	Atom termForm, Atom predicateForm, size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
 {
 	// Create the B-tree storage and register as relation table
-	RelationTable const * table = CreateRelationTable(&btreeTableProvider, form, nColumns, atomTypes, indexColumns);
+	RelationTable const * table = CreateRelationTableBootstrap(
+		&btreeTableProvider, termForm, predicateForm, nColumns, atomTypes, indexColumns);
 	RelationRegistryAdd(table);
-	
+
 	RelationBTree * relation = table->storage;
 
 	// register nColumns operators with leading columns as inputs
@@ -439,5 +441,13 @@ RelationTable const * CreateRelationBTreeWithServices(
 		ReleaseOperator(op);
 	}
 	return table;
+}
+
+
+RelationTable const * CreateRelationBTreeWithServices(
+	Atom termForm, size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
+{
+	return CreateRelationBTreeWithServicesBootstrap(
+		termForm, TermFormGetPredicateForm(termForm), nColumns, atomTypes, indexColumns);
 }
 

@@ -133,10 +133,17 @@ byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint
 
 /**
  * High-level method to create a RelationTable backed by a B-tree,
- * and register the associated operators.
+ * and register the associated operators. The form is a term form.
  */
 RelationTable const * CreateRelationBTreeWithServices(
-	Atom form, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
+	Atom termForm, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
+
+/**
+ * Bootstrapping variant taking the predicate form directly.
+ * See CreateRelationTableBootstrap()
+ */
+RelationTable const * CreateRelationBTreeWithServicesBootstrap(
+	Atom termForm, Atom predicateForm, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
 
 
 #endif	// RELATION_B_TREE_H

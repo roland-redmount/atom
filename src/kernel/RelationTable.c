@@ -3,18 +3,22 @@
 #include "kernel/ifact.h"
 #include "kernel/RelationTable.h"
 #include "kernel/operator.h"
+#include "lang/TermForm.h"
 #include "lang/TypedAtom.h"
 #include "memory/allocator.h"
 
 
-RelationTable const * CreateRelationTable(
-	RelationTableProvider * provider, Atom form, size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
+RelationTable const * CreateRelationTableBootstrap(
+	RelationTableProvider * provider, Atom termForm, Atom predicateForm,
+	size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
 {
 	// NOTE: pool allocation would be preferable
 	RelationTable * relation = Allocate(sizeof(RelationTable));
 	relation->provider = provider;
-	relation->form = form;
-	IFactAcquire(form);
+	relation->form = termForm;
+	IFactAcquire(termForm);
+	relation->predicateForm = predicateForm;
+	IFactAcquire(predicateForm);
 	relation->ownsForm = true;
 	relation->nColumns = nColumns;
 	// NOTE: this seems like to many small allocs ...
@@ -40,12 +44,21 @@ RelationTable const * CreateRelationTable(
 }
 
 
+RelationTable const * CreateRelationTable(
+	RelationTableProvider * provider, Atom form, size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
+{
+	return CreateRelationTableBootstrap(
+		provider, form, TermFormGetPredicateForm(form), nColumns, atomTypes, indexColumns);
+}
+
+
 void RelationTableReleaseForm(RelationTable const * table)
 {
 	ASSERT(table->ownsForm)
 	// clear the flag first, as the release may retract tuples from this table
 	((RelationTable *) table)->ownsForm = false;
 	IFactRelease(table->form);
+	IFactRelease(table->predicateForm);
 }
 
 
@@ -56,8 +69,10 @@ void FreeRelationTable(RelationTable const * table)
 		ASSERT(RelationTableNRows(table) == 0)
 		table->provider->free(table->storage);
 	}
-	if(table->ownsForm)
+	if(table->ownsForm) {
 		IFactRelease(table->form);
+		IFactRelease(table->predicateForm);
+	}
 	Free(table->atomTypes);
 	Free(table->indexColumns);
 	Free((void *) table);

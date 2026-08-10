@@ -318,6 +318,8 @@ typedef struct s_ClauseCompileState {
 	size8 nArguments;
 	// The term the query matched, which is not part of the conjunction
 	index8 matchedTermIndex;
+	// The form of that term, which is also the form of a recursive term in the clause
+	Atom queryTermForm;
 	// Arity of that term. A parameter numbered beyond it is a clause-local variable,
 	// which does not occur in the query term.
 	size8 matchedTermArity;
@@ -419,57 +421,75 @@ static Operator * compileConjunctionRecursive(
 	// clause argument more than once, so it may have more arguments than the clause.
 	index8 termClauseMap[clauseState->actors->nAtoms];
 
-	// Find a term that can be compiled.
-	// First iterate over term forms in the clause form
-	MultisetIterator termFormIterator;
-	MultisetIterate(clauseState->form, AT_ID, &termFormIterator);
-	size8 termIndex = 0;
-	while(!op && nTermsExcluded < clauseState->nTerms && MultisetIteratorNext(&termFormIterator)) {
-		ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
-		if(termIndex == clauseState->matchedTermIndex) {
-			termIndex += em.multiple;
-			continue;
-		}
-		Atom termForm = em.element;
-		size8 termArity = TermFormArity(termForm);
-		// negate the term form
-		Atom negatedTermForm = CreateTermForm(
-			TermFormGetPredicateForm(termForm),
-			!TermFormGetSign(termForm)
-		);
-		// iterate over all terms (multiples) of this form
-		TypedTuple * termActors = CreateTypedTuple(termArity);
-		TypedTuple * serviceParameters = CreateTypedTuple(termArity);
-		for(index8 m = 0; m < em.multiple; m++, termIndex++) {
-			if(clauseState->termExcluded[termIndex])
+	/**
+	 * Find a term that can be compiled, in two passes over the term forms of the clause.
+	 * The first pass skips the recursive term, the second takes it.
+	 *
+	 * A recursive term is deferred because it dispatches no matter what is bound: it has a
+	 * temporary service for every IO pattern of the query, as registerTemporaryServices()
+	 * cannot know in advance which one the clause needs. It would therefore win over a term
+	 * whose outputs it should be consuming, leaving that term with an input the relation
+	 * it reads has no service for. Every other term dispatches only once its own inputs
+	 * are available, which is what makes taking the first one that compiles sound.
+	 */
+	for(index8 pass = 0; !op && (pass < 2); pass++) {
+		// Iterate over term forms in the clause form
+		MultisetIterator termFormIterator;
+		MultisetIterate(clauseState->form, AT_ID, &termFormIterator);
+		size8 termIndex = 0;
+		while(!op && nTermsExcluded < clauseState->nTerms && MultisetIteratorNext(&termFormIterator)) {
+			ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
+			if(termIndex == clauseState->matchedTermIndex) {
+				termIndex += em.multiple;
 				continue;
-			// Extract term actors
-			TypedTupleCopyAt(clauseState->actors, clauseState->termActorsIndices[termIndex], termActors);
-			PrintCString("Term: ");
-			PrintFormActorsAsFormula(negatedTermForm, termActors);
-			PrintChar('\n');
-			// Attempt to compile this term to an Service
-			op = compileTerm(
-				negatedTermForm, termActors, serviceParameters, termClauseMap, clauseState->choices);
-			PrintCString("serviceParameters = ");
-			TypedTuplePrint(serviceParameters);
-			PrintChar('\n');
-
-			if(op) {
-				clauseState->termExcluded[termIndex] = true;
-				nTermsExcluded++;
-				propagateTermParameterTypes(clauseState, termIndex, termActors, serviceParameters);
-				PrintCString("Updated clause: ");
-				PrintFormActorsAsFormula(clauseState->form, clauseState->actors);
-				PrintChar('\n');
-				break;
 			}
+			Atom termForm = em.element;
+			size8 termArity = TermFormArity(termForm);
+			// negate the term form
+			Atom negatedTermForm = CreateTermForm(
+				TermFormGetPredicateForm(termForm),
+				!TermFormGetSign(termForm)
+			);
+			// A term of the query's own form is the recursive one
+			if((pass == 0) && (negatedTermForm.hash == clauseState->queryTermForm.hash)) {
+				termIndex += em.multiple;
+				IFactRelease(negatedTermForm);
+				continue;
+			}
+			// iterate over all terms (multiples) of this form
+			TypedTuple * termActors = CreateTypedTuple(termArity);
+			TypedTuple * serviceParameters = CreateTypedTuple(termArity);
+			for(index8 m = 0; m < em.multiple; m++, termIndex++) {
+				if(clauseState->termExcluded[termIndex])
+					continue;
+				// Extract term actors
+				TypedTupleCopyAt(clauseState->actors, clauseState->termActorsIndices[termIndex], termActors);
+				PrintCString("Term: ");
+				PrintFormActorsAsFormula(negatedTermForm, termActors);
+				PrintChar('\n');
+				// Attempt to compile this term to an Service
+				op = compileTerm(
+					negatedTermForm, termActors, serviceParameters, termClauseMap, clauseState->choices);
+				PrintCString("serviceParameters = ");
+				TypedTuplePrint(serviceParameters);
+				PrintChar('\n');
+
+				if(op) {
+					clauseState->termExcluded[termIndex] = true;
+					nTermsExcluded++;
+					propagateTermParameterTypes(clauseState, termIndex, termActors, serviceParameters);
+					PrintCString("Updated clause: ");
+					PrintFormActorsAsFormula(clauseState->form, clauseState->actors);
+					PrintChar('\n');
+					break;
+				}
+			}
+			FreeTypedTuple(serviceParameters);
+			FreeTypedTuple(termActors);
+			IFactRelease(negatedTermForm);
 		}
-		FreeTypedTuple(serviceParameters);
-		FreeTypedTuple(termActors);
-		IFactRelease(negatedTermForm);
+		MultisetIteratorEnd(&termFormIterator);
 	}
-	MultisetIteratorEnd(&termFormIterator);
 
 	if(!op) {
 		// No remaining term could be dispatched
@@ -608,8 +628,8 @@ static Operator * permuteToClauseArguments(
  * excepting the term matching the query, indicated by matchedTermIndex.
  */
 static Operator * compileConjunction(
-	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, size8 nArguments,
-	ChoicePoints * choices)
+	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, Atom queryTermForm,
+	size8 nArguments, ChoicePoints * choices)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	index8 termActorsIndices[clauseNTerms + 1];
@@ -631,6 +651,7 @@ static Operator * compileConjunction(
 		.nTerms = clauseNTerms,
 		.nArguments = nArguments + nLocalVariables,
 		.matchedTermIndex = matchedTermIndex,
+		.queryTermForm = queryTermForm,
 		.matchedTermArity =
 			termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex],
 		.termExcluded = termExcluded,
@@ -751,20 +772,15 @@ static size8 findInputArguments(
 
 /**
  * Find the relation registered to the given signature if on exists
- * (if this signature has been compiled before), or else create and register 
+ * (if this signature has been compiled before), or else create and register
  * a new relation table.
- *
- * TODO: The relation is now registered under its predicate form, not the term form.
- * Dispatch also looks up relations by predicate form. We should migrate to using
- * term forms for both, to support dispatch on negated predicates.
  */
 static RelationTable const * findOrCreateRelation(
 	Atom queryTermForm, size8 arity, byte const atomTypes[])
 {
-	Atom predicateForm = TermFormGetPredicateForm(queryTermForm);
-	RelationTable const * relation = RelationRegistryFind(predicateForm, arity, atomTypes);
+	RelationTable const * relation = RelationRegistryFind(queryTermForm, arity, atomTypes);
 	if(!relation) {
-		relation = CreateRelationTable(0, predicateForm, arity, atomTypes, 0);
+		relation = CreateRelationTable(0, queryTermForm, arity, atomTypes, 0);
 		ASSERT(relation)
 		RelationRegistryAdd(relation);
 	}
@@ -963,7 +979,8 @@ static size8 compileQueryClauses(
 						PrintChar('\n');
 
 						Operator * newService = compileConjunction(
-							clauseForm, substClauseActors, matchedTermIndex, queryTermArity, &choices);
+							clauseForm, substClauseActors, matchedTermIndex, queryTermForm,
+							queryTermArity, &choices);
 						if(!newService)
 							continue;
 						// Recover the unified parameters from the clause actors

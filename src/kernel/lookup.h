@@ -77,7 +77,9 @@ void LookupAddPredicateRoles(RelationTable const * relation, Atom const * actors
 void LookupRemovePredicateRoles(RelationTable const * relation, Atom const * actors);
 
 /**
- * Lookup the relation with the given form where atom partipates in role.
+ * Lookup the relation with the given predicate form where atom partipates in role.
+ * A relation table is keyed by a term form, but matching on the predicate form here
+ * finds the relation whatever its sign.
  * There must be only one such relation, or the function will assert.
  * This is used by list, multiset where there may be multiple relation tables
  * for lists with different element types, but all elements of one list are

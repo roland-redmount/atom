@@ -14,6 +14,7 @@
 #include "lang/Atom.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
+#include "lang/TermForm.h"
 #include "util/ResizingArray.h"
 
 
@@ -129,7 +130,7 @@ void LookupAddPredicateRoles(RelationTable const * relation, Atom const * actors
 	record.relation = relation;
 
 	MultisetIterator formIterator;
-	MultisetIterate(relation->form, AT_NAME, &formIterator);
+	MultisetIterate(relation->predicateForm, AT_NAME, &formIterator);
 	index8 index = 0;
 	while(MultisetIteratorNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
@@ -193,7 +194,7 @@ void LookupRemovePredicateRoles(RelationTable const * relation, Atom const * act
 	record.relation = relation;
 
 	MultisetIterator formIterator;
-	MultisetIterate(relation->form, AT_NAME, &formIterator);
+	MultisetIterate(relation->predicateForm, AT_NAME, &formIterator);
 	index8 index = 0;
 	while(MultisetIteratorNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
@@ -305,7 +306,7 @@ RelationTable const * LookupFindRelation(Atom atom, Atom form, Atom role)
 	while(LookupIteratorNext(&iterator)) {
 		Atom currentRole = LookupIteratorGetRole(&iterator);
 		RelationTable const * currentRelation = LookupIteratorGetRelation(&iterator);
-		if((currentRole.hash == role.hash) && (currentRelation->form.hash == form.hash)) {
+		if((currentRole.hash == role.hash) && (currentRelation->predicateForm.hash == form.hash)) {
 			ASSERT(relation == 0)	// ensure we have only 1 matching relation
 			relation = currentRelation;
 		}
@@ -324,7 +325,7 @@ void LookupDump(void)
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
 		IFactPrint(record->atom);
 		PrintChar(' ');
-		PrintPredicateForm(record->relation->form);
+		PrintTermForm(record->relation->form);
 		PrintChar(' ');
 		PrintName(record->role);
 		PrintF(" %u\n", record->nFacts);
