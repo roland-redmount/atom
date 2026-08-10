@@ -60,6 +60,28 @@ For clarity, we use a set of custom type names defined in `platform.h`. They lar
 For indexing we use unsigned integers with aliases `index8`, `index16`, `index32`; these are probably the most commonly used integer types, as indexing is so common. For data sizes we use `size8` through `size64`, also unsigned. There are [potential issues](https://c3-lang.org/blog/unsigned-sizes-a-five-year-mistake/) with unsigned types related to type conversion and overflow that we should watch out for, but I haven't has trouble so far.
 
 
+## Use of boolean flags
+
+Avoid using `bool` flags in function signatures as behavior switches, such as
+```
+int add2(int x, bool negate)
+{
+	return 2 + (negate ? -x : x);
+}
+```
+This makes the function call `add2(42, true)` difficult to understand without looking up the function definition. Instead, use an integer flag with `#define` values instead:
+```
+#define NEGATED			1
+#define NOT_NEGATED		2
+
+int add2(int x, int negate)
+{
+	return 2 + ((negate == NEGATE) ? -x : x);
+}
+```
+which allow for the more readable `add2(42, NEGATE)`. An `enum` type can also be used.
+
+
 ## Error handling
 
 Functions generally assume that they are provided valid arguments -- that data structures are properly filled in, pointers are not null, array indexes are within range, &c. We use the `ASSERT()` macro to verify such assumptions in debug builds; violation of the condition of an `ASSERT()` is considered programmer error, and should never occur. Functions do not have to test for programmer errors, return error codes, and callers don't have to test for error codes. It is assumed that functions work correctly when given correct arguments, and it is the callers responsibility to provide correct arguments. In release builds, a violated `ASSERT()` will lead to undefined behavior.
@@ -158,6 +180,8 @@ just write
 int currentTime;
 ```
 Cryptic computations can often be pulled out to a function so that they can be given a descriptive name.
+
+See also `CLAUDE.md` for guidance on language in documentation strings.
 
 
 

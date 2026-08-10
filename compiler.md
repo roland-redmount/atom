@@ -1,7 +1,7 @@
 # The atom compiler
 
 This document describes how atom compiles a query into a service. The implementation is
-in `src/kernel/compiler.c`, whose entry point is `CompileService()`.
+in `src/kernel/compiler.c`, whose entry point is `CompileQuery()`.
 
 These notes began as a design sketch and now describe what is built. Where something is
 not implemented, or is implemented in a way that is known to be incomplete, it says so.
