@@ -19,9 +19,9 @@ typedef bool (*MachineProviderCall)(OperatorContext * context);
 typedef struct s_MachineProvider {
 	/**
 	 * Initialize operator-specific context information, such as an iterator structure.
-	 * context will point to an allocate block of at least 
-	 * This method must return a pointer to its context (or 0 if none).
-	 * This context pointer will then be supplied to call() and finalizeContext().
+	 * The context data is the block of the operator's context size, which
+	 * OperatorCreateContext() has zeroed; see CreateMachineOperator().
+	 * This pointer may be 0 if the zeroed block is initialization enough.
 	 */
 	void (*setupContext)(OperatorContext * context);
 
@@ -45,8 +45,6 @@ typedef struct s_MachineProvider {
 	 * This pointer may be 0 if no finalization is required.
 	 */
 	void (*finalizeOperator)(Operator * op);
-
-	size32 contextSize;
 
 } MachineProvider;
 
@@ -300,9 +298,15 @@ Operator * CreatePermuteOperator(
  * Create a machine code operator. The indexOrder array has length nArguments and gives
  * the order in which the provider yields its tuples; see the ordering contract above.
  * A provider yielding at most one tuple declares no order and passes 0.
+ *
+ * The context size is the scratch space this operator needs for the state of one
+ * evaluation, which OperatorCreateContext() allocates as OperatorContext.data and zeroes.
+ * It belongs to the operator rather than to the provider, since one provider may serve
+ * operators whose state differs in size; see MachineService.c
  */
 Operator * CreateMachineOperator(
-	size8 nArguments, index8 const * indexOrder, MachineProvider * provider, void * providerData);
+	size8 nArguments, index8 const * indexOrder, MachineProvider * provider,
+	void * providerData, size32 contextSize);
 
 /**
  * Setup a JOIN operator with the specified number of arguments, from two existing

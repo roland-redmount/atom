@@ -76,6 +76,40 @@ void testAdd2(void)
 }
 
 
+/**
+ * The range service yields one tuple per number in the range, rather than the single
+ * tuple the arithmetic services compute.
+ */
+void testRange(void)
+{
+	Formula * query = CStringToTerm("lower 2 number _n upper 6");
+
+	Service service;
+	index8 permutation[3];
+	ASSERT(DispatchQueryFormula(query, &service, permutation))
+
+	Atom arguments[3];
+	TupleCopy(TypedTuplePeekAtoms(query->actors), arguments, 3);
+
+	Atom numberRole = CreateNameFromCString("number");
+	index8 numberIndex = PredicateRoleIndex(
+		TermFormGetPredicateForm(query->form),
+		numberRole
+	);
+	NameRelease(numberRole);
+
+	OperatorContext * context = OperatorCreateContext(service.op, arguments);
+	for(int64 expected = 2; expected <= 6; expected++) {
+		ASSERT_TRUE(OperatorCall(context))
+		ASSERT_INT64_EQUAL(arguments[numberIndex]._int, expected)
+	}
+	ASSERT_FALSE(OperatorCall(context))
+
+	OperatorFreeContext(context);
+	FreeFormula(query);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -83,6 +117,7 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testAdd1);
 	ExecuteTest(testAdd2);
+	ExecuteTest(testRange);
 
 	FreeMachineServices();
 	KernelShutdown();

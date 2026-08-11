@@ -1309,7 +1309,9 @@ static void recurseFinalizeContext(OperatorContext * context)
 
 static void machineSetupContext(OperatorContext * context)
 {
-	context->op->impl.machine.provider->setupContext(context);
+	MachineProvider * provider = context->op->impl.machine.provider;
+	if(provider->setupContext)
+		provider->setupContext(context);
 }
 
 
@@ -1328,9 +1330,10 @@ static void machineFinalizeContext(OperatorContext * context)
 
 
 Operator * CreateMachineOperator(
-	size8 nArguments, index8 const * indexOrder, MachineProvider * provider, void * providerData)
+	size8 nArguments, index8 const * indexOrder, MachineProvider * provider,
+	void * providerData, size32 contextSize)
 {
-	Operator * op = createOperator(OPERATOR_MACHINE, nArguments, provider->contextSize);
+	Operator * op = createOperator(OPERATOR_MACHINE, nArguments, contextSize);
 	op->impl.machine.provider = provider;
 	op->impl.machine.providerData = providerData;
 	// A provider yielding at most one tuple declares no order
