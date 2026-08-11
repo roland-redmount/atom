@@ -10,6 +10,7 @@
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
 #include "lang/Formula.h"
+#include "library/MachineService.h"
 #include "library/math.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
@@ -130,7 +131,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testDispatchRepeatedVariable);
 	ExecuteTest(testDispatchNegatedTerm);
 
-	MathTeardown();
+	FreeMachineServices();
 	KernelShutdown();
 	TestSummary();
 }

@@ -14,6 +14,7 @@
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
+#include "library/MachineService.h"
 #include "library/math.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/TermBuilder.h"
@@ -773,6 +774,6 @@ int main(int argc, char * argv[])
 	// recursive clause; see the notes on termination in compiler.md.
 	// ExecuteTest(testCompileRecursiveJoin1);
 
-	MathTeardown();
+	FreeMachineServices();
 	TestSummary();
 }

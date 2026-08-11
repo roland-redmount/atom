@@ -10,6 +10,7 @@
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
+#include "library/MachineService.h"
 #include "library/math.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
@@ -83,7 +84,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAdd1);
 	ExecuteTest(testAdd2);
 
-	MathTeardown();
+	FreeMachineServices();
 	KernelShutdown();
 
 	TestSummary();
