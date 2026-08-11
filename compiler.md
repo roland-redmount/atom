@@ -72,6 +72,18 @@ dropped, and the rest of the clause is negated, which turns the disjunction of n
 terms back into a conjunction of positive ones — the body of the rule. Compiling that
 conjunction is the work.
 
+A term form carries a sign, so the term the query matches has the query's own sign. That
+is what resolution asks for: a clause is a disjunction, and dropping one of its terms
+leaves an implication whose conclusion is that same term. A negated query resolves by the
+same rule as a positive one. Given the clause
+
+    ! even x | ! odd x
+
+the query `(! even x)` matches the term `! even x` and compiles to the body `odd x`, so
+`(! even 3)` is answered by the fact `(odd 3)`; see `testCompileNegatedTerm`. Note that
+this is classical negation, not negation as failure: `(! even 3)` follows from a rule or a
+fact establishing it, never from the absence of `(even 3)`.
+
 ### One term: PERMUTE
 
 Take the rule
@@ -322,13 +334,6 @@ is disabled for this reason.
   stored service already answers registers a second service of the same signature, which
   `ServiceRegistryAdd()` asserts against. The generated service should replace the existing
   one and take it as a branch of its union.
-- **A negated query** such as `(! even x)` dispatches but does not resolve against a rule.
-  A relation table is keyed by a term form, so a negated predicate can have a relation and
-  a service of its own, and dispatch reaches it; see `testDispatchNegatedTerm`. What is
-  missing is on the compiler side: it finds the clauses to try by matching a term form to
-  the query by exact hash, so it only ever finds same-signed occurrences, and nothing yet
-  compiles a rule into a relation for a negated predicate. Detecting recursion already
-  flips the sign correctly.
 - **Evaluation is naive**, not semi-naive: every round re-expands every call binding,
   rather than only the tuples the previous round derived.
 - **Duplicate work across queries.** A fixpoint derives its relation afresh for every
