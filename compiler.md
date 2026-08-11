@@ -72,6 +72,18 @@ dropped, and the rest of the clause is negated, which turns the disjunction of n
 terms back into a conjunction of positive ones — the body of the rule. Compiling that
 conjunction is the work.
 
+A term form carries a sign, so the term the query matches has the query's own sign. That
+is what resolution asks for: a clause is a disjunction, and dropping one of its terms
+leaves an implication whose conclusion is that same term. A negated query resolves by the
+same rule as a positive one. Given the clause
+
+    ! even x | ! odd x
+
+the query `(! even x)` matches the term `! even x` and compiles to the body `odd x`, so
+`(! even 3)` is answered by the fact `(odd 3)`; see `testCompileNegatedTerm`. Note that
+this is classical negation, not negation as failure: `(! even 3)` follows from a rule or a
+fact establishing it, never from the absence of `(even 3)`.
+
 ### One term: PERMUTE
 
 Take the rule
@@ -132,7 +144,18 @@ yet compiled, so the second term is now `+ 2<INT + 1 = b`, which dispatch matche
 
 Had the compiler started with the right term, dispatch would have found nothing, as `a` is
 not yet available as an input. It therefore tries the terms in turn and postpones the ones
-that do not compile yet. Back-substituting into the query gives the signature
+that do not compile yet.
+
+Taking the first term that compiles is sound only because a term dispatches exactly when
+its own inputs are available. A recursive term is the exception: `registerTemporaryServices()`
+cannot tell in advance which IO pattern the clause will need, so it registers a service for
+every one of them, and the recursive term then dispatches whatever is bound at the time.
+Taken first, it would win over a term whose outputs it should be consuming, and leave that
+term with an input the relation it reads has no service for. `compileConjunctionRecursive()`
+therefore passes over the terms twice, taking the recursive term only once no other term
+compiles.
+
+Back-substituting into the query gives the signature
 
     number 1<INT plusone 2>INT plustwo 3>INT
 
@@ -311,11 +334,6 @@ is disabled for this reason.
   stored service already answers registers a second service of the same signature, which
   `ServiceRegistryAdd()` asserts against. The generated service should replace the existing
   one and take it as a branch of its union.
-- **A negated query** such as `(! even x)` does not resolve. The compiler finds the clauses
-  to try by matching a term form to the query by exact hash, so it only ever finds
-  same-signed occurrences, and dispatch asserts that the query term form is positive, the
-  service registry having no services for negated predicates. Detecting recursion already
-  flips the sign correctly.
 - **Evaluation is naive**, not semi-naive: every round re-expands every call binding,
   rather than only the tuples the previous round derived.
 - **Duplicate work across queries.** A fixpoint derives its relation afresh for every

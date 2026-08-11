@@ -330,7 +330,7 @@ static data64 hashConjunction(IFactConjunction const * conjunction, Atom const *
 {
 	data64 hash = initialHash;
 	// hash the form and types
-	hash = DJB2DoubleHashAdd(&conjunction->table->form.hash, sizeof(data64), initialHash);
+	hash = DJB2DoubleHashAdd(&conjunction->table->termForm.hash, sizeof(data64), initialHash);
 	hash = DJB2DoubleHashAdd(conjunction->table->atomTypes, conjunction->table->nColumns, hash);
 	// hash all tuples (sorted)
 	return DJB2DoubleHashAdd(tuples, conjunction->nRows * conjunction->table->nColumns * sizeof(Atom), hash);

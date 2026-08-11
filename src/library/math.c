@@ -5,6 +5,7 @@
 #include "kernel/ServiceRegistry.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
+#include "lang/TermForm.h"
 #include "library/math.h"
 #include "memory/allocator.h"
 #include "parser/PredicateBuilder.h"
@@ -180,6 +181,9 @@ void MathSetup(void)
 
 	Atom addForm = CreatePredicateForm((Atom[]) {plus, plus, equals}, 3);
 	Atom mulForm = CreatePredicateForm((Atom[]) {times, times, equals}, 3);
+	// a relation table is keyed by a term form; these relations are not negated
+	Atom addTermForm = CreateTermForm(addForm, true);
+	Atom mulTermForm = CreateTermForm(mulForm, true);
 
 	byte atomTypes[3];
 	index8 * argumentIndex;
@@ -196,7 +200,7 @@ void MathSetup(void)
 	atomTypes[argumentIndex[1]] = AT_INT;
 	atomTypes[argumentIndex[2]] = AT_INT;
 	// NOTE: no particular column index order here
-	mathRelations[ADD_RELATION] = CreateRelationTable(0, addForm, 3, atomTypes, 0);
+	mathRelations[ADD_RELATION] = CreateRelationTable(0, addTermForm, 3, atomTypes, 0);
 	// the table must be registered for dispatch to find it
 	RelationRegistryAdd(mathRelations[ADD_RELATION]);
 
@@ -212,7 +216,7 @@ void MathSetup(void)
 	atomTypes[argumentIndex[1]] = AT_INT;
 	atomTypes[argumentIndex[2]] = AT_INT;
 	// NOTE: no particular column index order here
-	mathRelations[MUL_RELATION] = CreateRelationTable(0, mulForm, 3, atomTypes, 0);
+	mathRelations[MUL_RELATION] = CreateRelationTable(0, mulTermForm, 3, atomTypes, 0);
 	// the table must be registered for dispatch to find it
 	RelationRegistryAdd(mathRelations[MUL_RELATION]);
 
@@ -221,6 +225,9 @@ void MathSetup(void)
 	setupAdd2();
 	setupMul1();
 
+	// the relation tables now hold the references to their forms
+	IFactRelease(addTermForm);
+	IFactRelease(mulTermForm);
 	IFactRelease(addForm);
 	IFactRelease(mulForm);
 	NameRelease(plus);

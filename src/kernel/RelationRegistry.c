@@ -13,9 +13,9 @@ static BTree * relationRegistry;
 static int8 compareRelations(RelationTable const * relation, RelationTable const * relationOrKey)
 {
 	// First compare forms
-	if(relation->form.hash < relationOrKey->form.hash)
+	if(relation->termForm.hash < relationOrKey->termForm.hash)
 		return -1;
-	else if(relation->form.hash > relationOrKey->form.hash)
+	else if(relation->termForm.hash > relationOrKey->termForm.hash)
 		return 1;
 	else {
 		// then compare atom types
@@ -81,7 +81,7 @@ RelationTable const * RelationRegistryFind(Atom form, size8 nColumns, byte const
 	byte atomTypesCopy[nColumns];
 	CopyMemory(atomTypes, atomTypesCopy, nColumns);
 	RelationTable key = {
-		.form = form,
+		.termForm = form,
 		.nColumns = nColumns,
 		.atomTypes = atomTypesCopy
 	};
@@ -106,7 +106,7 @@ bool RelationIteratorNext(RelationIterator * iterator)
 {
 	// A key without atom types matches every table for the form
 	RelationTable key = {
-		.form = iterator->form,
+		.termForm = iterator->form,
 		.nColumns = 0,
 		.atomTypes = 0
 	};

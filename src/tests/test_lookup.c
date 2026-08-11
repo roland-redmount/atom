@@ -6,6 +6,7 @@
 #include "kernel/string.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
+#include "lang/TermForm.h"
 #include "testing/testing.h"
 
 
@@ -57,9 +58,10 @@ void testLookupPredicateRoles(void)
 		CreateNameFromCString("node"),
 		CreateNameFromCString("weight")
 	};
-	Atom form = CreatePredicateForm(roles, 2);
-	index8 nodeIndex = PredicateRoleIndex(form, roles[0]);
-	index8 weightIndex = PredicateRoleIndex(form, roles[1]);
+	Atom predicateForm = CreatePredicateForm(roles, 2);
+	Atom form = CreateTermForm(predicateForm, true);
+	index8 nodeIndex = PredicateRoleIndex(predicateForm, roles[0]);
+	index8 weightIndex = PredicateRoleIndex(predicateForm, roles[1]);
 
 	byte atomTypes[2];
 	atomTypes[nodeIndex] = AT_ID;
@@ -83,6 +85,7 @@ void testLookupPredicateRoles(void)
 	IFactRelease(node);
 	FreeRelationTable(relation);
 	IFactRelease(form);
+	IFactRelease(predicateForm);
 	NameRelease(roles[0]);
 	NameRelease(roles[1]);
 }

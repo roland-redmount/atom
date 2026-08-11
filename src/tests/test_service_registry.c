@@ -6,14 +6,14 @@
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
-#include "parser/PredicateBuilder.h"
+#include "parser/TermBuilder.h"
 #include "testing/testing.h"
 
 
 #define EXAMPLE_FORM_ARITY	4
 
 struct {
-	Atom form;		// a form
+	Atom form;		// a term form
 	byte atomTypes[EXAMPLE_FORM_ARITY];
 	RelationTable const * table;
 } fixture;
@@ -22,7 +22,7 @@ struct {
 static void setupFixture(void)
 {
 	// TODO: we should have a way to parse a form from a C string.
-	Formula * formula = CStringToPredicate("foo 0 bar 0 bar 0 baz 0");
+	Formula * formula = CStringToTerm("foo 0 bar 0 bar 0 baz 0");
 	fixture.form = formula->form;
 	SetMemory(fixture.atomTypes, EXAMPLE_FORM_ARITY, AT_INT);
 	IFactAcquire(fixture.form);

@@ -134,9 +134,6 @@ bool DispatchQueryAt(
 	index8 permutation[], size8 nSkip, bool * hasNextMatch)
 {
 	ASSERT(IsTermForm(queryTermForm))
-	// TODO: currently, the service registry only supports non-negated predicates
-	ASSERT(TermFormGetSign(queryTermForm))
-	Atom predicateForm = TermFormGetPredicateForm(queryTermForm);
 
 	bool match = false;
 	bool done = false;
@@ -149,11 +146,12 @@ bool DispatchQueryAt(
 	size8 termArity = queryActors->nAtoms;
 	index8 candidatePermutation[termArity];
 
-	// Iterate over relations matching the form.
+	// Iterate over relations matching the term form. Since a term form carries a sign,
+	// a query for (! even x) only reaches relations for the negated predicate.
 	// NOTE: this iteration order must be deterministic, as the compiler
 	// identifies a choice point by the position of its match in this sequence.
 	RelationIterator relationIterator;
-	RelationRegistryIterate(predicateForm, &relationIterator);
+	RelationRegistryIterate(queryTermForm, &relationIterator);
 	while(!done && RelationIteratorNext(&relationIterator)) {
 		RelationTable const * relation = RelationIteratorGet(&relationIterator);
 
@@ -164,8 +162,11 @@ bool DispatchQueryAt(
 		ServiceRegistryIterate(relation, &serviceIterator);
 		while(!done && ServiceIteratorNext(&serviceIterator)) {
 			Service const * currentService = ServiceIteratorPeekService(&serviceIterator);
+			// The permutations of a term are those of its predicate form, the sign
+			// contributing none. The relation was found by iterating on the query
+			// term form, so its predicate form is the query's.
 			if(!permutationMatch(
-				predicateForm, relation->atomTypes, currentService->parameterIO,
+				relation->predicateForm, relation->atomTypes, currentService->parameterIO,
 				queryActors, candidatePermutation))
 				continue;
 

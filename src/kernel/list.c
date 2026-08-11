@@ -73,7 +73,7 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 			atomTypes
 		);
 		RelationTable const * table = RelationRegistryFind(
-			GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT),
+			GetCoreTermForm(FORM_LIST_POSITION_ELEMENT),
 			3, atomTypes
 		);
 		ASSERT(table);

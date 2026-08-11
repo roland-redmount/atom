@@ -4,14 +4,14 @@
 #include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "lang/Formula.h"
-#include "parser/PredicateBuilder.h"
+#include "parser/TermBuilder.h"
 #include "testing/testing.h"
 
 
 #define EXAMPLE_FORM_ARITY	4
 
 struct {
-	Atom form;		// a form
+	Atom form;		// a term form
 	byte atomTypes[EXAMPLE_FORM_ARITY];
 } fixture;
 
@@ -19,7 +19,7 @@ struct {
 static void setupFixture(void)
 {
 	// TODO: we should have a way to parse a form from a C string.
-	Formula * formula = CStringToPredicate("foo 0 bar 0 bar 0 baz 0");
+	Formula * formula = CStringToTerm("foo 0 bar 0 bar 0 baz 0");
 	fixture.form = formula->form;
 	SetMemory(fixture.atomTypes, EXAMPLE_FORM_ARITY, AT_INT);
 	IFactAcquire(fixture.form);
@@ -64,13 +64,13 @@ void testAddRemoveRelationTable(void)
 
 
 /**
- * The core form (multiset element multiple) has two relation tables,
+ * The core term form (multiset element multiple) has two relation tables,
  * one for NAME elements and one for ID elements, so it is a good case
  * for iterating over the tables of a single form.
  */
 void testIterateRelationTables(void)
 {
-	Atom form = GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE);
+	Atom form = GetCoreTermForm(FORM_MULTISET_ELEMENT_MULTIPLE);
 	RelationTable const * multisetName = GetCoreRelationTable(RELATION_MULTISET_NAME);
 	RelationTable const * multisetId = GetCoreRelationTable(RELATION_MULTISET_ID);
 
@@ -83,7 +83,7 @@ void testIterateRelationTables(void)
 	while(RelationIteratorNext(&iterator)) {
 		RelationTable const * table = RelationIteratorGet(&iterator);
 		// every table yielded must belong to the form we asked for
-		ASSERT_DATA64_EQUAL(table->form.hash, form.hash)
+		ASSERT_DATA64_EQUAL(table->termForm.hash, form.hash)
 		if(table == multisetName)
 			foundName = true;
 		if(table == multisetId)
@@ -97,7 +97,7 @@ void testIterateRelationTables(void)
 	ASSERT_UINT32_EQUAL(nTables, 2)
 
 	// a form with a single table
-	form = GetCorePredicateForm(FORM_LIST_LENGTH);
+	form = GetCoreTermForm(FORM_LIST_LENGTH);
 	nTables = 0;
 	RelationRegistryIterate(form, &iterator);
 	while(RelationIteratorNext(&iterator)) {

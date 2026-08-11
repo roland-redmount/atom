@@ -306,10 +306,12 @@ static void setupEdgeFixture(void)
 		CreateNameFromCString("from"),
 		CreateNameFromCString("to")
 	};
-	edgeFixture.form = CreatePredicateForm(roles, 3);
-	index8 edgeIndex = PredicateRoleIndex(edgeFixture.form, roles[0]);
-	index8 fromIndex = PredicateRoleIndex(edgeFixture.form, roles[1]);
-	index8 toIndex = PredicateRoleIndex(edgeFixture.form, roles[2]);
+	Atom predicateForm = CreatePredicateForm(roles, 3);
+	edgeFixture.form = CreateTermForm(predicateForm, true);
+	index8 edgeIndex = PredicateRoleIndex(predicateForm, roles[0]);
+	index8 fromIndex = PredicateRoleIndex(predicateForm, roles[1]);
+	index8 toIndex = PredicateRoleIndex(predicateForm, roles[2]);
+	IFactRelease(predicateForm);
 	for(index8 i = 0; i < 3; i++)
 		NameRelease(roles[i]);
 
@@ -481,9 +483,11 @@ static void setupPrecSuccFixture(void)
 		CreateNameFromCString("prec"),
 		CreateNameFromCString("succ")
 	};
-	precSuccFixture.form = CreatePredicateForm(roles, 2);
-	precSuccFixture.precIndex = PredicateRoleIndex(precSuccFixture.form, roles[0]);
-	precSuccFixture.succIndex = PredicateRoleIndex(precSuccFixture.form, roles[1]);
+	Atom predicateForm = CreatePredicateForm(roles, 2);
+	precSuccFixture.form = CreateTermForm(predicateForm, true);
+	precSuccFixture.precIndex = PredicateRoleIndex(predicateForm, roles[0]);
+	precSuccFixture.succIndex = PredicateRoleIndex(predicateForm, roles[1]);
+	IFactRelease(predicateForm);
 	for(index8 i = 0; i < 2; i++)
 		NameRelease(roles[i]);
 
@@ -692,6 +696,56 @@ void testCompileRecursiveClosure(void)
 	teardownPrecSuccFixture();
 }
 
+/**
+ * Compute the query (! even 3) against the rule
+ * 
+ *   ! even x | ! odd x
+ * 
+ * and the fact (odd 3). 
+ */
+void testCompileNegatedTerm(void)
+{
+	// Setup the fact (odd 3)
+	Formula * odd3term = CStringToTerm("odd 3");
+	RelationTable const *evenTable = CreateRelationBTreeWithServices(
+		odd3term->form, 1, (byte[]) {AT_INT}, (index8[]) {0});
+	AssertFact(odd3term->form, odd3term->actors, 0);
+	// setup the rule
+	DictionaryEntry entry = DictionaryAddClauseFromCString("! even _x | ! odd _x");
+	Formula * queryTerm = CStringToTerm("! even 3");
+
+	// compile the query
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Service service = services[0];
+
+	// Call the resulting service
+	Atom arguments[1];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 1);
+	void * context = OperatorCreateContext(service.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+
+	Atom x = TermGetRoleActor(queryTerm->form, arguments, "even", 1);
+	ASSERT_UINT64_EQUAL(x._uint, 3);
+
+	// Second call should fail (no more tuples)
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	// teardown
+	ServiceRegistryRemove(service.relation, service.op);
+	RelationRegistryRemove(service.relation);
+	FreeFormula(queryTerm);
+	
+	DictionaryRemoveClause(&entry);
+
+	RetractFact(odd3term->form, odd3term->actors);
+	ServiceRegistryRemoveAll(evenTable);
+	RelationRegistryRemove(evenTable);
+	FreeFormula(odd3term);
+}
+
 
 int main(int argc, char * argv[])
 {
@@ -710,6 +764,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileRecursiveJoin2);
 	ExecuteTest(testCompileRecursiveReachable);
 	ExecuteTest(testCompileRecursiveClosure);
+
+	ExecuteTest(testCompileNegatedTerm);
 
 	// TODO: compiling a recursive rule over an infinite domain. The relation has no
 	// finite fixpoint and the call bindings n = 4, 3, 2, 1, 0, -1, -2, ... do not

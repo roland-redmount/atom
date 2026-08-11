@@ -217,7 +217,7 @@ void PrintService(Service const * service)
 		);
 		TypedTupleSetElement(parameters, i, parameter);
 	}
-	PrintFormActorsAsFormula(service->relation->form, parameters);
+	PrintFormActorsAsFormula(service->relation->termForm, parameters);
 	FreeTypedTuple(parameters);
 	PrintCString(" => ");
 	PrintOperator(service->op);

@@ -25,9 +25,9 @@ Atom CreateConjunctionForm(Atom const * clauseForms, size8 nClauseForms)
 
 	// (conjunction-form @form)
 	RelationTable const * conjunctionFormTable = RelationRegistryFind(
-		GetCorePredicateForm(FORM_CONJUNCTION_FORM),
+		GetCoreTermForm(FORM_CONJUNCTION_FORM),
 		1, (byte[]) {AT_ID}
-	);	
+	);
 	IFactBeginConjunction(&draft, conjunctionFormTable, 0);
 	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
 	IFactEndConjunction(&draft);	

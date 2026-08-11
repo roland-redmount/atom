@@ -1,11 +1,9 @@
 /**
  * High level interface to relation tables, independent of implementation.
- * A relation table is 1:1 with a (form, columns types) pair.
- * 
- * NOTE: the form is currently always a predicate form, which means we
- * cannot have services for negated predicates like (! odd x). 
- * It's not clear to me yet if this is a major limitation.
- * 
+ * A relation table is identied by a (term form, columns types) pair. Using
+ * a term form (signed predicate) as key allows a registering tables for
+ * negated predicates like (! odd x), distinct from the non-negated (odd x).
+ *
  * NOTE: in the future, we want to be able to hot-load implementations
  * into a running atom process. This would involve loading code into
  * executable memory and registering services with the appropriate
@@ -79,13 +77,20 @@ typedef struct s_RelationTableProvider {
 
 /**
  * A relation table implementation record, identified by (form, atomTypes).
- * 
+ *
  * Each implementation must provide callbacks to support adding
  * and removing tuples.
  */
 struct s_RelationTable {
-	Atom form;
-	// whether this table holds a reference to its form; see RelationTableReleaseForm()
+	// term form; the key this table is registered under. See RelationRegistry.h
+	Atom termForm;
+	/**
+	 * The predicate form of the term form, cached here because the roles of a
+	 * relation are read on every tuple added or removed; see LookupAddPredicateRoles().
+	 * Reading it off the term form instead would mean a relation query each time.
+	 */
+	Atom predicateForm;
+	// whether this table holds a reference to its forms; see RelationTableReleaseForm()
 	bool ownsForm;
 	size8 nColumns;
 	byte * atomTypes;
@@ -96,8 +101,8 @@ struct s_RelationTable {
 };
 
 /**
- * Create a relation table using the specified storage provider, or 0 if there is not storage
- * (computed relations).
+ * Create a relation table for the given signature (term form, atom types) using the
+ * specified storage provider, or 0 if there is no storage (computed relations).
  * 
  * If not 0, indexColumns indicates the desired order of index columns, so that tuples are
  * effectively ordered lexigraphically by indexColumns[0], ..., indexColumns[nColumns-1].
@@ -108,20 +113,33 @@ struct s_RelationTable {
  * but (_ _ @element) may be slow.
  */
 RelationTable const * CreateRelationTable(
-	RelationTableProvider * provider, Atom form, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
+	RelationTableProvider * provider, Atom termForm, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
+
+/**
+ * Create a relation table with the predicate form given explicitly, rather than
+ * computed from TermFormGetPredicateForm(termForm). This function is only for bootstrapping,
+ * where TermFormGetPredicateForm() is not yet available. See setupCoreServices() in kernel.c
+ */
+RelationTable const * CreateRelationTableBootstrap(
+	RelationTableProvider * provider, Atom termForm, Atom predicateForm,
+	size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
 
 
 void FreeRelationTable(RelationTable const * table);
 
 /**
- * Release the reference this table holds to its form, without freeing the table.
+ * Release the references this table holds to its term form and predicate form,
+ * without freeing the table.
  *
  * This is only for shutting down the self-referential core tables, whose own
  * defining facts are stored in those same tables. Such a table cannot be freed
  * directly: FreeRelationTable() requires it to be empty, but the tuples are only
  * retracted once the form's reference count drops to zero, which cannot happen
- * while the table holds a reference. Detaching the reference first lets the
+ * while the table holds a reference. Detaching the references first lets the
  * ifact drain its tuples out of a table that is still alive and serviced.
+ *
+ * The term form is released before the predicate form, since the defining fact of
+ * the term form holds a reference to the predicate form.
  *
  * The table must still be registered (its form is the registry B-tree key) and
  * must still have its services, which are used to locate the tuples to retract.

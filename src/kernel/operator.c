@@ -903,6 +903,8 @@ Operator * CreateProjectOperator(
 // them has to grow
 #define FIXPOINT_INITIAL_PENDING_TUPLES		64
 
+// Uncomment this to print tracing information for FIXPOINT operator call
+// #define FIXPOINT_DEBUG	1
 
 typedef struct s_FixpointContext {
 	BTree * tuples;
@@ -1086,7 +1088,7 @@ static void setupCallBinding(
 }
 
 
-#ifdef DEBUG
+#ifdef DEBUG_FIXPOINT
 /**
  * Trace what a fixpoint operator derives. Each round re-applies the rule bodies to every
  * call binding known so far, including the ones it has already derived tuples for, so the
@@ -1115,7 +1117,7 @@ static void fixpointApplyChildOperator(OperatorContext * context, Atom const * a
 	Operator const * op = context->op;
 	size32 tupleSize = op->nArguments * sizeof(Atom);
 
-#ifdef DEBUG
+#ifdef DEBUG_FIXPOINT
 	printFixpointTuple("  call", arguments, op->nArguments);
 #endif
 	CopyMemory(arguments, fixpointContext->childArguments, tupleSize);
@@ -1124,7 +1126,7 @@ static void fixpointApplyChildOperator(OperatorContext * context, Atom const * a
 	// Iterate over all tuples generate by the child operator and store them
 	// as pending tuples
 	while(OperatorCall(childContext)) {
-#ifdef DEBUG
+#ifdef DEBUG_FIXPOINT
 		printFixpointTuple("    derived", fixpointContext->childArguments, op->nArguments);
 #endif
 		ResizingArrayAppend(&fixpointContext->pendingTuples, fixpointContext->childArguments);
@@ -1161,11 +1163,11 @@ static void fixpointSetupContext(OperatorContext * context)
 	// operators below add the bindings they are asked for, so the rounds reach exactly
 	// the bindings the query depends on, and no more.
 	size32 nNewItems;
-#ifdef DEBUG
+#ifdef DEBUG_FIXPOINT
 	size32 round = 0;
 #endif
 	do {
-#ifdef DEBUG
+#ifdef DEBUG_FIXPOINT
 		PrintF("FIXPOINT round %u, %u calls, %u tuples so far\n",
 			++round, BTreeNItems(fixpointContext->calls), BTreeNItems(fixpointContext->tuples));
 #endif

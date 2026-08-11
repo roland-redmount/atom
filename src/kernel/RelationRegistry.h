@@ -1,6 +1,7 @@
 /**
  * The relation registry keeps track of all available relation tables,
- * identified by their (form, column types) pair.
+ * identified by their (term form, column types) pair. Since a term form carries
+ * a sign, a predicate and its negation are registered as two separate relations.
  * Services for these relations are registered separately; see ServiceRegistry.h
  */
 
@@ -32,7 +33,7 @@ void RelationRegistryAdd(RelationTable const * relation);
 void RelationRegistryRemove(RelationTable const * relation);
 
 /**
- * Locate a relation table for given (form, column types).
+ * Locate a relation table for given (term form, column types).
  */
 RelationTable const * RelationRegistryFind(Atom form, size8 nColumns, byte const atomTypes[]);
 
@@ -49,8 +50,8 @@ size32 RelationRegistryNTables(void);
 
 
 /**
- * Iterating over the relation tables of a given form.
- * A single form may have several tables, one per combination of column types.
+ * Iterating over the relation tables of a given term form.
+ * A single term form may have several tables, one per combination of column types.
  */
 typedef struct {
 	Atom form;
@@ -58,14 +59,14 @@ typedef struct {
 } RelationIterator;
 
 /**
- * Create an iterator over all relation tables registered for the given form.
+ * Create an iterator over all relation tables registered for the given term form.
  * The iterator is positioned before the first matching table, so
  * RelationIteratorNext() must be called before RelationIteratorGet().
  */
 void RelationRegistryIterate(Atom form, RelationIterator * iterator);
 
 /**
- * Advance to the next relation table for the form, if one exists.
+ * Advance to the next relation table for the term form, if one exists.
  */
 bool RelationIteratorNext(RelationIterator * iterator);
 

@@ -16,6 +16,7 @@
 #include "lang/Formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
+#include "lang/TermForm.h"
 #include "parser/PredicateBuilder.h"
 #include "testing/testing.h"
 
@@ -517,9 +518,11 @@ static void setupGraphFixture(void)
 		CreateNameFromCString("prec"),
 		CreateNameFromCString("succ")
 	};
-	graphFixture.form = CreatePredicateForm(roles, 2);
-	graphFixture.precIndex = PredicateRoleIndex(graphFixture.form, roles[0]);
-	graphFixture.succIndex = PredicateRoleIndex(graphFixture.form, roles[1]);
+	Atom predicateForm = CreatePredicateForm(roles, 2);
+	graphFixture.form = CreateTermForm(predicateForm, true);
+	graphFixture.precIndex = PredicateRoleIndex(predicateForm, roles[0]);
+	graphFixture.succIndex = PredicateRoleIndex(predicateForm, roles[1]);
+	IFactRelease(predicateForm);
 	for(index8 i = 0; i < 2; i++)
 		NameRelease(roles[i]);
 
