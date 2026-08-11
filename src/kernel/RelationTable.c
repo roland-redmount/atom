@@ -15,7 +15,7 @@ RelationTable const * CreateRelationTableBootstrap(
 	// NOTE: pool allocation would be preferable
 	RelationTable * relation = Allocate(sizeof(RelationTable));
 	relation->provider = provider;
-	relation->form = termForm;
+	relation->termForm = termForm;
 	IFactAcquire(termForm);
 	relation->predicateForm = predicateForm;
 	IFactAcquire(predicateForm);
@@ -57,7 +57,7 @@ void RelationTableReleaseForm(RelationTable const * table)
 	ASSERT(table->ownsForm)
 	// clear the flag first, as the release may retract tuples from this table
 	((RelationTable *) table)->ownsForm = false;
-	IFactRelease(table->form);
+	IFactRelease(table->termForm);
 	IFactRelease(table->predicateForm);
 }
 
@@ -70,7 +70,7 @@ void FreeRelationTable(RelationTable const * table)
 		table->provider->free(table->storage);
 	}
 	if(table->ownsForm) {
-		IFactRelease(table->form);
+		IFactRelease(table->termForm);
 		IFactRelease(table->predicateForm);
 	}
 	Free(table->atomTypes);

@@ -9,7 +9,7 @@
 
 
 /**
- * Set up a default memory layout to enable paging and allocation.
+ * Set up a default memory layout, enable paging and allocation.
  */
 void SetupMemory(void);
 
@@ -27,30 +27,27 @@ void KernelInitialize(void);
  * Shut down a kernel, removing all facts.
  * 
  * This is mainly used for debugging, to ensure deallocation works correctly.
- * In all other cases, we would simply flush the memory-mapped pages to disk
- * and exit.
+ * In most cases, we would instead flush the memory-mapped pages to disk and exit.
  */
 void KernelShutdown(void);
 
 /**
- * High level method to assert a fact.
- * Adds a tuple to the corresponding relation table,
- * and adds an entry to the lookup table for each AT_ID actor.
+ * High level method to assert a fact. Adds a tuple to the corresponding
+ * relation table, and adds an entry to the lookup table for each AT_ID actor.
  * The actors tuple may not contain variables.
- * To indicate an identifying fact, set idPosition to the 1-based position
- * of the identified atom.
- * The form is a term form, so a fact can be asserted for a negated predicate.
+ * To create an identifying fact, set idPosition to the 1-based position
+ * of the identified atom; else set idPosition = 0.
+ * The form is a term form, so a fact can be a negated predicate.
  */
 void AssertFact(Atom termForm, TypedTuple const * actors, uint8 idPosition);
 
 /**
- * High level method to retract a fact.
- * The actors tuple may not contain variables.
- * Removes the tuple from the corresponding relation table
- * and removes corresponding entries from the lookup table.
- * This function should always succeed, as facts can always
- * be retracted at any time.
- * The form is a term form; see AssertFact()
+ * High level method to retract a fact. Removes the tuple from the corresponding
+ * relation table and removes corresponding entries from the lookup table.
+ * The actors tuple may not contain variables. This method may not be used to
+ * retract an identifying fact; this is done by ReleaseIFact().
+ * This function should always succeed, as (non-identifying) facts can be retracted
+ * at any time.
  */
 void RetractFact(Atom termForm, TypedTuple * actors);
 
@@ -98,7 +95,7 @@ void RetractFact(Atom termForm, TypedTuple * actors);
 
 // #define FORM_PAIR_LEFT_RIGHT				X 	// (pair left right)
 
-#define N_CORE_PREDICATES					9
+#define N_CORE_FORMS					9
 
 
 /**

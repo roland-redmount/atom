@@ -325,7 +325,7 @@ void LookupDump(void)
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
 		IFactPrint(record->atom);
 		PrintChar(' ');
-		PrintTermForm(record->relation->form);
+		PrintTermForm(record->relation->termForm);
 		PrintChar(' ');
 		PrintName(record->role);
 		PrintF(" %u\n", record->nFacts);

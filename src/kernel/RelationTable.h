@@ -1,10 +1,8 @@
 /**
  * High level interface to relation tables, independent of implementation.
- * A relation table is 1:1 with a (form, columns types) pair.
- *
- * The form is a term form, so a relation carries a sign. This is what lets
- * a negated predicate like (! odd x) have a relation table of its own,
- * distinct from the one for (odd x).
+ * A relation table is identied by a (term form, columns types) pair. Using
+ * a term form (signed predicate) as key allows a registering tables for
+ * negated predicates like (! odd x), distinct from the non-negated (odd x).
  *
  * NOTE: in the future, we want to be able to hot-load implementations
  * into a running atom process. This would involve loading code into
@@ -85,7 +83,7 @@ typedef struct s_RelationTableProvider {
  */
 struct s_RelationTable {
 	// term form; the key this table is registered under. See RelationRegistry.h
-	Atom form;
+	Atom termForm;
 	/**
 	 * The predicate form of the term form, cached here because the roles of a
 	 * relation are read on every tuple added or removed; see LookupAddPredicateRoles().
@@ -103,8 +101,8 @@ struct s_RelationTable {
 };
 
 /**
- * Create a relation table using the specified storage provider, or 0 if there is not storage
- * (computed relations).
+ * Create a relation table for the given signature (term form, atom types) using the
+ * specified storage provider, or 0 if there is no storage (computed relations).
  * 
  * If not 0, indexColumns indicates the desired order of index columns, so that tuples are
  * effectively ordered lexigraphically by indexColumns[0], ..., indexColumns[nColumns-1].
@@ -115,15 +113,12 @@ struct s_RelationTable {
  * but (_ _ @element) may be slow.
  */
 RelationTable const * CreateRelationTable(
-	RelationTableProvider * provider, Atom form, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
+	RelationTableProvider * provider, Atom termForm, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
 
 /**
- * Create a relation table given its predicate form directly, rather than reading
- * it off the term form. This is only for bootstrapping, where CreateRelationTable()
- * cannot be used for two reasons. The first core tables are keyed by a term form
- * reserved by IFactReserve(), which holds no tuples yet to read a predicate form from.
- * And TermFormGetPredicateForm() calls SERVICE_TERM_FORM, which is not available until
- * the term form table itself exists. See setupCoreServices() in kernel.c
+ * Create a relation table with the predicate form given explicitly, rather than
+ * computed from TermFormGetPredicateForm(termForm). This function is only for bootstrapping,
+ * where TermFormGetPredicateForm() is not yet available. See setupCoreServices() in kernel.c
  */
 RelationTable const * CreateRelationTableBootstrap(
 	RelationTableProvider * provider, Atom termForm, Atom predicateForm,

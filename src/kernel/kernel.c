@@ -40,11 +40,11 @@ static void checkTypeSizes(void)
 }
 
 
-// structure of core predicate forms
+// Arity of core predicate (and term) forms
 
 #define CORE_FORMS_MAX_ARITY		3
 
-static const size8 corePredicateArity[N_CORE_PREDICATES + 1] = {
+static const size8 corePredicateArity[N_CORE_FORMS + 1] = {
 	0,
 	3,	// (multiset element multiple)
 	1,	// (predicate-form)
@@ -64,7 +64,7 @@ static const size8 corePredicateArity[N_CORE_PREDICATES + 1] = {
  * This ordering is also used as indexColumns in CreateRelationTable(), so that
  * lookup is fast on leading columns in this order.
  */ 
-static const index32 coreFormRoleIds[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY] = {
+static const index32 coreFormRoleIds[N_CORE_FORMS + 1][CORE_FORMS_MAX_ARITY] = {
 	{0},
 	{ROLE_MULTISET, ROLE_ELEMENT, ROLE_MULTIPLE},
 	{ROLE_PREDICATE_FORM},
@@ -178,21 +178,22 @@ static struct s_Kernel {
 	void * allocatorArea;
 
 	// Core predicate forms and roles, defined during bootstrapping
-	Atom corePredicateForms[N_CORE_PREDICATES + 1];
-	// The positive term form of each core predicate form, which is the key
-	// its relation tables are registered under
-	Atom coreTermForms[N_CORE_PREDICATES + 1];
+	Atom corePredicateForms[N_CORE_FORMS + 1];
+	// The positive (non-negated) term form of each core predicate form.
+	// Since the kernel registers only positive forms, this is 1:1 with predicate forms.
+	Atom coreTermForms[N_CORE_FORMS + 1];
+	// Pre-defined names for all roles involved in core predicates
 	Atom coreRoleNames[N_CORE_ROLES + 1];
 
 	// Mapping of roles from "kernel order" in canonical order, such that
 	// corePredicateRoleIndex[i][j] is the canonical order index of role j
 	// in "kernel order" for form i.
-	index8 corePredicateRoleIndex[N_CORE_PREDICATES + 1][CORE_FORMS_MAX_ARITY];
+	index8 corePredicateRoleIndex[N_CORE_FORMS + 1][CORE_FORMS_MAX_ARITY];
 	// Corresponding core relations and services
 	RelationTable const * coreRelations[N_CORE_RELATIONS + 1];
 	Operator * coreOperators[N_CORE_SERVICES + 1];
 
-	// number of ifacts abnd references created by bootstrapping
+	// number of ifacts and references created by bootstrapping
 	size32 nCoreIFacts;
 	size32 nCoreIFactRefs;
 	size32 nCoreNameRefs;
@@ -203,14 +204,14 @@ static struct s_Kernel {
 
 Atom GetCorePredicateForm(index32 formId)
 {
-	ASSERT((formId >= 1) && (formId <= N_CORE_PREDICATES))
+	ASSERT((formId >= 1) && (formId <= N_CORE_FORMS))
 	return kernel.corePredicateForms[formId];
 }
 
 
 Atom GetCoreTermForm(index32 formId)
 {
-	ASSERT((formId >= 1) && (formId <= N_CORE_PREDICATES))
+	ASSERT((formId >= 1) && (formId <= N_CORE_FORMS))
 	return kernel.coreTermForms[formId];
 }
 
@@ -619,7 +620,7 @@ static void setupCoreServices(void)
 	// We can now use CreateTermForm()
 
 	// Create remaining forms
-	for(index32 formId = FORM_CLAUSE_FORM; formId <= N_CORE_PREDICATES; formId++) {
+	for(index32 formId = FORM_CLAUSE_FORM; formId <= N_CORE_FORMS; formId++) {
 		for(index8 j = 0; j < corePredicateArity[formId]; j++)
 			roles[j] = kernel.coreRoleNames[coreFormRoleIds[formId][j]];
 		Atom form = CreatePredicateForm(roles, corePredicateArity[formId]);
@@ -637,7 +638,7 @@ static void setupCoreServices(void)
 
 	// The relation table registry now holds references to each core predicate form
 	// and term form, so we can release our references.
-	for(index32 i = 1; i <= N_CORE_PREDICATES; i++) {
+	for(index32 i = 1; i <= N_CORE_FORMS; i++) {
 		IFactRelease(kernel.corePredicateForms[i]);
 		IFactRelease(kernel.coreTermForms[i]);
 	}

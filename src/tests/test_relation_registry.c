@@ -83,7 +83,7 @@ void testIterateRelationTables(void)
 	while(RelationIteratorNext(&iterator)) {
 		RelationTable const * table = RelationIteratorGet(&iterator);
 		// every table yielded must belong to the form we asked for
-		ASSERT_DATA64_EQUAL(table->form.hash, form.hash)
+		ASSERT_DATA64_EQUAL(table->termForm.hash, form.hash)
 		if(table == multisetName)
 			foundName = true;
 		if(table == multisetId)
