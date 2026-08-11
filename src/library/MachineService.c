@@ -13,9 +13,8 @@
 
 
 /**
- * What one registered machine service needs to evaluate itself, held as the providerData
- * of its machine operator. The function pointer is stored here rather than in
- * providerData, a void * being unable to hold a function pointer portably.
+ * A MachineServiceData holds the data one registered machine service needs to evaluate itself.
+ * It is stored in the Operator.impl.machine.providerData slot.
  */
 typedef struct s_MachineServiceData {
 	MachineFunction function;
@@ -34,22 +33,26 @@ typedef struct s_MachineServiceData {
 
 
 /**
- * The context of one evaluation of a machine service. The arguments are held here in
- * signature order for the duration of a call; see MachineFunction.
- * The arguments buffer has a fixed size, so that the state can be the flexible member.
+ * The context of one evaluation of a machine service. The arguments[] array holds a copy
+ * of the operator arguments in the signature ("user") order for the duration of a call;
+ * see MachineFunction.
  */
 typedef struct s_MachineServiceContext {
 	bool hasBeenCalled;
 	// set once the function has reported no more tuples, and is not to be called again
 	bool isExhausted;
 	Atom arguments[MACHINE_SERVICE_MAX_ARITY];
-	// the function state, of the size RegisterMachineService() was given
+	// the function state, sizes determined by the RegisterMachineService() stateSize argument
 	byte state[];
 } MachineServiceContext;
 
 
-// The relations created by RegisterMachineService(), which FreeMachineServices() removes
+/**
+ * All relations created by RegisterMachineService() are stored in this array.
+ */
 static ResizingArray registeredRelations = {0};
+
+#define REGISTRY_INITIAL_CAPACITY	16
 
 
 static bool machineServiceCall(OperatorContext * context)
@@ -88,8 +91,8 @@ static void machineServiceFinalizeOperator(Operator * op)
 
 
 /**
- * One provider serves every machine service, the function to call being part of the
- * providerData of each operator.
+ * One provider serves every machine service. The function to call for a specific
+ * service is stored in the impl.machine.providerData field of each operator.
  */
 static MachineProvider machineServiceProvider = {
 	// nothing to set up: the zeroed context is the state before the first call
@@ -142,8 +145,11 @@ static RelationTable const * findOrCreateRelation(
 
 	relation = CreateRelationTable(0, termForm, arity, atomTypes, 0);
 	RelationRegistryAdd(relation);
-	if(!registeredRelations.elementSize)
-		CreateResizingArray(&registeredRelations, sizeof(RelationTable const *), 16);
+	if(!registeredRelations.elementSize) {
+		// first registered relation, create storage array
+		CreateResizingArray(
+			&registeredRelations, sizeof(RelationTable const *), REGISTRY_INITIAL_CAPACITY);
+	}
 	ResizingArrayAppend(&registeredRelations, &relation);
 	return relation;
 }
@@ -170,8 +176,9 @@ Service RegisterMachineService(
 	// A function with no state yields at most one tuple, and so declares no index order.
 	// A function with a state declares the order its signature writes its arguments in;
 	// see the ordering contract in operator.h
+	index8 const * indexOrder = stateSize ? data->argumentIndex : 0;
 	Operator * op = CreateMachineOperator(
-		arity, stateSize ? data->argumentIndex : 0, &machineServiceProvider, data,
+		arity, indexOrder, &machineServiceProvider, data,
 		sizeof(MachineServiceContext) + stateSize);
 	Service service = ServiceRegistryAdd(relation, parameterIO, op);
 	// the service registry now holds the reference to the operator
