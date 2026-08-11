@@ -7,8 +7,8 @@
 
 
 /**
- * Register the math services. They are removed by FreeMachineServices(),
- * along with those of every other library; see library/MachineService.h
+ * Register the math services. FreeMachineServices() removes them;
+ * see library/MachineService.h
  */
 void MathSetup(void);
 

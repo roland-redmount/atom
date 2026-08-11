@@ -39,11 +39,10 @@ static bool mul1(Atom arguments[], void * state, bool isFirstCall)
  * A "co-routine" machine function, returning multiple values.
  * This implements a range iterator (lower @1<INT number @2>INT upper @3<INT)
  * which returns all values @2 between the lower and upper bound, inclusive.
- * It keeps the value returned by the previous call in its state, and returns
- * false when there are no more tuples.
+ * The state holds the value returned by the previous call.
  *
- * The tuples differ only in @2, which ascends, so they are ordered as the
- * signature says they are; see RegisterMachineService()
+ * Successive tuples differ only in @2, which ascends, so the tuples are ordered
+ * as RegisterMachineService() requires.
  */
 typedef struct {
 	Atom number;

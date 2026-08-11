@@ -37,9 +37,8 @@ static index8 roleIndex(Atom predicateForm, char const * roleName)
 
 /**
  * A machine function is written in the argument order of its signature, while the
- * relation stores its arguments in the canonical role order of its form. This test
- * uses roles whose canonical order is not the order the signature writes them in,
- * which is what makes the permutation observable.
+ * relation stores its arguments in canonical role order. The roles here have a
+ * canonical order differing from the signature order, so the permutation is observable.
  */
 static void testMachineServiceArgumentOrder(void)
 {
@@ -63,7 +62,7 @@ static void testMachineServiceArgumentOrder(void)
 
 	OperatorContext * context = OperatorCreateContext(service.op, arguments);
 	ASSERT_TRUE(OperatorCall(context))
-	// 340 rather than 430, which is what reading the inputs in column order would give
+	// 340, not the 430 that reading the inputs in column order would give
 	ASSERT_INT64_EQUAL(arguments[resultIndex]._int, 340)
 	// the inputs are returned unchanged
 	ASSERT_INT64_EQUAL(arguments[firstIndex]._int, 3)
@@ -107,9 +106,9 @@ static void testMachineServiceTestPredicate(void)
 
 
 /**
- * A function with a state is called until it says it has no more tuples, so that a
- * service can compute a relation of several tuples. This one counts from @1 to @3,
- * which ascends, so its tuples are ordered as its signature says they are.
+ * A function with a state is called until it reports no more tuples, so that a service
+ * can compute a relation of several tuples. This function counts from @1 to @3.
+ * The count ascends, so the tuples are ordered as the signature says.
  */
 typedef struct {
 	int64 next;
@@ -139,7 +138,7 @@ static void testMachineServiceIterator(void)
 	index8 toIndex = roleIndex(predicateForm, "to");
 
 	// A service that may yield several tuples declares the order it yields them in.
-	// Declaring none would claim it yields at most one; see the contract in operator.h
+	// Declaring none would claim at most one tuple; see the contract in operator.h
 	ASSERT_NOT_NULL(service.op->indexOrder)
 
 	Atom arguments[3];
@@ -154,8 +153,8 @@ static void testMachineServiceIterator(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	// A range holding nothing yields nothing on the very first call, which is where an
-	// iterator and a single-tuple function that computes nothing look alike
+	// An empty range yields nothing on the first call, as a single-tuple function
+	// computing nothing also does
 	arguments[fromIndex] = (Atom) {._int = 5};
 	arguments[toIndex] = (Atom) {._int = 1};
 	context = OperatorCreateContext(service.op, arguments);
@@ -167,8 +166,8 @@ static void testMachineServiceIterator(void)
 
 
 /**
- * The state belongs to one evaluation, not to the service, so two evaluations of the
- * same service count independently. This is what a join relies on, evaluating its right
+ * The state belongs to one evaluation rather than to the service, so two evaluations of
+ * one service count independently. A JOIN operator relies on this, evaluating its right
  * child afresh for every tuple of its left child.
  */
 static void testMachineServiceIteratorState(void)

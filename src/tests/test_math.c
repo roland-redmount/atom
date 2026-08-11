@@ -78,7 +78,7 @@ void testAdd2(void)
 
 /**
  * The range service yields one tuple per number in the range, rather than the single
- * tuple the arithmetic services compute.
+ * tuple an arithmetic service computes.
  */
 void testRange(void)
 {

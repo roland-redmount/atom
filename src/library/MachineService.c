@@ -13,24 +13,21 @@
 
 
 /**
- * What one registered machine service needs to evaluate itself, held as the
- * providerData of its machine operator. A function pointer is stored in this
- * structure rather than in providerData directly, which is a void * and so cannot
- * portably hold one.
+ * What one registered machine service needs to evaluate itself, held as the providerData
+ * of its machine operator. The function pointer is stored here rather than in
+ * providerData, a void * being unable to hold a function pointer portably.
  */
 typedef struct s_MachineServiceData {
 	MachineFunction function;
 	size8 nArguments;
-	// what the function keeps between calls, zero for one computing a single tuple
+	// size of the function state, zero for a function computing a single tuple
 	size32 stateSize;
 	/**
 	 * The relation column of each argument of the signature: argumentIndex[i] is the
-	 * column holding the argument the signature numbered i + 1. Columns are in the
-	 * canonical role order of the form, which is an order of role name hashes and so
-	 * unrelated to the order the signature was written in.
-	 *
-	 * This is also the index order a service with a state declares, being a permutation
-	 * of the columns; see RegisterMachineService()
+	 * column of the argument the signature numbered i + 1. The columns are in canonical
+	 * role order, unrelated to the order the signature writes its arguments in.
+	 * A service with a state also declares this array as its index order;
+	 * see RegisterMachineService()
 	 */
 	index8 argumentIndex[MACHINE_SERVICE_MAX_ARITY];
 } MachineServiceData;
@@ -38,17 +35,15 @@ typedef struct s_MachineServiceData {
 
 /**
  * The context of one evaluation of a machine service. The arguments are held here in
- * signature order for the duration of a call, since the function is written in that
- * order while the caller's tuple is in column order.
+ * signature order for the duration of a call; see MachineFunction.
+ * The arguments buffer has a fixed size, so that the state can be the flexible member.
  */
 typedef struct s_MachineServiceContext {
-	// whether the function has been called for this evaluation
 	bool hasBeenCalled;
-	// whether it has said it has no more tuples, after which it is not called again
+	// set once the function has reported no more tuples, and is not to be called again
 	bool isExhausted;
 	Atom arguments[MACHINE_SERVICE_MAX_ARITY];
-	// The state of the function, of the size its service was registered with.
-	// createChildContext() zeroes the whole context, so it starts zeroed.
+	// the function state, of the size RegisterMachineService() was given
 	byte state[];
 } MachineServiceContext;
 
@@ -62,8 +57,8 @@ static bool machineServiceCall(OperatorContext * context)
 	MachineServiceContext * serviceContext = (MachineServiceContext *) context->data;
 	MachineServiceData const * data = context->op->impl.machine.providerData;
 
-	// The function is not called again once it has said it has no more tuples.
-	// A function with no state computes a single tuple, so one call is all it gets.
+	// A function reporting no more tuples is not called again, and a function with
+	// no state computes a single tuple and so is called once
 	if(serviceContext->isExhausted || (!data->stateSize && serviceContext->hasBeenCalled))
 		return false;
 	bool isFirstCall = !serviceContext->hasBeenCalled;
@@ -97,7 +92,7 @@ static void machineServiceFinalizeOperator(Operator * op)
  * providerData of each operator.
  */
 static MachineProvider machineServiceProvider = {
-	// nothing to set up: the context is zeroed, which is the state before the first call
+	// nothing to set up: the zeroed context is the state before the first call
 	.setupContext = 0,
 	.call = &machineServiceCall,
 	// nothing to finalize: the context holds no allocation of its own
@@ -107,8 +102,8 @@ static MachineProvider machineServiceProvider = {
 
 
 /**
- * Read the signature actors, which are in relation column order, into the column types
- * and parameter IO of the service and the argument index of the function.
+ * Read the signature actors into the column types and parameter IO of the service,
+ * and into the argument index of the function. The actors are in relation column order.
  */
 static void readSignatureParameters(
 	Formula const * signature, MachineServiceData * data, byte atomTypes[], byte parameterIO[])
@@ -135,9 +130,8 @@ static void readSignatureParameters(
 
 
 /**
- * Find the relation of a signature, or create and register it if this is the first
- * service registered for it. A computed relation has no storage provider, and no
- * particular index column order.
+ * Find the relation of a signature, or create and register it for the first service
+ * registered. A computed relation has no storage provider and no index column order.
  */
 static RelationTable const * findOrCreateRelation(
 	Atom termForm, size8 arity, byte const atomTypes[])
@@ -173,12 +167,9 @@ Service RegisterMachineService(
 
 	RelationTable const * relation = findOrCreateRelation(term->form, arity, atomTypes);
 
-	/**
-	 * A function with no state computes a single tuple, and so declares no index order,
-	 * which is what the operator contract asks of an operator yielding at most one tuple.
-	 * One with a state may yield several, and declares the order its signature writes its
-	 * arguments in; the argument index is that order, being a permutation of the columns.
-	 */
+	// A function with no state yields at most one tuple, and so declares no index order.
+	// A function with a state declares the order its signature writes its arguments in;
+	// see the ordering contract in operator.h
 	Operator * op = CreateMachineOperator(
 		arity, stateSize ? data->argumentIndex : 0, &machineServiceProvider, data,
 		sizeof(MachineServiceContext) + stateSize);
@@ -196,8 +187,7 @@ void FreeMachineServices(void)
 	if(!registeredRelations.elementSize)
 		return;
 
-	// Remove in reverse order of registration, so that a relation is removed before
-	// anything registered before it that it might depend on.
+	// remove in reverse order of registration
 	size32 nRelations = ResizingArrayNElements(&registeredRelations);
 	while(nRelations > 0) {
 		RelationTable const * relation =

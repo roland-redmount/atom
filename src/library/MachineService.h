@@ -41,10 +41,7 @@
 
 
 /**
- * Most arguments a machine service may have. A machine function is given its arguments
- * in a context buffer of this fixed size, which keeps the context a plain structure with
- * one flexible member, that being the state. The buffer could be sized to the arity of
- * the service instead, should one ever need more arguments than this.
+ * Most arguments a machine service may have; see MachineServiceContext
  */
 #define MACHINE_SERVICE_MAX_ARITY	8
 
@@ -53,19 +50,18 @@
  * A machine function computes one tuple of a relation from the arguments the
  * caller has bound. It returns true if it produced a tuple.
  *
- * The arguments are in the order the signature numbers them, so the argument
- * written @1 is arguments[0]. This is not the order of the relation's columns,
- * which is the canonical role order of its form; RegisterMachineService() permutes
- * between the two, so a function can use the positions it was written with.
+ * The arguments are in the order the signature numbers them, so the argument written
+ * @1 is arguments[0]. RegisterMachineService() permutes between that order and the
+ * column order of the relation.
  *
- * A function returns false when it computes nothing for the arguments it was given.
- * That is what lets a partial function, such as a division that rejects a zero
- * divisor, and a test, such as (even 4), be written as machine services.
+ * A function returns false when it computes no tuple for its arguments. A partial
+ * function, such as a division rejecting a zero divisor, and a test, such as (even 4),
+ * are written this way.
  *
  * A function yielding several tuples is called repeatedly until it returns false. The
  * function keeps its state in a block whose size is specified by RegisterMachineService().
  * The state is zeroed before the first call. isFirstCall is true on the first call.
- * A function of registered with no state can yield at most one tuple, and is
+ * A function registered with no state can yield at most one tuple, and is
  * given a null state pointer.
  */
 typedef bool (*MachineFunction)(Atom arguments[], void * state, bool isFirstCall);
