@@ -396,8 +396,7 @@ MachineProvider bTreeProvider = {
 	.setupContext = &btreeSetupContext,
 	.call = &btreeCall,
 	.finalizeContext = &btreeFinalizeContext,
-	.finalizeOperator = &finalizeBTreeOperator,
-	.contextSize = sizeof(RelationBTreeIterator)
+	.finalizeOperator = &finalizeBTreeOperator
 };
 
 
@@ -412,7 +411,8 @@ static Operator * createBTreeOperator(RelationBTree * relation, size8 nInputs)
 	// Tuples are stored permuted into index column order, so that is the order
 	// in which the B-tree yields them
 	return CreateMachineOperator(
-		relation->nColumns, relation->indexColumns, &bTreeProvider, providerData);
+		relation->nColumns, relation->indexColumns, &bTreeProvider, providerData,
+		sizeof(RelationBTreeIterator));
 }
 
 

@@ -1,245 +1,77 @@
-#include "kernel/Parameter.h"
-#include "kernel/operator.h"
-#include "kernel/ifact.h"
-#include "kernel/RelationRegistry.h"
-#include "kernel/ServiceRegistry.h"
-#include "lang/name.h"
-#include "lang/PredicateForm.h"
-#include "lang/TermForm.h"
+
+#include "library/MachineService.h"
 #include "library/math.h"
-#include "memory/allocator.h"
-#include "parser/PredicateBuilder.h"
 
-
-#define ADD1_INDEX		0
-#define ADD2_INDEX		1
-#define MUL1_INDEX		2
-
-#define N_SERVICES 		3
-
-#define ADD_RELATION	0
-#define MUL_RELATION	1
-
-#define N_RELATIONS		2
-
-#define MAX_RELATION_ARITY	3
-
-
-// List of created relation tables
-// These are needed by MathTeardown()
-RelationTable const * mathRelations[N_RELATIONS];
-
-// Every math operator computes a single tuple from its inputs, and so declares no
-// index order; see the ordering contract in operator.h
-static index8 const * mathIndexOrder = 0;
-
-// Precomputed argument indexes, in "reference" order
-// TODO: This is similar to kernel.corePredicateRoleIndex,
-// we should have a more general mechanism for handling "user order"
-static index8 relationArgumentIndex[N_RELATIONS][MAX_RELATION_ARITY];
 
 /**
- * The operator (+ x<INT + y<INT = z>INT )
+ * The operator (+ x<INT + y<INT = z>INT)
  */
-static void add1(OperatorContext * context)
+static bool add1(Atom arguments[], void * state, bool isFirstCall)
 {
-	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
-	int64 x = context->arguments[argumentIndex[0]]._int;
-	int64 y = context->arguments[argumentIndex[1]]._int;
-	context->arguments[argumentIndex[2]]._int = x + y;
+	arguments[2]._int = arguments[0]._int + arguments[1]._int;
+	return true;
 }
 
-static void setupAdd1(void)
-{
-	// Argument indices w.r.t. "user order" (+ + =)
-	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
-	byte parameterIO[3];
-	parameterIO[argumentIndex[0]] = PARAMETER_IN;
-	parameterIO[argumentIndex[1]] = PARAMETER_IN;
-	parameterIO[argumentIndex[2]] = PARAMETER_OUT;
-
-	Operator * op = CreateMachineOperator(3, mathIndexOrder, &mathProvider, (void *) ADD1_INDEX);
-	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, op);
-	ReleaseOperator(op);
-}
 
 /**
  * The operator (+ x<INT + y>INT = z<INT)
  * This implements subtraction by solving the equation
  * z = x + y  <->  y = z - x
  */
-static void add2(OperatorContext * context)
+static bool add2(Atom arguments[], void * state, bool isFirstCall)
 {
-	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
-	int64 x = context->arguments[argumentIndex[0]]._int;
-	int64 z = context->arguments[argumentIndex[2]]._int;
-	context->arguments[argumentIndex[1]]._int = z - x;
-}
-
-static void setupAdd2(void)
-{
-	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
-	byte parameterIO[3];
-	// add2() reads x and z and computes y, so y is the output
-	parameterIO[argumentIndex[0]] = PARAMETER_IN;
-	parameterIO[argumentIndex[1]] = PARAMETER_OUT;
-	parameterIO[argumentIndex[2]] = PARAMETER_IN;
-
-	Operator * op = CreateMachineOperator(3, mathIndexOrder, &mathProvider, (void *) ADD2_INDEX);
-	ServiceRegistryAdd(mathRelations[ADD_RELATION], parameterIO, op);
-	ReleaseOperator(op);	
-}
-
-
-/**
- * The operator (* x<INT * y<INT = z>INT )
- */
-static void mul1(OperatorContext * context)
-{
-	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
-	int64 x = context->arguments[argumentIndex[0]]._int;
-	int64 y = context->arguments[argumentIndex[1]]._int;
-	context->arguments[argumentIndex[2]]._int = x * y;
-}
-
-static void setupMul1(void)
-{
-	// Argument indices w.r.t. "user order" (* * =)
-	index8 * argumentIndex = relationArgumentIndex[ADD_RELATION];
-	byte parameterIO[3];
-	parameterIO[argumentIndex[0]] = PARAMETER_IN;
-	parameterIO[argumentIndex[1]] = PARAMETER_IN;
-	parameterIO[argumentIndex[2]] = PARAMETER_OUT;
-
-	Operator * op = CreateMachineOperator(3, mathIndexOrder, &mathProvider, (void *) MUL1_INDEX);
-	ServiceRegistryAdd(mathRelations[MUL_RELATION], parameterIO, op);
-	ReleaseOperator(op);
-}
-
-
-/**
- * Lookup table for operator functions.
- * We need this since we cannot store a function pointer directly in void * providerData
- * (due to text/data segment issues)
- */
-typedef void (*MathFunction)(OperatorContext * context);
-
-typedef struct s_MathContext {
-	MathFunction function;
-	bool hasBeenCalled;
-} MathContext;
-
-MathFunction functionTable[N_SERVICES] = {
-	&add1,
-	&add2,
-	&mul1
-};
-
-
-/**
- * Stubs for the operator provider
- */
-static void btreeSetupContext(OperatorContext * context)
-{
-	MathContext * mathContext = (MathContext *) &context->data;
-	index32 functionIndex = (data64) context->op->impl.machine.providerData;
-	mathContext->function = functionTable[functionIndex];
-	mathContext->hasBeenCalled = false;
-}
-
-
-static bool btreeCall(OperatorContext * context)
-{
-	MathContext * mathContext = (MathContext *) &context->data;
-	if(mathContext->hasBeenCalled)
-		return false;
-	mathContext->function(context);
-	mathContext->hasBeenCalled = true;
+	arguments[1]._int = arguments[2]._int - arguments[0]._int;
 	return true;
 }
 
 
-static void btreeFinalizeContext(OperatorContext * context)
+/**
+ * The operator (* x<INT * y<INT = z>INT)
+ */
+static bool mul1(Atom arguments[], void * state, bool isFirstCall)
 {
-	// Nothing to do
+	arguments[2]._int = arguments[0]._int * arguments[1]._int;
+	return true;
 }
 
 
-MachineProvider mathProvider = {
-	.setupContext = &btreeSetupContext,
-	.call = &btreeCall,
-	.finalizeContext = &btreeFinalizeContext,
-};
+/**
+ * A "co-routine" machine function, returning multiple values.
+ * This implements a range iterator (lower @1<INT number @2>INT upper @3<INT)
+ * which returns all values @2 between the lower and upper bound, inclusive.
+ * The state holds the value returned by the previous call.
+ *
+ * Successive tuples differ only in @2, which ascends, so the tuples are ordered
+ * as RegisterMachineService() requires.
+ */
+typedef struct {
+	Atom number;
+} RangeState;
+
+
+static bool range(Atom arguments[], void * state, bool isFirstCall)
+{
+	RangeState * rangeState = state;
+	if(isFirstCall)
+		// begin iterating at the lower bound
+		rangeState->number = arguments[0];
+	else
+		rangeState->number._int++;
+
+	if(rangeState->number._int > arguments[2]._int)
+		return false;
+	arguments[1] = rangeState->number;
+	return true;
+}
 
 
 void MathSetup(void)
 {
-	// Create forms and setup argument indices
-	Atom plus = CreateNameFromCString("+");
-	Atom times = CreateNameFromCString("*");
-	Atom equals = CreateNameFromCString("=");
+	RegisterMachineService("+ @1<INT + @2<INT = @3>INT", &add1, 0);
+	RegisterMachineService("+ @1<INT + @2>INT = @3<INT", &add2, 0);
 
-	Atom addForm = CreatePredicateForm((Atom[]) {plus, plus, equals}, 3);
-	Atom mulForm = CreatePredicateForm((Atom[]) {times, times, equals}, 3);
-	// a relation table is keyed by a term form; these relations are not negated
-	Atom addTermForm = CreateTermForm(addForm, true);
-	Atom mulTermForm = CreateTermForm(mulForm, true);
+	RegisterMachineService("* @1<INT * @2<INT = @3>INT", &mul1, 0);
 
-	byte atomTypes[3];
-	index8 * argumentIndex;
-
-	// create (+ + =) relation table
-
-	// Map roles in our "user order" (+ + =) to canonical order
-	argumentIndex = relationArgumentIndex[ADD_RELATION];
-	argumentIndex[0] = PredicateRoleIndex(addForm, plus);
-	argumentIndex[1] = argumentIndex[0] + 1;
-	argumentIndex[2] = PredicateRoleIndex(addForm, equals);
-
-	atomTypes[argumentIndex[0]] = AT_INT;
-	atomTypes[argumentIndex[1]] = AT_INT;
-	atomTypes[argumentIndex[2]] = AT_INT;
-	// NOTE: no particular column index order here
-	mathRelations[ADD_RELATION] = CreateRelationTable(0, addTermForm, 3, atomTypes, 0);
-	// the table must be registered for dispatch to find it
-	RelationRegistryAdd(mathRelations[ADD_RELATION]);
-
-	// create (* * =) relation table
-
-	// Map roles in our "user order" (+ + =) to canonical order
-	argumentIndex = relationArgumentIndex[MUL_RELATION];
-	argumentIndex[0] = PredicateRoleIndex(mulForm, times);
-	argumentIndex[1] = argumentIndex[0] + 1;
-	argumentIndex[2] = PredicateRoleIndex(mulForm, equals);
-
-	atomTypes[argumentIndex[0]] = AT_INT;
-	atomTypes[argumentIndex[1]] = AT_INT;
-	atomTypes[argumentIndex[2]] = AT_INT;
-	// NOTE: no particular column index order here
-	mathRelations[MUL_RELATION] = CreateRelationTable(0, mulTermForm, 3, atomTypes, 0);
-	// the table must be registered for dispatch to find it
-	RelationRegistryAdd(mathRelations[MUL_RELATION]);
-
-	// setup operators
-	setupAdd1();
-	setupAdd2();
-	setupMul1();
-
-	// the relation tables now hold the references to their forms
-	IFactRelease(addTermForm);
-	IFactRelease(mulTermForm);
-	IFactRelease(addForm);
-	IFactRelease(mulForm);
-	NameRelease(plus);
-	NameRelease(times);
-	NameRelease(equals);
-}
-
-
-void MathTeardown(void)
-{
-	for(index32 i = 0; i < N_RELATIONS; i++) {
-		ServiceRegistryRemoveAll(mathRelations[i]);
-		RelationRegistryRemove(mathRelations[i]);
-	}
+	RegisterMachineService(
+		"lower @1<INT number @2>INT upper @3<INT", &range, sizeof(RangeState));
 }

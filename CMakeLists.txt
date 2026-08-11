@@ -102,6 +102,7 @@ add_library(atom SHARED
     src/kernel/typedtuple.c
     src/kernel/UInt.c
 
+    src/library/MachineService.c
     src/library/math.c
 
     src/memory/allocator.c
@@ -187,6 +188,7 @@ set(ATOM_TESTS_TIER2        # higher level kernel procedures
     test_compiler
     test_dispatch
     test_unification
+    test_machineservice
     test_math
 )
 

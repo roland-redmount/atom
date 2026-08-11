@@ -5,6 +5,7 @@
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
 #include "kernel/list.h"
+#include "kernel/Parameter.h"
 #include "parser/Tokenizer.h"
 #include "testing/testing.h"
 
@@ -138,11 +139,72 @@ static void testTokenizer(void)
 }
 
 
+/**
+ * A parameter is written as a number, an io direction and an atom type name,
+ * which is the notation a service signature is registered in;
+ * see RegisterMachineService()
+ */
+static void testTokenizeParameter(void)
+{
+	Tokenizer tokenizer;
+	TokenizerInit(&tokenizer);
+
+	Token token = tokenizeCString(&tokenizer, "@1<INT");
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_PARAMETER)
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_PARAMETER)
+	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.number, 1)
+	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.io, PARAMETER_IN)
+	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.atomType, AT_INT)
+
+	token = tokenizeCString(&tokenizer, "@2>ID");
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_PARAMETER)
+	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.number, 2)
+	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.io, PARAMETER_OUT)
+	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.atomType, AT_ID)
+
+	// a parameter number of more than one digit
+	token = tokenizeCString(&tokenizer, "@12<UINT");
+	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.number, 12)
+
+	// A parameter number is 1-based, so @0 is not a parameter
+	ASSERT_TRUE(TokenizerPush(&tokenizer, '@'))
+	ASSERT_TRUE(TokenizerPush(&tokenizer, '0'))
+	ASSERT_FALSE(TokenizerPush(&tokenizer, '<'))
+	TokenizerReset(&tokenizer);
+
+	// neither is a parameter without a number
+	ASSERT_TRUE(TokenizerPush(&tokenizer, '@'))
+	ASSERT_FALSE(TokenizerPush(&tokenizer, '<'))
+	TokenizerReset(&tokenizer);
+
+	TokenizerCleanup(&tokenizer);
+}
+
+
 static void testCreateTokenFromCString(void)
 {
 	Token token = CreateTokenFromCString("_x");
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_VARIABLE)
 	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom.atom), 'x');
+	ReleaseToken(token);
+
+	// A token running to the end of the string is completed by the terminator.
+	// The atom type of a parameter comes last, so it is what a missing one loses.
+	token = CreateTokenFromCString("@1<INT");
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_PARAMETER)
+	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.number, 1)
+	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.io, PARAMETER_IN)
+	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.atomType, AT_INT)
+	ReleaseToken(token);
+
+	token = CreateTokenFromCString("foobar");
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_NAME)
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_NAME)
+	ReleaseToken(token);
+
+	// a token ending in a character of its own completes without the terminator
+	token = CreateTokenFromCString("&");
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_AND)
 	ReleaseToken(token);
 }
 
@@ -153,6 +215,7 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testStringBuffer);
 	ExecuteTest(testTokenizer);
+	ExecuteTest(testTokenizeParameter);
 	ExecuteTest(testCreateTokenFromCString);
 
 	KernelShutdown();

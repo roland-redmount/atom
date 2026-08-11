@@ -53,12 +53,11 @@ void testAddRemoveService(void)
 		.setupContext = 0,
 		.call = 0,
 		.finalizeContext = 0,
-		.finalizeOperator = 0,
-		.contextSize = 0
+		.finalizeOperator = 0
 	};
 
 	Operator * op = CreateMachineOperator(
-		EXAMPLE_FORM_ARITY, (index8[]) {0, 1, 2, 3}, &dummyProvider, 0);
+		EXAMPLE_FORM_ARITY, (index8[]) {0, 1, 2, 3}, &dummyProvider, 0, 0);
 	byte parameterIO[EXAMPLE_FORM_ARITY] = {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT};
 	ASSERT_INT32_EQUAL(op->referenceCount, 1)
 	ServiceRegistryAdd(fixture.table, parameterIO, op);

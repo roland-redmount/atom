@@ -14,6 +14,7 @@
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
+#include "library/MachineService.h"
 #include "library/math.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/TermBuilder.h"
@@ -747,6 +748,46 @@ void testCompileNegatedTerm(void)
 }
 
 
+/**
+ * Compile the query (number n square s) against rule
+ * 
+ *   number n square s <- lower 1 number n upper 4 & * n * n = s
+ * 
+ * where (lower number upper) is the computed range relation, yielding the numbers
+ * 1 to 4, and the JOIN evaluates the multiplication for each of them.
+ */
+void testCompileSquares(void)
+{
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"number _n square _s | ! lower 1 number _n upper 4 | ! * _n * _n = _s");
+	Formula * queryTerm = CStringToTerm("number _n square _s");
+
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Service service = services[0];
+
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
+	void * context = OperatorCreateContext(service.op, arguments);
+
+	for(int64 expected = 1; expected <= 4; expected++) {
+		ASSERT_TRUE(OperatorCall(context))
+		Atom n = TermGetRoleActor(queryTerm->form, arguments, "number", 1);
+		ASSERT_INT64_EQUAL(n._int, expected)
+		Atom s = TermGetRoleActor(queryTerm->form, arguments, "square", 1);
+		ASSERT_INT64_EQUAL(s._int, expected * expected)
+	}
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	ServiceRegistryRemove(service.relation, service.op);
+	RelationRegistryRemove(service.relation);
+	FreeFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -766,6 +807,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileRecursiveClosure);
 
 	ExecuteTest(testCompileNegatedTerm);
+	ExecuteTest(testCompileSquares);
 
 	// TODO: compiling a recursive rule over an infinite domain. The relation has no
 	// finite fixpoint and the call bindings n = 4, 3, 2, 1, 0, -1, -2, ... do not
@@ -773,6 +815,6 @@ int main(int argc, char * argv[])
 	// recursive clause; see the notes on termination in compiler.md.
 	// ExecuteTest(testCompileRecursiveJoin1);
 
-	MathTeardown();
+	FreeMachineServices();
 	TestSummary();
 }

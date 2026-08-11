@@ -23,6 +23,11 @@ void testGetAtomTypeName(void)
 void testAtomTypeFromString(void)
 {
 	ASSERT_UINT32_EQUAL(AtomTypeFromString("UINT", 4), AT_UINT)
+	// the last type name is as reachable as the first
+	ASSERT_UINT32_EQUAL(AtomTypeFromString("NAME", 4), AT_NAME)
+	ASSERT_UINT32_EQUAL(AtomTypeFromString("PARAMETER", 9), AT_PARAMETER)
+	// an unknown name is no type
+	ASSERT_UINT32_EQUAL(AtomTypeFromString("FROB", 4), 0)
 }
 
 

@@ -187,6 +187,10 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 					tokenizer->buffer.stringLength
 				);
 				StringBufferReset(&tokenizer->buffer);
+				// A parameter number is 1-based, so zero means the number is absent.
+				// Rejecting zero also rejects an empty number, which yields zero.
+				if(!tokenizer->data.parameter.number)
+					return false;
 				// continue with current character
 			}
 		}
@@ -335,6 +339,12 @@ Token CreateTokenFromCString(char const * cString)
 		if(tokenizer.isFull)
 			break;	// token complete before string ends
 	}
+	// A token running to the end of the string is completed by the terminator, as
+	// whitespace completes a token followed by another. A token ending in a character
+	// of its own, such as a quoted string, is already complete.
+	if(!tokenizer.isFull)
+		ASSERT(TokenizerPush(&tokenizer, 0));
+	ASSERT(TokenizerComplete(&tokenizer));
 	Token token = TokenizerGetToken(&tokenizer);
 	TokenizerCleanup(&tokenizer);
 	return token;

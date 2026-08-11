@@ -23,6 +23,9 @@ static OperatorContext * createChildContext(
  */
 static Operator * createOperator(enum OperatorType type, size8 nArguments, size32 contextSize)
 {
+	// Every operator provides a relation, and a relation has at least one column:
+	// its arity is that of a predicate form, which has at least one role
+	ASSERT(nArguments > 0)
 	Operator * op = Allocate(sizeof(Operator));
 	SetMemory(op, sizeof(Operator), 0);
 	op->type = type;
@@ -39,8 +42,11 @@ static Operator * createOperator(enum OperatorType type, size8 nArguments, size3
  */
 static void allocateIndexOrder(Operator * op)
 {
+	// A null index order means the operator declares none, yielding at most one tuple,
+	// so it must not be what an operator ends up with for want of arguments
 	ASSERT(!op->indexOrder)
-	op->indexOrder = op->nArguments ? Allocate(op->nArguments) : 0;
+	ASSERT(op->nArguments > 0)
+	op->indexOrder = Allocate(op->nArguments);
 }
 
 
@@ -1303,7 +1309,9 @@ static void recurseFinalizeContext(OperatorContext * context)
 
 static void machineSetupContext(OperatorContext * context)
 {
-	context->op->impl.machine.provider->setupContext(context);
+	MachineProvider * provider = context->op->impl.machine.provider;
+	if(provider->setupContext)
+		provider->setupContext(context);
 }
 
 
@@ -1322,9 +1330,10 @@ static void machineFinalizeContext(OperatorContext * context)
 
 
 Operator * CreateMachineOperator(
-	size8 nArguments, index8 const * indexOrder, MachineProvider * provider, void * providerData)
+	size8 nArguments, index8 const * indexOrder, MachineProvider * provider,
+	void * providerData, size32 contextSize)
 {
-	Operator * op = createOperator(OPERATOR_MACHINE, nArguments, provider->contextSize);
+	Operator * op = createOperator(OPERATOR_MACHINE, nArguments, contextSize);
 	op->impl.machine.provider = provider;
 	op->impl.machine.providerData = providerData;
 	// A provider yielding at most one tuple declares no order

@@ -464,10 +464,9 @@ void testIndexOrder(void)
 		.setupContext = 0,
 		.call = 0,
 		.finalizeContext = 0,
-		.finalizeOperator = 0,
-		.contextSize = 0
+		.finalizeOperator = 0
 	};
-	Operator * singleTupleOperator = CreateMachineOperator(2, 0, &singleTupleProvider, 0);
+	Operator * singleTupleOperator = CreateMachineOperator(2, 0, &singleTupleProvider, 0, 0);
 	ASSERT_NULL(singleTupleOperator->indexOrder)
 	Operator * singleTuplePermute = CreatePermuteOperator(
 		2, 0, 0, 0, (index8[]) {1, 0}, singleTupleOperator);

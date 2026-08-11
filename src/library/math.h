@@ -2,16 +2,15 @@
  * Library of machine services for basic math functions
  */
 
-#include "kernel/operator.h"
-
-
-// TODO: replace this with a service provider registry ...
-extern MachineProvider mathProvider;
+#ifndef MATH_H
+#define MATH_H
 
 
 /**
- * Register math services
+ * Register the math services. FreeMachineServices() removes them;
+ * see library/MachineService.h
  */
 void MathSetup(void);
 
-void MathTeardown(void);
+
+#endif	// MATH_H

@@ -3,6 +3,7 @@
 #include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"
+#include "kernel/Parameter.h"
 #include "kernel/string.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"
@@ -287,6 +288,37 @@ static void testClauseBuilder(void)
 }
 
 
+/**
+ * A service signature parses as an ordinary term whose actors are parameters.
+ * The actors are in canonical role order, which is not the order they are written in,
+ * so each parameter is found by its number rather than its position.
+ * This is what RegisterMachineService() relies on; see library/MachineService.h
+ */
+static void testCStringToSignature(void)
+{
+	Formula * signature = CStringToTerm("+ @1<INT + @2<INT = @3>INT");
+	ASSERT_UINT32_EQUAL(signature->actors->nAtoms, 3)
+
+	// every actor is a parameter, and the numbers are a permutation of 1..3
+	bool found[3] = {false, false, false};
+	for(index8 i = 0; i < 3; i++) {
+		TypedAtom actor = TypedTupleGetElement(signature->actors, i);
+		ASSERT_UINT32_EQUAL(actor.type, AT_PARAMETER)
+		ASSERT_UINT32_EQUAL(actor.atom.parameter.atomType, AT_INT)
+		index8 number = actor.atom.parameter.number;
+		ASSERT_TRUE((number >= 1) && (number <= 3))
+		ASSERT_FALSE(found[number - 1])
+		found[number - 1] = true;
+		// the two summands are inputs and the sum is the output
+		ASSERT_UINT32_EQUAL(
+			actor.atom.parameter.io,
+			(number == 3) ? PARAMETER_OUT : PARAMETER_IN
+		)
+	}
+	FreeFormula(signature);
+}
+
+
 static void testCStringToPredicate(void)
 {
 	char const * exampleString = "foo 123 baz \"foobar\" bar 456 bar 789";
@@ -373,6 +405,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testTermBuilder);
 	ExecuteTest(testClauseBuilder);
 	ExecuteTest(testCStringToPredicate);
+	ExecuteTest(testCStringToSignature);
 	ExecuteTest(testCStringToClause);
 	ExecuteTest(testCStringToConjunction);
 
