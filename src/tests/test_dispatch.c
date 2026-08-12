@@ -122,6 +122,78 @@ void testDispatchNegatedTerm(void)
 }
 
 
+/**
+ * A query leaving both arguments untyped matches one service per relation table
+ * registered for its form. The iterator visits those services in the order that
+ * DispatchQueryAt() enumerates them.
+ */
+void testDispatchIterator(void)
+{
+	Atom roles[2] = {
+		CreateNameFromCString("first"),
+		CreateNameFromCString("second")
+	};
+	Atom predicateForm = CreatePredicateForm(roles, 2);
+	Atom termForm = CreateTermForm(predicateForm, true);
+	for(index8 i = 0; i < 2; i++)
+		NameRelease(roles[i]);
+
+	// Two relation tables for the term form, one per combination of column types
+	RelationTable const * idTable = CreateRelationBTreeWithServices(
+		termForm, 2, (byte[]) {AT_ID, AT_ID}, (index8[]) {0, 1});
+	RelationTable const * uintTable = CreateRelationBTreeWithServices(
+		termForm, 2, (byte[]) {AT_ID, AT_UINT}, (index8[]) {0, 1});
+
+	// Only the service with two output parameters matches, so each table contributes
+	// one match
+	Formula * query = CStringToTerm("first _x second _y");
+	index8 permutation[2];
+	DispatchIterator iterator;
+	DispatchQueryIterate(query->form, query->actors, permutation, &iterator);
+
+	size8 nMatches = 0;
+	while(DispatchIteratorNext(&iterator)) {
+		// The match at this position is the one DispatchQueryAt() reaches by skipping
+		// the preceding matches
+		Service skipService;
+		index8 skipPermutation[2];
+		bool hasNextMatch;
+		ASSERT_TRUE(DispatchQueryAt(
+			query->form, query->actors, &skipService, skipPermutation, nMatches, &hasNextMatch))
+		Service const * service = DispatchIteratorPeekService(&iterator);
+		ASSERT_PTR_EQUAL(service->relation, skipService.relation)
+		ASSERT_PTR_EQUAL(service->op, skipService.op)
+		for(index8 i = 0; i < 2; i++)
+			ASSERT_UINT32_EQUAL(permutation[i], skipPermutation[i])
+
+		nMatches++;
+		ASSERT_TRUE(hasNextMatch == (nMatches < 2))
+	}
+	ASSERT_UINT32_EQUAL(nMatches, 2)
+	DispatchIteratorEnd(&iterator);
+
+	// An iterator abandoned before the last match is released just as well
+	DispatchQueryIterate(query->form, query->actors, permutation, &iterator);
+	ASSERT_TRUE(DispatchIteratorNext(&iterator))
+	DispatchIteratorEnd(&iterator);
+	FreeFormula(query);
+
+	// A query for a form with no relation table yields no match at all
+	Formula * unknownQuery = CStringToTerm("nowhere _x nothing _y");
+	DispatchQueryIterate(unknownQuery->form, unknownQuery->actors, permutation, &iterator);
+	ASSERT_FALSE(DispatchIteratorNext(&iterator))
+	DispatchIteratorEnd(&iterator);
+	FreeFormula(unknownQuery);
+
+	ServiceRegistryRemoveAll(uintTable);
+	RelationRegistryRemove(uintTable);
+	ServiceRegistryRemoveAll(idTable);
+	RelationRegistryRemove(idTable);
+	IFactRelease(termForm);
+	IFactRelease(predicateForm);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -130,6 +202,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testDispatchToService);
 	ExecuteTest(testDispatchRepeatedVariable);
 	ExecuteTest(testDispatchNegatedTerm);
+	ExecuteTest(testDispatchIterator);
 
 	FreeMachineServices();
 	KernelShutdown();

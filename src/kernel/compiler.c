@@ -209,7 +209,7 @@ static Operator * compileTerm(
 	size8 nArguments = termArity - nConstants;
 
 	// Compute the argument map for each service parameter, respecting the argument
-	// permutation obtained from DispatchQuery() above
+	// permutation obtained from dispatch above
 	index8 argumentMap[termArity];
 	Atom constants[termArity];
 	byte constantTypes[termArity];
