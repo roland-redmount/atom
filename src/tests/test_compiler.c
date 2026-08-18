@@ -21,10 +21,6 @@
 #include "testing/testing.h"
 
 
-// Upper bound on the number of services a single query may compile to
-#define MAX_COMPILED_SERVICES	4
-
-
 void testCompilePermute1(void)
 {
 	// This rule compiles to a PERMUTE service with no constants

@@ -98,18 +98,9 @@ static bool dispatchAtChoicePoint(
 }
 
 
-/**
- * Generate a parameters tuple from an actors tuple, such that each non-variable atom
- * in the actors tuple corresponds to an input parameter (with type preserved),
- * and each variable yields an output parameters. The output parameter types are
- * unknown and must be discovered later by matching against services.
- * The genererated parameter numbers are always equal to the tuple index (1-based).
- * 
- * NOTE: the parameters tuple could be an Atom[] as the type is constant, but this
- * currently doesn't fit with compileQuery() and downstream functions.
- */
-static void actorsToParameters(TypedTuple const * actors, TypedTuple * parameters)
+void GetQueryParameters(TypedTuple const * actors, TypedTuple * parameters)
 {
+	ASSERT(actors->nAtoms == parameters->nAtoms)
 	for(index8 i = 0; i < actors->nAtoms; i++) {
 		TypedAtom typedAtom = TypedTupleGetElement(actors, i);
 		if(typedAtom.type == AT_VARIABLE) {
@@ -1192,7 +1183,7 @@ size8 CompileQuery(Formula const * queryTerm, Service services[], size8 maxServi
 	// Generalize atoms in the query to parameters
 	size8 arity = queryTerm->actors->nAtoms;
 	TypedTuple * queryParameters = CreateTypedTuple(arity);
-	actorsToParameters(queryTerm->actors, queryParameters);
+	GetQueryParameters(queryTerm->actors, queryParameters);
 
 	PrintCString("\nCompileQuery()\nqueryParameters: ");
 	PrintFormActorsAsFormula(queryTerm->form, queryParameters);

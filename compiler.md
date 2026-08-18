@@ -333,6 +333,36 @@ with the fact `(integer 0 factorial 1)`, the call bindings run `n = 4, 3, 2, 1, 
 precondition `? < n > 0:`, which the language does not have yet. `testCompileRecursiveJoin1`
 is disabled for this reason.
 
+## Answering a user query
+
+A user asks a question, not for a service to be compiled: `(before x after y)` should
+give every fact the knowledge base entails, whether stored or derived, and the user has
+no way of knowing whether anything answers it yet. `UserQuery()` in `src/ui/query.c` is
+that entry point, one layer above the compiler and dispatch.
+
+It compiles a query the first time that query is asked, and is answered by the compiled
+services from then on. Whether a query has been asked before is decided by dispatching
+its **type**: the query generalized to parameters by `GetQueryParameters()`, which is the
+term form together with the direction and input type of each parameter. Two queries of one
+type compile to the same services, so a match means the compilation has happened, whether
+by an earlier query, by the kernel or by a stored relation registering its own services.
+
+The type is what has to be dispatched, not the query itself. The query
+
+    list "ab" position x element x
+
+matches no service at all, its repeated variable spanning a UINT column and a LETTER
+column, while its type `(list <ID position >UINT element >LETTER)` is a service the kernel
+registers. Dispatching the query would conclude that it has never been compiled, and
+compiling it would register that service a second time, which `ServiceRegistryAdd()`
+asserts against.
+
+The answer itself is a `MixedTypeRelation` over the query actors, which gathers the tuples
+of every matching service and applies the equality constraints of the query; see
+`MixedTypeRelation.h`. A query whose type compiles to nothing is compiled again every time
+it is asked. That costs a walk over the rules and registers nothing, and it is what lets a
+query start working once a rule answering it is asserted.
+
 ## Known gaps
 
 - **Preconditions**, needed to guard a recursive clause over an infinite domain, do not
@@ -345,3 +375,6 @@ is disabled for this reason.
   rather than only the tuples the previous round derived.
 - **Duplicate work across queries.** A fixpoint derives its relation afresh for every
   context, and nothing is memoized between queries.
+- **A compiled service is never invalidated.** A rule asserted after a query of its type
+  was compiled does not contribute to that query, as `UserQuery()` finds the service
+  compiled earlier and does not compile again.
