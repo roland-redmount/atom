@@ -105,6 +105,24 @@ static bool signatureQueryTupleMatch(
 }
 
 
+bool QueryEqualityMap(TypedTuple const * queryActors, index8 equalityMap[])
+{
+	bool hasRepeatedActor = false;
+	for(index8 i = 0; i < queryActors->nAtoms; i++) {
+		TypedAtom queryAtom = TypedTupleGetElement(queryActors, i);
+		equalityMap[i] = i;
+		for(index8 j = 0; j < i; j++) {
+			if(sameQueryAtom(queryAtom, TypedTupleGetElement(queryActors, j))) {
+				equalityMap[i] = j;
+				hasRepeatedActor = true;
+				break;
+			}
+		}
+	}
+	return hasRepeatedActor;
+}
+
+
 /**
  * Enumerate all possible argument permutations for the given form
  * and test each for a match against parametersList.
@@ -137,6 +155,9 @@ void DispatchQueryIterate(
 	iterator->queryActors = queryActors;
 	iterator->permutation = permutation;
 	iterator->inRelation = false;
+#ifdef DEBUG
+	iterator->previousMatchRelation = 0;
+#endif
 	// Iterate over relations matching the term form. Since a term form carries a sign,
 	// a query for (! even x) only reaches relations for the negated predicate.
 	// NOTE: this iteration order must be deterministic, as the compiler
@@ -171,6 +192,13 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 				// Copy the service, as a pointer into the service registry is only
 				// valid until the service iterator moves on.
 				iterator->service = *currentService;
+#ifdef DEBUG
+				// The services of one relation are visited in one run, so a second
+				// match in the relation just matched is a service that should never
+				// have been registered; see ServiceRegistryAdd()
+				ASSERT(relation != iterator->previousMatchRelation)
+				iterator->previousMatchRelation = relation;
+#endif
 				return true;
 			}
 		}

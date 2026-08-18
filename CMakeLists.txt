@@ -90,6 +90,7 @@ add_library(atom SHARED
     src/kernel/letter.c
     src/kernel/list.c
     src/kernel/lookup.c
+    src/kernel/MixedTypeRelation.c
     src/kernel/multiset.c
     src/kernel/Parameter.c
     src/kernel/RelationBTree.c
@@ -187,6 +188,7 @@ set(ATOM_TESTS_TIER2        # higher level kernel procedures
     test_dictionary
     test_compiler
     test_dispatch
+    test_mixed_type_relation
     test_unification
     test_machineservice
     test_math

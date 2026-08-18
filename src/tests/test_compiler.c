@@ -697,6 +697,7 @@ void testCompileRecursiveClosure(void)
 	teardownPrecSuccFixture();
 }
 
+
 /**
  * Compute the query (! even 3) against the rule
  * 

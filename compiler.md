@@ -121,6 +121,13 @@ asks for the nodes with an edge to themselves. The term compiles to the `(edge f
 service, and a `CONSTRAIN` operator above it keeps only the tuples whose `from` and `to`
 arguments agree. See `testCompileConstrain`.
 
+A variable repeated in the *query* is another matter, and not the compiler's. Every query
+actor becomes a parameter of its own when the query is parameterized, so the compiled
+service is the relation with the two positions left free, and dispatch matches on
+parameter types rather than on equality. The constraint is applied to the tuples as they
+are read, by the mixed type relation answering the query; see `MixedTypeRelation.h` and
+`testConcatRepeatedVariable`.
+
 ### A conjunction: JOIN
 
 With the rule and query above,

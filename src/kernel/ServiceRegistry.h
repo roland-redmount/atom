@@ -40,6 +40,13 @@ void SetupServiceRegistry(void);
  * Associates an operator with a relation in the service registry, giving a service.
  * Acquires a reference to the operator.
  * Returns a copy of the created service.
+ *
+ * The services of one relation have distinct parameter IO arrays, up to a permutation of
+ * the predicate form preserving the column atom types. Two services related by such a
+ * permutation are one service with its parameters renamed: they enumerate the same
+ * relation under the same bindings, and one query would then match both and receive
+ * every tuple twice. DEBUG builds assert this where it would take effect, in
+ * DispatchIteratorNext().
  */
 Service ServiceRegistryAdd(RelationTable const * relation, byte const parameterIO[], Operator * op);
 
