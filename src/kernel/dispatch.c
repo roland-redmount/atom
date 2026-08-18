@@ -105,6 +105,24 @@ static bool signatureQueryTupleMatch(
 }
 
 
+bool QueryEqualityMap(TypedTuple const * queryActors, index8 equalityMap[])
+{
+	bool hasRepeatedActor = false;
+	for(index8 i = 0; i < queryActors->nAtoms; i++) {
+		TypedAtom queryAtom = TypedTupleGetElement(queryActors, i);
+		equalityMap[i] = i;
+		for(index8 j = 0; j < i; j++) {
+			if(sameQueryAtom(queryAtom, TypedTupleGetElement(queryActors, j))) {
+				equalityMap[i] = j;
+				hasRepeatedActor = true;
+				break;
+			}
+		}
+	}
+	return hasRepeatedActor;
+}
+
+
 /**
  * Enumerate all possible argument permutations for the given form
  * and test each for a match against parametersList.
@@ -129,64 +147,115 @@ static bool permutationMatch(
 }
 
 
-bool DispatchQueryAt(
-	Atom queryTermForm, TypedTuple const * queryActors, Service * service,
-	index8 permutation[], size8 nSkip, bool * hasNextMatch)
+void DispatchQueryIterate(
+	Atom queryTermForm, TypedTuple const * queryActors, index8 permutation[], DispatchIterator * iterator)
 {
 	ASSERT(IsTermForm(queryTermForm))
 
-	bool match = false;
-	bool done = false;
-	// Number of matches seen so far, whether skipped or returned
-	index8 nMatches = 0;
-	if(hasNextMatch)
-		*hasNextMatch = false;
-	// permutationMatch() overwrites its permutation argument on every match,
-	// so probe into a scratch array to avoid clobbering the returned one.
-	size8 termArity = queryActors->nAtoms;
-	index8 candidatePermutation[termArity];
-
+	iterator->queryActors = queryActors;
+	iterator->permutation = permutation;
+	iterator->inRelation = false;
+#ifdef DEBUG
+	iterator->previousMatchRelation = 0;
+#endif
 	// Iterate over relations matching the term form. Since a term form carries a sign,
 	// a query for (! even x) only reaches relations for the negated predicate.
 	// NOTE: this iteration order must be deterministic, as the compiler
 	// identifies a choice point by the position of its match in this sequence.
-	RelationIterator relationIterator;
-	RelationRegistryIterate(queryTermForm, &relationIterator);
-	while(!done && RelationIteratorNext(&relationIterator)) {
-		RelationTable const * relation = RelationIteratorGet(&relationIterator);
+	RelationRegistryIterate(queryTermForm, &(iterator->relationIterator));
+}
+
+
+bool DispatchIteratorNext(DispatchIterator * iterator)
+{
+	while(true) {
+		if(!iterator->inRelation) {
+			if(!RelationIteratorNext(&(iterator->relationIterator)))
+				return false;
+			ServiceRegistryIterate(
+				RelationIteratorGet(&(iterator->relationIterator)), &(iterator->serviceIterator));
+			iterator->inRelation = true;
+		}
 
 		// Iterate over candidate services for the relation table
 		// TODO: this is inefficient, would be better to test once if the relation table
 		// atom types are compatible with the query, and only then iterate over services.
-		ServiceIterator serviceIterator;
-		ServiceRegistryIterate(relation, &serviceIterator);
-		while(!done && ServiceIteratorNext(&serviceIterator)) {
-			Service const * currentService = ServiceIteratorPeekService(&serviceIterator);
-			// The permutations of a term are those of its predicate form, the sign
-			// contributing none. The relation was found by iterating on the query
-			// term form, so its predicate form is the query's.
-			if(!permutationMatch(
+		RelationTable const * relation = RelationIteratorGet(&(iterator->relationIterator));
+		while(ServiceIteratorNext(&(iterator->serviceIterator))) {
+			Service const * currentService = ServiceIteratorPeekService(&(iterator->serviceIterator));
+			if(permutationMatch(
 				relation->predicateForm, relation->atomTypes, currentService->parameterIO,
-				queryActors, candidatePermutation))
-				continue;
-
-			if(match) {
-				// An additional match exists beyond the one we will return
-				*hasNextMatch = true;
-				done = true;
-			}
-			else if(nMatches++ >= nSkip) {
-				match = true;
-				// copy the service struct and its permutation to the caller
-				*service = *currentService;
-				CopyMemory(candidatePermutation, permutation, termArity * sizeof(index8));
-				// without a hasMore request we can stop at the first match
-				done = (hasNextMatch == 0);
+				iterator->queryActors, iterator->permutation))
+			{
+				// Copy the service, as a pointer into the service registry is only
+				// valid until the service iterator moves on.
+				iterator->service = *currentService;
+#ifdef DEBUG
+				// There should only be one service per relation matching the query. 
+				// A second match indicates a service that should never have been registered,
+				// so that the service registry is corrupted. See ServiceRegistryAdd()
+				ASSERT(relation != iterator->previousMatchRelation)
+				iterator->previousMatchRelation = relation;
+#endif
+				return true;
 			}
 		}
-		ServiceIteratorEnd(&serviceIterator);
+		ServiceIteratorEnd(&(iterator->serviceIterator));
+		iterator->inRelation = false;
 	}
-	RelationIteratorEnd(&relationIterator);
+}
+
+
+Service const * DispatchIteratorPeekService(DispatchIterator const * iterator)
+{
+	return &(iterator->service);
+}
+
+
+void DispatchIteratorEnd(DispatchIterator * iterator)
+{
+	if(iterator->inRelation) {
+		ServiceIteratorEnd(&(iterator->serviceIterator));
+		iterator->inRelation = false;
+	}
+	RelationIteratorEnd(&(iterator->relationIterator));
+}
+
+
+bool DispatchQueryAt(
+	Atom queryTermForm, TypedTuple const * queryActors, Service * service,
+	index8 permutation[], size8 nSkip, bool * hasNextMatch)
+{
+	// The iterator overwrites its permutation array on every match, so iterate into
+	// a scratch array to avoid clobbering the returned permutation.
+	size8 termArity = queryActors->nAtoms;
+	index8 candidatePermutation[termArity];
+	DispatchIterator iterator;
+	DispatchQueryIterate(queryTermForm, queryActors, candidatePermutation, &iterator);
+
+	bool match = false;
+	// Number of matches seen so far, whether skipped or returned
+	size8 nMatches = 0;
+	if(hasNextMatch)
+		*hasNextMatch = false;
+
+	while(DispatchIteratorNext(&iterator)) {
+		if(match) {
+			// An additional match exists beyond the one we return
+			*hasNextMatch = true;
+			break;
+		}
+		if(nMatches++ >= nSkip) {
+			match = true;
+			// copy the service struct and its permutation to the caller
+			*service = *DispatchIteratorPeekService(&iterator);
+			CopyMemory(candidatePermutation, permutation, termArity * sizeof(index8));
+			// without a hasNextMatch request we can stop at the first match
+			if(hasNextMatch == 0)
+				break;
+		}
+	}
+	DispatchIteratorEnd(&iterator);
 
 	return match;
 }

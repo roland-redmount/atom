@@ -1,4 +1,5 @@
 {
+	"editor.quickSuggestionsDelay": 700,
 	"editor.tokenColorCustomizations": {
 		"textMateRules": [
 			{
@@ -49,5 +50,14 @@
 	"C_Cpp.files.exclude": {
 		"coverage/**": true,
 		"build/**": true
+	},
+	"workbench.experimental.modernUI": false,
+	"window.titleBarStyle": "custom",
+	"workbench.colorCustomizations": {
+		"activityBar.background": "#121314",
+		"titleBar.activeBackground": "#8E0A2A",
+		"titleBar.activeForeground": "#FFFFFF",
+		"titleBar.inactiveBackground": "#5A0F1F",
+		"titleBar.inactiveForeground": "#D3D3D3"
 	}
 }
