@@ -12,6 +12,10 @@
 #include "kernel/typedtuple.h"
 
 
+// A B-tree relation registers one service per prefix of its index columns, and one
+// more enumerating the whole relation; see CreateRelationBTreeWithServices()
+#define RELATION_FIXTURE_N_SERVICES(nColumns)	((nColumns) + 1)
+
 // Upper bounds on a fixture relation, large enough for the fixtures here
 #define FIXTURE_MAX_COLUMNS		4
 #define FIXTURE_MAX_TUPLES		8
@@ -76,6 +80,7 @@ void TeardownRelationFixture(RelationFixture * fixture);
  * literal, and a bare word is a role name to the parser.
  */
 #define PREC_SUCC_N_EDGES			5
+#define PREC_SUCC_N_SERVICES		RELATION_FIXTURE_N_SERVICES(2)
 #define PREC_SUCC_N_CLOSURE_TUPLES	10
 
 void SetupPrecSuccFixture(RelationFixture * fixture);

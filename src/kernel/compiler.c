@@ -1091,7 +1091,7 @@ static void registerTemporaryServices(
 		size8 nInputs = findInputArguments(parameterIO, queryTermArity, inputArguments);
 
 		Operator * recurseOperator = CreateRecurseOperator(queryTermArity, inputArguments, nInputs);
-		ServiceRegistryAdd(variant->relation, parameterIO, recurseOperator);
+		ServiceRegistryAdd(variant->relation, parameterIO, recurseOperator, SERVICE_TEMPORARY);
 		variant->recurseOperators[boundOutputs] = recurseOperator;
 	}
 }
@@ -1197,7 +1197,8 @@ size8 CompileQuery(Formula const * queryTerm, Service services[], size8 maxServi
 		byte atomTypes[arity];
 		byte parameterIO[arity];
 		getVariantSignature(&variants[i], atomTypes, parameterIO);
-		services[i] = ServiceRegistryAdd(variants[i].relation, parameterIO, variants[i].op);
+		services[i] = ServiceRegistryAdd(
+			variants[i].relation, parameterIO, variants[i].op, SERVICE_COMPILED);
 		ReleaseOperator(variants[i].op);
 		FreeTypedTuple(variants[i].parameters);
 	}

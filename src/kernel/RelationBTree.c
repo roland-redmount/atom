@@ -436,7 +436,7 @@ RelationTable const * CreateRelationBTreeWithServicesBootstrap(
 			else
 				parameterIO[indexColumns[i]] = PARAMETER_OUT;
 		}
-		ServiceRegistryAdd(table, parameterIO, op);
+		ServiceRegistryAdd(table, parameterIO, op, SERVICE_PRIMITIVE);
 		// The registry now holds the reference to the operator
 		ReleaseOperator(op);
 	}

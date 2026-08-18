@@ -31,8 +31,9 @@
  * asked. Compiling nothing registers nothing, so this costs a walk over the rules and
  * no more, and it lets a query start working once a rule that answers it is asserted.
  *
- * NOTE: nothing invalidates a compiled service when the knowledge base changes. A rule
- * asserted after a query of its form was compiled does not contribute to that query.
+ * NOTE: a compiled service is a cache over the knowledge base, and is removed again when
+ * a change to the facts or the rules could alter what it yields, so that the next query
+ * of its type compiles it anew; see ServiceRegistryInvalidateTermForm().
  */
 MixedTypeRelation * UserQuery(Formula const * queryTerm);
 

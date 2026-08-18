@@ -1,8 +1,7 @@
 
-#include "kernel/compiler.h"
 #include "kernel/dictionary.h"
-#include "kernel/dispatch.h"
 #include "kernel/kernel.h"
+#include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
@@ -14,28 +13,6 @@
 
 
 static RelationFixture precSuccFixture;
-
-
-/**
- * Remove every service compiled for the given query, and the relations they belong to.
- * A test that compiles a query must leave the registries as it found them.
- */
-static void removeQueryServices(char const * queryString)
-{
-	Formula * query = CStringToTerm(queryString);
-	size8 arity = query->actors->nAtoms;
-	TypedTuple * parameters = CreateTypedTuple(arity);
-	GetQueryParameters(query->actors, parameters);
-
-	Service service;
-	index8 permutation[arity];
-	while(DispatchQuery(query->form, parameters, &service, permutation)) {
-		ServiceRegistryRemoveAll(service.relation);
-		RelationRegistryRemove(service.relation);
-	}
-	FreeTypedTuple(parameters);
-	FreeFormula(query);
-}
 
 
 /**
@@ -91,7 +68,6 @@ void testQueryCompilesOnce(void)
 	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
-	removeQueryServices("before _x after _y");
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
 	TeardownRelationFixture(&precSuccFixture);
@@ -121,7 +97,6 @@ void testQueryTypeIsParameterDirections(void)
 	ASSERT_UINT32_EQUAL(countQueryTuples("before \"a\" after _y"), 3)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 2)
 
-	removeQueryServices("before _x after _y");
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
 	TeardownRelationFixture(&precSuccFixture);
@@ -151,7 +126,6 @@ void testQueryRepeatedVariable(void)
 	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position _x element _x"), 0)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
-	removeQueryServices("before _x after _y");
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
 	TeardownRelationFixture(&precSuccFixture);
@@ -174,6 +148,88 @@ void testQueryWithoutAnswer(void)
 }
 
 
+/**
+ * A compiled service is a cache over the knowledge base. A relation of the same term form
+ * appearing gives a query one more relation to match, so the service is removed and the
+ * next query compiles it again; removing the relation it was compiled from removes it for
+ * good.
+ */
+void testQueryInvalidatedByRelation(void)
+{
+	SetupPrecSuccFixture(&precSuccFixture);
+	DictionaryEntry entry1;
+	DictionaryEntry entry2;
+	AddTransitiveClosureRules(&entry1, &entry2);
+	size32 nServices = ServiceRegistryCount();
+
+	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), PREC_SUCC_N_CLOSURE_TUPLES)
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
+
+	// A second relation of the (prec succ) form, whose services the compiled one knows
+	// nothing of
+	RelationTable const * uintTable = CreateRelationBTreeWithServices(
+		precSuccFixture.termForm, 2, (byte[]) {AT_ID, AT_UINT}, (index8[]) {0, 1});
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
+
+	// Asking again compiles the query anew, over both relations, and the new one holds
+	// no tuples to add
+	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), PREC_SUCC_N_CLOSURE_TUPLES)
+	ASSERT_TRUE(ServiceRegistryNCompiled() > 0)
+
+	// Removing that relation again takes the service compiled over it, and only that
+	// one: the service over the remaining relation still answers what it always did
+	ServiceRegistryRemoveAll(uintTable);
+	RelationRegistryRemove(uintTable);
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
+	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), PREC_SUCC_N_CLOSURE_TUPLES)
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
+
+	// Removing the relation the service was compiled from takes the service with it,
+	// and the computed relation it answered
+	TeardownRelationFixture(&precSuccFixture);
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
+	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices - PREC_SUCC_N_SERVICES)
+
+	DictionaryRemoveClause(&entry2);
+	DictionaryRemoveClause(&entry1);
+}
+
+
+/**
+ * A rule asserted after a query of its form was compiled has to reach that query, so
+ * adding or removing a rule removes the compiled services of every term form the rule
+ * mentions. Here the recursive rule turns the edges of the graph into its closure.
+ */
+void testQueryInvalidatedByRule(void)
+{
+	SetupPrecSuccFixture(&precSuccFixture);
+	DictionaryEntry baseEntry = DictionaryAddClauseFromCString(
+		"before _x after _y | ! prec _x succ _y");
+	size32 nServices = ServiceRegistryCount();
+
+	// With the base rule alone, the derived relation is the edge relation itself
+	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), PREC_SUCC_N_EDGES)
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
+
+	// The recursive rule makes the same query a different question
+	DictionaryEntry recursiveEntry = DictionaryAddClauseFromCString(
+		"before _x after _y | ! prec _x succ _z | ! before _z after _y");
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
+	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), PREC_SUCC_N_CLOSURE_TUPLES)
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
+
+	// And removing it again makes it the first question once more
+	DictionaryRemoveClause(&recursiveEntry);
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
+	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), PREC_SUCC_N_EDGES)
+
+	DictionaryRemoveClause(&baseEntry);
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
+	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices)
+	TeardownRelationFixture(&precSuccFixture);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -183,6 +239,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testQueryTypeIsParameterDirections);
 	ExecuteTest(testQueryRepeatedVariable);
 	ExecuteTest(testQueryWithoutAnswer);
+	ExecuteTest(testQueryInvalidatedByRelation);
+	ExecuteTest(testQueryInvalidatedByRule);
 
 	FreeMachineServices();
 	KernelShutdown();

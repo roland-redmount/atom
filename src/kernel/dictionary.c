@@ -1,11 +1,14 @@
 #include "btree/btree.h"
 #include "kernel/dictionary.h"
 #include "kernel/list.h"
+#include "kernel/multiset.h"
+#include "kernel/ServiceRegistry.h"
 #include "kernel/typedtuple.h"
 #include "lang/Formula.h"
 #include "lang/ClauseForm.h"
 #include "memory/allocator.h"
 #include "parser/ClauseBuilder.h"
+#include "util/ResizingArray.h"
 
 
 struct {
@@ -69,12 +72,43 @@ static void setupEntry(DictionaryEntry * entry, Atom clauseForm, TypedTuple cons
 }
 
 
+/**
+ * Invalidate any compiled services that given clause form could have contributed to,
+ * which may now be stale. The compiler resolves a query against the clauses whose form contains
+ * the query term form, so it is sufficient to invalidate services associated with any of the
+ * term forms in the given clause. See compileQueryClauses().
+ */
+static void invalidateClauseServices(Atom clauseForm)
+{
+	if(ServiceRegistryNCompiled() == 0)
+		return;
+
+	// Collect the term forms before invalidating any service: the multiset iterator
+	// evaluates a service of its own, and invalidation removes services
+	ResizingArray termForms;
+	CreateResizingArray(&termForms, sizeof(Atom), 8);
+	MultisetIterator iterator;
+	MultisetIterate(clauseForm, AT_ID, &iterator);
+	while(MultisetIteratorNext(&iterator)) {
+		ElementMultiple element = MultisetIteratorGetElement(&iterator);
+		ResizingArrayAppend(&termForms, &(element.element));
+	}
+	MultisetIteratorEnd(&iterator);
+
+	// Invalidate all term forms
+	for(index32 i = 0; i < ResizingArrayNElements(&termForms); i++)
+		ServiceRegistryInvalidateByTermForm(*(Atom *) ResizingArrayGetElement(&termForms, i));
+	FreeResizingArray(&termForms);
+}
+
+
 DictionaryEntry DictionaryAddClause(Formula const * clause)
 {
 	ASSERT(FormulaIsClause(clause))
 	DictionaryEntry entry;
 	setupEntry(&entry, clause->form, clause->actors);
 	ASSERT(BTreeInsert(dictionary.btree, &entry) == BTREE_INSERTED)
+	invalidateClauseServices(entry.clauseForm);
 	return entry;
 }
 
@@ -90,6 +124,9 @@ DictionaryEntry DictionaryAddClauseFromCString(const char * clauseString)
 
 void DictionaryRemoveClause(DictionaryEntry * entry)
 {
+	// Invalidate before the entry goes: the clause form is released with it, and the
+	// compiled services are stale either way
+	invalidateClauseServices(entry->clauseForm);
 	ASSERT(BTreeDelete(dictionary.btree, entry, 0) == BTREE_DELETED)
 }
 
@@ -97,6 +134,7 @@ void DictionaryRemoveClause(DictionaryEntry * entry)
 void DictionaryRemoveAll(void)
 {
 	BTreeClear(dictionary.btree);
+	ServiceRegistryInvalidateAll();
 }
 
 

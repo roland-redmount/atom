@@ -1359,6 +1359,59 @@ static void teardownMachineOperator(Operator * op)
 //------------------------------------- Generic Operator -----------------------------------------
 
 
+size8 OperatorNChildren(Operator const * op)
+{
+	switch(op->type) {
+	case OPERATOR_JOIN:
+	case OPERATOR_UNION:
+		return 2;
+
+	case OPERATOR_PERMUTE:
+	case OPERATOR_PROJECT:
+	case OPERATOR_CONSTRAIN:
+	case OPERATOR_FIXPOINT:
+		return 1;
+
+	case OPERATOR_MACHINE:
+	case OPERATOR_RECURSE:
+		return 0;
+
+	default:
+		ASSERT(false)
+		return 0;
+	}
+}
+
+
+Operator * OperatorGetChild(Operator const * op, index8 index)
+{
+	ASSERT(index < OperatorNChildren(op))
+	switch(op->type) {
+	case OPERATOR_PERMUTE:
+		return op->impl.permute.childOperator;
+
+	case OPERATOR_JOIN:
+		return index ? op->impl.join.right : op->impl.join.left;
+
+	case OPERATOR_UNION:
+		return index ? op->impl._union.second : op->impl._union.first;
+
+	case OPERATOR_PROJECT:
+		return op->impl.project.childOperator;
+
+	case OPERATOR_CONSTRAIN:
+		return op->impl.constrain.childOperator;
+
+	case OPERATOR_FIXPOINT:
+		return op->impl.fixpoint.childOperator;
+
+	default:
+		ASSERT(false)
+		return 0;
+	}
+}
+
+
 void AcquireOperator(Operator * op)
 {
 	op->referenceCount++;

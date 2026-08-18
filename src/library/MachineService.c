@@ -180,7 +180,7 @@ Service RegisterMachineService(
 	Operator * op = CreateMachineOperator(
 		arity, indexOrder, &machineServiceProvider, data,
 		sizeof(MachineServiceContext) + stateSize);
-	Service service = ServiceRegistryAdd(relation, parameterIO, op);
+	Service service = ServiceRegistryAdd(relation, parameterIO, op, SERVICE_PRIMITIVE);
 	// the service registry now holds the reference to the operator
 	ReleaseOperator(op);
 	FreeFormula(term);

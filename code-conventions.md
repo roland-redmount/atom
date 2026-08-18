@@ -99,6 +99,14 @@ int add2(int x, int negate)
 which allow for the more readable `add2(42, NEGATE)`. An `enum` type can also be used.
 
 
+## Tests for null values
+
+While tests like `if(x == 0)` and `if(!x)` are equivalent, they have different connotations. The form `x == 0` should
+be used whenever `x` represents a quantity, as in `if(numberOfApples == 0) {...}`. The form `!x` should be used
+when 0 indicates a null / absent value: this applies if $x$ is a pointer, but also if `x` is an integer type where the
+0 value indicates absent, such as with a 1-based index where 0 means "no index".
+
+
 ## Error handling
 
 Functions generally assume that they are provided valid arguments -- that data structures are properly filled in, pointers are not null, array indexes are within range, &c. We use the `ASSERT()` macro to verify such assumptions in debug builds; violation of the condition of an `ASSERT()` is considered programmer error, and should never occur. Functions do not have to test for programmer errors, return error codes, and callers don't have to test for error codes. It is assumed that functions work correctly when given correct arguments, and it is the callers responsibility to provide correct arguments. In release builds, a violated `ASSERT()` will lead to undefined behavior.

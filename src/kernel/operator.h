@@ -410,6 +410,20 @@ Operator * CreateRecurseOperator(
 size32 FixpointNDerivedTuples(OperatorContext const * context);
 
 /**
+ * Number of child operators of the given operator, which is 0 for a machine or recurse
+ * operator, those being the leaves of an operator tree.
+ */
+size8 OperatorNChildren(Operator const * op);
+
+/**
+ * The child operator at the given index, which must be below OperatorNChildren().
+ * The children are given in evaluation order, so the left child of a join operator
+ * comes before its right child.
+ */
+Operator * OperatorGetChild(Operator const * op, index8 index);
+
+
+/**
  * Acquire a reference to an operator.
  */
 void AcquireOperator(Operator * op);
