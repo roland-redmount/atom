@@ -97,10 +97,10 @@ static int8 btreeCompareServices(void const * item, void const * itemOrKey, size
 
 
 /**
- * Order service locations by operator, and by relation within one operator.
+ * Order OperatorRelation records by operator, the by relation.
  * A null relation is a prefix key matching every service of the operator.
  */
-static int8 btreeCompareServiceLocations(void const * item, void const * itemOrKey, size32 itemSize)
+static int8 btreeCompareOperatorRelations(void const * item, void const * itemOrKey, size32 itemSize)
 {
 	OperatorRelation const * record = item;
 	OperatorRelation const * recordOrKey = itemOrKey;
@@ -119,23 +119,22 @@ static int8 btreeCompareServiceLocations(void const * item, void const * itemOrK
 
 
 /**
- * Order dependencies by the operator depended on, and by the dependent operator within
- * one dependency. A null dependent is a prefix key matching every dependent of the
- * operator.
+ * Order OperatorDependency records by the the dependency, then by the dependent operator.
+ * A null dependent is a prefix key matching every dependent of the operator.
  */
 static int8 btreeCompareDependencies(void const * item, void const * itemOrKey, size32 itemSize)
 {
-	OperatorDependency const * dependency = item;
-	OperatorDependency const * dependencyOrKey = itemOrKey;
-	if(dependency->dependency < dependencyOrKey->dependency)
+	OperatorDependency const * record = item;
+	OperatorDependency const * recordOrKey = itemOrKey;
+	if(record->dependency < recordOrKey->dependency)
 		return -1;
-	if(dependency->dependency > dependencyOrKey->dependency)
+	if(record->dependency > recordOrKey->dependency)
 		return 1;
-	if(!dependencyOrKey->dependent)
+	if(!recordOrKey->dependent)
 		return 0;
-	if(dependency->dependent < dependencyOrKey->dependent)
+	if(record->dependent < recordOrKey->dependent)
 		return -1;
-	if(dependency->dependent > dependencyOrKey->dependent)
+	if(record->dependent > recordOrKey->dependent)
 		return 1;
 	return 0;
 }
@@ -149,7 +148,7 @@ void SetupServiceRegistry(void)
 		btreeCompareServices,
 		btreeFreeService
 	);
-	operatorRelations = BTreeCreate(sizeof(OperatorRelation), btreeCompareServiceLocations, 0);
+	operatorRelations = BTreeCreate(sizeof(OperatorRelation), btreeCompareOperatorRelations, 0);
 	dependencies = BTreeCreate(sizeof(OperatorDependency), btreeCompareDependencies, 0);
 	nCompiledServices = 0;
 }

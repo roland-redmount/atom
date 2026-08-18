@@ -118,9 +118,7 @@ void testAddRemoveService(void)
 
 
 /**
- * A compiled service is a cache over the knowledge base: it is removed again when a
- * service it is built on is removed, and so is every compiled service built on it. The
- * computed relation a compiled service leaves without services goes with it.
+ * Test that compiled services are removed when their dependencies are removed.
  */
 void testInvalidateDependentServices(void)
 {
@@ -128,21 +126,24 @@ void testInvalidateDependentServices(void)
 	byte parameterIO[EXAMPLE_FORM_ARITY] = {
 		PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT};
 
-	// The service the compiled ones are built on
+	// Create dummy machine service
 	Operator * machineOperator = createDummyMachineOperator();
 	ServiceRegistryAdd(fixture.table, parameterIO, machineOperator, SERVICE_PRIMITIVE);
 
-	// Two compiled services, the second built on the first
+	// Hand-build a "compiled" service that depends on the machine service
 	byte firstTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_INT, AT_UINT};
-	byte secondTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_UINT, AT_UINT};
 	RelationTable const * firstRelation = createComputedRelation(firstTypes);
-	RelationTable const * secondRelation = createComputedRelation(secondTypes);
 	Operator * firstOperator = addCompiledService(firstRelation, machineOperator);
+
+	// A second "compiled" service that depends on the first one
+	byte secondTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_UINT, AT_UINT};
+	RelationTable const * secondRelation = createComputedRelation(secondTypes);
 	addCompiledService(secondRelation, firstOperator);
+
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 2)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nCoreServices + 3)
 
-	// Removing the service both are built on takes them and their relations along
+	// Removing the machine service should remove both dependent services
 	ServiceRegistryRemove(fixture.table, machineOperator);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nCoreServices)
@@ -156,8 +157,8 @@ void testInvalidateDependentServices(void)
 
 
 /**
- * Registering a primitive service gives a query of its term form one more relation to
- * match, so whatever was compiled for that form is incomplete and goes.
+ * Registering a primitive service (SERVICE_PRIMITIVE) gives a query of its term form
+ * one more relation to match, so compiled services depending on this form must be invalidated.
  */
 void testInvalidateOnPrimitiveService(void)
 {
@@ -165,18 +166,22 @@ void testInvalidateOnPrimitiveService(void)
 	byte parameterIO[EXAMPLE_FORM_ARITY] = {
 		PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT};
 
+	// Register a dummy machine service
 	Operator * machineOperator = createDummyMachineOperator();
 	ServiceRegistryAdd(fixture.table, parameterIO, machineOperator, SERVICE_PRIMITIVE);
 
+	// Create a "compiled" relation depending on the machine service
 	byte compiledTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_INT, AT_UINT};
 	RelationTable const * compiledRelation = createComputedRelation(compiledTypes);
 	addCompiledService(compiledRelation, machineOperator);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
 
-	// A second relation of the fixture form, with a primitive service of its own
+	// Create a second relation of the fixture form, with distinct atom types,
+	// and associated primitive services
 	byte storedTypes[EXAMPLE_FORM_ARITY] = {AT_UINT, AT_UINT, AT_UINT, AT_UINT};
 	RelationTable const * storedRelation = CreateRelationBTreeWithServices(
 		fixture.form, EXAMPLE_FORM_ARITY, storedTypes, (index8[]) {0, 1, 2, 3});
+	// The above compiled service should now be invalidated
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
 	ASSERT_NULL(RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, compiledTypes))
 
@@ -189,9 +194,9 @@ void testInvalidateOnPrimitiveService(void)
 
 
 /**
- * A term needing neither reordering nor constants compiles to the service it matched, so
- * a compiled service may be nothing but another service's operator. It is built on that
- * service all the same, and goes when it does.
+ * Test that two a compiled services sharing the same operator as another service
+ * is invalidated when the operator is removed.
+ * See removeOperatorServices() in ServiceRegistry.c for details.
  */
 void testInvalidateSharedOperator(void)
 {
@@ -199,14 +204,17 @@ void testInvalidateSharedOperator(void)
 	byte parameterIO[EXAMPLE_FORM_ARITY] = {
 		PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT};
 
+	// Register a "dummy" machine service
 	Operator * machineOperator = createDummyMachineOperator();
 	ServiceRegistryAdd(fixture.table, parameterIO, machineOperator, SERVICE_PRIMITIVE);
 
+	// Register a second service using the same machine operator
 	byte compiledTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_INT, AT_UINT};
 	RelationTable const * compiledRelation = createComputedRelation(compiledTypes);
 	ServiceRegistryAdd(compiledRelation, parameterIO, machineOperator, SERVICE_COMPILED);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
 
+	// Removing the machine service invalidates the compiled service
 	ServiceRegistryRemove(fixture.table, machineOperator);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
 	ASSERT_NULL(RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, compiledTypes))
