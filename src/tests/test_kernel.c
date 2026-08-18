@@ -2,25 +2,19 @@
 #include "kernel/Int.h"
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
-#include "lang/name.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/string.h"
-#include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
 #include "memory/allocator.h"
+#include "testing/fixtures.h"
 #include "testing/testing.h"
 
 
 void testAssertRetract(void)
 {
 	// term form (foo bar)
-	Atom roles[2] = {CreateNameFromCString("foo"), CreateNameFromCString("bar")};
 	byte atomTypes[2] = {AT_ID, AT_INT};
-	Atom predicateForm = CreatePredicateForm(roles, 2);
-	Atom form = CreateTermForm(predicateForm, true);
-	IFactRelease(predicateForm);
-	NameRelease(roles[0]);
-	NameRelease(roles[1]);
+	Atom form = CreateTermFormFromRoleNames((char const * []) {"foo", "bar"}, 2, true);
 
 	// check that relation table does not already exist
 	ASSERT_NULL(RelationRegistryFind(form, 2, atomTypes))

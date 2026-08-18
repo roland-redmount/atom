@@ -18,6 +18,7 @@
 #include "library/math.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/TermBuilder.h"
+#include "testing/fixtures.h"
 #include "testing/testing.h"
 
 
@@ -286,67 +287,7 @@ void testCompileUnion(void)
 }
 
 
-// A directed graph (edge:ID from:ID to:ID), two of whose edges are self edges
-#define TEST_N_EDGES	4
-
-static struct {
-	Atom form;
-	RelationTable const * table;
-	TypedTuple * tuples[TEST_N_EDGES];
-} edgeFixture;
-
-
-static void setupEdgeFixture(void)
-{
-	Atom roles[3] = {
-		CreateNameFromCString("edge"),
-		CreateNameFromCString("from"),
-		CreateNameFromCString("to")
-	};
-	Atom predicateForm = CreatePredicateForm(roles, 3);
-	edgeFixture.form = CreateTermForm(predicateForm, true);
-	index8 edgeIndex = PredicateRoleIndex(predicateForm, roles[0]);
-	index8 fromIndex = PredicateRoleIndex(predicateForm, roles[1]);
-	index8 toIndex = PredicateRoleIndex(predicateForm, roles[2]);
-	IFactRelease(predicateForm);
-	for(index8 i = 0; i < 3; i++)
-		NameRelease(roles[i]);
-
-	byte atomTypes[3] = {AT_ID, AT_ID, AT_ID};
-	edgeFixture.table = CreateRelationBTreeWithServices(
-		edgeFixture.form, 3, atomTypes, (index8[]) {0, 1, 2});
-
-	// The graph a -> b, a -> a, b -> b, b -> c. Strings are lists of letters,
-	// so the edges are named ep..es rather than e1..e4, and their letters are
-	// kept clear of the node names.
-	char const * edgeNames[TEST_N_EDGES] = {"ep", "eq", "er", "es"};
-	char const * fromNames[TEST_N_EDGES] = {"a", "a", "b", "b"};
-	char const * toNames[TEST_N_EDGES] = {"b", "a", "b", "c"};
-	for(index8 i = 0; i < TEST_N_EDGES; i++) {
-		TypedAtom actors[3];
-		actors[edgeIndex] = CreateTypedAtom(AT_ID, CreateStringFromCString(edgeNames[i]));
-		actors[fromIndex] = CreateTypedAtom(AT_ID, CreateStringFromCString(fromNames[i]));
-		actors[toIndex] = CreateTypedAtom(AT_ID, CreateStringFromCString(toNames[i]));
-		edgeFixture.tuples[i] = CreateTypedTupleFromArray(actors, 3);
-		// the relation table now holds a reference to each atom
-		AssertFact(edgeFixture.form, edgeFixture.tuples[i], 0);
-		for(index8 j = 0; j < 3; j++)
-			ReleaseTypedAtom(actors[j]);
-	}
-}
-
-
-static void teardownEdgeFixture(void)
-{
-	// the relation table must be empty before it can be removed
-	for(index8 i = 0; i < TEST_N_EDGES; i++) {
-		RetractFact(edgeFixture.form, edgeFixture.tuples[i]);
-		FreeTypedTuple(edgeFixture.tuples[i]);
-	}
-	ServiceRegistryRemoveAll(edgeFixture.table);
-	RelationRegistryRemove(edgeFixture.table);
-	IFactRelease(edgeFixture.form);
-}
+static RelationFixture edgeFixture;
 
 
 /**
@@ -357,7 +298,7 @@ static void teardownEdgeFixture(void)
  */
 void testCompileConstrain(void)
 {
-	setupEdgeFixture();
+	SetupEdgeFixture(&edgeFixture);
 
 	// self x <- edge e from x to x
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
@@ -395,7 +336,7 @@ void testCompileConstrain(void)
 	RelationRegistryRemove(services[0].relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
-	teardownEdgeFixture();
+	TeardownRelationFixture(&edgeFixture);
 }
 
 
@@ -449,85 +390,8 @@ void testCompileRecursiveJoin1(void)
 	DictionaryRemoveClause(&entry);
 }
 
-/**
- * The relation (prec x succ y), x immediately preceding y, holding the graph
- *
- *   a -> b -> c -> d      with c -> b closing a cycle
- *   e -> f                a component nothing reaches from a
- *
- * The nodes are strings, and so are written quoted in a query: an actor must be a
- * literal, and a bare word is a role name to the parser. The relation is stored ordered
- * by the prec role, so that it can be looked up on it.
- */
-#define TEST_N_PREC_SUCC_EDGES	5
 
-// Tuples in the transitive closure of the whole graph: three from each of a, b and c,
-// and the single edge of the other component
-#define TEST_N_CLOSURE_TUPLES	10
-
-static struct {
-	Atom form;
-	index8 precIndex;
-	index8 succIndex;
-	RelationTable const * table;
-	TypedTuple * tuples[TEST_N_PREC_SUCC_EDGES];
-} precSuccFixture;
-
-
-static void setupPrecSuccFixture(void)
-{
-	Atom roles[2] = {
-		CreateNameFromCString("prec"),
-		CreateNameFromCString("succ")
-	};
-	Atom predicateForm = CreatePredicateForm(roles, 2);
-	precSuccFixture.form = CreateTermForm(predicateForm, true);
-	precSuccFixture.precIndex = PredicateRoleIndex(predicateForm, roles[0]);
-	precSuccFixture.succIndex = PredicateRoleIndex(predicateForm, roles[1]);
-	IFactRelease(predicateForm);
-	for(index8 i = 0; i < 2; i++)
-		NameRelease(roles[i]);
-
-	precSuccFixture.table = CreateRelationBTreeWithServices(
-		precSuccFixture.form, 2, (byte[]) {AT_ID, AT_ID},
-		(index8[]) {precSuccFixture.precIndex, precSuccFixture.succIndex});
-
-	char const * precNames[TEST_N_PREC_SUCC_EDGES] = {"a", "b", "c", "c", "e"};
-	char const * succNames[TEST_N_PREC_SUCC_EDGES] = {"b", "c", "d", "b", "f"};
-	for(index8 i = 0; i < TEST_N_PREC_SUCC_EDGES; i++) {
-		TypedAtom actors[2];
-		actors[precSuccFixture.precIndex] =
-			CreateTypedAtom(AT_ID, CreateStringFromCString(precNames[i]));
-		actors[precSuccFixture.succIndex] =
-			CreateTypedAtom(AT_ID, CreateStringFromCString(succNames[i]));
-		precSuccFixture.tuples[i] = CreateTypedTupleFromArray(actors, 2);
-		AssertFact(precSuccFixture.form, precSuccFixture.tuples[i], 0);
-		for(index8 j = 0; j < 2; j++)
-			ReleaseTypedAtom(actors[j]);
-	}
-}
-
-
-static void teardownPrecSuccFixture(void)
-{
-	for(index8 i = 0; i < TEST_N_PREC_SUCC_EDGES; i++) {
-		RetractFact(precSuccFixture.form, precSuccFixture.tuples[i]);
-		FreeTypedTuple(precSuccFixture.tuples[i]);
-	}
-	ServiceRegistryRemoveAll(precSuccFixture.table);
-	RelationRegistryRemove(precSuccFixture.table);
-	IFactRelease(precSuccFixture.form);
-}
-
-
-// The rules defining (before after) as the transitive closure of (prec succ)
-static void addTransitiveClosureRules(DictionaryEntry * base, DictionaryEntry * recursive)
-{
-	*base = DictionaryAddClauseFromCString(
-		"before _x after _y | ! prec _x succ _y");
-	*recursive = DictionaryAddClauseFromCString(
-		"before _x after _y | ! prec _x succ _z | ! before _z after _y");
-}
+static RelationFixture precSuccFixture;
 
 
 /**
@@ -546,10 +410,10 @@ static void addTransitiveClosureRules(DictionaryEntry * base, DictionaryEntry * 
  */
 void testCompileRecursiveJoin2(void)
 {
-	setupPrecSuccFixture();
+	SetupPrecSuccFixture(&precSuccFixture);
 	DictionaryEntry entry1;
 	DictionaryEntry entry2;
-	addTransitiveClosureRules(&entry1, &entry2);
+	AddTransitiveClosureRules(&entry1, &entry2);
 
 	Formula * queryTerm = CStringToTerm("before \"a\" after \"d\"");
 	Service services[MAX_COMPILED_SERVICES];
@@ -581,7 +445,7 @@ void testCompileRecursiveJoin2(void)
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
-	teardownPrecSuccFixture();
+	TeardownRelationFixture(&precSuccFixture);
 }
 
 
@@ -592,10 +456,10 @@ void testCompileRecursiveJoin2(void)
  */
 void testCompileRecursiveReachable(void)
 {
-	setupPrecSuccFixture();
+	SetupPrecSuccFixture(&precSuccFixture);
 	DictionaryEntry entry1;
 	DictionaryEntry entry2;
-	addTransitiveClosureRules(&entry1, &entry2);
+	AddTransitiveClosureRules(&entry1, &entry2);
 
 	Formula * queryTerm = CStringToTerm("before \"a\" after _y");
 	Service services[MAX_COMPILED_SERVICES];
@@ -631,7 +495,7 @@ void testCompileRecursiveReachable(void)
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
-	teardownPrecSuccFixture();
+	TeardownRelationFixture(&precSuccFixture);
 }
 
 
@@ -644,10 +508,10 @@ void testCompileRecursiveReachable(void)
  */
 void testCompileRecursiveClosure(void)
 {
-	setupPrecSuccFixture();
+	SetupPrecSuccFixture(&precSuccFixture);
 	DictionaryEntry entry1;
 	DictionaryEntry entry2;
-	addTransitiveClosureRules(&entry1, &entry2);
+	AddTransitiveClosureRules(&entry1, &entry2);
 
 	Formula * queryTerm = CStringToTerm("before _x after _y");
 	Service services[MAX_COMPILED_SERVICES];
@@ -655,11 +519,11 @@ void testCompileRecursiveClosure(void)
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
-	char const * expectedBefore[TEST_N_CLOSURE_TUPLES] = {
+	char const * expectedBefore[PREC_SUCC_N_CLOSURE_TUPLES] = {
 		"a", "a", "a", "b", "b", "b", "c", "c", "c", "e"};
-	char const * expectedAfter[TEST_N_CLOSURE_TUPLES] = {
+	char const * expectedAfter[PREC_SUCC_N_CLOSURE_TUPLES] = {
 		"b", "c", "d", "b", "c", "d", "b", "c", "d", "f"};
-	bool found[TEST_N_CLOSURE_TUPLES] = {false};
+	bool found[PREC_SUCC_N_CLOSURE_TUPLES] = {false};
 
 	Atom arguments[2];
 	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 2);
@@ -668,7 +532,7 @@ void testCompileRecursiveClosure(void)
 	while(OperatorCall(context)) {
 		Atom before = TermGetRoleActor(queryTerm->form, arguments, "before", 1);
 		Atom after = TermGetRoleActor(queryTerm->form, arguments, "after", 1);
-		for(index8 i = 0; i < TEST_N_CLOSURE_TUPLES; i++) {
+		for(index8 i = 0; i < PREC_SUCC_N_CLOSURE_TUPLES; i++) {
 			Atom expectedBeforeNode = CreateStringFromCString(expectedBefore[i]);
 			Atom expectedAfterNode = CreateStringFromCString(expectedAfter[i]);
 			if((before.hash == expectedBeforeNode.hash)
@@ -681,8 +545,8 @@ void testCompileRecursiveClosure(void)
 	}
 	OperatorFreeContext(context);
 
-	ASSERT_UINT32_EQUAL(nTuples, TEST_N_CLOSURE_TUPLES)
-	for(index8 i = 0; i < TEST_N_CLOSURE_TUPLES; i++)
+	ASSERT_UINT32_EQUAL(nTuples, PREC_SUCC_N_CLOSURE_TUPLES)
+	for(index8 i = 0; i < PREC_SUCC_N_CLOSURE_TUPLES; i++)
 		ASSERT_TRUE(found[i])
 
 	ServiceRegistryRemove(service.relation, service.op);
@@ -690,7 +554,7 @@ void testCompileRecursiveClosure(void)
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
-	teardownPrecSuccFixture();
+	TeardownRelationFixture(&precSuccFixture);
 }
 
 

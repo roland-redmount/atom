@@ -2,99 +2,18 @@
 #include "kernel/compiler.h"
 #include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
-#include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
-#include "kernel/string.h"
 #include "lang/Formula.h"
-#include "lang/name.h"
-#include "lang/PredicateForm.h"
-#include "lang/TermForm.h"
 #include "library/MachineService.h"
-#include "parser/ClauseBuilder.h"
 #include "parser/TermBuilder.h"
+#include "testing/fixtures.h"
 #include "testing/testing.h"
 #include "ui/query.h"
 
 
-/**
- * A directed graph (prec succ) of two components, one of which has the cycle b -> c -> b:
- *
- *   a -> b -> c -> d,  c -> b,  e -> f
- *
- * The transitive closure of the graph is the relation the rules below derive.
- */
-#define TEST_N_PREC_SUCC_EDGES	5
-
-// Tuples in the transitive closure of the whole graph: three from each of a, b and c,
-// and the single edge of the other component
-#define TEST_N_CLOSURE_TUPLES	10
-
-static struct {
-	Atom form;
-	index8 precIndex;
-	index8 succIndex;
-	RelationTable const * table;
-	TypedTuple * tuples[TEST_N_PREC_SUCC_EDGES];
-} precSuccFixture;
-
-
-static void setupPrecSuccFixture(void)
-{
-	Atom roles[2] = {
-		CreateNameFromCString("prec"),
-		CreateNameFromCString("succ")
-	};
-	Atom predicateForm = CreatePredicateForm(roles, 2);
-	precSuccFixture.form = CreateTermForm(predicateForm, true);
-	precSuccFixture.precIndex = PredicateRoleIndex(predicateForm, roles[0]);
-	precSuccFixture.succIndex = PredicateRoleIndex(predicateForm, roles[1]);
-	IFactRelease(predicateForm);
-	for(index8 i = 0; i < 2; i++)
-		NameRelease(roles[i]);
-
-	precSuccFixture.table = CreateRelationBTreeWithServices(
-		precSuccFixture.form, 2, (byte[]) {AT_ID, AT_ID},
-		(index8[]) {precSuccFixture.precIndex, precSuccFixture.succIndex});
-
-	char const * precNames[TEST_N_PREC_SUCC_EDGES] = {"a", "b", "c", "c", "e"};
-	char const * succNames[TEST_N_PREC_SUCC_EDGES] = {"b", "c", "d", "b", "f"};
-	for(index8 i = 0; i < TEST_N_PREC_SUCC_EDGES; i++) {
-		TypedAtom actors[2];
-		actors[precSuccFixture.precIndex] =
-			CreateTypedAtom(AT_ID, CreateStringFromCString(precNames[i]));
-		actors[precSuccFixture.succIndex] =
-			CreateTypedAtom(AT_ID, CreateStringFromCString(succNames[i]));
-		precSuccFixture.tuples[i] = CreateTypedTupleFromArray(actors, 2);
-		AssertFact(precSuccFixture.form, precSuccFixture.tuples[i], 0);
-		for(index8 j = 0; j < 2; j++)
-			ReleaseTypedAtom(actors[j]);
-	}
-}
-
-
-static void teardownPrecSuccFixture(void)
-{
-	for(index8 i = 0; i < TEST_N_PREC_SUCC_EDGES; i++) {
-		RetractFact(precSuccFixture.form, precSuccFixture.tuples[i]);
-		FreeTypedTuple(precSuccFixture.tuples[i]);
-	}
-	ServiceRegistryRemoveAll(precSuccFixture.table);
-	RelationRegistryRemove(precSuccFixture.table);
-	IFactRelease(precSuccFixture.form);
-}
-
-
-// The rules defining (before after) as the transitive closure of (prec succ)
-static void addTransitiveClosureRules(DictionaryEntry * base, DictionaryEntry * recursive)
-{
-	*base = DictionaryAddClauseFromCString(
-		"before _x after _y | ! prec _x succ _y");
-	*recursive = DictionaryAddClauseFromCString(
-		"before _x after _y | ! prec _x succ _z | ! before _z after _y");
-}
+static RelationFixture precSuccFixture;
 
 
 /**
@@ -141,13 +60,13 @@ static size32 countQueryTuples(char const * queryString)
  */
 void testQueryStoredFacts(void)
 {
-	setupPrecSuccFixture();
+	SetupPrecSuccFixture(&precSuccFixture);
 	size32 nServices = ServiceRegistryCount();
 
-	ASSERT_UINT32_EQUAL(countQueryTuples("prec _x succ _y"), TEST_N_PREC_SUCC_EDGES)
+	ASSERT_UINT32_EQUAL(countQueryTuples("prec _x succ _y"), PREC_SUCC_N_EDGES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices)
 
-	teardownPrecSuccFixture();
+	TeardownRelationFixture(&precSuccFixture);
 }
 
 
@@ -158,24 +77,24 @@ void testQueryStoredFacts(void)
  */
 void testQueryCompilesOnce(void)
 {
-	setupPrecSuccFixture();
+	SetupPrecSuccFixture(&precSuccFixture);
 	DictionaryEntry entry1;
 	DictionaryEntry entry2;
-	addTransitiveClosureRules(&entry1, &entry2);
+	AddTransitiveClosureRules(&entry1, &entry2);
 	size32 nServices = ServiceRegistryCount();
 
 	// The first query compiles the service deriving the closure
-	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), TEST_N_CLOSURE_TUPLES)
+	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
 	// The same query is answered by that service, and compiles nothing further
-	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), TEST_N_CLOSURE_TUPLES)
+	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
 	removeQueryServices("before _x after _y");
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
-	teardownPrecSuccFixture();
+	TeardownRelationFixture(&precSuccFixture);
 }
 
 
@@ -187,13 +106,13 @@ void testQueryCompilesOnce(void)
  */
 void testQueryTypeIsParameterDirections(void)
 {
-	setupPrecSuccFixture();
+	SetupPrecSuccFixture(&precSuccFixture);
 	DictionaryEntry entry1;
 	DictionaryEntry entry2;
-	addTransitiveClosureRules(&entry1, &entry2);
+	AddTransitiveClosureRules(&entry1, &entry2);
 	size32 nServices = ServiceRegistryCount();
 
-	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), TEST_N_CLOSURE_TUPLES)
+	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
 	// b, c and d come after a, and this query type compiles a service of its own
@@ -205,7 +124,7 @@ void testQueryTypeIsParameterDirections(void)
 	removeQueryServices("before _x after _y");
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
-	teardownPrecSuccFixture();
+	TeardownRelationFixture(&precSuccFixture);
 }
 
 
@@ -217,10 +136,10 @@ void testQueryTypeIsParameterDirections(void)
  */
 void testQueryRepeatedVariable(void)
 {
-	setupPrecSuccFixture();
+	SetupPrecSuccFixture(&precSuccFixture);
 	DictionaryEntry entry1;
 	DictionaryEntry entry2;
-	addTransitiveClosureRules(&entry1, &entry2);
+	AddTransitiveClosureRules(&entry1, &entry2);
 	size32 nServices = ServiceRegistryCount();
 
 	// b and c lie on a cycle, and so come after themselves
@@ -235,7 +154,7 @@ void testQueryRepeatedVariable(void)
 	removeQueryServices("before _x after _y");
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
-	teardownPrecSuccFixture();
+	TeardownRelationFixture(&precSuccFixture);
 }
 
 

@@ -4,15 +4,14 @@
 #include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
-#include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
-#include "lang/name.h"
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
 #include "lang/Formula.h"
 #include "library/MachineService.h"
 #include "library/math.h"
 #include "parser/TermBuilder.h"
+#include "testing/fixtures.h"
 #include "testing/testing.h"
 
 
@@ -76,15 +75,9 @@ void testDispatchRepeatedVariable(void)
  */
 void testDispatchNegatedTerm(void)
 {
-	Atom roles[2] = {
-		CreateNameFromCString("even"),
-		CreateNameFromCString("odd")
-	};
-	Atom predicateForm = CreatePredicateForm(roles, 2);
-	Atom termForm = CreateTermForm(predicateForm, true);
+	Atom termForm = CreateTermFormFromRoleNames((char const * []) {"even", "odd"}, 2, true);
+	Atom predicateForm = TermFormGetPredicateForm(termForm);
 	Atom negatedTermForm = CreateTermForm(predicateForm, false);
-	for(index8 i = 0; i < 2; i++)
-		NameRelease(roles[i]);
 
 	// The two signs give two distinct relation tables
 	byte atomTypes[2] = {AT_ID, AT_ID};
@@ -118,7 +111,6 @@ void testDispatchNegatedTerm(void)
 	RelationRegistryRemove(table);
 	IFactRelease(negatedTermForm);
 	IFactRelease(termForm);
-	IFactRelease(predicateForm);
 }
 
 
@@ -128,14 +120,8 @@ void testDispatchNegatedTerm(void)
  */
 void testDispatchIterator(void)
 {
-	Atom roles[2] = {
-		CreateNameFromCString("first"),
-		CreateNameFromCString("second")
-	};
-	Atom predicateForm = CreatePredicateForm(roles, 2);
-	Atom termForm = CreateTermForm(predicateForm, true);
-	for(index8 i = 0; i < 2; i++)
-		NameRelease(roles[i]);
+	Atom termForm = CreateTermFormFromRoleNames(
+		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
 	RelationTable const * idTable = CreateRelationBTreeWithServices(
@@ -188,7 +174,6 @@ void testDispatchIterator(void)
 	ServiceRegistryRemoveAll(idTable);
 	RelationRegistryRemove(idTable);
 	IFactRelease(termForm);
-	IFactRelease(predicateForm);
 }
 
 

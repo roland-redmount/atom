@@ -125,6 +125,7 @@ add_library(atom SHARED
 
     src/ui/query.c
 
+    src/testing/fixtures.c
     src/testing/testing.c
 
     ${PLATFORM_SOURCE}
