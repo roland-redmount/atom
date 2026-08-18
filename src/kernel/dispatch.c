@@ -183,19 +183,17 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 		RelationTable const * relation = RelationIteratorGet(&(iterator->relationIterator));
 		while(ServiceIteratorNext(&(iterator->serviceIterator))) {
 			Service const * currentService = ServiceIteratorPeekService(&(iterator->serviceIterator));
-			// The permutations of a term are those of its predicate form, the sign
-			// contributing none. The relation was found by iterating on the query
-			// term form, so its predicate form is the query's.
 			if(permutationMatch(
 				relation->predicateForm, relation->atomTypes, currentService->parameterIO,
-				iterator->queryActors, iterator->permutation)) {
+				iterator->queryActors, iterator->permutation))
+			{
 				// Copy the service, as a pointer into the service registry is only
 				// valid until the service iterator moves on.
 				iterator->service = *currentService;
 #ifdef DEBUG
-				// The services of one relation are visited in one run, so a second
-				// match in the relation just matched is a service that should never
-				// have been registered; see ServiceRegistryAdd()
+				// There should only be one service per relation matching the query. 
+				// A second match indicates a service that should never have been registered,
+				// so that the service registry is corrupted. See ServiceRegistryAdd()
 				ASSERT(relation != iterator->previousMatchRelation)
 				iterator->previousMatchRelation = relation;
 #endif

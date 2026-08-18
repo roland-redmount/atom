@@ -123,9 +123,8 @@ void testDispatchNegatedTerm(void)
 
 
 /**
- * A query leaving both arguments untyped matches one service per relation table
- * registered for its form. The iterator visits those services in the order that
- * DispatchQueryAt() enumerates them.
+ * Test iterating over all services matching a given query. Here, the query
+ * (first x second y) matches one service for each of the two underyling relation tables.
  */
 void testDispatchIterator(void)
 {
@@ -153,8 +152,7 @@ void testDispatchIterator(void)
 
 	size8 nMatches = 0;
 	while(DispatchIteratorNext(&iterator)) {
-		// The match at this position is the one DispatchQueryAt() reaches by skipping
-		// the preceding matches
+		// Match number k is the same returned by DispatchQueryAt() with nSkip = k
 		Service skipService;
 		index8 skipPermutation[2];
 		bool hasNextMatch;
