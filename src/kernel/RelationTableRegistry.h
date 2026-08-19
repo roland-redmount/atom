@@ -1,14 +1,10 @@
 /**
- * The relation table registry records where the tuples of a relation are stored, and is
- * how a signature reaches the storage to mutate. It is the write-side counterpart of the
- * service registry, which records how a relation is read; see ServiceRegistry.h.
+ * The relation table registry keeps a records of all created RelationTables.
+ * A Relation with no RelationTable registered is a computed relation, which has services
+ * but no tuple storage; for such relations, RelationTableRegistryFind() returns 0.
  *
- * A relation with no table registered is a computed relation, which has services but no
- * tuples of its own. Nothing else records that: it is what
- * RelationTableRegistryFind() returning 0 means.
- *
- * The registry holds no reference to a table; a table adds and removes itself as it is
- * created and dropped. See RelationTable.h
+ * The registry holds no reference to a RelationTable; a RelationTable adds and removes itself
+ * to the registry as it is created and dropped. See RelationTable.h
  */
 
 #ifndef RELATION_TABLE_REGISTRY_H
@@ -24,7 +20,7 @@
 void SetupRelationTableRegistry(void);
 
 /**
- * Register the tuple storage of a relation. Called by CreateRelationTable() only.
+ * Register a RelationTable. Called by CreateRelationTable() only.
  *
  * A relation may have at most one table. Lifting that restriction is what a relation with
  * several indexes would need here, along with a write path reaching every one of them.

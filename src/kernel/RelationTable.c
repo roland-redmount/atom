@@ -37,12 +37,6 @@ RelationTable * CreateRelationTable(
 }
 
 
-void RelationTableAddService(RelationTable * table, byte const parameterIO[], Operator * op)
-{
-	ServiceRegistryAdd(table->relation, parameterIO, op, SERVICE_PRIMITIVE);
-}
-
-
 void AcquireRelationTable(RelationTable * table)
 {
 	table->referenceCount++;

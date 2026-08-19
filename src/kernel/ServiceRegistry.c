@@ -290,8 +290,6 @@ static void removeService(Service const * service)
 	Relation const * relation = service->relation;
 	ASSERT(BTreeDelete(services, service, 0) == BTREE_DELETED)
 	ReleaseOperator(op);
-	// The last reference released here is what removes a relation nothing names any
-	// longer, which is how a computed relation is collected; see ReleaseRelation()
 	ReleaseRelation(relation);
 }
 
@@ -661,6 +659,7 @@ void RelationDump(Relation const * relation)
 	for(index8 i = 0; i < relation->nColumns; i++)
 		parameterIO[i] = PARAMETER_OUT;
 	Operator const * op = ServiceRegistryFind(relation, parameterIO);
+	ASSERT(op);
 
 	PrintF("Relation %u columns\n", relation->nColumns);
 

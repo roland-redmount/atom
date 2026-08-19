@@ -162,9 +162,8 @@ Service RegisterMachineService(
 
 void FreeMachineServices(void)
 {
-	// Removing the last service naming a relation removes the relation too, so this needs
-	// no record of what was registered: it removes the services of the machine service
-	// provider until none is left.
+	// Remove all services registered by machineServiceProvider.
+	// NOTE: this is highly inefficient, but typically only called prior to kernel shutdown.
 	Service service;
 	while(ServiceRegistryFindByMachineProvider(&machineServiceProvider, &service))
 		ServiceRegistryRemove(service.relation, service.op);

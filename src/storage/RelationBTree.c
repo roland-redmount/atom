@@ -6,6 +6,7 @@
 #include "kernel/operator.h"
 #include "kernel/Parameter.h"
 #include "kernel/RelationTable.h"
+#include "kernel/ServiceRegistry.h"
 #include "storage/RelationBTree.h"
 #include "memory/allocator.h"
 
@@ -355,7 +356,7 @@ static void btreeRegisterServices(RelationTable * table)
 			else
 				parameterIO[table->indexColumns[i]] = PARAMETER_OUT;
 		}
-		RelationTableAddService(table, parameterIO, op);
+		ServiceRegistryAdd(table->relation, parameterIO, op, SERVICE_PRIMITIVE);
 		// The registry now holds the reference to the operator
 		ReleaseOperator(op);
 	}

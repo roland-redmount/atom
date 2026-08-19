@@ -1,10 +1,7 @@
 /**
- * A relation table is the tuple storage of one relation, and the interface for mutating
- * it. Reading a relation is the business of its services instead; see ServiceRegistry.h.
- *
- * A table is registered against a relation rather than pointed at by it, so that a
- * relation with no table registered is simply a computed relation; see Relation.h and
- * RelationTableRegistry.h.
+ * A RelationTable keep track of the tuple storage of one Relation, and provides the interface
+ * for mutating the relation. Reading from a relation is done by  services; see ServiceRegistry.h.
+ * Computed relations do not have RelationTable.
  *
  * NOTE: in the future, we want to be able to hot-load implementations into a running atom
  * process. This would involve loading code into executable memory and registering services
@@ -20,7 +17,7 @@
 typedef struct s_RelationTable RelationTable;
 
 /**
- * Description of a storage implementation provider, such as RelationBTree.
+ * Description of a relation storage provider, such as RelationBTree.
  * One provider may provide the storage of many relations, sharing the same callbacks.
  * Providers live under src/storage/, RelationBTree being the only one so far.
  *
@@ -39,19 +36,15 @@ typedef struct s_RelationTableProvider {
 	void * (*createStorage)(RelationTable const * table);
 
 	/**
-	 * Register the services by which this table can be read, using
-	 * RelationTableAddService().
+	 * Register the services available for this relation. The provider should use
+	 * RelationTableAddService() to register each service.
 	 *
-	 * A provider registers exactly the services it can evaluate, and so this hook is
-	 * where a provider declares what it is capable of: RelationBTree registers a service
-	 * per prefix of the index column order, while an array-based provider might register
-	 * a lookup by position and nothing else. A caller asking ServiceRegistryFind() for a
-	 * signature no provider registered gets 0.
-	 *
-	 * Two services the rest of the kernel requires. A table must have the all-output
-	 * service that enumerates every tuple, which RelationDump() uses. A table holding the
-	 * tuples of identifying facts must additionally have the service taking the
-	 * identified column as its only input; see IFactBeginConjunction().
+	 * Required services:
+	 * 1) The all-output service that enumerates every tuple is required by RelationDump().
+	 * 2) If the relation stores tuples of an identifying fact, it must have the service taking
+	 *    the identified column as its only input; see IFactBeginConjunction().
+	 * 
+	 * NOTE: this related to Service, not RelationTable, doesn't quite fit in here
 	 */
 	void (*registerServices)(RelationTable * table);
 
@@ -95,11 +88,9 @@ typedef struct s_RelationTableProvider {
 /**
  * The tuple storage of one relation, held by a storage provider.
  *
- * A table is reference counted, because a machine operator reading it holds a pointer to
- * its storage and may outlive the table's registration: a rule that merely renames roles
- * compiles to a service evaluated by the very operator of the relation it reads, and that
- * service knows nothing of this table. The storage is deallocated once the last operator
- * reading it is gone, whatever order things are dropped in.
+ * A RelationTable is reference counted. A machine operator (or any code) reading from storage
+ * must acquire a reference to prevent premature deallocation of the RelationTable and
+ * the underlying storage.
  */
 struct s_RelationTable {
 	// The relation whose tuples this table stores. Acquired, as the table may outlive
@@ -122,24 +113,15 @@ struct s_RelationTable {
 
 /**
  * Create tuple storage for the given relation using the specified provider, register it,
- * and let the provider register its services. Returns holding the creation reference,
- * which DropRelationTable() releases.
+ * and let the provider register its services. The caller acquires a RelationTable reference,
+ * which DropRelationTable() releases. The RelationTable acquires the given relation.
  *
  * The indexColumns array gives the desired order of the index columns; see
  * RelationTable.indexColumns. Passing 0 gives the identity order.
- *
- * The table acquires the relation, so the caller keeps its own reference.
  */
 RelationTable * CreateRelationTable(
 	Relation const * relation, RelationTableProvider const * provider,
 	index8 const indexColumns[]);
-
-/**
- * Register a primitive service of the relation this table stores, to be called from
- * provider->registerServices(). The service registry acquires the operator, so the caller
- * releases its own reference afterwards, as it would for ServiceRegistryAdd().
- */
-void RelationTableAddService(RelationTable * table, byte const parameterIO[], Operator * op);
 
 /**
  * Acquire a reference to a relation table.
@@ -154,13 +136,9 @@ void ReleaseRelationTable(RelationTable * table);
 
 /**
  * Remove the tuple storage of a relation: remove every service of the relation, unregister
- * the table and release the creation reference. The table must be empty.
+ * the table and release the reference added by CreateRelationTable(). The table must be empty.
  *
- * Every service goes, not only the ones this table's provider registered. A service
- * compiled against this relation answers as its facts stood, so removing the facts leaves
- * it stale; see ServiceRegistryRemoveAll().
- *
- * The storage itself is deallocated here only if no machine operator is still reading it;
+ * The relation storage is deallocated only if no machine operator is still reading it;
  * see the note on reference counting on RelationTable.
  */
 void DropRelationTable(RelationTable * table);
@@ -185,9 +163,6 @@ byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint
  * Does not remove lookup entries; see RetractFact()
  */
 byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
-
-// NOTE: RelationDump() is declared in ServiceRegistry.h, since dumping the tuples of a
-// relation requires a service to enumerate them.
 
 
 #endif	// RELATION_TABLE_H
