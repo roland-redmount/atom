@@ -1,4 +1,6 @@
 
+#include "kernel/dispatch.h"
+#include "kernel/ifact.h"
 #include "kernel/lookup.h"
 #include "kernel/Relation.h"
 #include "kernel/RelationRegistry.h"
@@ -6,7 +8,38 @@
 #include "kernel/RelationTableRegistry.h"
 #include "lang/TermForm.h"
 #include "ui/assert.h"
+#include "ui/query.h"
 #include "storage/RelationBTree.h"
+
+
+/**
+ * Test whether the given term interpreted as a fact contradicts the current knowledgebase,
+ * that is, whether the negation of the term is  entailed by the knowledgebase.
+ * The actors tuple cannot contain a variable. Returns true if there is a contradiction.
+ */
+static bool checkContradiction(Atom termForm, TypedTuple const * actors)
+{
+	// Run a query for the negated term.
+	Atom negatedTermForm = CreateTermForm(
+		TermFormGetPredicateForm(termForm), !TermFormGetSign(termForm));
+	Formula * negatedTerm = CreateFormula(negatedTermForm, actors);
+
+	MixedTypeRelation * negatedRelation = UserQuery(negatedTerm);
+	bool foundTuple = MixedTypeRelationNext(negatedRelation);
+#ifdef DEBUG
+	if(foundTuple) {
+		// There was a matching tuple.  Since no actor is a variable,
+		// there can be at most one maching tuple, which is the negated term itself.
+		TypedTuple const * negatedTuple = MixedTypeRelationPeekTuple(negatedRelation);
+		ASSERT(TypedTupleEqual(negatedTuple, actors))
+		ASSERT(!MixedTypeRelationNext(negatedRelation))
+	}
+#endif
+	FreeMixedTypeRelation(negatedRelation);
+	FreeFormula(negatedTerm);
+	IFactRelease(negatedTermForm);
+	return foundTuple;
+}
 
 
 int AssertFact(Atom termForm, TypedTuple const * actors, RelationTableProvider const * provider)
@@ -14,7 +47,10 @@ int AssertFact(Atom termForm, TypedTuple const * actors, RelationTableProvider c
 	ASSERT(IsTermForm(termForm));
 	Atom const * actorsArray = TypedTuplePeekAtoms(actors);
 
-	// TODO: logic consistency check
+	// TODO: verify there is no variable among the actors
+
+	if(checkContradiction(termForm, actors))
+		return ASSERT_FAIL;
 
 	// find existing relation table, or create new
 	Relation const * relation = FindOrCreateRelation(
