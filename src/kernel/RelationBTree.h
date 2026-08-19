@@ -29,11 +29,13 @@ typedef struct s_RelationBTree {
 } RelationBTree;
 
 /**
- * Create a B-tree relation table. This function is called
- * by btreeTableProvider.createTable().
- * 
- * NOTE: currently the B-tree relation only stores a B-tree,
- * and in particular does not store the column types.
+ * Create the B-tree storage of a relation table. This function is called by
+ * btreeTableProvider.createStorage().
+ *
+ * The arity and index column order are copied here rather than read off the RelationTable
+ * on every call, so that a RelationBTree stays usable as a data structure on its own.
+ *
+ * NOTE: the B-tree relation does not store the column types.
  */
 RelationBTree * CreateRelationBTree(size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
 
@@ -49,10 +51,7 @@ size32 RelationBTreeNRows(RelationBTree const * relation);
  */
 byte RelationBTreeAddTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition);
 
-/**
- * Register relation table provider
- */
-// void RelationBTreeInitialize(void);
+// TODO: this should be registered with a relation table provider registry
 
 
 // B-tree iterator structure.
@@ -132,17 +131,18 @@ byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint
 // size32 RelationBTreeRemoveTuples(BTree * btree, Atom const queryTuple[], size8 nInputs, uint8 identified);
 
 /**
- * High-level method to create a RelationTable backed by a B-tree,
- * and register the associated operators. The form is a term form.
+ * High-level method to give the relation of the given signature B-tree storage, creating
+ * and registering the relation if it does not exist yet. The form is a term form.
+ * The returned table holds the creation reference; see DropRelationTable().
  */
-RelationTable const * CreateRelationBTreeWithServices(
+RelationTable * CreateRelationBTreeWithServices(
 	Atom termForm, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
 
 /**
  * Bootstrapping variant taking the predicate form directly.
- * See CreateRelationTableBootstrap()
+ * See CreateRelationBootstrap()
  */
-RelationTable const * CreateRelationBTreeWithServicesBootstrap(
+RelationTable * CreateRelationBTreeWithServicesBootstrap(
 	Atom termForm, Atom predicateForm, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
 
 

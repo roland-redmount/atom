@@ -2,14 +2,12 @@
 #include "kernel/ifact.h"
 #include "kernel/operator.h"
 #include "kernel/Parameter.h"
-#include "kernel/RelationRegistry.h"
-#include "kernel/RelationTable.h"
+#include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
 #include "library/MachineService.h"
 #include "memory/allocator.h"
 #include "parser/TermBuilder.h"
-#include "util/ResizingArray.h"
 
 
 /**
@@ -46,13 +44,6 @@ typedef struct s_MachineServiceContext {
 	byte state[];
 } MachineServiceContext;
 
-
-/**
- * All relations created by RegisterMachineService() are stored in this array.
- */
-static ResizingArray registeredRelations = {0};
-
-#define REGISTRY_INITIAL_CAPACITY	16
 
 
 static bool machineServiceCall(OperatorContext * context)
@@ -132,29 +123,6 @@ static void readSignatureParameters(
 }
 
 
-/**
- * Find the relation of a signature, or create and register it for the first service
- * registered. A computed relation has no storage provider and no index column order.
- */
-static RelationTable const * findOrCreateRelation(
-	Atom termForm, size8 arity, byte const atomTypes[])
-{
-	RelationTable const * relation = RelationRegistryFind(termForm, arity, atomTypes);
-	if(relation)
-		return relation;
-
-	relation = CreateRelationTable(0, termForm, arity, atomTypes, 0);
-	RelationRegistryAdd(relation);
-	if(!registeredRelations.elementSize) {
-		// first registered relation, create storage array
-		CreateResizingArray(
-			&registeredRelations, sizeof(RelationTable const *), REGISTRY_INITIAL_CAPACITY);
-	}
-	ResizingArrayAppend(&registeredRelations, &relation);
-	return relation;
-}
-
-
 Service RegisterMachineService(
 	char const * signature, MachineFunction function, size32 stateSize)
 {
@@ -171,7 +139,10 @@ Service RegisterMachineService(
 	byte parameterIO[MACHINE_SERVICE_MAX_ARITY];
 	readSignatureParameters(term, data, atomTypes, parameterIO);
 
-	RelationTable const * relation = findOrCreateRelation(term->form, arity, atomTypes);
+	// A machine service is computed, and so has no tuple storage: the relation exists
+	// only to name the signature the service is registered under, and is removed with the
+	// last service naming it; see ReleaseRelation()
+	Relation const * relation = FindOrCreateRelation(term->form, arity, atomTypes);
 
 	// A function with no state yields at most one tuple, and so declares no index order.
 	// A function with a state declares the order its signature writes its arguments in;
@@ -181,8 +152,9 @@ Service RegisterMachineService(
 		arity, indexOrder, &machineServiceProvider, data,
 		sizeof(MachineServiceContext) + stateSize);
 	Service service = ServiceRegistryAdd(relation, parameterIO, op, SERVICE_PRIMITIVE);
-	// the service registry now holds the reference to the operator
+	// the service registry now holds the references to the operator and the relation
 	ReleaseOperator(op);
+	ReleaseRelation(relation);
 	FreeFormula(term);
 	return service;
 }
@@ -190,18 +162,10 @@ Service RegisterMachineService(
 
 void FreeMachineServices(void)
 {
-	// nothing to do if no service was ever registered
-	if(!registeredRelations.elementSize)
-		return;
-
-	// remove in reverse order of registration
-	size32 nRelations = ResizingArrayNElements(&registeredRelations);
-	while(nRelations > 0) {
-		RelationTable const * relation =
-			*((RelationTable const **) ResizingArrayGetElement(&registeredRelations, --nRelations));
-		ServiceRegistryRemoveAll(relation);
-		RelationRegistryRemove(relation);
-	}
-	FreeResizingArray(&registeredRelations);
-	SetMemory(&registeredRelations, sizeof(ResizingArray), 0);
+	// Removing the last service naming a relation removes the relation too, so this needs
+	// no record of what was registered: it removes the services of the machine service
+	// provider until none is left.
+	Service service;
+	while(ServiceRegistryFindByMachineProvider(&machineServiceProvider, &service))
+		ServiceRegistryRemove(service.relation, service.op);
 }

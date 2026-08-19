@@ -3,6 +3,7 @@
  */
 
 #include "kernel/typedtuple.h"
+#include "kernel/Relation.h"
 #include "kernel/RelationTable.h"
 #include "kernel/operator.h"
 #include "platform.h"
@@ -163,7 +164,9 @@ void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
  */
 Atom GetCoreRoleName(index32 roleId);
 
-RelationTable const * GetCoreRelationTable(index32 relationId);
+Relation const * GetCoreRelation(index32 relationId);
+
+RelationTable * GetCoreRelationTable(index32 relationId);
 
 /**
  * Return the operator of a core service, given a SERVICE_* id.

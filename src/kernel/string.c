@@ -47,7 +47,7 @@ bool IsString(Atom atom)
 {
 	return AtomHasRole(
 		atom,
-		GetCoreRelationTable(RELATION_STRING),
+		GetCoreRelation(RELATION_STRING),
 		GetCoreRoleName(ROLE_STRING)
 	);
 }

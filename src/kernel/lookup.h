@@ -29,7 +29,7 @@
  */
 
 #include "btree/btree.h"
-#include "kernel/RelationTable.h"
+#include "kernel/Relation.h"
 #include "kernel/typedtuple.h"
 
 
@@ -45,19 +45,19 @@ size32 LookupTotalCount(void);
  * If predicateForm == 0, the function returns true if the atom participates
  * in any role in any relation.
  */
-bool AtomHasRole(Atom atom, RelationTable const * relation, Atom role);
+bool AtomHasRole(Atom atom, Relation const * relation, Atom role);
 
 /**
  * Add a lookup entry for an atom participating in a role.
  * This is called by AssertFact()
  */
-void AtomAddRole(Atom atom, RelationTable const * relation, Atom role);
+void AtomAddRole(Atom atom, Relation const * relation, Atom role);
 
 /**
  * Remove a lookup entry for an atom participating in a role.
  * This is called by RetractFact()
  */
-void AtomRemoveRole(Atom atom, RelationTable const * relation, Atom role);
+void AtomRemoveRole(Atom atom, Relation const * relation, Atom role);
 
 /**
  * Remove all roles for an AT_ID atom. This is used when removing a AT_ID atom.
@@ -66,15 +66,15 @@ void LookupRemoveAllRoles(Atom atom);
 
 /**
  * Add lookup entries for all actors in a predicate, defined by an actor list
- * for a given RelationTable
+ * for a given relation
  */
-void LookupAddPredicateRoles(RelationTable const * relation, Atom const * actors);
+void LookupAddPredicateRoles(Relation const * relation, Atom const * actors);
 
 /**
  * Remove lookup entries for each actor in a predicate, defined by an actor list
- * for a given RelationTable.
+ * for a given relation.
  */
-void LookupRemovePredicateRoles(RelationTable const * relation, Atom const * actors);
+void LookupRemovePredicateRoles(Relation const * relation, Atom const * actors);
 
 /**
  * Lookup the relation with the given predicate form where atom partipates in role.
@@ -85,7 +85,7 @@ void LookupRemovePredicateRoles(RelationTable const * relation, Atom const * act
  * for lists with different element types, but all elements of one list are
  * in the same table.
  */
-RelationTable const * LookupFindRelation(Atom atom, Atom form, Atom role);
+Relation const * LookupFindRelation(Atom atom, Atom form, Atom role);
 
 /**
  * Remove lookup entries for all atoms acting in the given predicate form.
@@ -108,7 +108,7 @@ RelationTable const * LookupFindRelation(Atom atom, Atom form, Atom role);
  */
 typedef struct s_LookupRecord {
 	Atom atom;
-	RelationTable const * relation;
+	Relation const * relation;
 	Atom role;
 	size32 nFacts;	// the number of facts that match this record
 } LookupRecord;
@@ -129,7 +129,7 @@ void LookupIterate(Atom atom, LookupIterator * iterator);
 
 bool LookupIteratorNext(LookupIterator * iterator);
 
-RelationTable const * LookupIteratorGetRelation(LookupIterator const * iterator);
+Relation const * LookupIteratorGetRelation(LookupIterator const * iterator);
 
 Atom LookupIteratorGetRole(LookupIterator const * iterator);
 

@@ -93,9 +93,11 @@ add_library(atom SHARED
     src/kernel/MixedTypeRelation.c
     src/kernel/multiset.c
     src/kernel/Parameter.c
+    src/kernel/Relation.c
     src/kernel/RelationBTree.c
     src/kernel/RelationRegistry.c
     src/kernel/RelationTable.c
+    src/kernel/RelationTableRegistry.c
     src/kernel/operator.c
     src/kernel/ServiceRegistry.c
     src/kernel/string.c

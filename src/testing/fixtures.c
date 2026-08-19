@@ -80,8 +80,7 @@ void TeardownRelationFixture(RelationFixture * fixture)
 		RetractFact(fixture->termForm, fixture->tuples[i]);
 		FreeTypedTuple(fixture->tuples[i]);
 	}
-	ServiceRegistryRemoveAll(fixture->table);
-	RelationRegistryRemove(fixture->table);
+	DropRelationTable(fixture->table);
 	IFactRelease(fixture->termForm);
 	SetMemory(fixture, sizeof(RelationFixture), 0);
 }

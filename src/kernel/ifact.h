@@ -13,6 +13,7 @@
 #ifndef IFACT_H
 #define IFACT_H
 
+#include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/typedtuple.h"
 
@@ -20,7 +21,8 @@
 struct s_Service;
 
 /**
- * A conjunction is a set of facts from a single relation table.
+ * A conjunction is a set of facts from a single relation table, which is why it holds
+ * the table rather than the relation: building an ifact writes tuples.
  * 
  * TODO: perhaps rename this IFactRelation, as it corresponds 1:1 to
  * a set of tuples from a specific (typed) relation.
@@ -129,10 +131,10 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash);
 /**
  * Reserve an IFact header with a predefined hash, before its defining facts
  * exist. This is only used during bootstrapping, to break the circular
- * dependency between the core predicate forms and the relation tables that
- * store their defining facts: a table created by CreateRelationTable()
+ * dependency between the core predicate forms and the relations that
+ * store their defining facts: a relation created by CreateRelation()
  * acquires a reference to its form, but that form's IFact cannot be built
- * until the table itself exists.
+ * until the relation itself exists.
  *
  * A reserved header holds no conjunctions and can only be acquired and
  * released; it must be finalized by a matching IFactEndBootstrap() call with

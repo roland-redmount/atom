@@ -50,7 +50,6 @@ void testCompilePermute1(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -87,7 +86,6 @@ void testCompilePermute2(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -138,7 +136,6 @@ void testCompileProject(void)
 
 	for(index8 i = 0; i < nServices; i++) {
 		ServiceRegistryRemove(services[i].relation, services[i].op);
-		RelationRegistryRemove(services[i].relation);
 	}
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -163,7 +160,6 @@ void testCompileUnconstrainedHeadVariable(void)
 
 	for(index8 i = 0; i < nServices; i++) {
 		ServiceRegistryRemove(services[i].relation, services[i].op);
-		RelationRegistryRemove(services[i].relation);
 	}
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -199,7 +195,6 @@ void testCompileJoin1(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -235,7 +230,6 @@ void testCompileJoin2(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -280,7 +274,6 @@ void testCompileUnion(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry1);
 	DictionaryRemoveClause(&entry2);
@@ -333,7 +326,6 @@ void testCompileConstrain(void)
 	IFactRelease(nodeA);
 	IFactRelease(nodeB);
 	ServiceRegistryRemove(services[0].relation, services[0].op);
-	RelationRegistryRemove(services[0].relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 	TeardownRelationFixture(&edgeFixture);
@@ -355,7 +347,7 @@ void testCompileRecursiveJoin1(void)
 		"number _n faculty _f | ! + _m + 1 = _n | ! number _m faculty _e | ! * _e * _n = _f");
 	// Create terminating fact, provide by a B-tree service
 	Formula * terminatingFact = CStringToTerm("number 0 faculty 1");	
-	RelationTable const * table = CreateRelationBTreeWithServices(
+	RelationTable * table = CreateRelationBTreeWithServices(
 		terminatingFact->form, 2,
 		TypedTuplePeekAtomTypes(terminatingFact->actors),
 		(index8[]) {0, 1}
@@ -381,11 +373,9 @@ void testCompileRecursiveJoin1(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	RetractFact(terminatingFact->form, terminatingFact->actors);
-	ServiceRegistryRemoveAll(table);
-	RelationRegistryRemove(table);
+	DropRelationTable(table);
 	FreeFormula(terminatingFact);
 	DictionaryRemoveClause(&entry);
 }
@@ -441,7 +431,6 @@ void testCompileRecursiveJoin2(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -491,7 +480,6 @@ void testCompileRecursiveReachable(void)
 		ASSERT_TRUE(found[i])
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -550,7 +538,6 @@ void testCompileRecursiveClosure(void)
 		ASSERT_TRUE(found[i])
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -569,7 +556,7 @@ void testCompileNegatedTerm(void)
 {
 	// Setup the fact (odd 3)
 	Formula * odd3term = CStringToTerm("odd 3");
-	RelationTable const *evenTable = CreateRelationBTreeWithServices(
+	RelationTable * evenTable = CreateRelationBTreeWithServices(
 		odd3term->form, 1, (byte[]) {AT_INT}, (index8[]) {0});
 	AssertFact(odd3term->form, odd3term->actors, 0);
 	// setup the rule
@@ -597,14 +584,12 @@ void testCompileNegatedTerm(void)
 
 	// teardown
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	
 	DictionaryRemoveClause(&entry);
 
 	RetractFact(odd3term->form, odd3term->actors);
-	ServiceRegistryRemoveAll(evenTable);
-	RelationRegistryRemove(evenTable);
+	DropRelationTable(evenTable);
 	FreeFormula(odd3term);
 }
 
@@ -643,7 +628,6 @@ void testCompileSquares(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }

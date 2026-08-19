@@ -24,10 +24,7 @@ Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
 	AddMultisetToIFactFromArrays(&draft, uniqueTermForms, multiplicities, nUniqueTermForms, AT_ID);
 
 	// (clause-form @form)
-	RelationTable const * clauseFormTable = RelationRegistryFind(
-		GetCoreTermForm(FORM_CLAUSE_FORM),
-		1, (byte[]) {AT_ID}
-	);
+	RelationTable * clauseFormTable = GetCoreRelationTable(RELATION_CLAUSE_FORM);
 	IFactBeginConjunction(&draft, clauseFormTable, 0);
 	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
 	IFactEndConjunction(&draft);	
@@ -40,7 +37,7 @@ bool IsClauseForm(Atom form)
 {
 	return AtomHasRole(
 		form,
-		GetCoreRelationTable(RELATION_CLAUSE_FORM),
+		GetCoreRelation(RELATION_CLAUSE_FORM),
 		GetCoreRoleName(ROLE_CLAUSE_FORM)
 	);
 }

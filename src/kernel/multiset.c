@@ -6,6 +6,7 @@
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
+#include "kernel/RelationTableRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "util/sort.h"
 
@@ -22,17 +23,17 @@ Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size3
 
 
 /**
- * Find the RelationTable for (multiset m element e multiple n) where 
+ * Find the relation (multiset m element e multiple n) where
  * e has the given atom type. Currently we only support multisets of ID or NAME atoms.
  */
-RelationTable const * findMultisetRelation(byte elementType)
+Relation const * findMultisetRelation(byte elementType)
 {
 	switch(elementType) {
 		case AT_ID:
-		return GetCoreRelationTable(RELATION_MULTISET_ID);
+		return GetCoreRelation(RELATION_MULTISET_ID);
 
 		case AT_NAME:
-		return GetCoreRelationTable(RELATION_MULTISET_NAME);
+		return GetCoreRelation(RELATION_MULTISET_NAME);
 
 		default:
 		ASSERT(false)
@@ -42,9 +43,18 @@ RelationTable const * findMultisetRelation(byte elementType)
 
 
 /**
- * Find the RelationTable associated with a multiset.
+ * Find the tuple storage of the multiset relation for the given element atom type.
  */
-static RelationTable const * lookupMultisetRelation(Atom multiset)
+static RelationTable * findMultisetTable(byte elementType)
+{
+	return RelationTableRegistryFind(findMultisetRelation(elementType));
+}
+
+
+/**
+ * Find the relation associated with a multiset.
+ */
+static Relation const * lookupMultisetRelation(Atom multiset)
 {
 	return LookupFindRelation(
 		multiset,
@@ -59,7 +69,7 @@ static RelationTable const * lookupMultisetRelation(Atom multiset)
  */
 static byte findMultisetElementType(Atom multiset)
 {
-	RelationTable const * relation = lookupMultisetRelation(multiset);
+	Relation const * relation = lookupMultisetRelation(multiset);
 	return relation->atomTypes[
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)
 	];
@@ -70,12 +80,12 @@ void AddMultisetToIFact(
 	IFactDraft * draft,
 	MultisetElementGenerator generator, void const * data, size32 nUniqueElements, byte elementType)
 {
-	RelationTable const * relation = findMultisetRelation(elementType);
-	
+	RelationTable * table = findMultisetTable(elementType);
+
 	// assert (multiset element multiple) facts
 	IFactBeginConjunction(
 		draft, 
-		relation,
+		table,
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 	);
 	Atom tuple[3];
@@ -139,11 +149,11 @@ bool IsMultiset(Atom atom)
 	return (
 		AtomHasRole(
 			atom,
-			GetCoreRelationTable(RELATION_MULTISET_ID),
+			GetCoreRelation(RELATION_MULTISET_ID),
 			GetCoreRoleName(ROLE_MULTISET)) ||
 		AtomHasRole(
 			atom,
-			GetCoreRelationTable(RELATION_MULTISET_NAME),
+			GetCoreRelation(RELATION_MULTISET_NAME),
 			GetCoreRoleName(ROLE_MULTISET)
 		)
 	);
@@ -169,7 +179,7 @@ size32 MultisetGetElementMultiple(Atom multiset, Atom element)
  */
 void MultisetIterate(Atom multiset, byte elementType, MultisetIterator * iterator)
 {
-	RelationTable const * relation = findMultisetRelation(elementType);
+	Relation const * relation = findMultisetRelation(elementType);
 	byte parameterIO[3];
 	CoreFormSetByteArray(
 		FORM_MULTISET_ELEMENT_MULTIPLE,

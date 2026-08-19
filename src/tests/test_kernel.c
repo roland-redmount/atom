@@ -1,6 +1,7 @@
 
 #include "kernel/Int.h"
 #include "kernel/kernel.h"
+#include "kernel/RelationTableRegistry.h"
 #include "kernel/ifact.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/string.h"
@@ -30,9 +31,11 @@ void testAssertRetract(void)
 	);
 	AssertFact(form, actors1, 0);
 
-	RelationTable const * relation = RelationRegistryFind(form, 2, atomTypes);
+	Relation const * relation = RelationRegistryFind(form, 2, atomTypes);
 	ASSERT_NOT_NULL(relation)
-	ASSERT_UINT32_EQUAL(RelationTableNRows(relation), 1)
+	RelationTable const * table = RelationTableRegistryFind(relation);
+	ASSERT_NOT_NULL(table)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
 
 	Atom baz = CreateStringFromCString("baz");
 	TypedTuple * actors2 = CreateTypedTupleFromArray(
@@ -43,10 +46,10 @@ void testAssertRetract(void)
 		2
 	);
 	AssertFact(form, actors2, 0);
-	ASSERT_UINT32_EQUAL(RelationTableNRows(relation), 2)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 2)
 
 	RetractFact(form, actors2);
-	ASSERT_UINT32_EQUAL(RelationTableNRows(relation), 1)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
 
 	// retracting the last fact should remove the service
 	RetractFact(form, actors1);

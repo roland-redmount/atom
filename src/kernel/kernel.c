@@ -12,6 +12,7 @@
 #include "kernel/Parameter.h"
 #include "kernel/RelationBTree.h"
 #include "kernel/RelationTable.h"
+#include "kernel/RelationTableRegistry.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "memory/allocator.h"
@@ -190,7 +191,7 @@ static struct s_Kernel {
 	// in "kernel order" for form i.
 	index8 corePredicateRoleIndex[N_CORE_FORMS + 1][CORE_FORMS_MAX_ARITY];
 	// Corresponding core relations and services
-	RelationTable const * coreRelations[N_CORE_RELATIONS + 1];
+	RelationTable * coreRelations[N_CORE_RELATIONS + 1];
 	Operator * coreOperators[N_CORE_SERVICES + 1];
 
 	// number of ifacts and references created by bootstrapping
@@ -326,7 +327,7 @@ void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
  * and create associated services.
  * This requires kernel.corePredicateRoleIndex to be initialized for the correponding form
  */
-static RelationTable const * createCoreRelationTable(uint32 relationId)
+static RelationTable * createCoreRelationTable(uint32 relationId)
 {
 	byte atomTypes[CORE_FORMS_MAX_ARITY];
 	CoreFormSetByteArray(coreRelationFormId[relationId], coreRelationAtomTypes[relationId], atomTypes);
@@ -344,7 +345,7 @@ static RelationTable const * createCoreRelationTable(uint32 relationId)
 }
 
 
-RelationTable const * GetCoreRelationTable(index32 relationId)
+Relation const * GetCoreRelation(index32 relationId)
 {
 	byte atomTypes[CORE_FORMS_MAX_ARITY];
 	CoreFormSetByteArray(coreRelationFormId[relationId], coreRelationAtomTypes[relationId], atomTypes);
@@ -354,6 +355,12 @@ RelationTable const * GetCoreRelationTable(index32 relationId)
 		corePredicateArity[formId],
 		atomTypes
 	);
+}
+
+
+RelationTable * GetCoreRelationTable(index32 relationId)
+{
+	return RelationTableRegistryFind(GetCoreRelation(relationId));
 }
 
 
@@ -368,7 +375,7 @@ RelationTable const * GetCoreRelationTable(index32 relationId)
  */
 static void bootstrapTermForm(Atom termForm, Atom predicateForm)
 {
-	RelationTable const * table = kernel.coreRelations[RELATION_TERM_FORM];
+	RelationTable * table = kernel.coreRelations[RELATION_TERM_FORM];
 
 	IFactDraft draft;
 	IFactBegin(&draft);
@@ -384,8 +391,8 @@ static void bootstrapTermForm(Atom termForm, Atom predicateForm)
 	IFactEndConjunction(&draft);
 	IFactEndBootstrap(&draft, termForm.hash);
 
-	AtomAddRole(termForm, table, GetCoreRoleName(ROLE_TERM_FORM));
-	AtomAddRole(predicateForm, table, GetCoreRoleName(ROLE_PREDICATE_FORM));
+	AtomAddRole(termForm, table->relation, GetCoreRoleName(ROLE_TERM_FORM));
+	AtomAddRole(predicateForm, table->relation, GetCoreRoleName(ROLE_PREDICATE_FORM));
 }
 
 
@@ -541,12 +548,12 @@ static void setupCoreServices(void)
 	// Add lookup
 	AtomAddRole(
 		multisetForm,
-		kernel.coreRelations[RELATION_MULTISET_NAME],
+		kernel.coreRelations[RELATION_MULTISET_NAME]->relation,
 		GetCoreRoleName(ROLE_MULTISET)
 	);
 	AtomAddRole(
 		multisetForm,
-		kernel.coreRelations[RELATION_PREDICATE_FORM],
+		kernel.coreRelations[RELATION_PREDICATE_FORM]->relation,
 		GetCoreRoleName(ROLE_PREDICATE_FORM)
 	);
 	
@@ -580,12 +587,12 @@ static void setupCoreServices(void)
 	// add lookup
 	AtomAddRole(
 		predicateForm,
-		kernel.coreRelations[RELATION_MULTISET_NAME],
+		kernel.coreRelations[RELATION_MULTISET_NAME]->relation,
 		GetCoreRoleName(ROLE_MULTISET)
 	);
 	AtomAddRole(
 		predicateForm,
-		kernel.coreRelations[RELATION_PREDICATE_FORM],
+		kernel.coreRelations[RELATION_PREDICATE_FORM]->relation,
 		GetCoreRoleName(ROLE_PREDICATE_FORM)
 	);
 
@@ -654,7 +661,7 @@ static void setupCoreServices(void)
 			parameterIO
 		);
 		kernel.coreOperators[i] = ServiceRegistryFind(
-			kernel.coreRelations[relationId],
+			kernel.coreRelations[relationId]->relation,
 			parameterIO
 		);
 		ASSERT(kernel.coreOperators[i])
@@ -666,6 +673,7 @@ void KernelInitialize(void)
 {
 	SetupMemory();
 	SetupRelationRegistry();
+	SetupRelationTableRegistry();
 	SetupServiceRegistry();
 	InitializeLookup();
 	InitializeIFacts();
@@ -714,18 +722,15 @@ void KernelShutdown(void)
 
 	 // Remove all relations and services above RELATION_TERM_FORM. This also releases
 	 // the associated predicate form and term form of each.
-	for(index32 relationId = N_CORE_RELATIONS; relationId > RELATION_TERM_FORM; relationId--) {
-		ServiceRegistryRemoveAll(kernel.coreRelations[relationId]);
-		// This releases the associated forms
-		RelationRegistryRemove(kernel.coreRelations[relationId]);
-	}
+	for(index32 relationId = N_CORE_RELATIONS; relationId > RELATION_TERM_FORM; relationId--)
+		// This removes the services, and releases the associated forms
+		DropRelationTable(kernel.coreRelations[relationId]);
 
 	/*
 	 * RELATION_MULTISET_ID is not circular, but shares the term form of
 	 * RELATION_MULTISET_NAME, so it goes before the three tables handled below.
 	 */
-	ServiceRegistryRemoveAll(kernel.coreRelations[RELATION_MULTISET_ID]);
-	RelationRegistryRemove(kernel.coreRelations[RELATION_MULTISET_ID]);
+	DropRelationTable(kernel.coreRelations[RELATION_MULTISET_ID]);
 
 	/**
 	 * Remove RELATION_TERM_FORM, RELATION_PREDICATE_FORM and RELATION_MULTISET_NAME.
@@ -766,20 +771,17 @@ void KernelShutdown(void)
 	 * retract their own term form from. Once all three are detached, the tables are empty
 	 * and can be torn down in the usual way.
 	 */
-	RelationTableReleaseForm(kernel.coreRelations[RELATION_TERM_FORM]);
-	RelationTableReleaseForm(kernel.coreRelations[RELATION_MULTISET_NAME]);
-	RelationTableReleaseForm(kernel.coreRelations[RELATION_PREDICATE_FORM]);
+	RelationReleaseForm(kernel.coreRelations[RELATION_TERM_FORM]->relation);
+	RelationReleaseForm(kernel.coreRelations[RELATION_MULTISET_NAME]->relation);
+	RelationReleaseForm(kernel.coreRelations[RELATION_PREDICATE_FORM]->relation);
 
 	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_TERM_FORM]) == 0)
 	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_PREDICATE_FORM]) == 0)
 	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_MULTISET_NAME]) == 0)
 
-	ServiceRegistryRemoveAll(kernel.coreRelations[RELATION_TERM_FORM]);
-	RelationRegistryRemove(kernel.coreRelations[RELATION_TERM_FORM]);
-	for(index32 relationId = RELATION_PREDICATE_FORM; relationId >= RELATION_MULTISET_NAME; relationId--) {
-		ServiceRegistryRemoveAll(kernel.coreRelations[relationId]);
-		RelationRegistryRemove(kernel.coreRelations[relationId]);
-	}
+	DropRelationTable(kernel.coreRelations[RELATION_TERM_FORM]);
+	for(index32 relationId = RELATION_PREDICATE_FORM; relationId >= RELATION_MULTISET_NAME; relationId--)
+		DropRelationTable(kernel.coreRelations[relationId]);
 
 	// Verify ifact counts
 	ASSERT(IFactTotalCount() == 0)
@@ -795,6 +797,7 @@ void KernelShutdown(void)
 	FreeIFacts();
 	FreeLookup();
 	FreeServiceRegistry();
+	FreeRelationTableRegistry();
 	FreeRelationRegistry();
 	FreeNameStorage();
 	CleanupMemory();
@@ -807,20 +810,24 @@ void AssertFact(Atom termForm, TypedTuple const * actors, uint8 idPosition)
 {
 	ASSERT(IsTermForm(termForm));
 	Atom const * actorsArray = TypedTuplePeekAtoms(actors);
-	RelationTable const * table = RelationRegistryFind(termForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
+	Relation const * relation = RelationRegistryFind(
+		termForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
+	RelationTable * table = relation ? RelationTableRegistryFind(relation) : 0;
 	if(table)
 		RelationTableAddTuple(table, actorsArray, idPosition);
 	else {
 		// TODO: create a relation table if not exists? Default to B-tree?
 		ASSERT(false);
 	}
-	LookupAddPredicateRoles(table, actorsArray);
+	LookupAddPredicateRoles(relation, actorsArray);
 }
 
 
 void RetractFact(Atom termForm, TypedTuple * actors)
 {
-	RelationTable const * relation = RelationRegistryFind(termForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
+	Relation const * relation = RelationRegistryFind(
+		termForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
+	RelationTable * table = RelationTableRegistryFind(relation);
 	Atom const * actorsArray = TypedTuplePeekAtoms(actors);
 	// Remove the lookup entries before the tuple: removing the tuple releases the
 	// relation's reference to each of its atoms, and releasing the last reference
@@ -829,7 +836,7 @@ void RetractFact(Atom termForm, TypedTuple * actors)
 	// so we can only retract 1 fact at a time.
 	LookupRemovePredicateRoles(relation, actorsArray);
 	// this will not remove defining facts
-	RelationTableRemoveTuple(relation, actorsArray, 0);
+	RelationTableRemoveTuple(table, actorsArray, 0);
 
 	// TODO: remove service if empty?
 }

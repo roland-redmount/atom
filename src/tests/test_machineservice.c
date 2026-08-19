@@ -4,6 +4,7 @@
 #include "kernel/kernel.h"
 #include "kernel/operator.h"
 #include "kernel/RelationRegistry.h"
+#include "kernel/RelationTableRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
@@ -222,18 +223,27 @@ static bool difference(Atom arguments[], void * state, bool isFirstCall)
 }
 
 
+/**
+ * Two machine services of one signature share a relation, and that relation is computed:
+ * no tuple storage is created anywhere along the way, and the relation goes with the last
+ * service naming it.
+ */
 static void testMachineServiceSharedRelation(void)
 {
-	size32 nTablesInitial = RelationRegistryNTables();
+	size32 nRelationsInitial = RelationRegistryNRelations();
+	size32 nTablesInitial = RelationTableRegistryNTables();
 
 	Service adding = RegisterMachineService(
 		"term @1<INT term @2<INT total @3>INT", &sum, 0);
-	ASSERT_UINT32_EQUAL(RelationRegistryNTables(), nTablesInitial + 1)
+	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
+	// a computed service has no storage to register
+	ASSERT_UINT32_EQUAL(RelationTableRegistryNTables(), nTablesInitial)
+	ASSERT_NULL(RelationTableRegistryFind(adding.relation))
 
 	Service subtracting = RegisterMachineService(
 		"term @1<INT term @2>INT total @3<INT", &difference, 0);
 	// the second service shares the relation of the first
-	ASSERT_UINT32_EQUAL(RelationRegistryNTables(), nTablesInitial + 1)
+	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 	ASSERT_PTR_EQUAL(subtracting.relation, adding.relation)
 	ASSERT_PTR_NOT_EQUAL(subtracting.op, adding.op)
 
@@ -250,8 +260,11 @@ static void testMachineServiceSharedRelation(void)
 	ASSERT_PTR_EQUAL(dispatched.op, subtracting.op)
 	FreeFormula(query);
 
+	// Removing the services removes the relation with them, which is what lets
+	// FreeMachineServices() keep no record of what it registered
 	FreeMachineServices();
-	ASSERT_UINT32_EQUAL(RelationRegistryNTables(), nTablesInitial)
+	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial)
+	ASSERT_UINT32_EQUAL(RelationTableRegistryNTables(), nTablesInitial)
 }
 
 

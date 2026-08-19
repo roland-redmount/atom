@@ -1,7 +1,12 @@
 /**
- * The service registry keeps track of the services available for each
- * registered relation. Dispatch uses the registry to match queries to services.
- * The relations themselves are registered separately; see RelationRegistry.h
+ * The service registry keeps track of the services available for each registered
+ * relation, which is how a relation can be read. Dispatch uses the registry to match
+ * queries to services.
+ *
+ * A service is registered against a relation, never against tuple storage, so a computed
+ * relation such as a machine service has services and nothing else. Where the tuples of a
+ * relation are stored is recorded separately; see RelationTableRegistry.h. The relations
+ * themselves are registered separately again; see RelationRegistry.h
  */
 
 #ifndef SERVICE_REGISTRY_H
@@ -9,7 +14,7 @@
 
 #include "btree/btree.h"
 #include "kernel/operator.h"
-#include "kernel/RelationTable.h"
+#include "kernel/Relation.h"
 
 
 /**
@@ -39,7 +44,8 @@ enum ServiceKind {
 };
 
 typedef struct s_Service {
-	RelationTable const * relation;
+	// The relation this service reads. Acquired; see Relation.h
+	Relation const * relation;
 	byte * parameterIO;
 	// Pointer to the root of the operator tree defining this service.
 	// NOTE: cannot be const * if we want to do AcquireOperator(op).
@@ -73,24 +79,23 @@ void SetupServiceRegistry(void);
  * that form.
  */
 Service ServiceRegistryAdd(
-	RelationTable const * relation, byte const parameterIO[], Operator * op,
+	Relation const * relation, byte const parameterIO[], Operator * op,
 	enum ServiceKind kind);
 
 /**
  * Dissociate the service of the given operator from a relation in the service
- * registry. Releases the reference to the operator. The relation itself is left to the
- * caller, which owns it.
+ * registry. Releases the reference to the operator, and the one to the relation.
  *
  * Every compiled service built on the removed one is invalidated, and so are the ones
  * built on those; see ServiceRegistryInvalidateTermForm().
  */
-void ServiceRegistryRemove(RelationTable const * relation, Operator * op);
+void ServiceRegistryRemove(Relation const * relation, Operator * op);
 
 /**
  * Dissociate all services from the given relation in the service registry, invalidating
  * the compiled services built on them; see ServiceRegistryRemove().
  */
-void ServiceRegistryRemoveAll(RelationTable const * relation);
+void ServiceRegistryRemoveAll(Relation const * relation);
 
 /**
  * Deallocate the service registry. Before calling this function,
@@ -117,8 +122,8 @@ size32 ServiceRegistryNCompiled(void);
  * services it could affect; the next query then compiles them again. Removing too much
  * costs a compilation, removing too little gives a wrong answer.
  *
- * Any relation associated with a removed service is also removed if it ends up with no
- * services left and has no provider (no storage).
+ * A relation nothing names any longer is removed with the last service naming it; see
+ * ReleaseRelation().
  *
  * NOTE: this modifies the registries, so it cannot run while a query is being read: an
  * open DispatchIterator or MixedTypeRelation write-locks against modification.
@@ -135,14 +140,14 @@ void ServiceRegistryInvalidateAll(void);
  * Iterating over services
  */
 typedef struct {
-	RelationTable const * table;
+	Relation const * relation;
 	BTreeIterator btreeIterator;
 } ServiceIterator;
 
 /**
- * Create iterator over all services for a given relation table
+ * Create iterator over all services for a given relation
  */
-void ServiceRegistryIterate(RelationTable const * table, ServiceIterator * iterator);
+void ServiceRegistryIterate(Relation const * relation, ServiceIterator * iterator);
 
 bool ServiceIteratorNext(ServiceIterator * iterator);
 
@@ -155,7 +160,18 @@ void ServiceIteratorEnd(ServiceIterator * iterator);
  * array, which must be the same length as the relation arity.
  * If a matching service does not exist, returns 0
  */
-Operator * ServiceRegistryFind(RelationTable const * relation, byte const parameterIO[]);
+Operator * ServiceRegistryFind(Relation const * relation, byte const parameterIO[]);
+
+/**
+ * Copy some registered service evaluated by a machine operator of the given provider to
+ * *service, and return true; return false if the registry holds no such service.
+ *
+ * This is how a machine provider finds the services it registered, without keeping a
+ * record of them: removing services until this returns false unregisters the provider.
+ * See FreeMachineServices() in library/MachineService.c
+ */
+bool ServiceRegistryFindByMachineProvider(
+	MachineProvider const * provider, Service * service);
 
 /**
  * For debugging
@@ -163,10 +179,10 @@ Operator * ServiceRegistryFind(RelationTable const * relation, byte const parame
 void PrintService(Service const * service);
 
 /**
- * Dump all tuples in a the given relation table.
+ * Dump all tuples of the given relation.
  * Requires an associated service for enumerating all tuples.
  */
-void RelationTableDump(RelationTable const * table);
+void RelationDump(Relation const * relation);
 
 /**
  * Print a list of all registered services

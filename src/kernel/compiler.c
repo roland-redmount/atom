@@ -5,6 +5,7 @@
 #include "kernel/multiset.h"
 #include "kernel/operator.h"
 #include "kernel/Parameter.h"
+#include "kernel/Relation.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/ClauseForm.h"
@@ -700,9 +701,11 @@ typedef struct s_CompiledVariant {
 	// resolved query parameters, owned by the variant
 	TypedTuple * parameters;
 	Operator * op;
-	// The relation this variant compiles to. Registered before the recursive clauses
-	// compile, so that their recursive term has something to dispatch to
-	RelationTable const * relation;
+	// The relation this variant compiles to, and a reference to it. Registered before the
+	// recursive clauses compile, so that their recursive term has something to dispatch
+	// to. A compiled service has no tuple storage, so this relation usually has no table;
+	// it may have one when the signature is that of a stored relation.
+	Relation const * relation;
 	// Temporary operators standing in for the relation while the recursive clauses compile.
 	// One variant for each possible parameter IO pattern. Removed by completeRecursiveVariant().
 	// See registerTemporaryServices().
@@ -775,24 +778,6 @@ static size8 findInputArguments(
 			inputArguments[nInputs++] = i;
 	}
 	return nInputs;
-}
-
-
-/**
- * Find the relation registered to the given signature if on exists
- * (if this signature has been compiled before), or else create and register
- * a new relation table.
- */
-static RelationTable const * findOrCreateRelation(
-	Atom queryTermForm, size8 arity, byte const atomTypes[])
-{
-	RelationTable const * relation = RelationRegistryFind(queryTermForm, arity, atomTypes);
-	if(!relation) {
-		relation = CreateRelationTable(0, queryTermForm, arity, atomTypes, 0);
-		ASSERT(relation)
-		RelationRegistryAdd(relation);
-	}
-	return relation;
 }
 
 
@@ -1040,7 +1025,7 @@ static void setupVariantRelation(
 	byte atomTypes[arity];
 	byte parameterIO[arity];
 	getVariantSignature(variant, atomTypes, parameterIO);
-	variant->relation = findOrCreateRelation(queryTermForm, arity, atomTypes);
+	variant->relation = FindOrCreateRelation(queryTermForm, arity, atomTypes);
 }
 
 
@@ -1220,7 +1205,9 @@ size8 CompileQuery(Formula const * queryTerm, Service services[], size8 maxServi
 		getVariantSignature(&variants[i], atomTypes, parameterIO);
 		services[i] = ServiceRegistryAdd(
 			variants[i].relation, parameterIO, variants[i].op, SERVICE_COMPILED);
+		// the service registry now holds the references to the operator and the relation
 		ReleaseOperator(variants[i].op);
+		ReleaseRelation(variants[i].relation);
 		FreeTypedTuple(variants[i].parameters);
 	}
 	FreeTypedTuple(queryParameters);

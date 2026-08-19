@@ -193,7 +193,7 @@ void testQueryInvalidatedByRelation(void)
 
 	// A second relation of the (prec succ) form, whose services the compiled one knows
 	// nothing of
-	RelationTable const * uintTable = CreateRelationBTreeWithServices(
+	RelationTable * uintTable = CreateRelationBTreeWithServices(
 		precSuccFixture.termForm, 2, (byte[]) {AT_ID, AT_UINT}, (index8[]) {0, 1});
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
 
@@ -204,8 +204,7 @@ void testQueryInvalidatedByRelation(void)
 
 	// Removing that relation again takes the service compiled over it, and only that
 	// one: the service over the remaining relation still answers what it always did
-	ServiceRegistryRemoveAll(uintTable);
-	RelationRegistryRemove(uintTable);
+	DropRelationTable(uintTable);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
 	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)

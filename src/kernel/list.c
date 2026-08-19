@@ -9,6 +9,7 @@
 #include "kernel/Parameter.h"
 #include "kernel/RelationTable.h"
 #include "kernel/RelationRegistry.h"
+#include "kernel/RelationTableRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/AtomType.h"
 #include "lang/PredicateForm.h"
@@ -44,7 +45,7 @@ Atom CreateList(ListElementGenerator generator, void const * data, byte elementT
 // assert (list length) fact
 static void assertListLength(IFactDraft * draft, size32 nElements)
 {
-	RelationTable const * listLengthTable = GetCoreRelationTable(RELATION_LIST_LENGTH);
+	RelationTable * listLengthTable = GetCoreRelationTable(RELATION_LIST_LENGTH);
 
 	IFactBeginConjunction(
 		draft,
@@ -72,10 +73,12 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 			(byte[]) {AT_ID, AT_UINT, elementType},
 			atomTypes
 		);
-		RelationTable const * table = RelationRegistryFind(
+		Relation const * relation = RelationRegistryFind(
 			GetCoreTermForm(FORM_LIST_POSITION_ELEMENT),
 			3, atomTypes
 		);
+		ASSERT(relation);
+		RelationTable * table = RelationTableRegistryFind(relation);
 		ASSERT(table);
 		// assert (ĺist position elements) facts for each element
 		IFactBeginConjunction(
@@ -142,7 +145,7 @@ bool IsList(Atom atom)
 	// there may be no (list element position) fact if atom is an empty list.
 	return AtomHasRole(
 		atom,
-		GetCoreRelationTable(RELATION_LIST_LENGTH),
+		GetCoreRelation(RELATION_LIST_LENGTH),
 		GetCoreRoleName(ROLE_LIST)
 	);
 }
@@ -163,7 +166,7 @@ size32 ListLength(Atom list)
 }
 
 
-static RelationTable const * lookupListElementRelation(Atom list)
+static Relation const * lookupListElementRelation(Atom list)
 {
 	return LookupFindRelation(
 		list,
@@ -176,7 +179,7 @@ static RelationTable const * lookupListElementRelation(Atom list)
 Atom ListGetElement(Atom list, index32 position)
 {
 	ASSERT(ListLength(list) > 0)
-	RelationTable const * relation = lookupListElementRelation(list);
+	Relation const * relation = lookupListElementRelation(list);
 	ASSERT(relation)
 
 	byte parameterIO[3];
@@ -201,12 +204,13 @@ Atom ListGetElement(Atom list, index32 position)
 index32 ListGetPosition(Atom list, Atom element)
 {
 	ASSERT(IsList(list))
-	RelationTable const * relation = lookupListElementRelation(list);
+	Relation const * relation = lookupListElementRelation(list);
 	ASSERT(relation)
 
-	// TODO: this operator is not provided by the B-tree relation provider
-	// as the keys are not in leading columns. Calling this function will
-	// trigger the ASSERT below.
+	// TODO: this service is not one the B-tree provider registers, as its inputs are not
+	// a prefix of the index column order; see RelationTableProvider.registerServices().
+	// Calling this function will trigger the ASSERT below. An array-based storage
+	// provider for (list position element) could register it.
 	byte parameterIO[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,
@@ -268,7 +272,7 @@ int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(Atom, Atom))
 void CopyListToTuple(Atom list, TypedTuple * tuple)
 {
 	ASSERT(ListLength(list) == tuple->nAtoms)
-	RelationTable const * relation = lookupListElementRelation(list);
+	Relation const * relation = lookupListElementRelation(list);
 	byte elementType = relation->atomTypes[
 		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)
 	];
@@ -293,7 +297,7 @@ void ListIterate(Atom list, ListIterator * iterator)
 	);
 
 	if(ListLength(list) > 0) {
-		RelationTable const * relation = lookupListElementRelation(list);
+		Relation const * relation = lookupListElementRelation(list);
 		ASSERT(relation)
 		
 		byte parameterIO[3];
@@ -338,7 +342,7 @@ void ListIteratorEnd(ListIterator * iterator)
 void PrintList(Atom list)
 {
 	PrintCString("LIST{");
-	RelationTable const * relation = lookupListElementRelation(list);
+	Relation const * relation = lookupListElementRelation(list);
 	ASSERT(relation)
 	byte elementType = relation->atomTypes[
 		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)

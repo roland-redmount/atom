@@ -1,6 +1,7 @@
 
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
+#include "kernel/Relation.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
@@ -12,8 +13,7 @@
 
 /**
  * The registry of services, as a B-tree storing Service items.
- * The relation tables these refer to are registered separately;
- * see RelationRegistry.h
+ * The relations these refer to are registered separately; see RelationRegistry.h
  */
 static BTree * services;
 
@@ -26,7 +26,7 @@ static BTree * services;
  */
 typedef struct {
 	Operator const * op;
-	RelationTable const * relation;
+	Relation const * relation;
 } OperatorRelation;
 
 static BTree * operatorRelations;
@@ -49,7 +49,7 @@ static size32 nCompiledServices;
 
 
 static void setupService(
-	Service * service, RelationTable const * relation, byte const parameterIO[], Operator * op,
+	Service * service, Relation const * relation, byte const parameterIO[], Operator * op,
 	enum ServiceKind kind)
 {
 	service->relation = relation;
@@ -166,7 +166,7 @@ void FreeServiceRegistry(void)
  * Copy the service of the given relation evaluated by the given operator to *service.
  * Returns false if the registry holds no such service.
  */
-static bool findService(RelationTable const * relation, Operator const * op, Service * service)
+static bool findService(Relation const * relation, Operator const * op, Service * service)
 {
 	Service key;
 	setupService(&key, relation, 0, (Operator *) op, SERVICE_PRIMITIVE);
@@ -272,8 +272,8 @@ static void removeDependencyRecords(Operator const * dependent)
 
 
 /**
- * Remove a service from the registry and its index, releasing the reference to its
- * operator. Nothing is invalidated here; see invalidateDependents().
+ * Remove a service from the registry and its index, releasing the references to its
+ * operator and its relation. Nothing is invalidated here; see invalidateDependents().
  */
 static void removeService(Service const * service)
 {
@@ -287,36 +287,12 @@ static void removeService(Service const * service)
 		removeDependencyRecords(service->op);
 
 	Operator * op = service->op;
+	Relation const * relation = service->relation;
 	ASSERT(BTreeDelete(services, service, 0) == BTREE_DELETED)
 	ReleaseOperator(op);
-}
-
-
-/**
- * Remove a relation with no services left, if it has no service provider (storage),
- * since such a relation holds no tuples, and nothing else would remove it.
- *
- * A stored relation is never in that state, as it belongs to whoever created it and keeps
- * its own services. It reaches this function all the same: the compiler registers a
- * compiled variant against the relation of its signature when one exists, which may be a
- * stored one, and that is the case of a relation holding both stored facts and rules;
- * see findOrCreateRelation() in compiler.c.
- */
-static void removeUnusedRelation(RelationTable const * relation)
-{
-	if(relation->provider)
-		return;
-	// A relation a service is registered against is registered itself, or dispatch
-	// would never reach the service
-	ASSERT(RelationRegistryFind(
-		relation->termForm, relation->nColumns, relation->atomTypes) == relation)
-
-	ServiceIterator iterator;
-	ServiceRegistryIterate(relation, &iterator);
-	bool hasService = ServiceIteratorNext(&iterator);
-	ServiceIteratorEnd(&iterator);
-	if(!hasService)
-		RelationRegistryRemove(relation);
+	// The last reference released here is what removes a relation nothing names any
+	// longer, which is how a computed relation is collected; see ReleaseRelation()
+	ReleaseRelation(relation);
 }
 
 
@@ -349,19 +325,18 @@ static void removeOperatorServices(Operator const * op)
 {
 	// Collect the relations for services with op as root operator, to be removed
 	ResizingArray relations;
-	CreateResizingArray(&relations, sizeof(RelationTable const *), 4);
+	CreateResizingArray(&relations, sizeof(Relation const *), 4);
 	collectOperatorRelations(op, &relations);
 
 	for(index32 i = 0; i < ResizingArrayNElements(&relations); i++) {
-		RelationTable const * relation =
-			*(RelationTable const **) ResizingArrayGetElement(&relations, i);
+		Relation const * relation =
+			*(Relation const **) ResizingArrayGetElement(&relations, i);
 		Service service;
 		if(!findService(relation, op, &service))
 			continue;
 		if(service.kind != SERVICE_COMPILED)
 			continue;
 		removeService(&service);
-		removeUnusedRelation(relation);
 	}
 	FreeResizingArray(&relations);
 }
@@ -415,7 +390,7 @@ static void freeStaleOperators(ResizingArray * staleOperators)
 
 
 Service ServiceRegistryAdd(
-	RelationTable const * relation, byte const parameterIO[], Operator * op,
+	Relation const * relation, byte const parameterIO[], Operator * op,
 	enum ServiceKind kind)
 {
 	Service service;
@@ -423,6 +398,7 @@ Service ServiceRegistryAdd(
 	// add to the service registry
 	ASSERT(BTreeInsert(services, &service) == BTREE_INSERTED)
 	AcquireOperator(op);
+	AcquireRelation(relation);
 	// add to the operator-relation index
 	OperatorRelation record = {.op = op, .relation = relation};
 	ASSERT(BTreeInsert(operatorRelations, &record) == BTREE_INSERTED)
@@ -450,7 +426,7 @@ Service ServiceRegistryAdd(
 }
 
 
-void ServiceRegistryRemove(RelationTable const * relation, Operator * op)
+void ServiceRegistryRemove(Relation const * relation, Operator * op)
 {
 	Service service;
 	bool found = findService(relation, op, &service);
@@ -474,7 +450,7 @@ void ServiceRegistryRemove(RelationTable const * relation, Operator * op)
 }
 
 
-void ServiceRegistryRemoveAll(RelationTable const * relation)
+void ServiceRegistryRemoveAll(Relation const * relation)
 {
 	ResizingArray staleOperators;
 	CreateResizingArray(&staleOperators, sizeof(Operator *), 8);
@@ -521,7 +497,7 @@ void ServiceRegistryInvalidateByTermForm(Atom termForm)
 	RelationIterator relationIterator;
 	RelationRegistryIterate(termForm, &relationIterator);
 	while(RelationIteratorNext(&relationIterator)) {
-		RelationTable const * relation = RelationIteratorGet(&relationIterator);
+		Relation const * relation = RelationIteratorGet(&relationIterator);
 		// Iterate over all services for the relation
 		ServiceIterator serviceIterator;
 		ServiceRegistryIterate(relation, &serviceIterator);
@@ -569,9 +545,9 @@ size32 ServiceRegistryNCompiled(void)
 }
 
 
-void ServiceRegistryIterate(RelationTable const * table, ServiceIterator * iterator)
+void ServiceRegistryIterate(Relation const * relation, ServiceIterator * iterator)
 {
-	iterator->table = table;
+	iterator->relation = relation;
 	BTreeIterate(&(iterator->btreeIterator), services);
 }
 
@@ -585,7 +561,7 @@ Service const * ServiceIteratorPeekService(ServiceIterator const * iterator)
 bool ServiceIteratorNext(ServiceIterator * iterator)
 {
 	Service key = {
-		.relation = iterator->table,
+		.relation = iterator->relation,
 		.parameterIO = 0,
 		.op = 0
 	};
@@ -611,7 +587,7 @@ void ServiceIteratorEnd(ServiceIterator * iterator)
 }
 
 
-Operator * ServiceRegistryFind(RelationTable const * relation, byte const parameterIO[])
+Operator * ServiceRegistryFind(Relation const * relation, byte const parameterIO[])
 {
 	Service key;
 	setupService(&key, relation, parameterIO, 0, SERVICE_PRIMITIVE);
@@ -626,6 +602,25 @@ Operator * ServiceRegistryFind(RelationTable const * relation, byte const parame
 	BTreeIteratorEnd(&iterator);
 	btreeFreeService(&key, 0);
 	return op;
+}
+
+
+bool ServiceRegistryFindByMachineProvider(
+	MachineProvider const * provider, Service * service)
+{
+	bool found = false;
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, services);
+	while(!found && BTreeIteratorNext(&iterator)) {
+		Service const * candidate = BTreeIteratorPeekItem(&iterator);
+		if((candidate->op->type == OPERATOR_MACHINE)
+			&& (candidate->op->impl.machine.provider == provider)) {
+			*service = *candidate;
+			found = true;
+		}
+	}
+	BTreeIteratorEnd(&iterator);
+	return found;
 }
 
 
@@ -659,23 +654,23 @@ static void btreePrintCallback(void const * item)
 }
 
 
-void RelationTableDump(RelationTable const * table)
+void RelationDump(Relation const * relation)
 {
 	// find a service for enumerating all tuples
-	byte parameterIO[table->nColumns];
-	for(index8 i = 0; i < table->nColumns; i++)
+	byte parameterIO[relation->nColumns];
+	for(index8 i = 0; i < relation->nColumns; i++)
 		parameterIO[i] = PARAMETER_OUT;
-	Operator const * op = ServiceRegistryFind(table, parameterIO);
-	
-	PrintF("Table %u columns\n", table->nColumns);
+	Operator const * op = ServiceRegistryFind(relation, parameterIO);
 
-	Atom arguments[table->nColumns];
+	PrintF("Relation %u columns\n", relation->nColumns);
+
+	Atom arguments[relation->nColumns];
 	OperatorContext * context = OperatorCreateContext(op, arguments);
 	size32 nTuples = 0;
 	while(OperatorCall(context)) {
 		// TODO: we should probably not print the full representaiton
 		// of identified atoms, as it triggers repeated queries
-		PrintTuple(table->atomTypes, arguments, table->nColumns);
+		PrintTuple(relation->atomTypes, arguments, relation->nColumns);
 		PrintChar('\n');
 		nTuples++;
 	}

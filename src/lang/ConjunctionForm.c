@@ -24,10 +24,7 @@ Atom CreateConjunctionForm(Atom const * clauseForms, size8 nClauseForms)
 	AddMultisetToIFactFromArrays(&draft, uniqueClauseForms, multiplicities, nUniqueClauseForms, AT_ID);
 
 	// (conjunction-form @form)
-	RelationTable const * conjunctionFormTable = RelationRegistryFind(
-		GetCoreTermForm(FORM_CONJUNCTION_FORM),
-		1, (byte[]) {AT_ID}
-	);
+	RelationTable * conjunctionFormTable = GetCoreRelationTable(RELATION_CONJUNCTION_FORM);
 	IFactBeginConjunction(&draft, conjunctionFormTable, 0);
 	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
 	IFactEndConjunction(&draft);	
@@ -40,7 +37,7 @@ bool IsConjunctionForm(Atom atom)
 {
 	return AtomHasRole(
 		atom,
-		GetCoreRelationTable(RELATION_CONJUNCTION_FORM),
+		GetCoreRelation(RELATION_CONJUNCTION_FORM),
 		GetCoreRoleName(ROLE_CONJUNCTION_FORM)
 	);
 }

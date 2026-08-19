@@ -219,8 +219,8 @@ void testJoinOperator2(void)
 	// (The created join operator does not keep track of its argument types,
 	//  but they could be inferred recursively from its child operators, since
 	//  a "leaf" operator must be a machine operator with specific argument types.)
-	byte const * leftArgumentTypes = GetCoreRelationTable(RELATION_LIST_ID)->atomTypes;
-	byte const * rightArgumentTypes = GetCoreRelationTable(RELATION_LIST_LETTER)->atomTypes;
+	byte const * leftArgumentTypes = GetCoreRelation(RELATION_LIST_ID)->atomTypes;
+	byte const * rightArgumentTypes = GetCoreRelation(RELATION_LIST_LETTER)->atomTypes;
 	byte joinArgumentTypes[5];
 	for(index8 i = 0; i < 3; i++)
 		joinArgumentTypes[leftArgumentMap[i]] = leftArgumentTypes[i];
@@ -564,7 +564,7 @@ static Operator * createClosureOperator(index8 const * inputArguments, size8 nIn
 	byte parameterIO[2];
 	parameterIO[precIndex] = nInputs ? PARAMETER_IN : PARAMETER_OUT;
 	parameterIO[succIndex] = PARAMETER_OUT;
-	Operator * edgeOperator = ServiceRegistryFind(graphFixture.table, parameterIO);
+	Operator * edgeOperator = ServiceRegistryFind(graphFixture.table->relation, parameterIO);
 	ASSERT_NOT_NULL(edgeOperator)
 
 	// Rule (1), the graph relation itself, with the edge arguments taken into the

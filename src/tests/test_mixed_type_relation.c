@@ -127,9 +127,9 @@ void testConcatAcrossRelations(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	RelationTable const * idTable = CreateRelationBTreeWithServices(
+	RelationTable * idTable = CreateRelationBTreeWithServices(
 		termForm, 2, (byte[]) {AT_ID, AT_ID}, (index8[]) {0, 1});
-	RelationTable const * uintTable = CreateRelationBTreeWithServices(
+	RelationTable * uintTable = CreateRelationBTreeWithServices(
 		termForm, 2, (byte[]) {AT_ID, AT_UINT}, (index8[]) {0, 1});
 
 	TypedAtom idActors[2] = {
@@ -173,10 +173,8 @@ void testConcatAcrossRelations(void)
 	RetractFact(termForm, uintTuple);
 	FreeTypedTuple(idTuple);
 	FreeTypedTuple(uintTuple);
-	ServiceRegistryRemoveAll(uintTable);
-	RelationRegistryRemove(uintTable);
-	ServiceRegistryRemoveAll(idTable);
-	RelationRegistryRemove(idTable);
+	DropRelationTable(uintTable);
+	DropRelationTable(idTable);
 	IFactRelease(termForm);
 }
 
