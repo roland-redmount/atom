@@ -14,7 +14,11 @@
 
 Atom CreateTermFormFromRoleNames(char const * const roleNames[], size8 nRoles, bool sign)
 {
+	ASSERT(nRoles > 0)
+	// zeroed first so that the array is initialized whatever nRoles is: an optimizing
+	// build cannot otherwise see that the loop below writes all of it
 	Atom roles[nRoles];
+	SetMemory(roles, nRoles * sizeof(Atom), 0);
 	for(index8 i = 0; i < nRoles; i++)
 		roles[i] = CreateNameFromCString(roleNames[i]);
 

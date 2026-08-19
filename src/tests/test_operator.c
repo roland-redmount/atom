@@ -215,17 +215,9 @@ void testJoinOperator2(void)
 	for(index8 i = 1; i < 5; i++)
 		arguments[i] = (Atom) {0};
 
-	// Create argument types for printing tuples.
-	// (The created join operator does not keep track of its argument types,
-	//  but they could be inferred recursively from its child operators, since
-	//  a "leaf" operator must be a machine operator with specific argument types.)
-	byte const * leftArgumentTypes = GetCoreRelation(RELATION_LIST_ID)->atomTypes;
-	byte const * rightArgumentTypes = GetCoreRelation(RELATION_LIST_LETTER)->atomTypes;
-	byte joinArgumentTypes[5];
-	for(index8 i = 0; i < 3; i++)
-		joinArgumentTypes[leftArgumentMap[i]] = leftArgumentTypes[i];
-	for(index8 i = 0; i < 3; i++)
-		joinArgumentTypes[rightArgumentMap[i]] = rightArgumentTypes[i];
+	// NOTE: a join operator does not keep track of its argument types, but they could be
+	// inferred recursively from its child operators, since a leaf operator must be a
+	// machine operator with specific argument types.
 
 	// Setup execution context
 	OperatorContext * context = OperatorCreateContext(joinOperator, arguments);

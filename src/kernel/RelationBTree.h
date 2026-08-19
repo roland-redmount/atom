@@ -85,11 +85,6 @@ void RelationBTreeIterate(
 bool RelationBTreeIteratorNext(RelationBTreeIterator * iterator);
 
 /**
- * Returns true if RelationBTreeIteratorNext() has not been called.
- */
-bool RelationBTreeIteratorBeforeFirst(RelationBTreeIterator * iterator);
-
-/**
  * Get the atom at 0-based index i in the current tuple.
  */
 Atom RelationBTreeIteratorGetAtom(RelationBTreeIterator const * iterator, index8 i);

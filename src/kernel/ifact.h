@@ -31,8 +31,6 @@ struct s_Service;
 typedef struct s_IFactConjunction {
 	// relation table storing tuples for this conjunction
 	RelationTable const * table;
-	// operator for retrieving existing tuples
-	Operator const * op;
 	index8 idColumn;		// position of the identified atom in the tuple
 	byte pad;
 	size16 nRows;			// number of tuples in this conjunction

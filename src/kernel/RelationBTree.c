@@ -139,7 +139,7 @@ byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint
 		// The specified idPosition is wrong, indicating an internal error
 		ASSERT(false)
 	}
-	if(!queryTuple->idPosition && btreeTuple->idPosition) {
+	if(!idPosition && btreeTuple->idPosition) {
 		// Attempt to retract an identifying fact
 		return TUPLE_PROTECTED;
 	}

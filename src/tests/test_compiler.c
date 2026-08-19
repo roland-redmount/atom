@@ -595,6 +595,60 @@ void testCompileNegatedTerm(void)
 
 
 /**
+ * A compiled service reads its stored relations live through their MACHINE operators, so
+ * asserting or retracting a fact of a relation that already exists needs no invalidation:
+ * the service compiled before the change answers correctly after it. Only structural
+ * change is invalidated; see the notes on invalidation in compiler.md.
+ */
+void testCompiledServiceReadsFactsLive(void)
+{
+	// (odd 3), and the rule making (! even x) follow from (odd x)
+	Formula * odd3term = CStringToTerm("odd 3");
+	RelationTable * oddTable = CreateRelationBTreeWithServices(
+		odd3term->form, 1, (byte[]) {AT_INT}, (index8[]) {0});
+	AssertFact(odd3term->form, odd3term->actors, 0);
+	DictionaryEntry entry = DictionaryAddClauseFromCString("! even _x | ! odd _x");
+
+	Formula * queryTerm = CStringToTerm("! even 3");
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Service service = services[0];
+	size32 nCompiled = ServiceRegistryNCompiled();
+
+	Atom arguments[1];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 1);
+	void * context = OperatorCreateContext(service.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	// Retracting the fact leaves the service registered, as the relation still exists
+	RetractFact(odd3term->form, odd3term->actors);
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiled)
+
+	// and that same service now yields nothing, having read the change
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 1);
+	context = OperatorCreateContext(service.op, arguments);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	// asserting it again brings the answer back, still without recompiling
+	AssertFact(odd3term->form, odd3term->actors, 0);
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 1);
+	context = OperatorCreateContext(service.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	ServiceRegistryRemove(service.relation, service.op);
+	FreeFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+	RetractFact(odd3term->form, odd3term->actors);
+	DropRelationTable(oddTable);
+	FreeFormula(odd3term);
+}
+
+
+/**
  * Compile the query (number n square s) against rule
  * 
  *   number n square s <- lower 1 number n upper 4 & * n * n = s
@@ -652,6 +706,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileRecursiveClosure);
 
 	ExecuteTest(testCompileNegatedTerm);
+	ExecuteTest(testCompiledServiceReadsFactsLive);
 	ExecuteTest(testCompileSquares);
 
 	// TODO: compiling a recursive rule over an infinite domain. The relation has no
