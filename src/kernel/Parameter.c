@@ -17,24 +17,19 @@ static bool hasParameterAtom(TypedTuple const * actors)
 }
 
 
-void GetQueryParameters(TypedTuple const * actors, TypedTuple * parameters)
+void GetQueryParameters(TypedTuple const * actors, Atom parameters[])
 {
-	ASSERT(actors->nAtoms == parameters->nAtoms)
 	ASSERT(!hasParameterAtom(actors))
 	for(index8 i = 0; i < actors->nAtoms; i++) {
 		TypedAtom typedAtom = TypedTupleGetElement(actors, i);
-		if(typedAtom.type == AT_VARIABLE) {
-			Atom parameter = {
+		if(typedAtom.type == AT_VARIABLE)
+			parameters[i] = (Atom) {
 				.parameter = {.number = i + 1, .io = PARAMETER_OUT, .atomType = 0}
 			};
-			TypedTupleSetElement(parameters, i, CreateTypedAtom(AT_PARAMETER, parameter));
-		}
-		else {
-			Atom parameter = {
+		else
+			parameters[i] = (Atom) {
 				.parameter = {.number = i + 1, .io = PARAMETER_IN, .atomType = typedAtom.type}
 			};
-			TypedTupleSetElement(parameters, i, CreateTypedAtom(AT_PARAMETER, parameter));
-		}
 	}
 }
 

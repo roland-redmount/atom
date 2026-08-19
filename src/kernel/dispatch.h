@@ -4,8 +4,8 @@
  *
  * A query is matched by its *type*: the term form, together with the direction and atom
  * type of each parameter. DispatchQuery() takes the actors of a query and generalizes
- * them to parameters itself; the other entry points take a query already generalized, as
- * the compiler works with parameters throughout. See GetQueryParameters().
+ * them to parameters itself; the other entry points take an array of AT_PARAMETER atoms,
+ * the compiler working in parameters throughout. See GetQueryParameters().
  */
 
 #ifndef DISPATCH_H
@@ -44,8 +44,9 @@ bool DispatchQuery(
 bool DispatchQueryFormula(Formula * queryTerm, Service * service, index8 * permutation);
 
 /**
- * Dispatch a query already generalized to parameters, which the tuple must hold: matching
- * is signature against signature. Unlike DispatchQuery(), a parameter occurring at
+ * Dispatch a query already generalized to parameters: matching is signature against
+ * signature. Every atom of the array is an AT_PARAMETER atom, which is why it is an
+ * Atom array rather than a TypedTuple. Unlike DispatchQuery(), a parameter occurring at
  * several positions is matched as one atom, which is what a rule body term with a
  * repeated variable needs.
  *
@@ -59,7 +60,7 @@ bool DispatchQueryFormula(Formula * queryTerm, Service * service, index8 * permu
  * one service per candidate; see compiler.c.
  */
 bool DispatchGeneralizedQuery(
-	Atom queryTermForm, TypedTuple const * queryParameters, Service * service,
+	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, Service * service,
 	index8 permutation[], size8 nSkip, bool * hasNextMatch);
 
 
@@ -69,7 +70,8 @@ bool DispatchGeneralizedQuery(
  * match, which repeats the search from the start every time.
  */
 typedef struct {
-	TypedTuple const * queryParameters;
+	Atom const * queryParameters;
+	size8 nParameters;
 	index8 * permutation;
 	RelationIterator relationIterator;
 	ServiceIterator serviceIterator;
@@ -90,13 +92,13 @@ typedef struct {
  * DispatchGeneralizedQuery() with increasing nSkip.
  * The iterator is positioned before the first matching service, so
  * DispatchIteratorNext() must be called before DispatchIteratorPeekService().
- * The permutation array must hold at least queryParameters->nAtoms elements,
+ * The permutation array must hold at least nParameters elements,
  * and receives the argument permutation of the current match; see DispatchQuery().
  * The caller must call DispatchIteratorEnd() when done.
  */
 void DispatchIterate(
-	Atom queryTermForm, TypedTuple const * queryParameters, index8 permutation[],
-	DispatchIterator * iterator);
+	Atom queryTermForm, Atom const queryParameters[], size8 nParameters,
+	index8 permutation[], DispatchIterator * iterator);
 
 /**
  * Advance to the next matching service, if one exists, writing its argument

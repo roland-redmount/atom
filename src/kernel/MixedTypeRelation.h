@@ -49,9 +49,9 @@ typedef struct s_MixedTypeRelation {
 		// for MIXED_TYPE_CONCAT
 		struct {
 			TypedTuple const * queryActors;
-			// The query generalized to parameters, which is what dispatch matches;
-			// see GetQueryParameters()
-			TypedTuple * queryParameters;
+			// The query generalized to parameters, which is what dispatch matches, and
+			// which the dispatch iterator reads as it goes; see GetQueryParameters()
+			Atom * queryParameters;
 			// Index of the first query actor denoting the same atom as actor i, which
 			// is the equality constraint the query type drops. Null when the query
 			// actors are all distinct, which is the usual case, and then no tuple is

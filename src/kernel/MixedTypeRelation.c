@@ -150,10 +150,13 @@ MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * 
 	relation->impl.concat.context = 0;
 	relation->impl.concat.isExhausted = false;
 
-	// The arguments and permutation arrays share one allocation, the arguments first
-	// so that they keep the alignment of an Atom
-	relation->impl.concat.arguments = Allocate(arity * (sizeof(Atom) + sizeof(index8)));
-	relation->impl.concat.permutation = (index8 *) (relation->impl.concat.arguments + arity);
+	// The arguments, query parameters and permutation arrays share one allocation, the
+	// atoms first so that they keep the alignment of an Atom
+	relation->impl.concat.arguments = Allocate(
+		arity * (2 * sizeof(Atom) + sizeof(index8)));
+	relation->impl.concat.queryParameters = relation->impl.concat.arguments + arity;
+	relation->impl.concat.permutation =
+		(index8 *) (relation->impl.concat.queryParameters + arity);
 
 	// Create the equalityMap only if there are repeated variables
 	index8 equalityMap[arity];
@@ -164,11 +167,10 @@ MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * 
 	else
 		relation->impl.concat.equalityMap = 0;
 
-	// Dispatch the query type, and keep the tuple: the iterator reads it as it goes
-	relation->impl.concat.queryParameters = CreateTypedTuple(arity);
+	// Dispatch the query type, which the iterator reads for as long as it is open
 	GetQueryParameters(queryActors, relation->impl.concat.queryParameters);
 	DispatchIterate(
-		queryTermForm, relation->impl.concat.queryParameters,
+		queryTermForm, relation->impl.concat.queryParameters, arity,
 		relation->impl.concat.permutation, &(relation->impl.concat.dispatchIterator));
 	return relation;
 }
@@ -201,7 +203,6 @@ void FreeMixedTypeRelation(MixedTypeRelation * relation)
 		if(relation->impl.concat.context)
 			OperatorFreeContext(relation->impl.concat.context);
 		DispatchIteratorEnd(&(relation->impl.concat.dispatchIterator));
-		FreeTypedTuple(relation->impl.concat.queryParameters);
 		Free(relation->impl.concat.arguments);
 		if(relation->impl.concat.equalityMap)
 			Free(relation->impl.concat.equalityMap);

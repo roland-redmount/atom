@@ -82,6 +82,41 @@ static bool nextChoiceBranch(ChoicePoints * choices)
 
 
 /**
+ * Generalize the actors of a term to its signature, which is what dispatch matches: a
+ * parameter stands for itself, and a constant for an input parameter of the constant's own
+ * type, which is all a constant asks of a service. The number given to a constant is above
+ * every number the term uses, so that it constrains nothing to be equal to it.
+ *
+ * The parameters array must hold as many atoms as the term has actors. Actors of a term
+ * are parameters and constants only, every variable of the clause having been given a
+ * parameter by parameterizeLocalVariables().
+ */
+static void getTermParameters(TypedTuple const * termActors, Atom parameters[])
+{
+	uint8 nextNumber = 1;
+	for(index8 i = 0; i < termActors->nAtoms; i++) {
+		TypedAtom actor = TypedTupleGetElement(termActors, i);
+		ASSERT(actor.type != AT_VARIABLE)
+		if((actor.type == AT_PARAMETER) && (actor.atom.parameter.number >= nextNumber))
+			nextNumber = actor.atom.parameter.number + 1;
+	}
+	for(index8 i = 0; i < termActors->nAtoms; i++) {
+		TypedAtom actor = TypedTupleGetElement(termActors, i);
+		if(actor.type == AT_PARAMETER)
+			parameters[i] = actor.atom;
+		else {
+			// a parameter number is a uint8, which a term arity cannot exhaust
+			ASSERT(nextNumber < 255)
+			parameters[i] = (Atom) {
+				.parameter = {
+					.number = nextNumber++, .io = PARAMETER_IN, .atomType = actor.type}
+			};
+		}
+	}
+}
+
+
+/**
  * Dispatch a term at the next choice point, taking the alternative selected
  * for the current branch and recording whether further alternatives exist.
  */
@@ -91,8 +126,11 @@ static bool dispatchAtChoicePoint(
 {
 	ASSERT(choices->depth < MAX_CHOICE_POINTS)
 	index8 d = choices->depth++;
+	size8 termArity = termActors->nAtoms;
+	Atom termParameters[termArity];
+	getTermParameters(termActors, termParameters);
 	return DispatchGeneralizedQuery(
-		termForm, termActors, service, permutation,
+		termForm, termParameters, termArity, service, permutation,
 		choices->matchIndex[d], &(choices->hasNextMatch[d])
 	);
 }
@@ -1159,10 +1197,14 @@ size8 CompileQuery(Formula const * queryTerm, Service services[], size8 maxServi
 	ASSERT(IsTermForm(queryTerm->form))
 	ASSERT(maxServices > 0)
 
-	// Generalize atoms in the query to parameters
+	// Generalize atoms in the query to parameters. The compilation works in tuples of
+	// typed atoms throughout, so the parameters are wrapped in one here.
 	size8 arity = queryTerm->actors->nAtoms;
+	Atom parameters[arity];
+	GetQueryParameters(queryTerm->actors, parameters);
 	TypedTuple * queryParameters = CreateTypedTuple(arity);
-	GetQueryParameters(queryTerm->actors, queryParameters);
+	for(index8 i = 0; i < arity; i++)
+		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameters[i]));
 
 	PrintCString("\nCompileQuery()\nqueryParameters: ");
 	PrintFormActorsAsFormula(queryTerm->form, queryParameters);

@@ -77,13 +77,13 @@ void testDispatchRepeatedParameter(void)
 {
 	Formula * query = CStringToTerm("list \"ab\" position _p element _e");
 	size8 arity = query->actors->nAtoms;
-	TypedTuple * parameters = CreateTypedTuple(arity);
+	Atom parameters[arity];
 	GetQueryParameters(query->actors, parameters);
 
 	Service service;
 	index8 permutation[arity];
 	ASSERT_TRUE(DispatchGeneralizedQuery(
-		query->form, parameters, &service, permutation, 0, 0))
+		query->form, parameters, arity, &service, permutation, 0, 0))
 
 	// Give the position and the element one parameter, as a term (list s position p
 	// element p) has. The service has a UINT position and a LETTER element, so no atom
@@ -98,14 +98,11 @@ void testDispatchRepeatedParameter(void)
 	index8 elementIndex = PredicateRoleIndex(predicateForm, elementRole);
 	NameRelease(positionRole);
 	NameRelease(elementRole);
-	TypedTupleSetElement(
-		parameters, positionIndex, CreateTypedAtom(AT_PARAMETER, repeatedParameter));
-	TypedTupleSetElement(
-		parameters, elementIndex, CreateTypedAtom(AT_PARAMETER, repeatedParameter));
+	parameters[positionIndex] = repeatedParameter;
+	parameters[elementIndex] = repeatedParameter;
 	ASSERT_FALSE(DispatchGeneralizedQuery(
-		query->form, parameters, &service, permutation, 0, 0))
+		query->form, parameters, arity, &service, permutation, 0, 0))
 
-	FreeTypedTuple(parameters);
 	FreeFormula(query);
 }
 
@@ -173,11 +170,11 @@ void testDispatchIterator(void)
 	// Only the service with two output parameters matches, so each table contributes
 	// one match
 	Formula * query = CStringToTerm("first _x second _y");
-	TypedTuple * parameters = CreateTypedTuple(2);
+	Atom parameters[2];
 	GetQueryParameters(query->actors, parameters);
 	index8 permutation[2];
 	DispatchIterator iterator;
-	DispatchIterate(query->form, parameters, permutation, &iterator);
+	DispatchIterate(query->form, parameters, 2, permutation, &iterator);
 
 	size8 nMatches = 0;
 	while(DispatchIteratorNext(&iterator)) {
@@ -186,7 +183,7 @@ void testDispatchIterator(void)
 		index8 skipPermutation[2];
 		bool hasNextMatch;
 		ASSERT_TRUE(DispatchGeneralizedQuery(
-			query->form, parameters, &skipService, skipPermutation, nMatches, &hasNextMatch))
+			query->form, parameters, 2, &skipService, skipPermutation, nMatches, &hasNextMatch))
 		Service const * service = DispatchIteratorPeekService(&iterator);
 		ASSERT_PTR_EQUAL(service->relation, skipService.relation)
 		ASSERT_PTR_EQUAL(service->op, skipService.op)
@@ -200,20 +197,18 @@ void testDispatchIterator(void)
 	DispatchIteratorEnd(&iterator);
 
 	// An iterator abandoned before the last match is released just as well
-	DispatchIterate(query->form, parameters, permutation, &iterator);
+	DispatchIterate(query->form, parameters, 2, permutation, &iterator);
 	ASSERT_TRUE(DispatchIteratorNext(&iterator))
 	DispatchIteratorEnd(&iterator);
-	FreeTypedTuple(parameters);
 	FreeFormula(query);
 
 	// A query for a form with no relation table yields no match at all
 	Formula * unknownQuery = CStringToTerm("nowhere _x nothing _y");
-	TypedTuple * unknownParameters = CreateTypedTuple(2);
+	Atom unknownParameters[2];
 	GetQueryParameters(unknownQuery->actors, unknownParameters);
-	DispatchIterate(unknownQuery->form, unknownParameters, permutation, &iterator);
+	DispatchIterate(unknownQuery->form, unknownParameters, 2, permutation, &iterator);
 	ASSERT_FALSE(DispatchIteratorNext(&iterator))
 	DispatchIteratorEnd(&iterator);
-	FreeTypedTuple(unknownParameters);
 	FreeFormula(unknownQuery);
 
 	ServiceRegistryRemoveAll(uintTable);

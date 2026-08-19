@@ -16,12 +16,9 @@
  * The query term must outlive the returned relation, which reads its actors.
  *
  * A query that does not dispatch to any service is compiled, registering new services.
- * Dispatch and the compiler both work by the query type, so a query answered by an
- * earlier query of its type is not compiled again; see DispatchQuery() and
- * GetQueryParameters(). What the type leaves out is the equality constraint of a repeated
- * actor, which the returned relation applies to the tuples it reads, so a query such as
- * (item z index z) is answered from the service compiled for (item e index p); see
- * testQueryTypeIgnoresRepeatedVariable().
+ * Dispatch and the compiler both work with the query generalized to parameters, so a query
+ * answered by an earlier query that generalize to the same parameters is not compiled again;
+ * see DispatchQuery() and GetQueryParameters().
  *
  * NOTE: a query whose type compiles to nothing is compiled again every time it is
  * asked. Compiling nothing registers nothing, so this costs a walk over the rules and

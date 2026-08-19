@@ -35,10 +35,11 @@
 
 
 /**
- * Generate a parameters tuple from an actors tuple, such that each non-variable atom
+ * Generate the parameters of an actors tuple, such that each non-variable atom
  * in the actors tuple yields an input parameter of the same type as the atom,
  * and each variable yields an output parameter, whose type is unknown.
- * The two tuples must have the same number of atoms.
+ * The parameters array must hold as many atoms as the actors tuple. Every atom written is
+ * an AT_PARAMETER atom, so the array carries no atom types of its own.
  * The output parameter types must be discovered later by matching against services.
  * The generated parameter numbers are always equal to the tuple index (1-based), so
  * actor is mapped to a distinct parameter, and any repeated variable loses its
@@ -48,7 +49,7 @@
  * builds assert. A caller working in parameters already, as the compiler does, has
  * nothing to generalize.
  */
-void GetQueryParameters(TypedTuple const * actors, TypedTuple * parameters);
+void GetQueryParameters(TypedTuple const * actors, Atom parameters[]);
 
 void PrintParameter(Atom parameter);
 
