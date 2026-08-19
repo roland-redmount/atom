@@ -2,86 +2,66 @@
  * Tests for the high level fact interface, AssertFact() and RetractFact().
  */
 
-#include "kernel/Int.h"
 #include "kernel/kernel.h"
-#include "kernel/RelationTableRegistry.h"
-#include "kernel/ifact.h"
 #include "kernel/RelationRegistry.h"
-#include "kernel/string.h"
-#include "lang/TermForm.h"
-#include "memory/allocator.h"
-#include "testing/fixtures.h"
+#include "kernel/RelationTable.h"
+#include "kernel/RelationTableRegistry.h"
+#include "lang/Formula.h"
+#include "parser/TermBuilder.h"
 #include "testing/testing.h"
 #include "ui/assert.h"
 
 
 /**
- * NOTE: this test is the specification of what AssertFact() and RetractFact() are
- * to become, and does not pass yet. It is disabled in main() until they create a
- * relation table for a fact whose relation does not exist, and drop the table again
- * once its last fact is retracted.
+ * Assert and retract two facts of a relation that does not exist beforehand.
+ * The first assert creates the relation and its table, and retracting the last
+ * fact drops both again.
  */
 void testAssertRetract(void)
 {
-	// term form (foo bar)
-	byte atomTypes[2] = {AT_ID, AT_INT};
-	Atom form = CreateTermFormFromRoleNames((char const * []) {"foo", "bar"}, 2, true);
+	// Two facts of the term form (foo bar), with the same atom types,
+	// so that both belong to the same relation.
+	Formula * fact1 = CStringToTerm("foo \"barf\" bar 1");
+	Formula * fact2 = CStringToTerm("foo \"baz\" bar 42");
+	size8 nColumns = fact1->actors->nAtoms;
+	byte const * atomTypes = TypedTuplePeekAtomTypes(fact1->actors);
 
-	// check that relation table does not already exist
-	ASSERT_NULL(RelationRegistryFind(form, 2, atomTypes))
-	
-	// asserting the first fact should create the service
-	Atom barf = CreateStringFromCString("barf");
-	TypedTuple * actors1 = CreateTypedTupleFromArray(
-		(TypedAtom[]) {
-			CreateTypedAtom(AT_ID, barf),
-			CreateTypedAtom(AT_INT, (Atom) {._int = -1})
-		},
-		2
-	);
-	AssertFact(form, actors1, 0);
+	// The relation does not exist until the first fact is asserted
+	ASSERT_NULL(RelationRegistryFind(fact1->form, nColumns, atomTypes))
 
-	Relation const * relation = RelationRegistryFind(form, 2, atomTypes);
+	ASSERT_INT32_EQUAL(AssertFact(fact1->form, fact1->actors, 0), ASSERT_OK)
+
+	Relation const * relation = RelationRegistryFind(fact1->form, nColumns, atomTypes);
 	ASSERT_NOT_NULL(relation)
 	RelationTable const * table = RelationTableRegistryFind(relation);
 	ASSERT_NOT_NULL(table)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
 
-	Atom baz = CreateStringFromCString("baz");
-	TypedTuple * actors2 = CreateTypedTupleFromArray(
-		(TypedAtom[]) {
-			CreateTypedAtom(AT_INT, (Atom) {._int = 42}),
-			CreateTypedAtom(AT_ID, baz)
-		},
-		2
-	);
-	AssertFact(form, actors2, 0);
-	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 2)
-
-	RetractFact(form, actors2);
+	// Asserting the same fact again changes nothing
+	ASSERT_INT32_EQUAL(AssertFact(fact1->form, fact1->actors, 0), ASSERT_EXISTED)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
 
-	// retracting the last fact should remove the service
-	RetractFact(form, actors1);
-	ASSERT_NULL(RelationRegistryFind(form, 2, atomTypes))
-	
-	FreeTypedTuple(actors1);
-	FreeTypedTuple(actors2);
-	IFactRelease(barf);
-	IFactRelease(baz);
-	IFactRelease(form);
+	// The second fact goes in the same table
+	ASSERT_INT32_EQUAL(AssertFact(fact2->form, fact2->actors, 0), ASSERT_OK)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 2)
+
+	RetractFact(fact2->form, fact2->actors);
+	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
+
+	// Retracting the last fact drops the table, and the relation with it
+	RetractFact(fact1->form, fact1->actors);
+	ASSERT_NULL(RelationRegistryFind(fact1->form, nColumns, atomTypes))
+
+	FreeFormula(fact2);
+	FreeFormula(fact1);
 }
 
 
 int main(int argc, char * argv[])
 {
-#ifdef DEBUG_ALLOCATE
-	SetAllocationLogging(true);
-#endif
-
 	KernelInitialize();
 
-	// ExecuteTest(testAssertRetract);
+	ExecuteTest(testAssertRetract);
 
 	KernelShutdown();
 
