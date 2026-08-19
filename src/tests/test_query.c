@@ -75,12 +75,12 @@ void testQueryCompilesOnce(void)
 
 
 /**
- * Two queries of the same term form are of the same "type" only if they agree on the direction
- * and input type of every parameter. Here, the query (before x after y) is distinct
+ * Two queries of the same term form compile to distinct services if their parameter IO
+ * direction (position of variables) differ. Here, the query (before x after y) is distinct
  * from (before "a" after y) since the parameter IO direction differs, so they compile
  * independently to two distinct services.
  */
-void testQueryTypeIsParameterDirections(void)
+void testQueryParameterIO(void)
 {
 	SetupPrecSuccFixture(&precSuccFixture);
 	DictionaryEntry entry1;
@@ -91,7 +91,7 @@ void testQueryTypeIsParameterDirections(void)
 	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
-	// b, c and d come after a, and this query type compiles a service of its own
+	// b, c and d come after a, and this query compiles a service of its own
 	ASSERT_UINT32_EQUAL(countQueryTuples("before \"a\" after _y"), 3)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 2)
 	ASSERT_UINT32_EQUAL(countQueryTuples("before \"a\" after _y"), 3)
@@ -104,10 +104,7 @@ void testQueryTypeIsParameterDirections(void)
 
 
 /**
- * A repeated variable is not part of the query type: the query is compiled and dispatched
- * with distinct parameters, and the equality constraint is applied to the tuples as they are read.
- * The query (list "ab" position x element x) is the case that tells the two apart, as it
- * matches no service while a service of its type exists.
+ * Test that UserQuery() filters correctly on repeated variables.
  */
 void testQueryRepeatedVariable(void)
 {
@@ -121,7 +118,9 @@ void testQueryRepeatedVariable(void)
 	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _x"), 2)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
-	// A position is never a letter, so this query yields no tuples
+	// This query yields no tuples, since the (list position element) service
+	// has distinct parameter types for the position and element roles, and
+	// therefore all tuples from the servuce will fail the equality constraint.
 	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position _x element _x"), 0)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
@@ -132,26 +131,25 @@ void testQueryRepeatedVariable(void)
 
 
 /**
- * A repeated variable is not part of the query type, which is what decides whether a
- * query has been compiled before. The rule here derives (item index) with a LETTER and a
- * UINT column, so the query (item z index z) can match no service, while its type is the
- * service compiled for (item e index p). Were the query itself asked instead of its type,
- * that service would be compiled a second time, and registering it would fail.
+ * Since a repeated variable is lost when generalizing a query to parameters, the
+ * queries (item e index p) and (item z index z) below should compile to the same
+ * service, and therefore only the first query leads to compilation, while the
+ * second query re-uses the existing compiled service.
  */
-void testQueryTypeIgnoresRepeatedVariable(void)
+void testQueryCompileIgnoresRepeatedVariable(void)
 {
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
 		"item _e index _p | ! list \"ab\" position _p element _e");
 	size32 nServices = ServiceRegistryCount();
 
-	// The letters of "ab" with their positions. The element role of (list position
-	// element) is an untyped output, so the rule compiles one service per element type,
-	// of which only the LETTER one yields tuples
+	// This query compiles two services since we have two (list position element)
+	// services with element types AT_ID and AT_NAME; it yields the letters of "ab"
+	// and their positions.
 	ASSERT_UINT32_EQUAL(countQueryTuples("item _e index _p"), 2)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 2)
 
-	// No letter is a position, so this asks for nothing, and its type is compiled
-	// already: nothing is compiled here
+	// This query re-uses the above compiled services, but yields no tuples
+	// since the element type is never a UINT.
 	ASSERT_UINT32_EQUAL(countQueryTuples("item _z index _z"), 0)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 2)
 
@@ -264,9 +262,9 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testQueryStoredFacts);
 	ExecuteTest(testQueryCompilesOnce);
-	ExecuteTest(testQueryTypeIsParameterDirections);
+	ExecuteTest(testQueryParameterIO);
 	ExecuteTest(testQueryRepeatedVariable);
-	ExecuteTest(testQueryTypeIgnoresRepeatedVariable);
+	ExecuteTest(testQueryCompileIgnoresRepeatedVariable);
 	ExecuteTest(testQueryWithoutAnswer);
 	ExecuteTest(testQueryInvalidatedByRelation);
 	ExecuteTest(testQueryInvalidatedByRule);

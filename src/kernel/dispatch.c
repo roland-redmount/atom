@@ -200,8 +200,6 @@ bool DispatchGeneralizedQuery(
 bool DispatchQuery(
 	Atom queryTermForm, TypedTuple const * queryActors, Service * service, index8 permutation[])
 {
-	// Dispatch the query type: the equality constraint of a repeated actor is not part
-	// of what a service provides, and is applied to the tuples an answer is read from
 	size8 arity = queryActors->nAtoms;
 	Atom queryParameters[arity];
 	GetQueryParameters(queryActors, queryParameters);

@@ -4,13 +4,12 @@
 
 
 /**
- * Test whether an actors tuple holds a parameter, which a query never does: a parameter
- * belongs to a signature, and is what a query is generalized to.
+ * Test whether a tuple contains a parameter.
  */
-static bool hasParameterAtom(TypedTuple const * actors)
+static bool hasParameterAtom(TypedTuple const * tuple)
 {
-	for(index8 i = 0; i < actors->nAtoms; i++) {
-		if(TypedTupleGetElement(actors, i).type == AT_PARAMETER)
+	for(index8 i = 0; i < tuple->nAtoms; i++) {
+		if(TypedTupleGetElement(tuple, i).type == AT_PARAMETER)
 			return true;
 	}
 	return false;
