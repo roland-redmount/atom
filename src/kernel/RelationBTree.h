@@ -95,35 +95,14 @@ Atom RelationBTreeIteratorGetAtom(RelationBTreeIterator const * iterator, index8
 void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, Atom tuple[]);
 
 /**
- * View the iterator's current tuple
- * NOTE: this is no longer feasible as RelationBTree reorders columns internally
- */
-// Atom const * RelationBTreeIteratorPeekTuple(RelationBTreeIterator const * iterator);
-
-/**
  * Terminate the iterator, releasing lock from the tree.
  */
 void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator);
 
 /**
- * Query a B-tree relation table and return a single tuple.
- * The relation table must have exactly one tuple matching the query.
- */
-// void RelationBTreeQuerySingle(RelationTable * table, Atom const ueryTuple[], size8 nInputs, Atom resultTuple[]);
-
-/**
- * Query the relation and return a single TypedAtom from a single tuple.
- * The relation table must have exactly one tuple matching the query.
- */
-// Atom RelationBTreeQuerySingleAtom(RelationTable * table, Atom const queryTuple[], size8 nInputs, index8 index);
-
-
-/**
  * Remove a tuple from the BTree matching the query. See RelationTableRemoveTuple()
  */
 byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition);
-
-// size32 RelationBTreeRemoveTuples(BTree * btree, Atom const queryTuple[], size8 nInputs, uint8 identified);
 
 /**
  * High-level method to give the relation of the given signature B-tree storage, creating
