@@ -341,27 +341,30 @@ no way of knowing whether anything answers it yet. `UserQuery()` in `src/ui/quer
 that entry point, one layer above the compiler and dispatch.
 
 It compiles a query the first time that query is asked, and is answered by the compiled
-services from then on. Whether a query has been asked before is decided by dispatching
-its **type**: the query generalized to parameters by `GetQueryParameters()`, which is the
-term form together with the direction and input type of each parameter. Two queries of one
-type compile to the same services, so a match means the compilation has happened, whether
-by an earlier query, by the kernel or by a stored relation registering its own services.
+services from then on. Whether a query has been asked before is decided by dispatching it,
+and both dispatch and the compiler work by the query **type**: the query generalized to
+parameters by `GetQueryParameters()`, which is the term form together with the direction
+and input type of each parameter. Two queries of one type compile to the same services, so
+a match means the compilation has happened, whether by an earlier query, by the kernel or
+by a stored relation registering its own services.
 
-The type is what has to be dispatched, not the query itself. The query
+Generalizing is what makes the two agree. The compiler numbers every actor of a query
+separately, so a variable occurring twice loses its equality constraint; were dispatch to
+match that constraint, a query repeating a variable would look uncompiled while its type
+was compiled, and compiling it again would register a service that exists. Take a rule
+deriving `(item index)` over a LETTER and a UINT column: `(item z index z)` can be
+satisfied by no tuple, but its type is exactly the service compiled for
+`(item e index p)`. So `DispatchQuery()` generalizes the actors it is given, and the
+entry points the compiler uses take a query already generalized.
 
-    list "ab" position x element x
+The constraint the type drops is applied where the answer is read: a `MixedTypeRelation`
+over the query actors gathers the tuples of every matching service and keeps those in
+which the repeated actors agree, atom type included, since dispatch no longer says
+anything about the columns they matched; see `MixedTypeRelation.h`.
 
-matches no service at all, its repeated variable spanning a UINT column and a LETTER
-column, while its type `(list <ID position >UINT element >LETTER)` is a service the kernel
-registers. Dispatching the query would conclude that it has never been compiled, and
-compiling it would register that service a second time, which `ServiceRegistryAdd()`
-asserts against.
-
-The answer itself is a `MixedTypeRelation` over the query actors, which gathers the tuples
-of every matching service and applies the equality constraints of the query; see
-`MixedTypeRelation.h`. A query whose type compiles to nothing is compiled again every time
-it is asked. That costs a walk over the rules and registers nothing, and it is what lets a
-query start working once a rule answering it is asserted.
+A query whose type compiles to nothing is compiled again every time it is asked. That
+costs a walk over the rules and registers nothing, and it is what lets a query start
+working once a rule answering it is asserted.
 
 ### Invalidating a compiled service
 

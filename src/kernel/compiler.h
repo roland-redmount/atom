@@ -25,22 +25,4 @@
  */
 size8 CompileQuery(Formula const * queryTerm, Service services[], size8 maxServices);
 
-/**
- * Generate a parameters tuple from an actors tuple, such that each non-variable atom
- * in the actors tuple corresponds to an input parameter (with type preserved),
- * and each variable yields an output parameter. The output parameter types are
- * unknown and must be discovered later by matching against services.
- * The generated parameter numbers are always equal to the tuple index (1-based).
- * The two tuples must have the same number of atoms.
- *
- * The result is the query generalized to its type: the term form together with the
- * direction and input type of each parameter is what determines the services a query
- * compiles to, and hence whether it has been compiled before; see UserQuery().
- *
- * NOTE: the parameters tuple could be an Atom[] as the type is constant, but this
- * currently doesn't fit with compileQuery() and downstream functions.
- */
-void GetQueryParameters(TypedTuple const * actors, TypedTuple * parameters);
-
-
 #endif	// COMPILER_H

@@ -1,8 +1,5 @@
 /**
- * The user query interface: the layer above dispatch and the compiler that answers a
- * query as a user expects it to be answered, without the user knowing which services
- * exist. See compiler.h for what compilation does, and MixedTypeRelation.h for how the
- * tuples of several services become one relation.
+ * High-level user query interface
  */
 
 #ifndef QUERY_H
@@ -13,19 +10,18 @@
 
 
 /**
- * Answer a user query: the relation of every fact the knowledge base entails for the
- * given query term, whether stored as a fact or derived through a rule. The caller
- * iterates the returned relation and frees it with FreeMixedTypeRelation().
+ * Execute a query, returning a mixed-type relation containing every fact entailed by
+ * the knowledge base for the given query term . The caller iterates the returned relation
+ * and frees it with FreeMixedTypeRelation().
  * The query term must outlive the returned relation, which reads its actors.
  *
- * A query asked for the first time is compiled here, which registers the services
- * answering it; a query asked again is answered by those services. Whether a query has
- * been asked before is decided by dispatching its type, which is the query generalized
- * to parameters; see GetQueryParameters(). Dispatching the actors instead would ask a
- * narrower question and lead to compiling a service that already exists: the query
- * (list "ab" position x element x) matches no service, its repeated variable spanning
- * columns of two types, while its type (list <ID position >UINT element >LETTER) is a
- * service of the kernel.
+ * A query that does not dispatch to any service is compiled, registering new services.
+ * Dispatch and the compiler both work by the query type, so a query answered by an
+ * earlier query of its type is not compiled again; see DispatchQuery() and
+ * GetQueryParameters(). What the type leaves out is the equality constraint of a repeated
+ * actor, which the returned relation applies to the tuples it reads, so a query such as
+ * (item z index z) is answered from the service compiled for (item e index p); see
+ * testQueryTypeIgnoresRepeatedVariable().
  *
  * NOTE: a query whose type compiles to nothing is compiled again every time it is
  * asked. Compiling nothing registers nothing, so this costs a walk over the rules and

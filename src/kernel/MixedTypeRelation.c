@@ -1,7 +1,50 @@
 
 #include "kernel/MixedTypeRelation.h"
+#include "kernel/Parameter.h"
 #include "lang/TermForm.h"
+#include "lang/Variable.h"
 #include "memory/allocator.h"
+
+
+/**
+ * Test whether two query actors are one variable, which is the only way an actor denotes
+ * the same atom at two positions of a query: any other actor stands for itself.
+ *
+ * NOTE: each occurence of the anonymous variable _ is a variable of its own,
+ * which SameVariable() gives us.
+ */
+static bool isRepeatedVariable(TypedAtom first, TypedAtom second)
+{
+	if((first.type != AT_VARIABLE) || (second.type != AT_VARIABLE))
+		return false;
+	return SameVariable(first.atom, second.atom);
+}
+
+
+/**
+ * Set equalityMap[i] to the index of the first query actor denoting the same atom as
+ * actor i, which is i itself for an actor occurring once. Returns true if any actor is
+ * repeated, which is the only case where a tuple can fail the constraint.
+ *
+ * This is the constraint the query type drops, as every actor obtains a parameter of its
+ * own there; see GetQueryParameters().
+ */
+static bool queryEqualityMap(TypedTuple const * queryActors, index8 equalityMap[])
+{
+	bool hasRepeatedActor = false;
+	for(index8 i = 0; i < queryActors->nAtoms; i++) {
+		TypedAtom queryAtom = TypedTupleGetElement(queryActors, i);
+		equalityMap[i] = i;
+		for(index8 j = 0; j < i; j++) {
+			if(isRepeatedVariable(queryAtom, TypedTupleGetElement(queryActors, j))) {
+				equalityMap[i] = j;
+				hasRepeatedActor = true;
+				break;
+			}
+		}
+	}
+	return hasRepeatedActor;
+}
 
 
 /**
@@ -54,9 +97,12 @@ static bool tupleSatisfiesConstraints(MixedTypeRelation const * relation)
 	for(index8 i = 0; i < relation->tuple->nAtoms; i++) {
 		if(equalityMap[i] == i)
 			continue;
-		if(CompareAtoms(
-			TypedTupleGetAtom(relation->tuple, i),
-			TypedTupleGetAtom(relation->tuple, equalityMap[i])))
+		// The atom types are compared as well: dispatch matches the query type, which
+		// says nothing about the columns of a repeated actor, and an atom of one type
+		// may have the bit pattern of an atom of another
+		if(!SameTypedAtoms(
+			TypedTupleGetElement(relation->tuple, i),
+			TypedTupleGetElement(relation->tuple, equalityMap[i])))
 			return false;
 	}
 	return true;
@@ -111,16 +157,19 @@ MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * 
 
 	// Create the equalityMap only if there are repeated variables
 	index8 equalityMap[arity];
-	if(QueryEqualityMap(queryActors, equalityMap)) {
+	if(queryEqualityMap(queryActors, equalityMap)) {
 		relation->impl.concat.equalityMap = Allocate(arity * sizeof(index8));
 		CopyMemory(equalityMap, relation->impl.concat.equalityMap, arity * sizeof(index8));
 	}
 	else
 		relation->impl.concat.equalityMap = 0;
 
-	DispatchQueryIterate(
-		queryTermForm, queryActors, relation->impl.concat.permutation,
-		&(relation->impl.concat.dispatchIterator));
+	// Dispatch the query type, and keep the tuple: the iterator reads it as it goes
+	relation->impl.concat.queryParameters = CreateTypedTuple(arity);
+	GetQueryParameters(queryActors, relation->impl.concat.queryParameters);
+	DispatchIterate(
+		queryTermForm, relation->impl.concat.queryParameters,
+		relation->impl.concat.permutation, &(relation->impl.concat.dispatchIterator));
 	return relation;
 }
 
@@ -152,6 +201,7 @@ void FreeMixedTypeRelation(MixedTypeRelation * relation)
 		if(relation->impl.concat.context)
 			OperatorFreeContext(relation->impl.concat.context);
 		DispatchIteratorEnd(&(relation->impl.concat.dispatchIterator));
+		FreeTypedTuple(relation->impl.concat.queryParameters);
 		Free(relation->impl.concat.arguments);
 		if(relation->impl.concat.equalityMap)
 			Free(relation->impl.concat.equalityMap);

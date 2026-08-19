@@ -12,114 +12,63 @@
 #include "lang/FormPermutation.h"
 #include "lang/Formula.h"
 #include "lang/SubstitutionList.h"
-#include "lang/Variable.h"
 #include "lang/unification.h"
 
 /**
- * Test whether two query atoms denote the same atom, so that they can only match
- * service parameters of the same type. Only variables and parameters can do so;
- * any other atom is matched against the service parameter type directly.
+ * Test whether a generalized query matches a service signature, permuted according to the
+ * given permutation array (0-based indices). The query holds parameters, and the
+ * constants a rule body term restricts its arguments by; it holds no variables, those
+ * having become parameters when the query was generalized. Matching rules are:
  *
- * NOTE: each occurence of the anonymous variable _ is a variable of its own,
- * which SameVariable() gives us.
- */
-static bool sameQueryAtom(TypedAtom first, TypedAtom second)
-{
-	if(first.type != second.type)
-		return false;
-	if(first.type == AT_VARIABLE)
-		return SameVariable(first.atom, second.atom);
-	if(first.type == AT_PARAMETER)
-		return first.atom.parameter.number == second.atom.parameter.number;
-	return false;
-}
-
-
-/**
- * Test whether a query tuple matches a service parameters list when permuted
- * according to the given permutation array (0-based indices). The query tuple
- * may contain parameters (used by the compiler). Matching rules are:
- *
- * 1) Each service input parameter must match (i) a query atom of the same type
- *    as the service parameter atom type, or (ii) a query input parameter
- *    of the same type or type == NONE.
- * 2) Each service output parameter must match (1) a query variable, or
- *    (ii) a query output parameter of the same type or type == NONE.
- * 3) A variable or parameter occurring at several positions of the query denotes
- *    one atom, and so must match service parameters of the same type.
+ * 1) The direction of each query parameter must agree with the service parameter, and its
+ *    atom type must equal the type of the service column, or be absent, which is the case
+ *    of an output whose type is not known yet.
+ * 2) A constant restricts an argument, so the service must take that argument as an input
+ *    of the constant's own type.
+ * 3) A parameter occurring at several positions of the query denotes one atom, and so
+ *    must match service parameters of the same type. A query generalized from actors
+ *    numbers every position separately and never has such a repeat; a rule body term
+ *    does, which is what a CONSTRAIN operator is built on.
  *
  * Returns true if the tuples match.
  */
 static bool signatureQueryTupleMatch(
-	byte const atomTypes[], byte const parameterIO[], TypedTuple const * queryActors, index8 const permutation[])
+	byte const atomTypes[], byte const parameterIO[], TypedTuple const * queryParameters,
+	index8 const permutation[])
 {
 	// iterate over query tuple
-	for(index8 i = 0; i < queryActors->nAtoms; i++) {
-		TypedAtom queryAtom = TypedTupleGetElement(queryActors, permutation[i]);
+	for(index8 i = 0; i < queryParameters->nAtoms; i++) {
+		TypedAtom queryAtom = TypedTupleGetElement(queryParameters, permutation[i]);
 		byte serviceParameterType = atomTypes[i];
 
-		// An earlier occurence of this query atom must have matched the same type,
+		if(queryAtom.type != AT_PARAMETER) {
+			// a constant, which the service must take as an input of its type
+			ASSERT(queryAtom.type != AT_VARIABLE)
+			if(parameterIO[i] != PARAMETER_IN)
+				return false;
+			if(queryAtom.type != serviceParameterType)
+				return false;
+			continue;
+		}
+
+		Atom parameter = queryAtom.atom;
+		if(parameter.parameter.io != parameterIO[i])
+			return false;
+		if(parameter.parameter.atomType
+			&& (parameter.parameter.atomType != serviceParameterType))
+			return false;
+
+		// An earlier occurence of this parameter must have matched the same type,
 		// or no single atom could satisfy the query
 		for(index8 j = 0; j < i; j++) {
-			if(sameQueryAtom(queryAtom, TypedTupleGetElement(queryActors, permutation[j]))
+			TypedAtom earlierAtom = TypedTupleGetElement(queryParameters, permutation[j]);
+			if((earlierAtom.type == AT_PARAMETER)
+				&& (earlierAtom.atom.parameter.number == parameter.parameter.number)
 				&& (atomTypes[j] != serviceParameterType))
 				return false;
 		}
-
-		switch(parameterIO[i]) {
-		case PARAMETER_IN:
-			// service has an input parameter
-			if(queryAtom.type == AT_PARAMETER) {
-				// query has a parameter; IO direction must match
-				if(queryAtom.atom.parameter.io != PARAMETER_IN)
-					return false;
-				// parameter atom type must match, or be absent
-				byte queryParameterType = queryAtom.atom.parameter.atomType;
-				if(queryParameterType && (queryParameterType != serviceParameterType))
-					return false;
-			}
-			else {
-				// query atom type must match the parameter type
-				if(queryAtom.type != serviceParameterType)
-					return false;
-			}
-			break;
-		
-		case PARAMETER_OUT:
-			// service has an output parameter
-			if(queryAtom.type == AT_PARAMETER) {
-				if(queryAtom.atom.parameter.io != PARAMETER_OUT)
-					return false;
-				byte queryParameterType = queryAtom.atom.parameter.atomType;
-				if(queryParameterType && (queryParameterType != serviceParameterType))
-					return false;
-			}
-			else {
-				if(queryAtom.type != AT_VARIABLE)
-					return false;
-			}
-			break;
-		}
 	}
 	return true;
-}
-
-
-bool QueryEqualityMap(TypedTuple const * queryActors, index8 equalityMap[])
-{
-	bool hasRepeatedActor = false;
-	for(index8 i = 0; i < queryActors->nAtoms; i++) {
-		TypedAtom queryAtom = TypedTupleGetElement(queryActors, i);
-		equalityMap[i] = i;
-		for(index8 j = 0; j < i; j++) {
-			if(sameQueryAtom(queryAtom, TypedTupleGetElement(queryActors, j))) {
-				equalityMap[i] = j;
-				hasRepeatedActor = true;
-				break;
-			}
-		}
-	}
-	return hasRepeatedActor;
 }
 
 
@@ -130,14 +79,14 @@ bool QueryEqualityMap(TypedTuple const * queryActors, index8 equalityMap[])
  */
 static bool permutationMatch(
 	Atom predicateForm, byte const atomTypes[], byte const parameterIO[],
-	TypedTuple const * queryActors, index8 permutation[])
+	TypedTuple const * queryParameters, index8 permutation[])
 {
 	// iterate over all permutations of the form
 	FormIterator * iter = CreateFormIterator(predicateForm);
 	bool match = false;
 	do {
 		GetTuplePermutation(iter, permutation);
-		if(signatureQueryTupleMatch(atomTypes, parameterIO, queryActors, permutation)) {
+		if(signatureQueryTupleMatch(atomTypes, parameterIO, queryParameters, permutation)) {
 			match = true;
 			break;
 		}
@@ -147,12 +96,13 @@ static bool permutationMatch(
 }
 
 
-void DispatchQueryIterate(
-	Atom queryTermForm, TypedTuple const * queryActors, index8 permutation[], DispatchIterator * iterator)
+void DispatchIterate(
+	Atom queryTermForm, TypedTuple const * queryParameters, index8 permutation[],
+	DispatchIterator * iterator)
 {
 	ASSERT(IsTermForm(queryTermForm))
 
-	iterator->queryActors = queryActors;
+	iterator->queryParameters = queryParameters;
 	iterator->permutation = permutation;
 	iterator->inRelation = false;
 #ifdef DEBUG
@@ -185,7 +135,7 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 			Service const * currentService = ServiceIteratorPeekService(&(iterator->serviceIterator));
 			if(permutationMatch(
 				relation->predicateForm, relation->atomTypes, currentService->parameterIO,
-				iterator->queryActors, iterator->permutation))
+				iterator->queryParameters, iterator->permutation))
 			{
 				// Copy the service, as a pointer into the service registry is only
 				// valid until the service iterator moves on.
@@ -222,16 +172,16 @@ void DispatchIteratorEnd(DispatchIterator * iterator)
 }
 
 
-bool DispatchQueryAt(
-	Atom queryTermForm, TypedTuple const * queryActors, Service * service,
+bool DispatchGeneralizedQuery(
+	Atom queryTermForm, TypedTuple const * queryParameters, Service * service,
 	index8 permutation[], size8 nSkip, bool * hasNextMatch)
 {
 	// The iterator overwrites its permutation array on every match, so iterate into
 	// a scratch array to avoid clobbering the returned permutation.
-	size8 termArity = queryActors->nAtoms;
+	size8 termArity = queryParameters->nAtoms;
 	index8 candidatePermutation[termArity];
 	DispatchIterator iterator;
-	DispatchQueryIterate(queryTermForm, queryActors, candidatePermutation, &iterator);
+	DispatchIterate(queryTermForm, queryParameters, candidatePermutation, &iterator);
 
 	bool match = false;
 	// Number of matches seen so far, whether skipped or returned
@@ -261,9 +211,19 @@ bool DispatchQueryAt(
 }
 
 
-bool DispatchQuery(Atom queryTermForm, TypedTuple const * queryActors, Service * service, index8 permutation[])
+bool DispatchQuery(
+	Atom queryTermForm, TypedTuple const * queryActors, Service * service, index8 permutation[])
 {
-	return DispatchQueryAt(queryTermForm, queryActors, service, permutation, 0, 0);
+	// Dispatch the query type: the equality constraint of a repeated actor is not part
+	// of what a service provides, and is applied to the tuples an answer is read from
+	TypedTuple * queryParameters = CreateTypedTuple(queryActors->nAtoms);
+	GetQueryParameters(queryActors, queryParameters);
+
+	bool match = DispatchGeneralizedQuery(
+		queryTermForm, queryParameters, service, permutation, 0, 0);
+
+	FreeTypedTuple(queryParameters);
+	return match;
 }
 
 

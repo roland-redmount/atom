@@ -37,13 +37,13 @@
  * single-valued and re-run the whole compilation once per combination,
  * forcing a different choice each time. A choice point is identified by the
  * position at which it is encountered, which is well defined because
- * DispatchQueryAt() enumerates candidates deterministically.
+ * DispatchGeneralizedQuery() enumerates candidates deterministically.
  */
 
 #define MAX_CHOICE_POINTS	8
 
 typedef struct s_ChoicePoints {
-	// which match to take from DispatchQueryAt() at each choice point (0, 1, ...)
+	// which match to take from DispatchGeneralizedQuery() at each choice point (0, 1, ...)
 	index8 matchIndex[MAX_CHOICE_POINTS];
 	// whether there is another match available at each choice point
 	bool hasNextMatch[MAX_CHOICE_POINTS];
@@ -91,31 +91,10 @@ static bool dispatchAtChoicePoint(
 {
 	ASSERT(choices->depth < MAX_CHOICE_POINTS)
 	index8 d = choices->depth++;
-	return DispatchQueryAt(
+	return DispatchGeneralizedQuery(
 		termForm, termActors, service, permutation,
 		choices->matchIndex[d], &(choices->hasNextMatch[d])
 	);
-}
-
-
-void GetQueryParameters(TypedTuple const * actors, TypedTuple * parameters)
-{
-	ASSERT(actors->nAtoms == parameters->nAtoms)
-	for(index8 i = 0; i < actors->nAtoms; i++) {
-		TypedAtom typedAtom = TypedTupleGetElement(actors, i);
-		if(typedAtom.type == AT_VARIABLE) {
-			Atom parameter = {
-				.parameter = {.number = i + 1, .io = PARAMETER_OUT, .atomType = 0}
-			};
-			TypedTupleSetElement(parameters, i, CreateTypedAtom(AT_PARAMETER, parameter));
-		}
-		else {
-			Atom parameter = {
-				.parameter = {.number = i + 1, .io = PARAMETER_IN, .atomType = typedAtom.type}
-			};
-			TypedTupleSetElement(parameters, i, CreateTypedAtom(AT_PARAMETER, parameter));
-		}
-	}
 }
 
 

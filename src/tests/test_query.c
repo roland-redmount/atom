@@ -121,14 +121,42 @@ void testQueryRepeatedVariable(void)
 	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _x"), 2)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
-	// A position is never a letter, so this query yields no tuples. Compiling it would
-	// register the (list position element) service of the kernel a second time.
+	// A position is never a letter, so this query yields no tuples
 	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position _x element _x"), 0)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
 	TeardownRelationFixture(&precSuccFixture);
+}
+
+
+/**
+ * A repeated variable is not part of the query type, which is what decides whether a
+ * query has been compiled before. The rule here derives (item index) with a LETTER and a
+ * UINT column, so the query (item z index z) can match no service, while its type is the
+ * service compiled for (item e index p). Were the query itself asked instead of its type,
+ * that service would be compiled a second time, and registering it would fail.
+ */
+void testQueryTypeIgnoresRepeatedVariable(void)
+{
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"item _e index _p | ! list \"ab\" position _p element _e");
+	size32 nServices = ServiceRegistryCount();
+
+	// The letters of "ab" with their positions. The element role of (list position
+	// element) is an untyped output, so the rule compiles one service per element type,
+	// of which only the LETTER one yields tuples
+	ASSERT_UINT32_EQUAL(countQueryTuples("item _e index _p"), 2)
+	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 2)
+
+	// No letter is a position, so this asks for nothing, and its type is compiled
+	// already: nothing is compiled here
+	ASSERT_UINT32_EQUAL(countQueryTuples("item _z index _z"), 0)
+	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 2)
+
+	DictionaryRemoveClause(&entry);
+	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices)
 }
 
 
@@ -238,6 +266,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testQueryCompilesOnce);
 	ExecuteTest(testQueryTypeIsParameterDirections);
 	ExecuteTest(testQueryRepeatedVariable);
+	ExecuteTest(testQueryTypeIgnoresRepeatedVariable);
 	ExecuteTest(testQueryWithoutAnswer);
 	ExecuteTest(testQueryInvalidatedByRelation);
 	ExecuteTest(testQueryInvalidatedByRule);
