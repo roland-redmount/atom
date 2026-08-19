@@ -1,3 +1,6 @@
+/**
+ * Tests for the high level fact interface, AssertFact() and RetractFact().
+ */
 
 #include "kernel/Int.h"
 #include "kernel/kernel.h"
@@ -9,8 +12,15 @@
 #include "memory/allocator.h"
 #include "testing/fixtures.h"
 #include "testing/testing.h"
+#include "ui/assert.h"
 
 
+/**
+ * NOTE: this test is the specification of what AssertFact() and RetractFact() are
+ * to become, and does not pass yet. It is disabled in main() until they create a
+ * relation table for a fact whose relation does not exist, and drop the table again
+ * once its last fact is retracted.
+ */
 void testAssertRetract(void)
 {
 	// term form (foo bar)

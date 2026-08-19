@@ -6,6 +6,7 @@
 #include "kernel/letter.h"
 #include "kernel/list.h"
 #include "kernel/RelationRegistry.h"
+#include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "kernel/tuple.h"
@@ -352,7 +353,7 @@ void testCompileRecursiveJoin1(void)
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(relation);
-	AssertFact(terminatingFact->form, terminatingFact->actors, 0);
+	RelationTableAddTuple(table, TypedTuplePeekAtoms(terminatingFact->actors), 0);
 	// Compile the query
 	Formula * queryTerm = CStringToTerm("number 4 faculty _f");
 	Service services[MAX_COMPILED_SERVICES];
@@ -374,7 +375,7 @@ void testCompileRecursiveJoin1(void)
 
 	ServiceRegistryRemove(service.relation, service.op);
 	FreeFormula(queryTerm);
-	RetractFact(terminatingFact->form, terminatingFact->actors);
+	RelationTableRemoveTuple(table, TypedTuplePeekAtoms(terminatingFact->actors), 0);
 	DropRelationTable(table);
 	FreeFormula(terminatingFact);
 	DictionaryRemoveClause(&entry);
@@ -560,7 +561,7 @@ void testCompileNegatedTerm(void)
 	RelationTable * evenTable = CreateRelationTable(
 		evenRelation, &btreeTableProvider, (index8[]) {0});
 	ReleaseRelation(evenRelation);
-	AssertFact(odd3term->form, odd3term->actors, 0);
+	RelationTableAddTuple(evenTable, TypedTuplePeekAtoms(odd3term->actors), 0);
 	// setup the rule
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even _x | ! odd _x");
 	Formula * queryTerm = CStringToTerm("! even 3");
@@ -590,7 +591,7 @@ void testCompileNegatedTerm(void)
 	
 	DictionaryRemoveClause(&entry);
 
-	RetractFact(odd3term->form, odd3term->actors);
+	RelationTableRemoveTuple(evenTable, TypedTuplePeekAtoms(odd3term->actors), 0);
 	DropRelationTable(evenTable);
 	FreeFormula(odd3term);
 }
@@ -610,7 +611,7 @@ void testCompiledServiceReadsFactsLive(void)
 	RelationTable * oddTable = CreateRelationTable(
 		oddRelation, &btreeTableProvider, (index8[]) {0});
 	ReleaseRelation(oddRelation);
-	AssertFact(odd3term->form, odd3term->actors, 0);
+	RelationTableAddTuple(oddTable, TypedTuplePeekAtoms(odd3term->actors), 0);
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even _x | ! odd _x");
 
 	Formula * queryTerm = CStringToTerm("! even 3");
@@ -627,7 +628,7 @@ void testCompiledServiceReadsFactsLive(void)
 	OperatorFreeContext(context);
 
 	// Retracting the fact leaves the service registered, as the relation still exists
-	RetractFact(odd3term->form, odd3term->actors);
+	RelationTableRemoveTuple(oddTable, TypedTuplePeekAtoms(odd3term->actors), 0);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiled)
 
 	// and that same service now yields nothing, having read the change
@@ -637,7 +638,7 @@ void testCompiledServiceReadsFactsLive(void)
 	OperatorFreeContext(context);
 
 	// asserting it again brings the answer back, still without recompiling
-	AssertFact(odd3term->form, odd3term->actors, 0);
+	RelationTableAddTuple(oddTable, TypedTuplePeekAtoms(odd3term->actors), 0);
 	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 1);
 	context = OperatorCreateContext(service.op, arguments);
 	ASSERT_TRUE(OperatorCall(context))
@@ -646,7 +647,7 @@ void testCompiledServiceReadsFactsLive(void)
 	ServiceRegistryRemove(service.relation, service.op);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
-	RetractFact(odd3term->form, odd3term->actors);
+	RelationTableRemoveTuple(oddTable, TypedTuplePeekAtoms(odd3term->actors), 0);
 	DropRelationTable(oddTable);
 	FreeFormula(odd3term);
 }

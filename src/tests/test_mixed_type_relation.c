@@ -3,6 +3,7 @@
 #include "kernel/kernel.h"
 #include "kernel/MixedTypeRelation.h"
 #include "kernel/RelationRegistry.h"
+#include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "lang/Formula.h"
@@ -146,8 +147,8 @@ void testConcatAcrossRelations(void)
 	};
 	TypedTuple * idTuple = CreateTypedTupleFromArray(idActors, 2);
 	TypedTuple * uintTuple = CreateTypedTupleFromArray(uintActors, 2);
-	AssertFact(termForm, idTuple, 0);
-	AssertFact(termForm, uintTuple, 0);
+	RelationTableAddTuple(idTable, TypedTuplePeekAtoms(idTuple), 0);
+	RelationTableAddTuple(uintTable, TypedTuplePeekAtoms(uintTuple), 0);
 	for(index8 i = 0; i < 2; i++) {
 		ReleaseTypedAtom(idActors[i]);
 		ReleaseTypedAtom(uintActors[i]);
@@ -173,8 +174,8 @@ void testConcatAcrossRelations(void)
 	FreeMixedTypeRelation(relation);
 	FreeFormula(query);
 
-	RetractFact(termForm, idTuple);
-	RetractFact(termForm, uintTuple);
+	RelationTableRemoveTuple(idTable, TypedTuplePeekAtoms(idTuple), 0);
+	RelationTableRemoveTuple(uintTable, TypedTuplePeekAtoms(uintTuple), 0);
 	FreeTypedTuple(idTuple);
 	FreeTypedTuple(uintTuple);
 	DropRelationTable(uintTable);

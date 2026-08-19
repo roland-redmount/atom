@@ -2,7 +2,6 @@
  * The kernel provides the essential "core" relation tables and services
  */
 
-#include "kernel/typedtuple.h"
 #include "kernel/Relation.h"
 #include "kernel/RelationTable.h"
 #include "kernel/operator.h"
@@ -31,26 +30,6 @@ void KernelInitialize(void);
  * In most cases, we would instead flush the memory-mapped pages to disk and exit.
  */
 void KernelShutdown(void);
-
-/**
- * High level method to assert a fact. Adds a tuple to the corresponding
- * relation table, and adds an entry to the lookup table for each AT_ID actor.
- * The actors tuple may not contain variables.
- * To create an identifying fact, set idPosition to the 1-based position
- * of the identified atom; else set idPosition = 0.
- * The form is a term form, so a fact can be a negated predicate.
- */
-void AssertFact(Atom termForm, TypedTuple const * actors, uint8 idPosition);
-
-/**
- * High level method to retract a fact. Removes the tuple from the corresponding
- * relation table and removes corresponding entries from the lookup table.
- * The actors tuple may not contain variables. This method may not be used to
- * retract an identifying fact; this is done by ReleaseIFact().
- * This function should always succeed, as (non-identifying) facts can be retracted
- * at any time.
- */
-void RetractFact(Atom termForm, TypedTuple * actors);
 
 /**
  * Stable identifiers for core role names (satisfying (name @name))

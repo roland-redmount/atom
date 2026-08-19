@@ -2,6 +2,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/RelationRegistry.h"
+#include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "lang/name.h"
@@ -53,7 +54,7 @@ void SetupRelationFixture(
 }
 
 
-void RelationFixtureAssertFact(RelationFixture * fixture, char const * const atomNames[])
+void RelationFixtureAddTuple(RelationFixture * fixture, char const * const atomNames[])
 {
 	ASSERT(fixture->nTuples < FIXTURE_MAX_TUPLES)
 	TypedAtom actors[fixture->nColumns];
@@ -63,7 +64,7 @@ void RelationFixtureAssertFact(RelationFixture * fixture, char const * const ato
 
 	TypedTuple * tuple = CreateTypedTupleFromArray(actors, fixture->nColumns);
 	// the relation table now holds a reference to each atom
-	AssertFact(fixture->termForm, tuple, 0);
+	RelationTableAddTuple(fixture->table, TypedTuplePeekAtoms(tuple), 0);
 	for(index8 i = 0; i < fixture->nColumns; i++)
 		ReleaseTypedAtom(actors[i]);
 
@@ -84,7 +85,8 @@ void TeardownRelationFixture(RelationFixture * fixture)
 {
 	// the relation table must be empty before it can be removed
 	for(index8 i = 0; i < fixture->nTuples; i++) {
-		RetractFact(fixture->termForm, fixture->tuples[i]);
+		RelationTableRemoveTuple(
+			fixture->table, TypedTuplePeekAtoms(fixture->tuples[i]), 0);
 		FreeTypedTuple(fixture->tuples[i]);
 	}
 	DropRelationTable(fixture->table);
@@ -100,7 +102,7 @@ void SetupPrecSuccFixture(RelationFixture * fixture)
 	char const * precNames[PREC_SUCC_N_EDGES] = {"a", "b", "c", "c", "e"};
 	char const * succNames[PREC_SUCC_N_EDGES] = {"b", "c", "d", "b", "f"};
 	for(index8 i = 0; i < PREC_SUCC_N_EDGES; i++)
-		RelationFixtureAssertFact(
+		RelationFixtureAddTuple(
 			fixture, (char const * []) {precNames[i], succNames[i]});
 }
 
@@ -122,6 +124,6 @@ void SetupEdgeFixture(RelationFixture * fixture)
 	char const * fromNames[EDGE_N_EDGES] = {"a", "a", "b", "b"};
 	char const * toNames[EDGE_N_EDGES] = {"b", "a", "b", "c"};
 	for(index8 i = 0; i < EDGE_N_EDGES; i++)
-		RelationFixtureAssertFact(
+		RelationFixtureAddTuple(
 			fixture, (char const * []) {edgeNames[i], fromNames[i], toNames[i]});
 }

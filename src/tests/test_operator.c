@@ -502,7 +502,7 @@ static void setupGraphFixture(void)
 	char const * precNames[TEST_N_EDGES] = {"a", "b", "c", "d", "e"};
 	char const * succNames[TEST_N_EDGES] = {"b", "c", "a", "e", "f"};
 	for(index8 i = 0; i < TEST_N_EDGES; i++)
-		RelationFixtureAssertFact(
+		RelationFixtureAddTuple(
 			&graphFixture, (char const * []) {precNames[i], succNames[i]});
 }
 

@@ -126,6 +126,7 @@ add_library(atom SHARED
     src/parser/Token.c
     src/parser/Tokenizer.c
 
+    src/ui/assert.c
     src/ui/query.c
 
     src/testing/fixtures.c
@@ -174,8 +175,8 @@ set(ATOM_TESTS_TIER0        # fundamentals
 )
 
 set(ATOM_TESTS_TIER1        # core data structures, language elements
+    test_assert
     test_atomtypes
-	test_kernel
     test_language
     test_list
     test_lookup
