@@ -1,15 +1,19 @@
 /**
- * The relation registry keeps track of all available relation tables,
- * identified by their (term form, column types) pair. Since a term form carries
- * a sign, a predicate and its negation are registered as two separate relations.
- * Services for these relations are registered separately; see ServiceRegistry.h
+ * The relation registry keeps track of all registered relations, identified by their
+ * (term form, column types) pair. Since a term form carries a sign, a predicate and its
+ * negation are registered as two separate relations.
+ *
+ * The registry interns relations: one signature is one Relation record, so pointer
+ * equality is signature equality, and the service registry and the relation table registry
+ * both key on the pointer. It holds no reference of its own; a relation adds and removes
+ * itself as it is created and released. See Relation.h
  */
 
 #ifndef RELATION_REGISTRY_H
 #define RELATION_REGISTRY_H
 
 #include "btree/btree.h"
-#include "kernel/RelationTable.h"
+#include "kernel/Relation.h"
 
 
 /**
@@ -18,40 +22,36 @@
 void SetupRelationRegistry(void);
 
 /**
- * Add a relation table to the registry.
- * The registry takes ownership of the relation, and will call FreeRelationTable()
- * upon removal.
+ * Add a relation to the registry. Called by CreateRelation() only.
  */
-void RelationRegistryAdd(RelationTable const * relation);
+void RelationRegistryAdd(Relation const * relation);
 
 /**
- * Remove a relation table, include all stored tuples (if any).
- * Any associated services must have been removed first;
- * see RelationRemoveAllServices().
- * Calls FreeRelationTable()
+ * Remove a relation from the registry. Called by ReleaseRelation() only, when the last
+ * reference to the relation goes.
  */
-void RelationRegistryRemove(RelationTable const * relation);
+void RelationRegistryRemove(Relation const * relation);
 
 /**
- * Locate a relation table for given (term form, column types).
+ * Locate the relation for given (term form, column types), or 0 if there is none.
  */
-RelationTable const * RelationRegistryFind(Atom form, size8 nColumns, byte const atomTypes[]);
+Relation const * RelationRegistryFind(Atom form, size8 nColumns, byte const atomTypes[]);
 
 /**
  * Deallocate the registry. Before calling this function,
- * all relation tables must have been removed.
+ * all relations must have been released.
  */
 void FreeRelationRegistry(void);
 
 /**
- * Number of registered relation tables.
+ * Number of registered relations.
  */
-size32 RelationRegistryNTables(void);
+size32 RelationRegistryNRelations(void);
 
 
 /**
- * Iterating over the relation tables of a given term form.
- * A single term form may have several tables, one per combination of column types.
+ * Iterating over the relations of a given term form.
+ * A single term form may have several relations, one per combination of column types.
  */
 typedef struct {
 	Atom form;
@@ -59,23 +59,23 @@ typedef struct {
 } RelationIterator;
 
 /**
- * Create an iterator over all relation tables registered for the given term form.
- * The iterator is positioned before the first matching table, so
+ * Create an iterator over all relations registered for the given term form.
+ * The iterator is positioned before the first matching relation, so
  * RelationIteratorNext() must be called before RelationIteratorGet().
  */
 void RelationRegistryIterate(Atom form, RelationIterator * iterator);
 
 /**
- * Advance to the next relation table for the term form, if one exists.
+ * Advance to the next relation of the term form, if one exists.
  */
 bool RelationIteratorNext(RelationIterator * iterator);
 
 /**
- * The relation table at the current iterator position.
+ * The relation at the current iterator position.
  * Only valid after RelationIteratorNext() has returned true,
  * and until RelationIteratorEnd() is called.
  */
-RelationTable const * RelationIteratorGet(RelationIterator const * iterator);
+Relation const * RelationIteratorGet(RelationIterator const * iterator);
 
 void RelationIteratorEnd(RelationIterator * iterator);
 

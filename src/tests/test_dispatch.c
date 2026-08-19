@@ -1,7 +1,6 @@
 
 #include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/TermForm.h"
@@ -14,6 +13,7 @@
 #include "testing/fixtures.h"
 #include "kernel/Parameter.h"
 #include "lang/name.h"
+#include "storage/RelationBTree.h"
 #include "testing/testing.h"
 
 
@@ -119,34 +119,36 @@ void testDispatchNegatedTerm(void)
 
 	// The two signs give two distinct relation tables
 	byte atomTypes[2] = {AT_ID, AT_ID};
-	RelationTable const * table = CreateRelationBTreeWithServices(
-		termForm, 2, atomTypes, (index8[]) {0, 1});
-	RelationTable const * negatedTable = CreateRelationBTreeWithServices(
-		negatedTermForm, 2, atomTypes, (index8[]) {0, 1});
+	Relation const * relation = CreateRelation(termForm, 2, atomTypes);
+	RelationTable * table = CreateRelationTable(
+		relation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(relation);
+	Relation const * negatedRelation = CreateRelation(negatedTermForm, 2, atomTypes);
+	RelationTable * negatedTable = CreateRelationTable(
+		negatedRelation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(negatedRelation);
 	ASSERT_PTR_NOT_EQUAL(table, negatedTable)
-	ASSERT_PTR_EQUAL(RelationRegistryFind(termForm, 2, atomTypes), table)
-	ASSERT_PTR_EQUAL(RelationRegistryFind(negatedTermForm, 2, atomTypes), negatedTable)
+	ASSERT_PTR_EQUAL(RelationRegistryFind(termForm, 2, atomTypes), table->relation)
+	ASSERT_PTR_EQUAL(RelationRegistryFind(negatedTermForm, 2, atomTypes), negatedTable->relation)
 	// both tables report the predicate form the two term forms share
-	ASSERT_DATA64_EQUAL(table->predicateForm.hash, predicateForm.hash)
-	ASSERT_DATA64_EQUAL(negatedTable->predicateForm.hash, predicateForm.hash)
+	ASSERT_DATA64_EQUAL(table->relation->predicateForm.hash, predicateForm.hash)
+	ASSERT_DATA64_EQUAL(negatedTable->relation->predicateForm.hash, predicateForm.hash)
 
 	// A negated query dispatches, and reaches the negated relation rather than the other
 	Service service;
 	index8 permutation[2];
 	Formula * query = CStringToTerm("! even _x odd _y");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	ASSERT_PTR_EQUAL(service.relation, negatedTable)
+	ASSERT_PTR_EQUAL(service.relation, negatedTable->relation)
 	FreeFormula(query);
 
 	query = CStringToTerm("even _x odd _y");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	ASSERT_PTR_EQUAL(service.relation, table)
+	ASSERT_PTR_EQUAL(service.relation, table->relation)
 	FreeFormula(query);
 
-	ServiceRegistryRemoveAll(negatedTable);
-	RelationRegistryRemove(negatedTable);
-	ServiceRegistryRemoveAll(table);
-	RelationRegistryRemove(table);
+	DropRelationTable(negatedTable);
+	DropRelationTable(table);
 	IFactRelease(negatedTermForm);
 	IFactRelease(termForm);
 }
@@ -162,10 +164,14 @@ void testDispatchIterator(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	RelationTable const * idTable = CreateRelationBTreeWithServices(
-		termForm, 2, (byte[]) {AT_ID, AT_ID}, (index8[]) {0, 1});
-	RelationTable const * uintTable = CreateRelationBTreeWithServices(
-		termForm, 2, (byte[]) {AT_ID, AT_UINT}, (index8[]) {0, 1});
+	Relation const * idRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_ID});
+	RelationTable * idTable = CreateRelationTable(
+		idRelation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(idRelation);
+	Relation const * uintRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_UINT});
+	RelationTable * uintTable = CreateRelationTable(
+		uintRelation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(uintRelation);
 
 	// Only the service with two output parameters matches, so each table contributes
 	// one match
@@ -202,7 +208,7 @@ void testDispatchIterator(void)
 	DispatchIteratorEnd(&iterator);
 	FreeFormula(query);
 
-	// A query for a form with no relation table yields no match at all
+	// A query for a form with no relation yields no match at all
 	Formula * unknownQuery = CStringToTerm("nowhere _x nothing _y");
 	Atom unknownParameters[2];
 	GetQueryParameters(unknownQuery->actors, unknownParameters);
@@ -211,10 +217,8 @@ void testDispatchIterator(void)
 	DispatchIteratorEnd(&iterator);
 	FreeFormula(unknownQuery);
 
-	ServiceRegistryRemoveAll(uintTable);
-	RelationRegistryRemove(uintTable);
-	ServiceRegistryRemoveAll(idTable);
-	RelationRegistryRemove(idTable);
+	DropRelationTable(uintTable);
+	DropRelationTable(idTable);
 	IFactRelease(termForm);
 }
 

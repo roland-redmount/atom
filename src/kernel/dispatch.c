@@ -5,7 +5,6 @@
 #include "kernel/list.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/ClauseForm.h"
@@ -116,7 +115,7 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 		// Iterate over candidate services for the relation table
 		// TODO: this is inefficient, would be better to test once if the relation table
 		// atom types are compatible with the query, and only then iterate over services.
-		RelationTable const * relation = RelationIteratorGet(&(iterator->relationIterator));
+		Relation const * relation = RelationIteratorGet(&(iterator->relationIterator));
 		while(ServiceIteratorNext(&(iterator->serviceIterator))) {
 			Service const * currentService = ServiceIteratorPeekService(&(iterator->serviceIterator));
 			if(permutationMatch(

@@ -1,91 +1,84 @@
 
-#include "btree/btree.h"
-#include "kernel/ifact.h"
+#include "kernel/Relation.h"
 #include "kernel/RelationTable.h"
-#include "kernel/operator.h"
-#include "lang/TermForm.h"
+#include "kernel/RelationTableRegistry.h"
+#include "kernel/ServiceRegistry.h"
 #include "lang/TypedAtom.h"
 #include "memory/allocator.h"
 
 
-RelationTable const * CreateRelationTableBootstrap(
-	RelationTableProvider * provider, Atom termForm, Atom predicateForm,
-	size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
+RelationTable * CreateRelationTable(
+	Relation const * relation, RelationTableProvider const * provider,
+	index8 const indexColumns[])
 {
+	ASSERT(provider)
 	// NOTE: pool allocation would be preferable
-	RelationTable * relation = Allocate(sizeof(RelationTable));
-	relation->provider = provider;
-	relation->termForm = termForm;
-	IFactAcquire(termForm);
-	relation->predicateForm = predicateForm;
-	IFactAcquire(predicateForm);
-	relation->ownsForm = true;
-	relation->nColumns = nColumns;
-	// NOTE: this seems like to many small allocs ...
-	relation->atomTypes = Allocate(nColumns);
-	CopyMemory(atomTypes, relation->atomTypes, nColumns);
+	RelationTable * table = Allocate(sizeof(RelationTable));
+	table->relation = relation;
+	AcquireRelation(relation);
+	table->provider = provider;
+	table->referenceCount = 1;
+	// not readable by createStorage() below, which is what produces it
+	table->storage = 0;
 
-	relation->indexColumns = Allocate(nColumns);
-	if(indexColumns) {
-		CopyMemory(indexColumns, relation->indexColumns, nColumns);
-	}
+	table->indexColumns = Allocate(relation->nColumns);
+	if(indexColumns)
+		CopyMemory(indexColumns, table->indexColumns, relation->nColumns);
 	else {
 		// use the identity order
-		for(index8 i = 0; i < nColumns; i++)
-			relation->indexColumns[i] = i;
+		for(index8 i = 0; i < relation->nColumns; i++)
+			table->indexColumns[i] = i;
 	}
-	
-	if(provider)
-		relation->storage = provider->createStorage(nColumns, atomTypes, relation->indexColumns);
-	else
-		relation->storage = 0;
 
-	return relation;
+	table->storage = provider->createStorage(table);
+	RelationTableRegistryAdd(table);
+	provider->registerServices(table);
+	return table;
 }
 
 
-RelationTable const * CreateRelationTable(
-	RelationTableProvider * provider, Atom form, size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
+void AcquireRelationTable(RelationTable * table)
 {
-	return CreateRelationTableBootstrap(
-		provider, form, TermFormGetPredicateForm(form), nColumns, atomTypes, indexColumns);
+	table->referenceCount++;
 }
 
 
-void RelationTableReleaseForm(RelationTable const * table)
+void ReleaseRelationTable(RelationTable * table)
 {
-	ASSERT(table->ownsForm)
-	// clear the flag first, as the release may retract tuples from this table
-	((RelationTable *) table)->ownsForm = false;
-	IFactRelease(table->termForm);
-	IFactRelease(table->predicateForm);
-}
+	table->referenceCount--;
+	if(table->referenceCount > 0)
+		return;
 
-
-void FreeRelationTable(RelationTable const * table)
-{
-	// a computed relation has no provider, and so no stored tuples
-	if(table->provider) {
-		ASSERT(RelationTableNRows(table) == 0)
-		table->provider->free(table->storage);
-	}
-	if(table->ownsForm) {
-		IFactRelease(table->termForm);
-		IFactRelease(table->predicateForm);
-	}
-	Free(table->atomTypes);
+	table->provider->free(table);
+	ReleaseRelation(table->relation);
 	Free(table->indexColumns);
-	Free((void *) table);
+	Free(table);
+}
+
+
+void DropRelationTable(RelationTable * table)
+{
+	ASSERT(RelationTableNRows(table) == 0)
+
+	// Removing a service releases the reference the registry holds to its operator, which
+	// may free the operator and so release this table. The creation reference released at
+	// the end keeps the table alive until then, and the reference the table holds to its
+	// relation keeps the relation alive across the loop inside ServiceRegistryRemoveAll().
+	ServiceRegistryRemoveAll(table->relation);
+
+	RelationTableRegistryRemove(table);
+	ReleaseRelationTable(table);
 }
 
 
 byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)
 {
-	byte result = table->provider->addTuple(table->storage, tuple, idPosition);
+	Relation const * relation = table->relation;
+	byte result = table->provider->addTuple(table, tuple, idPosition);
 	if(result == TUPLE_ADDED) {
-		for(index8 i = 0; i < table->nColumns; i++) {
+		for(index8 i = 0; i < relation->nColumns; i++) {
 			if(i + 1 != idPosition)
-				AcquireAtom(tuple[i], table->atomTypes[i]);
+				AcquireAtom(tuple[i], relation->atomTypes[i]);
 		}
 	}
 	return result;
@@ -94,17 +87,18 @@ byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint
 
 size32 RelationTableNRows(RelationTable const * table)
 {
-	return table->provider->numberOfTuples(table->storage);
+	return table->provider->numberOfTuples(table);
 }
 
 
 byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)
 {
-	byte result = table->provider->removeTuple(table->storage, tuple, idPosition);
+	Relation const * relation = table->relation;
+	byte result = table->provider->removeTuple(table, tuple, idPosition);
 	if(result == TUPLE_REMOVED) {
-		for(index32 i = 0; i < table->nColumns; i++) {
+		for(index32 i = 0; i < relation->nColumns; i++) {
 			if((i + 1) != idPosition)
-				ReleaseTypedAtom(CreateTypedAtom(table->atomTypes[i], tuple[i]));
+				ReleaseTypedAtom(CreateTypedAtom(relation->atomTypes[i], tuple[i]));
 		}
 	}
 	return result;

@@ -5,7 +5,6 @@
 #include "kernel/list.h"
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/string.h"
 
 
@@ -47,7 +46,7 @@ bool IsString(Atom atom)
 {
 	return AtomHasRole(
 		atom,
-		GetCoreRelationTable(RELATION_STRING),
+		GetCoreRelation(RELATION_STRING),
 		GetCoreRoleName(ROLE_STRING)
 	);
 }

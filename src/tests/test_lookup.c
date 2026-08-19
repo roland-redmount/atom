@@ -2,7 +2,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/lookup.h"
-#include "kernel/RelationTable.h"
+#include "kernel/Relation.h"
 #include "kernel/string.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
@@ -13,7 +13,7 @@
 void testLookup(void)
 {
 	Atom string = CreateStringFromCString("foo");
-	RelationTable const * stringRelation = GetCoreRelationTable(RELATION_STRING);
+	Relation const * stringRelation = GetCoreRelation(RELATION_STRING);
 	Atom stringRole = GetCoreRoleName(ROLE_STRING);
 
 	ASSERT_TRUE(AtomHasRole(string, stringRelation, stringRole))
@@ -67,7 +67,7 @@ void testLookupPredicateRoles(void)
 	atomTypes[nodeIndex] = AT_ID;
 	atomTypes[weightIndex] = AT_UINT;
 	// a computed relation, as we only need it to describe the columns
-	RelationTable const * relation = CreateRelationTable(0, form, 2, atomTypes, 0);
+	Relation const * relation = CreateRelation(form, 2, atomTypes);
 
 	Atom node = CreateStringFromCString("foo");
 	Atom actors[2];
@@ -83,7 +83,7 @@ void testLookupPredicateRoles(void)
 	ASSERT_FALSE(AtomHasRole(node, relation, roles[0]))
 
 	IFactRelease(node);
-	FreeRelationTable(relation);
+	ReleaseRelation(relation);
 	IFactRelease(form);
 	IFactRelease(predicateForm);
 	NameRelease(roles[0]);

@@ -86,7 +86,7 @@ size32 LookupTotalCount(void)
 }
 
 
-bool AtomHasRole(Atom atom, RelationTable const * relation, Atom role)
+bool AtomHasRole(Atom atom, Relation const * relation, Atom role)
 {
 	LookupRecord record = {
 		.atom = atom,
@@ -110,7 +110,7 @@ static void addRecord(LookupRecord * record)
 }
 
 
-void AtomAddRole(Atom atom, RelationTable const * relation, Atom role)
+void AtomAddRole(Atom atom, Relation const * relation, Atom role)
 {
 	LookupRecord record = {
 		.atom = atom,
@@ -122,7 +122,7 @@ void AtomAddRole(Atom atom, RelationTable const * relation, Atom role)
 }
 
 
-void LookupAddPredicateRoles(RelationTable const * relation, Atom const * actors)
+void LookupAddPredicateRoles(Relation const * relation, Atom const * actors)
 {
 	// iterate over roles names in the predicate form
 	// and add corresponding actors to lookup table
@@ -159,7 +159,7 @@ static void removeRecord(LookupRecord * record)
 }
 
 
-void AtomRemoveRole(Atom atom, RelationTable const * relation, Atom role)
+void AtomRemoveRole(Atom atom, Relation const * relation, Atom role)
 {
 	LookupRecord record = {
 		.atom = atom,
@@ -188,7 +188,7 @@ void LookupRemoveAllRoles(Atom atom)
 }
 
 
-void LookupRemovePredicateRoles(RelationTable const * relation, Atom const * actors)
+void LookupRemovePredicateRoles(Relation const * relation, Atom const * actors)
 {
 	LookupRecord record;
 	record.relation = relation;
@@ -277,7 +277,7 @@ bool LookupIteratorNext(LookupIterator * iterator)
 }
 
 
-RelationTable const * LookupIteratorGetRelation(LookupIterator const * iterator)
+Relation const * LookupIteratorGetRelation(LookupIterator const * iterator)
 {
 	LookupRecord const * record = BTreeIteratorPeekItem(&(iterator->treeIterator));
 	return record->relation;
@@ -298,14 +298,14 @@ void LookupIteratorEnd(LookupIterator * iterator)
 }
 
 
-RelationTable const * LookupFindRelation(Atom atom, Atom form, Atom role)
+Relation const * LookupFindRelation(Atom atom, Atom form, Atom role)
 {
-	RelationTable const * relation = 0;
+	Relation const * relation = 0;
 	LookupIterator iterator;
 	LookupIterate(atom, &iterator);
 	while(LookupIteratorNext(&iterator)) {
 		Atom currentRole = LookupIteratorGetRole(&iterator);
-		RelationTable const * currentRelation = LookupIteratorGetRelation(&iterator);
+		Relation const * currentRelation = LookupIteratorGetRelation(&iterator);
 		if((currentRole.hash == role.hash) && (currentRelation->predicateForm.hash == form.hash)) {
 			ASSERT(relation == 0)	// ensure we have only 1 matching relation
 			relation = currentRelation;

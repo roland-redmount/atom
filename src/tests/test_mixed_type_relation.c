@@ -2,11 +2,11 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/MixedTypeRelation.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "lang/Formula.h"
+#include "storage/RelationBTree.h"
 #include "library/MachineService.h"
 #include "parser/TermBuilder.h"
 #include "testing/fixtures.h"
@@ -127,10 +127,14 @@ void testConcatAcrossRelations(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	RelationTable const * idTable = CreateRelationBTreeWithServices(
-		termForm, 2, (byte[]) {AT_ID, AT_ID}, (index8[]) {0, 1});
-	RelationTable const * uintTable = CreateRelationBTreeWithServices(
-		termForm, 2, (byte[]) {AT_ID, AT_UINT}, (index8[]) {0, 1});
+	Relation const * idRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_ID});
+	RelationTable * idTable = CreateRelationTable(
+		idRelation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(idRelation);
+	Relation const * uintRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_UINT});
+	RelationTable * uintTable = CreateRelationTable(
+		uintRelation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(uintRelation);
 
 	TypedAtom idActors[2] = {
 		CreateTypedAtom(AT_ID, CreateStringFromCString("a")),
@@ -173,10 +177,8 @@ void testConcatAcrossRelations(void)
 	RetractFact(termForm, uintTuple);
 	FreeTypedTuple(idTuple);
 	FreeTypedTuple(uintTuple);
-	ServiceRegistryRemoveAll(uintTable);
-	RelationRegistryRemove(uintTable);
-	ServiceRegistryRemoveAll(idTable);
-	RelationRegistryRemove(idTable);
+	DropRelationTable(uintTable);
+	DropRelationTable(idTable);
 	IFactRelease(termForm);
 }
 

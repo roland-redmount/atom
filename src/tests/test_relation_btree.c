@@ -5,9 +5,9 @@
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
 #include "kernel/RelationTable.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
+#include "storage/RelationBTree.h"
 #include "testing/testing.h"
 
 
@@ -208,6 +208,39 @@ void testRemoveTuple(void)
 	teardownFixture();
 }
 
+/**
+ * A tuple stored as part of an identifying fact records the position of the identified
+ * atom, and is protected: it can only be removed by a caller naming that same position,
+ * which is what releasing the ifact does. See removeIFactTuples() in ifact.c
+ */
+void testRemoveIdentifiedTuple(void)
+{
+	setupFixture();
+
+	// the identified atom of tuple1 sits in the first column
+	RelationBTreeAddTuple(fixture.relation, fixture.tuple1, 1);
+	RelationBTreeAddTuple(fixture.relation, fixture.tuple2, 0);
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 2)
+
+	// a caller naming no identified column cannot retract an identifying fact
+	ASSERT_UINT32_EQUAL(
+		RelationBTreeRemoveTuple(fixture.relation, fixture.tuple1, 0), TUPLE_PROTECTED)
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 2)
+
+	// naming the identified column removes it
+	ASSERT_UINT32_EQUAL(
+		RelationBTreeRemoveTuple(fixture.relation, fixture.tuple1, 1), TUPLE_REMOVED)
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 1)
+
+	// an ordinary tuple is not protected
+	ASSERT_UINT32_EQUAL(
+		RelationBTreeRemoveTuple(fixture.relation, fixture.tuple2, 0), TUPLE_REMOVED)
+	ASSERT_UINT32_EQUAL(RelationBTreeNRows(fixture.relation), 0)
+
+	teardownFixture();
+}
+
+
 // NOTE: relation tables currently do not support removing multiple tuples using variables;
 // this requires a service to handle the search. 
 
@@ -281,6 +314,7 @@ int main(void)
 	ExecuteTest(testAddTuple);
 	ExecuteTest(testFindTuple);
 	ExecuteTest(testRemoveTuple);
+	ExecuteTest(testRemoveIdentifiedTuple);
 	// ExecuteTest(testRemoveTuples);
 	// ExecuteTest(testRemoveAllTuples);
 	

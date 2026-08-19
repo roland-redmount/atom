@@ -1,20 +1,24 @@
 
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
+#include "storage/RelationBTree.h"
 #include "parser/ClauseBuilder.h"
 #include "testing/fixtures.h"
 
 
 Atom CreateTermFormFromRoleNames(char const * const roleNames[], size8 nRoles, bool sign)
 {
+	ASSERT(nRoles > 0)
+	// zeroed first so that the array is initialized whatever nRoles is: an optimizing
+	// build cannot otherwise see that the loop below writes all of it
 	Atom roles[nRoles];
+	SetMemory(roles, nRoles * sizeof(Atom), 0);
 	for(index8 i = 0; i < nRoles; i++)
 		roles[i] = CreateNameFromCString(roleNames[i]);
 
@@ -41,8 +45,11 @@ void SetupRelationFixture(
 		fixture->roleIndex[i] = RelationFixtureRoleIndex(fixture, roleNames[i]);
 		atomTypes[i] = AT_ID;
 	}
-	fixture->table = CreateRelationBTreeWithServices(
-		fixture->termForm, nColumns, atomTypes, fixture->roleIndex);
+	Relation const * relation = CreateRelation(fixture->termForm, nColumns, atomTypes);
+	fixture->table = CreateRelationTable(
+		relation, &btreeTableProvider, fixture->roleIndex);
+	// the table holds its own reference to the relation
+	ReleaseRelation(relation);
 }
 
 
@@ -80,8 +87,7 @@ void TeardownRelationFixture(RelationFixture * fixture)
 		RetractFact(fixture->termForm, fixture->tuples[i]);
 		FreeTypedTuple(fixture->tuples[i]);
 	}
-	ServiceRegistryRemoveAll(fixture->table);
-	RelationRegistryRemove(fixture->table);
+	DropRelationTable(fixture->table);
 	IFactRelease(fixture->termForm);
 	SetMemory(fixture, sizeof(RelationFixture), 0);
 }

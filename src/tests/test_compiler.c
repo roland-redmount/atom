@@ -5,7 +5,6 @@
 #include "kernel/ifact.h"
 #include "kernel/letter.h"
 #include "kernel/list.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
@@ -14,6 +13,7 @@
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
+#include "storage/RelationBTree.h"
 #include "library/MachineService.h"
 #include "library/math.h"
 #include "parser/ClauseBuilder.h"
@@ -50,7 +50,6 @@ void testCompilePermute1(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -87,7 +86,6 @@ void testCompilePermute2(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -138,7 +136,6 @@ void testCompileProject(void)
 
 	for(index8 i = 0; i < nServices; i++) {
 		ServiceRegistryRemove(services[i].relation, services[i].op);
-		RelationRegistryRemove(services[i].relation);
 	}
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -163,7 +160,6 @@ void testCompileUnconstrainedHeadVariable(void)
 
 	for(index8 i = 0; i < nServices; i++) {
 		ServiceRegistryRemove(services[i].relation, services[i].op);
-		RelationRegistryRemove(services[i].relation);
 	}
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -199,7 +195,6 @@ void testCompileJoin1(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -235,7 +230,6 @@ void testCompileJoin2(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -280,7 +274,6 @@ void testCompileUnion(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry1);
 	DictionaryRemoveClause(&entry2);
@@ -333,7 +326,6 @@ void testCompileConstrain(void)
 	IFactRelease(nodeA);
 	IFactRelease(nodeB);
 	ServiceRegistryRemove(services[0].relation, services[0].op);
-	RelationRegistryRemove(services[0].relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 	TeardownRelationFixture(&edgeFixture);
@@ -355,11 +347,11 @@ void testCompileRecursiveJoin1(void)
 		"number _n faculty _f | ! + _m + 1 = _n | ! number _m faculty _e | ! * _e * _n = _f");
 	// Create terminating fact, provide by a B-tree service
 	Formula * terminatingFact = CStringToTerm("number 0 faculty 1");	
-	RelationTable const * table = CreateRelationBTreeWithServices(
-		terminatingFact->form, 2,
-		TypedTuplePeekAtomTypes(terminatingFact->actors),
-		(index8[]) {0, 1}
-	);
+	Relation const * relation = CreateRelation(
+		terminatingFact->form, 2, TypedTuplePeekAtomTypes(terminatingFact->actors));
+	RelationTable * table = CreateRelationTable(
+		relation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(relation);
 	AssertFact(terminatingFact->form, terminatingFact->actors, 0);
 	// Compile the query
 	Formula * queryTerm = CStringToTerm("number 4 faculty _f");
@@ -381,11 +373,9 @@ void testCompileRecursiveJoin1(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	RetractFact(terminatingFact->form, terminatingFact->actors);
-	ServiceRegistryRemoveAll(table);
-	RelationRegistryRemove(table);
+	DropRelationTable(table);
 	FreeFormula(terminatingFact);
 	DictionaryRemoveClause(&entry);
 }
@@ -441,7 +431,6 @@ void testCompileRecursiveJoin2(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -491,7 +480,6 @@ void testCompileRecursiveReachable(void)
 		ASSERT_TRUE(found[i])
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -550,7 +538,6 @@ void testCompileRecursiveClosure(void)
 		ASSERT_TRUE(found[i])
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -569,8 +556,10 @@ void testCompileNegatedTerm(void)
 {
 	// Setup the fact (odd 3)
 	Formula * odd3term = CStringToTerm("odd 3");
-	RelationTable const *evenTable = CreateRelationBTreeWithServices(
-		odd3term->form, 1, (byte[]) {AT_INT}, (index8[]) {0});
+	Relation const * evenRelation = CreateRelation(odd3term->form, 1, (byte[]) {AT_INT});
+	RelationTable * evenTable = CreateRelationTable(
+		evenRelation, &btreeTableProvider, (index8[]) {0});
+	ReleaseRelation(evenRelation);
 	AssertFact(odd3term->form, odd3term->actors, 0);
 	// setup the rule
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even _x | ! odd _x");
@@ -597,14 +586,68 @@ void testCompileNegatedTerm(void)
 
 	// teardown
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	
 	DictionaryRemoveClause(&entry);
 
 	RetractFact(odd3term->form, odd3term->actors);
-	ServiceRegistryRemoveAll(evenTable);
-	RelationRegistryRemove(evenTable);
+	DropRelationTable(evenTable);
+	FreeFormula(odd3term);
+}
+
+
+/**
+ * A compiled service reads its stored relations live through their MACHINE operators, so
+ * asserting or retracting a fact of a relation that already exists needs no invalidation:
+ * the service compiled before the change answers correctly after it. Only structural
+ * change is invalidated; see the notes on invalidation in compiler.md.
+ */
+void testCompiledServiceReadsFactsLive(void)
+{
+	// (odd 3), and the rule making (! even x) follow from (odd x)
+	Formula * odd3term = CStringToTerm("odd 3");
+	Relation const * oddRelation = CreateRelation(odd3term->form, 1, (byte[]) {AT_INT});
+	RelationTable * oddTable = CreateRelationTable(
+		oddRelation, &btreeTableProvider, (index8[]) {0});
+	ReleaseRelation(oddRelation);
+	AssertFact(odd3term->form, odd3term->actors, 0);
+	DictionaryEntry entry = DictionaryAddClauseFromCString("! even _x | ! odd _x");
+
+	Formula * queryTerm = CStringToTerm("! even 3");
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Service service = services[0];
+	size32 nCompiled = ServiceRegistryNCompiled();
+
+	Atom arguments[1];
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 1);
+	void * context = OperatorCreateContext(service.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	// Retracting the fact leaves the service registered, as the relation still exists
+	RetractFact(odd3term->form, odd3term->actors);
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiled)
+
+	// and that same service now yields nothing, having read the change
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 1);
+	context = OperatorCreateContext(service.op, arguments);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	// asserting it again brings the answer back, still without recompiling
+	AssertFact(odd3term->form, odd3term->actors, 0);
+	TupleCopy(TypedTuplePeekAtoms(queryTerm->actors), arguments, 1);
+	context = OperatorCreateContext(service.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	ServiceRegistryRemove(service.relation, service.op);
+	FreeFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+	RetractFact(odd3term->form, odd3term->actors);
+	DropRelationTable(oddTable);
 	FreeFormula(odd3term);
 }
 
@@ -643,7 +686,6 @@ void testCompileSquares(void)
 	OperatorFreeContext(context);
 
 	ServiceRegistryRemove(service.relation, service.op);
-	RelationRegistryRemove(service.relation);
 	FreeFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -668,6 +710,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileRecursiveClosure);
 
 	ExecuteTest(testCompileNegatedTerm);
+	ExecuteTest(testCompiledServiceReadsFactsLive);
 	ExecuteTest(testCompileSquares);
 
 	// TODO: compiling a recursive rule over an infinite domain. The relation has no

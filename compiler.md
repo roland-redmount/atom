@@ -14,6 +14,25 @@ argument whether the caller supplies it or the service produces it, and an opera
 evaluates it. So one relation may have several services, differing in what the caller has
 to know in order to ask.
 
+A relation is identity and nothing else — a term form and a column type per argument
+(`src/kernel/Relation.h`). Both the ways of reading it and the storage holding its tuples
+are registered *against* it, and neither is reachable from the relation:
+
+- the **service registry** records how a relation can be read (`ServiceRegistry.h`),
+- the **relation table registry** records where its tuples are stored (`RelationTableRegistry.h`).
+
+A relation with no table registered is a **computed** relation: it has services but no
+tuples of its own, which is what a machine service such as `library/math.c` is, and what
+the compiler produces. A relation with a table is a **stored** relation, whose services
+its storage provider registered. Which services a provider registers *is* its statement of
+what it can do: `RelationBTree` registers one per prefix of its index column order, so a
+signature binding a column out of that order simply has no service.
+
+Keeping the three apart is what lets one operator serve two relations, which is the case
+the next section ends on. A relation is reference counted and disappears when nothing
+names it any longer; a relation table is reference counted too, and its storage outlives
+the table's registration for as long as an operator is still reading it.
+
 Parameters are written by number, direction and type: `1<INT` is argument 1, an input of
 type `INT`, and `3>INT` is argument 3, an output. A service over the addition relation
 that computes a sum has the signature
@@ -387,7 +406,18 @@ those; see `ServiceRegistryInvalidateTermForm()`.
 A dependency is between two operators, and the services are the ones those operators
 evaluate. Services sharing an operator are one for this purpose, and go stale together,
 which is what a term compiling to the service it matched gives: the compiled service is
-then nothing but that service's operator.
+then nothing but that service's operator. A rule that merely renames roles, such as
+`(person p dependent d) <- (parent p child d)`, produces exactly that: the compiled
+service is registered against the `(person dependent)` relation and evaluated by the
+machine operator of `(parent child)`, a relation it holds no pointer to.
+
+This is a rule about the knowledge base, not about memory. Dropping the `(parent child)`
+table removes the compiled service because the relation it read has left the knowledge
+base, and the next query compiles it again — correctly finding nothing. It is not what
+keeps the storage alive: the machine operator holds a counted reference to the table it
+reads, so the storage is deallocated when the last operator reading it is gone, whatever
+order things are dropped in. See `testDropTableWithSharedOperator` in
+`test_service_registry.c`, which drops the table while the shared operator is still held.
 
 None of this applies to the temporary services a recursive compilation registers for its
 own recursive terms. They are scaffolding, registered and removed within one compilation,
@@ -402,15 +432,15 @@ Three events drive it:
   compiler creates relations of its own while compiling, and invalidating there could
   remove a service the compilation in flight is building on.
 - **A service is removed**, which is what retracting the last fact of a relation and
-  removing it comes to. Everything built on it goes.
+  dropping its table comes to. Everything built on it goes.
 - **A rule is added or removed.** A clause form is the multiset of the term forms of its
   terms, and the compiler resolves a query against the clauses whose form contains the
   query term form, so those term forms name every service the rule could have reached.
   No per-rule bookkeeping is needed, and a rule added before anything was compiled costs
   nothing.
 
-A compiled service removed by invalidation takes its relation with it when that relation is
-computed and has no service left, as nothing else would remove it. Invalidation modifies
+A compiled service removed by invalidation takes its relation with it when no service and
+no table names that relation any longer. Invalidation modifies
 the registries, so it cannot run while a query is being read: an open `DispatchIterator`
 or `MixedTypeRelation` write-locks against modification.
 

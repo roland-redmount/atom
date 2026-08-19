@@ -1,7 +1,6 @@
 
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "lang/Formula.h"
 #include "parser/TermBuilder.h"
@@ -33,29 +32,33 @@ static void teardownFixture(void)
 }
 
 
-void testAddRemoveRelationTable(void)
+/**
+ * A relation registers itself when created and removes itself when its last reference
+ * goes; see Relation.h
+ */
+void testAddRemoveRelation(void)
 {
 	setupFixture();
-	size32 nTablesInitial = RelationRegistryNTables();
+	size32 nRelationsInitial = RelationRegistryNRelations();
 
-	RelationTable const * createdTable = CreateRelationTable(
-		&btreeTableProvider, fixture.form, EXAMPLE_FORM_ARITY,
-		fixture.atomTypes, 0
-	);
-	ASSERT_UINT32_EQUAL(createdTable->nColumns, EXAMPLE_FORM_ARITY)
-
-	// Add relation table to the registry
-	RelationRegistryAdd(createdTable);
-	ASSERT_UINT32_EQUAL(RelationRegistryNTables(), nTablesInitial + 1)
+	Relation const * relation = CreateRelation(
+		fixture.form, EXAMPLE_FORM_ARITY, fixture.atomTypes);
+	ASSERT_UINT32_EQUAL(relation->nColumns, EXAMPLE_FORM_ARITY)
+	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 
 	ASSERT_PTR_EQUAL(
 		RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, fixture.atomTypes),
-		createdTable
+		relation
 	)
 
-	// Remove the table
-	RelationRegistryRemove(createdTable);
-	ASSERT_UINT32_EQUAL(RelationRegistryNTables(), nTablesInitial)
+	// A second reference keeps the relation registered
+	AcquireRelation(relation);
+	ReleaseRelation(relation);
+	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
+
+	// Releasing the creation reference removes it
+	ReleaseRelation(relation);
+	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial)
 
 	ASSERT_NULL(RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, fixture.atomTypes));
 
@@ -64,48 +67,48 @@ void testAddRemoveRelationTable(void)
 
 
 /**
- * The core term form (multiset element multiple) has two relation tables,
+ * The core term form (multiset element multiple) has two relations,
  * one for NAME elements and one for ID elements, so it is a good case
- * for iterating over the tables of a single form.
+ * for iterating over the relations of a single form.
  */
-void testIterateRelationTables(void)
+void testIterateRelations(void)
 {
 	Atom form = GetCoreTermForm(FORM_MULTISET_ELEMENT_MULTIPLE);
-	RelationTable const * multisetName = GetCoreRelationTable(RELATION_MULTISET_NAME);
-	RelationTable const * multisetId = GetCoreRelationTable(RELATION_MULTISET_ID);
+	Relation const * multisetName = GetCoreRelation(RELATION_MULTISET_NAME);
+	Relation const * multisetId = GetCoreRelation(RELATION_MULTISET_ID);
 
 	bool foundName = false;
 	bool foundId = false;
-	size32 nTables = 0;
+	size32 nRelations = 0;
 
 	RelationIterator iterator;
 	RelationRegistryIterate(form, &iterator);
 	while(RelationIteratorNext(&iterator)) {
-		RelationTable const * table = RelationIteratorGet(&iterator);
-		// every table yielded must belong to the form we asked for
-		ASSERT_DATA64_EQUAL(table->termForm.hash, form.hash)
-		if(table == multisetName)
+		Relation const * relation = RelationIteratorGet(&iterator);
+		// every relation yielded must belong to the form we asked for
+		ASSERT_DATA64_EQUAL(relation->termForm.hash, form.hash)
+		if(relation == multisetName)
 			foundName = true;
-		if(table == multisetId)
+		if(relation == multisetId)
 			foundId = true;
-		nTables++;
+		nRelations++;
 	}
 	RelationIteratorEnd(&iterator);
 
 	ASSERT_TRUE(foundName)
 	ASSERT_TRUE(foundId)
-	ASSERT_UINT32_EQUAL(nTables, 2)
+	ASSERT_UINT32_EQUAL(nRelations, 2)
 
-	// a form with a single table
+	// a form with a single relation
 	form = GetCoreTermForm(FORM_LIST_LENGTH);
-	nTables = 0;
+	nRelations = 0;
 	RelationRegistryIterate(form, &iterator);
 	while(RelationIteratorNext(&iterator)) {
-		ASSERT_PTR_EQUAL(RelationIteratorGet(&iterator), GetCoreRelationTable(RELATION_LIST_LENGTH))
-		nTables++;
+		ASSERT_PTR_EQUAL(RelationIteratorGet(&iterator), GetCoreRelation(RELATION_LIST_LENGTH))
+		nRelations++;
 	}
 	RelationIteratorEnd(&iterator);
-	ASSERT_UINT32_EQUAL(nTables, 1)
+	ASSERT_UINT32_EQUAL(nRelations, 1)
 
 	// an unregistered form yields nothing
 	setupFixture();
@@ -120,8 +123,8 @@ int main(void)
 {
 	KernelInitialize();
 
-	ExecuteTest(testAddRemoveRelationTable);
-	ExecuteTest(testIterateRelationTables);
+	ExecuteTest(testAddRemoveRelation);
+	ExecuteTest(testIterateRelations);
 
 	KernelShutdown();
 

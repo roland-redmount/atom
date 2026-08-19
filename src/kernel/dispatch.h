@@ -77,7 +77,7 @@ typedef struct {
 #ifdef DEBUG
 	// Relation of the previous match, kept to verify that one query never matches two
 	// services of one relation; see ServiceRegistryAdd()
-	RelationTable const * previousMatchRelation;
+	Relation const * previousMatchRelation;
 #endif
 } DispatchIterator;
 

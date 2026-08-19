@@ -1,23 +1,14 @@
 /**
- * A relation table based on a B-tree. Relies on btree.c for implemention.
- * Provides both operators (query) and agents (assert)
+ * A relation table based on a B-tree. Relies on btree.c for implementation.
  */
 
 #include "btree/btree.h"
 #include "kernel/operator.h"
-#include "kernel/ifact.h"
 #include "kernel/Parameter.h"
-#include "kernel/RelationBTree.h"
-#include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
-#include "lang/TermForm.h"
 #include "kernel/ServiceRegistry.h"
-#include "kernel/typedtuple.h"
-#include "lang/TypedAtom.h"
-#include "lang/Variable.h"
+#include "storage/RelationBTree.h"
 #include "memory/allocator.h"
-#include "memory/pool.h"
-#include "util/ResizingArray.h"
 
 
 
@@ -139,7 +130,7 @@ byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint
 		// The specified idPosition is wrong, indicating an internal error
 		ASSERT(false)
 	}
-	if(!queryTuple->idPosition && btreeTuple->idPosition) {
+	if(!idPosition && btreeTuple->idPosition) {
 		// Attempt to retract an identifying fact
 		return TUPLE_PROTECTED;
 	}
@@ -151,37 +142,45 @@ byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint
 }
 
 /**
- * Stubs for the RelationTableProvider interface.
+ * Stubs adapting the RelationBTree data structure to the RelationTableProvider interface.
+ * RelationBTree keeps its own copy of the arity and the index column order, so that it
+ * stays usable on its own; see CreateRelationBTree().
  */
 
-static void * createRelationBTree(size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
+static void * createRelationBTree(RelationTable const * table)
 {
-	return CreateRelationBTree(nColumns, atomTypes, indexColumns);
+	return CreateRelationBTree(
+		table->relation->nColumns, table->relation->atomTypes, table->indexColumns);
 }
 
-static size32 relationBTreeNTuples(void * storage)
+static size32 relationBTreeNTuples(RelationTable const * table)
 {
-	return RelationBTreeNRows((RelationBTree *) storage);
+	return RelationBTreeNRows((RelationBTree *) table->storage);
 }
 
-static byte relationBTreeAddTuple(void * storage, Atom const tuple[], uint8 idPosition)
+static byte relationBTreeAddTuple(
+	RelationTable const * table, Atom const tuple[], uint8 idPosition)
 {
-	return RelationBTreeAddTuple((RelationBTree *) storage, tuple, idPosition);
+	return RelationBTreeAddTuple((RelationBTree *) table->storage, tuple, idPosition);
 }
 
-static byte relationBTreeRemoveTuple(void * storage, Atom const tuple[], uint8 idPosition)
+static byte relationBTreeRemoveTuple(
+	RelationTable const * table, Atom const tuple[], uint8 idPosition)
 {
-	return RelationBTreeRemoveTuple((RelationBTree *) storage, tuple, idPosition);
+	return RelationBTreeRemoveTuple((RelationBTree *) table->storage, tuple, idPosition);
 }
 
 
-static void freeRelationBTree(void * storage)
+static void freeRelationBTree(RelationTable const * table)
 {
-	FreeRelationBTree((RelationBTree *) storage);
+	FreeRelationBTree((RelationBTree *) table->storage);
 }
+
+static void btreeRegisterServices(RelationTable * table);
 
 RelationTableProvider btreeTableProvider = {
 	.createStorage = createRelationBTree,
+	.registerServices = btreeRegisterServices,
 	.addTuple = relationBTreeAddTuple,
 	.removeTuple = relationBTreeRemoveTuple,
 	// .removeIFactTuples = relationBTreeRemoveIFactTuples,
@@ -261,93 +260,6 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator)
 	SetMemory(iterator, sizeof(RelationBTreeIterator), 0);
 }
 
-/*  TODO: these convenience functions might be moved to the service registry? */
-
-// void RelationBTreeQuerySingle(RelationTable * table, Atom const queryTuple[], size8 nInputs, Atom resultTuple[])
-// {
-// 	RelationBTreeIterator iterator;
-//  	RelationBTreeIterate(table, queryTuple, nInputs, &iterator);
-//  	ASSERT(RelationBTreeIteratorNext(&iterator));
-//  	RelationBTreeIteratorGetTuple(&iterator, resultTuple);
-//  	// verify the relation has a single tuple only
-//  	ASSERT(!RelationBTreeIteratorNext(&iterator));
-//  	RelationBTreeIteratorEnd(&iterator);
-// }
-
-
-// Atom RelationBTreeQuerySingleAtom(RelationTable * table, Atom const queryTuple[], size8 nInputs, index8 index)
-// {
-//  	RelationBTreeIterator iterator;
-//  	RelationBTreeIterate(table, queryTuple, nInputs, &iterator);
-//  	ASSERT(RelationBTreeIteratorNext(&iterator));
-//  	Atom atom = RelationBTreeIteratorGetAtom(&iterator, index);
-//  	// verify the relation has a single tuple only
-//  	ASSERT(!RelationBTreeIteratorNext(&iterator));
-//  	RelationBTreeIteratorEnd(&iterator);
-// 	return atom;
-// }
-
-/**
- * TODO: unclear how this function fits within the RelationTable framework.
- * We now also have relationBTreeRemoveTuple() for removing 1 tuple.
- * With an Atom[] as query, we cannot encode variables; RelatonTable only adds/removes
- * 1 tuple at a time, as does RetractFact().
- * 
- * Removing multiple facts should probably be a query-action combination like
- * 
- * (list @l element e position p) : retract (list @l element e position p)
- *
- * This should compile to a loop where for each tuple provided by the operator,
- * the retract "agent" removes the tuple. A practical problem with this is that
- * many data structures (including our B-tree) does not support deleting elements during
- * iteration; and even if it is supported, it may be very slow, for example in array
- * storage where each delete requires moving O(N) elements, so that deleting the full
- * array is O(N^2). We could implement a special case in RelationTable for removing the
- * entire storage structure though, as this does not require variables.
- * This is a fundamental problem when separating read/write operations into operators and agents.
- * 
- * Removing multiple elements also occurs when releasing an ifact; see open issue in IFactRelease()
- * There is also the thorny issue of recursive deletions via IFactRelease().
- */
-
-// size32 RelationBTreeRemoveTuples(BTree * btree, Atom const queryTuple[], size8 nInputs, uint8 identified)
-// {
-// 	ASSERT(!BTreeIsWriteLocked(btree));
-// 	size8 nColumns = btreeTupleNAtoms(btree->itemSize);
-
-// 	// retrieve all matching tuples
-// 	ResizingArray tuplesArray;
-// 	CreateResizingArray(&tuplesArray, btreeTupleNBytes(nColumns), 10);
-// 	RelationBTreeIterator iterator;
-// 	size32 nTuplesToDelete = 0;
-// 	RelationBTreeIterate(btree, queryTuple, nInputs, &iterator);
-// 	while(RelationBTreeIteratorNext(&iterator)) {
-// 		BTreeTuple const * tuple = BTreeIteratorPeekItem(&(iterator.treeIterator));
-// 		if(tuple->identified == identified) {
-// 			ResizingArrayAppend(&tuplesArray, tuple);
-// 			nTuplesToDelete++;
-// 		}
-// 	}
-// 	RelationBTreeIteratorEnd(&iterator);
-
-// 	// Release all atoms referenced by tuples.
-// 	// NOTE: this cannot be done while iterating over the tree,
-// 	// as IFactRelease() calls RelationBTreeRemoveTuples() recursively.
-// 	for(index32 i = 0; i < nTuplesToDelete; i++) {
-// 		BTreeTuple * tuple = ResizingArrayGetElement(&tuplesArray, i);
-// 		for(index32 j = 0; j < nColumns; j++) {
-// 			ReleaseTypedAtom(CreateTypedAtom(table->atomTypes[j], tuple->atoms[j]));
-// 		}
-// 	}
-// 	// delete tuples
-// 	for(index32 i = 0; i < nTuplesToDelete; i++) {
-// 		BTreeTuple * tuple = ResizingArrayGetElement(&tuplesArray, i);
-// 		ASSERT(BTreeDelete(btree, tuple) == BTREE_DELETED);
-// 	}
-// 	FreeResizingArray(&tuplesArray);
-// 	return nTuplesToDelete;
-// }
-
 
 /**
  * Stubs for the B-tree operator provider.
@@ -357,7 +269,12 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator)
 
 // Could not fit this in the 8-byte Operator.impl.machine.providerData field :-/
 typedef struct s_RelationBTreeProviderData {
-	RelationBTree * relation;
+	/**
+	 * The table this operator reads. Acquired, so that the storage outlives every
+	 * operator reading it: an operator may be shared with a compiled service that knows
+	 * nothing of this table, and so survive the table being dropped.
+	 */
+	RelationTable * table;
 	index8 nInputs;
 } RelationBTreeProviderData;
 
@@ -367,7 +284,8 @@ static void btreeSetupContext(OperatorContext * context)
 	RelationBTreeProviderData * providerData = context->op->impl.machine.providerData;
 	// Initialize the RelationBTreeIterator, allocated by OperatorCreateContext()
 	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
-	RelationBTreeIterate(providerData->relation, context->arguments, providerData->nInputs, iterator);
+	RelationBTreeIterate(
+		providerData->table->storage, context->arguments, providerData->nInputs, iterator);
 }
 
 
@@ -389,7 +307,9 @@ static void btreeFinalizeContext(OperatorContext * context)
 
 static void finalizeBTreeOperator(Operator * op)
 {
-	Free(op->impl.machine.providerData);
+	RelationBTreeProviderData * providerData = op->impl.machine.providerData;
+	ReleaseRelationTable(providerData->table);
+	Free(providerData);
 }
 
 MachineProvider bTreeProvider = {
@@ -401,53 +321,43 @@ MachineProvider bTreeProvider = {
 
 
 /**
- * Create a B-tree operator with nInputs leadning input parameters
+ * Create a B-tree operator with nInputs leading input parameters, acquiring the table it
+ * reads; see RelationBTreeProviderData.
  */
-static Operator * createBTreeOperator(RelationBTree * relation, size8 nInputs)
+static Operator * createBTreeOperator(RelationTable * table, size8 nInputs)
 {
 	RelationBTreeProviderData * providerData = Allocate(sizeof(RelationBTreeProviderData));
-	providerData->relation = relation;
+	AcquireRelationTable(table);
+	providerData->table = table;
 	providerData->nInputs = nInputs;
 	// Tuples are stored permuted into index column order, so that is the order
 	// in which the B-tree yields them
 	return CreateMachineOperator(
-		relation->nColumns, relation->indexColumns, &bTreeProvider, providerData,
+		table->relation->nColumns, table->indexColumns, &bTreeProvider, providerData,
 		sizeof(RelationBTreeIterator));
 }
 
 
-RelationTable const * CreateRelationBTreeWithServicesBootstrap(
-	Atom termForm, Atom predicateForm, size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
+/**
+ * A B-tree can search on any prefix of its index column order, and so registers one
+ * service per prefix length: the first nInputs columns in index order are inputs and the
+ * rest outputs. A signature binding a column out of that order, such as
+ * (list< position> element<), is not among them; see ListGetPosition() in list.c
+ */
+static void btreeRegisterServices(RelationTable * table)
 {
-	// Create the B-tree storage and register as relation table
-	RelationTable const * table = CreateRelationTableBootstrap(
-		&btreeTableProvider, termForm, predicateForm, nColumns, atomTypes, indexColumns);
-	RelationRegistryAdd(table);
-
-	RelationBTree * relation = table->storage;
-
-	// register nColumns operators with leading columns as inputs
+	size8 nColumns = table->relation->nColumns;
 	for(index8 nInputs = 0; nInputs <= nColumns; nInputs++) {
-		Operator * op = createBTreeOperator(relation, nInputs);
+		Operator * op = createBTreeOperator(table, nInputs);
 		byte parameterIO[nColumns];
 		for(index8 i = 0; i < nColumns; i++) {
 			if(i < nInputs)
-				parameterIO[indexColumns[i]] = PARAMETER_IN;
+				parameterIO[table->indexColumns[i]] = PARAMETER_IN;
 			else
-				parameterIO[indexColumns[i]] = PARAMETER_OUT;
+				parameterIO[table->indexColumns[i]] = PARAMETER_OUT;
 		}
-		ServiceRegistryAdd(table, parameterIO, op, SERVICE_PRIMITIVE);
+		ServiceRegistryAdd(table->relation, parameterIO, op, SERVICE_PRIMITIVE);
 		// The registry now holds the reference to the operator
 		ReleaseOperator(op);
 	}
-	return table;
 }
-
-
-RelationTable const * CreateRelationBTreeWithServices(
-	Atom termForm, size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
-{
-	return CreateRelationBTreeWithServicesBootstrap(
-		termForm, TermFormGetPredicateForm(termForm), nColumns, atomTypes, indexColumns);
-}
-

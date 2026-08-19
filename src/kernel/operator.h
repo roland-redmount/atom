@@ -39,7 +39,16 @@ typedef struct s_MachineProvider {
 	void (*finalizeContext)(OperatorContext * context);
 
 	/**
-	 * Finalize the machine operator (deallocate data structures, &c).
+	 * Finalize the machine operator (deallocate data structures, &c), called once when
+	 * the last reference to the operator is released.
+	 *
+	 * Operator.impl.machine.providerData is the provider's private state for one
+	 * operator, and this is where the provider lets go of whatever that state points at.
+	 * A provider reading storage owned by somebody else must hold a counted reference to
+	 * it for as long as the operator lives, and release it here. An operator may be shared
+	 * by multiple services; this occurs for example with a rule that merely renames roles.
+	 * See createBTreeOperator() in RelationBTree.c, which acquires the RelationTable it reads.
+	 *
 	 * This pointer may be 0 if no finalization is required.
 	 */
 	void (*finalizeOperator)(Operator * op);

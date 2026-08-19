@@ -1,10 +1,10 @@
 
 #include "kernel/dictionary.h"
 #include "kernel/kernel.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
+#include "storage/RelationBTree.h"
 #include "library/MachineService.h"
 #include "parser/TermBuilder.h"
 #include "testing/fixtures.h"
@@ -193,8 +193,11 @@ void testQueryInvalidatedByRelation(void)
 
 	// A second relation of the (prec succ) form, whose services the compiled one knows
 	// nothing of
-	RelationTable const * uintTable = CreateRelationBTreeWithServices(
-		precSuccFixture.termForm, 2, (byte[]) {AT_ID, AT_UINT}, (index8[]) {0, 1});
+	Relation const * uintRelation = CreateRelation(
+		precSuccFixture.termForm, 2, (byte[]) {AT_ID, AT_UINT});
+	RelationTable * uintTable = CreateRelationTable(
+		uintRelation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(uintRelation);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
 
 	// Asking again compiles the query anew, over both relations, and the new one holds
@@ -204,8 +207,7 @@ void testQueryInvalidatedByRelation(void)
 
 	// Removing that relation again takes the service compiled over it, and only that
 	// one: the service over the remaining relation still answers what it always did
-	ServiceRegistryRemoveAll(uintTable);
-	RelationRegistryRemove(uintTable);
+	DropRelationTable(uintTable);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
 	ASSERT_UINT32_EQUAL(countQueryTuples("before _x after _y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
