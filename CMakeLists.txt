@@ -94,7 +94,6 @@ add_library(atom SHARED
     src/kernel/multiset.c
     src/kernel/Parameter.c
     src/kernel/Relation.c
-    src/kernel/RelationBTree.c
     src/kernel/RelationRegistry.c
     src/kernel/RelationTable.c
     src/kernel/RelationTableRegistry.c
@@ -104,6 +103,8 @@ add_library(atom SHARED
     src/kernel/tuple.c
     src/kernel/typedtuple.c
     src/kernel/UInt.c
+
+    src/storage/RelationBTree.c
 
     src/library/MachineService.c
     src/library/math.c

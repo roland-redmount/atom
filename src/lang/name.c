@@ -2,7 +2,6 @@
 #include "btree/btree.h"
 #include "lang/name.h"
 #include "kernel/kernel.h"
-#include "kernel/RelationBTree.h"
 #include "memory/allocator.h"
 #include "util/hashing.h"
 

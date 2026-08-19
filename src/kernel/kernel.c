@@ -10,11 +10,11 @@
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/RelationTable.h"
 #include "kernel/RelationTableRegistry.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
+#include "storage/RelationBTree.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
 

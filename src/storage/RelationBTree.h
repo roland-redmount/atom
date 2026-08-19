@@ -12,8 +12,8 @@
  *       relation, &btreeTableProvider, indexColumns);
  *   ReleaseRelation(relation);
  *
- * NOTE: in the future this should be a "plugin" module, should probably move
- * to a separate folder.
+ * NOTE: in the future this should be a "plugin" module, loaded into a running atom
+ * process rather than linked in; see the note on hot-loading in RelationTable.h.
  */
 
 #ifndef RELATION_B_TREE_H

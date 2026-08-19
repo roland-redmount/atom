@@ -1,13 +1,13 @@
 
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
+#include "storage/RelationBTree.h"
 #include "parser/ClauseBuilder.h"
 #include "testing/fixtures.h"
 

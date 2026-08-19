@@ -22,6 +22,7 @@ typedef struct s_RelationTable RelationTable;
 /**
  * Description of a storage implementation provider, such as RelationBTree.
  * One provider may provide the storage of many relations, sharing the same callbacks.
+ * Providers live under src/storage/, RelationBTree being the only one so far.
  *
  * Every hook receives the RelationTable, and so can read the column types and arity off
  * table->relation and the index column order off table->indexColumns. Only createStorage()

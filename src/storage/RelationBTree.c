@@ -5,8 +5,8 @@
 #include "btree/btree.h"
 #include "kernel/operator.h"
 #include "kernel/Parameter.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/RelationTable.h"
+#include "storage/RelationBTree.h"
 #include "memory/allocator.h"
 
 

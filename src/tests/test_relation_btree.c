@@ -5,9 +5,9 @@
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
 #include "kernel/RelationTable.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
+#include "storage/RelationBTree.h"
 #include "testing/testing.h"
 
 

@@ -3,11 +3,11 @@
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
 #include "kernel/Relation.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTableRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
+#include "storage/RelationBTree.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
 

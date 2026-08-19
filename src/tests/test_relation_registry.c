@@ -1,7 +1,6 @@
 
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "lang/Formula.h"
 #include "parser/TermBuilder.h"

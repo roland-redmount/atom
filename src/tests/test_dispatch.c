@@ -1,7 +1,6 @@
 
 #include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
-#include "kernel/RelationBTree.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/TermForm.h"
@@ -14,6 +13,7 @@
 #include "testing/fixtures.h"
 #include "kernel/Parameter.h"
 #include "lang/name.h"
+#include "storage/RelationBTree.h"
 #include "testing/testing.h"
 
 
