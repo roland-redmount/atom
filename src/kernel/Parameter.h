@@ -2,7 +2,7 @@
  * An AT_PARAMETER atom is used in service signatures to mark a position
  * in the actor list where a parameter is a expected. Parameters are
  * different from variables: while a variable indicates "any atom"
- * and has no particular input/output direction, an parameter
+ * and has no particular input/output direction, a parameter
  * indicates one specific atom, although its identity is unknown.
  * Parameters are identified within a formula by a unique number.
  * 
@@ -15,6 +15,7 @@
 #ifndef	PARAMETER_H
 #define	PARAMETER_H 
 
+#include "kernel/typedtuple.h"
 #include "lang/TypedAtom.h"
 #include "lang/Atom.h"
 
@@ -32,6 +33,19 @@
 #define PARAMETER_IN		1
 #define PARAMETER_OUT		2
 
+
+/**
+ * Generate the parameters of an actors tuple to an array of AT_PARAMETER atoms,
+ * such that each non-variable atom in the actors tuple yields an input parameter
+ * of the same type as the atom, and each variable yields an output parameter,
+ * whose type is unknown.
+ * The actors tuple must not contain AT_PARAMATER atoms.
+ * The parameters array must hold as many atoms as the actors tuple.
+ * The generated parameter numbers are always equal to the tuple index (1-based), so
+ * each actor is mapped to a distinct parameter, and any repeated variable loses its
+ * equality constraint.
+ */
+void GetQueryParameters(TypedTuple const * actors, Atom parameters[]);
 
 void PrintParameter(Atom parameter);
 

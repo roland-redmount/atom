@@ -37,13 +37,13 @@
  * single-valued and re-run the whole compilation once per combination,
  * forcing a different choice each time. A choice point is identified by the
  * position at which it is encountered, which is well defined because
- * DispatchQueryAt() enumerates candidates deterministically.
+ * DispatchGeneralizedQuery() enumerates candidates deterministically.
  */
 
 #define MAX_CHOICE_POINTS	8
 
 typedef struct s_ChoicePoints {
-	// which match to take from DispatchQueryAt() at each choice point (0, 1, ...)
+	// which match to take from DispatchGeneralizedQuery() at each choice point (0, 1, ...)
 	index8 matchIndex[MAX_CHOICE_POINTS];
 	// whether there is another match available at each choice point
 	bool hasNextMatch[MAX_CHOICE_POINTS];
@@ -82,6 +82,41 @@ static bool nextChoiceBranch(ChoicePoints * choices)
 
 
 /**
+ * Generalize the actors of a term to its signature, which is what dispatch matches: a
+ * parameter stands for itself, and a constant for an input parameter of the constant's own
+ * type, which is all a constant asks of a service. The number given to a constant is above
+ * every number the term uses, so that it constrains nothing to be equal to it.
+ *
+ * The parameters array must hold as many atoms as the term has actors. Actors of a term
+ * are parameters and constants only, every variable of the clause having been given a
+ * parameter by parameterizeLocalVariables().
+ */
+static void getTermParameters(TypedTuple const * termActors, Atom parameters[])
+{
+	uint8 nextNumber = 1;
+	for(index8 i = 0; i < termActors->nAtoms; i++) {
+		TypedAtom actor = TypedTupleGetElement(termActors, i);
+		ASSERT(actor.type != AT_VARIABLE)
+		if((actor.type == AT_PARAMETER) && (actor.atom.parameter.number >= nextNumber))
+			nextNumber = actor.atom.parameter.number + 1;
+	}
+	for(index8 i = 0; i < termActors->nAtoms; i++) {
+		TypedAtom actor = TypedTupleGetElement(termActors, i);
+		if(actor.type == AT_PARAMETER)
+			parameters[i] = actor.atom;
+		else {
+			// a parameter number is a uint8, which a term arity cannot exhaust
+			ASSERT(nextNumber < 255)
+			parameters[i] = (Atom) {
+				.parameter = {
+					.number = nextNumber++, .io = PARAMETER_IN, .atomType = actor.type}
+			};
+		}
+	}
+}
+
+
+/**
  * Dispatch a term at the next choice point, taking the alternative selected
  * for the current branch and recording whether further alternatives exist.
  */
@@ -91,40 +126,13 @@ static bool dispatchAtChoicePoint(
 {
 	ASSERT(choices->depth < MAX_CHOICE_POINTS)
 	index8 d = choices->depth++;
-	return DispatchQueryAt(
-		termForm, termActors, service, permutation,
+	size8 termArity = termActors->nAtoms;
+	Atom termParameters[termArity];
+	getTermParameters(termActors, termParameters);
+	return DispatchGeneralizedQuery(
+		termForm, termParameters, termArity, service, permutation,
 		choices->matchIndex[d], &(choices->hasNextMatch[d])
 	);
-}
-
-
-/**
- * Generate a parameters tuple from an actors tuple, such that each non-variable atom
- * in the actors tuple corresponds to an input parameter (with type preserved),
- * and each variable yields an output parameters. The output parameter types are
- * unknown and must be discovered later by matching against services.
- * The genererated parameter numbers are always equal to the tuple index (1-based).
- * 
- * NOTE: the parameters tuple could be an Atom[] as the type is constant, but this
- * currently doesn't fit with compileQuery() and downstream functions.
- */
-static void actorsToParameters(TypedTuple const * actors, TypedTuple * parameters)
-{
-	for(index8 i = 0; i < actors->nAtoms; i++) {
-		TypedAtom typedAtom = TypedTupleGetElement(actors, i);
-		if(typedAtom.type == AT_VARIABLE) {
-			Atom parameter = {
-				.parameter = {.number = i + 1, .io = PARAMETER_OUT, .atomType = 0}
-			};
-			TypedTupleSetElement(parameters, i, CreateTypedAtom(AT_PARAMETER, parameter));
-		}
-		else {
-			Atom parameter = {
-				.parameter = {.number = i + 1, .io = PARAMETER_IN, .atomType = typedAtom.type}
-			};
-			TypedTupleSetElement(parameters, i, CreateTypedAtom(AT_PARAMETER, parameter));
-		}
-	}
 }
 
 
@@ -1100,7 +1108,7 @@ static void registerTemporaryServices(
 		size8 nInputs = findInputArguments(parameterIO, queryTermArity, inputArguments);
 
 		Operator * recurseOperator = CreateRecurseOperator(queryTermArity, inputArguments, nInputs);
-		ServiceRegistryAdd(variant->relation, parameterIO, recurseOperator);
+		ServiceRegistryAdd(variant->relation, parameterIO, recurseOperator, SERVICE_TEMPORARY);
 		variant->recurseOperators[boundOutputs] = recurseOperator;
 	}
 }
@@ -1189,10 +1197,14 @@ size8 CompileQuery(Formula const * queryTerm, Service services[], size8 maxServi
 	ASSERT(IsTermForm(queryTerm->form))
 	ASSERT(maxServices > 0)
 
-	// Generalize atoms in the query to parameters
+	// Generalize atoms in the query to parameters. The compilation works in tuples of
+	// typed atoms throughout, so the parameters are wrapped in one here.
 	size8 arity = queryTerm->actors->nAtoms;
+	Atom parameters[arity];
+	GetQueryParameters(queryTerm->actors, parameters);
 	TypedTuple * queryParameters = CreateTypedTuple(arity);
-	actorsToParameters(queryTerm->actors, queryParameters);
+	for(index8 i = 0; i < arity; i++)
+		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameters[i]));
 
 	PrintCString("\nCompileQuery()\nqueryParameters: ");
 	PrintFormActorsAsFormula(queryTerm->form, queryParameters);
@@ -1206,7 +1218,8 @@ size8 CompileQuery(Formula const * queryTerm, Service services[], size8 maxServi
 		byte atomTypes[arity];
 		byte parameterIO[arity];
 		getVariantSignature(&variants[i], atomTypes, parameterIO);
-		services[i] = ServiceRegistryAdd(variants[i].relation, parameterIO, variants[i].op);
+		services[i] = ServiceRegistryAdd(
+			variants[i].relation, parameterIO, variants[i].op, SERVICE_COMPILED);
 		ReleaseOperator(variants[i].op);
 		FreeTypedTuple(variants[i].parameters);
 	}

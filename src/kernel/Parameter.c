@@ -3,6 +3,36 @@
 #include "parser/Characters.h"
 
 
+/**
+ * Test whether a tuple contains a parameter.
+ */
+static bool hasParameterAtom(TypedTuple const * tuple)
+{
+	for(index8 i = 0; i < tuple->nAtoms; i++) {
+		if(TypedTupleGetElement(tuple, i).type == AT_PARAMETER)
+			return true;
+	}
+	return false;
+}
+
+
+void GetQueryParameters(TypedTuple const * actors, Atom parameters[])
+{
+	ASSERT(!hasParameterAtom(actors))
+	for(index8 i = 0; i < actors->nAtoms; i++) {
+		TypedAtom typedAtom = TypedTupleGetElement(actors, i);
+		if(typedAtom.type == AT_VARIABLE)
+			parameters[i] = (Atom) {
+				.parameter = {.number = i + 1, .io = PARAMETER_OUT, .atomType = 0}
+			};
+		else
+			parameters[i] = (Atom) {
+				.parameter = {.number = i + 1, .io = PARAMETER_IN, .atomType = typedAtom.type}
+			};
+	}
+}
+
+
 void PrintParameter(Atom atom)
 {
 	PrintF("@%u", atom.parameter.number);

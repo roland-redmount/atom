@@ -7,79 +7,13 @@
 #include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
 #include "lang/Formula.h"
-#include "lang/name.h"
-#include "lang/PredicateForm.h"
-#include "lang/TermForm.h"
 #include "library/MachineService.h"
 #include "parser/TermBuilder.h"
+#include "testing/fixtures.h"
 #include "testing/testing.h"
 
 
-// A directed graph (edge:ID from:ID to:ID), two of whose edges are self edges
-#define TEST_N_EDGES	4
-
-static struct {
-	Atom form;
-	RelationTable const * table;
-	index8 edgeIndex;
-	index8 fromIndex;
-	index8 toIndex;
-	TypedTuple * tuples[TEST_N_EDGES];
-} edgeFixture;
-
-
-/**
- * Assert facts of the form (edge e from a to b) where all atoms are AT_ID.
- */
-static void setupEdgeFixture(void)
-{
-	Atom roles[3] = {
-		CreateNameFromCString("edge"),
-		CreateNameFromCString("from"),
-		CreateNameFromCString("to")
-	};
-	Atom predicateForm = CreatePredicateForm(roles, 3);
-	edgeFixture.form = CreateTermForm(predicateForm, true);
-	edgeFixture.edgeIndex = PredicateRoleIndex(predicateForm, roles[0]);
-	edgeFixture.fromIndex = PredicateRoleIndex(predicateForm, roles[1]);
-	edgeFixture.toIndex = PredicateRoleIndex(predicateForm, roles[2]);
-	IFactRelease(predicateForm);
-	for(index8 i = 0; i < 3; i++)
-		NameRelease(roles[i]);
-
-	byte atomTypes[3] = {AT_ID, AT_ID, AT_ID};
-	edgeFixture.table = CreateRelationBTreeWithServices(
-		edgeFixture.form, 3, atomTypes, (index8[]) {0, 1, 2});
-
-	// The graph a -> b, a -> a, b -> b, b -> c, so eq and er are the self edges
-	char const * edgeNames[TEST_N_EDGES] = {"ep", "eq", "er", "es"};
-	char const * fromNames[TEST_N_EDGES] = {"a", "a", "b", "b"};
-	char const * toNames[TEST_N_EDGES] = {"b", "a", "b", "c"};
-	for(index8 i = 0; i < TEST_N_EDGES; i++) {
-		TypedAtom actors[3];
-		actors[edgeFixture.edgeIndex] = CreateTypedAtom(AT_ID, CreateStringFromCString(edgeNames[i]));
-		actors[edgeFixture.fromIndex] = CreateTypedAtom(AT_ID, CreateStringFromCString(fromNames[i]));
-		actors[edgeFixture.toIndex] = CreateTypedAtom(AT_ID, CreateStringFromCString(toNames[i]));
-		edgeFixture.tuples[i] = CreateTypedTupleFromArray(actors, 3);
-		// the relation table now holds a reference to each atom
-		AssertFact(edgeFixture.form, edgeFixture.tuples[i], 0);
-		for(index8 j = 0; j < 3; j++)
-			ReleaseTypedAtom(actors[j]);
-	}
-}
-
-
-static void teardownEdgeFixture(void)
-{
-	// the relation table must be empty before it can be removed
-	for(index8 i = 0; i < TEST_N_EDGES; i++) {
-		RetractFact(edgeFixture.form, edgeFixture.tuples[i]);
-		FreeTypedTuple(edgeFixture.tuples[i]);
-	}
-	ServiceRegistryRemoveAll(edgeFixture.table);
-	RelationRegistryRemove(edgeFixture.table);
-	IFactRelease(edgeFixture.form);
-}
+static RelationFixture edgeFixture;
 
 
 /**
@@ -104,7 +38,7 @@ static size32 countQueryTuples(char const * queryString)
  */
 void testConcatEveryTuple(void)
 {
-	setupEdgeFixture();
+	SetupEdgeFixture(&edgeFixture);
 	Formula * query = CStringToTerm("edge _e from _x to _y");
 
 	MixedTypeRelation * relation = CreateConcatRelation(query->form, query->actors);
@@ -112,14 +46,14 @@ void testConcatEveryTuple(void)
 
 	// Each tuple of the relation arrives once, though we do not know in which order,
 	// as the relation is stored sorted by atom
-	bool foundTuple[TEST_N_EDGES] = {false, false, false, false};
+	bool foundTuple[EDGE_N_EDGES] = {false, false, false, false};
 	size32 nTuples = 0;
 	while(MixedTypeRelationNext(relation)) {
 		TypedTuple const * tuple = MixedTypeRelationPeekTuple(relation);
 		ASSERT_UINT32_EQUAL(tuple->nAtoms, 3)
 		for(index8 i = 0; i < 3; i++)
 			ASSERT_UINT32_EQUAL(TypedTupleGetElement(tuple, i).type, AT_ID)
-		for(index8 i = 0; i < TEST_N_EDGES; i++) {
+		for(index8 i = 0; i < EDGE_N_EDGES; i++) {
 			if(TypedTupleEqual(tuple, edgeFixture.tuples[i])) {
 				ASSERT_FALSE(foundTuple[i])
 				foundTuple[i] = true;
@@ -127,13 +61,13 @@ void testConcatEveryTuple(void)
 		}
 		nTuples++;
 	}
-	ASSERT_UINT32_EQUAL(nTuples, TEST_N_EDGES)
-	for(index8 i = 0; i < TEST_N_EDGES; i++)
+	ASSERT_UINT32_EQUAL(nTuples, EDGE_N_EDGES)
+	for(index8 i = 0; i < EDGE_N_EDGES; i++)
 		ASSERT_TRUE(foundTuple[i])
 
 	FreeMixedTypeRelation(relation);
 	FreeFormula(query);
-	teardownEdgeFixture();
+	TeardownRelationFixture(&edgeFixture);
 }
 
 
@@ -144,7 +78,7 @@ void testConcatEveryTuple(void)
  */
 void testConcatRepeatedVariable(void)
 {
-	setupEdgeFixture();
+	SetupEdgeFixture(&edgeFixture);
 	Formula * query = CStringToTerm("edge _e from _x to _x");
 
 	MixedTypeRelation * relation = CreateConcatRelation(query->form, query->actors);
@@ -152,8 +86,8 @@ void testConcatRepeatedVariable(void)
 	while(MixedTypeRelationNext(relation)) {
 		TypedTuple const * tuple = MixedTypeRelationPeekTuple(relation);
 		ASSERT_DATA64_EQUAL(
-			TypedTupleGetAtom(tuple, edgeFixture.fromIndex).hash,
-			TypedTupleGetAtom(tuple, edgeFixture.toIndex).hash)
+			TypedTupleGetAtom(tuple, RelationFixtureRoleIndex(&edgeFixture, "from")).hash,
+			TypedTupleGetAtom(tuple, RelationFixtureRoleIndex(&edgeFixture, "to")).hash)
 		nTuples++;
 	}
 	ASSERT_UINT32_EQUAL(nTuples, 2)
@@ -162,9 +96,9 @@ void testConcatRepeatedVariable(void)
 
 	// Each occurence of the anonymous variable is a variable of its own, and so
 	// constrains nothing
-	ASSERT_UINT32_EQUAL(countQueryTuples("edge _ from _ to _"), TEST_N_EDGES)
+	ASSERT_UINT32_EQUAL(countQueryTuples("edge _ from _ to _"), EDGE_N_EDGES)
 
-	teardownEdgeFixture();
+	TeardownRelationFixture(&edgeFixture);
 }
 
 
@@ -173,13 +107,13 @@ void testConcatRepeatedVariable(void)
  */
 void testConcatConstantQuery(void)
 {
-	setupEdgeFixture();
+	SetupEdgeFixture(&edgeFixture);
 
 	// The edge eq is the self edge of a
 	ASSERT_UINT32_EQUAL(countQueryTuples("edge \"eq\" from \"a\" to \"a\""), 1)
 	ASSERT_UINT32_EQUAL(countQueryTuples("edge \"eq\" from \"a\" to \"b\""), 0)
 
-	teardownEdgeFixture();
+	TeardownRelationFixture(&edgeFixture);
 }
 
 
@@ -189,15 +123,8 @@ void testConcatConstantQuery(void)
  */
 void testConcatAcrossRelations(void)
 {
-	Atom roles[2] = {
-		CreateNameFromCString("first"),
-		CreateNameFromCString("second")
-	};
-	Atom predicateForm = CreatePredicateForm(roles, 2);
-	Atom termForm = CreateTermForm(predicateForm, true);
-	IFactRelease(predicateForm);
-	for(index8 i = 0; i < 2; i++)
-		NameRelease(roles[i]);
+	Atom termForm = CreateTermFormFromRoleNames(
+		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
 	RelationTable const * idTable = CreateRelationBTreeWithServices(
@@ -291,7 +218,7 @@ void testConcatWithoutMatch(void)
  */
 void testConcatAbandonedIteration(void)
 {
-	setupEdgeFixture();
+	SetupEdgeFixture(&edgeFixture);
 
 	Formula * query = CStringToTerm("edge _e from _x to _y");
 	MixedTypeRelation * relation = CreateConcatRelation(query->form, query->actors);
@@ -299,7 +226,7 @@ void testConcatAbandonedIteration(void)
 	FreeMixedTypeRelation(relation);
 	FreeFormula(query);
 
-	teardownEdgeFixture();
+	TeardownRelationFixture(&edgeFixture);
 }
 
 

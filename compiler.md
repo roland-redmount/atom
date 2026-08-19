@@ -333,6 +333,87 @@ with the fact `(integer 0 factorial 1)`, the call bindings run `n = 4, 3, 2, 1, 
 precondition `? < n > 0:`, which the language does not have yet. `testCompileRecursiveJoin1`
 is disabled for this reason.
 
+## Answering a user query
+
+A user asks a question, not for a service to be compiled: `(before x after y)` should
+give every fact the knowledge base entails, whether stored or derived, and the user has
+no way of knowing whether anything answers it yet. `UserQuery()` in `src/ui/query.c` is
+that entry point, one layer above the compiler and dispatch.
+
+It compiles a query the first time that query is asked, and is answered by the compiled
+services from then on. Whether a query has been asked before is decided by dispatching it,
+and both dispatch and the compiler work by the query **type**: the query generalized to
+parameters by `GetQueryParameters()`, which is the term form together with the direction
+and input type of each parameter. Two queries of one type compile to the same services, so
+a match means the compilation has happened, whether by an earlier query, by the kernel or
+by a stored relation registering its own services.
+
+Generalizing is what makes the two agree. The compiler numbers every actor of a query
+separately, so a variable occurring twice loses its equality constraint; were dispatch to
+match that constraint, a query repeating a variable would look uncompiled while its type
+was compiled, and compiling it again would register a service that exists. Take a rule
+deriving `(item index)` over a LETTER and a UINT column: `(item z index z)` can be
+satisfied by no tuple, but its type is exactly the service compiled for
+`(item e index p)`. So `DispatchQuery()` generalizes the actors it is given, and the
+entry points the compiler uses take a query already generalized.
+
+The constraint the type drops is applied where the answer is read: a `MixedTypeRelation`
+over the query actors gathers the tuples of every matching service and keeps those in
+which the repeated actors agree, atom type included, since dispatch no longer says
+anything about the columns they matched; see `MixedTypeRelation.h`.
+
+A query whose type compiles to nothing is compiled again every time it is asked. That
+costs a walk over the rules and registers nothing, and it is what lets a query start
+working once a rule answering it is asserted.
+
+### Invalidating a compiled service
+
+A compiled service answers as the facts and the rules stood when it was compiled, so it is
+a cache, and a change to either has to remove the services it could affect. The next query
+of that type then compiles them again. Removing too much costs a compilation; removing too
+little gives a wrong answer, so invalidation is deliberately coarse.
+
+Only structural change matters. A fact asserted into a relation that exists needs nothing:
+the compiled service reads that relation live through its MACHINE operator. What does
+matter is a relation appearing, a service appearing or disappearing, and a rule being
+added or removed.
+
+The service registry records, for each compiled service, the services its operator tree is
+built on. The walk recording them stops at every service it meets, so a tree contributes a
+handful of entries and a service further down is reached through the one above it. Removing
+a service therefore removes the compiled services built on it, and then the ones built on
+those; see `ServiceRegistryInvalidateTermForm()`.
+
+A dependency is between two operators, and the services are the ones those operators
+evaluate. Services sharing an operator are one for this purpose, and go stale together,
+which is what a term compiling to the service it matched gives: the compiled service is
+then nothing but that service's operator.
+
+None of this applies to the temporary services a recursive compilation registers for its
+own recursive terms. They are scaffolding, registered and removed within one compilation,
+so nothing outlives it to depend on them and nothing invalidates them; they are marked
+`SERVICE_TEMPORARY` and take no part in the bookkeeping.
+
+Three events drive it:
+
+- **A primitive service is registered.** A query of its term form now has one more
+  relation to match, so the compiled services of that form are incomplete. Hooking service
+  registration rather than relation registration is what keeps the compiler out of it: the
+  compiler creates relations of its own while compiling, and invalidating there could
+  remove a service the compilation in flight is building on.
+- **A service is removed**, which is what retracting the last fact of a relation and
+  removing it comes to. Everything built on it goes.
+- **A rule is added or removed.** A clause form is the multiset of the term forms of its
+  terms, and the compiler resolves a query against the clauses whose form contains the
+  query term form, so those term forms name every service the rule could have reached.
+  No per-rule bookkeeping is needed, and a rule added before anything was compiled costs
+  nothing.
+
+A compiled service removed by invalidation takes its relation with it when that relation is
+computed and has no service left, as nothing else would remove it. Invalidation modifies
+the registries, so it cannot run while a query is being read: an open `DispatchIterator`
+or `MixedTypeRelation` write-locks against modification.
+
 ## Known gaps
 
 - **Preconditions**, needed to guard a recursive clause over an infinite domain, do not

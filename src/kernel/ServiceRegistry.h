@@ -22,6 +22,22 @@
  * since we cannot return pointers into the B-tree storage structure (they may
  * change over time). The registry holds a reference to Service.operator.
  */
+enum ServiceKind {
+	// Provided by the kernel, a stored relation or a machine service, and so part of
+	// the knowledge base rather than derived from it
+	SERVICE_PRIMITIVE = 1,
+	// Compiled from the rules by the compiler. A compiled service is a cache over the
+	// knowledge base, and is removed again when a change could alter what it yields;
+	// see ServiceRegistryInvalidateTermForm().
+	SERVICE_COMPILED = 2,
+	// Registered by the compiler for the duration of one compilation, so that a
+	// recursive term has something to dispatch to, and removed again when that
+	// compilation finishes; see registerTemporaryServices() in compiler.c. A temporary
+	// service is scaffolding rather than an answer: nothing outlives the compilation to
+	// depend on it, and nothing invalidates it.
+	SERVICE_TEMPORARY = 3,
+};
+
 typedef struct s_Service {
 	RelationTable const * relation;
 	byte * parameterIO;
@@ -29,6 +45,7 @@ typedef struct s_Service {
 	// NOTE: cannot be const * if we want to do AcquireOperator(op).
 	// NOTE: not named "operator", which is a reserved word in C++
 	Operator * op;
+	enum ServiceKind kind;
 } Service;
 
 /**
@@ -48,17 +65,30 @@ void SetupServiceRegistry(void);
  * 
  * DEBUG builds assert this where it would take effect, in
  * DispatchIteratorNext().
+ *
+ * A compiled service records which services its operator tree is built on, so that it
+ * can be invalidated when one of them changes; see ServiceRegistryInvalidateTermForm().
+ * Registering a primitive service is itself such a change, as a query of its term form
+ * may now have one more relation to match, and so invalidates the compiled services of
+ * that form.
  */
-Service ServiceRegistryAdd(RelationTable const * relation, byte const parameterIO[], Operator * op);
+Service ServiceRegistryAdd(
+	RelationTable const * relation, byte const parameterIO[], Operator * op,
+	enum ServiceKind kind);
 
 /**
  * Dissociate the service of the given operator from a relation in the service
- * registry. Releases the reference to the operator.
+ * registry. Releases the reference to the operator. The relation itself is left to the
+ * caller, which owns it.
+ *
+ * Every compiled service built on the removed one is invalidated, and so are the ones
+ * built on those; see ServiceRegistryInvalidateTermForm().
  */
 void ServiceRegistryRemove(RelationTable const * relation, Operator * op);
 
 /**
- * Dissociate all services from the given relation in the service registry.
+ * Dissociate all services from the given relation in the service registry, invalidating
+ * the compiled services built on them; see ServiceRegistryRemove().
  */
 void ServiceRegistryRemoveAll(RelationTable const * relation);
 
@@ -72,6 +102,33 @@ void FreeServiceRegistry(void);
  * Total number of registered services.
  */
 size32 ServiceRegistryCount(void);
+
+/**
+ * Number of registered services compiled from the rules; see ServiceKind.
+ */
+size32 ServiceRegistryNCompiled(void);
+
+
+/**
+ * Invalidate compiled services depending on the given term form.
+ * Removes every compiled service whose signature matches the given form, or that
+ * calls a service of that form, transitively. A compiled service answers a query as the
+ * rules and the facts stood when it was compiled, so a change to either has to remove the
+ * services it could affect; the next query then compiles them again. Removing too much
+ * costs a compilation, removing too little gives a wrong answer.
+ *
+ * Any relation associated with a removed service is also removed if it ends up with no
+ * services left and has no provider (no storage).
+ *
+ * NOTE: this modifies the registries, so it cannot run while a query is being read: an
+ * open DispatchIterator or MixedTypeRelation write-locks against modification.
+ */
+void ServiceRegistryInvalidateByTermForm(Atom termForm);
+
+/**
+ * Remove every compiled service, whatever its form; see ServiceRegistryInvalidateTermForm().
+ */
+void ServiceRegistryInvalidateAll(void);
 
 
 /**

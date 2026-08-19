@@ -6,6 +6,9 @@
 #include "kernel/ServiceRegistry.h"
 #include "lang/Formula.h"
 
+// Upper bound on the number of services one query may compile to
+#define MAX_COMPILED_SERVICES	8
+
 /**
  * Attempt to compile a query, registering every generated service and writing
  * a copy to the services[] array. Returns the number of services written.
@@ -21,6 +24,5 @@
  * store a formula.
  */
 size8 CompileQuery(Formula const * queryTerm, Service services[], size8 maxServices);
-
 
 #endif	// COMPILER_H

@@ -14,10 +14,9 @@
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
 #include "lang/Formula.h"
-#include "lang/name.h"
-#include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
 #include "parser/PredicateBuilder.h"
+#include "testing/fixtures.h"
 #include "testing/testing.h"
 
 
@@ -502,58 +501,18 @@ void testIndexOrder(void)
 #define TEST_N_CYCLE_CLOSURE	(3 * 3)
 #define TEST_N_PATH_CLOSURE		3
 
-static struct {
-	Atom form;
-	index8 precIndex;
-	index8 succIndex;
-	RelationTable const * table;
-	TypedTuple * tuples[TEST_N_EDGES];
-} graphFixture;
+static RelationFixture graphFixture;
 
 
 static void setupGraphFixture(void)
 {
-	Atom roles[2] = {
-		CreateNameFromCString("prec"),
-		CreateNameFromCString("succ")
-	};
-	Atom predicateForm = CreatePredicateForm(roles, 2);
-	graphFixture.form = CreateTermForm(predicateForm, true);
-	graphFixture.precIndex = PredicateRoleIndex(predicateForm, roles[0]);
-	graphFixture.succIndex = PredicateRoleIndex(predicateForm, roles[1]);
-	IFactRelease(predicateForm);
-	for(index8 i = 0; i < 2; i++)
-		NameRelease(roles[i]);
-
-	graphFixture.table = CreateRelationBTreeWithServices(
-		graphFixture.form, 2, (byte[]) {AT_ID, AT_ID},
-		(index8[]) {graphFixture.precIndex, graphFixture.succIndex});
+	SetupRelationFixture(&graphFixture, (char const * []) {"prec", "succ"}, 2);
 
 	char const * precNames[TEST_N_EDGES] = {"a", "b", "c", "d", "e"};
 	char const * succNames[TEST_N_EDGES] = {"b", "c", "a", "e", "f"};
-	for(index8 i = 0; i < TEST_N_EDGES; i++) {
-		TypedAtom actors[2];
-		actors[graphFixture.precIndex] =
-			CreateTypedAtom(AT_ID, CreateStringFromCString(precNames[i]));
-		actors[graphFixture.succIndex] =
-			CreateTypedAtom(AT_ID, CreateStringFromCString(succNames[i]));
-		graphFixture.tuples[i] = CreateTypedTupleFromArray(actors, 2);
-		AssertFact(graphFixture.form, graphFixture.tuples[i], 0);
-		for(index8 j = 0; j < 2; j++)
-			ReleaseTypedAtom(actors[j]);
-	}
-}
-
-
-static void teardownGraphFixture(void)
-{
-	for(index8 i = 0; i < TEST_N_EDGES; i++) {
-		RetractFact(graphFixture.form, graphFixture.tuples[i]);
-		FreeTypedTuple(graphFixture.tuples[i]);
-	}
-	ServiceRegistryRemoveAll(graphFixture.table);
-	RelationRegistryRemove(graphFixture.table);
-	IFactRelease(graphFixture.form);
+	for(index8 i = 0; i < TEST_N_EDGES; i++)
+		RelationFixtureAssertFact(
+			&graphFixture, (char const * []) {precNames[i], succNames[i]});
 }
 
 
@@ -595,8 +554,8 @@ static void teardownGraphFixture(void)
  */
 static Operator * createClosureOperator(index8 const * inputArguments, size8 nInputs)
 {
-	index8 precIndex = graphFixture.precIndex;
-	index8 succIndex = graphFixture.succIndex;
+	index8 precIndex = RelationFixtureRoleIndex(&graphFixture, "prec");
+	index8 succIndex = RelationFixtureRoleIndex(&graphFixture, "succ");
 
 	// Both rule bodies take the graph relation looked up on x when the caller bound it,
 	// which is what confines the derivation to the reachable part of the graph, and
@@ -664,7 +623,7 @@ void testFixpointOperator(void)
 	OperatorFreeContext(context);
 
 	ReleaseOperator(closureOperator);
-	teardownGraphFixture();
+	TeardownRelationFixture(&graphFixture);
 }
 
 
@@ -698,7 +657,7 @@ void testFixpointCallBinding(void)
 
 	IFactRelease(nodeA);
 	ReleaseOperator(closureOperator);
-	teardownGraphFixture();
+	TeardownRelationFixture(&graphFixture);
 }
 
 

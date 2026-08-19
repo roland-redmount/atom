@@ -123,6 +123,9 @@ add_library(atom SHARED
     src/parser/Token.c
     src/parser/Tokenizer.c
 
+    src/ui/query.c
+
+    src/testing/fixtures.c
     src/testing/testing.c
 
     ${PLATFORM_SOURCE}
@@ -189,6 +192,7 @@ set(ATOM_TESTS_TIER2        # higher level kernel procedures
     test_compiler
     test_dispatch
     test_mixed_type_relation
+    test_query
     test_unification
     test_machineservice
     test_math

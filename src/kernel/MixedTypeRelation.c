@@ -1,7 +1,36 @@
 
 #include "kernel/MixedTypeRelation.h"
+#include "kernel/Parameter.h"
 #include "lang/TermForm.h"
+#include "lang/Variable.h"
 #include "memory/allocator.h"
+
+
+/**
+ * Detect repeated variables. If queryActors[i] is a variable, equalityMap[i] i set to the index
+ * of the first variable in queryActors that equals queryActors[i].
+ * Returns true if any repeated variables were found.
+ */
+static bool queryVariableMap(TypedTuple const * queryActors, index8 equalityMap[])
+{
+	bool hasRepeatedVariable = false;
+	for(index8 i = 0; i < queryActors->nAtoms; i++) {
+		TypedAtom queryAtom = TypedTupleGetElement(queryActors, i);
+		equalityMap[i] = i;
+		if(queryAtom.type == AT_VARIABLE) {
+			// check for repeated variables
+			for(index8 j = 0; j < i; j++) {
+				TypedAtom previousAtom = TypedTupleGetElement(queryActors, j);
+				if(previousAtom.type == AT_VARIABLE && SameVariable(queryAtom.atom, previousAtom.atom)) {
+					equalityMap[i] = j;
+					hasRepeatedVariable = true;
+					break;
+				}
+			}
+		}
+	}
+	return hasRepeatedVariable;
+}
 
 
 /**
@@ -43,20 +72,20 @@ static void gatherTuple(MixedTypeRelation * relation)
 
 /**
  * Test whether the current tuple of the relation satisfies the equality constraints
- * of the query, if any. Any euqliaty-constrained arguments always have the same atom type.
+ * of the query, if any. Equality-constrained arguments must always have the same atom type.
  */
 static bool tupleSatisfiesConstraints(MixedTypeRelation const * relation)
 {
-	index8 const * equalityMap = relation->impl.concat.equalityMap;
-	if(!equalityMap)
+	index8 const * variableMap = relation->impl.concat.variableMap;
+	if(!variableMap)
 		return true;	// no constraints to check
 
 	for(index8 i = 0; i < relation->tuple->nAtoms; i++) {
-		if(equalityMap[i] == i)
+		if(variableMap[i] == i)
 			continue;
-		if(CompareAtoms(
-			TypedTupleGetAtom(relation->tuple, i),
-			TypedTupleGetAtom(relation->tuple, equalityMap[i])))
+		if(!SameTypedAtoms(
+			TypedTupleGetElement(relation->tuple, i),
+			TypedTupleGetElement(relation->tuple, variableMap[i])))
 			return false;
 	}
 	return true;
@@ -104,23 +133,27 @@ MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * 
 	relation->impl.concat.context = 0;
 	relation->impl.concat.isExhausted = false;
 
-	// The arguments and permutation arrays share one allocation, the arguments first
-	// so that they keep the alignment of an Atom
-	relation->impl.concat.arguments = Allocate(arity * (sizeof(Atom) + sizeof(index8)));
-	relation->impl.concat.permutation = (index8 *) (relation->impl.concat.arguments + arity);
+	// The arguments, query parameters and permutation arrays share one allocation, the
+	// atoms first so that they keep the alignment of an Atom
+	relation->impl.concat.arguments = Allocate(
+		arity * (2 * sizeof(Atom) + sizeof(index8)));
+	relation->impl.concat.queryParameters = relation->impl.concat.arguments + arity;
+	relation->impl.concat.permutation =
+		(index8 *) (relation->impl.concat.queryParameters + arity);
 
-	// Create the equalityMap only if there are repeated variables
-	index8 equalityMap[arity];
-	if(QueryEqualityMap(queryActors, equalityMap)) {
-		relation->impl.concat.equalityMap = Allocate(arity * sizeof(index8));
-		CopyMemory(equalityMap, relation->impl.concat.equalityMap, arity * sizeof(index8));
+	// Create the variable map only if there are repeated variables
+	index8 variableMap[arity];
+	if(queryVariableMap(queryActors, variableMap)) {
+		relation->impl.concat.variableMap = Allocate(arity * sizeof(index8));
+		CopyMemory(variableMap, relation->impl.concat.variableMap, arity * sizeof(index8));
 	}
 	else
-		relation->impl.concat.equalityMap = 0;
+		relation->impl.concat.variableMap = 0;
 
-	DispatchQueryIterate(
-		queryTermForm, queryActors, relation->impl.concat.permutation,
-		&(relation->impl.concat.dispatchIterator));
+	GetQueryParameters(queryActors, relation->impl.concat.queryParameters);
+	DispatchIterate(
+		queryTermForm, relation->impl.concat.queryParameters, arity,
+		relation->impl.concat.permutation, &(relation->impl.concat.dispatchIterator));
 	return relation;
 }
 
@@ -153,8 +186,8 @@ void FreeMixedTypeRelation(MixedTypeRelation * relation)
 			OperatorFreeContext(relation->impl.concat.context);
 		DispatchIteratorEnd(&(relation->impl.concat.dispatchIterator));
 		Free(relation->impl.concat.arguments);
-		if(relation->impl.concat.equalityMap)
-			Free(relation->impl.concat.equalityMap);
+		if(relation->impl.concat.variableMap)
+			Free(relation->impl.concat.variableMap);
 		break;
 
 	default:

@@ -49,10 +49,13 @@ typedef struct s_MixedTypeRelation {
 		// for MIXED_TYPE_CONCAT
 		struct {
 			TypedTuple const * queryActors;
-			// Index of the first query actor denoting the same atom as actor i;
-			// see QueryEqualityMap(). Null when the query actors are all distinct,
-			// which is the usual case, and then no tuple is dropped.
-			index8 * equalityMap;
+			// The query generalized to parameters, which is what dispatch matches, and
+			// which the dispatch iterator reads as it goes; see GetQueryParameters()
+			Atom * queryParameters;
+			// Index of the first query actor denoting the same variable as query actor i,
+			// or just i when actor[i] is not a variable. Used to filter on equality constraints.
+			// Set to 0 when the query actors contain no repeated variables (the common case)
+			index8 * variableMap;
 			// The arguments tuple the current service is called with, and the argument
 			// permutation matching it, both in service parameter order
 			Atom * arguments;
@@ -81,6 +84,7 @@ typedef struct s_MixedTypeRelation {
  * constraint is dropped here; see DispatchQuery().
  *
  * The query actors tuple is not copied, and must remain valid until the relation is freed.
+ * It holds the actors of a query and no parameter of its own, which DEBUG builds assert.
  *
  * NOTE: iteration keeps a DispatchIterator open, which write-locks the relation and
  * service registries. No service or relation may be registered while the tuples of this
