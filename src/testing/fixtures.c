@@ -45,8 +45,11 @@ void SetupRelationFixture(
 		fixture->roleIndex[i] = RelationFixtureRoleIndex(fixture, roleNames[i]);
 		atomTypes[i] = AT_ID;
 	}
-	fixture->table = CreateRelationBTreeWithServices(
-		fixture->termForm, nColumns, atomTypes, fixture->roleIndex);
+	Relation const * relation = CreateRelation(fixture->termForm, nColumns, atomTypes);
+	fixture->table = CreateRelationTable(
+		relation, &btreeTableProvider, fixture->roleIndex);
+	// the table holds its own reference to the relation
+	ReleaseRelation(relation);
 }
 
 

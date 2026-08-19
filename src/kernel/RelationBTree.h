@@ -1,7 +1,17 @@
 /**
- * Implementation of a RelationTable storing tuples in a B-tree data structure,
- * with operators for searching on the leading columns.
- * 
+ * A storage provider keeping the tuples of a relation in a B-tree, with operators for
+ * searching on the leading columns.
+ *
+ * This module exposes two provider interfaces and the B-tree behind them, and reads a
+ * relation only for the arity and column types of the table it is storing. It knows
+ * nothing of the registries or of kernel bootstrapping: giving a relation storage is the
+ * caller's business, and is done the same way whatever the provider.
+ *
+ *   Relation const * relation = CreateRelation(termForm, nColumns, atomTypes);
+ *   RelationTable * table = CreateRelationTable(
+ *       relation, &btreeTableProvider, indexColumns);
+ *   ReleaseRelation(relation);
+ *
  * NOTE: in the future this should be a "plugin" module, should probably move
  * to a separate folder.
  */
@@ -103,21 +113,5 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator);
  * Remove a tuple from the BTree matching the query. See RelationTableRemoveTuple()
  */
 byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition);
-
-/**
- * High-level method to give the relation of the given signature B-tree storage, creating
- * and registering the relation if it does not exist yet. The form is a term form.
- * The returned table holds the creation reference; see DropRelationTable().
- */
-RelationTable * CreateRelationBTreeWithServices(
-	Atom termForm, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
-
-/**
- * Bootstrapping variant taking the predicate form directly.
- * See CreateRelationBootstrap()
- */
-RelationTable * CreateRelationBTreeWithServicesBootstrap(
-	Atom termForm, Atom predicateForm, size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
-
 
 #endif	// RELATION_B_TREE_H

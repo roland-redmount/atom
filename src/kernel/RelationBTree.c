@@ -1,23 +1,13 @@
 /**
- * A relation table based on a B-tree. Relies on btree.c for implemention.
- * Provides both operators (query) and agents (assert)
+ * A relation table based on a B-tree. Relies on btree.c for implementation.
  */
 
 #include "btree/btree.h"
 #include "kernel/operator.h"
-#include "kernel/ifact.h"
 #include "kernel/Parameter.h"
 #include "kernel/RelationBTree.h"
-#include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
-#include "lang/TermForm.h"
-#include "kernel/ServiceRegistry.h"
-#include "kernel/typedtuple.h"
-#include "lang/TypedAtom.h"
-#include "lang/Variable.h"
 #include "memory/allocator.h"
-#include "memory/pool.h"
-#include "util/ResizingArray.h"
 
 
 
@@ -370,28 +360,3 @@ static void btreeRegisterServices(RelationTable * table)
 		ReleaseOperator(op);
 	}
 }
-
-
-RelationTable * CreateRelationBTreeWithServicesBootstrap(
-	Atom termForm, Atom predicateForm, size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
-{
-	Relation const * relation = RelationRegistryFind(termForm, nColumns, atomTypes);
-	if(relation)
-		AcquireRelation(relation);
-	else
-		relation = CreateRelationBootstrap(termForm, predicateForm, nColumns, atomTypes);
-
-	RelationTable * table = CreateRelationTable(relation, &btreeTableProvider, indexColumns);
-	// the table holds its own reference to the relation
-	ReleaseRelation(relation);
-	return table;
-}
-
-
-RelationTable * CreateRelationBTreeWithServices(
-	Atom termForm, size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
-{
-	return CreateRelationBTreeWithServicesBootstrap(
-		termForm, TermFormGetPredicateForm(termForm), nColumns, atomTypes, indexColumns);
-}
-

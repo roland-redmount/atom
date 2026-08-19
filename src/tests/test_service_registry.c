@@ -178,8 +178,10 @@ void testInvalidateOnPrimitiveService(void)
 	// Create a second relation of the fixture form, with distinct atom types,
 	// and associated primitive services
 	byte storedTypes[EXAMPLE_FORM_ARITY] = {AT_UINT, AT_UINT, AT_UINT, AT_UINT};
-	RelationTable * storedTable = CreateRelationBTreeWithServices(
-		fixture.form, EXAMPLE_FORM_ARITY, storedTypes, (index8[]) {0, 1, 2, 3});
+	Relation const * storedRelation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
+	RelationTable * storedTable = CreateRelationTable(
+		storedRelation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
+	ReleaseRelation(storedRelation);
 	// The above compiled service should now be invalidated
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
 	ASSERT_NULL(RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, compiledTypes))
@@ -250,8 +252,10 @@ void testDropTableWithSharedOperator(void)
 {
 	setupFixture();
 	byte storedTypes[EXAMPLE_FORM_ARITY] = {AT_UINT, AT_UINT, AT_UINT, AT_UINT};
-	RelationTable * table = CreateRelationBTreeWithServices(
-		fixture.form, EXAMPLE_FORM_ARITY, storedTypes, (index8[]) {0, 1, 2, 3});
+	Relation const * relation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
+	RelationTable * table = CreateRelationTable(
+		relation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
+	ReleaseRelation(relation);
 
 	Operator * sharedOperator = shareTableOperator(table);
 	AcquireOperator(sharedOperator);
@@ -283,8 +287,10 @@ void testDropTableAfterSharedOperator(void)
 {
 	setupFixture();
 	byte storedTypes[EXAMPLE_FORM_ARITY] = {AT_UINT, AT_UINT, AT_UINT, AT_UINT};
-	RelationTable * table = CreateRelationBTreeWithServices(
-		fixture.form, EXAMPLE_FORM_ARITY, storedTypes, (index8[]) {0, 1, 2, 3});
+	Relation const * relation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
+	RelationTable * table = CreateRelationTable(
+		relation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
+	ReleaseRelation(relation);
 
 	Operator * sharedOperator = shareTableOperator(table);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)

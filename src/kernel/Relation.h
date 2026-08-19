@@ -54,8 +54,8 @@ struct s_Relation {
 
 /**
  * Create a relation for the given signature and add it to the relation registry.
- * Returns holding the creation reference, which the caller releases once it has registered
- * whatever it created the relation for; see ReleaseRelation().
+ * The relation must not already exist, or an ASSERT will occur.
+ * The caller holds one reference to the relation.
  */
 Relation const * CreateRelation(Atom termForm, size8 nColumns, byte const atomTypes[]);
 
@@ -69,7 +69,8 @@ Relation const * CreateRelationBootstrap(
 
 /**
  * The registered relation of the given signature, creating and registering one if there
- * is none. Returns holding a reference either way, as CreateRelation() does.
+ * is none. Unlike CreateRelation(), an existing relation is not an error.
+ * The caller holds one reference to the relation either way.
  */
 Relation const * FindOrCreateRelation(Atom termForm, size8 nColumns, byte const atomTypes[]);
 

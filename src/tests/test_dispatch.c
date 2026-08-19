@@ -119,10 +119,14 @@ void testDispatchNegatedTerm(void)
 
 	// The two signs give two distinct relation tables
 	byte atomTypes[2] = {AT_ID, AT_ID};
-	RelationTable * table = CreateRelationBTreeWithServices(
-		termForm, 2, atomTypes, (index8[]) {0, 1});
-	RelationTable * negatedTable = CreateRelationBTreeWithServices(
-		negatedTermForm, 2, atomTypes, (index8[]) {0, 1});
+	Relation const * relation = CreateRelation(termForm, 2, atomTypes);
+	RelationTable * table = CreateRelationTable(
+		relation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(relation);
+	Relation const * negatedRelation = CreateRelation(negatedTermForm, 2, atomTypes);
+	RelationTable * negatedTable = CreateRelationTable(
+		negatedRelation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(negatedRelation);
 	ASSERT_PTR_NOT_EQUAL(table, negatedTable)
 	ASSERT_PTR_EQUAL(RelationRegistryFind(termForm, 2, atomTypes), table->relation)
 	ASSERT_PTR_EQUAL(RelationRegistryFind(negatedTermForm, 2, atomTypes), negatedTable->relation)
@@ -160,10 +164,14 @@ void testDispatchIterator(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	RelationTable * idTable = CreateRelationBTreeWithServices(
-		termForm, 2, (byte[]) {AT_ID, AT_ID}, (index8[]) {0, 1});
-	RelationTable * uintTable = CreateRelationBTreeWithServices(
-		termForm, 2, (byte[]) {AT_ID, AT_UINT}, (index8[]) {0, 1});
+	Relation const * idRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_ID});
+	RelationTable * idTable = CreateRelationTable(
+		idRelation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(idRelation);
+	Relation const * uintRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_UINT});
+	RelationTable * uintTable = CreateRelationTable(
+		uintRelation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(uintRelation);
 
 	// Only the service with two output parameters matches, so each table contributes
 	// one match

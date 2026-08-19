@@ -193,8 +193,11 @@ void testQueryInvalidatedByRelation(void)
 
 	// A second relation of the (prec succ) form, whose services the compiled one knows
 	// nothing of
-	RelationTable * uintTable = CreateRelationBTreeWithServices(
-		precSuccFixture.termForm, 2, (byte[]) {AT_ID, AT_UINT}, (index8[]) {0, 1});
+	Relation const * uintRelation = CreateRelation(
+		precSuccFixture.termForm, 2, (byte[]) {AT_ID, AT_UINT});
+	RelationTable * uintTable = CreateRelationTable(
+		uintRelation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(uintRelation);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
 
 	// Asking again compiles the query anew, over both relations, and the new one holds

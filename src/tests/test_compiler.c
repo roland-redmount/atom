@@ -347,11 +347,11 @@ void testCompileRecursiveJoin1(void)
 		"number _n faculty _f | ! + _m + 1 = _n | ! number _m faculty _e | ! * _e * _n = _f");
 	// Create terminating fact, provide by a B-tree service
 	Formula * terminatingFact = CStringToTerm("number 0 faculty 1");	
-	RelationTable * table = CreateRelationBTreeWithServices(
-		terminatingFact->form, 2,
-		TypedTuplePeekAtomTypes(terminatingFact->actors),
-		(index8[]) {0, 1}
-	);
+	Relation const * relation = CreateRelation(
+		terminatingFact->form, 2, TypedTuplePeekAtomTypes(terminatingFact->actors));
+	RelationTable * table = CreateRelationTable(
+		relation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(relation);
 	AssertFact(terminatingFact->form, terminatingFact->actors, 0);
 	// Compile the query
 	Formula * queryTerm = CStringToTerm("number 4 faculty _f");
@@ -556,8 +556,10 @@ void testCompileNegatedTerm(void)
 {
 	// Setup the fact (odd 3)
 	Formula * odd3term = CStringToTerm("odd 3");
-	RelationTable * evenTable = CreateRelationBTreeWithServices(
-		odd3term->form, 1, (byte[]) {AT_INT}, (index8[]) {0});
+	Relation const * evenRelation = CreateRelation(odd3term->form, 1, (byte[]) {AT_INT});
+	RelationTable * evenTable = CreateRelationTable(
+		evenRelation, &btreeTableProvider, (index8[]) {0});
+	ReleaseRelation(evenRelation);
 	AssertFact(odd3term->form, odd3term->actors, 0);
 	// setup the rule
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even _x | ! odd _x");
@@ -604,8 +606,10 @@ void testCompiledServiceReadsFactsLive(void)
 {
 	// (odd 3), and the rule making (! even x) follow from (odd x)
 	Formula * odd3term = CStringToTerm("odd 3");
-	RelationTable * oddTable = CreateRelationBTreeWithServices(
-		odd3term->form, 1, (byte[]) {AT_INT}, (index8[]) {0});
+	Relation const * oddRelation = CreateRelation(odd3term->form, 1, (byte[]) {AT_INT});
+	RelationTable * oddTable = CreateRelationTable(
+		oddRelation, &btreeTableProvider, (index8[]) {0});
+	ReleaseRelation(oddRelation);
 	AssertFact(odd3term->form, odd3term->actors, 0);
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even _x | ! odd _x");
 

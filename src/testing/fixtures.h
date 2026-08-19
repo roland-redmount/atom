@@ -13,7 +13,8 @@
 
 
 // A B-tree relation registers one service per prefix of its index columns, and one
-// more enumerating the whole relation; see CreateRelationBTreeWithServices()
+// more enumerating the whole relation; see btreeRegisterServices() in RelationBTree.c
+// and RelationTableProvider.registerServices()
 #define RELATION_FIXTURE_N_SERVICES(nColumns)	((nColumns) + 1)
 
 // Upper bounds on a fixture relation, large enough for the fixtures here

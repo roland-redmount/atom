@@ -333,15 +333,19 @@ static RelationTable * createCoreRelationTable(uint32 relationId)
 	CoreFormSetByteArray(coreRelationFormId[relationId], coreRelationAtomTypes[relationId], atomTypes);
 	index32 formId = coreRelationFormId[relationId];
 
-	// The bootstrap variant is used throughout, since the predicate form is at hand
-	// and the earliest core tables are keyed by a term form that has no tuples yet
-	return CreateRelationBTreeWithServicesBootstrap(
+	// The bootstrap constructor is used throughout, since the predicate form is at hand
+	// and the earliest core relations are keyed by a term form that has no tuples yet
+	Relation const * relation = CreateRelationBootstrap(
 		kernel.coreTermForms[formId],
 		kernel.corePredicateForms[formId],
 		corePredicateArity[formId],
-		atomTypes,
-		kernel.corePredicateRoleIndex[formId]
+		atomTypes
 	);
+	RelationTable * table = CreateRelationTable(
+		relation, &btreeTableProvider, kernel.corePredicateRoleIndex[formId]);
+	// the table holds its own reference to the relation
+	ReleaseRelation(relation);
+	return table;
 }
 
 
