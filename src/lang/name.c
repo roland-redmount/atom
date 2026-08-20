@@ -11,7 +11,8 @@ typedef struct s_NameRecord {
 	data64 hash;
 	uint32 nReferences;
 	size32 length;
-	char * string;		// variable lengths string from Allocate()
+	// heap allocated string from Allocate(), no zero terminator
+	char * string;
 } NameRecord;
 
 
@@ -83,13 +84,19 @@ size32 NumberOfNames(void)
 }
 
 
-Atom CreateName(char const * string, size32 length)
+Atom CreateName(char const * cString, size32 length)
 {
-	data64 hash = nameHash(string, length, djb2InitialHash);
+	data64 hash = nameHash(cString, length, djb2InitialHash);
 	NameRecord * existingRecord = peekNameRecord(hash);
 	if(existingRecord) {
-		// name already exists
-		// TODO: check for hash collision
+		// A name with the same hash exists.
+		// Check for hash collision
+		if(CompareMemory(cString, existingRecord->string, length)) {
+			Panic(
+				"Hash collision for names \"%s\" and \"%.*s\", hash = %llx",
+				cString, existingRecord->length, existingRecord->string, hash
+			);
+		}
 		existingRecord->nReferences++;
 	}
 	else {
@@ -99,7 +106,7 @@ Atom CreateName(char const * string, size32 length)
 		record.nReferences = 1;
 		record.length = length;
 		record.string = Allocate(length);
-		CopyMemory(string, record.string, length);
+		CopyMemory(cString, record.string, length);
 		ASSERT(addNameRecord(&record));
 	}
 	nameStorage.nReferencesTotal++;
