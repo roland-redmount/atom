@@ -51,6 +51,7 @@ static void openService(MixedTypeRelation * relation)
 
 	relation->impl.concat.context = OperatorCreateContext(
 		relation->impl.concat.service.op, relation->impl.concat.arguments);
+	relation->impl.concat.nServices++;
 }
 
 
@@ -132,6 +133,7 @@ MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * 
 	relation->impl.concat.queryActors = queryActors;
 	relation->impl.concat.context = 0;
 	relation->impl.concat.isExhausted = false;
+	relation->impl.concat.nServices = 0;
 
 	// The arguments, query parameters and permutation arrays share one allocation, the
 	// atoms first so that they keep the alignment of an Atom
@@ -169,6 +171,13 @@ bool MixedTypeRelationNext(MixedTypeRelation * relation)
 		ASSERT(false)
 		return false;
 	}
+}
+
+
+size32 MixedTypeRelationNServices(MixedTypeRelation const * relation)
+{
+	ASSERT(relation->type == MIXED_TYPE_CONCAT)
+	return relation->impl.concat.nServices;
 }
 
 

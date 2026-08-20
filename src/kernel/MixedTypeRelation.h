@@ -61,6 +61,9 @@ typedef struct s_MixedTypeRelation {
 			index8 * permutation;
 			DispatchIterator dispatchIterator;
 			Service service;
+			// Number of services read from so far, counted as each is opened;
+			// see MixedTypeRelationNServices()
+			size32 nServices;
 			// Context of the current service, null before the first service and
 			// between two services
 			OperatorContext * context;
@@ -106,6 +109,17 @@ bool MixedTypeRelationNext(MixedTypeRelation * relation);
  * MixedTypeRelationNext() or FreeMixedTypeRelation().
  */
 TypedTuple const * MixedTypeRelationPeekTuple(MixedTypeRelation const * relation);
+
+/**
+ * The number of services the relation has taken its tuples from. This tells a query no
+ * service answers from one a service answers with no tuples: the first counts zero here
+ * and the second at least one, though both yield nothing.
+ *
+ * A service is counted when the relation begins reading it, so this is the number of
+ * matching services only once MixedTypeRelationNext() has returned false. A caller that
+ * stops early has not reached the services it did not read.
+ */
+size32 MixedTypeRelationNServices(MixedTypeRelation const * relation);
 
 /**
  * Deallocate a mixed type relation. May be called at any position, so a caller that has

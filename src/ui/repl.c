@@ -85,14 +85,14 @@ static void printParseError(index32 errorPosition)
 }
 
 
-static void printAnswerCount(size32 nAnswers)
+/*
+ * Print a summary of the query results
+ */
+static void printQueryResultSummary(MixedTypeRelation const * resultRelations, size32 nTuples)
 {
-	if(nAnswers == 0) {
-		printLine("No facts.");
-		return;
-	}
+	size32 nServices = MixedTypeRelationNServices(resultRelations);
 	printMargin();
-	PrintF("%u fact%s.\n", nAnswers, (nAnswers == 1) ? "" : "s");
+	PrintF("%d facts from %d matching services\n", nTuples, nServices);
 }
 
 
@@ -117,17 +117,17 @@ static void executeQuery(char const * line)
 	}
 
 	MixedTypeRelation * resultRelations = UserQuery(query);
-	size32 nAnswers = 0;
+	size32 nTuples = 0;
 	while(MixedTypeRelationNext(resultRelations)) {
 		printMargin();
 		PrintFormActorsAsFormula(form, MixedTypeRelationPeekTuple(resultRelations));
 		PrintChar('\n');
-		nAnswers++;
+		nTuples++;
 	}
+	// the relation counts the services it read, so it is read out before being freed
+	printQueryResultSummary(resultRelations, nTuples);
 	FreeMixedTypeRelation(resultRelations);
 	ReleaseFormula(query);
-
-	printAnswerCount(nAnswers);
 }
 
 

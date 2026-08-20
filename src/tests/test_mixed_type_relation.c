@@ -34,6 +34,23 @@ static size32 countQueryTuples(char const * queryString)
 
 
 /**
+ * Return the number of services the relation for the given query read from, having read
+ * it to its end.
+ */
+static size32 countQueryServices(char const * queryString)
+{
+	Atom query = CStringToTerm(queryString);
+	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
+	while(MixedTypeRelationNext(relation))
+		;
+	size32 nServices = MixedTypeRelationNServices(relation);
+	FreeMixedTypeRelation(relation);
+	ReleaseFormula(query);
+	return nServices;
+}
+
+
+/**
  * A query with a variable at every position must enumerate the whole relation,
  * and the tuples arrive in the actor order of the query.
  */
@@ -197,6 +214,27 @@ void testConcatRepeatedVariableAcrossTypes(void)
 
 
 /**
+ * A query no service answers and a query a service answers with no tuples both yield
+ * nothing, and the count of services read is what tells the two apart.
+ */
+void testConcatServiceCount(void)
+{
+	// two services answer the (list position element) form, one per element type
+	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position p element e"), 2)
+	ASSERT_UINT32_EQUAL(countQueryServices("list \"ab\" position p element e"), 2)
+
+	// those same services are read for this query, whose repeated variable drops
+	// every tuple they yield
+	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position x element x"), 0)
+	ASSERT_UINT32_EQUAL(countQueryServices("list \"ab\" position x element x"), 2)
+
+	// no service answers this form at all
+	ASSERT_UINT32_EQUAL(countQueryTuples("nowhere x nothing y"), 0)
+	ASSERT_UINT32_EQUAL(countQueryServices("nowhere x nothing y"), 0)
+}
+
+
+/**
  * Constructing a MixedTypeRelation with a query that does not match any service
  * yields no tuples.
  */
@@ -206,6 +244,7 @@ void testConcatWithoutMatch(void)
 	MixedTypeRelation * relation = CreateConcatRelation(
 		FormulaGetForm(unknownQuery), FormulaGetActors(unknownQuery));
 	ASSERT_FALSE(MixedTypeRelationNext(relation))
+	ASSERT_UINT32_EQUAL(MixedTypeRelationNServices(relation), 0)
 	// A relation read past its last tuple stays empty, and neither the dispatch
 	// iterator nor a service is called again
 	ASSERT_FALSE(MixedTypeRelationNext(relation))
@@ -242,6 +281,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testConcatConstantQuery);
 	ExecuteTest(testConcatAcrossRelations);
 	ExecuteTest(testConcatRepeatedVariableAcrossTypes);
+	ExecuteTest(testConcatServiceCount);
 	ExecuteTest(testConcatWithoutMatch);
 	ExecuteTest(testConcatAbandonedIteration);
 
