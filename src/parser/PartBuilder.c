@@ -15,15 +15,6 @@ void InitializePartBuilder(PartBuilder * builder)
 	// role and actor are undefined
 }
 
-
-static void beginReflection(PartBuilder * builder)
-{
-	builder->formulaBuilder = Allocate(sizeof(FormulaBuilder));
-	InitializeFormulaBuilder(builder->formulaBuilder);
-	builder->state = STATE_REFLECTION;
-}
-
-
 static void releaseFormulaBuilder(PartBuilder * builder)
 {
 	CleanupFormulaBuilder(builder->formulaBuilder);
@@ -46,7 +37,9 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 
 	case STATE_HAS_NAME:
 		if(token.type == TOKEN_BEGIN_REFLECT) {
-			beginReflection(builder);
+			builder->formulaBuilder = Allocate(sizeof(FormulaBuilder));
+			InitializeFormulaBuilder(builder->formulaBuilder);
+			builder->state = STATE_REFLECTION;
 			return true;
 		}
 		if(!TokenIsLiteral(token))

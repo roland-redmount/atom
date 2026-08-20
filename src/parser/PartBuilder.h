@@ -14,11 +14,7 @@ struct s_FormulaBuilder;
  * A part is a role name followed by an actor. The actor may be written as a
  * reflection [ ... ], in which case the part builder collects the tokens of
  * the reflection in a nested formula builder while in STATE_REFLECTION, and
- * the formula it yields becomes the actor.
- *
- * The nested builder is held by pointer and allocated only when a reflection
- * begins. A FormulaBuilder contains a PartBuilder in turn, so holding one by
- * value would make this structure infinitely recursive.
+ * the formula atom it yields becomes the actor.
  */
 typedef struct s_PartBuilder {
 	enum BuilderState {
@@ -26,7 +22,8 @@ typedef struct s_PartBuilder {
 	} state;
 	Atom role;
 	TypedAtom actor;
-	struct s_FormulaBuilder * formulaBuilder;	// only in STATE_REFLECTION
+	// Keep a pointer to the nested builder, allocated only in STATE_REFLECTION.
+	struct s_FormulaBuilder * formulaBuilder;
 } PartBuilder;
 
 

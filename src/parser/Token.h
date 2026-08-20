@@ -40,6 +40,5 @@ bool TokenIsLiteral(Token token);
  */
 void ReleaseToken(Token token);
 
-void PrintToken(Token token);
 
 #endif	// TOKEN_H
