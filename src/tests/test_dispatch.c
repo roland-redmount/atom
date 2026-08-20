@@ -55,7 +55,7 @@ void testDispatchRepeatedVariable(void)
 	index8 permutation[3];
 
 	// A position is never a letter, so no atom satisfies this query, and it dispatches
-	// to the (list <ID position >UINT element >LETTER) service all the same
+	// to the (list <ID position >INT element >LETTER) service all the same
 	Atom query = CStringToTerm("list \"ab\" position x element x");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
 	ReleaseFormula(query);
@@ -86,7 +86,7 @@ void testDispatchRepeatedParameter(void)
 		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0))
 
 	// Give the position and the element one parameter, as a term (list s position p
-	// element p) has. The service has a UINT position and a LETTER element, so no atom
+	// element p) has. The service has an INT position and a LETTER element, so no atom
 	// can be both.
 	Atom repeatedParameter = {
 		.parameter = {.number = 2, .io = PARAMETER_OUT, .atomType = 0}
@@ -168,10 +168,10 @@ void testDispatchIterator(void)
 	RelationTable * idTable = CreateRelationTable(
 		idRelation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(idRelation);
-	Relation const * uintRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_UINT});
-	RelationTable * uintTable = CreateRelationTable(
-		uintRelation, &btreeTableProvider, (index8[]) {0, 1});
-	ReleaseRelation(uintRelation);
+	Relation const * intRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_INT});
+	RelationTable * intTable = CreateRelationTable(
+		intRelation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(intRelation);
 
 	// Only the service with two output parameters matches, so each table contributes
 	// one match
@@ -217,7 +217,7 @@ void testDispatchIterator(void)
 	DispatchIteratorEnd(&iterator);
 	ReleaseFormula(unknownQuery);
 
-	DropRelationTable(uintTable);
+	DropRelationTable(intTable);
 	DropRelationTable(idTable);
 	IFactRelease(termForm);
 }

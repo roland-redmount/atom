@@ -100,24 +100,24 @@ static const index32 coreRelationFormId[N_CORE_RELATIONS + 1] = {
  */
 static const byte coreRelationAtomTypes[N_CORE_RELATIONS + 1][CORE_FORMS_MAX_ARITY] = {
 	{0},
-	// (multiset:ID element:NAME multiple:UINT)
-	{AT_ID, AT_NAME, AT_UINT},
+	// (multiset:ID element:NAME multiple:INT)
+	{AT_ID, AT_NAME, AT_INT},
 	// (predicate-form:ID)
 	{AT_ID},
 	// (multiset:ID element:ID multiple:INT)
-	{AT_ID, AT_ID, AT_UINT},
-	// (term-form:ID predicate-form:ID sign:UINT)
-	{AT_ID, AT_ID, AT_UINT},
+	{AT_ID, AT_ID, AT_INT},
+	// (term-form:ID predicate-form:ID sign:INT)
+	{AT_ID, AT_ID, AT_INT},
 	// (clause-form:ID)
 	{AT_ID},
 	// (conjunction-form:ID)
 	{AT_ID},
-	// (list:ID position:UINT element:LETTER)
-	{AT_ID, AT_UINT, AT_LETTER},
-	// (list:ID position:UINT element:ID)
-	{AT_ID, AT_UINT, AT_ID},
-	// (list:ID length:UINT)
-	{AT_ID, AT_UINT},
+	// (list:ID position:INT element:LETTER)
+	{AT_ID, AT_INT, AT_LETTER},
+	// (list:ID position:INT element:ID)
+	{AT_ID, AT_INT, AT_ID},
+	// (list:ID length:INT)
+	{AT_ID, AT_INT},
 	// (quote:ID quoted:ID)
 	{AT_ID, AT_ID},
 	// (string:ID)
@@ -129,21 +129,21 @@ static const byte coreRelationAtomTypes[N_CORE_RELATIONS + 1][CORE_FORMS_MAX_ARI
  */
 static const index32 coreServiceRelationId[N_CORE_SERVICES + 1] = {
 	0,
-	// (multiset <ID element >NAME multiple >UINT)
+	// (multiset <ID element >NAME multiple >INT)
 	RELATION_MULTISET_NAME,
 	// (predicate-form >ID)
 	RELATION_PREDICATE_FORM,
-	// (multiset <ID element >ID multiple >UINT)
+	// (multiset <ID element >ID multiple >INT)
 	RELATION_MULTISET_ID,
-	// (multiset >ID element >ID multiple >UINT)
+	// (multiset >ID element >ID multiple >INT)
 	RELATION_MULTISET_ID,
 	// (term-form <ID predicate-form >ID)
 	RELATION_TERM_FORM,
-	// (list <ID length >UINT)
+	// (list <ID length >INT)
 	RELATION_LIST_LENGTH,
-	// (list <ID position >UINT element >LETTER)
+	// (list <ID position >INT element >LETTER)
 	RELATION_LIST_LETTER,
-	// (list <ID position >UINT element >ID)
+	// (list <ID position >INT element >ID)
 	RELATION_LIST_ID,
 };
 
@@ -153,21 +153,21 @@ static const index32 coreServiceRelationId[N_CORE_SERVICES + 1] = {
  */
 static const byte coreServiceParameterIO[N_CORE_SERVICES + 1][CORE_FORMS_MAX_ARITY] = {
 	{0},
-	// (multiset <ID element >NAME multiple >UINT)
+	// (multiset <ID element >NAME multiple >INT)
 	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 	// (predicate-form >ID)
 	{PARAMETER_IN},
-	// (multiset <ID element >ID multiple >UINT)
+	// (multiset <ID element >ID multiple >INT)
 	{PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT},
-	// (multiset >ID element >ID multiple >UINT)
+	// (multiset >ID element >ID multiple >INT)
 	{PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT},
-	// (term-form <ID predicate-form >ID sign >UINT)
+	// (term-form <ID predicate-form >ID sign >INT)
 	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
-	// (list <ID length >UINT)
+	// (list <ID length >INT)
 	{PARAMETER_IN, PARAMETER_OUT},
-	// (list <ID position >UINT element >LETTER)
+	// (list <ID position >INT element >LETTER)
 	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
-	// (list <ID position >UINT element >ID)
+	// (list <ID position >INT element >ID)
 	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 };
 
@@ -386,7 +386,7 @@ static void bootstrapTermForm(Atom termForm, Atom predicateForm)
 	// the term form itself goes in the id column, which createFacts() fills in
 	CoreFormSetTuple(
 		FORM_TERM_FORM,
-		(Atom []) {(Atom) {0}, predicateForm, (Atom) {._uint = 1}},
+		(Atom []) {(Atom) {0}, predicateForm, (Atom) {._int = 1}},
 		tuple
 	);
 	IFactAddTuple(&draft, tuple);
@@ -512,21 +512,21 @@ static void setupCoreServices(void)
 	Atom multisetTuple[3];
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
-		(Atom []) {multisetForm, GetCoreRoleName(ROLE_MULTISET), (Atom) {._uint = 1}},
+		(Atom []) {multisetForm, GetCoreRoleName(ROLE_MULTISET), (Atom) {._int = 1}},
 		multisetTuple
 	);
 	IFactAddTuple(&multisetDraft, multisetTuple);
 	// (multiset @multiset-form element "element" multiple 1)
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
-		(Atom []) {multisetForm, GetCoreRoleName(ROLE_ELEMENT), (Atom) {._uint = 1}},
+		(Atom []) {multisetForm, GetCoreRoleName(ROLE_ELEMENT), (Atom) {._int = 1}},
 		multisetTuple
 	);
 	IFactAddTuple(&multisetDraft, multisetTuple);
 	// (multiset @multiset-form element "multiple" multiple 1)
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
-		(Atom []) {multisetForm, GetCoreRoleName(ROLE_MULTIPLE), (Atom) {._uint = 1}},
+		(Atom []) {multisetForm, GetCoreRoleName(ROLE_MULTIPLE), (Atom) {._int = 1}},
 		multisetTuple
 	);
 	IFactAddTuple(&multisetDraft, multisetTuple);
@@ -572,7 +572,7 @@ static void setupCoreServices(void)
 		&predicateFormDraft, kernel.coreRelations[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
-		(Atom []) {predicateForm, GetCoreRoleName(ROLE_PREDICATE_FORM), (Atom) {._uint = 1}},
+		(Atom []) {predicateForm, GetCoreRoleName(ROLE_PREDICATE_FORM), (Atom) {._int = 1}},
 		multisetTuple
 	);
 	IFactAddTuple(&predicateFormDraft, multisetTuple);

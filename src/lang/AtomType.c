@@ -7,7 +7,6 @@ char const * atomTypeNames[N_ATOMTYPES + 1] = {
 	"NONE",
 	"NAME",
 	"ID",
-	"UINT",
 	"INT",
 	"FLOAT",
 	"LETTER",

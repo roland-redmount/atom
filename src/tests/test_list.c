@@ -1,5 +1,4 @@
 
-#include "kernel/UInt.h"
 #include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/list.h"

@@ -7,7 +7,6 @@
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
 #include "kernel/string.h"
-#include "kernel/UInt.h"
 #include "lang/Atom.h"
 #include "lang/ClauseForm.h"
 #include "lang/formula.h"
@@ -119,10 +118,6 @@ void PrintTypedAtom(TypedAtom typedAtom)
 	switch(typedAtom.type) {
 	case AT_NONE:
 		PrintCString("NONE");
-		break;
-
-	case AT_UINT:
-		PrintUInt(typedAtom.atom);
 		break;
 
 	case AT_INT:

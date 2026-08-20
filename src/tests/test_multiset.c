@@ -1,5 +1,4 @@
 
-#include "kernel/UInt.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "lang/name.h"

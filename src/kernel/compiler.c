@@ -914,7 +914,7 @@ static size8 compileQueryClauses(
 	 */
 
 	/**
-	 * TODO: here we need the service (multiset >ID element <ID multiple >UINT) where element is input
+	 * TODO: here we need the service (multiset >ID element <ID multiple >INT) where element is input
 	 * Since the element role is not a leading column, RelationBTree does not support this.
 	 * For now, we simply scan the entire table and filter on matching terms. This is obviously
 	 * highly inefficient. A better solution would require multiple indexes on the relation table.
@@ -932,7 +932,7 @@ static size8 compileQueryClauses(
 		Atom clauseForm = multisetQueryTuple[
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)];
 		size8 multiple = multisetQueryTuple[
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)]._uint;
+			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)]._int;
 		// Ensure the multiset is a clause form
 		if(!IsClauseForm(clauseForm))
 			continue;

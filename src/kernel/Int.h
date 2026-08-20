@@ -1,5 +1,5 @@
 /**
- * Atom types for signed integers, two's complement, little endian
+ * The atom type for signed integers, two's complement, little endian.
  * The atom is an int64.
  */
 

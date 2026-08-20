@@ -65,14 +65,14 @@ void testLookupPredicateRoles(void)
 
 	byte atomTypes[2];
 	atomTypes[nodeIndex] = AT_ID;
-	atomTypes[weightIndex] = AT_UINT;
+	atomTypes[weightIndex] = AT_INT;
 	// a computed relation, as we only need it to describe the columns
 	Relation const * relation = CreateRelation(form, 2, atomTypes);
 
 	Atom node = CreateStringFromCString("foo");
 	Atom actors[2];
 	actors[nodeIndex] = node;
-	actors[weightIndex] = (Atom) {._uint = 42};
+	actors[weightIndex] = (Atom) {._int = 42};
 
 	// only the node column obtains a lookup record
 	LookupAddPredicateRoles(relation, actors);

@@ -1,5 +1,4 @@
 
-#include "kernel/UInt.h"
 #include "lang/Variable.h"
 #include "kernel/dispatch.h"
 #include "kernel/letter.h"
@@ -56,7 +55,7 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 	Atom listLengthTuple[2];
 	CoreFormSetTuple(
 		FORM_LIST_LENGTH,
-		(Atom[]) {(Atom) {0}, (Atom) {._uint = nElements}},
+		(Atom[]) {(Atom) {0}, (Atom) {._int = nElements}},
 		listLengthTuple
 	);
 	IFactAddTuple(draft, listLengthTuple);
@@ -70,7 +69,7 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 		byte atomTypes[3];
 		CoreFormSetByteArray(
 			FORM_LIST_POSITION_ELEMENT,
-			(byte[]) {AT_ID, AT_UINT, elementType},
+			(byte[]) {AT_ID, AT_INT, elementType},
 			atomTypes
 		);
 		Relation const * relation = RelationRegistryFind(
@@ -91,7 +90,7 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 		for(index32 i = 0; i < nElements; i++) {
 			CoreFormSetTuple(
 				FORM_LIST_POSITION_ELEMENT,
-				(Atom[]) {(Atom) {0}, (Atom) {._uint = i + 1}, generator(i, data)},
+				(Atom[]) {(Atom) {0}, (Atom) {._int = i + 1}, generator(i, data)},
 				listElementTuple
 			);
 			IFactAddTuple(draft, listElementTuple);
@@ -162,7 +161,7 @@ size32 ListLength(Atom list)
 		arguments
 	);
 	ASSERT(OperatorCallOnce(op, arguments))
-	return (size32) arguments[CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LENGTH)]._uint;
+	return (size32) arguments[CorePredicateRoleIndex(FORM_LIST_LENGTH, ROLE_LENGTH)]._int;
 }
 
 
@@ -193,7 +192,7 @@ Atom ListGetElement(Atom list, index32 position)
 	Atom arguments[3];
 	CoreFormSetTuple(
 		FORM_LIST_POSITION_ELEMENT,
-		(Atom []) {list, (Atom) {._uint = position}, (Atom) {0}},
+		(Atom []) {list, (Atom) {._int = position}, (Atom) {0}},
 		arguments
 	);
 	ASSERT(OperatorCallOnce(op, arguments))
@@ -227,7 +226,7 @@ index32 ListGetPosition(Atom list, Atom element)
 		arguments
 	);
 	ASSERT(OperatorCallOnce(op, arguments))
-	return arguments[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION)]._uint;
+	return arguments[CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION)]._int;
 }
 
 
