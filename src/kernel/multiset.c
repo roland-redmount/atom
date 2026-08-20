@@ -1,5 +1,4 @@
 
-#include "kernel/UInt.h"
 #include "lang/Variable.h"
 #include "lang/TypedAtom.h"
 #include "kernel/lookup.h"
@@ -96,7 +95,7 @@ void AddMultisetToIFact(
 			(Atom[]) {
 				(Atom) {0},
 				em.element,
-				(Atom) {._uint = em.multiple},
+				(Atom) {._int = em.multiple},
 			},
 			tuple
 		);
@@ -208,7 +207,7 @@ ElementMultiple MultisetIteratorGetElement(MultisetIterator const * iterator)
 	Atom element = iterator->queryTuple[CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
 	return (ElementMultiple) {
 		.element = element,
-		.multiple = multiple._uint
+		.multiple = multiple._int
 	};
 }
 

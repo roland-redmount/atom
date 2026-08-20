@@ -1,5 +1,4 @@
 
-#include "kernel/UInt.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
 #include "kernel/pair.h"
@@ -13,7 +12,7 @@ static void testPair(void)
 
 	// create a pair
 	TypedAtom left = CreateTypedAtom(AT_LETTER, GetAlphabetLetter('x'));
-	TypedAtom right = CreateTypedAtom(AT_UINT, (Atom) {._uint = 42});
+	TypedAtom right = CreateTypedAtom(AT_INT, (Atom) {._int = 42});
 	Atom pair1 = CreatePair(left, right);
 	
 	ASSERT_TRUE(IsPair(pair1))

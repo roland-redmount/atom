@@ -82,15 +82,15 @@ void KernelShutdown(void);
  * Stable identifiers the for core relations.
  * There may be > 1 relation per predicate, with distinct types.
  */
-#define RELATION_MULTISET_NAME      		1	// (multiset:ID element:NAME multiple:UINT)
+#define RELATION_MULTISET_NAME      		1	// (multiset:ID element:NAME multiple:INT)
 #define RELATION_PREDICATE_FORM				2	// (predicate-form:ID)
 #define RELATION_MULTISET_ID         		3	// (multiset:ID element:ID multiple:INT)
-#define RELATION_TERM_FORM					4	// (term-form:ID predicate-form:ID sign:UINT)
+#define RELATION_TERM_FORM					4	// (term-form:ID predicate-form:ID sign:INT)
 #define RELATION_CLAUSE_FORM				5	// (clause-form:ID)
 #define RELATION_CONJUNCTION_FORM			6	// (conjunction-form:ID)
-#define RELATION_LIST_LETTER        		7	// (list:ID position:UINT element:LETTER)
-#define RELATION_LIST_ID  	 	     		8	// (list:ID position:UINT element:LETTER)
-#define RELATION_LIST_LENGTH				9	// (list:ID length:UINT)
+#define RELATION_LIST_LETTER        		7	// (list:ID position:INT element:LETTER)
+#define RELATION_LIST_ID  	 	     		8	// (list:ID position:INT element:ID)
+#define RELATION_LIST_LENGTH				9	// (list:ID length:INT)
 #define RELATION_QUOTE	    				10	// (quote:ID quoted:ID)
 #define RELATION_STRING						11	// (string:ID)
 
@@ -102,14 +102,14 @@ void KernelShutdown(void);
  * Stable identifiers for a small set of core services.
  * There may be > 1 service per relation table.
  */
-#define SERVICE_MULTISET_NAME				1	// (multiset <ID element >NAME multiple >UINT)
+#define SERVICE_MULTISET_NAME				1	// (multiset <ID element >NAME multiple >INT)
 #define SERVICE_PREDICATE_FORM				2	// (predicate-form >ID)
-#define SERVICE_MULTISET_ID					3	// (multiset <ID element >ID multiple >UINT)
-#define SERVICE_MULTISET_ID_ALL				4	// (multiset >ID element >ID multiple >UINT)
+#define SERVICE_MULTISET_ID					3	// (multiset <ID element >ID multiple >INT)
+#define SERVICE_MULTISET_ID_ALL				4	// (multiset >ID element >ID multiple >INT)
 #define SERVICE_TERM_FORM					5	// (term-form <ID predicate-form >ID)
-#define SERVICE_LIST_LENGTH                 6	// (list <ID length >UINT)
-#define SERVICE_LIST_LETTER					7	// (list <ID position >UINT element >LETTER)	
-#define SERVICE_LIST_ID						8	// (list <ID position >UINT element >ID)	
+#define SERVICE_LIST_LENGTH                 6	// (list <ID length >INT)
+#define SERVICE_LIST_LETTER					7	// (list <ID position >INT element >LETTER)	
+#define SERVICE_LIST_ID						8	// (list <ID position >INT element >ID)	
 
 #define N_CORE_SERVICES                     8
 

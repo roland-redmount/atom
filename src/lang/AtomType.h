@@ -15,15 +15,14 @@
 #define AT_NONE					0
 #define AT_NAME					1		// a name (symbol) identified by a hash
 #define AT_ID					2		// atom identified by an ifact
-#define AT_UINT					3		// unsigned integer
-#define AT_INT					4		// signed integer
-#define AT_FLOAT				5		// double-precision floating point number
-#define AT_LETTER				6		// a letter of the English alphabet
-#define AT_VARIABLE             7		// variable with a letter identifier
-#define AT_PARAMETER			8		// a parameter in a service
-#define AT_FORMULA				9		// a form plus its actors
+#define AT_INT					3		// signed integer
+#define AT_FLOAT				4		// double-precision floating point number
+#define AT_LETTER				5		// a letter of the English alphabet
+#define AT_VARIABLE             6		// variable with a letter identifier
+#define AT_PARAMETER			7		// a parameter in a service
+#define AT_FORMULA				8		// a form plus its actors
 
-#define N_ATOMTYPES				9
+#define N_ATOMTYPES				8
 
 
 /**

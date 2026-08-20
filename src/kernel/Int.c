@@ -4,6 +4,6 @@
 
 void PrintInt(Atom integer)
 {
-	PrintF("%lld", integer);
+	PrintF("%lld", integer._int);
 }
 

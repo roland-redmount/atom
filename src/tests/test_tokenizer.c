@@ -295,7 +295,7 @@ static void testTokenizeParameter(void)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.atomType, AT_ID)
 
 	// a parameter number of more than one digit
-	token = tokenizeCString(&tokenizer, "@12<UINT", TOKENIZER_ACTOR_MODE);
+	token = tokenizeCString(&tokenizer, "@12<NAME", TOKENIZER_ACTOR_MODE);
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.number, 12)
 
 	// A parameter number is 1-based, so @0 is not a parameter

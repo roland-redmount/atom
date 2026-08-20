@@ -45,7 +45,7 @@ void testCompilePermute1(void)
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom d = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "=", 1);
-	ASSERT_UINT64_EQUAL(d._uint, 3);
+	ASSERT_UINT64_EQUAL(d._int, 3);
 
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
@@ -77,10 +77,10 @@ void testCompilePermute2(void)
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom x = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "number", 1);
-	ASSERT_UINT64_EQUAL(x._uint, 3);
+	ASSERT_UINT64_EQUAL(x._int, 3);
 
 	Atom y = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "addtwo", 1);
-	ASSERT_UINT64_EQUAL(y._uint, 5);
+	ASSERT_UINT64_EQUAL(y._int, 5);
 
 	// Second call should fail (no more tuples)
 	ASSERT_FALSE(OperatorCall(context))
@@ -187,10 +187,10 @@ void testCompileJoin1(void)
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom y = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "second", 1);
-	ASSERT_UINT64_EQUAL(y._uint, 4);
+	ASSERT_UINT64_EQUAL(y._int, 4);
 
 	Atom z = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "third", 1);
-	ASSERT_UINT64_EQUAL(z._uint, 5);
+	ASSERT_UINT64_EQUAL(z._int, 5);
 
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
@@ -225,7 +225,7 @@ void testCompileJoin2(void)
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom t = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "third", 1);
-	ASSERT_UINT64_EQUAL(t._uint, 5);
+	ASSERT_UINT64_EQUAL(t._int, 5);
 
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
@@ -263,13 +263,13 @@ void testCompileUnion(void)
 	// PrintTuple(atomTypes?, arguments, 3);
 	// PrintChar('\n');
 	Atom y = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "neighbor", 1);
-	ASSERT_TRUE(y._uint == 4);
+	ASSERT_TRUE(y._int == 4);
 
 	ASSERT_TRUE(OperatorCall(context))
 	// PrintTuple(arguments, 3);
 	// PrintChar('\n');
 	y = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "neighbor", 1);
-	ASSERT_TRUE(y._uint == 6);
+	ASSERT_TRUE(y._int == 6);
 
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
@@ -368,7 +368,7 @@ void testCompileRecursiveJoin1(void)
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom f = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "faculty", 1);
-	ASSERT_UINT64_EQUAL(f._uint, 24);
+	ASSERT_UINT64_EQUAL(f._int, 24);
 
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
@@ -579,7 +579,7 @@ void testCompileNegatedTerm(void)
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom x = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "even", 1);
-	ASSERT_UINT64_EQUAL(x._uint, 3);
+	ASSERT_UINT64_EQUAL(x._int, 3);
 
 	// Second call should fail (no more tuples)
 	ASSERT_FALSE(OperatorCall(context))

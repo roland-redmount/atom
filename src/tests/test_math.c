@@ -67,7 +67,7 @@ void testAdd2(void)
 	) + 1;
 	NameRelease(plusRole);
 	// Account for dispatch argument permutation to pick the right actor
-	ASSERT_INT32_EQUAL(arguments[permutation[plusRoleIndex]]._uint, 7 - 4);
+	ASSERT_INT32_EQUAL(arguments[permutation[plusRoleIndex]]._int, 7 - 4);
 
 	ASSERT_FALSE(OperatorCall(context))
 	

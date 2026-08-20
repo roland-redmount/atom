@@ -107,7 +107,6 @@ add_library(atom SHARED
     src/kernel/string.c
     src/kernel/tuple.c
     src/kernel/typedtuple.c
-    src/kernel/UInt.c
 
     src/storage/RelationBTree.c
 

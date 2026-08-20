@@ -1,7 +1,6 @@
 
 #include "kernel/float.h"
 #include "kernel/Int.h"
-#include "kernel/UInt.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
 #include "testing/testing.h"
@@ -9,7 +8,6 @@
 
 void testGetAtomTypeName(void)
 {
-	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_UINT), "UINT")
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_INT), "INT")
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_FLOAT), "FLOAT")
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_LETTER), "LETTER")
@@ -22,7 +20,6 @@ void testGetAtomTypeName(void)
 
 void testAtomTypeFromString(void)
 {
-	ASSERT_UINT32_EQUAL(AtomTypeFromString("UINT", 4), AT_UINT)
 	ASSERT_UINT32_EQUAL(AtomTypeFromString("NAME", 4), AT_NAME)
 	ASSERT_UINT32_EQUAL(AtomTypeFromString("PARAMETER", 9), AT_PARAMETER)
 	// the last type name is as reachable as the first

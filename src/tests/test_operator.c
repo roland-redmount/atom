@@ -52,7 +52,7 @@ void testMachineOperator(void)
  */
 static Operator * createReorderedListOperator(void)
 {
-	// The operator (list <ID position >UINT element >LETTER)
+	// The operator (list <ID position >INT element >LETTER)
 	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
 	index8 argumentMap[3];
 	CoreFormSetByteArray(
@@ -235,7 +235,7 @@ void testJoinOperator2(void)
 		// The two child operators together provide every argument of the join operator,
 		// so no argument is left at the zero atom we started out with
 		for(index8 i = 0; i < 5; i++)
-			ASSERT_TRUE(arguments[i]._uint != 0)
+			ASSERT_TRUE(arguments[i]._int != 0)
 		nElements++;
 	}
 	ASSERT_INT32_EQUAL(nElements, 2 * 3)
@@ -294,7 +294,7 @@ void testConstrainOperator(void)
 	char expectedLetters[] = "fa";
 	for(index8 i = 0; i < 2; i++) {
 		ASSERT_TRUE(OperatorCall(context))
-		ASSERT_UINT64_EQUAL(arguments[1]._uint, i + 1)
+		ASSERT_UINT64_EQUAL(arguments[1]._int, i + 1)
 		ASSERT_CHAR_EQUAL(LetterToChar(arguments[3], LETTER_LOWERCASE), expectedLetters[i])
 	}
 	ASSERT_FALSE(OperatorCall(context))
@@ -342,7 +342,7 @@ void testUnionOperator(void)
 	char expectedCharacters[TEST_UNION_N_ELEMENTS] = "bfaoorf";
 	for(index32 i = 0; i < TEST_UNION_N_ELEMENTS; i++) {
 		ASSERT_TRUE(OperatorCall(context))
-		ASSERT_INT32_EQUAL(arguments[0]._uint, expectedPositions[i])
+		ASSERT_INT32_EQUAL(arguments[0]._int, expectedPositions[i])
 		ASSERT_CHAR_EQUAL(
 			LetterToChar(arguments[1], LETTER_LOWERCASE),
 			expectedCharacters[i]
@@ -393,7 +393,7 @@ void testUnionDuplicateAtExhaustion(void)
 	char expectedCharacters[3] = "foo";
 	for(index32 i = 0; i < 3; i++) {
 		ASSERT_TRUE(OperatorCall(context))
-		ASSERT_INT32_EQUAL(arguments[0]._uint, expectedPositions[i])
+		ASSERT_INT32_EQUAL(arguments[0]._int, expectedPositions[i])
 		ASSERT_CHAR_EQUAL(
 			LetterToChar(arguments[1], LETTER_LOWERCASE),
 			expectedCharacters[i]

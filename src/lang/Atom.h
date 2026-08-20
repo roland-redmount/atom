@@ -10,8 +10,6 @@
 typedef union u_Atom {
 	// AT_NAME, AT_ID, AT_FORMULA
 	data64 hash;
-	// AT_UNT
-	uint64 _uint;
 	// AT_INT
 	int64 _int;
 	// AT_FLOAT

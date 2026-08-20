@@ -1,5 +1,4 @@
 
-#include "kernel/UInt.h"
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"

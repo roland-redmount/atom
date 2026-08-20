@@ -48,6 +48,26 @@ void testQueryStoredFacts(void)
 
 
 /**
+ * An integer literal in a query dispatches to a kernel service taking an INT column.
+ * The tokenizer gives every integer literal the type AT_INT, and dispatch matches a
+ * query parameter type against a service column type by equality, so naming a list
+ * position by literal only finds a service while (list position element) keeps its
+ * position column INT; see signatureQueryTupleMatch() in dispatch.c.
+ */
+void testQueryIntegerLiteral(void)
+{
+	// "ab" is a list of letters, so only the LETTER service answers; the ID service
+	// of the same form contributes nothing
+	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position 1 element e"), 1)
+	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position 2 element e"), 1)
+	// a position no element of the list has
+	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position 3 element e"), 0)
+	// the length of the list, whose service takes an INT column too
+	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" length 2"), 1)
+}
+
+
+/**
  * A query no service answers is compiled when it is first asked, and answered by the
  * compiled services from then on. The rules here derive the transitive closure of the
  * graph, so the answer holds tuples that are not facts of any stored relation.
@@ -149,7 +169,7 @@ void testQueryCompileIgnoresRepeatedVariable(void)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 2)
 
 	// This query re-uses the above compiled services, but yields no tuples
-	// since the element type is never a UINT.
+	// since the element type is never an INT.
 	ASSERT_UINT32_EQUAL(countQueryTuples("item z index z"), 0)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 2)
 
@@ -193,11 +213,11 @@ void testQueryInvalidatedByRelation(void)
 
 	// A second relation of the (prec succ) form, whose services the compiled one knows
 	// nothing of
-	Relation const * uintRelation = CreateRelation(
-		precSuccFixture.termForm, 2, (byte[]) {AT_ID, AT_UINT});
-	RelationTable * uintTable = CreateRelationTable(
-		uintRelation, &btreeTableProvider, (index8[]) {0, 1});
-	ReleaseRelation(uintRelation);
+	Relation const * intRelation = CreateRelation(
+		precSuccFixture.termForm, 2, (byte[]) {AT_ID, AT_INT});
+	RelationTable * intTable = CreateRelationTable(
+		intRelation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(intRelation);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
 
 	// Asking again compiles the query anew, over both relations, and the new one holds
@@ -207,7 +227,7 @@ void testQueryInvalidatedByRelation(void)
 
 	// Removing that relation again takes the service compiled over it, and only that
 	// one: the service over the remaining relation still answers what it always did
-	DropRelationTable(uintTable);
+	DropRelationTable(intTable);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
 	ASSERT_UINT32_EQUAL(countQueryTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
@@ -263,6 +283,7 @@ int main(int argc, char * argv[])
 	KernelInitialize();
 
 	ExecuteTest(testQueryStoredFacts);
+	ExecuteTest(testQueryIntegerLiteral);
 	ExecuteTest(testQueryCompilesOnce);
 	ExecuteTest(testQueryParameterIO);
 	ExecuteTest(testQueryRepeatedVariable);

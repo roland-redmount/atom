@@ -371,7 +371,7 @@ Generalizing is what makes the two agree. The compiler numbers every actor of a 
 separately, so a variable occurring twice loses its equality constraint; were dispatch to
 match that constraint, a query repeating a variable would look uncompiled while its type
 was compiled, and compiling it again would register a service that exists. Take a rule
-deriving `(item index)` over a LETTER and a UINT column: `(item z index z)` can be
+deriving `(item index)` over a LETTER and an INT column: `(item z index z)` can be
 satisfied by no tuple, but its type is exactly the service compiled for
 `(item e index p)`. So `DispatchQuery()` generalizes the actors it is given, and the
 entry points the compiler uses take a query already generalized.

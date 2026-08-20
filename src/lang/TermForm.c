@@ -1,6 +1,5 @@
 
 #include "lang/Variable.h"
-#include "kernel/UInt.h"
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
@@ -25,7 +24,7 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 	IFactBeginConjunction(&draft, termFormTable, CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM));
 	Atom tuple[3];
 	// TODO: make this a kernel function CoreFormSetTuple()
-	termFormSetTuple(tuple, (Atom) {0}, predicateForm, (Atom) {._uint = sign ? 1 : 0});
+	termFormSetTuple(tuple, (Atom) {0}, predicateForm, (Atom) {._int = sign ? 1 : 0});
 	IFactAddTuple(&draft, tuple);
 	IFactEndConjunction(&draft);
 
@@ -68,7 +67,7 @@ bool TermFormGetSign(Atom termForm)
 	Atom result[3];
 	termFormGetTuple(termForm, result);
 	Atom sign = result[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_SIGN)];
-	return (sign._uint == 1);
+	return (sign._int == 1);
 }
 
 

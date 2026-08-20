@@ -128,13 +128,13 @@ void testInvalidateDependentServices(void)
 	ServiceRegistryAdd(fixture.relation, exampleParameterIO, machineOperator, SERVICE_PRIMITIVE);
 
 	// Hand-build a "compiled" service that depends on the machine service
-	byte firstTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_INT, AT_UINT};
+	byte firstTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_INT, AT_LETTER};
 	Relation const * firstRelation = createComputedRelation(firstTypes);
 	Operator * firstOperator = addCompiledService(firstRelation, machineOperator);
 	ReleaseRelation(firstRelation);
 
 	// A second "compiled" service that depends on the first one
-	byte secondTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_UINT, AT_UINT};
+	byte secondTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_LETTER, AT_LETTER};
 	Relation const * secondRelation = createComputedRelation(secondTypes);
 	addCompiledService(secondRelation, firstOperator);
 	ReleaseRelation(secondRelation);
@@ -169,7 +169,7 @@ void testInvalidateOnPrimitiveService(void)
 	ServiceRegistryAdd(fixture.relation, exampleParameterIO, machineOperator, SERVICE_PRIMITIVE);
 
 	// Create a "compiled" relation depending on the machine service
-	byte compiledTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_INT, AT_UINT};
+	byte compiledTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_INT, AT_LETTER};
 	Relation const * compiledRelation = createComputedRelation(compiledTypes);
 	addCompiledService(compiledRelation, machineOperator);
 	ReleaseRelation(compiledRelation);
@@ -177,7 +177,7 @@ void testInvalidateOnPrimitiveService(void)
 
 	// Create a second relation of the fixture form, with distinct atom types,
 	// and associated primitive services
-	byte storedTypes[EXAMPLE_FORM_ARITY] = {AT_UINT, AT_UINT, AT_UINT, AT_UINT};
+	byte storedTypes[EXAMPLE_FORM_ARITY] = {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER};
 	Relation const * storedRelation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
 	RelationTable * storedTable = CreateRelationTable(
 		storedRelation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
@@ -208,7 +208,7 @@ void testInvalidateSharedOperator(void)
 	ServiceRegistryAdd(fixture.relation, exampleParameterIO, machineOperator, SERVICE_PRIMITIVE);
 
 	// Register a second service using the same machine operator
-	byte compiledTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_INT, AT_UINT};
+	byte compiledTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_INT, AT_LETTER};
 	Relation const * compiledRelation = createComputedRelation(compiledTypes);
 	ServiceRegistryAdd(compiledRelation, exampleParameterIO, machineOperator, SERVICE_COMPILED);
 	ReleaseRelation(compiledRelation);
@@ -251,7 +251,7 @@ static Operator * shareTableOperator(RelationTable * table)
 void testDropTableWithSharedOperator(void)
 {
 	setupFixture();
-	byte storedTypes[EXAMPLE_FORM_ARITY] = {AT_UINT, AT_UINT, AT_UINT, AT_UINT};
+	byte storedTypes[EXAMPLE_FORM_ARITY] = {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER};
 	Relation const * relation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
@@ -286,7 +286,7 @@ void testDropTableWithSharedOperator(void)
 void testDropTableAfterSharedOperator(void)
 {
 	setupFixture();
-	byte storedTypes[EXAMPLE_FORM_ARITY] = {AT_UINT, AT_UINT, AT_UINT, AT_UINT};
+	byte storedTypes[EXAMPLE_FORM_ARITY] = {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER};
 	Relation const * relation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});

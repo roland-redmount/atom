@@ -149,26 +149,26 @@ void testConcatAcrossRelations(void)
 	RelationTable * idTable = CreateRelationTable(
 		idRelation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(idRelation);
-	Relation const * uintRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_UINT});
-	RelationTable * uintTable = CreateRelationTable(
-		uintRelation, &btreeTableProvider, (index8[]) {0, 1});
-	ReleaseRelation(uintRelation);
+	Relation const * intRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_INT});
+	RelationTable * intTable = CreateRelationTable(
+		intRelation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(intRelation);
 
 	TypedAtom idActors[2] = {
 		CreateTypedAtom(AT_ID, CreateStringFromCString("a")),
 		CreateTypedAtom(AT_ID, CreateStringFromCString("b"))
 	};
-	TypedAtom uintActors[2] = {
+	TypedAtom intActors[2] = {
 		CreateTypedAtom(AT_ID, CreateStringFromCString("c")),
-		CreateTypedAtom(AT_UINT, (Atom) {._uint = 42})
+		CreateTypedAtom(AT_INT, (Atom) {._int = 42})
 	};
 	TypedTuple * idTuple = CreateTypedTupleFromArray(idActors, 2);
-	TypedTuple * uintTuple = CreateTypedTupleFromArray(uintActors, 2);
+	TypedTuple * intTuple = CreateTypedTupleFromArray(intActors, 2);
 	RelationTableAddTuple(idTable, TypedTuplePeekAtoms(idTuple), 0);
-	RelationTableAddTuple(uintTable, TypedTuplePeekAtoms(uintTuple), 0);
+	RelationTableAddTuple(intTable, TypedTuplePeekAtoms(intTuple), 0);
 	for(index8 i = 0; i < 2; i++) {
 		ReleaseTypedAtom(idActors[i]);
-		ReleaseTypedAtom(uintActors[i]);
+		ReleaseTypedAtom(intActors[i]);
 	}
 
 	Atom query = CStringToTerm("first x second y");
@@ -176,26 +176,26 @@ void testConcatAcrossRelations(void)
 
 	size32 nTuples = 0;
 	bool foundIdTuple = false;
-	bool foundUIntTuple = false;
+	bool foundIntTuple = false;
 	while(MixedTypeRelationNext(relation)) {
 		TypedTuple const * tuple = MixedTypeRelationPeekTuple(relation);
 		foundIdTuple = foundIdTuple || TypedTupleEqual(tuple, idTuple);
-		foundUIntTuple = foundUIntTuple || TypedTupleEqual(tuple, uintTuple);
+		foundIntTuple = foundIntTuple || TypedTupleEqual(tuple, intTuple);
 		nTuples++;
 	}
 	// One tuple of each relation, with the column types of the relation it came from
 	ASSERT_UINT32_EQUAL(nTuples, 2)
 	ASSERT_TRUE(foundIdTuple)
-	ASSERT_TRUE(foundUIntTuple)
+	ASSERT_TRUE(foundIntTuple)
 
 	FreeMixedTypeRelation(relation);
 	ReleaseFormula(query);
 
 	RelationTableRemoveTuple(idTable, TypedTuplePeekAtoms(idTuple), 0);
-	RelationTableRemoveTuple(uintTable, TypedTuplePeekAtoms(uintTuple), 0);
+	RelationTableRemoveTuple(intTable, TypedTuplePeekAtoms(intTuple), 0);
 	FreeTypedTuple(idTuple);
-	FreeTypedTuple(uintTuple);
-	DropRelationTable(uintTable);
+	FreeTypedTuple(intTuple);
+	DropRelationTable(intTable);
 	DropRelationTable(idTable);
 	IFactRelease(termForm);
 }
@@ -203,7 +203,7 @@ void testConcatAcrossRelations(void)
 
 /**
  * A variable repeated across role where the underylying service has different atom types
- * should return no tuples. Here, for the service (list <ID position >UINT element >LETTER)
+ * should return no tuples. Here, for the service (list <ID position >INT element >LETTER)
  * the constraint (list "ab" position x element x should yield no tuples.
  */
 void testConcatRepeatedVariableAcrossTypes(void)

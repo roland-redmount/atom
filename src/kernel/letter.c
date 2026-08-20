@@ -1,7 +1,6 @@
 
 #include <ctype.h>
 
-#include "kernel/UInt.h"
 #include "lang/Variable.h"
 #include "kernel/letter.h"
 #include "kernel/ifact.h"
