@@ -24,6 +24,7 @@
 
 #include "kernel/float.h"
 #include "kernel/Int.h"
+#include "kernel/letter.h"
 #include "kernel/Parameter.h"
 #include "lang/Variable.h"
 #include "kernel/string.h"
@@ -121,13 +122,20 @@ static bool beginRoleToken(Tokenizer * tokenizer, char c)
 
 /**
  * Begin the token a character starts in TOKENIZER_ACTOR_MODE, which is an actor: a number,
- * a string, a variable, a parameter, or the reflection holding a formula as an actor.
+ * a string, a letter, a variable, a parameter, or the reflection holding a formula as an
+ * actor.
  */
 static bool beginActorToken(Tokenizer * tokenizer, char c)
 {
 	switch(c) {
 	case '"':
 		tokenizer->type = TOKEN_STRING;
+		tokenizer->isValid = false;
+		return true;
+
+	case '\'':
+		// a letter is written 'A, and needs no closing quote since it is one character
+		tokenizer->type = TOKEN_LETTER;
 		tokenizer->isValid = false;
 		return true;
 
@@ -247,6 +255,30 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		if(IsPrintableChar(c)) {
 			StringBufferPush(&(tokenizer->buffer), c);
 			return true;
+		}
+		return false;
+
+	case TOKEN_LETTER:
+		// the letter itself, which the opening quote is still waiting for
+		if(tokenizer->buffer.stringLength == 0) {
+			if(!IsAlpha(c))
+				return false;
+			StringBufferPush(&(tokenizer->buffer), c);
+			tokenizer->isValid = true;
+			return true;
+		}
+		// A letter is one character, so a further name character is an error rather than
+		// the start of the next token, as with a variable.
+		if(IsNameChar(c))
+			return false;
+		if(IsWhiteSpace(c) || (c == 0)) {
+			tokenizer->isFull = true;
+			return true;
+		}
+		if(IsSeparatorChar(c)) {
+			// a separator ends the letter and begins a token of its own
+			tokenizer->isFull = true;
+			return false;
 		}
 		return false;
 
@@ -395,6 +427,10 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 			token.typedAtom = parseFloat(string, stringLength);
 		else
 			token.typedAtom = parseInteger(string, stringLength);
+		break;
+
+	case TOKEN_LETTER:
+		token.typedAtom = CreateTypedAtom(AT_LETTER, GetAlphabetLetter(string[0]));
 		break;
 
 	case TOKEN_VARIABLE:

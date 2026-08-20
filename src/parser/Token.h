@@ -14,6 +14,7 @@ enum TokenType {
 	TOKEN_NAME,
 	TOKEN_NUMBER,			// TODO: should we differentiate between INT and FLOAT ?
 	TOKEN_STRING,
+	TOKEN_LETTER,			// a letter of the alphabet, written 'A
 	TOKEN_VARIABLE,
 	TOKEN_PARAMETER,		// NOTE: should not be necessary, parameters are used in kernel only
 	TOKEN_AND,				// logical conjunction (&)

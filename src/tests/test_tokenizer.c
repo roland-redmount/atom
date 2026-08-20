@@ -147,6 +147,48 @@ static void testTokenizer(void)
 
 
 /**
+ * A letter of the alphabet is written 'A, with no closing quote since a letter is one
+ * character. It is an actor, and stands nowhere a role name does.
+ */
+static void testTokenizeLetter(void)
+{
+	Tokenizer tokenizer;
+	TokenizerInit(&tokenizer);
+
+	Token token = tokenizeCString(&tokenizer, "'A", TOKENIZER_ACTOR_MODE);
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_LETTER)
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_LETTER)
+	ASSERT_CHAR_EQUAL(LetterToChar(token.typedAtom.atom, LETTER_UPPERCASE), 'A')
+
+	// a letter is case-insensitive, so 'a is the same atom as 'A
+	Token lowerToken = tokenizeCString(&tokenizer, "'a", TOKENIZER_ACTOR_MODE);
+	ASSERT_TRUE(SameTypedAtoms(lowerToken.typedAtom, token.typedAtom))
+
+	// A letter is one character, so a second one is an error rather than the start of
+	// the next token; see TOKEN_VARIABLE for the same rule on a variable name.
+	TokenizerSetMode(&tokenizer, TOKENIZER_ACTOR_MODE);
+	ASSERT_TRUE(TokenizerPush(&tokenizer, '\''))
+	ASSERT_TRUE(TokenizerPush(&tokenizer, 'A'))
+	ASSERT_FALSE(TokenizerPush(&tokenizer, 'B'))
+	ASSERT_FALSE(TokenizerComplete(&tokenizer))
+	TokenizerReset(&tokenizer);
+
+	// only a letter of the alphabet follows the quote
+	TokenizerSetMode(&tokenizer, TOKENIZER_ACTOR_MODE);
+	ASSERT_TRUE(TokenizerPush(&tokenizer, '\''))
+	ASSERT_FALSE(TokenizerPush(&tokenizer, '4'))
+	TokenizerReset(&tokenizer);
+
+	// and a letter stands nowhere a role name does
+	TokenizerSetMode(&tokenizer, TOKENIZER_ROLE_MODE);
+	ASSERT_FALSE(TokenizerPush(&tokenizer, '\''))
+	TokenizerReset(&tokenizer);
+
+	TokenizerCleanup(&tokenizer);
+}
+
+
+/**
  * The mode decides what a character may begin, which is what lets a bare word be a role
  * name in one place and a variable in the other; see enum TokenizerMode.
  */
@@ -359,6 +401,7 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testStringBuffer);
 	ExecuteTest(testTokenizer);
+	ExecuteTest(testTokenizeLetter);
 	ExecuteTest(testTokenizerMode);
 	ExecuteTest(testModeFollowsToken);
 	ExecuteTest(testTokenizeParameter);

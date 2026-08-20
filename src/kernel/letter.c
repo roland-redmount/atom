@@ -57,5 +57,4 @@ void PrintLetter(Atom letter, uint8 letterCase)
 	char c = LetterToChar(letter, letterCase);
 	PrintChar('\'');
 	PrintChar(c);
-	PrintChar('\'');
 }

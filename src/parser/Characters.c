@@ -9,7 +9,7 @@ bool IsWhiteSpace(char c)
 
 
 // these characters cannot occur in syntax
-static char const * reservedChars = (char const *) "():;.,`'";
+static char const * reservedChars = (char const *) "():;.,`";
 
 // valid characters in syntax
 bool IsSyntaxChar(char c)
@@ -41,7 +41,7 @@ bool IsRoleChar(char c)
 	return IsPredicateChar(c) && c != ' ';
 }
 
-static char const * separatorChars = (char const *) "&|!_$\"[]() ";
+static char const * separatorChars = (char const *) "&|!_$\"'[]() ";
 
 // a separator character ends the token before it and begins a new one
 bool IsSeparatorChar(char c)

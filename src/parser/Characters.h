@@ -29,7 +29,7 @@ bool IsNameChar(char c);
 /**
  * A separator character ends the token before it and begins a new one.
  * Space is a separator, as are the characters that begin a token of their
- * own: & | ! " _ and the reflection brackets [ ].
+ * own: & | ! " ' _ and the reflection brackets [ ].
  */
 bool IsSeparatorChar(char c);
 

@@ -2,6 +2,7 @@
 #include "kernel/float.h"
 #include "lang/Variable.h"
 #include "kernel/kernel.h"
+#include "kernel/letter.h"
 #include "kernel/list.h"
 #include "kernel/Parameter.h"
 #include "kernel/string.h"
@@ -484,6 +485,33 @@ static void testReflection(char const * reflected, char const * termString)
 
 
 /**
+ * A letter is an actor, written 'A. This is the syntax PrintLetter() prints, so a formula
+ * holding a letter reads back as the formula it was printed from.
+ */
+static void testLetterActor(void)
+{
+	Atom term = CStringToTerm("list \"ab\" position 1 element 'A");
+	TypedTuple const * actors = FormulaGetActors(term);
+	ASSERT_UINT32_EQUAL(actors->nAtoms, 3)
+
+	Atom elementRole = CreateNameFromCString("element");
+	index8 elementIndex = PredicateRoleIndex(
+		TermFormGetPredicateForm(FormulaGetForm(term)), elementRole);
+	NameRelease(elementRole);
+
+	TypedAtom element = TypedTupleGetElement(actors, elementIndex);
+	ASSERT_UINT32_EQUAL(element.type, AT_LETTER)
+	ASSERT_TRUE(SameAtoms(element.atom, GetAlphabetLetter('A')))
+
+	// a letter is case-insensitive, so the same term is written either way
+	Atom lowerTerm = CStringToTerm("list \"ab\" position 1 element 'a");
+	ASSERT_TRUE(SameAtoms(term, lowerTerm))
+	ReleaseFormula(lowerTerm);
+	ReleaseFormula(term);
+}
+
+
+/**
  * ParseFormula() reads what CStringToFormula() reads, but reports invalid syntax
  * instead of aborting on it, naming the character where the string went wrong.
  */
@@ -619,6 +647,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCStringToClause);
 	ExecuteTest(testCStringToConjunction);
 	ExecuteTest(testCStringToFormula);
+	ExecuteTest(testLetterActor);
 	ExecuteTest(testParseFormula);
 	ExecuteTest(testReflectedTerm);
 	ExecuteTest(testReflectedNegatedTerm);
