@@ -75,7 +75,7 @@ add_library(atom SHARED
     src/lang/AtomType.c
     src/lang/ClauseForm.c
     src/lang/ConjunctionForm.c
-    src/lang/Formula.c
+    src/lang/formula.c
     src/lang/FormPermutation.c
     src/lang/name.c
     src/lang/PredicateForm.c
@@ -194,6 +194,7 @@ set(ATOM_TESTS_TIER1        # core data structures, language elements
     test_string
     test_tokenizer
     test_tuple
+    test_variable
 )
 
 set(ATOM_TESTS_TIER2        # higher level kernel procedures

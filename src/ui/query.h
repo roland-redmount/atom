@@ -6,7 +6,7 @@
 #define QUERY_H
 
 #include "kernel/MixedTypeRelation.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 
 
 /**
@@ -28,7 +28,7 @@
  * a change to the facts or the rules could alter what it yields, so that the next query
  * of its type compiles it anew; see ServiceRegistryInvalidateTermForm().
  */
-MixedTypeRelation * UserQuery(Formula const * queryTerm);
+MixedTypeRelation * UserQuery(Atom queryTerm);
 
 
 #endif	// QUERY_H

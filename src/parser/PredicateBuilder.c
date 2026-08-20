@@ -2,7 +2,7 @@
 #include "kernel/ifact.h"
 #include "kernel/string.h"
 #include "kernel/multiset.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "parser/PredicateBuilder.h"
@@ -72,9 +72,9 @@ bool PredicateBuilderIsEmpty(PredicateBuilder const * builder)
 
 
 /**
- * Create a DT_FORMULA from the lists of roles and actors stored in this builder.
+ * Create a predicate formula from the lists of roles and actors stored in this builder.
  */
-Formula * PredicateBuilderCreateFormula(PredicateBuilder const * builder)
+Atom PredicateBuilderCreateFormula(PredicateBuilder const * builder)
 {
 	size8 arity = predicateArity(builder);
 	Atom const * roles = ResizingArrayGetMemory(&(builder->roles));
@@ -91,7 +91,7 @@ Formula * PredicateBuilderCreateFormula(PredicateBuilder const * builder)
 		actors[i] = actor;
 	}
 	
-	Formula * formula = CreateFormulaFromArray(form, actors);
+	Atom formula = CreateFormulaFromArray(form, actors);
 	IFactRelease(form);
 	return formula;
 }
@@ -127,7 +127,7 @@ void CleanupPredicateBuilder(PredicateBuilder * builder)
 }
 
 
-Formula * CStringToPredicate(char const * string)
+Atom CStringToPredicate(char const * string)
 {
 	size32 length = CStringLength(string);
 	Tokenizer tokenizer;
@@ -145,7 +145,7 @@ Formula * CStringToPredicate(char const * string)
 		}
 	}
 	ASSERT(PredicateBuilderIsValid(&builder));
-	Formula * predicate = PredicateBuilderCreateFormula(&builder);
+	Atom predicate = PredicateBuilderCreateFormula(&builder);
 	
 	CleanupPredicateBuilder(&builder);
 	TokenizerCleanup(&tokenizer);

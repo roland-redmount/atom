@@ -6,7 +6,7 @@
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTableRegistry.h"
 #include "kernel/ServiceRegistry.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "storage/RelationBTree.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
@@ -33,11 +33,11 @@ static byte const exampleParameterIO[EXAMPLE_FORM_ARITY] = {
 static void setupFixture(void)
 {
 	// TODO: we should have a way to parse a form from a C string.
-	Formula * formula = CStringToTerm("foo 0 bar 0 bar 0 baz 0");
-	fixture.form = formula->form;
+	Atom formula = CStringToTerm("foo 0 bar 0 bar 0 baz 0");
+	fixture.form = FormulaGetForm(formula);
 	SetMemory(fixture.atomTypes, EXAMPLE_FORM_ARITY, AT_INT);
 	IFactAcquire(fixture.form);
-	FreeFormula(formula);
+	ReleaseFormula(formula);
 
 	// services are registered per relation, so we need one to test with
 	fixture.relation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, fixture.atomTypes);

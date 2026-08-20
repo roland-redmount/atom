@@ -9,7 +9,7 @@
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/ClauseForm.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "lang/SubstitutionList.h"
 #include "lang/TermForm.h"
 #include "lang/Variable.h"
@@ -465,7 +465,7 @@ static Operator * compileConjunctionRecursive(
 				!TermFormGetSign(termForm)
 			);
 			// A term of the query's own form is the recursive one
-			if((pass == 0) && (negatedTermForm.hash == clauseState->queryTermForm.hash)) {
+			if((pass == 0) && SameAtoms(negatedTermForm, clauseState->queryTermForm)) {
 				termIndex += em.multiple;
 				IFactRelease(negatedTermForm);
 				continue;
@@ -926,7 +926,7 @@ static size8 compileQueryClauses(
 	while(OperatorCall(multisetContext)) {
 		Atom termForm = multisetQueryTuple[
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
-		if(termForm.hash != queryTermForm.hash)
+		if(!SameAtoms(termForm, queryTermForm))
 			continue;
 		// Found a multiset where the term form occurs
 		Atom clauseForm = multisetQueryTuple[
@@ -1194,28 +1194,29 @@ static size8 compileQuery(
 }
 
 
-size8 CompileQuery(Formula const * queryTerm, Service services[], size8 maxServices)
+size8 CompileQuery(Atom queryTerm, Service services[], size8 maxServices)
 {
-	ASSERT(IsTermForm(queryTerm->form))
+	FormulaView term = FormulaGetView(queryTerm);
+	ASSERT(IsTermForm(term.form))
 	ASSERT(maxServices > 0)
 
 	// Generalize atoms in the query to parameters. The compilation works in tuples of
 	// typed atoms throughout, so the parameters are wrapped in one here.
-	size8 arity = queryTerm->actors->nAtoms;
+	size8 arity = term.actors->nAtoms;
 	Atom parameters[arity];
-	GetQueryParameters(queryTerm->actors, parameters);
+	GetQueryParameters(term.actors, parameters);
 	TypedTuple * queryParameters = CreateTypedTuple(arity);
 	for(index8 i = 0; i < arity; i++)
 		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameters[i]));
 
 #ifdef DEBUG_COMPILER
 	PrintCString("\nCompileQuery()\nqueryParameters: ");
-	PrintFormActorsAsFormula(queryTerm->form, queryParameters);
+	PrintFormActorsAsFormula(term.form, queryParameters);
 	PrintChar('\n');
 #endif
 
 	CompiledVariant variants[maxServices];
-	size8 nVariants = compileQuery(queryTerm->form, queryParameters, variants, maxServices);
+	size8 nVariants = compileQuery(term.form, queryParameters, variants, maxServices);
 
 	for(index8 i = 0; i < nVariants; i++) {
 		// Parameter types and the relation were resolved by compileQuery()

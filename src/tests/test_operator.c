@@ -12,7 +12,7 @@
 #include "kernel/string.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "lang/TermForm.h"
 #include "parser/PredicateBuilder.h"
 #include "testing/fixtures.h"

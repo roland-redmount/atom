@@ -2,7 +2,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/RelationRegistry.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
 
@@ -18,11 +18,11 @@ struct {
 static void setupFixture(void)
 {
 	// TODO: we should have a way to parse a form from a C string.
-	Formula * formula = CStringToTerm("foo 0 bar 0 bar 0 baz 0");
-	fixture.form = formula->form;
+	Atom formula = CStringToTerm("foo 0 bar 0 bar 0 baz 0");
+	fixture.form = FormulaGetForm(formula);
 	SetMemory(fixture.atomTypes, EXAMPLE_FORM_ARITY, AT_INT);
 	IFactAcquire(fixture.form);
-	FreeFormula(formula);
+	ReleaseFormula(formula);
 }
 
 

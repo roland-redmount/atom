@@ -5,7 +5,7 @@
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "lang/TypedAtom.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 
 
 static void quoteSetTuple(TypedTuple * tuple, TypedAtom quote, TypedAtom quoted)

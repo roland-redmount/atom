@@ -6,7 +6,7 @@
 #include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/string.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "storage/RelationBTree.h"
 #include "library/MachineService.h"
 #include "parser/TermBuilder.h"
@@ -22,13 +22,13 @@ static RelationFixture edgeFixture;
  */
 static size32 countQueryTuples(char const * queryString)
 {
-	Formula * query = CStringToTerm(queryString);
-	MixedTypeRelation * relation = CreateConcatRelation(query->form, query->actors);
+	Atom query = CStringToTerm(queryString);
+	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
 	size32 nTuples = 0;
 	while(MixedTypeRelationNext(relation))
 		nTuples++;
 	FreeMixedTypeRelation(relation);
-	FreeFormula(query);
+	ReleaseFormula(query);
 	return nTuples;
 }
 
@@ -40,10 +40,10 @@ static size32 countQueryTuples(char const * queryString)
 void testConcatEveryTuple(void)
 {
 	SetupEdgeFixture(&edgeFixture);
-	Formula * query = CStringToTerm("edge _e from _x to _y");
+	Atom query = CStringToTerm("edge _e from _x to _y");
 
-	MixedTypeRelation * relation = CreateConcatRelation(query->form, query->actors);
-	ASSERT_DATA64_EQUAL(relation->termForm.hash, query->form.hash)
+	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
+	ASSERT_DATA64_EQUAL(relation->termForm.hash, FormulaGetForm(query).hash)
 
 	// Each tuple of the relation arrives once, though we do not know in which order,
 	// as the relation is stored sorted by atom
@@ -67,7 +67,7 @@ void testConcatEveryTuple(void)
 		ASSERT_TRUE(foundTuple[i])
 
 	FreeMixedTypeRelation(relation);
-	FreeFormula(query);
+	ReleaseFormula(query);
 	TeardownRelationFixture(&edgeFixture);
 }
 
@@ -80,9 +80,9 @@ void testConcatEveryTuple(void)
 void testConcatRepeatedVariable(void)
 {
 	SetupEdgeFixture(&edgeFixture);
-	Formula * query = CStringToTerm("edge _e from _x to _x");
+	Atom query = CStringToTerm("edge _e from _x to _x");
 
-	MixedTypeRelation * relation = CreateConcatRelation(query->form, query->actors);
+	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
 	size32 nTuples = 0;
 	while(MixedTypeRelationNext(relation)) {
 		TypedTuple const * tuple = MixedTypeRelationPeekTuple(relation);
@@ -93,7 +93,7 @@ void testConcatRepeatedVariable(void)
 	}
 	ASSERT_UINT32_EQUAL(nTuples, 2)
 	FreeMixedTypeRelation(relation);
-	FreeFormula(query);
+	ReleaseFormula(query);
 
 	// Each occurence of the anonymous variable is a variable of its own, and so
 	// constrains nothing
@@ -154,8 +154,8 @@ void testConcatAcrossRelations(void)
 		ReleaseTypedAtom(uintActors[i]);
 	}
 
-	Formula * query = CStringToTerm("first _x second _y");
-	MixedTypeRelation * relation = CreateConcatRelation(query->form, query->actors);
+	Atom query = CStringToTerm("first _x second _y");
+	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
 
 	size32 nTuples = 0;
 	bool foundIdTuple = false;
@@ -172,7 +172,7 @@ void testConcatAcrossRelations(void)
 	ASSERT_TRUE(foundUIntTuple)
 
 	FreeMixedTypeRelation(relation);
-	FreeFormula(query);
+	ReleaseFormula(query);
 
 	RelationTableRemoveTuple(idTable, TypedTuplePeekAtoms(idTuple), 0);
 	RelationTableRemoveTuple(uintTable, TypedTuplePeekAtoms(uintTuple), 0);
@@ -202,15 +202,15 @@ void testConcatRepeatedVariableAcrossTypes(void)
  */
 void testConcatWithoutMatch(void)
 {
-	Formula * unknownQuery = CStringToTerm("nowhere _x nothing _y");
+	Atom unknownQuery = CStringToTerm("nowhere _x nothing _y");
 	MixedTypeRelation * relation = CreateConcatRelation(
-		unknownQuery->form, unknownQuery->actors);
+		FormulaGetForm(unknownQuery), FormulaGetActors(unknownQuery));
 	ASSERT_FALSE(MixedTypeRelationNext(relation))
 	// A relation read past its last tuple stays empty, and neither the dispatch
 	// iterator nor a service is called again
 	ASSERT_FALSE(MixedTypeRelationNext(relation))
 	FreeMixedTypeRelation(relation);
-	FreeFormula(unknownQuery);
+	ReleaseFormula(unknownQuery);
 }
 
 
@@ -223,11 +223,11 @@ void testConcatAbandonedIteration(void)
 {
 	SetupEdgeFixture(&edgeFixture);
 
-	Formula * query = CStringToTerm("edge _e from _x to _y");
-	MixedTypeRelation * relation = CreateConcatRelation(query->form, query->actors);
+	Atom query = CStringToTerm("edge _e from _x to _y");
+	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
 	ASSERT_TRUE(MixedTypeRelationNext(relation))
 	FreeMixedTypeRelation(relation);
-	FreeFormula(query);
+	ReleaseFormula(query);
 
 	TeardownRelationFixture(&edgeFixture);
 }

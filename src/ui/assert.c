@@ -22,7 +22,7 @@ static bool checkContradiction(Atom termForm, TypedTuple const * actors)
 	// Run a query for the negated term.
 	Atom negatedTermForm = CreateTermForm(
 		TermFormGetPredicateForm(termForm), !TermFormGetSign(termForm));
-	Formula * negatedTerm = CreateFormula(negatedTermForm, actors);
+	Atom negatedTerm = CreateFormula(negatedTermForm, actors);
 
 	MixedTypeRelation * negatedRelation = UserQuery(negatedTerm);
 	bool foundTuple = MixedTypeRelationNext(negatedRelation);
@@ -36,7 +36,7 @@ static bool checkContradiction(Atom termForm, TypedTuple const * actors)
 	}
 #endif
 	FreeMixedTypeRelation(negatedRelation);
-	FreeFormula(negatedTerm);
+	ReleaseFormula(negatedTerm);
 	IFactRelease(negatedTermForm);
 	return foundTuple;
 }
@@ -69,7 +69,7 @@ int AssertFact(Atom termForm, TypedTuple const * actors, RelationTableProvider c
 }
 
 
-void RetractFact(Atom termForm, TypedTuple * actors)
+void RetractFact(Atom termForm, TypedTuple const * actors)
 {
 	Relation const * relation = RelationRegistryFind(
 		termForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));

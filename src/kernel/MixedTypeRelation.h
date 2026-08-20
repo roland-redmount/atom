@@ -18,7 +18,6 @@
 
 #include "kernel/dispatch.h"
 #include "kernel/typedtuple.h"
-#include "lang/Formula.h"
 
 
 enum MixedTypeRelationType {
@@ -71,7 +70,7 @@ typedef struct s_MixedTypeRelation {
 		} concat;
 		// for MIXED_TYPE_FORMULA
 		struct {
-			Formula * formula;
+			Atom formula;
 		} formula;
 	} impl;
 } MixedTypeRelation;
@@ -85,6 +84,8 @@ typedef struct s_MixedTypeRelation {
  *
  * The query actors tuple is not copied, and must remain valid until the relation is freed.
  * It holds the actors of a query and no parameter of its own, which DEBUG builds assert.
+ * The tuple of a formula belongs to the formula registry and is shared by every holder of
+ * that formula, so the caller must not write to it; see FormulaGetActors().
  *
  * NOTE: iteration keeps a DispatchIterator open, which write-locks the relation and
  * service registries. No service or relation may be registered while the tuples of this

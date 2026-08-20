@@ -9,7 +9,7 @@
 #include "kernel/ServiceRegistry.h"
 #include "lang/ClauseForm.h"
 #include "lang/FormPermutation.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "lang/SubstitutionList.h"
 #include "lang/unification.h"
 
@@ -208,8 +208,9 @@ bool DispatchQuery(
 }
 
 
-bool DispatchQueryFormula(Formula * queryTerm, Service * service, index8 * permutation)
+bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutation)
 {
-	return DispatchQuery(queryTerm->form, queryTerm->actors, service, permutation);
+	FormulaView term = FormulaGetView(queryTerm);
+	return DispatchQuery(term.form, term.actors, service, permutation);
 }
 

@@ -3,7 +3,7 @@
 #include "kernel/list.h"
 #include "kernel/multiset.h"
 #include "lang/ClauseForm.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "lang/FormPermutation.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
@@ -69,7 +69,7 @@ static void testPredicateForm(void)
 	for(index32 i = 0; i < EXAMPLE_PREDICATE_N_ROLES; i++) {
 		ASSERT_TRUE(MultisetIteratorNext(&roleIterator))
 		em = MultisetIteratorGetElement(&roleIterator);
-		if(em.element.hash == exampleNames.baz.hash) {
+		if(SameAtoms(em.element, exampleNames.baz)) {
 			ASSERT(em.multiple == 2)
 		}
 		else {
@@ -168,7 +168,7 @@ static void testClauseForm(void)
 		ASSERT_TRUE(MultisetIteratorNext(&termFormIterator))
 		ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
 		// order of term forms is arbitrary
-		if(em.element.hash == termFormsFixture.termForm.hash) {
+		if(SameAtoms(em.element, termFormsFixture.termForm)) {
 			ASSERT_UINT32_EQUAL(em.multiple, 2)
 		}
 		else {
@@ -216,12 +216,53 @@ static void testCreateClause(void)
 	for(index8 i = 0; i < EXAMPLE_CLAUSE_ARITY; i++)
 		TypedTupleSetElement(actors, i, CreateTypedAtom(AT_INT, (Atom) {._int = i + 1}));
 	
-	Formula * clause = CreateFormula(clauseFormFixture.clauseForm, actors);
+	Atom clause = CreateFormula(clauseFormFixture.clauseForm, actors);
 
-	ASSERT_UINT32_EQUAL(clause->actors->nAtoms, EXAMPLE_CLAUSE_ARITY)
-	ASSERT_TRUE(TypedTupleEqual(clause->actors, actors));
+	ASSERT_UINT32_EQUAL(FormulaGetActors(clause)->nAtoms, EXAMPLE_CLAUSE_ARITY)
+	ASSERT_TRUE(TypedTupleEqual(FormulaGetActors(clause), actors));
 
-	FreeFormula(clause);
+	ReleaseFormula(clause);
+	FreeTypedTuple(actors);
+	teardownClauseForm(clauseFormFixture);
+}
+
+
+/**
+ * A formula is an atom, and formulas are unique: the same form and actors always
+ * give the same atom, whichever way the formula is reached.
+ */
+static void testFormulaIsUnique(void)
+{
+	ClauseFormFixture clauseFormFixture = setupClauseForm();
+	size32 nFormulasBefore = NumberOfFormulas();
+
+	TypedTuple * actors = CreateTypedTuple(EXAMPLE_CLAUSE_ARITY);
+	for(index8 i = 0; i < EXAMPLE_CLAUSE_ARITY; i++)
+		TypedTupleSetElement(actors, i, CreateTypedAtom(AT_INT, (Atom) {._int = i + 1}));
+
+	Atom clause = CreateFormula(clauseFormFixture.clauseForm, actors);
+	ASSERT_UINT32_EQUAL(NumberOfFormulas(), nFormulasBefore + 1)
+
+	// Creating the same formula again yields the same atom and no second formula
+	Atom sameClause = CreateFormula(clauseFormFixture.clauseForm, actors);
+	ASSERT_TRUE(SameAtoms(clause, sameClause))
+	ASSERT_UINT32_EQUAL(NumberOfFormulas(), nFormulasBefore + 1)
+
+	// Releasing one of the two references leaves the formula readable
+	ReleaseFormula(sameClause);
+	ASSERT_UINT32_EQUAL(NumberOfFormulas(), nFormulasBefore + 1)
+	ASSERT_TRUE(TypedTupleEqual(FormulaGetActors(clause), actors))
+
+	// Changing an actor gives a different formula
+	TypedTupleSetElement(actors, 0, CreateTypedAtom(AT_INT, (Atom) {._int = 99}));
+	Atom otherClause = CreateFormula(clauseFormFixture.clauseForm, actors);
+	ASSERT_FALSE(SameAtoms(clause, otherClause))
+	ASSERT_UINT32_EQUAL(NumberOfFormulas(), nFormulasBefore + 2)
+
+	ReleaseFormula(otherClause);
+	ReleaseFormula(clause);
+	ASSERT_UINT32_EQUAL(NumberOfFormulas(), nFormulasBefore)
+
 	FreeTypedTuple(actors);
 	teardownClauseForm(clauseFormFixture);
 }
@@ -268,6 +309,7 @@ int main(int argc, char * argv[])
 	ExecuteTestSetupTearDown(testTermForm, setup, teardown);
 	ExecuteTestSetupTearDown(testClauseForm, setup, teardown);
 	ExecuteTestSetupTearDown(testCreateClause, setup, teardown);
+	ExecuteTestSetupTearDown(testFormulaIsUnique, setup, teardown);
 	ExecuteTestSetupTearDown(testPredicatePermutation, setup, teardown);
 
 	KernelShutdown();

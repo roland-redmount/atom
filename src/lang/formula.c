@@ -1,8 +1,9 @@
+#include "btree/btree.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "kernel/typedtuple.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "lang/name.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"
@@ -11,6 +12,31 @@
 #include "memory/allocator.h"
 #include "util/hashing.h"
 #include "util/sort.h"
+
+
+/**
+ * The registry stores a FormulaRecord for every formula, keyed on the formula
+ * hash, and owns the actors tuple of each one. A record is only reachable
+ * through peekFormulaRecord(), so a caller never sees one.
+ *
+ * A record moves within the B-tree when another record is inserted or deleted,
+ * so a FormulaRecord pointer must never be held across the creation or release
+ * of a formula. The actors tuple is allocated separately from the record, so a
+ * tuple pointer handed out by FormulaGetActors() does stay valid; that is what
+ * lets a caller keep the tuple while building further formulas from it.
+ */
+typedef struct s_FormulaRecord {
+	data64 hash;
+	uint32 nReferences;
+	Atom form;
+	TypedTuple * actors;
+} FormulaRecord;
+
+
+static struct {
+	BTree * tree;
+	uint32 nReferencesTotal;
+} formulaStorage;
 
 
 static size8 FormArity(Atom form)
@@ -30,79 +56,221 @@ static size8 FormArity(Atom form)
 }
 
 
-Formula * CreateFormula(Atom form, TypedTuple const * actors)
+static data64 formulaHash(Atom form, TypedTuple const * actors, data64 initialHash)
 {
-	Formula * formula = Allocate(sizeof(Formula));
-	formula->form = form;
-	formula->actors = CreateTypedTuple(actors->nAtoms);
-	TypedTupleCopy(actors, formula->actors);
-	TypedTupleAcquire(formula->actors);
-	IFactAcquire(form);
-	return formula;
+	data64 hash = DJB2DoubleHashAdd(&(form.hash), sizeof(data64), initialHash);
+	return TypedTupleHash(actors, hash);
 }
 
 
-Formula * CreateFormulaFromArray(Atom form, TypedAtom const * actors)
+static int8 btreeCompareFormulaRecords(void const * item1, void const * item2, size32 itemSize)
 {
-	Formula * formula = Allocate(sizeof(Formula));
-	formula->form = form;
-	formula->actors = CreateTypedTupleFromArray(actors, FormArity(form));
-	TypedTupleAcquire(formula->actors);
-	IFactAcquire(form);
-	return formula;
+	FormulaRecord const * record1 = item1;
+	FormulaRecord const * record2 = item2;
+	return CompareAtoms((Atom) {.hash = record1->hash}, (Atom) {.hash = record2->hash});
 }
 
 
-bool FormulaEqual(Formula const * formula1, Formula const * formula2)
+static FormulaRecord * peekFormulaRecord(data64 hash)
 {
-	return (formula1->form.hash == formula2->form.hash) &&
-		TypedTupleEqual(formula1->actors, formula2->actors);
+	FormulaRecord keyRecord;
+	keyRecord.hash = hash;
+	return (FormulaRecord *) BTreePeekItem(formulaStorage.tree, &keyRecord);
 }
 
 
-void FreeFormula(Formula * formula)
+void InitializeFormulaStorage(void)
 {
-	IFactRelease(formula->form);
-	TypedTupleRelease(formula->actors);
-	FreeTypedTuple(formula->actors);
-	Free(formula);
+	// Create the B-tree. No freeItem() callback used here; a FormulaRecord is taken apart by
+	// ReleaseFormula() before it is deleted; see ReleaseFormula().
+	formulaStorage.tree = BTreeCreate(sizeof(FormulaRecord), btreeCompareFormulaRecords, 0);
+	formulaStorage.nReferencesTotal = 0;
 }
 
 
-bool FormulaIsPredicate(Formula const * formula)
+void FreeFormulaStorage(void)
 {
-	return IsPredicateForm(formula->form);
+	ASSERT(NumberOfFormulas() == 0)
+	ASSERT(formulaStorage.nReferencesTotal == 0)
+	BTreeFree(formulaStorage.tree);
 }
 
 
-bool FormulaIsTerm(Formula const * formula)
+size32 NumberOfFormulas(void)
 {
-	return IsTermForm(formula->form);
+	return BTreeNItems(formulaStorage.tree);
 }
 
 
-bool FormulaIsClause(Formula const * formula)
+uint32 FormulaTotalReferenceCount(void)
 {
-	return IsClauseForm(formula->form);
+	return formulaStorage.nReferencesTotal;
 }
 
 
-bool FormulaIsConjunction(Formula const * formula)
+static bool sameFormula(FormulaRecord const * record, Atom form, TypedTuple const * actors)
 {
-	return IsConjunctionForm(formula->form);
+	return SameAtoms(record->form, form) && TypedTupleEqual(record->actors, actors);
 }
 
 
-index32 FormulaRoleIndex(Formula const * formula, Atom roleName)
+/**
+ * Find or create the formula with the given form and actors. The actors tuple
+ * is adopted by the registry if the formula is new, and freed if it is not.
+ */
+static Atom internFormula(Atom form, TypedTuple * actors)
+{
+	data64 hash = formulaHash(form, actors, djb2InitialHash);
+	FormulaRecord * existingRecord = peekFormulaRecord(hash);
+	if(existingRecord) {
+		// A formula with the same hash exists.
+		// Check for hash collision
+		if(!sameFormula(existingRecord, form, actors)) {
+			PrintCString("Hash collision between formulas ");
+			PrintFormActorsAsFormula(form, actors);
+			PrintCString(" and ");
+			PrintFormActorsAsFormula(existingRecord->form, existingRecord->actors);
+			PrintChar('\n');
+			Panic("Hash collision for formulas, hash = %llx", hash);
+		}
+		existingRecord->nReferences++;
+		FreeTypedTuple(actors);
+	}
+	else {
+		// create new formula
+		FormulaRecord record;
+		record.hash = hash;
+		record.nReferences = 1;
+		record.form = form;
+		record.actors = actors;
+		IFactAcquire(form);
+		TypedTupleAcquireElements(actors);
+		ASSERT(BTreeInsert(formulaStorage.tree, &record) == BTREE_INSERTED)
+	}
+	formulaStorage.nReferencesTotal++;
+	return (Atom) {.hash = hash};
+}
+
+
+Atom CreateFormula(Atom form, TypedTuple const * actors)
+{
+	return internFormula(form, CreateTupleFromTuple(actors));
+}
+
+
+Atom CreateFormulaFromArray(Atom form, TypedAtom const * actors)
+{
+	return internFormula(form, CreateTypedTupleFromArray(actors, FormArity(form)));
+}
+
+
+void AcquireFormula(Atom formula)
+{
+	FormulaRecord * record = peekFormulaRecord(formula.hash);
+	ASSERT(record)
+	record->nReferences++;
+	formulaStorage.nReferencesTotal++;
+}
+
+
+void ReleaseFormula(Atom formula)
+{
+	FormulaRecord * record = peekFormulaRecord(formula.hash);
+	ASSERT(record)
+	ASSERT(record->nReferences > 0)
+	ASSERT(formulaStorage.nReferencesTotal > 0)
+
+	record->nReferences--;
+	formulaStorage.nReferencesTotal--;
+
+	if(record->nReferences == 0) {
+		// Copy the record and remove it from the registry before taking it apart.
+		// Releasing the form retracts its defining facts, and releasing an actor
+		// that is itself a formula re-enters this function, so neither may find
+		// the formula being released still in the B-tree.
+		FormulaRecord recordCopy = *record;
+		ASSERT(BTreeDelete(formulaStorage.tree, &recordCopy, 0) == BTREE_DELETED)
+		IFactRelease(recordCopy.form);
+		TypedTupleReleaseElements(recordCopy.actors);
+		FreeTypedTuple(recordCopy.actors);
+	}
+}
+
+
+Atom FormulaGetForm(Atom formula)
+{
+	FormulaRecord const * record = peekFormulaRecord(formula.hash);
+	ASSERT(record)
+	return record->form;
+}
+
+
+TypedTuple const * FormulaGetActors(Atom formula)
+{
+	FormulaRecord const * record = peekFormulaRecord(formula.hash);
+	ASSERT(record)
+	return record->actors;
+}
+
+
+FormulaView FormulaGetView(Atom formula)
+{
+	FormulaRecord const * record = peekFormulaRecord(formula.hash);
+	ASSERT(record)
+	return (FormulaView) {.form = record->form, .actors = record->actors};
+}
+
+
+void FormulaDump(void)
+{
+	PrintF("Formula table %u formulas:\n", NumberOfFormulas());
+
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, formulaStorage.tree);
+	while(BTreeIteratorNext(&iterator)) {
+		FormulaRecord const * record = BTreeIteratorPeekItem(&iterator);
+		PrintF("%llx (%llu) ", record->hash, record->hash);
+		PrintFormActorsAsFormula(record->form, record->actors);
+		PrintF(" %u references\n", record->nReferences);
+	}
+	BTreeIteratorEnd(&iterator);
+}
+
+
+bool FormulaIsPredicate(Atom formula)
+{
+	return IsPredicateForm(FormulaGetForm(formula));
+}
+
+
+bool FormulaIsTerm(Atom formula)
+{
+	return IsTermForm(FormulaGetForm(formula));
+}
+
+
+bool FormulaIsClause(Atom formula)
+{
+	return IsClauseForm(FormulaGetForm(formula));
+}
+
+
+bool FormulaIsConjunction(Atom formula)
+{
+	return IsConjunctionForm(FormulaGetForm(formula));
+}
+
+
+index32 FormulaRoleIndex(Atom formula, Atom roleName)
 {
 	// TODO: currently this only supports predicates.
 	// Need to implement GetClauseRoleIndex() &c
 	ASSERT(FormulaIsPredicate(formula))
-	return PredicateRoleIndex(formula->form, roleName);
+	return PredicateRoleIndex(FormulaGetForm(formula), roleName);
 }
 
 
-Formula * CreatePredicate(Atom const * roleNames, TypedAtom * actors, size8 arity)
+Atom CreatePredicate(Atom const * roleNames, TypedAtom * actors, size8 arity)
 {
 	Atom predicateForm = CreatePredicateForm(roleNames, arity);
 
@@ -113,18 +281,18 @@ Formula * CreatePredicate(Atom const * roleNames, TypedAtom * actors, size8 arit
 	CopyMemory(actors, actorsOrdered, arity * sizeof(TypedAtom));
 	ReorderArray(actorsOrdered, roleOrder, arity, sizeof(TypedAtom));
 
-	Formula * predicate = CreateFormulaFromArray(predicateForm, actorsOrdered);
+	Atom predicate = CreateFormulaFromArray(predicateForm, actorsOrdered);
 	IFactRelease(predicateForm);
 	return predicate;
 }
 
 
-Formula * CreateTerm(Formula const * predicate, bool sign)
+Atom CreateTerm(Atom predicate, bool sign)
 {
 	ASSERT(FormulaIsPredicate(predicate));
-	Atom termForm = CreateTermForm(predicate->form, sign);
+	Atom termForm = CreateTermForm(FormulaGetForm(predicate), sign);
 
-	Formula * term = CreateFormula(termForm, predicate->actors);
+	Atom term = CreateFormula(termForm, FormulaGetActors(predicate));
 	IFactRelease(termForm);
 	return term;
 }
@@ -141,18 +309,24 @@ Atom TermGetRoleActor(Atom termForm, Atom const termActors[], const char * role,
 }
 
 
-Formula * CreateClause(Formula const ** terms, size8 nTerms)
+Atom CreateClause(Atom const * terms, size8 nTerms)
 {
 	// a clause without terms is meaningless, and would give zero length arrays below
 	ASSERT(nTerms > 0);
+
+	// Take a view of every term before building the clause, so that the terms
+	// are read with one registry lookup each
+	FormulaView termViews[nTerms];
+	for(index8 i = 0; i < nTerms; i++)
+		termViews[i] = FormulaGetView(terms[i]);
 
 	// collect term forms and their arities
 	Atom termForms[nTerms];
 	size8 termArities[nTerms];
 	size8 clauseArity = 0;
 	for(index8 i = 0; i < nTerms; i++) {
-		termForms[i] = terms[i]->form;
-		termArities[i] = terms[i]->actors->nAtoms;
+		termForms[i] = termViews[i].form;
+		termArities[i] = termViews[i].actors->nAtoms;
 		ASSERT(clauseArity < 255 - termArities[i]);
 		clauseArity += termArities[i];
 	}
@@ -162,7 +336,7 @@ Formula * CreateClause(Formula const ** terms, size8 nTerms)
 	TypedAtom actors[clauseArity];
 	for(index8 i = 0, k = 0; i < nTerms; i++) {
 		for(index8 j = 0; j < termArities[i]; j++)
-			actors[k++] = TypedTupleGetElement(terms[i]->actors, j);
+			actors[k++] = TypedTupleGetElement(termViews[i].actors, j);
 	}
 
 	// reorder actors to match the name order of clauseForm
@@ -175,25 +349,31 @@ Formula * CreateClause(Formula const ** terms, size8 nTerms)
 		blockSizes[i] = termArities[i] * sizeof(TypedAtom);
 	ReorderRaggedArray(actors, termOrder, blockSizes, nTerms);
 
-	Formula * clause = CreateFormulaFromArray(clauseForm, actors);
+	Atom clause = CreateFormulaFromArray(clauseForm, actors);
 	IFactRelease(clauseForm);
 	return clause;
 }
 
 
 // NOTE: this is very similar to CreateClause, could be refactored
-Formula * CreateConjunction(Formula const ** clauses, size8 nClauses)
+Atom CreateConjunction(Atom const * clauses, size8 nClauses)
 {
 	// as in CreateClause(), a conjunction without clauses is meaningless
 	ASSERT(nClauses > 0);
+
+	// Take a view of every clause before building the conjunction, so that the
+	// clauses are read with one registry lookup each
+	FormulaView clauseViews[nClauses];
+	for(index8 i = 0; i < nClauses; i++)
+		clauseViews[i] = FormulaGetView(clauses[i]);
 
 	// collect clause forms and their arities
 	Atom clauseForms[nClauses];
 	size8 clauseArities[nClauses];
 	size8 conjunctionArity = 0;
 	for(index8 i = 0; i < nClauses; i++) {
-		clauseForms[i] = clauses[i]->form;
-		clauseArities[i] = clauses[i]->actors->nAtoms;
+		clauseForms[i] = clauseViews[i].form;
+		clauseArities[i] = clauseViews[i].actors->nAtoms;
 		ASSERT(conjunctionArity < 255 - clauseArities[i]);
 		conjunctionArity += clauseArities[i];
 	}
@@ -203,7 +383,7 @@ Formula * CreateConjunction(Formula const ** clauses, size8 nClauses)
 	TypedAtom actors[conjunctionArity];
 	for(index8 i = 0, k = 0; i < nClauses; i++) {
 		for(index8 j = 0; j < clauseArities[i]; j++)
-			actors[k++] = TypedTupleGetElement(clauses[i]->actors, j);
+			actors[k++] = TypedTupleGetElement(clauseViews[i].actors, j);
 	}
 
 	// reorder actors to match the name order of clauseForm
@@ -216,7 +396,7 @@ Formula * CreateConjunction(Formula const ** clauses, size8 nClauses)
 		blockSizes[i] = clauseArities[i] * sizeof(TypedAtom);
 	ReorderRaggedArray(actors, clauseOrder, blockSizes, nClauses);
 
-	Formula * conjunction = CreateFormulaFromArray(conjunctionForm, actors);
+	Atom conjunction = CreateFormulaFromArray(conjunctionForm, actors);
 	IFactRelease(conjunctionForm);
 	return conjunction;
 }
@@ -233,7 +413,7 @@ index8 ClauseGetTermIndex(Atom clauseForm, Atom termForm, uint8 m)
 	ElementMultiple elementMultiple;
 	while(MultisetIteratorNext(&iterator)) {
 		elementMultiple = MultisetIteratorGetElement(&iterator);
-		if(elementMultiple.element.hash == termForm.hash) {
+		if(SameAtoms(elementMultiple.element, termForm)) {
 			found = true;
 			break;
 		}
@@ -260,7 +440,7 @@ index8 ClauseGetTermActorsIndex(Atom clauseForm, Atom termForm, uint8 m)
 	ElementMultiple elementMultiple;
 	while(MultisetIteratorNext(&iterator)) {
 		elementMultiple = MultisetIteratorGetElement(&iterator);
-		if(elementMultiple.element.hash == termForm.hash) {
+		if(SameAtoms(elementMultiple.element, termForm)) {
 			found = true;
 			break;
 		}
@@ -299,9 +479,9 @@ void ClauseGetTermActorsIndices(Atom clauseForm, index8 * termActorsIndices)
 }
 
 
-uint8 FormulaArity(Formula const * formula)
+uint8 FormulaArity(Atom formula)
 {
-	return FormArity(formula->form);
+	return FormArity(FormulaGetForm(formula));
 }
 
 
@@ -382,9 +562,10 @@ static void printConjunction(Atom conjunctionForm, TypedTuple const * actors, in
 /**
  * Traverse and print a formula
  */
-void PrintFormula(Formula const * formula)
+void PrintFormula(Atom formula)
 {
-	PrintFormActorsAsFormula(formula->form, formula->actors);
+	FormulaView view = FormulaGetView(formula);
+	PrintFormActorsAsFormula(view.form, view.actors);
 }
 
 
@@ -401,11 +582,4 @@ void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors)
 		printConjunction(form, actors, &atomIndex);
 	else
 		ASSERT(false);
-}
-
-
-data64 FormulaHashFormActors(data64 formHash, TypedTuple const * actors, size32 nActors, data64 initialHash)
-{
-	data64 hash = DJB2DoubleHashAdd(&formHash, sizeof(data64), initialHash);
-	return TypedTupleHash(actors, hash);
 }

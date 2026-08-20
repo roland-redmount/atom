@@ -6,7 +6,7 @@
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "lang/TypedAtom.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "memory/allocator.h"
 #include "util/ResizingArray.h"
 

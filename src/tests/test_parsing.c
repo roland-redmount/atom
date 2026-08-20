@@ -7,7 +7,7 @@
 #include "kernel/string.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
@@ -107,7 +107,7 @@ static void testPartBuilder(void)
 
 typedef struct {
 	TokensFixture tokensFixture;
-	Formula * predicate;
+	Atom predicate;
 } PredicateFixture;
 
 
@@ -125,7 +125,7 @@ static void setupPredicateFixture(PredicateFixture * fixture)
 
 static void teardownPredicateFixture(PredicateFixture * fixture)
 {
-	FreeFormula(fixture->predicate);
+	ReleaseFormula(fixture->predicate);
 	teardownTokensFixture(&(fixture->tokensFixture));
 }
 
@@ -147,11 +147,11 @@ static void testPredicateBuilder(void)
 		ASSERT_TRUE(PredicateBuilderPush(&builder, tokensFixture->actorTokens[i]))
 		ASSERT_TRUE(PredicateBuilderIsValid(&builder))
 	}
-	Formula * predicate = PredicateBuilderCreateFormula(&builder);
+	Atom predicate = PredicateBuilderCreateFormula(&builder);
 
-	ASSERT_TRUE(FormulaEqual(predicate, fixture.predicate))
+	ASSERT_TRUE(SameAtoms(predicate, fixture.predicate))
 
-	FreeFormula(predicate);
+	ReleaseFormula(predicate);
 	CleanupPredicateBuilder(&builder);
 
 	teardownPredicateFixture(&fixture);
@@ -160,8 +160,8 @@ static void testPredicateBuilder(void)
 
 typedef struct {
 	PredicateFixture predicateFixture;
-	Formula * term;
-	Formula * negatedTerm;
+	Atom term;
+	Atom negatedTerm;
 } TermFixture;
 
 
@@ -174,8 +174,8 @@ static void setupTermFixture(TermFixture * fixture)
 
 static void teardownTermFixture(TermFixture * fixture)
 {
-	FreeFormula(fixture->term);
-	FreeFormula(fixture->negatedTerm);
+	ReleaseFormula(fixture->term);
+	ReleaseFormula(fixture->negatedTerm);
 	teardownPredicateFixture(&(fixture->predicateFixture));
 }
 
@@ -203,12 +203,12 @@ static void testTermBuilder(void)
 			ASSERT_TRUE(TermBuilderPush(&builder, tokensFixture->actorTokens[i]))
 			ASSERT_TRUE(TermBuilderIsValid(&builder))
 		}
-		Formula * term = TermBuilderCreateFormula(&builder);
+		Atom term = TermBuilderCreateFormula(&builder);
 
-		Formula * fixtureTerm = sign ? fixture.term : fixture.negatedTerm;
-		ASSERT_TRUE(FormulaEqual(term, fixtureTerm))
+		Atom fixtureTerm = sign ? fixture.term : fixture.negatedTerm;
+		ASSERT_TRUE(SameAtoms(term, fixtureTerm))
 
-		FreeFormula(term);
+		ReleaseFormula(term);
 		TermBuilderReset(&builder);
 	}
 	CleanupTermBuilder(&builder);
@@ -224,8 +224,8 @@ static void testTermBuilder(void)
 
 typedef struct {
 	TermFixture termFixture;
-	const Formula * terms[EXAMPLE_CLAUSE_N_TERMS];
-	Formula * clause;
+	Atom terms[EXAMPLE_CLAUSE_N_TERMS];
+	Atom clause;
 } ClauseFixture;
 
 
@@ -240,7 +240,7 @@ void setupClauseFixture(ClauseFixture * fixture)
 static void teardownClauseFixture(ClauseFixture * fixture)
 {
 	teardownTermFixture(&(fixture->termFixture));
-	FreeFormula(fixture->clause);
+	ReleaseFormula(fixture->clause);
 }
 
 static void testClauseBuilder(void)
@@ -278,12 +278,12 @@ static void testClauseBuilder(void)
 		}
 		ASSERT_FALSE(ClauseBuilderIsEmpty(&builder))
 	}
-	Formula * clause = ClauseBuilderCreateFormula(&builder);
+	Atom clause = ClauseBuilderCreateFormula(&builder);
 	CleanupClauseBuilder(&builder);
 
-	ASSERT_TRUE(FormulaEqual(clause, fixture.clause))
+	ASSERT_TRUE(SameAtoms(clause, fixture.clause))
 
-	FreeFormula(clause);
+	ReleaseFormula(clause);
 	teardownClauseFixture(&fixture);
 }
 
@@ -296,13 +296,13 @@ static void testClauseBuilder(void)
  */
 static void testCStringToSignature(void)
 {
-	Formula * signature = CStringToTerm("+ @1<INT + @2<INT = @3>INT");
-	ASSERT_UINT32_EQUAL(signature->actors->nAtoms, 3)
+	Atom signature = CStringToTerm("+ @1<INT + @2<INT = @3>INT");
+	ASSERT_UINT32_EQUAL(FormulaGetActors(signature)->nAtoms, 3)
 
 	// every actor is a parameter, and the numbers are a permutation of 1..3
 	bool found[3] = {false, false, false};
 	for(index8 i = 0; i < 3; i++) {
-		TypedAtom actor = TypedTupleGetElement(signature->actors, i);
+		TypedAtom actor = TypedTupleGetElement(FormulaGetActors(signature), i);
 		ASSERT_UINT32_EQUAL(actor.type, AT_PARAMETER)
 		ASSERT_UINT32_EQUAL(actor.atom.parameter.atomType, AT_INT)
 		index8 number = actor.atom.parameter.number;
@@ -315,67 +315,67 @@ static void testCStringToSignature(void)
 			(number == 3) ? PARAMETER_OUT : PARAMETER_IN
 		)
 	}
-	FreeFormula(signature);
+	ReleaseFormula(signature);
 }
 
 
 static void testCStringToPredicate(void)
 {
 	char const * exampleString = "foo 123 baz \"foobar\" bar 456 bar 789";
-	Formula * predicate = CStringToPredicate(exampleString);
+	Atom predicate = CStringToPredicate(exampleString);
 
-	ASSERT_UINT32_EQUAL(PredicateArity(predicate->form), 4)
-	ASSERT_UINT32_EQUAL(predicate->actors->nAtoms, 4)
+	ASSERT_UINT32_EQUAL(PredicateArity(FormulaGetForm(predicate)), 4)
+	ASSERT_UINT32_EQUAL(FormulaGetActors(predicate)->nAtoms, 4)
 
 	Atom baz = CreateNameFromCString("baz");
-	index8 bazRoleIndex = PredicateRoleIndex(predicate->form, baz);
+	index8 bazRoleIndex = PredicateRoleIndex(FormulaGetForm(predicate), baz);
 	NameRelease(baz);
 
 	Atom string = CreateStringFromCString("foobar");
 	ASSERT_TRUE(
 		SameTypedAtoms(
-			TypedTupleGetElement(predicate->actors, bazRoleIndex),
+			TypedTupleGetElement(FormulaGetActors(predicate), bazRoleIndex),
 			CreateTypedAtom(AT_ID, string)
 		)
 	)
 	IFactRelease(string);
 
-	FreeFormula(predicate);
+	ReleaseFormula(predicate);
 }
 
 
 static void testCStringToClause(void)
 {
 	// NOTE: this string must be in canonical order
-	Formula * clause = CStringToClause("aarf \"foobar\" | foo _x bar 123.45");
+	Atom clause = CStringToClause("aarf \"foobar\" | foo _x bar 123.45");
 	// PrintFormula(clause);
 	// PrintChar('\n');
 
-	ASSERT_UINT32_EQUAL(ClauseArity(clause->form), 3);
-	ASSERT_UINT32_EQUAL(clause->actors->nAtoms, 3)
+	ASSERT_UINT32_EQUAL(ClauseArity(FormulaGetForm(clause)), 3);
+	ASSERT_UINT32_EQUAL(FormulaGetActors(clause)->nAtoms, 3)
 
 	Atom string = CreateStringFromCString("foobar");
 	ASSERT_TRUE(
 		SameTypedAtoms(
-			TypedTupleGetElement(clause->actors, 0),
+			TypedTupleGetElement(FormulaGetActors(clause), 0),
 			CreateTypedAtom(AT_ID, string)
 		)
 	)
 	IFactRelease(string);
 	ASSERT_TRUE(
 		SameTypedAtoms(
-			TypedTupleGetElement(clause->actors, 1),
+			TypedTupleGetElement(FormulaGetActors(clause), 1),
 			CreateTypedAtom(AT_VARIABLE, CreateVariable('x'))
 		)
 	)
 	ASSERT_TRUE(
 		SameTypedAtoms(
-			TypedTupleGetElement(clause->actors, 2),
+			TypedTupleGetElement(FormulaGetActors(clause), 2),
 			CreateTypedAtom(AT_FLOAT, (Atom) {._float = 123.45})
 		)
 	)
 
-	FreeFormula(clause);
+	ReleaseFormula(clause);
 
 	// TODO: more complex test cases, and conjunctions, e.g.
 	// foo 42 bar 3.4 | !string "baaz" & + 2 + 2 = 4 & foobar _x | foobar _y & + 3 + 4 = 8
@@ -385,14 +385,14 @@ static void testCStringToClause(void)
 static void testCStringToConjunction(void)
 {
 	// NOTE: this string must be in canonical order
-	Formula * conjunction = CStringToConjunction("aarf \"foobar\" | foo _x bar 123.45 & barf 42 frob _y");
+	Atom conjunction = CStringToConjunction("aarf \"foobar\" | foo _x bar 123.45 & barf 42 frob _y");
 	// PrintFormula(conjunction);
 	// PrintChar('\n');
 
-	ASSERT_UINT32_EQUAL(ConjunctionFormArity(conjunction->form), 5)
-	ASSERT_UINT32_EQUAL(conjunction->actors->nAtoms, 5)
+	ASSERT_UINT32_EQUAL(ConjunctionFormArity(FormulaGetForm(conjunction)), 5)
+	ASSERT_UINT32_EQUAL(FormulaGetActors(conjunction)->nAtoms, 5)
 
-	FreeFormula(conjunction);
+	ReleaseFormula(conjunction);
 }
 
 

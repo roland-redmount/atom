@@ -1,4 +1,5 @@
 
+#include "lang/formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
@@ -679,6 +680,7 @@ void KernelInitialize(void)
 	InitializeLookup();
 	InitializeIFacts();
 	SetupDictionary();
+	InitializeFormulaStorage();
 
 	setupCoreRoleNames();
 	setupCoreServices();
@@ -783,6 +785,10 @@ void KernelShutdown(void)
 	DropRelationTable(kernel.coreRelations[RELATION_TERM_FORM]);
 	for(index32 relationId = RELATION_PREDICATE_FORM; relationId >= RELATION_MULTISET_NAME; relationId--)
 		DropRelationTable(kernel.coreRelations[relationId]);
+
+	// Every formula must have been released before the ifacts, since a formula
+	// holds a reference to its form
+	FreeFormulaStorage();
 
 	// Verify ifact counts
 	ASSERT(IFactTotalCount() == 0)

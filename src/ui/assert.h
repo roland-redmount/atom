@@ -31,7 +31,7 @@ int AssertFact(Atom termForm, TypedTuple const * actors, RelationTableProvider c
  * This function should always succeed, as (non-identifying) facts can be retracted
  * at any time.
  */
-void RetractFact(Atom termForm, TypedTuple * actors);
+void RetractFact(Atom termForm, TypedTuple const * actors);
 
 
 

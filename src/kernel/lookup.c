@@ -224,10 +224,10 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm)
 	Atom previousAtom = {0};
 	while(BTreeIteratorNext(&iterator)) {
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
-		if(record->predicateForm.hash == predicateForm.hash) {
+		if(SameAtoms(record->predicateForm, predicateForm)) {
 			// since lookup entries are ordered by atom,
 			// we can skip any entry with the same atom as previous
-			if(record->atom.hash != previousAtom.hash) {
+			if(!SameAtoms(record->atom, previousAtom)) {
 				ResizingArrayAppend(&datumArray, &(record->atom));
 				previousAtom = record->atom;
 			}
@@ -306,7 +306,7 @@ Relation const * LookupFindRelation(Atom atom, Atom form, Atom role)
 	while(LookupIteratorNext(&iterator)) {
 		Atom currentRole = LookupIteratorGetRole(&iterator);
 		Relation const * currentRelation = LookupIteratorGetRelation(&iterator);
-		if((currentRole.hash == role.hash) && (currentRelation->predicateForm.hash == form.hash)) {
+		if(SameAtoms(currentRole, role) && SameAtoms(currentRelation->predicateForm, form)) {
 			ASSERT(relation == 0)	// ensure we have only 1 matching relation
 			relation = currentRelation;
 		}

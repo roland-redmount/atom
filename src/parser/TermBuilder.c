@@ -1,6 +1,6 @@
 
 #include "kernel/ifact.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "lang/TermForm.h"
 #include "parser/PredicateBuilder.h"
 #include "parser/TermBuilder.h"
@@ -54,14 +54,14 @@ bool TermBuilderIsEmpty(TermBuilder const * builder)
 }
 
 
-Formula * TermBuilderCreateFormula(TermBuilder const * builder)
+Atom TermBuilderCreateFormula(TermBuilder const * builder)
 {
 	ASSERT(builder->isValid);
-	Formula * predicate = PredicateBuilderCreateFormula(&(builder->predicateBuilder));
-	Formula * term = CreateTerm(predicate, builder->sign);
+	Atom predicate = PredicateBuilderCreateFormula(&(builder->predicateBuilder));
+	Atom term = CreateTerm(predicate, builder->sign);
 	// CreateTerm() copies the actors, so the intermediate predicate formula
 	// is no longer needed here.
-	FreeFormula(predicate);
+	ReleaseFormula(predicate);
 	return term;
 }
 
@@ -80,7 +80,7 @@ void CleanupTermBuilder(TermBuilder * builder)
 }
 
 
-Formula * CStringToTerm(char const * cString)
+Atom CStringToTerm(char const * cString)
 {
 	size32 length = CStringLength(cString);
 	Tokenizer tokenizer;
@@ -97,7 +97,7 @@ Formula * CStringToTerm(char const * cString)
 		}
 	}
 	ASSERT(TermBuilderIsValid(&builder));
-	Formula * term = TermBuilderCreateFormula(&builder);
+	Atom term = TermBuilderCreateFormula(&builder);
 	
 	CleanupTermBuilder(&builder);
 	TokenizerCleanup(&tokenizer);

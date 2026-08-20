@@ -5,7 +5,7 @@
 #include "kernel/kernel.h"
 #include "kernel/string.h"
 #include "lang/ClauseForm.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "parser/ClauseBuilder.h"
 #include "testing/testing.h"
 
@@ -13,13 +13,13 @@
 void testDictionary(void)
 {
 	size8 const arity = 5;
-	Formula * rule = CStringToClause("!number _x square _s | * _x * _x = _s");
+	Atom rule = CStringToClause("!number _x square _s | * _x * _x = _s");
 
 	DictionaryEntry entry = DictionaryAddClause(rule);
 
 	// test iteration
 	DictionaryIterator iterator;
-	DictionaryIterate(rule->form, &iterator);
+	DictionaryIterate(FormulaGetForm(rule), &iterator);
 	ASSERT_TRUE(DictionaryIteratorNext(&iterator))
 	// test that actors tuple is identical to the formula
 	TypedTuple const * actorsTuple = DictionaryIteratorPeekActors(&iterator);
@@ -27,7 +27,7 @@ void testDictionary(void)
 		ASSERT_TRUE(
 			SameTypedAtoms(
 				TypedTupleGetElement(actorsTuple, i),
-				TypedTupleGetElement(rule->actors, i)
+				TypedTupleGetElement(FormulaGetActors(rule), i)
 			)
 		)
 	}
@@ -36,7 +36,7 @@ void testDictionary(void)
 
 	// test remove tuple
 	DictionaryRemoveClause(&entry);
-	FreeFormula(rule);
+	ReleaseFormula(rule);
 }
 
 

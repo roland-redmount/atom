@@ -81,7 +81,7 @@ void MultisetIterationOrder(Atom multiset, byte elementType, Atom const elements
  * Although the multiset has no "semantic" ordering, this iterator
  * is guaranteed to produce tuples according to the order defined by
  * TypedTupleCompare(), generating a stable ordering. This is used to
- * align the roles of a form with an ordered actor list by DT_FORMULA.
+ * align the roles of a form with an ordered actor list by a formula.
  */
 
 typedef struct s_MultisetIterator
