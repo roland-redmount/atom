@@ -41,7 +41,7 @@ bool IsRoleChar(char c)
 	return IsPredicateChar(c) && c != ' ';
 }
 
-static char const * separatorChars = (char const *) "&|!_$\" ";
+static char const * separatorChars = (char const *) "&|!_$\"[]() ";
 
 // names cannot contain separator characters
 bool IsNameChar(char c)

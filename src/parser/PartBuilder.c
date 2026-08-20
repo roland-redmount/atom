@@ -22,10 +22,17 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 		ASSERT(token.typedAtom.type == AT_NAME)
 		builder->role = token.typedAtom.atom;
 		NameAcquire(builder->role);
-		builder->state = STATE_PARTIAL;
+		builder->state = STATE_HAS_NAME;
 		return true;	
 
-	case STATE_PARTIAL:
+	case STATE_HAS_NAME:
+		if(token.type == TOKEN_BEGIN_REFLECT) {
+			// TODO: here we must parse a new formula, terminated by TOKEN_END_REFLECT,
+			// and store the resulting AT_FORMULA as the actor for this part.
+			// For this we need a parse function for a generic formula; it may become
+			// a term, clause or conjunction.
+			ASSERT(false) 
+		}
 		if(!TokenIsLiteral(token))
 			return false;
 		builder->actor = token.typedAtom;
@@ -70,7 +77,7 @@ TypedAtom PartBuilderGetActor(PartBuilder const * builder)
 
 void PartBuilderReset(PartBuilder * builder)
 {
-	if(builder->state == STATE_PARTIAL) {
+	if(builder->state == STATE_HAS_NAME) {
 		NameRelease(builder->role);
 	}
 	else if(builder->state == STATE_COMPLETE) {

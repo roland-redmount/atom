@@ -86,6 +86,18 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 			tokenizer->type = TOKEN_PARAMETER;
 			tokenizer->isValid = true;
 			return true;
+		
+		case '[':
+			tokenizer->type = TOKEN_BEGIN_REFLECT;
+			tokenizer->isValid = true;
+			tokenizer->isFull = true;
+			return true;
+
+		case ']':
+			tokenizer->type = TOKEN_END_REFLECT;
+			tokenizer->isValid = true;
+			tokenizer->isFull = true;
+			return true;
 
 		default:
 			if(IsDigitChar(c)) {

@@ -70,6 +70,13 @@ bool ClauseBuilderIsValid(ClauseBuilder const * builder)
 }
 
 
+bool ClauseBuilderIsSingleTerm(ClauseBuilder const * builder)
+{
+	// a term is only appended to the terms array when a TOKEN_OR is accepted
+	return ResizingArrayNElements(&(builder->terms)) == 0;
+}
+
+
 static void finishClauseBuilder(ClauseBuilder * builder)
 {
 	ASSERT(builder->isValid);

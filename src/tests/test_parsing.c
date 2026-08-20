@@ -13,6 +13,7 @@
 #include "lang/TermForm.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/ConjunctionBuilder.h"
+#include "parser/FormulaBuilder.h"
 #include "parser/PredicateBuilder.h"
 #include "parser/PartBuilder.h"
 #include "parser/TermBuilder.h"
@@ -396,6 +397,41 @@ static void testCStringToConjunction(void)
 }
 
 
+static void testCStringToFormula(void)
+{
+	// a formula with neither | nor & is a term
+	Atom term = CStringToFormula("foo _x bar 123.45");
+	ASSERT_TRUE(FormulaIsTerm(term))
+	Atom expectedTerm = CStringToTerm("foo _x bar 123.45");
+	ASSERT_TRUE(SameAtoms(term, expectedTerm))
+	ReleaseFormula(expectedTerm);
+	ReleaseFormula(term);
+
+	// a negated term is still a term
+	Atom negatedTerm = CStringToFormula("! foo 42");
+	ASSERT_TRUE(FormulaIsTerm(negatedTerm))
+	ASSERT_FALSE(TermFormGetSign(FormulaGetForm(negatedTerm)))
+	ReleaseFormula(negatedTerm);
+
+	// a formula with | but no & is a clause
+	// NOTE: this string must be in canonical order
+	Atom clause = CStringToFormula("aarf \"foobar\" | foo _x bar 123.45");
+	ASSERT_TRUE(FormulaIsClause(clause))
+	Atom expectedClause = CStringToClause("aarf \"foobar\" | foo _x bar 123.45");
+	ASSERT_TRUE(SameAtoms(clause, expectedClause))
+	ReleaseFormula(expectedClause);
+	ReleaseFormula(clause);
+
+	// a formula with & is a conjunction
+	Atom conjunction = CStringToFormula("aarf \"foobar\" | foo _x bar 123.45 & barf 42 frob _y");
+	ASSERT_TRUE(FormulaIsConjunction(conjunction))
+	Atom expectedConjunction = CStringToConjunction("aarf \"foobar\" | foo _x bar 123.45 & barf 42 frob _y");
+	ASSERT_TRUE(SameAtoms(conjunction, expectedConjunction))
+	ReleaseFormula(expectedConjunction);
+	ReleaseFormula(conjunction);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -408,6 +444,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCStringToSignature);
 	ExecuteTest(testCStringToClause);
 	ExecuteTest(testCStringToConjunction);
+	ExecuteTest(testCStringToFormula);
 
 	KernelShutdown();
 

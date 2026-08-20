@@ -8,7 +8,7 @@
 
 
 typedef struct s_PartBuilder {
-	enum BuilderState {STATE_EMPTY, STATE_PARTIAL, STATE_COMPLETE} state;
+	enum BuilderState {STATE_EMPTY, STATE_HAS_NAME, STATE_COMPLETE} state;
 	Atom role;
 	TypedAtom actor;
 } PartBuilder;

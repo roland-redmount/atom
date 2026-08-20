@@ -12,13 +12,15 @@
 enum TokenType {
 	TOKEN_INVALID = 0,
 	TOKEN_NAME,
-	TOKEN_NUMBER,	// TODO: should we differentiate between INT and FLOAT ?
+	TOKEN_NUMBER,			// TODO: should we differentiate between INT and FLOAT ?
 	TOKEN_STRING,
 	TOKEN_VARIABLE,
-	TOKEN_PARAMETER,
-	TOKEN_AND,		// logical conjunction (&)
-	TOKEN_OR,		// logical disjunction (|)
-	TOKEN_NOT		// logical negation
+	TOKEN_PARAMETER,		// NOTE: should not be necessary, parameters are used in kernel only
+	TOKEN_AND,				// logical conjunction (&)
+	TOKEN_OR,				// logical disjunction (|)
+	TOKEN_NOT,				// logical negation
+	TOKEN_BEGIN_REFLECT,	// begin a reflection block
+	TOKEN_END_REFLECT,		// end a reflection block
 };
 
 typedef struct s_Token {
@@ -28,7 +30,7 @@ typedef struct s_Token {
 
 
 /**
- * A "literal" in this context is a token that be an actor in a role,
+ * A "literal" in this context is a token that can be an actor in a role,
  * namely TOKEN_NUMBER, TOKEN_STRING, TOKEN_VARIABLE, TOKEN_PARAMETER
  */
 bool TokenIsLiteral(Token token);

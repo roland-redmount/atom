@@ -124,6 +124,7 @@ add_library(atom SHARED
     src/parser/Characters.c
     src/parser/ClauseBuilder.c
     src/parser/ConjunctionBuilder.c
+    src/parser/FormulaBuilder.c
     src/parser/PartBuilder.c
     src/parser/PredicateBuilder.c
     src/parser/StringBuffer.c

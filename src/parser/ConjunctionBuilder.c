@@ -60,6 +60,14 @@ bool ConjunctionBuilderIsValid(ConjunctionBuilder const * builder)
 }
 
 
+bool ConjunctionBuilderIsSingleClause(ConjunctionBuilder const * builder)
+{
+	// A clause is only appended to the clauses array when a TOKEN_AND is accepted,
+	// so a count of zero elements means we at most one clause.
+	return ResizingArrayNElements(&(builder->clauses)) == 0;
+}
+
+
 static void finishConjunctionBuilder(ConjunctionBuilder * builder)
 {
 	ASSERT(builder->isValid);
