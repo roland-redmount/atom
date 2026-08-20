@@ -52,7 +52,6 @@ bool IsString(Atom atom)
 }
 
 
-// TODO: printing case should be configurable, lower/upper/sentence/camel case
 void PrintString(Atom string)
 {
 	PrintChar('"');
@@ -60,7 +59,7 @@ void PrintString(Atom string)
 	ListIterate(string, &iterator);
 	while(ListIteratorNext(&iterator)) {
 		Atom letter = ListIteratorGetElement(&iterator);
-		PrintChar(LetterToChar(letter, LETTER_LOWERCASE));
+		PrintChar(LetterToChar(letter, LETTER_UPPERCASE));
 	}
 	ListIteratorEnd(&iterator);
 	PrintChar('"');

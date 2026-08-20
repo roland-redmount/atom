@@ -2,6 +2,7 @@
 #include "kernel/float.h"
 #include "lang/Variable.h"
 #include "kernel/kernel.h"
+#include "kernel/letter.h"
 #include "kernel/list.h"
 #include "kernel/Parameter.h"
 #include "kernel/string.h"
@@ -348,7 +349,7 @@ static void testCStringToPredicate(void)
 static void testCStringToClause(void)
 {
 	// NOTE: this string must be in canonical order
-	Atom clause = CStringToClause("aarf \"foobar\" | foo _x bar 123.45");
+	Atom clause = CStringToClause("aarf \"foobar\" | foo x bar 123.45");
 	// PrintFormula(clause);
 	// PrintChar('\n');
 
@@ -386,7 +387,7 @@ static void testCStringToClause(void)
 static void testCStringToConjunction(void)
 {
 	// NOTE: this string must be in canonical order
-	Atom conjunction = CStringToConjunction("aarf \"foobar\" | foo _x bar 123.45 & barf 42 frob _y");
+	Atom conjunction = CStringToConjunction("aarf \"foobar\" | foo x bar 123.45 & barf 42 frob y");
 	// PrintFormula(conjunction);
 	// PrintChar('\n');
 
@@ -400,9 +401,9 @@ static void testCStringToConjunction(void)
 static void testCStringToFormula(void)
 {
 	// a formula with neither | nor & is a term
-	Atom term = CStringToFormula("foo _x bar 123.45");
+	Atom term = CStringToFormula("foo x bar 123.45");
 	ASSERT_TRUE(FormulaIsTerm(term))
-	Atom expectedTerm = CStringToTerm("foo _x bar 123.45");
+	Atom expectedTerm = CStringToTerm("foo x bar 123.45");
 	ASSERT_TRUE(SameAtoms(term, expectedTerm))
 	ReleaseFormula(expectedTerm);
 	ReleaseFormula(term);
@@ -415,17 +416,17 @@ static void testCStringToFormula(void)
 
 	// a formula with | but no & is a clause
 	// NOTE: this string must be in canonical order
-	Atom clause = CStringToFormula("aarf \"foobar\" | foo _x bar 123.45");
+	Atom clause = CStringToFormula("aarf \"foobar\" | foo x bar 123.45");
 	ASSERT_TRUE(FormulaIsClause(clause))
-	Atom expectedClause = CStringToClause("aarf \"foobar\" | foo _x bar 123.45");
+	Atom expectedClause = CStringToClause("aarf \"foobar\" | foo x bar 123.45");
 	ASSERT_TRUE(SameAtoms(clause, expectedClause))
 	ReleaseFormula(expectedClause);
 	ReleaseFormula(clause);
 
 	// a formula with & is a conjunction
-	Atom conjunction = CStringToFormula("aarf \"foobar\" | foo _x bar 123.45 & barf 42 frob _y");
+	Atom conjunction = CStringToFormula("aarf \"foobar\" | foo x bar 123.45 & barf 42 frob y");
 	ASSERT_TRUE(FormulaIsConjunction(conjunction))
-	Atom expectedConjunction = CStringToConjunction("aarf \"foobar\" | foo _x bar 123.45 & barf 42 frob _y");
+	Atom expectedConjunction = CStringToConjunction("aarf \"foobar\" | foo x bar 123.45 & barf 42 frob y");
 	ASSERT_TRUE(SameAtoms(conjunction, expectedConjunction))
 	ReleaseFormula(expectedConjunction);
 	ReleaseFormula(conjunction);
@@ -483,9 +484,88 @@ static void testReflection(char const * reflected, char const * termString)
 }
 
 
+/**
+ * A letter is an actor, written 'A. This is the syntax PrintLetter() prints, so a formula
+ * holding a letter reads back as the formula it was printed from.
+ */
+static void testLetterActor(void)
+{
+	Atom term = CStringToTerm("list \"ab\" position 1 element 'A");
+	TypedTuple const * actors = FormulaGetActors(term);
+	ASSERT_UINT32_EQUAL(actors->nAtoms, 3)
+
+	Atom elementRole = CreateNameFromCString("element");
+	index8 elementIndex = PredicateRoleIndex(
+		TermFormGetPredicateForm(FormulaGetForm(term)), elementRole);
+	NameRelease(elementRole);
+
+	TypedAtom element = TypedTupleGetElement(actors, elementIndex);
+	ASSERT_UINT32_EQUAL(element.type, AT_LETTER)
+	ASSERT_TRUE(SameAtoms(element.atom, GetAlphabetLetter('A')))
+
+	// a letter is case-insensitive, so the same term is written either way
+	Atom lowerTerm = CStringToTerm("list \"ab\" position 1 element 'a");
+	ASSERT_TRUE(SameAtoms(term, lowerTerm))
+	ReleaseFormula(lowerTerm);
+	ReleaseFormula(term);
+}
+
+
+/**
+ * ParseFormula() reads what CStringToFormula() reads, but reports invalid syntax
+ * instead of aborting on it, naming the character where the string went wrong.
+ */
+static void testParseFormula(void)
+{
+	index32 errorPosition;
+
+	// a valid string parses to the formula CStringToFormula() yields for it
+	Atom formula = ParseFormula("foo x bar 123.45", &errorPosition);
+	ASSERT_TRUE(formula.hash != 0)
+	Atom expectedFormula = CStringToFormula("foo x bar 123.45");
+	ASSERT_TRUE(SameAtoms(formula, expectedFormula))
+	ReleaseFormula(expectedFormula);
+	ReleaseFormula(formula);
+
+	// a character belonging to no token is reported where it stands
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x bar *", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 10)
+
+	// a number stands where an actor does and not where a role name does, so it is
+	// reported at its first character rather than at the whitespace before it
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x 42 bar 1", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 6)
+
+	// a variable is named by a single letter, so a word too long to be one is reported
+	// at the letter that makes it too long; see enum TokenizerMode
+	ASSERT_UINT64_EQUAL(ParseFormula("foo xy bar 1", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 5)
+
+	// a string ending in the middle of a formula is reported at its end
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x bar", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 9)
+
+	// an unterminated string is read to the end of the line
+	ASSERT_UINT64_EQUAL(ParseFormula("foo \"abc", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 8)
+
+	// an unterminated reflection abandons its nested builder
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [ bar 1", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 11)
+
+	// a parameter naming no known atom type is rejected, not asserted on
+	ASSERT_UINT64_EQUAL(ParseFormula("foo @1<NOTATYPE", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 15)
+
+	// a string holding no formula at all
+	ASSERT_UINT64_EQUAL(ParseFormula("", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 0)
+}
+
+
 static void testReflectedTerm(void)
 {
-	testReflection("foo \"a\" bar _b", "term [foo \"a\" bar _b] arity 2");
+	testReflection("foo \"a\" bar b", "term [foo \"a\" bar b] arity 2");
 }
 
 
@@ -567,6 +647,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCStringToClause);
 	ExecuteTest(testCStringToConjunction);
 	ExecuteTest(testCStringToFormula);
+	ExecuteTest(testLetterActor);
+	ExecuteTest(testParseFormula);
 	ExecuteTest(testReflectedTerm);
 	ExecuteTest(testReflectedNegatedTerm);
 	ExecuteTest(testReflectedClause);

@@ -248,14 +248,14 @@ static void testMachineServiceSharedRelation(void)
 	ASSERT_PTR_NOT_EQUAL(subtracting.op, adding.op)
 
 	// dispatch tells them apart by what the query binds
-	Atom query = CStringToTerm("term 3 term 4 total _t");
+	Atom query = CStringToTerm("term 3 term 4 total t");
 	Service dispatched;
 	index8 permutation[3];
 	ASSERT_TRUE(DispatchQueryFormula(query, &dispatched, permutation))
 	ASSERT_PTR_EQUAL(dispatched.op, adding.op)
 	ReleaseFormula(query);
 
-	query = CStringToTerm("term 3 term _u total 10");
+	query = CStringToTerm("term 3 term u total 10");
 	ASSERT_TRUE(DispatchQueryFormula(query, &dispatched, permutation))
 	ASSERT_PTR_EQUAL(dispatched.op, subtracting.op)
 	ReleaseFormula(query);

@@ -82,7 +82,7 @@ void testAdd2(void)
  */
 void testRange(void)
 {
-	Atom query = CStringToTerm("lower 2 number _n upper 6");
+	Atom query = CStringToTerm("lower 2 number n upper 6");
 
 	Service service;
 	index8 permutation[3];

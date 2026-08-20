@@ -249,6 +249,13 @@ set_tests_properties(${ATOM_TESTS_TIER2} PROPERTIES
     FIXTURES_REQUIRED "TIER0;TIER1")
 
 # ---------------------------------------------------------------------------
+# User interface executables
+# ---------------------------------------------------------------------------
+
+add_executable(repl src/ui/repl.c)
+target_link_libraries(repl PRIVATE atom)
+
+# ---------------------------------------------------------------------------
 # Optional graphics target
 # ---------------------------------------------------------------------------
 

@@ -110,9 +110,9 @@ void SetupPrecSuccFixture(RelationFixture * fixture)
 void AddTransitiveClosureRules(DictionaryEntry * base, DictionaryEntry * recursive)
 {
 	*base = DictionaryAddClauseFromCString(
-		"before _x after _y | ! prec _x succ _y");
+		"before x after y | ! prec x succ y");
 	*recursive = DictionaryAddClauseFromCString(
-		"before _x after _y | ! prec _x succ _z | ! before _z after _y");
+		"before x after y | ! prec x succ z | ! before z after y");
 }
 
 

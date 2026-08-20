@@ -14,6 +14,7 @@ enum TokenType {
 	TOKEN_NAME,
 	TOKEN_NUMBER,			// TODO: should we differentiate between INT and FLOAT ?
 	TOKEN_STRING,
+	TOKEN_LETTER,			// a letter of the alphabet, written 'A
 	TOKEN_VARIABLE,
 	TOKEN_PARAMETER,		// NOTE: should not be necessary, parameters are used in kernel only
 	TOKEN_AND,				// logical conjunction (&)
@@ -28,12 +29,6 @@ typedef struct s_Token {
 	TypedAtom typedAtom;
 } Token;
 
-
-/**
- * A "literal" in this context is a token that can be an actor in a role,
- * namely TOKEN_NUMBER, TOKEN_STRING, TOKEN_VARIABLE, TOKEN_PARAMETER
- */
-bool TokenIsLiteral(Token token);
 
 /**
  * Release the atom contained in the token, if any.

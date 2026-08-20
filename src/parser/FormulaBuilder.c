@@ -59,20 +59,102 @@ void CleanupFormulaBuilder(FormulaBuilder * builder)
 }
 
 
-static bool pushToFormulaBuilder(void * context, Token token)
+/*
+ * Offer the token the tokenizer holds to the builder, and reset the tokenizer so that it
+ * can read the next one. Returns false if the builder rejects the token.
+ */
+static bool pushToken(Tokenizer * tokenizer, FormulaBuilder * builder)
 {
-	return FormulaBuilderPush((FormulaBuilder *) context, token);
+	Token token = TokenizerGetToken(tokenizer);
+	bool isAccepted = FormulaBuilderPush(builder, token);
+	ReleaseToken(token);
+	TokenizerReset(tokenizer);
+	return isAccepted;
+}
+
+
+/*
+ * Push every character of the string to a tokenizer, offering each completed token to the
+ * builder. Returns true once the whole string has been read. At the first character the
+ * tokenizer rejects, or the first token the builder rejects, this returns false and writes
+ * the index where the offending syntax begins to errorPosition. An error within a token is
+ * reported at the first character of that token, rather than where the builder noticed it.
+ *
+ * This is TokenizeCString() with each of its ASSERTs replaced by an error, since a string
+ * typed by a user may be invalid syntax; see Tokenizer.h.
+ */
+static bool tokenizeToFormulaBuilder(
+	char const * cString, FormulaBuilder * builder, index32 * errorPosition)
+{
+	Tokenizer tokenizer;
+	TokenizerInit(&tokenizer);
+	size32 length = CStringLength(cString);
+	index32 tokenPosition = 0;
+	bool isAccepted = true;
+
+	// NOTE: including the 0 terminator, which completes the last token
+	for(index32 i = 0; i <= length; i++) {
+		// a tokenizer that has not begun a token starts one at the character pushed next
+		if(tokenizer.type == TOKEN_INVALID)
+			tokenPosition = i;
+
+		if(!TokenizerPush(&tokenizer, cString[i])) {
+			if(!TokenizerComplete(&tokenizer)) {
+				// the character belongs to no token the tokenizer can read
+				*errorPosition = i;
+				isAccepted = false;
+				break;
+			}
+			// the character ended the token before it without being part of it,
+			// and has to be pushed again once that token has been taken
+			if(!pushToken(&tokenizer, builder)) {
+				*errorPosition = tokenPosition;
+				isAccepted = false;
+				break;
+			}
+			tokenPosition = i;
+			if(!TokenizerPush(&tokenizer, cString[i])) {
+				*errorPosition = i;
+				isAccepted = false;
+				break;
+			}
+		}
+		if(TokenizerComplete(&tokenizer) && !pushToken(&tokenizer, builder)) {
+			*errorPosition = tokenPosition;
+			isAccepted = false;
+			break;
+		}
+	}
+	TokenizerCleanup(&tokenizer);
+	return isAccepted;
+}
+
+
+Atom ParseFormula(char const * cString, index32 * errorPosition)
+{
+	FormulaBuilder builder;
+	InitializeFormulaBuilder(&builder);
+
+	Atom formula = (Atom) {0};
+	if(tokenizeToFormulaBuilder(cString, &builder, errorPosition)) {
+		if(FormulaBuilderIsValid(&builder))
+			formula = FormulaBuilderCreateFormula(&builder);
+		else
+			// every token was accepted, but they do not add up to a formula:
+			// the string ends where the missing syntax should have been
+			*errorPosition = CStringLength(cString);
+	}
+	// A builder abandoned part way through releases whatever it had collected,
+	// so this is also the error path; see PartBuilderReset().
+	CleanupFormulaBuilder(&builder);
+	return formula;
 }
 
 
 Atom CStringToFormula(char const * cString)
 {
-	FormulaBuilder builder;
-	InitializeFormulaBuilder(&builder);
-	TokenizeCString(cString, pushToFormulaBuilder, &builder);
-
-	ASSERT(FormulaBuilderIsValid(&builder))
-	Atom formula = FormulaBuilderCreateFormula(&builder);
-	CleanupFormulaBuilder(&builder);
+	index32 errorPosition;
+	Atom formula = ParseFormula(cString, &errorPosition);
+	ASSERT(formula.hash)
 	return formula;
 }

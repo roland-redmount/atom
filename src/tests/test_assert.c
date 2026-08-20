@@ -98,7 +98,7 @@ void testAssertContradictsStoredFact(void)
 void testAssertContradictsDerivedFact(void)
 {
 	// (! even x) follows from (odd x), so (odd 3) entails (! even 3)
-	DictionaryEntry entry = DictionaryAddClauseFromCString("! even _x | ! odd _x");
+	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
 	Atom odd3 = CStringToTerm("odd 3");
 	Atom even3 = CStringToTerm("even 3");
 	Atom even4 = CStringToTerm("even 4");

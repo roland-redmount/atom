@@ -42,8 +42,7 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 			builder->state = STATE_REFLECTION;
 			return true;
 		}
-		if(!TokenIsLiteral(token))
-			return false;
+		// the tokenizer reads an actor after a role name, so this token is one
 		builder->actor = token.typedAtom;
 		AcquireTypedAtom(builder->actor);
 		builder->state = STATE_COMPLETE;

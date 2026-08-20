@@ -27,8 +27,8 @@ void testCompilePermute1(void)
 {
 	// This rule compiles to a PERMUTE service with no constants
 	// + z - x = y  <-  + x + y = z
-	DictionaryEntry entry = DictionaryAddClauseFromCString("+ _z - _x = _y | ! + _x + _y = _z");
-	Atom queryTerm = CStringToTerm("+ 7 - 4 = _d");
+	DictionaryEntry entry = DictionaryAddClauseFromCString("+ z - x = y | ! + x + y = z");
+	Atom queryTerm = CStringToTerm("+ 7 - 4 = d");
 
 	// This will yield a new service from the existing (+ + =) service
 	Service services[MAX_COMPILED_SERVICES];
@@ -62,8 +62,8 @@ void testCompilePermute2(void)
 	// The constant restricts an argument of the child service and cannot
 	// introduce duplicate tuples, so no PROJECT service is needed.
 	// number x addtwo y <- + x + 2 = y
-	DictionaryEntry entry = DictionaryAddClauseFromCString("number _x addtwo _y | ! + _x + 2 = _y");
-	Atom queryTerm = CStringToTerm("number 3 addtwo _z");
+	DictionaryEntry entry = DictionaryAddClauseFromCString("number x addtwo y | ! + x + 2 = y");
+	Atom queryTerm = CStringToTerm("number 3 addtwo z");
 
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
@@ -99,8 +99,8 @@ void testCompileProject(void)
 	// the rule compiles to PROJECT(PERMUTE(...)).
 	// set s element e <- list s position p element e
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"set _s element _e | ! list _s position _p element _e");
-	Atom queryTerm = CStringToTerm("set \"alibaba\" element _e");
+		"set s element e | ! list s position p element e");
+	Atom queryTerm = CStringToTerm("set \"alibaba\" element e");
 
 	// The element role is an untyped output, so the term matches every
 	// (list position element) relation: one per element type. We therefore
@@ -152,8 +152,8 @@ void testCompileUnconstrainedHeadVariable(void)
 {
 	// set s element e size n <- list s position p element e
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"set _s element _e size _n | ! list _s position _p element _e");
-	Atom queryTerm = CStringToTerm("set \"ab\" element _e size _z");
+		"set s element e size n | ! list s position p element e");
+	Atom queryTerm = CStringToTerm("set \"ab\" element e size z");
 
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
@@ -172,8 +172,8 @@ void testCompileJoin1(void)
 	// This rule compiles to a JOIN service
 	// first x second y third z  <-  + x + 1 = y & + y + 1 = z
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"first _x second _y third _z | ! + _x + 1 = _y | ! + _y + 1 = _z");
-	Atom queryTerm = CStringToTerm("first 3 second _s third _t");
+		"first x second y third z | ! + x + 1 = y | ! + y + 1 = z");
+	Atom queryTerm = CStringToTerm("first 3 second s third t");
 
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
@@ -210,8 +210,8 @@ void testCompileJoin2(void)
 	// PROJECT(JOIN(+ x + 1 = y, + y + 1 = z), 2)
 	// first x third z  <-  + x + 1 = y & + y + 1 = z
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"first _x third _z | ! + _x + 1 = _y | ! + _y + 1 = _z");
-	Atom queryTerm = CStringToTerm("first 3 third _t");
+		"first x third z | ! + x + 1 = y | ! + y + 1 = z");
+	Atom queryTerm = CStringToTerm("first 3 third t");
 
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
@@ -242,10 +242,10 @@ void testCompileUnion(void)
 	// number x neighbor y <- = y + x + 1     (y = x + 1)
 	// number x neighbor y <- = x + y + 1     (x = y - 1 <-> y = x - 1)
 	DictionaryEntry entry1 = DictionaryAddClauseFromCString(
-		"number _x neighbor _y | ! = _y + _x + 1");
+		"number x neighbor y | ! = y + x + 1");
 	DictionaryEntry entry2 = DictionaryAddClauseFromCString(
-		"number _x neighbor _y | ! = _x + _y + 1");
-	Atom queryTerm = CStringToTerm("number 5 neighbor _y");
+		"number x neighbor y | ! = x + y + 1");
+	Atom queryTerm = CStringToTerm("number 5 neighbor y");
 
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
@@ -296,8 +296,8 @@ void testCompileConstrain(void)
 
 	// self x <- edge e from x to x
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"self _x | ! edge _e from _x to _x");
-	Atom queryTerm = CStringToTerm("self _y");
+		"self x | ! edge e from x to x");
+	Atom queryTerm = CStringToTerm("self y");
 
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
@@ -345,7 +345,7 @@ void testCompileRecursiveJoin1(void)
 {
 	// The recursive rule
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"number _n faculty _f | ! + _m + 1 = _n | ! number _m faculty _e | ! * _e * _n = _f");
+		"number n faculty f | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
 	// Create terminating fact, provide by a B-tree service
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
 	Relation const * relation = CreateRelation(
@@ -355,7 +355,7 @@ void testCompileRecursiveJoin1(void)
 	ReleaseRelation(relation);
 	RelationTableAddTuple(table, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	// Compile the query
-	Atom queryTerm = CStringToTerm("number 4 faculty _f");
+	Atom queryTerm = CStringToTerm("number 4 faculty f");
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
@@ -451,7 +451,7 @@ void testCompileRecursiveReachable(void)
 	DictionaryEntry entry2;
 	AddTransitiveClosureRules(&entry1, &entry2);
 
-	Atom queryTerm = CStringToTerm("before \"a\" after _y");
+	Atom queryTerm = CStringToTerm("before \"a\" after y");
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
@@ -502,7 +502,7 @@ void testCompileRecursiveClosure(void)
 	DictionaryEntry entry2;
 	AddTransitiveClosureRules(&entry1, &entry2);
 
-	Atom queryTerm = CStringToTerm("before _x after _y");
+	Atom queryTerm = CStringToTerm("before x after y");
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
 	ASSERT_UINT32_EQUAL(nServices, 1)
@@ -563,7 +563,7 @@ void testCompileNegatedTerm(void)
 	ReleaseRelation(evenRelation);
 	RelationTableAddTuple(evenTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	// setup the rule
-	DictionaryEntry entry = DictionaryAddClauseFromCString("! even _x | ! odd _x");
+	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
 	Atom queryTerm = CStringToTerm("! even 3");
 
 	// compile the query
@@ -612,7 +612,7 @@ void testCompiledServiceReadsFactsLive(void)
 		oddRelation, &btreeTableProvider, (index8[]) {0});
 	ReleaseRelation(oddRelation);
 	RelationTableAddTuple(oddTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
-	DictionaryEntry entry = DictionaryAddClauseFromCString("! even _x | ! odd _x");
+	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
 
 	Atom queryTerm = CStringToTerm("! even 3");
 	Service services[MAX_COMPILED_SERVICES];
@@ -664,8 +664,8 @@ void testCompiledServiceReadsFactsLive(void)
 void testCompileSquares(void)
 {
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"number _n square _s | ! lower 1 number _n upper 4 | ! * _n * _n = _s");
-	Atom queryTerm = CStringToTerm("number _n square _s");
+		"number n square s | ! lower 1 number n upper 4 | ! * n * n = s");
+	Atom queryTerm = CStringToTerm("number n square s");
 
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);

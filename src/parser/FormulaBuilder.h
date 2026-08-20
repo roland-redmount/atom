@@ -35,8 +35,21 @@ void CleanupFormulaBuilder(FormulaBuilder * builder);
 
 /**
  * Parse a C string to a term, clause or conjunction, whichever it turns out to be.
+ * The string must be a valid formula, or an ASSERT will be triggered; see ParseFormula()
+ * for a caller that cannot make that promise.
  */
 Atom CStringToFormula(char const * cString);
+
+/**
+ * Parse a C string to a term, clause or conjunction, whichever it turns out to be,
+ * without requiring the string to be valid syntax. A string that is not a formula is a
+ * normal outcome here, unlike with CStringToFormula(): it yields the zero atom, whose
+ * hash the caller tests, and the index of the character parsing failed at is written to
+ * errorPosition. That index is the length of
+ * the string when the string ends in the middle of a formula, which is also what an
+ * empty string yields.
+ */
+Atom ParseFormula(char const * cString, index32 * errorPosition);
 
 
 #endif	// FORMULABUILDER_H
