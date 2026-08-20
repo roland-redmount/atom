@@ -52,22 +52,26 @@ static void printLine(char const * text)
 
 static void printBanner(void)
 {
+	PrintChar('\n');
 	printLine("atom v.0.1");
 	PrintChar('\n');
 	printLine("Enter a query, or :help for the commands.");
+	PrintChar('\n');
 }
 
 
 static void printHelp(void)
 {
+	PrintChar('\n');
 	printLine("Enter a query as a term, such as");
 	printLine("    + 2 + 3 = s");
-	printLine("and every fact answering it is printed. A variable is named by a single");
-	printLine("letter, and _ stands for a variable whose name does not matter.");
+	printLine("to view every matching fact in the knowledgebase.");
+	printLine("Variables are single letters and _ is the anonymous variable.");
 	PrintChar('\n');
 	printLine("Commands:");
 	printLine("    :help            Print this text");
 	printLine("    :quit, ctrl-D    End the session");
+	PrintChar('\n');
 }
 
 
