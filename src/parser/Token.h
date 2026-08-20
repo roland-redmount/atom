@@ -30,12 +30,6 @@ typedef struct s_Token {
 
 
 /**
- * A "literal" in this context is a token that can be an actor in a role,
- * namely TOKEN_NUMBER, TOKEN_STRING, TOKEN_VARIABLE, TOKEN_PARAMETER
- */
-bool TokenIsLiteral(Token token);
-
-/**
  * Release the atom contained in the token, if any.
  */
 void ReleaseToken(Token token);

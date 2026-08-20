@@ -56,12 +56,12 @@ void testDispatchRepeatedVariable(void)
 
 	// A position is never a letter, so no atom satisfies this query, and it dispatches
 	// to the (list <ID position >UINT element >LETTER) service all the same
-	Atom query = CStringToTerm("list \"ab\" position _x element _x");
+	Atom query = CStringToTerm("list \"ab\" position x element x");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
 	ReleaseFormula(query);
 
 	// Distinct variables at those same positions match the same service
-	query = CStringToTerm("list \"ab\" position _p element _e");
+	query = CStringToTerm("list \"ab\" position p element e");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
 	ReleaseFormula(query);
 }
@@ -75,7 +75,7 @@ void testDispatchRepeatedVariable(void)
  */
 void testDispatchRepeatedParameter(void)
 {
-	Atom query = CStringToTerm("list \"ab\" position _p element _e");
+	Atom query = CStringToTerm("list \"ab\" position p element e");
 	size8 arity = FormulaGetActors(query)->nAtoms;
 	Atom parameters[arity];
 	GetQueryParameters(FormulaGetActors(query), parameters);
@@ -137,12 +137,12 @@ void testDispatchNegatedTerm(void)
 	// A negated query dispatches, and reaches the negated relation rather than the other
 	Service service;
 	index8 permutation[2];
-	Atom query = CStringToTerm("! even _x odd _y");
+	Atom query = CStringToTerm("! even x odd y");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
 	ASSERT_PTR_EQUAL(service.relation, negatedTable->relation)
 	ReleaseFormula(query);
 
-	query = CStringToTerm("even _x odd _y");
+	query = CStringToTerm("even x odd y");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
 	ASSERT_PTR_EQUAL(service.relation, table->relation)
 	ReleaseFormula(query);
@@ -175,7 +175,7 @@ void testDispatchIterator(void)
 
 	// Only the service with two output parameters matches, so each table contributes
 	// one match
-	Atom query = CStringToTerm("first _x second _y");
+	Atom query = CStringToTerm("first x second y");
 	Atom parameters[2];
 	GetQueryParameters(FormulaGetActors(query), parameters);
 	index8 permutation[2];
@@ -209,7 +209,7 @@ void testDispatchIterator(void)
 	ReleaseFormula(query);
 
 	// A query for a form with no relation yields no match at all
-	Atom unknownQuery = CStringToTerm("nowhere _x nothing _y");
+	Atom unknownQuery = CStringToTerm("nowhere x nothing y");
 	Atom unknownParameters[2];
 	GetQueryParameters(FormulaGetActors(unknownQuery), unknownParameters);
 	DispatchIterate(FormulaGetForm(unknownQuery), unknownParameters, 2, permutation, &iterator);

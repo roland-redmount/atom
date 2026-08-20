@@ -15,6 +15,10 @@ struct s_FormulaBuilder;
  * reflection [ ... ], in which case the part builder collects the tokens of
  * the reflection in a nested formula builder while in STATE_REFLECTION, and
  * the formula atom it yields becomes the actor.
+ *
+ * A part builder holds the same alternation as the tokenizer, which reads an actor after
+ * a role name; see enum TokenizerMode. It therefore takes the token following a role name
+ * to be the actor, without testing what kind of token it is.
  */
 typedef struct s_PartBuilder {
 	enum BuilderState {

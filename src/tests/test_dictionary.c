@@ -13,7 +13,7 @@
 void testDictionary(void)
 {
 	size8 const arity = 5;
-	Atom rule = CStringToClause("!number _x square _s | * _x * _x = _s");
+	Atom rule = CStringToClause("!number x square s | * x * x = s");
 
 	DictionaryEntry entry = DictionaryAddClause(rule);
 

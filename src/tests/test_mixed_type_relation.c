@@ -40,7 +40,7 @@ static size32 countQueryTuples(char const * queryString)
 void testConcatEveryTuple(void)
 {
 	SetupEdgeFixture(&edgeFixture);
-	Atom query = CStringToTerm("edge _e from _x to _y");
+	Atom query = CStringToTerm("edge e from x to y");
 
 	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
 	ASSERT_DATA64_EQUAL(relation->termForm.hash, FormulaGetForm(query).hash)
@@ -80,7 +80,7 @@ void testConcatEveryTuple(void)
 void testConcatRepeatedVariable(void)
 {
 	SetupEdgeFixture(&edgeFixture);
-	Atom query = CStringToTerm("edge _e from _x to _x");
+	Atom query = CStringToTerm("edge e from x to x");
 
 	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
 	size32 nTuples = 0;
@@ -154,7 +154,7 @@ void testConcatAcrossRelations(void)
 		ReleaseTypedAtom(uintActors[i]);
 	}
 
-	Atom query = CStringToTerm("first _x second _y");
+	Atom query = CStringToTerm("first x second y");
 	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
 
 	size32 nTuples = 0;
@@ -191,8 +191,8 @@ void testConcatAcrossRelations(void)
  */
 void testConcatRepeatedVariableAcrossTypes(void)
 {
-	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position _p element _e"), 2)
-	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position _x element _x"), 0)
+	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position p element e"), 2)
+	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position x element x"), 0)
 }
 
 
@@ -202,7 +202,7 @@ void testConcatRepeatedVariableAcrossTypes(void)
  */
 void testConcatWithoutMatch(void)
 {
-	Atom unknownQuery = CStringToTerm("nowhere _x nothing _y");
+	Atom unknownQuery = CStringToTerm("nowhere x nothing y");
 	MixedTypeRelation * relation = CreateConcatRelation(
 		FormulaGetForm(unknownQuery), FormulaGetActors(unknownQuery));
 	ASSERT_FALSE(MixedTypeRelationNext(relation))
@@ -223,7 +223,7 @@ void testConcatAbandonedIteration(void)
 {
 	SetupEdgeFixture(&edgeFixture);
 
-	Atom query = CStringToTerm("edge _e from _x to _y");
+	Atom query = CStringToTerm("edge e from x to y");
 	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
 	ASSERT_TRUE(MixedTypeRelationNext(relation))
 	FreeMixedTypeRelation(relation);

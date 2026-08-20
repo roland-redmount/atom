@@ -61,8 +61,9 @@ static void printBanner(void)
 static void printHelp(void)
 {
 	printLine("Enter a query as a term, such as");
-	printLine("    + 2 + 3 = _sum");
-	printLine("and every answer to it is printed. A variable begins with '_'.");
+	printLine("    + 2 + 3 = s");
+	printLine("and every fact answering it is printed. A variable is named by a single");
+	printLine("letter, and _ stands for a variable whose name does not matter.");
 	PrintChar('\n');
 	printLine("Commands:");
 	printLine("    :help            Print this text");

@@ -348,7 +348,7 @@ static void testCStringToPredicate(void)
 static void testCStringToClause(void)
 {
 	// NOTE: this string must be in canonical order
-	Atom clause = CStringToClause("aarf \"foobar\" | foo _x bar 123.45");
+	Atom clause = CStringToClause("aarf \"foobar\" | foo x bar 123.45");
 	// PrintFormula(clause);
 	// PrintChar('\n');
 
@@ -386,7 +386,7 @@ static void testCStringToClause(void)
 static void testCStringToConjunction(void)
 {
 	// NOTE: this string must be in canonical order
-	Atom conjunction = CStringToConjunction("aarf \"foobar\" | foo _x bar 123.45 & barf 42 frob _y");
+	Atom conjunction = CStringToConjunction("aarf \"foobar\" | foo x bar 123.45 & barf 42 frob y");
 	// PrintFormula(conjunction);
 	// PrintChar('\n');
 
@@ -400,9 +400,9 @@ static void testCStringToConjunction(void)
 static void testCStringToFormula(void)
 {
 	// a formula with neither | nor & is a term
-	Atom term = CStringToFormula("foo _x bar 123.45");
+	Atom term = CStringToFormula("foo x bar 123.45");
 	ASSERT_TRUE(FormulaIsTerm(term))
-	Atom expectedTerm = CStringToTerm("foo _x bar 123.45");
+	Atom expectedTerm = CStringToTerm("foo x bar 123.45");
 	ASSERT_TRUE(SameAtoms(term, expectedTerm))
 	ReleaseFormula(expectedTerm);
 	ReleaseFormula(term);
@@ -415,17 +415,17 @@ static void testCStringToFormula(void)
 
 	// a formula with | but no & is a clause
 	// NOTE: this string must be in canonical order
-	Atom clause = CStringToFormula("aarf \"foobar\" | foo _x bar 123.45");
+	Atom clause = CStringToFormula("aarf \"foobar\" | foo x bar 123.45");
 	ASSERT_TRUE(FormulaIsClause(clause))
-	Atom expectedClause = CStringToClause("aarf \"foobar\" | foo _x bar 123.45");
+	Atom expectedClause = CStringToClause("aarf \"foobar\" | foo x bar 123.45");
 	ASSERT_TRUE(SameAtoms(clause, expectedClause))
 	ReleaseFormula(expectedClause);
 	ReleaseFormula(clause);
 
 	// a formula with & is a conjunction
-	Atom conjunction = CStringToFormula("aarf \"foobar\" | foo _x bar 123.45 & barf 42 frob _y");
+	Atom conjunction = CStringToFormula("aarf \"foobar\" | foo x bar 123.45 & barf 42 frob y");
 	ASSERT_TRUE(FormulaIsConjunction(conjunction))
-	Atom expectedConjunction = CStringToConjunction("aarf \"foobar\" | foo _x bar 123.45 & barf 42 frob _y");
+	Atom expectedConjunction = CStringToConjunction("aarf \"foobar\" | foo x bar 123.45 & barf 42 frob y");
 	ASSERT_TRUE(SameAtoms(conjunction, expectedConjunction))
 	ReleaseFormula(expectedConjunction);
 	ReleaseFormula(conjunction);
@@ -492,25 +492,30 @@ static void testParseFormula(void)
 	index32 errorPosition;
 
 	// a valid string parses to the formula CStringToFormula() yields for it
-	Atom formula = ParseFormula("foo _x bar 123.45", &errorPosition);
+	Atom formula = ParseFormula("foo x bar 123.45", &errorPosition);
 	ASSERT_TRUE(formula.hash != 0)
-	Atom expectedFormula = CStringToFormula("foo _x bar 123.45");
+	Atom expectedFormula = CStringToFormula("foo x bar 123.45");
 	ASSERT_TRUE(SameAtoms(formula, expectedFormula))
 	ReleaseFormula(expectedFormula);
 	ReleaseFormula(formula);
 
 	// a character belonging to no token is reported where it stands
-	ASSERT_UINT64_EQUAL(ParseFormula("foo _x bar *", &errorPosition).hash, 0)
-	ASSERT_UINT32_EQUAL(errorPosition, 11)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x bar *", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 10)
 
-	// a token the builder rejects is reported at the first character of that token,
-	// rather than at the whitespace before it or the character that ended it
-	ASSERT_UINT64_EQUAL(ParseFormula("foo _x 42 bar 1", &errorPosition).hash, 0)
-	ASSERT_UINT32_EQUAL(errorPosition, 7)
+	// a number stands where an actor does and not where a role name does, so it is
+	// reported at its first character rather than at the whitespace before it
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x 42 bar 1", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 6)
+
+	// a variable is named by a single letter, so a word too long to be one is reported
+	// at the letter that makes it too long; see enum TokenizerMode
+	ASSERT_UINT64_EQUAL(ParseFormula("foo xy bar 1", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 5)
 
 	// a string ending in the middle of a formula is reported at its end
-	ASSERT_UINT64_EQUAL(ParseFormula("foo _x bar", &errorPosition).hash, 0)
-	ASSERT_UINT32_EQUAL(errorPosition, 10)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x bar", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 9)
 
 	// an unterminated string is read to the end of the line
 	ASSERT_UINT64_EQUAL(ParseFormula("foo \"abc", &errorPosition).hash, 0)
@@ -532,7 +537,7 @@ static void testParseFormula(void)
 
 static void testReflectedTerm(void)
 {
-	testReflection("foo \"a\" bar _b", "term [foo \"a\" bar _b] arity 2");
+	testReflection("foo \"a\" bar b", "term [foo \"a\" bar b] arity 2");
 }
 
 
