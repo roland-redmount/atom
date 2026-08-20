@@ -4,7 +4,6 @@
 #include "kernel/UInt.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
-#include "lang/Variable.h"
 #include "testing/testing.h"
 
 
@@ -30,26 +29,6 @@ void testAtomTypeFromString(void)
 	ASSERT_UINT32_EQUAL(AtomTypeFromString("FORMULA", 7), AT_FORMULA)
 	// an unknown name is no type
 	ASSERT_UINT32_EQUAL(AtomTypeFromString("FROB", 4), 0)
-}
-
-
-void testVariable(void)
-{
-	Atom var1 = CreateVariable('X');
-	ASSERT_CHAR_EQUAL(GetVariableName(var1), 'x')
-
-	// variables are always lowercase
-	Atom var2 = CreateVariable('y');
-	ASSERT_CHAR_EQUAL(GetVariableName(var2), 'y')
-
-	Atom var3 = anonymousVariable.atom;
-	ASSERT_CHAR_EQUAL(GetVariableName(var3), '_')
-
-	// test quoting
-	ASSERT_FALSE(VariableIsQuoted(var1))
-	Atom quotedVar1 = QuoteVariable(var1);
-	ASSERT_TRUE(VariableIsQuoted(quotedVar1))
-	ASSERT_DATA64_EQUAL(UnquoteVariable(quotedVar1).hash, var1.hash)
 }
 
 
@@ -79,7 +58,6 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAtomTypeFromString);
 
 	ExecuteTest(testLetter);
-	ExecuteTest(testVariable);
 
 	CleanupMemory();
 

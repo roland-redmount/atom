@@ -26,11 +26,11 @@ char GetVariableName(Atom variable)
 
 bool SameVariable(Atom variable1, Atom variable2)
 {
-	if(variable1.hash && variable1.hash)
+	if(variable1.variable.name || variable2.variable.name)
 		return SameAtoms(variable1, variable2);
 	else {
-		// either variable is _
-		return 0;
+		// both variables are _, which compares unequal to itself
+		return false;
 	}
 }
 

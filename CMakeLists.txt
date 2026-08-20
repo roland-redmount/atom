@@ -194,6 +194,7 @@ set(ATOM_TESTS_TIER1        # core data structures, language elements
     test_string
     test_tokenizer
     test_tuple
+    test_variable
 )
 
 set(ATOM_TESTS_TIER2        # higher level kernel procedures
