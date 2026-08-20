@@ -41,20 +41,25 @@ void TokenizerInit(Tokenizer * tokenizer)
 /**
  * Determine the atom type of a parameter from the type name accumulated in the
  * buffer, and mark the token complete. A parameter with no type name is untyped.
+ * Returns false, leaving the token incomplete, when the buffer holds no known type
+ * name. That is a syntax error rather than a programmer error, since the type name
+ * is typed by a user; see ParseFormula().
  */
-static void finishParameter(Tokenizer * tokenizer)
+static bool finishParameter(Tokenizer * tokenizer)
 {
 	if(tokenizer->buffer.stringLength > 0) {
 		tokenizer->data.parameter.atomType = AtomTypeFromString(
 			tokenizer->buffer.buffer,
 			tokenizer->buffer.stringLength
 		);
-		ASSERT(tokenizer->data.parameter.atomType);
+		if(!tokenizer->data.parameter.atomType)
+			return false;
 	}
 	else
 		tokenizer->data.parameter.atomType = 0;
 
 	tokenizer->isFull = true;
+	return true;
 }
 
 
@@ -258,8 +263,7 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 		}
 		if(IsWhiteSpace(c) || (c == 0)) {
 			// whitespace completes parameter
-			finishParameter(tokenizer);
-			return true;
+			return finishParameter(tokenizer);
 		}
 		if(IsSeparatorChar(c)) {
 			// a separator completes the parameter but begins a token of its own,

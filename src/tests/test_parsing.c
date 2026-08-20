@@ -483,6 +483,53 @@ static void testReflection(char const * reflected, char const * termString)
 }
 
 
+/**
+ * ParseFormula() reads what CStringToFormula() reads, but reports invalid syntax
+ * instead of aborting on it, naming the character where the string went wrong.
+ */
+static void testParseFormula(void)
+{
+	index32 errorPosition;
+
+	// a valid string parses to the formula CStringToFormula() yields for it
+	Atom formula = ParseFormula("foo _x bar 123.45", &errorPosition);
+	ASSERT_TRUE(formula.hash != 0)
+	Atom expectedFormula = CStringToFormula("foo _x bar 123.45");
+	ASSERT_TRUE(SameAtoms(formula, expectedFormula))
+	ReleaseFormula(expectedFormula);
+	ReleaseFormula(formula);
+
+	// a character belonging to no token is reported where it stands
+	ASSERT_UINT64_EQUAL(ParseFormula("foo _x bar *", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 11)
+
+	// a token the builder rejects is reported at the first character of that token,
+	// rather than at the whitespace before it or the character that ended it
+	ASSERT_UINT64_EQUAL(ParseFormula("foo _x 42 bar 1", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 7)
+
+	// a string ending in the middle of a formula is reported at its end
+	ASSERT_UINT64_EQUAL(ParseFormula("foo _x bar", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 10)
+
+	// an unterminated string is read to the end of the line
+	ASSERT_UINT64_EQUAL(ParseFormula("foo \"abc", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 8)
+
+	// an unterminated reflection abandons its nested builder
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [ bar 1", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 11)
+
+	// a parameter naming no known atom type is rejected, not asserted on
+	ASSERT_UINT64_EQUAL(ParseFormula("foo @1<NOTATYPE", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 15)
+
+	// a string holding no formula at all
+	ASSERT_UINT64_EQUAL(ParseFormula("", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 0)
+}
+
+
 static void testReflectedTerm(void)
 {
 	testReflection("foo \"a\" bar _b", "term [foo \"a\" bar _b] arity 2");
@@ -567,6 +614,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCStringToClause);
 	ExecuteTest(testCStringToConjunction);
 	ExecuteTest(testCStringToFormula);
+	ExecuteTest(testParseFormula);
 	ExecuteTest(testReflectedTerm);
 	ExecuteTest(testReflectedNegatedTerm);
 	ExecuteTest(testReflectedClause);

@@ -217,6 +217,44 @@ void PrintCString(char const * string)
 
 
 /**
+ * Discard the rest of a line too long to fit the caller's buffer, so that the
+ * next ReadLine() starts on the line after it.
+ */
+static void discardLine(void)
+{
+	int c;
+	while(((c = fgetc(stdin)) != EOF) && (c != '\n'))
+		;
+}
+
+
+int ReadLine(char * buffer, size32 bufferSize)
+{
+	ASSERT(bufferSize > 1)
+	// a prompt ends in no line terminator, so it may still be buffered here
+	fflush(stdout);
+	if(!fgets(buffer, bufferSize, stdin))
+		return READLINE_END;
+
+	size32 length = CStringLength(buffer);
+	if((length > 0) && (buffer[length - 1] == '\n')) {
+		length--;
+		// a line written on another platform may be terminated with \r\n
+		if((length > 0) && (buffer[length - 1] == '\r'))
+			length--;
+		buffer[length] = 0;
+		return READLINE_OK;
+	}
+	// No line terminator, so either the line was longer than the buffer, or the
+	// input ended without one. A full buffer tells the two apart.
+	if(length < bufferSize - 1)
+		return READLINE_OK;
+	discardLine();
+	return READLINE_TOO_LONG;
+}
+
+
+/**
  * printf-style string formatting.
  * TODO: replace vsnprintf() with our own implementation
  * to get rid of dependence on the C standard library

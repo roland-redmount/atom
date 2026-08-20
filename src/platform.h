@@ -195,6 +195,23 @@ void SetPrintIndent(uint32 nChars);
 uint32 GetPrintIndent(void);
 
 /**
+ * Reading from an input stream
+ */
+
+/**
+ * Read one line of input into the buffer, dropping the line terminator and
+ * terminating the buffer with 0. Returns one of the READLINE_ codes.
+ * Pending output is written out first, so a prompt printed without a line
+ * terminator is on screen before the input is waited for.
+ */
+int ReadLine(char * buffer, size32 bufferSize);
+
+// Result codes for ReadLine()
+#define READLINE_OK			1	// a line was read
+#define READLINE_END		2	// end of input, nothing was read
+#define READLINE_TOO_LONG	3	// the line did not fit the buffer and was discarded
+
+/**
  * File I/O
  */
 
