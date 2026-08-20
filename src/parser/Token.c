@@ -26,32 +26,3 @@ void ReleaseToken(Token token)
 	}
 	// other token types have nothing to release
 }
-
-void PrintToken(Token token)
-{
-	switch(token.type) {
-	case TOKEN_AND:
-		PrintCString("TOKEN_AND");
-		// PrintChar('&');
-		break;
-
-	case TOKEN_OR:
-		PrintCString("TOKEN_OR");
-		// PrintChar('|');
-		break;
-
-	case TOKEN_NOT:
-		PrintCString("TOKEN_NOT");
-		PrintChar('~');
-		break;
-
-	case TOKEN_NAME:
-	case TOKEN_NUMBER:
-	case TOKEN_VARIABLE:
-	case TOKEN_STRING:
-		PrintTypedAtom(token.typedAtom);
-
-	default:
-		PrintF("Token type %u", token.type);
-	}
-}

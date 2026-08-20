@@ -30,6 +30,12 @@ bool ClauseBuilderIsEmpty(ClauseBuilder const * builder);
  */
 bool ClauseBuilderIsValid(ClauseBuilder const * builder);
 
+/**
+ * True if the builder has accepted no TOKEN_OR, so that its formula
+ * is a clause of a single term. That term is held by the term builder.
+ */
+bool ClauseBuilderIsSingleTerm(ClauseBuilder const * builder);
+
 Atom ClauseBuilderCreateFormula(ClauseBuilder * builder);
 
 void ClauseBuilderReset(ClauseBuilder * builder);

@@ -21,6 +21,12 @@ bool ConjunctionBuilderPush(ConjunctionBuilder * builder, Token token);
 
 bool ConjunctionBuilderIsValid(ConjunctionBuilder const * builder);
 
+/**
+ * True if the builder has accepted no TOKEN_AND, so that its formula
+ * is a conjunction of a single clause. That clause is held by the clause builder.
+ */
+bool ConjunctionBuilderIsSingleClause(ConjunctionBuilder const * builder);
+
 Atom ConjunctionBuilderCreateFormula(ConjunctionBuilder * builder);
 
 void ConjunctionBuilderReset(ConjunctionBuilder * builder);

@@ -7,10 +7,23 @@
 #include "parser/Token.h"
 
 
+struct s_FormulaBuilder;
+
+
+/**
+ * A part is a role name followed by an actor. The actor may be written as a
+ * reflection [ ... ], in which case the part builder collects the tokens of
+ * the reflection in a nested formula builder while in STATE_REFLECTION, and
+ * the formula atom it yields becomes the actor.
+ */
 typedef struct s_PartBuilder {
-	enum BuilderState {STATE_EMPTY, STATE_PARTIAL, STATE_COMPLETE} state;
+	enum BuilderState {
+		STATE_EMPTY, STATE_HAS_NAME, STATE_REFLECTION, STATE_COMPLETE
+	} state;
 	Atom role;
 	TypedAtom actor;
+	// Keep a pointer to the nested builder, allocated only in STATE_REFLECTION.
+	struct s_FormulaBuilder * formulaBuilder;
 } PartBuilder;
 
 

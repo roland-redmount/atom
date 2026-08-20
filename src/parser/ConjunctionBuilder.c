@@ -34,29 +34,32 @@ static void addCurrentClause(ConjunctionBuilder * builder)
 
 bool ConjunctionBuilderPush(ConjunctionBuilder * builder, Token token)
 {
-	if(token.type == TOKEN_AND) {
-		if(ClauseBuilderIsValid(&(builder->clauseBuilder))) {
-			addCurrentClause(builder);
-			builder->isValid = false;
-			return true;
-		}
-		else
-			return false;
+	// the clause builder is offered every token first, including TOKEN_AND;
+	// see TermBuilderPush() for why
+	if(ClauseBuilderPush(&(builder->clauseBuilder), token)) {
+		builder->isValid = ClauseBuilderIsValid(&(builder->clauseBuilder));
+		return true;
 	}
-	else {
-		if(ClauseBuilderPush(&(builder->clauseBuilder), token)) {
-			builder->isValid = ClauseBuilderIsValid(&(builder->clauseBuilder));
-			return true;
-		}
-		else
-			return false;
-	}
+
+	if((token.type != TOKEN_AND) || !ClauseBuilderIsValid(&(builder->clauseBuilder)))
+		return false;
+	addCurrentClause(builder);
+	builder->isValid = false;
+	return true;
 }
 
 
 bool ConjunctionBuilderIsValid(ConjunctionBuilder const * builder)
 {
 	return builder->isValid;
+}
+
+
+bool ConjunctionBuilderIsSingleClause(ConjunctionBuilder const * builder)
+{
+	// A clause is only appended to the clauses array when a TOKEN_AND is accepted,
+	// so a count of zero elements means we at most one clause.
+	return ResizingArrayNElements(&(builder->clauses)) == 0;
 }
 
 
@@ -100,26 +103,20 @@ void CleanupConjunctionBuilder(ConjunctionBuilder * builder)
 }
 
 
+static bool pushToConjunctionBuilder(void * context, Token token)
+{
+	return ConjunctionBuilderPush((ConjunctionBuilder *) context, token);
+}
+
+
 Atom CStringToConjunction(char const * cString)
 {
-	size32 length = CStringLength(cString);
-	Tokenizer tokenizer;
-	TokenizerInit(&tokenizer);
 	ConjunctionBuilder builder;
 	InitializeConjunctionBuilder(&builder);
-	for(index32 i = 0; i <= length; i++) {
-		TokenizerPush(&tokenizer, cString[i]);
-		if(TokenizerComplete(&tokenizer)) {
-			Token token = TokenizerGetToken(&tokenizer);
-			ASSERT(ConjunctionBuilderPush(&builder, token));
-			ReleaseToken(token);
-			TokenizerReset(&tokenizer);
-		}
-	}
-	ASSERT(ConjunctionBuilderIsValid(&builder));
-	Atom conjuction = ConjunctionBuilderCreateFormula(&builder);
-	
+	TokenizeCString(cString, pushToConjunctionBuilder, &builder);
+
+	ASSERT(ConjunctionBuilderIsValid(&builder))
+	Atom conjunction = ConjunctionBuilderCreateFormula(&builder);
 	CleanupConjunctionBuilder(&builder);
-	TokenizerCleanup(&tokenizer);
-	return conjuction;
+	return conjunction;
 }

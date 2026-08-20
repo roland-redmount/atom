@@ -37,24 +37,19 @@ static void addCurrentTerm(ClauseBuilder * builder)
 
 bool ClauseBuilderPush(ClauseBuilder * builder, Token token)
 {
-	if(token.type == TOKEN_OR) {
-		if(TermBuilderIsValid(&(builder->termBuilder))) {
-			addCurrentTerm(builder);
-			builder->isValid = false;
-			return true;
-		}
-		else
-			return false;
+	// the term builder is offered every token first, including TOKEN_OR;
+	// see TermBuilderPush() for why
+	if(TermBuilderPush(&(builder->termBuilder), token)) {
+		builder->isEmpty = false;
+		builder->isValid = TermBuilderIsValid(&(builder->termBuilder));
+		return true;
 	}
-	else {
-		if(TermBuilderPush(&(builder->termBuilder), token)) {
-			builder->isEmpty = false;
-			builder->isValid = TermBuilderIsValid(&(builder->termBuilder));
-			return true;
-		}
-		else
-			return false;
-	}
+
+	if((token.type != TOKEN_OR) || !TermBuilderIsValid(&(builder->termBuilder)))
+		return false;
+	addCurrentTerm(builder);
+	builder->isValid = false;
+	return true;
 }
 
 
@@ -67,6 +62,13 @@ bool ClauseBuilderIsEmpty(ClauseBuilder const * builder)
 bool ClauseBuilderIsValid(ClauseBuilder const * builder)
 {
 	return builder->isValid;
+}
+
+
+bool ClauseBuilderIsSingleTerm(ClauseBuilder const * builder)
+{
+	// a term is only appended to the terms array when a TOKEN_OR is accepted
+	return ResizingArrayNElements(&(builder->terms)) == 0;
 }
 
 
@@ -110,26 +112,20 @@ void CleanupClauseBuilder(ClauseBuilder * builder)
 }
 
 
+static bool pushToClauseBuilder(void * context, Token token)
+{
+	return ClauseBuilderPush((ClauseBuilder *) context, token);
+}
+
+
 Atom CStringToClause(char const * cString)
 {
-	size32 length = CStringLength(cString);
-	Tokenizer tokenizer;
-	TokenizerInit(&tokenizer);
 	ClauseBuilder builder;
 	InitializeClauseBuilder(&builder);
-	for(index32 i = 0; i <= length; i++) {
-		TokenizerPush(&tokenizer, cString[i]);
-		if(TokenizerComplete(&tokenizer)) {
-			Token token = TokenizerGetToken(&tokenizer);
-			ASSERT(ClauseBuilderPush(&builder, token));
-			ReleaseToken(token);
-			TokenizerReset(&tokenizer);
-		}
-	}
-	ASSERT(ClauseBuilderIsValid(&builder));
+	TokenizeCString(cString, pushToClauseBuilder, &builder);
+
+	ASSERT(ClauseBuilderIsValid(&builder))
 	Atom clause = ClauseBuilderCreateFormula(&builder);
-	
 	CleanupClauseBuilder(&builder);
-	TokenizerCleanup(&tokenizer);
 	return clause;
 }
