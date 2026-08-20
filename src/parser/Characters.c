@@ -43,10 +43,16 @@ bool IsRoleChar(char c)
 
 static char const * separatorChars = (char const *) "&|!_$\"[]() ";
 
+// a separator character ends the token before it and begins a new one
+bool IsSeparatorChar(char c)
+{
+	return CStringFindChar(separatorChars, c) != 0;
+}
+
 // names cannot contain separator characters
 bool IsNameChar(char c)
 {
-	return IsSyntaxChar(c) && !CStringFindChar(separatorChars, c);
+	return IsSyntaxChar(c) && !IsSeparatorChar(c);
 }
 
 // names cannot start with a digit
@@ -54,13 +60,6 @@ bool IsNameInitialChar(char c)
 {
 	return IsNameChar(c) && !IsDigitChar(c);
 }
-
-// clause, predicate or role separator character
-bool IsSeparatorChar(char c)
-{
-	return c == ' ' || c == '|' || c == '&';
-}
-
 
 bool IsNameString(char const * string, size32 length)
 {

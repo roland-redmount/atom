@@ -120,9 +120,11 @@ static void testTokenizer(void)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_FLOAT)
 	ASSERT_FLOAT_EQUAL(token.typedAtom.atom._float, 123.45)
 
-	// the string "123.45." is not a legal number
+	// the string "123.45." is not a legal number. The tokenizer stays incomplete,
+	// which is what tells a syntax error from a token ended by a separator.
 	pushCString(&tokenizer, decimalString);
 	ASSERT_FALSE(TokenizerPush(&tokenizer, '.'))
+	ASSERT_FALSE(TokenizerComplete(&tokenizer))
 	TokenizerReset(&tokenizer);
 
 	// a variable
@@ -209,6 +211,48 @@ static void testCreateTokenFromCString(void)
 }
 
 
+/**
+ * Push a string followed by a separator character. The separator ends the token
+ * without being part of it, so the token is taken here and the separator is left
+ * for the caller to push again. See TokenizerPush().
+ */
+static Token takeTerminatedToken(Tokenizer * tokenizer, char const * string, char separator)
+{
+	pushCString(tokenizer, string);
+	ASSERT_FALSE(TokenizerPush(tokenizer, separator))
+	ASSERT_TRUE(TokenizerComplete(tokenizer))
+	Token token = TokenizerGetToken(tokenizer);
+	TokenizerReset(tokenizer);
+	return token;
+}
+
+
+static void testSeparatorTerminatesToken(void)
+{
+	Tokenizer tokenizer;
+	TokenizerInit(&tokenizer);
+
+	// a name closing a reflection, as in [foo bar]
+	Token token = takeTerminatedToken(&tokenizer, "bar", ']');
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_NAME)
+	ReleaseToken(token);
+	token = testTokenizeCharacter(&tokenizer, ']');
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_END_REFLECT)
+	ReleaseToken(token);
+
+	// a number followed by a conjunction
+	token = takeTerminatedToken(&tokenizer, "12", '&');
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
+	ASSERT_INT64_EQUAL(token.typedAtom.atom._int, 12);
+	ReleaseToken(token);
+	token = testTokenizeCharacter(&tokenizer, '&');
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_AND)
+	ReleaseToken(token);
+
+	TokenizerCleanup(&tokenizer);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -217,6 +261,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testTokenizer);
 	ExecuteTest(testTokenizeParameter);
 	ExecuteTest(testCreateTokenFromCString);
+	ExecuteTest(testSeparatorTerminatesToken);
 
 	KernelShutdown();
 

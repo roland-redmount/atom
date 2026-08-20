@@ -18,27 +18,24 @@ void InitializeTermBuilder(TermBuilder * builder)
 
 bool TermBuilderPush(TermBuilder * builder, Token token)
 {
-	if(token.type == TOKEN_NOT) {
+	// The predicate builder is offered every token first, including TOKEN_NOT,
+	// because a reflection being collected below this term claims the operator
+	// tokens written inside it. Only a token the predicate builder rejects can
+	// belong to this term.
+	if(PredicateBuilderPush(&(builder->predicateBuilder), token)) {
 		if(builder->isEmpty) {
-			builder->sign = false;
+			builder->sign = true;
 			builder->isEmpty = false;
-			return true;
 		}
-		else
-			return false;
+		builder->isValid = PredicateBuilderIsValid(&(builder->predicateBuilder));
+		return true;
 	}
-	else {
-		if(PredicateBuilderPush(&(builder->predicateBuilder), token)) {
-			if(builder->isEmpty) {
-				builder->sign = true;
-				builder->isEmpty = false;
-			}
-			builder->isValid = PredicateBuilderIsValid(&(builder->predicateBuilder));
-			return true;
-		}
-		else
-			return false;
-	}
+
+	if((token.type != TOKEN_NOT) || !builder->isEmpty)
+		return false;
+	builder->sign = false;
+	builder->isEmpty = false;
+	return true;
 }
 
 
@@ -80,26 +77,20 @@ void CleanupTermBuilder(TermBuilder * builder)
 }
 
 
+static bool pushToTermBuilder(void * context, Token token)
+{
+	return TermBuilderPush((TermBuilder *) context, token);
+}
+
+
 Atom CStringToTerm(char const * cString)
 {
-	size32 length = CStringLength(cString);
-	Tokenizer tokenizer;
-	TokenizerInit(&tokenizer);
 	TermBuilder builder;
 	InitializeTermBuilder(&builder);
-	for(index32 i = 0; i <= length; i++) {
-		TokenizerPush(&tokenizer, cString[i]);
-		if(TokenizerComplete(&tokenizer)) {
-			Token token = TokenizerGetToken(&tokenizer);
-			ASSERT(TermBuilderPush(&builder, token));
-			ReleaseToken(token);
-			TokenizerReset(&tokenizer);
-		}
-	}
-	ASSERT(TermBuilderIsValid(&builder));
+	TokenizeCString(cString, pushToTermBuilder, &builder);
+
+	ASSERT(TermBuilderIsValid(&builder))
 	Atom term = TermBuilderCreateFormula(&builder);
-	
 	CleanupTermBuilder(&builder);
-	TokenizerCleanup(&tokenizer);
 	return term;
 }

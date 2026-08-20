@@ -1,6 +1,5 @@
 
 #include "kernel/ifact.h"
-#include "kernel/string.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/ConjunctionBuilder.h"
 #include "parser/FormulaBuilder.h"
@@ -60,27 +59,20 @@ void CleanupFormulaBuilder(FormulaBuilder * builder)
 }
 
 
+static bool pushToFormulaBuilder(void * context, Token token)
+{
+	return FormulaBuilderPush((FormulaBuilder *) context, token);
+}
+
+
 Atom CStringToFormula(char const * cString)
 {
-	size32 length = CStringLength(cString);
-	Tokenizer tokenizer;
-	TokenizerInit(&tokenizer);
 	FormulaBuilder builder;
 	InitializeFormulaBuilder(&builder);
-	// NOTE: including the 0 terminator
-	for(index32 i = 0; i <= length; i++) {
-		ASSERT(TokenizerPush(&tokenizer, cString[i]));
-		if(TokenizerComplete(&tokenizer)) {
-			Token token = TokenizerGetToken(&tokenizer);
-			ASSERT(FormulaBuilderPush(&builder, token));
-			ReleaseToken(token);
-			TokenizerReset(&tokenizer);
-		}
-	}
-	ASSERT(FormulaBuilderIsValid(&builder));
-	Atom formula = FormulaBuilderCreateFormula(&builder);
+	TokenizeCString(cString, pushToFormulaBuilder, &builder);
 
+	ASSERT(FormulaBuilderIsValid(&builder))
+	Atom formula = FormulaBuilderCreateFormula(&builder);
 	CleanupFormulaBuilder(&builder);
-	TokenizerCleanup(&tokenizer);
 	return formula;
 }

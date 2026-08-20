@@ -111,8 +111,7 @@ size8 ReduceTypedAtomsArray(TypedAtom * typedAtoms, uint32 * multiplicities, siz
 }
 
 /**
- * Print atom to stdout
- * This calls the atom print function for the atom type, wraps in [ ]
+ * Print an atom to stdout, by calling the print function for its atom type.
  */
 void PrintTypedAtom(TypedAtom typedAtom)
 {
@@ -147,7 +146,11 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		break;
 
 	case AT_FORMULA:
+		// a formula actor is a reflection, and is printed in brackets so that
+		// it reads back as one formula rather than as parts of the enclosing one
+		PrintChar('[');
 		PrintFormula(typedAtom.atom);
+		PrintChar(']');
 		break;
 
 	case AT_PARAMETER:

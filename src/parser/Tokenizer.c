@@ -38,6 +38,26 @@ void TokenizerInit(Tokenizer * tokenizer)
 }
 
 
+/**
+ * Determine the atom type of a parameter from the type name accumulated in the
+ * buffer, and mark the token complete. A parameter with no type name is untyped.
+ */
+static void finishParameter(Tokenizer * tokenizer)
+{
+	if(tokenizer->buffer.stringLength > 0) {
+		tokenizer->data.parameter.atomType = AtomTypeFromString(
+			tokenizer->buffer.buffer,
+			tokenizer->buffer.stringLength
+		);
+		ASSERT(tokenizer->data.parameter.atomType);
+	}
+	else
+		tokenizer->data.parameter.atomType = 0;
+
+	tokenizer->isFull = true;
+}
+
+
 // return true if character was accepted
 bool TokenizerPush(Tokenizer * tokenizer, char c)
 {
@@ -130,6 +150,11 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 			tokenizer->isFull = true;
 			return true;
 		}
+		if(IsSeparatorChar(c)) {
+			// a separator terminates the name and begins a token of its own
+			tokenizer->isFull = true;
+			return false;
+		}
 		return false;
 
 	case TOKEN_NUMBER:
@@ -153,6 +178,11 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 			// whitespace terminates number
 			tokenizer->isFull = true;
 			return true;
+		}
+		if(IsSeparatorChar(c)) {
+			// a separator terminates the number and begins a token of its own
+			tokenizer->isFull = true;
+			return false;
 		}
 		return false;
 
@@ -217,7 +247,7 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 				return true;
 			}
 			else
-				return false;	// we don't allow PARAMETER_IN_OUT at this time
+				return false;
 		}
 		// parse atom type name
 		// TODO: here we must ensure that the string
@@ -227,22 +257,17 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 			return true;
 		}
 		if(IsWhiteSpace(c) || (c == 0)) {
-			// whitespace terminates parameter
-			if(tokenizer->buffer.stringLength > 0) {
-				tokenizer->data.parameter.atomType = AtomTypeFromString(
-					tokenizer->buffer.buffer,
-					tokenizer->buffer.stringLength
-				);
-				ASSERT(tokenizer->data.parameter.atomType);
-			}
-			else
-				tokenizer->data.parameter.atomType = 0;	// untyped parameter
-
-			tokenizer->isFull = true;
+			// whitespace completes parameter
+			finishParameter(tokenizer);
 			return true;
 		}
-		else
+		if(IsSeparatorChar(c)) {
+			// a separator completes the parameter but begins a token of its own,
+			// so reject the token (to be pushed again)
+			finishParameter(tokenizer);
 			return false;
+		}
+		return false;
 
 	default:
 		// should never occur
@@ -360,4 +385,36 @@ Token CreateTokenFromCString(char const * cString)
 	Token token = TokenizerGetToken(&tokenizer);
 	TokenizerCleanup(&tokenizer);
 	return token;
+}
+
+/**
+ * Send the current token to the handler and reset the tokenizer.
+ */
+static void handleToken(Tokenizer * tokenizer, TokenHandler handler, void * context)
+{
+	Token token = TokenizerGetToken(tokenizer);
+	ASSERT(handler(context, token))
+	ReleaseToken(token);
+	TokenizerReset(tokenizer);
+}
+
+
+void TokenizeCString(char const * cString, TokenHandler handler, void * context)
+{
+	size32 length = CStringLength(cString);
+	Tokenizer tokenizer;
+	TokenizerInit(&tokenizer);
+	// NOTE: including the 0 terminator, which completes the last token
+	for(index32 i = 0; i <= length; i++) {
+		if(!TokenizerPush(&tokenizer, cString[i])) {
+			// the character ended the token before it without being part of it,
+			// and has to be pushed again once that token has been taken
+			ASSERT(TokenizerComplete(&tokenizer))
+			handleToken(&tokenizer, handler, context);
+			ASSERT(TokenizerPush(&tokenizer, cString[i]))
+		}
+		if(TokenizerComplete(&tokenizer))
+			handleToken(&tokenizer, handler, context);
+	}
+	TokenizerCleanup(&tokenizer);
 }

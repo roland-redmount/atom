@@ -45,6 +45,14 @@ void PrintToken(Token token)
 		PrintChar('~');
 		break;
 
+	case TOKEN_BEGIN_REFLECT:
+		PrintCString("TOKEN_BEGIN_REFLECT");
+		break;
+
+	case TOKEN_END_REFLECT:
+		PrintCString("TOKEN_END_REFLECT");
+		break;
+
 	case TOKEN_NAME:
 	case TOKEN_NUMBER:
 	case TOKEN_VARIABLE:

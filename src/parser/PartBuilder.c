@@ -2,6 +2,8 @@
 #include "kernel/ifact.h"
 #include "kernel/string.h"
 #include "lang/name.h"
+#include "memory/allocator.h"
+#include "parser/FormulaBuilder.h"
 #include "parser/PartBuilder.h"
 #include "parser/Tokenizer.h"
 
@@ -9,7 +11,24 @@
 void InitializePartBuilder(PartBuilder * builder)
 {
 	builder->state = STATE_EMPTY;
+	builder->formulaBuilder = 0;
 	// role and actor are undefined
+}
+
+
+static void beginReflection(PartBuilder * builder)
+{
+	builder->formulaBuilder = Allocate(sizeof(FormulaBuilder));
+	InitializeFormulaBuilder(builder->formulaBuilder);
+	builder->state = STATE_REFLECTION;
+}
+
+
+static void releaseFormulaBuilder(PartBuilder * builder)
+{
+	CleanupFormulaBuilder(builder->formulaBuilder);
+	Free(builder->formulaBuilder);
+	builder->formulaBuilder = 0;
 }
 
 
@@ -27,11 +46,8 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 
 	case STATE_HAS_NAME:
 		if(token.type == TOKEN_BEGIN_REFLECT) {
-			// TODO: here we must parse a new formula, terminated by TOKEN_END_REFLECT,
-			// and store the resulting AT_FORMULA as the actor for this part.
-			// For this we need a parse function for a generic formula; it may become
-			// a term, clause or conjunction.
-			ASSERT(false) 
+			beginReflection(builder);
+			return true;
 		}
 		if(!TokenIsLiteral(token))
 			return false;
@@ -39,6 +55,29 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 		AcquireTypedAtom(builder->actor);
 		builder->state = STATE_COMPLETE;
 		return true;
+
+	case STATE_REFLECTION:
+		// The nested builder is offered the token first. A reflection within this
+		// one is closed by the part builder that opened it, so a TOKEN_END_REFLECT
+		// the nested builder rejects can only be the one closing this reflection.
+		if(FormulaBuilderPush(builder->formulaBuilder, token))
+			return true;	// token accepted by reflection's formula builder
+		if(token.type == TOKEN_END_REFLECT) {
+			if(!FormulaBuilderIsValid(builder->formulaBuilder))
+				return false;
+			// Create the reflected formula
+			Atom formula = FormulaBuilderCreateFormula(builder->formulaBuilder);
+			// the reference from FormulaBuilderCreateFormula() belongs to the actor,
+			// so it is not acquired here
+			builder->actor = CreateTypedAtom(AT_FORMULA, formula);
+			releaseFormulaBuilder(builder);
+			builder->state = STATE_COMPLETE;
+			return true;
+		}
+		else {
+			// Any other rejected token means error in the reflection formula
+			return false;
+		}
 
 	case STATE_COMPLETE:
 		// cannot accept more tokens
@@ -79,6 +118,11 @@ void PartBuilderReset(PartBuilder * builder)
 {
 	if(builder->state == STATE_HAS_NAME) {
 		NameRelease(builder->role);
+	}
+	else if(builder->state == STATE_REFLECTION) {
+		// an unterminated reflection, abandoned with its nested builder
+		NameRelease(builder->role);
+		releaseFormulaBuilder(builder);
 	}
 	else if(builder->state == STATE_COMPLETE) {
 		NameRelease(builder->role);

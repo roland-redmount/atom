@@ -127,28 +127,20 @@ void CleanupPredicateBuilder(PredicateBuilder * builder)
 }
 
 
-Atom CStringToPredicate(char const * string)
+static bool pushToPredicateBuilder(void * context, Token token)
 {
-	size32 length = CStringLength(string);
-	Tokenizer tokenizer;
-	TokenizerInit(&tokenizer);
-	PredicateBuilder builder;
-	InitializePredicateBuilder(&builder);
-	// NOTE: including the 0 terminator
-	for(index32 i = 0; i <= length; i++) {
-		ASSERT(TokenizerPush(&tokenizer, string[i]));
-		if(TokenizerComplete(&tokenizer)) {
-			Token token = TokenizerGetToken(&tokenizer);
-			ASSERT(PredicateBuilderPush(&builder, token));
-			ReleaseToken(token);
-			TokenizerReset(&tokenizer);
-		}
-	}
-	ASSERT(PredicateBuilderIsValid(&builder));
-	Atom predicate = PredicateBuilderCreateFormula(&builder);
-	
-	CleanupPredicateBuilder(&builder);
-	TokenizerCleanup(&tokenizer);
-	return predicate;
+	return PredicateBuilderPush((PredicateBuilder *) context, token);
 }
 
+
+Atom CStringToPredicate(char const * cString)
+{
+	PredicateBuilder builder;
+	InitializePredicateBuilder(&builder);
+	TokenizeCString(cString, pushToPredicateBuilder, &builder);
+
+	ASSERT(PredicateBuilderIsValid(&builder))
+	Atom predicate = PredicateBuilderCreateFormula(&builder);
+	CleanupPredicateBuilder(&builder);
+	return predicate;
+}

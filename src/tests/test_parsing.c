@@ -432,6 +432,128 @@ static void testCStringToFormula(void)
 }
 
 
+/**
+ * Build the term (<reflectionRole> [<formula>] <numberRole> <number>),
+ * with the given formula as the actor of the reflection role.
+ */
+static Atom createTermWithReflection(
+	char const * reflectionRole, Atom formula,
+	char const * numberRole, int64 number)
+{
+	Atom roles[2] = {
+		CreateNameFromCString(reflectionRole),
+		CreateNameFromCString(numberRole)
+	};
+	TypedAtom actors[2] = {
+		CreateTypedAtom(AT_FORMULA, formula),
+		CreateTypedAtom(AT_INT, (Atom) {._int = number})
+	};
+	Atom predicate = CreatePredicate(roles, actors, 2);
+	Atom term = CreateTerm(predicate, true);
+
+	ReleaseFormula(predicate);
+	NameRelease(roles[0]);
+	NameRelease(roles[1]);
+	return term;
+}
+
+
+/**
+ * Parse a term holding a reflection, and compare it against the same term built
+ * from a formula parsed on its own. The term is parsed both ways, since only
+ * CStringToFormula() puts a clause and conjunction builder above the reflection,
+ * and an operator token inside the reflection has to reach it past both of them.
+ */
+static void testReflection(char const * reflected, char const * termString)
+{
+	Atom formula = CStringToFormula(reflected);
+	Atom expected = createTermWithReflection("term", formula, "arity", 2);
+
+	Atom parsedTerm = CStringToTerm(termString);
+	ASSERT_TRUE(FormulaIsTerm(parsedTerm))
+	ASSERT_TRUE(SameAtoms(parsedTerm, expected))
+
+	Atom parsedFormula = CStringToFormula(termString);
+	ASSERT_TRUE(SameAtoms(parsedFormula, expected))
+
+	ReleaseFormula(parsedFormula);
+	ReleaseFormula(parsedTerm);
+	ReleaseFormula(expected);
+	ReleaseFormula(formula);
+}
+
+
+static void testReflectedTerm(void)
+{
+	testReflection("foo \"a\" bar _b", "term [foo \"a\" bar _b] arity 2");
+}
+
+
+static void testReflectedNegatedTerm(void)
+{
+	testReflection("! foo 42", "term [! foo 42] arity 2");
+}
+
+
+static void testReflectedClause(void)
+{
+	testReflection("foo 1 | bar 2", "term [foo 1 | bar 2] arity 2");
+}
+
+
+static void testReflectedConjunction(void)
+{
+	testReflection("foo 1 & bar 2", "term [foo 1 & bar 2] arity 2");
+}
+
+
+static void testNestedReflection(void)
+{
+	// the expectation is built from the inside out, so that it does not
+	// depend on the reflection parsing being tested
+	Atom innermost = CStringToTerm("bar 1");
+	Atom inner = createTermWithReflection("foo", innermost, "baz", 2);
+	Atom expected = createTermWithReflection("term", inner, "arity", 3);
+
+	Atom parsed = CStringToTerm("term [foo [bar 1] baz 2] arity 3");
+	ASSERT_TRUE(SameAtoms(parsed, expected))
+
+	ReleaseFormula(parsed);
+	ReleaseFormula(expected);
+	ReleaseFormula(inner);
+	ReleaseFormula(innermost);
+}
+
+
+static void testReflectionRejected(void)
+{
+	Token nameToken = (Token) {
+		TOKEN_NAME,
+		CreateTypedAtom(AT_NAME, CreateNameFromCString("foo"))
+	};
+	Token beginToken = (Token) {TOKEN_BEGIN_REFLECT, invalidAtom};
+	Token endToken = (Token) {TOKEN_END_REFLECT, invalidAtom};
+
+	PartBuilder builder;
+	InitializePartBuilder(&builder);
+
+	// a reflection cannot stand where a role name is expected
+	ASSERT_FALSE(PartBuilderPush(&builder, beginToken))
+
+	// a reflection holding no formula is not an actor
+	ASSERT_TRUE(PartBuilderPush(&builder, nameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
+	ASSERT_FALSE(PartBuilderPush(&builder, endToken))
+	ASSERT_FALSE(PartBuilderComplete(&builder))
+
+	// resetting an unterminated reflection releases its nested builder
+	PartBuilderReset(&builder);
+	ASSERT_TRUE(PartBuilderIsEmpty(&builder))
+
+	ReleaseTypedAtom(nameToken.typedAtom);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -445,6 +567,12 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCStringToClause);
 	ExecuteTest(testCStringToConjunction);
 	ExecuteTest(testCStringToFormula);
+	ExecuteTest(testReflectedTerm);
+	ExecuteTest(testReflectedNegatedTerm);
+	ExecuteTest(testReflectedClause);
+	ExecuteTest(testReflectedConjunction);
+	ExecuteTest(testNestedReflection);
+	ExecuteTest(testReflectionRejected);
 
 	KernelShutdown();
 
