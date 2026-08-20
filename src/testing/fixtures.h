@@ -43,18 +43,18 @@ typedef struct {
 
 /**
  * Create the positive term form of the given role names, and register a relation table
- * for it holding one AT_ID column per role. The fixture holds no facts until
- * RelationFixtureAssertFact() adds them.
+ * for it holding one AT_ID column per role. The fixture relation is empty until
+ * RelationFixtureAddTuple() adds a tuple to it.
  */
 void SetupRelationFixture(
 	RelationFixture * fixture, char const * const roleNames[], size8 nColumns);
 
 /**
- * Assert one fact of the fixture relation, naming the atom of each role in the order the
+ * Add one tuple to the fixture relation, naming the atom of each role in the order the
  * role names were given to SetupRelationFixture(). The fixture keeps the tuple, so that
- * a test can compare an answer against it, and retracts it on teardown.
+ * a test can compare an answer against it, and removes it on teardown.
  */
-void RelationFixtureAssertFact(RelationFixture * fixture, char const * const atomNames[]);
+void RelationFixtureAddTuple(RelationFixture * fixture, char const * const atomNames[]);
 
 /**
  * Column index of the given role of the fixture relation, which is also the index of that

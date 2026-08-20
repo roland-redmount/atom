@@ -25,21 +25,24 @@ void TeardownDictionary(void);
 
 /**
  * Add a clause (formula) to the dictionary.
+ * This invalidates compiled services involving any term in the clause.
  */
 DictionaryEntry DictionaryAddClause(Formula const * clause);
 
 /**
- * Parse a string into a clause (formula) and add it to the dictionary.
+ * Parse a string into a clause (formula) and call DictionaryAddClause()
  */
 DictionaryEntry DictionaryAddClauseFromCString(const char * clauseString);
 
 /**
  * Remove a single clause from the dictionary
+ * This invalidates compiled services involving any term in the clause.
  */
 void DictionaryRemoveClause(DictionaryEntry * entry);
 
 /**
- * Remove all clauses from the dictionary. Used for testing.
+ * Remove all clauses from the dictionary. Used for testing only.
+ * This invalidates all compiled services.
  */
 void DictionaryRemoveAll(void);
 
