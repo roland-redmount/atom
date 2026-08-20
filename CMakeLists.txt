@@ -45,6 +45,11 @@ if(DEBUG_ALLOCATE)
     add_compile_definitions(DEBUG_ALLOCATE)
 endif()
 
+option(DEBUG_COMPILER "Enable compiler trace output" OFF)
+if(DEBUG_COMPILER)
+    add_compile_definitions(DEBUG_COMPILER)
+endif()
+
 option(COVERAGE "Enable gcov coverage instrumentation" OFF)
 if(COVERAGE)
     add_compile_options(-g -DDEBUG -fprofile-arcs -ftest-coverage)

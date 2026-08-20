@@ -25,6 +25,11 @@
  * See compiler.md in the repository root for what the compiler does and why: the worked
  * examples behind each operator it emits, how a recursive rule compiles to a fixpoint,
  * and what is known not to work yet.
+ *
+ * Building with DEBUG_COMPILER defined makes the compiler trace each query it compiles,
+ * the rules it resolves against and the services it emits. The trace is off by default,
+ * since AssertFact() compiles a query for every fact it is given; see cmake option
+ * DEBUG_COMPILER in CMakeLists.txt.
  */
 
 
@@ -473,23 +478,29 @@ static Operator * compileConjunctionRecursive(
 					continue;
 				// Extract term actors
 				TypedTupleCopyAt(clauseState->actors, clauseState->termActorsIndices[termIndex], termActors);
+#ifdef DEBUG_COMPILER
 				PrintCString("Term: ");
 				PrintFormActorsAsFormula(negatedTermForm, termActors);
 				PrintChar('\n');
+#endif
 				// Attempt to compile this term to an Service
 				op = compileTerm(
 					negatedTermForm, termActors, serviceParameters, termClauseMap, clauseState->choices);
+#ifdef DEBUG_COMPILER
 				PrintCString("serviceParameters = ");
 				TypedTuplePrint(serviceParameters);
 				PrintChar('\n');
+#endif
 
 				if(op) {
 					clauseState->termExcluded[termIndex] = true;
 					nTermsExcluded++;
 					propagateTermParameterTypes(clauseState, termIndex, termActors, serviceParameters);
+#ifdef DEBUG_COMPILER
 					PrintCString("Updated clause: ");
 					PrintFormActorsAsFormula(clauseState->form, clauseState->actors);
 					PrintChar('\n');
+#endif
 					break;
 				}
 			}
@@ -617,7 +628,9 @@ static Operator * permuteToClauseArguments(
 	}
 	for(index8 i = 0; i < clauseNArguments; i++) {
 		if(!covered[i]) {
+#ifdef DEBUG_COMPILER
 			PrintCString("Clause does not provide every argument\n");
+#endif
 			ReleaseOperator(op);
 			return 0;
 		}
@@ -941,9 +954,11 @@ static size8 compileQueryClauses(
 		TypedTuple * resolvedParameters = CreateTypedTuple(queryTermArity);
 		while(DictionaryIteratorNext(&dictIterator)) {
 			TypedTuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
+#ifdef DEBUG_COMPILER
 			PrintCString("Matched rule: ");
 			PrintFormActorsAsFormula(clauseForm, clauseActors);
 			PrintChar('\n');
+#endif
 
 			// Iterate over all occurences of the query term in the matched clause
 			// and find one that unifies, if any.
@@ -967,9 +982,11 @@ static size8 compileQueryClauses(
 						// compileConjunction() updates parameter types in the clause
 						// actors, so re-derive them for each branch.
 						SubstituteTuple(&matchedTermSubst, clauseActors, substClauseActors);
+#ifdef DEBUG_COMPILER
 						PrintCString("Unified rule: ");
 						PrintFormActorsAsFormula(clauseForm, substClauseActors);
 						PrintChar('\n');
+#endif
 
 						Operator * newService = compileConjunction(
 							clauseForm, substClauseActors, matchedTermIndex, queryTermForm,
@@ -1191,9 +1208,11 @@ size8 CompileQuery(Formula const * queryTerm, Service services[], size8 maxServi
 	for(index8 i = 0; i < arity; i++)
 		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameters[i]));
 
+#ifdef DEBUG_COMPILER
 	PrintCString("\nCompileQuery()\nqueryParameters: ");
 	PrintFormActorsAsFormula(queryTerm->form, queryParameters);
 	PrintChar('\n');
+#endif
 
 	CompiledVariant variants[maxServices];
 	size8 nVariants = compileQuery(queryTerm->form, queryParameters, variants, maxServices);
@@ -1212,11 +1231,13 @@ size8 CompileQuery(Formula const * queryTerm, Service services[], size8 maxServi
 	}
 	FreeTypedTuple(queryParameters);
 
+#ifdef DEBUG_COMPILER
 	PrintCString("-> compiled operators:\n");
 	for(index8 i = 0; i < nVariants; i++) {
 		PrintService(&services[i]);
 		PrintChar('\n');
 	}
+#endif
 
 	return nVariants;
 }
