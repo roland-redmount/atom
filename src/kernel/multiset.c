@@ -166,7 +166,7 @@ size32 MultisetGetElementMultiple(Atom multiset, Atom element)
 	size32 multiple = 0;
 	while(!multiple && MultisetIteratorNext(&iterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
-		if(em.element.hash == element.hash)
+		if(SameAtoms(em.element, element))
 			multiple = em.multiple;
 	}
 	MultisetIteratorEnd(&iterator);
@@ -272,7 +272,7 @@ void MultisetIterationOrder(Atom multiset, byte elementType, Atom const elements
 		index8 m = 0;
 		// find corresponding element in the elements array
 		for(index8 j = 0; j < nElements; j++) {
-			if(elements[j].hash == em.element.hash) {
+			if(SameAtoms(elements[j], em.element)) {
 				order[i + m] = j;
 				m++;
 			}

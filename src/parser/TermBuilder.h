@@ -28,7 +28,7 @@ bool TermBuilderIsValid(TermBuilder const * builder);
  */
 bool TermBuilderIsEmpty(TermBuilder const * builder);
 
-Formula * TermBuilderCreateFormula(TermBuilder const * builder);
+Atom TermBuilderCreateFormula(TermBuilder const * builder);
 
 void TermBuilderReset(TermBuilder * builder);
 
@@ -37,7 +37,7 @@ void CleanupTermBuilder(TermBuilder * builder);
 /**
  * Parse a C string to a term
  */
-Formula * CStringToTerm(char const * cString);
+Atom CStringToTerm(char const * cString);
 
 
 #endif	// TERMBUILDER_H

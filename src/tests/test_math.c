@@ -6,7 +6,7 @@
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
@@ -18,21 +18,21 @@
 
 void testAdd1(void)
 {
-	Formula * query = CStringToTerm("+ 2 + 3 = _");
+	Atom query = CStringToTerm("+ 2 + 3 = _");
 
 	Service service;
 	index8 permutation[3];
 	ASSERT(DispatchQueryFormula(query, &service, permutation))
 
 	Atom arguments[3];
-	TupleCopy(TypedTuplePeekAtoms(query->actors), arguments, 3);
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(query)), arguments, 3);
 	
 	void * context = OperatorCreateContext(service.op, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 	
 	Atom equalsRole = CreateNameFromCString("=");
 	index8 equalsRoleIndex = PredicateRoleIndex(
-		TermFormGetPredicateForm(query->form),
+		TermFormGetPredicateForm(FormulaGetForm(query)),
 		equalsRole
 	);
 	NameRelease(equalsRole);
@@ -41,20 +41,20 @@ void testAdd1(void)
 	ASSERT_FALSE(OperatorCall(context))
 	
 	OperatorFreeContext(context);
-	FreeFormula(query);
+	ReleaseFormula(query);
 }
 
 
 void testAdd2(void)
 {
-	Formula * query = CStringToTerm("= 7 + 4 + _");
+	Atom query = CStringToTerm("= 7 + 4 + _");
 
 	Service service;
 	index8 permutation[3];
 	ASSERT(DispatchQueryFormula(query, &service, permutation))
 
 	Atom arguments[3];
-	TupleCopy(TypedTuplePeekAtoms(query->actors), arguments, 3);
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(query)), arguments, 3);
 	
 	void * context = OperatorCreateContext(service.op, arguments);
 	ASSERT_TRUE(OperatorCall(context))
@@ -62,7 +62,7 @@ void testAdd2(void)
 	Atom plusRole = CreateNameFromCString("+");
 	// Get the index of the second '+' role actor in the canonical form
 	index8 plusRoleIndex = PredicateRoleIndex(
-		TermFormGetPredicateForm(query->form),
+		TermFormGetPredicateForm(FormulaGetForm(query)),
 		plusRole
 	) + 1;
 	NameRelease(plusRole);
@@ -72,7 +72,7 @@ void testAdd2(void)
 	ASSERT_FALSE(OperatorCall(context))
 	
 	OperatorFreeContext(context);
-	FreeFormula(query);
+	ReleaseFormula(query);
 }
 
 
@@ -82,18 +82,18 @@ void testAdd2(void)
  */
 void testRange(void)
 {
-	Formula * query = CStringToTerm("lower 2 number _n upper 6");
+	Atom query = CStringToTerm("lower 2 number _n upper 6");
 
 	Service service;
 	index8 permutation[3];
 	ASSERT(DispatchQueryFormula(query, &service, permutation))
 
 	Atom arguments[3];
-	TupleCopy(TypedTuplePeekAtoms(query->actors), arguments, 3);
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(query)), arguments, 3);
 
 	Atom numberRole = CreateNameFromCString("number");
 	index8 numberIndex = PredicateRoleIndex(
-		TermFormGetPredicateForm(query->form),
+		TermFormGetPredicateForm(FormulaGetForm(query)),
 		numberRole
 	);
 	NameRelease(numberRole);
@@ -106,7 +106,7 @@ void testRange(void)
 	ASSERT_FALSE(OperatorCall(context))
 
 	OperatorFreeContext(context);
-	FreeFormula(query);
+	ReleaseFormula(query);
 }
 
 

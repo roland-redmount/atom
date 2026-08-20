@@ -6,7 +6,7 @@
 #include "lang/TermForm.h"
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "library/MachineService.h"
 #include "library/math.h"
 #include "parser/TermBuilder.h"
@@ -23,23 +23,23 @@
 void testDispatchToService(void)
 {
 	Service service;
-	Formula * query;
+	Atom query;
 	
 	// this query matches with the identity permutation
 	query = CStringToTerm("+ 3 + 4 = _");
 	index8 permutation[3];
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
 	ASSERT_UINT32_EQUAL(service.op->type, OPERATOR_MACHINE)
-	FreeFormula(query);
+	ReleaseFormula(query);
 
 	// one the following two queries requires form permutation to match
 	query = CStringToTerm("+ 3 + _ = 7");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	FreeFormula(query);
+	ReleaseFormula(query);
 
 	query = CStringToTerm("+ _ + 3 = 7");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	FreeFormula(query);
+	ReleaseFormula(query);
 }
 
 
@@ -56,14 +56,14 @@ void testDispatchRepeatedVariable(void)
 
 	// A position is never a letter, so no atom satisfies this query, and it dispatches
 	// to the (list <ID position >UINT element >LETTER) service all the same
-	Formula * query = CStringToTerm("list \"ab\" position _x element _x");
+	Atom query = CStringToTerm("list \"ab\" position _x element _x");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	FreeFormula(query);
+	ReleaseFormula(query);
 
 	// Distinct variables at those same positions match the same service
 	query = CStringToTerm("list \"ab\" position _p element _e");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	FreeFormula(query);
+	ReleaseFormula(query);
 }
 
 
@@ -75,15 +75,15 @@ void testDispatchRepeatedVariable(void)
  */
 void testDispatchRepeatedParameter(void)
 {
-	Formula * query = CStringToTerm("list \"ab\" position _p element _e");
-	size8 arity = query->actors->nAtoms;
+	Atom query = CStringToTerm("list \"ab\" position _p element _e");
+	size8 arity = FormulaGetActors(query)->nAtoms;
 	Atom parameters[arity];
-	GetQueryParameters(query->actors, parameters);
+	GetQueryParameters(FormulaGetActors(query), parameters);
 
 	Service service;
 	index8 permutation[arity];
 	ASSERT_TRUE(DispatchGeneralizedQuery(
-		query->form, parameters, arity, &service, permutation, 0, 0))
+		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0))
 
 	// Give the position and the element one parameter, as a term (list s position p
 	// element p) has. The service has a UINT position and a LETTER element, so no atom
@@ -91,7 +91,7 @@ void testDispatchRepeatedParameter(void)
 	Atom repeatedParameter = {
 		.parameter = {.number = 2, .io = PARAMETER_OUT, .atomType = 0}
 	};
-	Atom predicateForm = TermFormGetPredicateForm(query->form);
+	Atom predicateForm = TermFormGetPredicateForm(FormulaGetForm(query));
 	Atom positionRole = CreateNameFromCString("position");
 	Atom elementRole = CreateNameFromCString("element");
 	index8 positionIndex = PredicateRoleIndex(predicateForm, positionRole);
@@ -101,9 +101,9 @@ void testDispatchRepeatedParameter(void)
 	parameters[positionIndex] = repeatedParameter;
 	parameters[elementIndex] = repeatedParameter;
 	ASSERT_FALSE(DispatchGeneralizedQuery(
-		query->form, parameters, arity, &service, permutation, 0, 0))
+		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0))
 
-	FreeFormula(query);
+	ReleaseFormula(query);
 }
 
 
@@ -137,15 +137,15 @@ void testDispatchNegatedTerm(void)
 	// A negated query dispatches, and reaches the negated relation rather than the other
 	Service service;
 	index8 permutation[2];
-	Formula * query = CStringToTerm("! even _x odd _y");
+	Atom query = CStringToTerm("! even _x odd _y");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
 	ASSERT_PTR_EQUAL(service.relation, negatedTable->relation)
-	FreeFormula(query);
+	ReleaseFormula(query);
 
 	query = CStringToTerm("even _x odd _y");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
 	ASSERT_PTR_EQUAL(service.relation, table->relation)
-	FreeFormula(query);
+	ReleaseFormula(query);
 
 	DropRelationTable(negatedTable);
 	DropRelationTable(table);
@@ -175,12 +175,12 @@ void testDispatchIterator(void)
 
 	// Only the service with two output parameters matches, so each table contributes
 	// one match
-	Formula * query = CStringToTerm("first _x second _y");
+	Atom query = CStringToTerm("first _x second _y");
 	Atom parameters[2];
-	GetQueryParameters(query->actors, parameters);
+	GetQueryParameters(FormulaGetActors(query), parameters);
 	index8 permutation[2];
 	DispatchIterator iterator;
-	DispatchIterate(query->form, parameters, 2, permutation, &iterator);
+	DispatchIterate(FormulaGetForm(query), parameters, 2, permutation, &iterator);
 
 	size8 nMatches = 0;
 	while(DispatchIteratorNext(&iterator)) {
@@ -189,7 +189,7 @@ void testDispatchIterator(void)
 		index8 skipPermutation[2];
 		bool hasNextMatch;
 		ASSERT_TRUE(DispatchGeneralizedQuery(
-			query->form, parameters, 2, &skipService, skipPermutation, nMatches, &hasNextMatch))
+			FormulaGetForm(query), parameters, 2, &skipService, skipPermutation, nMatches, &hasNextMatch))
 		Service const * service = DispatchIteratorPeekService(&iterator);
 		ASSERT_PTR_EQUAL(service->relation, skipService.relation)
 		ASSERT_PTR_EQUAL(service->op, skipService.op)
@@ -203,19 +203,19 @@ void testDispatchIterator(void)
 	DispatchIteratorEnd(&iterator);
 
 	// An iterator abandoned before the last match is released just as well
-	DispatchIterate(query->form, parameters, 2, permutation, &iterator);
+	DispatchIterate(FormulaGetForm(query), parameters, 2, permutation, &iterator);
 	ASSERT_TRUE(DispatchIteratorNext(&iterator))
 	DispatchIteratorEnd(&iterator);
-	FreeFormula(query);
+	ReleaseFormula(query);
 
 	// A query for a form with no relation yields no match at all
-	Formula * unknownQuery = CStringToTerm("nowhere _x nothing _y");
+	Atom unknownQuery = CStringToTerm("nowhere _x nothing _y");
 	Atom unknownParameters[2];
-	GetQueryParameters(unknownQuery->actors, unknownParameters);
-	DispatchIterate(unknownQuery->form, unknownParameters, 2, permutation, &iterator);
+	GetQueryParameters(FormulaGetActors(unknownQuery), unknownParameters);
+	DispatchIterate(FormulaGetForm(unknownQuery), unknownParameters, 2, permutation, &iterator);
 	ASSERT_FALSE(DispatchIteratorNext(&iterator))
 	DispatchIteratorEnd(&iterator);
-	FreeFormula(unknownQuery);
+	ReleaseFormula(unknownQuery);
 
 	DropRelationTable(uintTable);
 	DropRelationTable(idTable);

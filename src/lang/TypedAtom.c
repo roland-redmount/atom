@@ -10,7 +10,7 @@
 #include "kernel/UInt.h"
 #include "lang/Atom.h"
 #include "lang/ClauseForm.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
@@ -50,7 +50,7 @@ void ReleaseTypedAtom(TypedAtom typedAtom)
  */
 bool SameTypedAtoms(TypedAtom typedAtom1, TypedAtom typedAtom2)
 {
-	return (typedAtom1.type == typedAtom2.type) && (typedAtom1.atom.hash == typedAtom2.atom.hash);
+	return (typedAtom1.type == typedAtom2.type) && SameAtoms(typedAtom1.atom, typedAtom2.atom);
 }
 
 
@@ -144,6 +144,10 @@ void PrintTypedAtom(TypedAtom typedAtom)
 
 	case AT_NAME:
 		PrintName(typedAtom.atom);
+		break;
+
+	case AT_FORMULA:
+		PrintFormula(typedAtom.atom);
 		break;
 
 	case AT_PARAMETER:

@@ -27,7 +27,7 @@ char GetVariableName(Atom variable)
 bool SameVariable(Atom variable1, Atom variable2)
 {
 	if(variable1.hash && variable1.hash)
-		return variable1.hash == variable2.hash;
+		return SameAtoms(variable1, variable2);
 	else {
 		// either variable is _
 		return 0;

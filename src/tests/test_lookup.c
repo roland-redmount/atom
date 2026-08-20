@@ -109,8 +109,8 @@ void testLookupIterator(void)
 		Atom role = LookupIteratorGetRole(&iterator);
 		// the role is either list or string
 		ASSERT_TRUE(
-			(role.hash == GetCoreRoleName(ROLE_LIST).hash) ||
-			(role.hash == GetCoreRoleName(ROLE_STRING).hash)
+			SameAtoms(role, GetCoreRoleName(ROLE_LIST)) ||
+			SameAtoms(role, GetCoreRoleName(ROLE_STRING))
 		)
 	}
 	ASSERT_FALSE(LookupIteratorNext(&iterator))

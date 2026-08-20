@@ -233,7 +233,7 @@ index32 ListGetPosition(Atom list, Atom element)
 
 int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(Atom, Atom))
 {
-	if(list1.hash == list2.hash)
+	if(SameAtoms(list1, list2))
 		return 0;
 
 	ListIterator iterator1;

@@ -4,7 +4,7 @@
 #include "kernel/multiset.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/typedtuple.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "lang/ClauseForm.h"
 #include "memory/allocator.h"
 #include "parser/ClauseBuilder.h"
@@ -102,11 +102,12 @@ static void invalidateClauseServices(Atom clauseForm)
 }
 
 
-DictionaryEntry DictionaryAddClause(Formula const * clause)
+DictionaryEntry DictionaryAddClause(Atom clause)
 {
 	ASSERT(FormulaIsClause(clause))
+	FormulaView clauseView = FormulaGetView(clause);
 	DictionaryEntry entry;
-	setupEntry(&entry, clause->form, clause->actors);
+	setupEntry(&entry, clauseView.form, clauseView.actors);
 	ASSERT(BTreeInsert(dictionary.btree, &entry) == BTREE_INSERTED)
 	invalidateClauseServices(entry.clauseForm);
 	return entry;
@@ -115,9 +116,9 @@ DictionaryEntry DictionaryAddClause(Formula const * clause)
 
 DictionaryEntry DictionaryAddClauseFromCString(const char * clauseString)
 {
-	Formula * rule = CStringToClause(clauseString);
+	Atom rule = CStringToClause(clauseString);
 	DictionaryEntry entry = DictionaryAddClause(rule);
-	FreeFormula(rule);	
+	ReleaseFormula(rule);	
 	return entry;
 }
 

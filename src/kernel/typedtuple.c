@@ -218,14 +218,14 @@ void TypedTupleCopyAt(TypedTuple const * source, index8 sourceOffset, TypedTuple
 }
 
 
-void TypedTupleAcquire(TypedTuple const * tuple)
+void TypedTupleAcquireElements(TypedTuple const * tuple)
 {
 	for(index8 i = 0; i < tuple->nAtoms; i++)
 		AcquireTypedAtom(TypedTupleGetElement(tuple, i));
 }
 
 
-void TypedTupleRelease(TypedTuple const * tuple)
+void TypedTupleReleaseElements(TypedTuple const * tuple)
 {
 	for(index8 i = 0; i < tuple->nAtoms; i++)
 		ReleaseTypedAtom(TypedTupleGetElement(tuple, i));

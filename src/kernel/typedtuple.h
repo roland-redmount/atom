@@ -124,12 +124,12 @@ void TypedTupleSwap(TypedTuple * tuple1, TypedTuple * tuple2);
 /**
  * Acquire all elements of the given tuple.
  */
-void TypedTupleAcquire(TypedTuple const * tuple);
+void TypedTupleAcquireElements(TypedTuple const * tuple);
 
 /**
  * Release all elements of the given tuple.
  */
-void TypedTupleRelease(TypedTuple const * tuple);
+void TypedTupleReleaseElements(TypedTuple const * tuple);
 
 /**
  * Compare two tuples for equality.

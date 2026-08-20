@@ -2,6 +2,7 @@
 
 #include "testing/testing.h"
 #include "kernel/ifact.h"
+#include "lang/formula.h"
 #include "memory/allocator.h"
 
 
@@ -279,10 +280,15 @@ static void executeCheckReferences(void (*function)(void), CheckType checkType)
 	// a baseline we actually took before calling it
 	uint32 initialRefCount = 0;
 	uint32 initialIFactCount = 0;
+	uint32 initialFormulaRefCount = 0;
+	uint32 initialFormulaCount = 0;
+	// The formula registry is set up together with the ifacts; see KernelInitialize()
 	bool ifactsInitialized = IFactsInitialized();
 	if(ifactsInitialized) {
 		initialRefCount = IFactTotalReferenceCount();
 		initialIFactCount = IFactTotalCount();
+		initialFormulaRefCount = FormulaTotalReferenceCount();
+		initialFormulaCount = NumberOfFormulas();
 		IFactsEnableFlagging();
 	}
 	uint32 initialBytesAllocated = AllocatorNBytesAllocated();
@@ -305,6 +311,21 @@ static void executeCheckReferences(void (*function)(void), CheckType checkType)
 			IFactDumpFlagged();
 		}
 		IFactDisableFlagging();
+
+		int32 formulaRefCountDiff = FormulaTotalReferenceCount() - initialFormulaRefCount;
+		if(checkType != CHECK_TEARDOWN && formulaRefCountDiff < 0)
+			PrintF("%s: Lost %d formula references.\n", checkTypeNames[checkType], formulaRefCountDiff);
+		if(checkType != CHECK_SETUP && formulaRefCountDiff > 0)
+			PrintF("%s: Failed to release %d formula references.\n",
+				checkTypeNames[checkType], formulaRefCountDiff);
+
+		int32 formulaDiff = NumberOfFormulas() - initialFormulaCount;
+		if(checkType != CHECK_TEARDOWN && formulaDiff < 0)
+			PrintF("%s: Lost %d formulas.\n", checkTypeNames[checkType], formulaDiff);
+		if(checkType != CHECK_SETUP && formulaDiff > 0) {
+			PrintF("%s: Failed to release %d formulas.\n", checkTypeNames[checkType], formulaDiff);
+			FormulaDump();
+		}
 	}
 
 	int32 allocateDiff = AllocatorNBytesAllocated() - initialBytesAllocated;

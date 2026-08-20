@@ -21,14 +21,14 @@ bool ConjunctionBuilderPush(ConjunctionBuilder * builder, Token token);
 
 bool ConjunctionBuilderIsValid(ConjunctionBuilder const * builder);
 
-Formula * ConjunctionBuilderCreateFormula(ConjunctionBuilder * builder);
+Atom ConjunctionBuilderCreateFormula(ConjunctionBuilder * builder);
 
 void ConjunctionBuilderReset(ConjunctionBuilder * builder);
 
 void CleanupConjunctionBuilder(ConjunctionBuilder * builder);
 
 // convenience method for testing
-Formula * CStringToConjunction(char const * cString);
+Atom CStringToConjunction(char const * cString);
 
 
 #endif	// CONJUNCTION_BUILDER_H

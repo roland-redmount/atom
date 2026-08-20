@@ -2,7 +2,7 @@
 #include "kernel/ifact.h"
 #include "kernel/multiset.h"
 #include "lang/ClauseForm.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/TermBuilder.h"
 #include "parser/Tokenizer.h"
@@ -15,7 +15,7 @@
 void InitializeClauseBuilder(ClauseBuilder * builder)
 {
 	InitializeTermBuilder(&(builder->termBuilder));
-	CreateResizingArray(&(builder->terms), sizeof(Formula *), INITIAL_N_TERMS);
+	CreateResizingArray(&(builder->terms), sizeof(Atom), INITIAL_N_TERMS);
 	builder->arity = 0;
 	builder->isEmpty = true;
 	builder->isValid = false;
@@ -25,7 +25,7 @@ void InitializeClauseBuilder(ClauseBuilder * builder)
 static void addCurrentTerm(ClauseBuilder * builder)
 {
 	// add current term to array
-	Formula * term = TermBuilderCreateFormula(&(builder->termBuilder));
+	Atom term = TermBuilderCreateFormula(&(builder->termBuilder));
 	TermBuilderReset(&(builder->termBuilder));
 	// update arity
 	uint8 termArity = FormulaArity(term);
@@ -80,12 +80,12 @@ static void finishClauseBuilder(ClauseBuilder * builder)
 }
 
 
-Formula * ClauseBuilderCreateFormula(ClauseBuilder * builder)
+Atom ClauseBuilderCreateFormula(ClauseBuilder * builder)
 {
 	finishClauseBuilder(builder);
 
 	size8 nTerms = ResizingArrayNElements(&(builder->terms));
-	Formula const ** terms = ResizingArrayGetMemory(&(builder->terms));
+	Atom const * terms = ResizingArrayGetMemory(&(builder->terms));
 	return CreateClause(terms, nTerms);
 }
 
@@ -95,8 +95,8 @@ void ClauseBuilderReset(ClauseBuilder * builder)
 	TermBuilderReset(&(builder->termBuilder));
 	size8 nTerms = ResizingArrayNElements(&(builder->terms));
 	for(index8 i = 0; i < nTerms; i++) {
-		Formula * term = *((Formula **) ResizingArrayGetElement(&(builder->terms), i));
-		FreeFormula(term);
+		Atom term = *((Atom *) ResizingArrayGetElement(&(builder->terms), i));
+		ReleaseFormula(term);
 	}
 	ResizingArrayReset(&(builder->terms));
 }
@@ -110,7 +110,7 @@ void CleanupClauseBuilder(ClauseBuilder * builder)
 }
 
 
-Formula * CStringToClause(char const * cString)
+Atom CStringToClause(char const * cString)
 {
 	size32 length = CStringLength(cString);
 	Tokenizer tokenizer;
@@ -127,7 +127,7 @@ Formula * CStringToClause(char const * cString)
 		}
 	}
 	ASSERT(ClauseBuilderIsValid(&builder));
-	Formula * clause = ClauseBuilderCreateFormula(&builder);
+	Atom clause = ClauseBuilderCreateFormula(&builder);
 	
 	CleanupClauseBuilder(&builder);
 	TokenizerCleanup(&tokenizer);

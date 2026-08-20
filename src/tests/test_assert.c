@@ -7,7 +7,7 @@
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
 #include "kernel/RelationTableRegistry.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
 #include "ui/assert.h"
@@ -22,39 +22,39 @@ void testAssertRetract(void)
 {
 	// Two facts of the term form (foo bar), with the same atom types,
 	// so that both belong to the same relation.
-	Formula * fact1 = CStringToTerm("foo \"barf\" bar 1");
-	Formula * fact2 = CStringToTerm("foo \"baz\" bar 42");
-	size8 nColumns = fact1->actors->nAtoms;
-	byte const * atomTypes = TypedTuplePeekAtomTypes(fact1->actors);
+	Atom fact1 = CStringToTerm("foo \"barf\" bar 1");
+	Atom fact2 = CStringToTerm("foo \"baz\" bar 42");
+	size8 nColumns = FormulaGetActors(fact1)->nAtoms;
+	byte const * atomTypes = TypedTuplePeekAtomTypes(FormulaGetActors(fact1));
 
 	// The relation does not exist until the first fact is asserted
-	ASSERT_NULL(RelationRegistryFind(fact1->form, nColumns, atomTypes))
+	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(fact1), nColumns, atomTypes))
 
-	ASSERT_INT32_EQUAL(AssertFact(fact1->form, fact1->actors, 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(fact1), FormulaGetActors(fact1), 0), ASSERT_OK)
 
-	Relation const * relation = RelationRegistryFind(fact1->form, nColumns, atomTypes);
+	Relation const * relation = RelationRegistryFind(FormulaGetForm(fact1), nColumns, atomTypes);
 	ASSERT_NOT_NULL(relation)
 	RelationTable const * table = RelationTableRegistryFind(relation);
 	ASSERT_NOT_NULL(table)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
 
 	// Asserting the same fact again changes nothing
-	ASSERT_INT32_EQUAL(AssertFact(fact1->form, fact1->actors, 0), ASSERT_EXISTED)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(fact1), FormulaGetActors(fact1), 0), ASSERT_EXISTED)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
 
 	// The second fact goes in the same table
-	ASSERT_INT32_EQUAL(AssertFact(fact2->form, fact2->actors, 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(fact2), FormulaGetActors(fact2), 0), ASSERT_OK)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 2)
 
-	RetractFact(fact2->form, fact2->actors);
+	RetractFact(FormulaGetForm(fact2), FormulaGetActors(fact2));
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
 
 	// Retracting the last fact drops the table, and the relation with it
-	RetractFact(fact1->form, fact1->actors);
-	ASSERT_NULL(RelationRegistryFind(fact1->form, nColumns, atomTypes))
+	RetractFact(FormulaGetForm(fact1), FormulaGetActors(fact1));
+	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(fact1), nColumns, atomTypes))
 
-	FreeFormula(fact2);
-	FreeFormula(fact1);
+	ReleaseFormula(fact2);
+	ReleaseFormula(fact1);
 }
 
 
@@ -65,28 +65,28 @@ void testAssertRetract(void)
  */
 void testAssertContradictsStoredFact(void)
 {
-	Formula * fact = CStringToTerm("prec \"a\" succ \"b\"");
-	Formula * negatedFact = CStringToTerm("! prec \"a\" succ \"b\"");
-	size8 nColumns = negatedFact->actors->nAtoms;
-	byte const * atomTypes = TypedTuplePeekAtomTypes(negatedFact->actors);
+	Atom fact = CStringToTerm("prec \"a\" succ \"b\"");
+	Atom negatedFact = CStringToTerm("! prec \"a\" succ \"b\"");
+	size8 nColumns = FormulaGetActors(negatedFact)->nAtoms;
+	byte const * atomTypes = TypedTuplePeekAtomTypes(FormulaGetActors(negatedFact));
 
-	ASSERT_INT32_EQUAL(AssertFact(fact->form, fact->actors, 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(fact), FormulaGetActors(fact), 0), ASSERT_OK)
 
 	// (! prec "a" succ "b") is refused, contradicting the fact just asserted
-	ASSERT_INT32_EQUAL(AssertFact(negatedFact->form, negatedFact->actors, 0), ASSERT_FAIL)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(negatedFact), FormulaGetActors(negatedFact), 0), ASSERT_FAIL)
 	// and the refused assert leaves no relation behind
-	ASSERT_NULL(RelationRegistryFind(negatedFact->form, nColumns, atomTypes))
+	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(negatedFact), nColumns, atomTypes))
 
 	// Retracting the fact it contradicts makes the same assert succeed
-	RetractFact(fact->form, fact->actors);
-	ASSERT_INT32_EQUAL(AssertFact(negatedFact->form, negatedFact->actors, 0), ASSERT_OK)
+	RetractFact(FormulaGetForm(fact), FormulaGetActors(fact));
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(negatedFact), FormulaGetActors(negatedFact), 0), ASSERT_OK)
 
 	// and the positive fact is now the one refused
-	ASSERT_INT32_EQUAL(AssertFact(fact->form, fact->actors, 0), ASSERT_FAIL)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(fact), FormulaGetActors(fact), 0), ASSERT_FAIL)
 
-	RetractFact(negatedFact->form, negatedFact->actors);
-	FreeFormula(negatedFact);
-	FreeFormula(fact);
+	RetractFact(FormulaGetForm(negatedFact), FormulaGetActors(negatedFact));
+	ReleaseFormula(negatedFact);
+	ReleaseFormula(fact);
 }
 
 
@@ -99,27 +99,27 @@ void testAssertContradictsDerivedFact(void)
 {
 	// (! even x) follows from (odd x), so (odd 3) entails (! even 3)
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even _x | ! odd _x");
-	Formula * odd3 = CStringToTerm("odd 3");
-	Formula * even3 = CStringToTerm("even 3");
-	Formula * even4 = CStringToTerm("even 4");
+	Atom odd3 = CStringToTerm("odd 3");
+	Atom even3 = CStringToTerm("even 3");
+	Atom even4 = CStringToTerm("even 4");
 
-	ASSERT_INT32_EQUAL(AssertFact(odd3->form, odd3->actors, 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(odd3), FormulaGetActors(odd3), 0), ASSERT_OK)
 
 	// (even 3) is refused: no relation holds (! even 3), but the rule derives it
-	ASSERT_INT32_EQUAL(AssertFact(even3->form, even3->actors, 0), ASSERT_FAIL)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(even3), FormulaGetActors(even3), 0), ASSERT_FAIL)
 	ASSERT_NULL(RelationRegistryFind(
-		even3->form, even3->actors->nAtoms, TypedTuplePeekAtomTypes(even3->actors)))
+		FormulaGetForm(even3), FormulaGetActors(even3)->nAtoms, TypedTuplePeekAtomTypes(FormulaGetActors(even3))))
 
 	// (even 4) is accepted, as the rule derives (! even 4) only from (odd 4),
 	// which is not a fact
-	ASSERT_INT32_EQUAL(AssertFact(even4->form, even4->actors, 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(even4), FormulaGetActors(even4), 0), ASSERT_OK)
 
 	DictionaryRemoveClause(&entry);
-	RetractFact(even4->form, even4->actors);
-	RetractFact(odd3->form, odd3->actors);
-	FreeFormula(even4);
-	FreeFormula(even3);
-	FreeFormula(odd3);
+	RetractFact(FormulaGetForm(even4), FormulaGetActors(even4));
+	RetractFact(FormulaGetForm(odd3), FormulaGetActors(odd3));
+	ReleaseFormula(even4);
+	ReleaseFormula(even3);
+	ReleaseFormula(odd3);
 }
 
 

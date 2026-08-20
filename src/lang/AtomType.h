@@ -21,7 +21,9 @@
 #define AT_LETTER				6		// a letter of the English alphabet
 #define AT_VARIABLE             7		// variable with a letter identifier
 #define AT_PARAMETER			8		// a parameter in a service
-#define N_ATOMTYPES				8
+#define AT_FORMULA				9		// a form plus its actors
+
+#define N_ATOMTYPES				9
 
 
 /**

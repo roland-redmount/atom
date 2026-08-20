@@ -8,7 +8,7 @@
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "library/MachineService.h"
@@ -248,17 +248,17 @@ static void testMachineServiceSharedRelation(void)
 	ASSERT_PTR_NOT_EQUAL(subtracting.op, adding.op)
 
 	// dispatch tells them apart by what the query binds
-	Formula * query = CStringToTerm("term 3 term 4 total _t");
+	Atom query = CStringToTerm("term 3 term 4 total _t");
 	Service dispatched;
 	index8 permutation[3];
 	ASSERT_TRUE(DispatchQueryFormula(query, &dispatched, permutation))
 	ASSERT_PTR_EQUAL(dispatched.op, adding.op)
-	FreeFormula(query);
+	ReleaseFormula(query);
 
 	query = CStringToTerm("term 3 term _u total 10");
 	ASSERT_TRUE(DispatchQueryFormula(query, &dispatched, permutation))
 	ASSERT_PTR_EQUAL(dispatched.op, subtracting.op)
-	FreeFormula(query);
+	ReleaseFormula(query);
 
 	// Removing the services removes the relation with them, which is what lets
 	// FreeMachineServices() keep no record of what it registered

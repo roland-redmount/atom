@@ -4,7 +4,7 @@
 #include "kernel/Parameter.h"
 #include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "library/MachineService.h"
 #include "memory/allocator.h"
 #include "parser/TermBuilder.h"
@@ -100,13 +100,14 @@ static MachineProvider machineServiceProvider = {
  * and into the argument index of the function. The actors are in relation column order.
  */
 static void readSignatureParameters(
-	Formula const * signature, MachineServiceData * data, byte atomTypes[], byte parameterIO[])
+	TypedTuple const * signatureActors, MachineServiceData * data,
+	byte atomTypes[], byte parameterIO[])
 {
 	bool numberSeen[MACHINE_SERVICE_MAX_ARITY];
 	SetMemory(numberSeen, sizeof(numberSeen), 0);
 
 	for(index8 i = 0; i < data->nArguments; i++) {
-		TypedAtom actor = TypedTupleGetElement(signature->actors, i);
+		TypedAtom actor = TypedTupleGetElement(signatureActors, i);
 		// every actor of a signature is a parameter
 		ASSERT(actor.type == AT_PARAMETER)
 		atomTypes[i] = actor.atom.parameter.atomType;
@@ -126,8 +127,9 @@ static void readSignatureParameters(
 Service RegisterMachineService(
 	char const * signature, MachineFunction function, size32 stateSize)
 {
-	Formula * term = CStringToTerm(signature);
-	size8 arity = term->actors->nAtoms;
+	Atom term = CStringToTerm(signature);
+	FormulaView termView = FormulaGetView(term);
+	size8 arity = termView.actors->nAtoms;
 	ASSERT(arity <= MACHINE_SERVICE_MAX_ARITY)
 
 	MachineServiceData * data = Allocate(sizeof(MachineServiceData));
@@ -137,12 +139,12 @@ Service RegisterMachineService(
 
 	byte atomTypes[MACHINE_SERVICE_MAX_ARITY];
 	byte parameterIO[MACHINE_SERVICE_MAX_ARITY];
-	readSignatureParameters(term, data, atomTypes, parameterIO);
+	readSignatureParameters(termView.actors, data, atomTypes, parameterIO);
 
 	// A machine service is computed, and so has no tuple storage: the relation exists
 	// only to name the signature the service is registered under, and is removed with the
 	// last service naming it; see ReleaseRelation()
-	Relation const * relation = FindOrCreateRelation(term->form, arity, atomTypes);
+	Relation const * relation = FindOrCreateRelation(termView.form, arity, atomTypes);
 
 	// A function with no state yields at most one tuple, and so declares no index order.
 	// A function with a state declares the order its signature writes its arguments in;
@@ -155,7 +157,7 @@ Service RegisterMachineService(
 	// the service registry now holds the references to the operator and the relation
 	ReleaseOperator(op);
 	ReleaseRelation(relation);
-	FreeFormula(term);
+	ReleaseFormula(term);
 	return service;
 }
 

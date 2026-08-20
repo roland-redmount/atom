@@ -3,7 +3,7 @@
 #include "kernel/kernel.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "storage/RelationBTree.h"
 #include "library/MachineService.h"
 #include "parser/TermBuilder.h"
@@ -20,13 +20,13 @@ static RelationFixture precSuccFixture;
  */
 static size32 countQueryTuples(char const * queryString)
 {
-	Formula * query = CStringToTerm(queryString);
+	Atom query = CStringToTerm(queryString);
 	MixedTypeRelation * relation = UserQuery(query);
 	size32 nTuples = 0;
 	while(MixedTypeRelationNext(relation))
 		nTuples++;
 	FreeMixedTypeRelation(relation);
-	FreeFormula(query);
+	ReleaseFormula(query);
 	return nTuples;
 }
 

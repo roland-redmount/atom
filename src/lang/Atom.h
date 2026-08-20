@@ -8,7 +8,7 @@
  * depending on its type.
  */
 typedef union u_Atom {
-	// AT_NAME, AT_ID
+	// AT_NAME, AT_ID, AT_FORMULA
 	data64 hash;
 	// AT_UNT
 	uint64 _uint;
@@ -41,6 +41,13 @@ void SortAtoms(Atom atoms[], size32 nAtoms);
 uint8 ReduceAtomsArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms);
 
 int8 CompareAtoms(Atom atom1, Atom atom2);
+
+/**
+ * Test two atoms of the same type for identity. An atom is identified by its
+ * 64-bit value whatever its type, so this compares the whole atom.
+ * Two atoms of different types may share a value; see SameTypedAtoms().
+ */
+bool SameAtoms(Atom atom1, Atom atom2);
 
 void AcquireAtom(Atom atom, byte atomType);
 

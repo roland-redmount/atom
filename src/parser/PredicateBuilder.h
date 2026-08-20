@@ -1,13 +1,13 @@
 /**
  * PredicateBuilder accepts a stream of role, actor tokens
  * where roles may be repeated at any time, and allows generating
- * a predicate (DT_FORMULA).
+ * a predicate formula.
  */
 
 #ifndef PREDICATEBUILDER_H
 #define PREDICATEBUILDER_H
 
-#include "lang/Formula.h"
+#include "lang/formula.h"
 #include "parser/PartBuilder.h"
 #include "util/ResizingArray.h"
 
@@ -27,13 +27,13 @@ bool PredicateBuilderIsEmpty(PredicateBuilder const * builder);
 
 bool PredicateBuilderIsValid(PredicateBuilder const * builder);
 
-Formula * PredicateBuilderCreateFormula(PredicateBuilder const * builder);
+Atom PredicateBuilderCreateFormula(PredicateBuilder const * builder);
 
 void PredicateBuilderReset(PredicateBuilder * builder);
 
 void CleanupPredicateBuilder(PredicateBuilder * builder);
 
-Formula * CStringToPredicate(char const * string);
+Atom CStringToPredicate(char const * string);
 
 
 #endif	// PREDICATEBUILDER_H

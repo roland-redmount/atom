@@ -14,7 +14,7 @@
 #include "kernel/Parameter.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
-#include "lang/Formula.h"
+#include "lang/formula.h"
 
 /**
  * Dispatch a query, copying the first matching service to *service, if any.
@@ -40,7 +40,7 @@ bool DispatchQuery(
 /**
  * Same, using a term (formula) instead of a termform and actors tuple
  */
-bool DispatchQueryFormula(Formula * queryTerm, Service * service, index8 * permutation);
+bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutation);
 
 /**
  * Dispatch a query generalized to parameters. The queryParameters array must contain

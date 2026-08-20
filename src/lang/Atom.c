@@ -1,5 +1,6 @@
 
 #include "kernel/ifact.h"
+#include "lang/formula.h"
 #include "lang/name.h"
 
 
@@ -10,6 +11,12 @@ int8 CompareAtoms(Atom atom1, Atom atom2)
 	if(atom1.hash > atom2.hash)
 		return 1;
 	return 0;
+}
+
+
+bool SameAtoms(Atom atom1, Atom atom2)
+{
+	return atom1.hash == atom2.hash;
 }
 
 
@@ -45,7 +52,7 @@ uint8 ReduceAtomsArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms)
 {
 	for(index8 k = 0; k < nAtoms; k++) {
 		index8 i = k + 1;
-		while((i < nAtoms) && (atoms[k].hash == atoms[i].hash))
+		while((i < nAtoms) && SameAtoms(atoms[k], atoms[i]))
 			i++;
 		multiplicities[k] = i - k;
 		if(multiplicities[k] > 1) {
@@ -68,6 +75,10 @@ void AcquireAtom(Atom atom, byte atomType)
 		NameAcquire(atom);
 		break;
 
+		case AT_FORMULA:
+		AcquireFormula(atom);
+		break;
+
 		// else nothing to do
 	}
 }
@@ -82,6 +93,10 @@ void ReleaseAtom(Atom atom, byte atomType)
 
 		case AT_NAME:
 		NameRelease(atom);
+		break;
+
+		case AT_FORMULA:
+		ReleaseFormula(atom);
 		break;
 	}
 }
