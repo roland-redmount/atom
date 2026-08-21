@@ -310,3 +310,13 @@ bool TypedTupleContainsAtom(TypedTuple const * tuple, TypedAtom atom)
 	}
 	return false;
 }
+
+
+bool TypedTupleContainsVariable(TypedTuple const * tuple)
+{
+	for(index8 i = 0; i < tuple->nAtoms; i++) {
+		if(TypedTupleGetElement(tuple, i).type == AT_VARIABLE)
+			return true;
+	}
+	return false;
+}

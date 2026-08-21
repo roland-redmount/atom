@@ -8,6 +8,8 @@
 #include "kernel/RelationTable.h"
 #include "kernel/RelationTableRegistry.h"
 #include "lang/formula.h"
+#include "parser/ClauseBuilder.h"
+#include "parser/ConjunctionBuilder.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
 #include "ui/assert.h"
@@ -123,6 +125,82 @@ void testAssertContradictsDerivedFact(void)
 }
 
 
+/**
+ * A term holding no variable is a fact, and asserting it is asserting that fact.
+ */
+void testAssertFormulaFact(void)
+{
+	Atom fact = CStringToTerm("foo \"barf\" bar 1");
+
+	ASSERT_INT32_EQUAL(AssertFormula(fact), ASSERT_OK)
+	// the same fact a second time changes nothing
+	ASSERT_INT32_EQUAL(AssertFormula(fact), ASSERT_EXISTED)
+
+	// a fact contradicting it is refused, as it is by AssertFact()
+	Atom negatedFact = CStringToTerm("! foo \"barf\" bar 1");
+	ASSERT_INT32_EQUAL(AssertFormula(negatedFact), ASSERT_FAIL)
+	ReleaseFormula(negatedFact);
+
+	RetractFact(FormulaGetForm(fact), FormulaGetActors(fact));
+	ReleaseFormula(fact);
+}
+
+
+/**
+ * A clause of two or more terms holding a variable is a rule, and asserting it adds the
+ * rule to the dictionary.
+ */
+void testAssertFormulaRule(void)
+{
+	Atom rule = CStringToClause("before x after y | ! prec x succ y");
+
+	ASSERT_FALSE(DictionaryContainsClause(rule))
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+	ASSERT_TRUE(DictionaryContainsClause(rule))
+
+	// the same rule a second time changes nothing
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_EXISTED)
+
+	// Adding a clause already in the dictionary yields the entry already there,
+	// which is what the rule is removed with
+	DictionaryEntry entry = DictionaryAddClause(rule);
+	DictionaryRemoveClause(&entry);
+	ASSERT_FALSE(DictionaryContainsClause(rule))
+	ReleaseFormula(rule);
+}
+
+
+/**
+ * A formula that is neither a fact nor a rule is refused, and the result code says which
+ * of the two it failed to be.
+ */
+void testAssertFormulaRejects(void)
+{
+	// a term holding a variable states nothing that could be stored
+	Atom termWithVariable = CStringToTerm("foo x bar 1");
+	ASSERT_INT32_EQUAL(AssertFormula(termWithVariable), ASSERT_FACT_VARIABLE)
+	ReleaseFormula(termWithVariable);
+
+	// a clause holding no variable derives nothing
+	Atom groundClause = CStringToClause("foo 1 | ! bar 2");
+	ASSERT_INT32_EQUAL(AssertFormula(groundClause), ASSERT_RULE_GROUND)
+	ReleaseFormula(groundClause);
+
+	// A clause of one term says no more than that term. The parser never builds one,
+	// yielding the term itself instead, so it is built here.
+	Atom term = CStringToTerm("foo x bar 1");
+	Atom singleTermClause = CreateClause(&term, 1);
+	ASSERT_INT32_EQUAL(AssertFormula(singleTermClause), ASSERT_RULE_ONE_TERM)
+	ReleaseFormula(singleTermClause);
+	ReleaseFormula(term);
+
+	// a conjunction is several rules at once, which this interface does not take
+	Atom conjunction = CStringToConjunction("foo x bar 1 | ! baz x & barf 42 frob y");
+	ASSERT_INT32_EQUAL(AssertFormula(conjunction), ASSERT_NOT_CLAUSE)
+	ReleaseFormula(conjunction);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -130,6 +208,9 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertRetract);
 	ExecuteTest(testAssertContradictsStoredFact);
 	ExecuteTest(testAssertContradictsDerivedFact);
+	ExecuteTest(testAssertFormulaFact);
+	ExecuteTest(testAssertFormulaRule);
+	ExecuteTest(testAssertFormulaRejects);
 
 	KernelShutdown();
 

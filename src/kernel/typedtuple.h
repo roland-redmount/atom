@@ -165,5 +165,10 @@ void TypedTuplePrint(TypedTuple const * tuple);
 
 bool TypedTupleContainsAtom(TypedTuple const * tuple, TypedAtom atom);
 
+/**
+ * Whether any atom of the tuple is a variable, which a fact may not hold.
+ */
+bool TypedTupleContainsVariable(TypedTuple const * tuple);
+
 
 #endif  // TYPEDTUPLE_H

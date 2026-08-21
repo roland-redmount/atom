@@ -6,11 +6,12 @@
  * is a command instead, which is how everything that is not a query is asked for.
  *
  * The world a session starts with holds the core relations and the math services, and
- * nothing else, since there is no way yet to state a fact or a rule here.
+ * whatever the session states with :assert.
  */
 
 #include "kernel/kernel.h"
 #include "lang/formula.h"
+#include "ui/assert.h"
 #include "lang/TermForm.h"
 #include "library/MachineService.h"
 #include "library/math.h"
@@ -69,6 +70,12 @@ static void printHelp(void)
 	printLine("Variables are single letters and _ is the anonymous variable.");
 	PrintChar('\n');
 	printLine("Commands:");
+	printLine("    :assert <fact or rule>");
+	printLine("                     Add to the knowledgebase, as in");
+	printLine("                         :assert prec \"a\" succ \"b\"");
+	printLine("                         :assert before x after y | ! prec x succ y");
+	printLine("                     A fact is a term holding no variable, and a rule is");
+	printLine("                     a clause of two or more terms holding a variable.");
 	printLine("    :help            Print this text");
 	printLine("    :quit, ctrl-D    End the session");
 	PrintChar('\n');
@@ -136,6 +143,72 @@ static void executeQuery(char const * line)
 
 
 /*
+ * Report what asserting a formula came to, naming the rule broken by one that could be
+ * neither a fact nor a rule.
+ */
+static void printAssertResult(int result)
+{
+	switch(result) {
+	case ASSERT_OK:
+		printLine("Asserted.");
+		break;
+
+	case ASSERT_EXISTED:
+		printLine("Already known.");
+		break;
+
+	case ASSERT_FAIL:
+		printLine("Contradicts the knowledgebase.");
+		break;
+
+	case ASSERT_FACT_VARIABLE:
+		printLine("A fact may not hold a variable.");
+		break;
+
+	case ASSERT_RULE_GROUND:
+		printLine("A rule must hold at least one variable.");
+		break;
+
+	case ASSERT_RULE_ONE_TERM:
+		printLine("A rule must hold at least two terms.");
+		break;
+
+	case ASSERT_NOT_CLAUSE:
+		printLine("Only a fact or a rule can be asserted.");
+		break;
+
+	default:
+		ASSERT(false)
+		break;
+	}
+}
+
+
+/*
+ * Assert one formula, which is the text following the :assert command. That text begins
+ * part way into the line the user typed, so its position there is what puts the caret of a
+ * syntax error under the character it names.
+ */
+static void executeAssert(char const * formulaText, index32 linePosition)
+{
+	if(!*formulaText) {
+		printLine(":assert takes a fact or a rule.");
+		return;
+	}
+
+	index32 errorPosition;
+	Atom formula = ParseFormula(formulaText, &errorPosition);
+	if(!formula.hash) {
+		printParseError(linePosition + errorPosition);
+		return;
+	}
+
+	printAssertResult(AssertFormula(formula));
+	ReleaseFormula(formula);
+}
+
+
+/*
  * Match the command a line begins with. Returns the command's argument, which is whatever
  * follows the command word with the space between them dropped, or 0 if the line begins
  * with some other command. A command taking no argument is matched with an empty argument.
@@ -159,16 +232,23 @@ static char const * matchCommand(char const * line, char const * command)
 
 
 /*
- * Execute a command line, which begins with ':'. This is where asserting a fact and
- * asserting a rule will be dispatched from.
+ * Execute a command, which is the word beginning with ':' that the given command text
+ * starts with. The whole line is passed as well, since a command argument is reported at
+ * its position in the line the user typed rather than in the argument itself.
  */
-static int executeCommand(char const * line)
+static int executeCommand(char const * line, char const * commandText)
 {
-	if(matchCommand(line, ":quit"))
+	if(matchCommand(commandText, ":quit"))
 		return REPL_QUIT;
 
-	if(matchCommand(line, ":help")) {
+	if(matchCommand(commandText, ":help")) {
 		printHelp();
+		return REPL_CONTINUE;
+	}
+
+	char const * formulaText = matchCommand(commandText, ":assert");
+	if(formulaText) {
+		executeAssert(formulaText, formulaText - line);
 		return REPL_CONTINUE;
 	}
 
@@ -187,7 +267,7 @@ static int executeLine(char const * line)
 		return REPL_CONTINUE;
 
 	if(*firstCharacter == ':')
-		return executeCommand(firstCharacter);
+		return executeCommand(line, firstCharacter);
 
 	// The query is parsed from the whole line, so that the position of a syntax error
 	// counts from where the line began rather than from its first word.
@@ -226,6 +306,9 @@ int main(int argc, char * argv[])
 	}
 
 	FreeMachineServices();
-	KernelShutdown();
+	// The world a session built is not emptied again, and KernelShutdown() is not called:
+	// it requires every fact and rule above the core set to have been removed first, which
+	// is a thing to do for a test rather than for a session. Nothing here outlives the
+	// process; see KernelInitialize(), which starts each session with a blank world.
 	return 0;
 }
