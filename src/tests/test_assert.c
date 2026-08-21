@@ -178,19 +178,19 @@ void testAssertFormulaRejects(void)
 {
 	// a term holding a variable states nothing that could be stored
 	Atom termWithVariable = CStringToTerm("foo x bar 1");
-	ASSERT_INT32_EQUAL(AssertFormula(termWithVariable), ASSERT_FACT_VARIABLE)
+	ASSERT_INT32_EQUAL(AssertFormula(termWithVariable), ASSERT_TERM_VARIABLE)
 	ReleaseFormula(termWithVariable);
 
 	// a clause holding no variable derives nothing
 	Atom groundClause = CStringToClause("foo 1 | ! bar 2");
-	ASSERT_INT32_EQUAL(AssertFormula(groundClause), ASSERT_RULE_GROUND)
+	ASSERT_INT32_EQUAL(AssertFormula(groundClause), ASSERT_CLAUSE_NO_VARIABLE)
 	ReleaseFormula(groundClause);
 
 	// A clause of one term says no more than that term. The parser never builds one,
 	// yielding the term itself instead, so it is built here.
 	Atom term = CStringToTerm("foo x bar 1");
 	Atom singleTermClause = CreateClause(&term, 1);
-	ASSERT_INT32_EQUAL(AssertFormula(singleTermClause), ASSERT_RULE_ONE_TERM)
+	ASSERT_INT32_EQUAL(AssertFormula(singleTermClause), ASSERT_CLAUSE_ONE_TERM)
 	ReleaseFormula(singleTermClause);
 	ReleaseFormula(term);
 

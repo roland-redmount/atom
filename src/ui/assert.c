@@ -16,7 +16,7 @@
 
 /**
  * Test whether the given term interpreted as a fact contradicts the current knowledgebase,
- * that is, whether the negation of the term is  entailed by the knowledgebase.
+ * that is, whether the negation of the term is entailed by the knowledgebase.
  * The actors tuple cannot contain a variable. Returns true if there is a contradiction.
  */
 static bool checkContradiction(Atom termForm, TypedTuple const * actors)
@@ -71,21 +71,19 @@ int AssertFact(Atom termForm, TypedTuple const * actors, RelationTableProvider c
 
 
 /**
- * Assert a clause as a rule. A clause of one term says no more than that term, and a clause
- * holding no variable states a disjunction of facts rather than deriving anything, so
- * neither is a rule.
+ * Add a clause to the rule dictionary.
  */
 static int assertRule(Atom clause, FormulaView const * view)
 {
+	// A rule must have at least two terms
 	if(ClauseFormNTerms(view->form) < 2)
-		return ASSERT_RULE_ONE_TERM;
+		return ASSERT_CLAUSE_ONE_TERM;
+	//  A clause with no variable is a disjunction of facts, not a rule
 	if(!TypedTupleContainsVariable(view->actors))
-		return ASSERT_RULE_GROUND;
+		return ASSERT_CLAUSE_NO_VARIABLE;
 
 	if(DictionaryContainsClause(clause))
 		return ASSERT_EXISTED;
-	// The entry is discarded, as there is nothing here to retract the rule with.
-	// It can be found again from the clause; see DictionaryAddClause().
 	DictionaryAddClause(clause);
 	return ASSERT_OK;
 }
@@ -97,8 +95,8 @@ int AssertFormula(Atom formula)
 
 	if(FormulaIsTerm(formula)) {
 		if(TypedTupleContainsVariable(view.actors))
-			return ASSERT_FACT_VARIABLE;
-		// a null provider gives the fact a B-tree table, which is the default storage
+			return ASSERT_TERM_VARIABLE;
+		// use default storage provider
 		return AssertFact(view.form, view.actors, 0);
 	}
 

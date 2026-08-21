@@ -20,23 +20,20 @@
 int AssertFact(Atom termForm, TypedTuple const * actors, RelationTableProvider const * provider);
 
 /**
- * High level method to assert a formula, which is a fact if it is a term and a rule if it
- * is a clause. A fact is added with AssertFact() and a rule with DictionaryAddClause().
- *
- * A term holding a variable is no fact, and a clause is no rule unless it holds a variable
- * and at least two terms, so those are rejected rather than asserted. The result code says
- * which of these the formula turned out to be.
+ * High level method to assert any formula: a single term without variables is a (ground) fact
+ * and will be asserted by AssertFact(); a clause with at least two terms and at least one
+ * variable is a rule and will be DictionaryAddClause().
  */
 int AssertFormula(Atom formula);
 
 // Result codes for AssertFact() and AssertFormula()
-#define ASSERT_OK				1	// a new fact or rule was created
-#define ASSERT_EXISTED			2	// the fact or rule already existed, nothing changed
-#define ASSERT_FAIL				3	// logical contradiction, nothing changed
-#define ASSERT_FACT_VARIABLE	4	// a term holding a variable, which no fact may
-#define ASSERT_RULE_GROUND		5	// a clause holding no variable, which every rule must
-#define ASSERT_RULE_ONE_TERM	6	// a clause of one term, which says no more than the term
-#define ASSERT_NOT_CLAUSE		7	// a formula that is neither a term nor a clause
+#define ASSERT_OK					1	// a new fact or rule was created
+#define ASSERT_EXISTED				2	// the fact or rule already existed, nothing changed
+#define ASSERT_FAIL					3	// logical contradiction, nothing changed
+#define ASSERT_TERM_VARIABLE		4	// a term containing variables cannot be a fact
+#define ASSERT_CLAUSE_NO_VARIABLE	5	// a clause with no variables cannot be a rule
+#define ASSERT_CLAUSE_ONE_TERM		6	// a clause of one term cannot be a rule
+#define ASSERT_NOT_CLAUSE			7	// a conjunction
 
 /**
  * High level method to retract a fact. Removes the tuple from the corresponding

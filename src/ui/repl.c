@@ -65,19 +65,16 @@ static void printHelp(void)
 {
 	PrintChar('\n');
 	printLine("Enter a query as a term, such as");
-	printLine("    + 2 + 3 = s");
+	printLine("  + 2 + 3 = s");
 	printLine("to view every matching fact in the knowledgebase.");
 	printLine("Variables are single letters and _ is the anonymous variable.");
 	PrintChar('\n');
 	printLine("Commands:");
-	printLine("    :assert <fact or rule>");
-	printLine("                     Add to the knowledgebase, as in");
-	printLine("                         :assert prec \"a\" succ \"b\"");
-	printLine("                         :assert before x after y | ! prec x succ y");
-	printLine("                     A fact is a term holding no variable, and a rule is");
-	printLine("                     a clause of two or more terms holding a variable.");
-	printLine("    :help            Print this text");
-	printLine("    :quit, ctrl-D    End the session");
+	printLine("  :assert <term>      Assert a fact. The term must not contain variables.");
+	printLine("  :assert <clause>    Assert a rule. The clause must have at least two terms");
+	printLine("                      and contain at least one variable.");
+	printLine("  :help               Print this text.");
+	printLine("  :quit, ctrl-D       End the session.");
 	PrintChar('\n');
 }
 
@@ -161,16 +158,16 @@ static void printAssertResult(int result)
 		printLine("Contradicts the knowledgebase.");
 		break;
 
-	case ASSERT_FACT_VARIABLE:
-		printLine("A fact may not hold a variable.");
+	case ASSERT_TERM_VARIABLE:
+		printLine("A fact may not contain a variable.");
 		break;
 
-	case ASSERT_RULE_GROUND:
-		printLine("A rule must hold at least one variable.");
+	case ASSERT_CLAUSE_NO_VARIABLE:
+		printLine("A rule must contain at least one variable.");
 		break;
 
-	case ASSERT_RULE_ONE_TERM:
-		printLine("A rule must hold at least two terms.");
+	case ASSERT_CLAUSE_ONE_TERM:
+		printLine("A rule must contain at least two terms.");
 		break;
 
 	case ASSERT_NOT_CLAUSE:
@@ -192,7 +189,7 @@ static void printAssertResult(int result)
 static void executeAssert(char const * formulaText, index32 linePosition)
 {
 	if(!*formulaText) {
-		printLine(":assert takes a fact or a rule.");
+		printLine(":assert requies a term or a clause.");
 		return;
 	}
 
