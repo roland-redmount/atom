@@ -1,4 +1,5 @@
 
+#include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
@@ -6,6 +7,7 @@
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
 #include "kernel/RelationTableRegistry.h"
+#include "lang/ClauseForm.h"
 #include "lang/TermForm.h"
 #include "ui/assert.h"
 #include "ui/query.h"
@@ -14,7 +16,7 @@
 
 /**
  * Test whether the given term interpreted as a fact contradicts the current knowledgebase,
- * that is, whether the negation of the term is  entailed by the knowledgebase.
+ * that is, whether the negation of the term is entailed by the knowledgebase.
  * The actors tuple cannot contain a variable. Returns true if there is a contradiction.
  */
 static bool checkContradiction(Atom termForm, TypedTuple const * actors)
@@ -45,9 +47,8 @@ static bool checkContradiction(Atom termForm, TypedTuple const * actors)
 int AssertFact(Atom termForm, TypedTuple const * actors, RelationTableProvider const * provider)
 {
 	ASSERT(IsTermForm(termForm));
+	ASSERT(!TypedTupleContainsVariable(actors));
 	Atom const * actorsArray = TypedTuplePeekAtoms(actors);
-
-	// TODO: verify there is no variable among the actors
 
 	if(checkContradiction(termForm, actors))
 		return ASSERT_FAIL;
@@ -66,6 +67,43 @@ int AssertFact(Atom termForm, TypedTuple const * actors, RelationTableProvider c
 	// else tuple was added
 	LookupAddPredicateRoles(relation, actorsArray);
 	return ASSERT_OK;
+}
+
+
+/**
+ * Add a clause to the rule dictionary.
+ */
+static int assertRule(Atom clause, FormulaView const * view)
+{
+	// A rule must have at least two terms
+	if(ClauseFormNTerms(view->form) < 2)
+		return ASSERT_CLAUSE_ONE_TERM;
+	//  A clause with no variable is a disjunction of facts, not a rule
+	if(!TypedTupleContainsVariable(view->actors))
+		return ASSERT_CLAUSE_NO_VARIABLE;
+
+	if(DictionaryContainsClause(clause))
+		return ASSERT_EXISTED;
+	DictionaryAddClause(clause);
+	return ASSERT_OK;
+}
+
+
+int AssertFormula(Atom formula)
+{
+	FormulaView view = FormulaGetView(formula);
+
+	if(FormulaIsTerm(formula)) {
+		if(TypedTupleContainsVariable(view.actors))
+			return ASSERT_TERM_VARIABLE;
+		// use default storage provider
+		return AssertFact(view.form, view.actors, 0);
+	}
+
+	if(FormulaIsClause(formula))
+		return assertRule(formula, &view);
+
+	return ASSERT_NOT_CLAUSE;
 }
 
 

@@ -102,11 +102,41 @@ static void invalidateClauseServices(Atom clauseForm)
 }
 
 
-DictionaryEntry DictionaryAddClause(Atom clause)
+/**
+ * Find the entry of the given clause, copying it to *entry if one is given, and return
+ * whether the dictionary holds it. The key is the clause's own form and actors, which
+ * compareEntries() only reads, so no entry has to be built to look one up.
+ */
+static bool findEntry(Atom clause, DictionaryEntry * entry)
 {
 	ASSERT(FormulaIsClause(clause))
 	FormulaView clauseView = FormulaGetView(clause);
+	DictionaryEntry key = {
+		.clauseForm = clauseView.form,
+		.tuple = (TypedTuple *) clauseView.actors
+	};
+	if(entry)
+		return BTreeGetItem(dictionary.btree, &key, entry);
+	return BTreeContainsItem(dictionary.btree, &key);
+}
+
+
+bool DictionaryContainsClause(Atom clause)
+{
+	return findEntry(clause, 0);
+}
+
+
+DictionaryEntry DictionaryAddClause(Atom clause)
+{
+	// A clause the dictionary already holds is left as it is. Building an entry for it
+	// would acquire a reference per actor that inserting it would then have to give back,
+	// and would leave the entry it replaced with no owner.
 	DictionaryEntry entry;
+	if(findEntry(clause, &entry))
+		return entry;
+
+	FormulaView clauseView = FormulaGetView(clause);
 	setupEntry(&entry, clauseView.form, clauseView.actors);
 	ASSERT(BTreeInsert(dictionary.btree, &entry) == BTREE_INSERTED)
 	invalidateClauseServices(entry.clauseForm);

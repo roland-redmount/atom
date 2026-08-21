@@ -25,9 +25,17 @@ void TeardownDictionary(void);
 
 /**
  * Add a clause (formula) to the dictionary.
- * This invalidates compiled services involving any term in the clause.
+ * A clause already in the dictionary is not added again: nothing changes and the entry
+ * already there is returned. A caller that must know whether a given rule is new must
+ * call DictionaryContainsClause().
+ * Adding a clause invalidates compiled services involving any term in that clause.
  */
 DictionaryEntry DictionaryAddClause(Atom clause);
+
+/**
+ * Whether the dictionary already holds the given clause.
+ */
+bool DictionaryContainsClause(Atom clause);
 
 /**
  * Parse a string into a clause (formula) and call DictionaryAddClause()

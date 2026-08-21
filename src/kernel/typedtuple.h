@@ -154,16 +154,14 @@ data64 TypedTupleHash(TypedTuple const * tuple, data64 initialHash);
 void TypedTuplePrint(TypedTuple const * tuple);
 
 /**
- * Test whether the tuple matches the query tuple, accounting for variables.
- * 
- * TODO: this does not handle queries with multiplicities as it does not account
- * for permutations; for example the query (a x_ a 1) will not match the fact (a 1 a 2)
- * 
- * NOTE: I don't think this is being used anymore? See signatureQueryTupleMatch()
+ * Test the tuple contains the given atom.
  */
-// bool TypedTupleMatch(TypedTuple const * tuple, TypedTuple const * queryTuple);
-
 bool TypedTupleContainsAtom(TypedTuple const * tuple, TypedAtom atom);
+
+/**
+ * Test if any atom of the tuple is a variable (AT_VARIABLE).
+ */
+bool TypedTupleContainsVariable(TypedTuple const * tuple);
 
 
 #endif  // TYPEDTUPLE_H

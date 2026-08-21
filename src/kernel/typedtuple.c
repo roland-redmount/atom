@@ -255,57 +255,20 @@ void TypedTuplePrint(TypedTuple const * tuple)
 }
 
 
-// bool TypedTupleMatch(TypedTuple const * tuple, TypedTuple const * queryTuple)
-// {
-// 	ASSERT(tuple->nAtoms == queryTuple->nAtoms)
-// 	for(index8 i = 0; i < tuple->nAtoms; i++) {
-// 		TypedAtom atom = TypedTupleGetElement(tuple, i);
-// 		TypedAtom queryAtom = TypedTupleGetElement(queryTuple, i);
-// 		if(queryAtom.type == AT_VARIABLE) {
-// 			if(VariableIsQuoted(queryAtom.atom)) {
-// 				/**
-// 				 * If the query variable is quoted, we remove the outermost quote.
-// 				 * This allows querying for a variable _x stored in a relation (foo)
-// 				 * using (foo '_x)
-// 				 * TODO: review the semantics of this!
-// 				 */
-// 				queryAtom.atom = UnquoteVariable(queryAtom.atom);
-// 			}
-// 			else {
-// 				if(VariableMatch(queryAtom.atom, atom)) {
-// 					// any repeats of this variable must correspond to the same atom
-// 					for(index8 j = i + 1; j < tuple->nAtoms; j++) {
-// 						TypedAtom nextQueryAtom = TypedTupleGetElement(queryTuple, j);
-// 						if((nextQueryAtom.type == AT_VARIABLE) &&
-// 							SameVariable(queryAtom.atom, nextQueryAtom.atom))
-// 						{
-// 							TypedAtom nextAtom = TypedTupleGetElement(tuple, j);
-// 							if(!SameTypedAtoms(atom, nextAtom))
-// 								return false;
-// 						}
-// 					}
-// 					continue;
-// 				}
-// 				else {
-// 					// variable does not match (wrong type)
-// 					return false;
-// 				}
-// 			}
-// 		}
-// 		else {
-// 			// all other atoms must be equal
-// 			if(!SameTypedAtoms(queryAtom, atom))
-// 				return false;
-// 		}
-// 	}
-// 	return true;
-// }
-
-
 bool TypedTupleContainsAtom(TypedTuple const * tuple, TypedAtom atom)
 {
 	for(index8 i = 0; i < tuple->nAtoms; i++) {
 		if(SameTypedAtoms(TypedTupleGetElement(tuple, i), atom))
+			return true;
+	}
+	return false;
+}
+
+
+bool TypedTupleContainsVariable(TypedTuple const * tuple)
+{
+	for(index8 i = 0; i < tuple->nAtoms; i++) {
+		if(TypedTupleGetElement(tuple, i).type == AT_VARIABLE)
 			return true;
 	}
 	return false;
