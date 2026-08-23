@@ -54,23 +54,18 @@ bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutatio
  * match, and they name it. The columns the query gives a type are the same in every match
  * and so say nothing about which match it is, but they cost nothing to carry along.
  *
- * The excludedTypes array holds the MatchTypes of nExcluded matches the caller has seen
- * already, and a candidate naming one of them is passed over. The MatchTypes of the match
- * returned is written to *matchTypes. Setting nExcluded = 0 excludes nothing, and
- * matchTypes may be 0 when the caller does not need the match named.
+ * The excludedSignatures array holds type signatures to exclude; a candidate service
+ * with one of these signatures is skipped. Setting nExcluded = 0 excludes nothing. The
+ * signature of the match returned is the one of the relation it reads, so a caller
+ * enumerating matches excludes service->relation->typeSignature to ask for the next.
  *
  * *hasNextMatch is set to true if a match outside the exclusion list exists beyond the one
  * returned. Caller can pass hasNextMatch = 0 if only one match is required.
- *
- * NOTE: naming a match by its column types, rather than by its position in the enumeration,
- * is what makes the enumeration order irrelevant. The order comes from
- * RelationRegistryIterate(), and relations come and go as services are registered and
- * removed, so a caller enumerating matches across several calls cannot count on it.
  */
 bool DispatchParameterizedQuery(
 	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, Service * service,
-	index8 permutation[], TypeSignature const excludedTypes[], size8 nExcluded,
-	TypeSignature * matchTypes, bool * hasNextMatch);
+	index8 permutation[], TypeSignature const excludedSignatures[], size8 nExcluded,
+	bool * hasNextMatch);
 
 
 /**

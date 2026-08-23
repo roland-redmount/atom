@@ -163,10 +163,10 @@ void DispatchIteratorEnd(DispatchIterator * iterator)
  */
 static bool isExcludedMatch(
 	Relation const * relation, size8 nParameters,
-	TypeSignature const excludedTypes[], size8 nExcluded)
+	TypeSignature const excludedSignatures[], size8 nExcluded)
 {
 	for(index8 i = 0; i < nExcluded; i++) {
-		if(CompareMemory(relation->typeSignature.atomTypes, excludedTypes[i].atomTypes, nParameters) == 0)
+		if(CompareMemory(relation->typeSignature.atomTypes, excludedSignatures[i].atomTypes, nParameters) == 0)
 			return true;
 	}
 	return false;
@@ -175,11 +175,10 @@ static bool isExcludedMatch(
 
 bool DispatchParameterizedQuery(
 	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, Service * service,
-	index8 permutation[], TypeSignature const excludedTypes[], size8 nExcluded,
-	TypeSignature * matchSignature, bool * hasNextMatch)
+	index8 permutation[], TypeSignature const excludedSignatures[], size8 nExcluded,
+	bool * hasNextMatch)
 {
 	ASSERT(!nExcluded || (nParameters <= RELATION_MAX_ARITY))
-	ASSERT(!matchSignature || (nParameters <= RELATION_MAX_ARITY))
 
 	// The iterator overwrites its permutation array on every match, so iterate into
 	// a scratch array to avoid clobbering the returned permutation.
@@ -194,7 +193,7 @@ bool DispatchParameterizedQuery(
 
 	while(DispatchIteratorNext(&iterator)) {
 		Service const * candidate = DispatchIteratorPeekService(&iterator);
-		if(isExcludedMatch(candidate->relation, nParameters, excludedTypes, nExcluded))
+		if(isExcludedMatch(candidate->relation, nParameters, excludedSignatures, nExcluded))
 			continue;
 		if(match) {
 			// A match the caller has not seen exists beyond the one we return
@@ -202,11 +201,9 @@ bool DispatchParameterizedQuery(
 			break;
 		}
 		match = true;
-		// copy the service struct, its permutation and its column types to the caller
+		// copy the service struct and its permutation to the caller
 		*service = *candidate;
 		CopyMemory(candidatePermutation, permutation, nParameters * sizeof(index8));
-		if(matchSignature)
-			*matchSignature = candidate->relation->typeSignature;
 		// without a hasNextMatch request we can stop at the first match
 		if(hasNextMatch == 0)
 			break;
@@ -225,7 +222,7 @@ bool DispatchQuery(
 	GetQueryParameters(queryActors, queryParameters);
 
 	return DispatchParameterizedQuery(
-		queryTermForm, queryParameters, arity, service, permutation, 0, 0, 0, 0);
+		queryTermForm, queryParameters, arity, service, permutation, 0, 0, 0);
 }
 
 

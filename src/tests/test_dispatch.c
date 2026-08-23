@@ -83,7 +83,7 @@ void testDispatchRepeatedParameter(void)
 	Service service;
 	index8 permutation[arity];
 	ASSERT_TRUE(DispatchParameterizedQuery(
-		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0, 0, 0))
+		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0, 0))
 
 	// Give the position and the element one parameter, as a term (list s position p
 	// element p) has. The service has an INT position and a LETTER element, so no atom
@@ -101,7 +101,7 @@ void testDispatchRepeatedParameter(void)
 	parameters[positionIndex] = repeatedParameter;
 	parameters[elementIndex] = repeatedParameter;
 	ASSERT_FALSE(DispatchParameterizedQuery(
-		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0, 0, 0))
+		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0, 0))
 
 	ReleaseFormula(query);
 }
@@ -200,14 +200,16 @@ void testDispatchIterator(void)
 		bool hasNextMatch;
 		ASSERT_TRUE(DispatchParameterizedQuery(
 			FormulaGetForm(query), parameters, 2, &excludeService, excludePermutation,
-			excludedTypes, nMatches, &(excludedTypes[nMatches]), &hasNextMatch))
+			excludedTypes, nMatches, &hasNextMatch))
 		Service const * service = DispatchIteratorPeekService(&iterator);
 		ASSERT_PTR_EQUAL(service->relation, excludeService.relation)
 		ASSERT_PTR_EQUAL(service->op, excludeService.op)
 		for(index8 i = 0; i < 2; i++)
 			ASSERT_UINT32_EQUAL(permutation[i], excludePermutation[i])
 
-		// The match types name the relation matched
+		// The relation a match reads is what names it, so excluding its signature is what
+		// asks for the other match
+		excludedTypes[nMatches] = excludeService.relation->typeSignature;
 		ASSERT_UINT32_EQUAL(excludedTypes[nMatches].atomTypes[0], AT_ID)
 		if(excludedTypes[nMatches].atomTypes[1] == AT_ID)
 			foundIdRelation = true;
@@ -228,7 +230,7 @@ void testDispatchIterator(void)
 	index8 exhaustedPermutation[2];
 	ASSERT_FALSE(DispatchParameterizedQuery(
 		FormulaGetForm(query), parameters, 2, &exhaustedService, exhaustedPermutation,
-		excludedTypes, 2, 0, 0))
+		excludedTypes, 2, 0))
 
 	// An iterator abandoned before the last match is released just as well
 	DispatchIterate(FormulaGetForm(query), parameters, 2, permutation, &iterator);

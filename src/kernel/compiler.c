@@ -62,49 +62,45 @@
 #define MAX_CHOICE_POINT_MATCHES	8
 
 typedef struct s_ChoicePoints {
-	// Query parameter types obtained at each choice of each choice point.
-	// These excluded in next call to DispatchParameterizedQuery()
-	TypeSignature takenTypes[MAX_CHOICE_POINTS][MAX_CHOICE_POINT_MATCHES];
-	size8 nTaken[MAX_CHOICE_POINTS];
-	// whether a match the choice point has not taken exists at each choice point
+	// Type signature of the service obtained from dispatch at each choice of each choice point.
+	// These are excluded in the next call to DispatchParameterizedQuery()
+	TypeSignature choiceSignatures[MAX_CHOICE_POINTS][MAX_CHOICE_POINT_MATCHES];
+	// Number of choices per choice point
+	size8 nChoices[MAX_CHOICE_POINTS];
+	// whether another match exists, at each choice poin
 	bool hasNextMatch[MAX_CHOICE_POINTS];
 	// number of choice points encountered in the current run
 	index8 depth;
 #ifdef DEBUG
-	// The form of the term dispatched at each choice point that has taken a match, kept to
-	// verify that a re-run reaches that choice point with the same term. The terms of a
-	// clause compile in an order the earlier choices decide, so this holds exactly of the
-	// choice points a run keeps: nextChoiceBranch() clears the ones below the one it
-	// advances, and those may legitimately see other terms.
+	// The form of the term dispatched at each choice point.
+	// This is kept to verify that every compile run reaches that choice point with the same term.
 	Atom takenTermForm[MAX_CHOICE_POINTS];
 #endif
 } ChoicePoints;
 
 
-static void resetChoicePoints(ChoicePoints * choices)
+static void resetChoicePoints(ChoicePoints * choicePoints)
 {
-	SetMemory(choices, sizeof(ChoicePoints), 0);
+	SetMemory(choicePoints, sizeof(ChoicePoints), 0);
 }
 
 
 /**
- * Advance to the next combination of choices, depth first: take the deepest
- * choice point that still has an untried alternative from dispatch,
- * and reset the choice points
- * below it. Returns false once all combinations have been visited.
+ * Advance to the deepest choice point that still has a next (untried) match,
+ * and reset the choice points below it. Returns false when no choice point has a next match.
  */
-static bool nextChoiceBranch(ChoicePoints * choices)
+static bool nextChoiceBranch(ChoicePoints * choicePoints)
 {
-	for(index8 i = choices->depth; i > 0; i--) {
+	for(index8 i = choicePoints->depth; i > 0; i--) {
 		index8 d = i - 1;
-		if(choices->hasNextMatch[d]) {
-			// The matches taken at this choice point are kept, so that the next run takes
+		if(choicePoints->hasNextMatch[d]) {
+			// The matches found at this choice point are kept, so that the next run takes
 			// a match outside them; the choice points below it start afresh
 			for(index8 j = i; j < MAX_CHOICE_POINTS; j++) {
-				choices->nTaken[j] = 0;
-				choices->hasNextMatch[j] = false;
+				choicePoints->nChoices[j] = 0;
+				choicePoints->hasNextMatch[j] = false;
 			}
-			choices->depth = 0;
+			choicePoints->depth = 0;
 			return true;
 		}
 	}
@@ -195,12 +191,11 @@ static void setupParameterizedQuery(
 static bool dispatchTermService(
 	Atom termForm, Atom const termParameters[], size8 termArity, int fallback,
 	Service * service, index8 permutation[],
-	TypeSignature const excludedTypes[], size8 nExcluded,
-	TypeSignature * matchTypes, bool * hasNextMatch)
+	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch)
 {
 	if(DispatchParameterizedQuery(
 		termForm, termParameters, termArity, service, permutation,
-		excludedTypes, nExcluded, matchTypes, hasNextMatch))
+		excludedSignatures, nExcluded, hasNextMatch))
 		return true;
 	if(fallback != COMPILE_FALLBACK_RULES)
 		return false;
@@ -216,7 +211,7 @@ static bool dispatchTermService(
 
 	return DispatchParameterizedQuery(
 		termForm, termParameters, termArity, service, permutation,
-		excludedTypes, nExcluded, matchTypes, hasNextMatch);
+		excludedSignatures, nExcluded, hasNextMatch);
 }
 
 
@@ -225,31 +220,32 @@ static bool dispatchTermService(
  */
 static bool dispatchAtNewChoicePoint(
 	Atom termForm, TypedTuple const * termActors, int fallback, Service * service,
-	index8 permutation[], ChoicePoints * choices)
+	index8 permutation[], ChoicePoints * choicePoints)
 {
 	// Add a new choice point
-	ASSERT(choices->depth < MAX_CHOICE_POINTS)
-	index8 d = choices->depth++;
+	ASSERT(choicePoints->depth < MAX_CHOICE_POINTS)
+	index8 d = choicePoints->depth++;
 	// dispatch term, parameterized
 	size8 termArity = termActors->nAtoms;
 	Atom termParameters[termArity];
 	getTermParameters(termActors, termParameters);
-	// Take a match this choice point has not taken yet, recording it so that a later run
-	// takes another one, and whether another one remains
-	ASSERT(choices->nTaken[d] < MAX_CHOICE_POINT_MATCHES)
+	ASSERT(choicePoints->nChoices[d] < MAX_CHOICE_POINT_MATCHES)
 #ifdef DEBUG
-	if(choices->nTaken[d])
-		ASSERT(SameAtoms(choices->takenTermForm[d], termForm))
-	choices->takenTermForm[d] = termForm;
+	if(choicePoints->nChoices[d])
+		ASSERT(SameAtoms(choicePoints->takenTermForm[d], termForm))
+	choicePoints->takenTermForm[d] = termForm;
 #endif
-	TypeSignature * matchTypes = &(choices->takenTypes[d][choices->nTaken[d]]);
 	if(!dispatchTermService(
 		termForm, termParameters, termArity, fallback, service, permutation,
-		choices->takenTypes[d], choices->nTaken[d],
-		matchTypes, &(choices->hasNextMatch[d])))
+		choicePoints->choiceSignatures[d], choicePoints->nChoices[d],
+		&(choicePoints->hasNextMatch[d])))
 		return false;
 
-	choices->nTaken[d]++;
+	// The relation the match reads is what names it, so recording its signature is what
+	// makes a later run take a different match here
+	choicePoints->choiceSignatures[d][choicePoints->nChoices[d]] =
+		service->relation->typeSignature;
+	choicePoints->nChoices[d]++;
 	return true;
 }
 
@@ -319,14 +315,14 @@ static Operator * constrainRepeatedArguments(Operator * op, index8 clauseMap[])
  */
 static Operator * compileTerm(
 	Atom termForm, TypedTuple const * termActors, int fallback,
-	TypedTuple * serviceParameters, index8 clauseMap[], ChoicePoints * choices)
+	TypedTuple * serviceParameters, index8 clauseMap[], ChoicePoints * choicePoints)
 {
 	// attempt to locate a service for the term
 	size8 termArity = termActors->nAtoms;
 	index8 permutation[termArity];
 	Service termService;
 	if(!dispatchAtNewChoicePoint(
-		termForm, termActors, fallback, &termService, permutation, choices))
+		termForm, termActors, fallback, &termService, permutation, choicePoints))
 		return 0;
 
 	// Count the constants first: a permute operator indexes its constants after
@@ -456,7 +452,7 @@ typedef struct s_ClauseCompileState {
 	// The terms compiled so far, together with the matched term
 	bool * termExcluded;
 	// Choice points taken during the compilation
-	ChoicePoints * choices;
+	ChoicePoints * choicePoints;
 } ClauseCompileState;
 
 
@@ -619,7 +615,7 @@ static Operator * compileConjunctionRecursive(
 				// If a term is found, a new choice point is added
 				op = compileTerm(
 					negatedTermForm, termActors, fallback, serviceParameters, termClauseMap,
-					clauseState->choices);
+					clauseState->choicePoints);
 #ifdef DEBUG_COMPILER
 				PrintCString("serviceParameters = ");
 				TypedTuplePrint(serviceParameters);
@@ -785,7 +781,7 @@ static Operator * permuteToClauseArguments(
  */
 static Operator * compileConjunction(
 	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, Atom queryTermForm,
-	size8 nArguments, ChoicePoints * choices)
+	size8 nArguments, ChoicePoints * choicePoints)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	index8 termActorsIndices[clauseNTerms + 1];
@@ -811,7 +807,7 @@ static Operator * compileConjunction(
 		.matchedTermArity =
 			termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex],
 		.termExcluded = termExcluded,
-		.choices = choices
+		.choicePoints = choicePoints
 	};
 
 	index8 clauseMap[clauseActors->nAtoms];
@@ -978,13 +974,13 @@ static Operator * sortOperatorToIndexOrder(Operator * op)
 
 
 /**
- * Combine two branches of the same signature into their union, taking over the caller's
- * reference to each. Two branches ordered differently are sorted alike first, as a union
- * can only merge relations that agree on the order. Each clause of a rule compiles on its
+ * Union two Operatrors having the same signature, taking over the caller's
+ * reference to each. If the operators have different indexOrder, they are sorted first
+ * (UNION can only merge relations that agree on the order. Each clause of a rule compiles on its
  * own, and inherits its order from the relations its own terms read, so two branches of
  * one rule have no reason to agree.
  */
-static Operator * unionBranches(Operator * first, Operator * second)
+static Operator * unionOperators(Operator * first, Operator * second)
 {
 	if(!sameIndexOrder(first, second)) {
 		first = sortOperatorToIndexOrder(first);
@@ -1121,8 +1117,8 @@ static size8 compileQueryClauses(
 					// Compile once per combination of choices. A term that leaves
 					// an output parameter untyped may match several services, each
 					// yielding a differently typed variant of the query service.
-					ChoicePoints choices;
-					resetChoicePoints(&choices);
+					ChoicePoints choicePoints;
+					resetChoicePoints(&choicePoints);
 					do {
 						// compileConjunction() updates parameter types in the clause
 						// actors, so re-derive them for each branch.
@@ -1135,7 +1131,7 @@ static size8 compileQueryClauses(
 
 						Operator * newService = compileConjunction(
 							clauseForm, substClauseActors, matchedTermIndex, queryTermForm,
-							queryTermArity, &choices);
+							queryTermArity, &choicePoints);
 						if(!newService)
 							continue;
 						// Recover the unified parameters from the clause actors
@@ -1144,9 +1140,10 @@ static size8 compileQueryClauses(
 						CompiledVariant * variant = findVariant(variants, nVariants, resolvedParameters);
 						if(variant) {
 							// Another clause yielded the same signature: union them
-							variant->op = unionBranches(variant->op, newService);
+							variant->op = unionOperators(variant->op, newService);
 						}
 						else {
+							// add compiled variant of this clause
 							ASSERT(nVariants < maxVariants)
 							variant = &(variants[nVariants++]);
 							SetMemory(variant, sizeof(CompiledVariant), 0);
@@ -1157,7 +1154,7 @@ static size8 compileQueryClauses(
 						// A variant a recursive clause compiled into needs a fixpoint
 						// operator to derive it
 						variant->isRecursive = variant->isRecursive || isRecursive;
-					} while(nextChoiceBranch(&choices));
+					} while(nextChoiceBranch(&choicePoints));
 				}
 				FreeSubstitution(&querySubst);
 				FreeSubstitution(&matchedTermSubst);
@@ -1297,7 +1294,7 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
  * compile first, and determine the parameter types of the query for each compiled variant;
  * these parameter types must be known before a recursive clause can compile, so that a
  * temporary service can be registers that the recursive term can dispatches to during compilation.
- * A recursive clause therefore must occur together with a non-recursive  clause of the same
+ * A recursive clause therefore must occur together with a non-recursive clause of the same
  * signature, else it will fail to compile.
  *
  * NOTE: a recursive service is not guaranteed to terminate; see the notes on termination
