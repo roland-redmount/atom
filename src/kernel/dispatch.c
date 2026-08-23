@@ -14,7 +14,7 @@
 #include "lang/unification.h"
 
 /**
- * Test whether a generalized query matches a service signature, permuted according to the
+ * Test whether a parameterized query matches a service signature, permuted according to the
  * given permutation array (0-based indices). Both sides are parameters, so matching is
  * signature against signature:
  *
@@ -22,7 +22,7 @@
  *    atom type must equal the type of the service column, or be absent, which is the case
  *    of an output whose type is not known yet.
  * 2) A parameter occurring at several positions of the query denotes one atom, and so
- *    must match service parameters of the same type. A query generalized from actors
+ *    must match service parameters of the same type. A query parameterized from actors
  *    numbers every position separately and never has such a repeat; a rule body term
  *    does, which is what a CONSTRAIN operator is built on.
  *
@@ -157,10 +157,31 @@ void DispatchIteratorEnd(DispatchIterator * iterator)
 }
 
 
-bool DispatchGeneralizedQuery(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, Service * service,
-	index8 permutation[], size8 nSkip, bool * hasNextMatch)
+/**
+ * Test whether a match is one the caller has seen already, its column types naming it; see
+ * DispatchParameterizedQuery().
+ */
+static bool isExcludedMatch(
+	Relation const * relation, size8 nParameters,
+	MatchTypes const excludedTypes[], size8 nExcluded)
 {
+	for(index8 i = 0; i < nExcluded; i++) {
+		if(CompareMemory(relation->atomTypes, excludedTypes[i].atomTypes, nParameters) == 0)
+			return true;
+	}
+	return false;
+}
+
+
+bool DispatchParameterizedQuery(
+	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, Service * service,
+	index8 permutation[], MatchTypes const excludedTypes[], size8 nExcluded,
+	MatchTypes * matchTypes, bool * hasNextMatch)
+{
+	// Only a caller naming its matches is bounded by the width of MatchTypes
+	ASSERT(!nExcluded || (nParameters <= MAX_MATCH_PARAMETERS))
+	ASSERT(!matchTypes || (nParameters <= MAX_MATCH_PARAMETERS))
+
 	// The iterator overwrites its permutation array on every match, so iterate into
 	// a scratch array to avoid clobbering the returned permutation.
 	index8 candidatePermutation[nParameters];
@@ -169,26 +190,29 @@ bool DispatchGeneralizedQuery(
 		queryTermForm, queryParameters, nParameters, candidatePermutation, &iterator);
 
 	bool match = false;
-	// Number of matches seen so far, whether skipped or returned
-	size8 nMatches = 0;
 	if(hasNextMatch)
 		*hasNextMatch = false;
 
 	while(DispatchIteratorNext(&iterator)) {
+		Service const * candidate = DispatchIteratorPeekService(&iterator);
+		if(isExcludedMatch(candidate->relation, nParameters, excludedTypes, nExcluded))
+			continue;
 		if(match) {
-			// An additional match exists beyond the one we return
+			// A match the caller has not seen exists beyond the one we return
 			*hasNextMatch = true;
 			break;
 		}
-		if(nMatches++ >= nSkip) {
-			match = true;
-			// copy the service struct and its permutation to the caller
-			*service = *DispatchIteratorPeekService(&iterator);
-			CopyMemory(candidatePermutation, permutation, nParameters * sizeof(index8));
-			// without a hasNextMatch request we can stop at the first match
-			if(hasNextMatch == 0)
-				break;
+		match = true;
+		// copy the service struct, its permutation and its column types to the caller
+		*service = *candidate;
+		CopyMemory(candidatePermutation, permutation, nParameters * sizeof(index8));
+		if(matchTypes) {
+			SetMemory(matchTypes, sizeof(MatchTypes), 0);
+			CopyMemory(candidate->relation->atomTypes, matchTypes->atomTypes, nParameters);
 		}
+		// without a hasNextMatch request we can stop at the first match
+		if(hasNextMatch == 0)
+			break;
 	}
 	DispatchIteratorEnd(&iterator);
 
@@ -203,8 +227,8 @@ bool DispatchQuery(
 	Atom queryParameters[arity];
 	GetQueryParameters(queryActors, queryParameters);
 
-	return DispatchGeneralizedQuery(
-		queryTermForm, queryParameters, arity, service, permutation, 0, 0);
+	return DispatchParameterizedQuery(
+		queryTermForm, queryParameters, arity, service, permutation, 0, 0, 0, 0);
 }
 
 

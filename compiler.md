@@ -48,6 +48,13 @@ query atom that is a constant needs an input parameter of its own type, and a qu
 variable needs an output. When no service matches, the query has to be compiled from the
 rules in the dictionary, which is what this document is about.
 
+Dispatch itself only ever looks a service up. Compiling one when the lookup fails is
+`FindOrCompileService()` in `compiler.h`, the two steps together, and that is what both a
+user query and a term of a rule body go through. It is not folded into dispatch because
+dispatch has to stay a pure lookup: a `MixedTypeRelation` reads its answer through an open
+`DispatchIterator`, which write-locks the registries against modification, and compiling
+underneath one would modify them.
+
 A service is evaluated by a tree of **operators** (`src/kernel/operator.h`). The leaves
 are machine operators, which provide the stored and computed relations; the internal nodes
 are the operators of relational algebra — `PERMUTE`, `CONSTRAIN`, `JOIN`, `PROJECT`,
@@ -59,8 +66,9 @@ operator yields distinct tuples in a declared order; that contract is documented
 
 ### Parameterizing the query
 
-The query is first generalized: every non-variable actor becomes a typed input parameter
-and every variable becomes an output parameter of unknown type, numbered by position.
+The query is first **parameterized**: every non-variable actor becomes a typed input
+parameter and every variable becomes an output parameter of unknown type, numbered by
+position.
 So the query
 
     + 7 - 4 = d
@@ -173,13 +181,21 @@ not yet available as an input. It therefore tries the terms in turn and postpone
 that do not compile yet.
 
 Taking the first term that compiles is sound only because a term dispatches exactly when
-its own inputs are available. A recursive term is the exception: `registerTemporaryServices()`
-cannot tell in advance which IO pattern the clause will need, so it registers a service for
-every one of them, and the recursive term then dispatches whatever is bound at the time.
-Taken first, it would win over a term whose outputs it should be consuming, and leave that
-term with an input the relation it reads has no service for. `compileConjunctionRecursive()`
-therefore passes over the terms twice, taking the recursive term only once no other term
-compiles.
+its own inputs are available. Two kinds of term compile whatever is bound, and each would
+win over a term whose outputs it should be consuming, leaving that term to read its
+relation unbound. `compileConjunctionRecursive()` therefore passes over the terms three
+times, and a term of either kind is only taken once no term before it can be.
+
+The first is a term the rules answer. Compiling a term produces a plan for whichever
+binding pattern it is asked in, so it always succeeds where a rule exists. The first pass
+offers no term to the rules, and the second offers them to every term in turn.
+
+The second is the recursive term. `registerTemporaryServices()` cannot tell in advance
+which IO pattern the clause will need, so it registers a service for every one of them, and
+the recursive term then dispatches whatever is bound at the time. It is also the term with
+nothing to contribute: its parameter types are settled by the non-recursive clauses before
+it compiles at all, and a clause whose other terms do not compile yields no fixpoint
+anyway. So it is taken last of all, in the third pass, which considers no other term.
 
 Back-substituting into the query gives the signature
 
@@ -187,6 +203,32 @@ Back-substituting into the query gives the signature
 
 A conjunction of more than two terms compiles to a series of joins. See
 `testCompileJoin1`.
+
+### A term the rules answer
+
+A term of a rule body need not read a relation that anything has registered a service for.
+When the registry has nothing, the term is compiled from the rules in turn, and the
+services that produces are what it then dispatches to. So one rule can be built on another:
+given
+
+    parent p offspring c <- father p child c
+    grandparent x grandchild z <- parent x offspring y & parent y offspring z
+
+the query `grandparent x grandchild z` compiles the `(parent offspring)` rule twice, once
+for each of the two patterns its terms ask for — the first term leaves both arguments free,
+and the second takes as an input the argument the first produced. See
+`testCompileChainedRules`.
+
+This is the same two steps a user query takes, applied one level down, and is why the
+compiler and dispatch are mutually recursive: compiling a query compiles its clauses,
+compiling a clause dispatches its terms, and dispatching a term may compile a query.
+
+Nothing in that stops: the rules `p x <- q x` and `q x <- p x` recurse through one another
+with no base case. The compiler therefore keeps a stack of the parameterized queries it is
+compiling, and one already on the stack yields no service, so the clause fails to compile
+as it would were there no rule for it at all. Mutual recursion is a gap rather than a
+feature; see `testCompileMutualRecursion`. Recursion through a rule of the query's own form
+is a different matter, and is what the rest of this document calls a recursive rule.
 
 ### Local variables: PROJECT
 
@@ -232,6 +274,17 @@ query. Each such term is a choice point, and each combination of choices yields 
 separately typed service, so one query can compile to several. See the notes on
 `ChoicePoints` in `compiler.c`, and `testCompileProject`, which compiles one service per
 list element type.
+
+The whole compilation is re-run once per combination, so a choice point has to name the
+alternatives it has taken already in a way that survives from one run to the next. It names
+them by what distinguishes them: a match is one relation, and a relation of a given term
+form is identified by its column types. So those types name the match, and dispatch is
+asked for a match outside the names taken so far; see `MatchTypes` in `dispatch.h`.
+
+Counting into the dispatch enumeration instead would not survive. The order comes from
+`RelationRegistryIterate()`, and compiling a term registers services and creates relations,
+so a later run can enumerate the matches of an earlier choice point in a different order
+and take one the branch never meant.
 
 ## Recursive rules
 
@@ -360,36 +413,40 @@ no way of knowing whether anything answers it yet. `UserQuery()` in `src/ui/quer
 that entry point, one layer above the compiler and dispatch.
 
 It compiles a query the first time that query is asked, and is answered by the compiled
-services from then on. Whether a query has been asked before is decided by dispatching it,
-and both dispatch and the compiler work by the query **type**: the query generalized to
-parameters by `GetQueryParameters()`, which is the term form together with the direction
-and input type of each parameter. Two queries of one type compile to the same services, so
-a match means the compilation has happened, whether by an earlier query, by the kernel or
-by a stored relation registering its own services.
+services from then on. That is `FindOrCompileService()`, and whether a query has been asked
+before is decided by dispatching it. Both dispatch and the compiler work by the
+**parameterized query**: the query put into parameters by `GetQueryParameters()`, which is
+the term form together with the direction and input type of each parameter. Two queries
+that parameterize alike compile to the same services, so a match means the compilation has
+happened, whether by an earlier query, by the kernel or by a stored relation registering
+its own services.
 
-Generalizing is what makes the two agree. The compiler numbers every actor of a query
+Parameterizing is what makes the two agree. The compiler numbers every actor of a query
 separately, so a variable occurring twice loses its equality constraint; were dispatch to
-match that constraint, a query repeating a variable would look uncompiled while its type
-was compiled, and compiling it again would register a service that exists. Take a rule
-deriving `(item index)` over a LETTER and an INT column: `(item z index z)` can be
-satisfied by no tuple, but its type is exactly the service compiled for
-`(item e index p)`. So `DispatchQuery()` generalizes the actors it is given, and the
-entry points the compiler uses take a query already generalized.
+match that constraint, a query repeating a variable would look uncompiled while the
+parameterized query was compiled, and compiling it again would register a service that
+exists. Take a rule deriving `(item index)` over a LETTER and an INT column:
+`(item z index z)` can be satisfied by no tuple, but it parameterizes to exactly the
+service compiled for `(item e index p)`. So `DispatchQuery()` parameterizes the actors it
+is given, and the entry points the compiler uses take a query already parameterized. A term
+of a rule body is parameterized again on its way into a compilation of its own, since its
+own parameters are numbered by the clause and may repeat; the constraint that drops is
+applied by the `CONSTRAIN` operator above the compiled term.
 
-The constraint the type drops is applied where the answer is read: a `MixedTypeRelation`
-over the query actors gathers the tuples of every matching service and keeps those in
-which the repeated actors agree, atom type included, since dispatch no longer says
-anything about the columns they matched; see `MixedTypeRelation.h`.
+The constraint parameterizing drops is applied where the answer is read: a
+`MixedTypeRelation` over the query actors gathers the tuples of every matching service and
+keeps those in which the repeated actors agree, atom type included, since dispatch no
+longer says anything about the columns they matched; see `MixedTypeRelation.h`.
 
-A query whose type compiles to nothing is compiled again every time it is asked. That
-costs a walk over the rules and registers nothing, and it is what lets a query start
+A parameterized query that compiles to nothing is compiled again every time it is asked.
+That costs a walk over the rules and registers nothing, and it is what lets a query start
 working once a rule answering it is asserted.
 
 ### Invalidating a compiled service
 
 A compiled service answers as the facts and the rules stood when it was compiled, so it is
 a cache, and a change to either has to remove the services it could affect. The next query
-of that type then compiles them again. Removing too much costs a compilation; removing too
+that parameterizes alike then compiles them again. Removing too much costs a compilation; removing too
 little gives a wrong answer, so invalidation is deliberately coarse.
 
 Only structural change matters. A fact asserted into a relation that exists needs nothing:
@@ -448,6 +505,11 @@ or `MixedTypeRelation` write-locks against modification.
 
 - **Preconditions**, needed to guard a recursive clause over an infinite domain, do not
   exist. This is the only thing standing between the compiler and the factorial rule.
+- **Mutual recursion** between two relations is not handled. A rule whose body reaches a
+  parameterized query already being compiled fails to compile, as the compiler has no base
+  case to offer it; see the section on a term the rules answer. Making it work needs the
+  temporary services and the fixpoint that same-form recursion already uses, keyed on
+  something other than the query's own form.
 - **A relation with both stored facts and rules** is not handled. Compiling a query that a
   stored service already answers registers a second service of the same signature, which
   `ServiceRegistryAdd()` asserts against. The generated service should replace the existing

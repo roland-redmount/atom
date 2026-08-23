@@ -1,3 +1,4 @@
+#include "kernel/compiler.h"
 #include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
 #include "kernel/kernel.h"
@@ -34,27 +35,49 @@
 
 
 /**
- * A query term that leaves an output parameter untyped may match several
- * services, one per relation table matching its form (the element type
- * of a list, say, is not determined by the query). Each such term is a choice
- * point, and each combination of choices yields a separately typed service.
+ * A query term with untyped output parameters may dispatch to multiple services.
+ * Each term dispatched during compilation creates a choice point, and each combination of
+ * such choices yields a compiled service with a specific signature. Typically, many choice
+ * points will have only one choice.
  *
- * Rather than making every compilation step multi-valued, we keep them
- * single-valued and re-run the whole compilation once per combination,
- * forcing a different choice each time. A choice point is identified by the
- * position at which it is encountered, which is well defined because
- * DispatchGeneralizedQuery() enumerates candidates deterministically.
+ * We re-run the whole compilation once per combination, forcing a different choice each time.
+ * A choice already taken at a choice point is named by the column types of the relation the
+ * matched service reads, and a re-run asks dispatch for a match outside the names taken so
+ * far; see DispatchParameterizedQuery(). Naming a match this way rather than by its
+ * position in the dispatch enumeration is what keeps a re-run on the branch it means to be
+ * on: compiling a term may register services of its own, which moves the relations of an
+ * earlier choice point about in the enumeration.
+ *
+ * NOTE: a choice point is identified by the position at which it is encountered. That is
+ * well defined because the terms of a clause are compiled in a deterministic order, and a
+ * term compiled from the rules carries choice points of its own rather than adding to these.
+ *
+ * ChoicePoints describes the current position in a tree of ChoicePoints.depth,
+ * where each level corresponds to a dispatched term.
  */
 
 #define MAX_CHOICE_POINTS	8
 
+// Most alternatives one choice point may enumerate
+#define MAX_CHOICE_POINT_MATCHES	8
+
 typedef struct s_ChoicePoints {
-	// which match to take from DispatchGeneralizedQuery() at each choice point (0, 1, ...)
-	index8 matchIndex[MAX_CHOICE_POINTS];
-	// whether there is another match available at each choice point
+	// The matches already taken at each choice point, which dispatch is asked to avoid;
+	// see DispatchParameterizedQuery()
+	MatchTypes takenTypes[MAX_CHOICE_POINTS][MAX_CHOICE_POINT_MATCHES];
+	size8 nTaken[MAX_CHOICE_POINTS];
+	// whether a match the choice point has not taken exists at each choice point
 	bool hasNextMatch[MAX_CHOICE_POINTS];
 	// number of choice points encountered in the current run
 	index8 depth;
+#ifdef DEBUG
+	// The form of the term dispatched at each choice point that has taken a match, kept to
+	// verify that a re-run reaches that choice point with the same term. The terms of a
+	// clause compile in an order the earlier choices decide, so this holds exactly of the
+	// choice points a run keeps: nextChoiceBranch() clears the ones below the one it
+	// advances, and those may legitimately see other terms.
+	Atom takenTermForm[MAX_CHOICE_POINTS];
+#endif
 } ChoicePoints;
 
 
@@ -66,7 +89,8 @@ static void resetChoicePoints(ChoicePoints * choices)
 
 /**
  * Advance to the next combination of choices, depth first: take the deepest
- * choice point that still has an untried alternative, and reset the choice points
+ * choice point that still has an untried alternative from dispatch,
+ * and reset the choice points
  * below it. Returns false once all combinations have been visited.
  */
 static bool nextChoiceBranch(ChoicePoints * choices)
@@ -74,9 +98,10 @@ static bool nextChoiceBranch(ChoicePoints * choices)
 	for(index8 i = choices->depth; i > 0; i--) {
 		index8 d = i - 1;
 		if(choices->hasNextMatch[d]) {
-			choices->matchIndex[d]++;
+			// The matches taken at this choice point are kept, so that the next run takes
+			// a match outside them; the choice points below it start afresh
 			for(index8 j = i; j < MAX_CHOICE_POINTS; j++) {
-				choices->matchIndex[j] = 0;
+				choices->nTaken[j] = 0;
 				choices->hasNextMatch[j] = false;
 			}
 			choices->depth = 0;
@@ -123,22 +148,109 @@ static void getTermParameters(TypedTuple const * termActors, Atom parameters[])
 
 
 /**
- * Dispatch a term at the next choice point, taking the alternative selected
- * for the current branch and recording whether further alternatives exist.
+ * What dispatchTermService() may do when the service registry holds no service for a term.
+ * Compiling a term from the rules succeeds whatever the term binds, so a clause only offers
+ * that to a term once none of its terms dispatches to a registered service; see
+ * compileConjunctionRecursive().
  */
-static bool dispatchAtChoicePoint(
-	Atom termForm, TypedTuple const * termActors, Service * service,
+#define COMPILE_FALLBACK_NONE	1
+#define COMPILE_FALLBACK_RULES	2
+
+static size8 compileParameterizedQuery(
+	Atom queryTermForm, TypedTuple const * queryParameters,
+	Service services[], size8 maxServices);
+
+
+/**
+ * Number the parameters of a term by position, which is what a parameterized query is:
+ * every position a parameter of its own, so that a parameter occurring twice in the term
+ * loses its equality constraint. That constraint is not lost from the compiled term, which
+ * applies it above the service; see constrainRepeatedArguments(). This is what
+ * DispatchQuery() does to the actors it is given, done here to the parameters of a term.
+ */
+static void setupParameterizedQuery(
+	Atom const termParameters[], size8 termArity, TypedTuple * queryParameters)
+{
+	for(index8 i = 0; i < termArity; i++) {
+		Atom parameter = termParameters[i];
+		parameter.parameter.number = i + 1;
+		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameter));
+	}
+}
+
+
+/**
+ * Find the service a term is to be compiled against: the one the service registry holds,
+ * or, where the caller permits it, one compiled from the rules answering the term. This is
+ * what lets a rule body term be answered by another rule, and is the same two steps
+ * UserQuery() takes for a query the user asks.
+ *
+ * The compiled services are registered, so the second dispatch finds whichever of them this
+ * term asks for. Dispatching again rather than picking from what the compilation returned
+ * keeps permutation matching and the parameter type checks in one place.
+ *
+ * The exclusion list, the resolved types and hasNextMatch are as for
+ * DispatchParameterizedQuery(). Returns true if a service was found.
+ */
+static bool dispatchTermService(
+	Atom termForm, Atom const termParameters[], size8 termArity, int fallback,
+	Service * service, index8 permutation[],
+	MatchTypes const excludedTypes[], size8 nExcluded,
+	MatchTypes * matchTypes, bool * hasNextMatch)
+{
+	if(DispatchParameterizedQuery(
+		termForm, termParameters, termArity, service, permutation,
+		excludedTypes, nExcluded, matchTypes, hasNextMatch))
+		return true;
+	if(fallback != COMPILE_FALLBACK_RULES)
+		return false;
+
+	TypedTuple * queryParameters = CreateTypedTuple(termArity);
+	setupParameterizedQuery(termParameters, termArity, queryParameters);
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = compileParameterizedQuery(
+		termForm, queryParameters, services, MAX_COMPILED_SERVICES);
+	FreeTypedTuple(queryParameters);
+	if(!nServices)
+		return false;
+
+	return DispatchParameterizedQuery(
+		termForm, termParameters, termArity, service, permutation,
+		excludedTypes, nExcluded, matchTypes, hasNextMatch);
+}
+
+
+/**
+ * Dispatch a term, adding a choice point for it
+ */
+static bool dispatchAtNewChoicePoint(
+	Atom termForm, TypedTuple const * termActors, int fallback, Service * service,
 	index8 permutation[], ChoicePoints * choices)
 {
+	// Add a new choice point
 	ASSERT(choices->depth < MAX_CHOICE_POINTS)
 	index8 d = choices->depth++;
+	// dispatch term, parameterized
 	size8 termArity = termActors->nAtoms;
 	Atom termParameters[termArity];
 	getTermParameters(termActors, termParameters);
-	return DispatchGeneralizedQuery(
-		termForm, termParameters, termArity, service, permutation,
-		choices->matchIndex[d], &(choices->hasNextMatch[d])
-	);
+	// Take a match this choice point has not taken yet, recording it so that a later run
+	// takes another one, and whether another one remains
+	ASSERT(choices->nTaken[d] < MAX_CHOICE_POINT_MATCHES)
+#ifdef DEBUG
+	if(choices->nTaken[d])
+		ASSERT(SameAtoms(choices->takenTermForm[d], termForm))
+	choices->takenTermForm[d] = termForm;
+#endif
+	MatchTypes * matchTypes = &(choices->takenTypes[d][choices->nTaken[d]]);
+	if(!dispatchTermService(
+		termForm, termParameters, termArity, fallback, service, permutation,
+		choices->takenTypes[d], choices->nTaken[d],
+		matchTypes, &(choices->hasNextMatch[d])))
+		return false;
+
+	choices->nTaken[d]++;
+	return true;
 }
 
 
@@ -201,16 +313,20 @@ static Operator * constrainRepeatedArguments(Operator * op, index8 clauseMap[])
  *
  * The serviceParameters tuple is set to the matched service's parameters,
  * permuted to match the term actors order.
+ *
+ * The fallback says whether a term the service registry cannot answer may be compiled from
+ * the rules; see dispatchTermService().
  */
 static Operator * compileTerm(
-	Atom termForm, TypedTuple const * termActors,
+	Atom termForm, TypedTuple const * termActors, int fallback,
 	TypedTuple * serviceParameters, index8 clauseMap[], ChoicePoints * choices)
 {
-	// attempt to locate an existing service
+	// attempt to locate a service for the term
 	size8 termArity = termActors->nAtoms;
 	index8 permutation[termArity];
 	Service termService;
-	if(!dispatchAtChoicePoint(termForm, termActors, &termService, permutation, choices))
+	if(!dispatchAtNewChoicePoint(
+		termForm, termActors, fallback, &termService, permutation, choices))
 		return 0;
 
 	// Count the constants first: a permute operator indexes its constants after
@@ -339,6 +455,7 @@ typedef struct s_ClauseCompileState {
 	size8 matchedTermArity;
 	// The terms compiled so far, together with the matched term
 	bool * termExcluded;
+	// Choice points taken during the compilation
 	ChoicePoints * choices;
 } ClauseCompileState;
 
@@ -436,17 +553,30 @@ static Operator * compileConjunctionRecursive(
 	index8 termClauseMap[clauseState->actors->nAtoms];
 
 	/**
-	 * Find a term that can be compiled, in two passes over the term forms of the clause.
-	 * The first pass skips the recursive term, the second takes it.
+	 * Find a term that can be compiled, in three passes over the term forms of the clause.
 	 *
-	 * A recursive term is deferred because it dispatches no matter what is bound: it has a
-	 * temporary service for every IO pattern of the query, as registerTemporaryServices()
-	 * cannot know in advance which one the clause needs. It would therefore win over a term
-	 * whose outputs it should be consuming, leaving that term with an input the relation
-	 * it reads has no service for. Every other term dispatches only once its own inputs
-	 * are available, which is what makes taking the first one that compiles sound.
+	 * A term only dispatches to a registered service once its own inputs are available,
+	 * which is what makes taking the first term that compiles sound. Two kinds of term
+	 * compile whatever is bound and so must not be taken while another term still can.
+	 *
+	 * The first is a term compiled from the rules, which yields a plan for any binding
+	 * pattern the term is asked in. Taken early it would read a relation unbound where a
+	 * later binding would have restricted it. The first pass therefore offers no term to
+	 * the rules, and the second offers them to every term in turn.
+	 *
+	 * The second is the recursive term, which has a temporary service for every IO pattern
+	 * of the query, as registerTemporaryServices() cannot know in advance which one the
+	 * clause needs. It would win over a term whose outputs it should be consuming, leaving
+	 * that term to read its relation unbound. It is also the term with nothing to
+	 * contribute: its parameter types are already settled by the non-recursive clauses, and
+	 * a clause whose other terms do not compile yields no fixpoint anyway. So it is taken
+	 * last of all, in the third pass, and skipped by the two before it.
 	 */
-	for(index8 pass = 0; !op && (pass < 2); pass++) {
+	for(index8 pass = 0; !op && (pass < 3); pass++) {
+		// Only the second pass offers a term to the rules. The recursive term of the third
+		// pass has its temporary service, and compiling it from the rules would re-enter
+		// the very compilation it belongs to.
+		int fallback = (pass == 1) ? COMPILE_FALLBACK_RULES : COMPILE_FALLBACK_NONE;
 		// Iterate over term forms in the clause form
 		MultisetIterator termFormIterator;
 		MultisetIterate(clauseState->form, AT_ID, &termFormIterator);
@@ -464,8 +594,10 @@ static Operator * compileConjunctionRecursive(
 				TermFormGetPredicateForm(termForm),
 				!TermFormGetSign(termForm)
 			);
-			// A term of the query's own form is the recursive one
-			if((pass == 0) && SameAtoms(negatedTermForm, clauseState->queryTermForm)) {
+			// A term of the query's own form is the recursive one, which only the third
+			// pass takes and only the third pass considers
+			bool isRecursiveTerm = SameAtoms(negatedTermForm, clauseState->queryTermForm);
+			if(isRecursiveTerm == (pass < 2)) {
 				termIndex += em.multiple;
 				IFactRelease(negatedTermForm);
 				continue;
@@ -483,9 +615,11 @@ static Operator * compileConjunctionRecursive(
 				PrintFormActorsAsFormula(negatedTermForm, termActors);
 				PrintChar('\n');
 #endif
-				// Attempt to compile this term to an Service
+				// Attempt to compile this term to a Service
+				// If a term is found, a new choice point is added
 				op = compileTerm(
-					negatedTermForm, termActors, serviceParameters, termClauseMap, clauseState->choices);
+					negatedTermForm, termActors, fallback, serviceParameters, termClauseMap,
+					clauseState->choices);
 #ifdef DEBUG_COMPILER
 				PrintCString("serviceParameters = ");
 				TypedTuplePrint(serviceParameters);
@@ -880,11 +1014,11 @@ static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
  *
  * The recursive clauses are taken in a second pass, once the non-recursive ones have
  * fixed the parameter types and a service has been registered for their recursive term
- * to dispatch to; see compileQuery().
+ * to dispatch to; see compileQueryVariants().
  *
  * foundRecursiveClause is an output: it is set to true if any matching clause is recursive,
- * and never cleared, so the caller initializes it. That is how compileQuery() knows whether
- * the second pass is needed at all. The second pass sets it again, to no effect.
+ * and never cleared, so the caller initializes it. That is how compileQueryVariants() knows
+ * whether the second pass is needed at all. The second pass sets it again, to no effect.
  */
 
 #define NON_RECURSIVE_PASS	1
@@ -1162,7 +1296,7 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
  * NOTE: a recursive service is not guaranteed to terminate; see the notes on termination
  * in compiler.md.
  */
-static size8 compileQuery(
+static size8 compileQueryVariants(
 	Atom queryTermForm, TypedTuple const * queryActors,
 	CompiledVariant * variants, size8 maxVariants)
 {
@@ -1194,32 +1328,76 @@ static size8 compileQuery(
 }
 
 
-size8 CompileQuery(Atom queryTerm, Service services[], size8 maxServices)
-{
-	FormulaView term = FormulaGetView(queryTerm);
-	ASSERT(IsTermForm(term.form))
-	ASSERT(maxServices > 0)
+/**
+ * The parameterized queries being compiled, outermost first. A rule body term with no
+ * service is compiled from the rules, and that compilation may reach a term of a form
+ * already being compiled: the rules (p x <- q x) and (q x <- p x) recurse through one
+ * another. Re-entering a parameterized query already on this stack yields no service, so
+ * such a clause fails to compile, as it does when no rule answers it at all.
+ *
+ * Recursion through a rule of the query's own form is a different matter, and is handled by
+ * the temporary services of registerTemporaryServices().
+ */
+#define MAX_COMPILATION_DEPTH	16
 
-	// Generalize atoms in the query to parameters. The compilation works in tuples of
-	// typed atoms throughout, so the parameters are wrapped in one here.
-	size8 arity = term.actors->nAtoms;
-	Atom parameters[arity];
-	GetQueryParameters(term.actors, parameters);
-	TypedTuple * queryParameters = CreateTypedTuple(arity);
-	for(index8 i = 0; i < arity; i++)
-		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameters[i]));
+typedef struct s_CompilationFrame {
+	Atom termForm;
+	// The parameters compileParameterizedQuery() was called with, which it holds for the
+	// lifetime of the frame
+	TypedTuple const * parameters;
+} CompilationFrame;
+
+static CompilationFrame compilationStack[MAX_COMPILATION_DEPTH];
+static size8 compilationDepth;
+
+
+/**
+ * Test whether the given parameterized query is one being compiled already. A term form
+ * determines the arity, so two frames of one form always have comparable parameters.
+ */
+static bool isBeingCompiled(Atom queryTermForm, TypedTuple const * queryParameters)
+{
+	for(index8 i = 0; i < compilationDepth; i++) {
+		if(SameAtoms(compilationStack[i].termForm, queryTermForm)
+			&& sameParameterSignature(compilationStack[i].parameters, queryParameters))
+			return true;
+	}
+	return false;
+}
+
+
+/**
+ * Compile a parameterized query into services, registering each one and writing a copy to
+ * the services array; see CompileQuery(), which is this over the actors of a query. The
+ * queryParameters tuple holds AT_PARAMETER atoms numbered 1, 2, ...
+ * Returns the number of services registered, which is 0 for a query already being compiled.
+ */
+static size8 compileParameterizedQuery(
+	Atom queryTermForm, TypedTuple const * queryParameters,
+	Service services[], size8 maxServices)
+{
+	ASSERT(IsTermForm(queryTermForm))
+	ASSERT(maxServices > 0)
+	if(isBeingCompiled(queryTermForm, queryParameters))
+		return 0;
+	ASSERT(compilationDepth < MAX_COMPILATION_DEPTH)
+	compilationStack[compilationDepth++] = (CompilationFrame) {
+		.termForm = queryTermForm, .parameters = queryParameters
+	};
 
 #ifdef DEBUG_COMPILER
-	PrintCString("\nCompileQuery()\nqueryParameters: ");
-	PrintFormActorsAsFormula(term.form, queryParameters);
+	PrintCString("\ncompileParameterizedQuery()\nqueryParameters: ");
+	PrintFormActorsAsFormula(queryTermForm, queryParameters);
 	PrintChar('\n');
 #endif
 
+	size8 arity = queryParameters->nAtoms;
 	CompiledVariant variants[maxServices];
-	size8 nVariants = compileQuery(term.form, queryParameters, variants, maxServices);
+	size8 nVariants = compileQueryVariants(
+		queryTermForm, queryParameters, variants, maxServices);
 
 	for(index8 i = 0; i < nVariants; i++) {
-		// Parameter types and the relation were resolved by compileQuery()
+		// Parameter types and the relation were resolved by compileQueryVariants()
 		byte atomTypes[arity];
 		byte parameterIO[arity];
 		getVariantSignature(&variants[i], atomTypes, parameterIO);
@@ -1230,7 +1408,6 @@ size8 CompileQuery(Atom queryTerm, Service services[], size8 maxServices)
 		ReleaseRelation(variants[i].relation);
 		FreeTypedTuple(variants[i].parameters);
 	}
-	FreeTypedTuple(queryParameters);
 
 #ifdef DEBUG_COMPILER
 	PrintCString("-> compiled operators:\n");
@@ -1240,5 +1417,52 @@ size8 CompileQuery(Atom queryTerm, Service services[], size8 maxServices)
 	}
 #endif
 
+	compilationDepth--;
+	return nVariants;
+}
+
+
+bool FindOrCompileService(
+	Atom queryTermForm, TypedTuple const * queryActors, Service * service,
+	index8 permutation[])
+{
+	if(DispatchQuery(queryTermForm, queryActors, service, permutation))
+		return true;
+
+	size8 arity = queryActors->nAtoms;
+	Atom parameters[arity];
+	GetQueryParameters(queryActors, parameters);
+	TypedTuple * queryParameters = CreateTypedTuple(arity);
+	for(index8 i = 0; i < arity; i++)
+		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameters[i]));
+
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = compileParameterizedQuery(
+		queryTermForm, queryParameters, services, MAX_COMPILED_SERVICES);
+	FreeTypedTuple(queryParameters);
+	if(!nServices)
+		return false;
+
+	return DispatchQuery(queryTermForm, queryActors, service, permutation);
+}
+
+
+size8 CompileQuery(Atom queryTerm, Service services[], size8 maxServices)
+{
+	FormulaView term = FormulaGetView(queryTerm);
+	ASSERT(IsTermForm(term.form))
+
+	// Parameterize the atoms of the query. The compilation works in tuples of typed atoms
+	// throughout, so the parameters are wrapped in one here.
+	size8 arity = term.actors->nAtoms;
+	Atom parameters[arity];
+	GetQueryParameters(term.actors, parameters);
+	TypedTuple * queryParameters = CreateTypedTuple(arity);
+	for(index8 i = 0; i < arity; i++)
+		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameters[i]));
+
+	size8 nVariants = compileParameterizedQuery(
+		term.form, queryParameters, services, maxServices);
+	FreeTypedTuple(queryParameters);
 	return nVariants;
 }

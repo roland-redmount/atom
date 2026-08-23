@@ -68,7 +68,7 @@ void testDispatchRepeatedVariable(void)
 
 
 /**
- * A parameter occurring at several positions of a generalized query does denote one atom,
+ * A parameter occurring at several positions of a parameterized query does denote one atom,
  * which is the case of a rule body term with a repeated variable: the compiler dispatches
  * such a term and constrains the arguments providing it. Those positions can only match
  * service parameters of one type.
@@ -82,8 +82,8 @@ void testDispatchRepeatedParameter(void)
 
 	Service service;
 	index8 permutation[arity];
-	ASSERT_TRUE(DispatchGeneralizedQuery(
-		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0))
+	ASSERT_TRUE(DispatchParameterizedQuery(
+		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0, 0, 0))
 
 	// Give the position and the element one parameter, as a term (list s position p
 	// element p) has. The service has an INT position and a LETTER element, so no atom
@@ -100,8 +100,8 @@ void testDispatchRepeatedParameter(void)
 	NameRelease(elementRole);
 	parameters[positionIndex] = repeatedParameter;
 	parameters[elementIndex] = repeatedParameter;
-	ASSERT_FALSE(DispatchGeneralizedQuery(
-		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0))
+	ASSERT_FALSE(DispatchParameterizedQuery(
+		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0, 0, 0))
 
 	ReleaseFormula(query);
 }
@@ -182,25 +182,51 @@ void testDispatchIterator(void)
 	DispatchIterator iterator;
 	DispatchIterate(FormulaGetForm(query), parameters, 2, permutation, &iterator);
 
+	// A match is named by the column types of the relation it reads, and excluding a name
+	// asks for the other match. This is what the compiler enumerates a choice point by;
+	// see compiler.c
+	MatchTypes excludedTypes[2];
+	bool foundIdRelation = false;
+	bool foundIntRelation = false;
+
 	size8 nMatches = 0;
 	while(DispatchIteratorNext(&iterator)) {
-		// Match number k is the same returned by DispatchGeneralizedQuery() with nSkip = k
-		Service skipService;
-		index8 skipPermutation[2];
+		// The match the iterator is at is the one dispatch returns when every match before
+		// it is excluded, whatever order the two are enumerated in
+		Service excludeService;
+		index8 excludePermutation[2];
 		bool hasNextMatch;
-		ASSERT_TRUE(DispatchGeneralizedQuery(
-			FormulaGetForm(query), parameters, 2, &skipService, skipPermutation, nMatches, &hasNextMatch))
+		ASSERT_TRUE(DispatchParameterizedQuery(
+			FormulaGetForm(query), parameters, 2, &excludeService, excludePermutation,
+			excludedTypes, nMatches, &(excludedTypes[nMatches]), &hasNextMatch))
 		Service const * service = DispatchIteratorPeekService(&iterator);
-		ASSERT_PTR_EQUAL(service->relation, skipService.relation)
-		ASSERT_PTR_EQUAL(service->op, skipService.op)
+		ASSERT_PTR_EQUAL(service->relation, excludeService.relation)
+		ASSERT_PTR_EQUAL(service->op, excludeService.op)
 		for(index8 i = 0; i < 2; i++)
-			ASSERT_UINT32_EQUAL(permutation[i], skipPermutation[i])
+			ASSERT_UINT32_EQUAL(permutation[i], excludePermutation[i])
+
+		// The match types name the relation matched
+		ASSERT_UINT32_EQUAL(excludedTypes[nMatches].atomTypes[0], AT_ID)
+		if(excludedTypes[nMatches].atomTypes[1] == AT_ID)
+			foundIdRelation = true;
+		else if(excludedTypes[nMatches].atomTypes[1] == AT_INT)
+			foundIntRelation = true;
 
 		nMatches++;
 		ASSERT_TRUE(hasNextMatch == (nMatches < 2))
 	}
 	ASSERT_UINT32_EQUAL(nMatches, 2)
+	// Both relations are reached, whichever order the registry yields them in
+	ASSERT_TRUE(foundIdRelation)
+	ASSERT_TRUE(foundIntRelation)
 	DispatchIteratorEnd(&iterator);
+
+	// With every match excluded there is nothing left to return
+	Service exhaustedService;
+	index8 exhaustedPermutation[2];
+	ASSERT_FALSE(DispatchParameterizedQuery(
+		FormulaGetForm(query), parameters, 2, &exhaustedService, exhaustedPermutation,
+		excludedTypes, 2, 0, 0))
 
 	// An iterator abandoned before the last match is released just as well
 	DispatchIterate(FormulaGetForm(query), parameters, 2, permutation, &iterator);

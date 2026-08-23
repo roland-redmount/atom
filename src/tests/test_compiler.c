@@ -1,6 +1,7 @@
 
 #include "kernel/compiler.h"
 #include "kernel/dictionary.h"
+#include "kernel/dispatch.h"
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
 #include "kernel/letter.h"
@@ -692,6 +693,170 @@ void testCompileSquares(void)
 }
 
 
+/**
+ * A rule body term with no service of its own is compiled from the rules answering it, so
+ * one rule can be built on another. Here (grandparent grandchild) is defined over
+ * (parent offspring), which is itself a rule over the stored (father child) relation, and
+ * neither of the two (parent offspring) services exists until this query compiles them.
+ *
+ * The two terms of the grandparent rule ask for different IO patterns: the first leaves
+ * both arguments free, and the second takes as an input the argument the first produced.
+ * So the rule compiles twice, once per pattern.
+ */
+static RelationFixture fatherFixture;
+
+void testCompileChainedRules(void)
+{
+	SetupRelationFixture(&fatherFixture, (char const * []) {"father", "child"}, 2);
+	RelationFixtureAddTuple(&fatherFixture, (char const * []) {"a", "b"});
+	RelationFixtureAddTuple(&fatherFixture, (char const * []) {"b", "c"});
+
+	// parent p offspring c <- father p child c
+	DictionaryEntry parentEntry = DictionaryAddClauseFromCString(
+		"parent p offspring c | ! father p child c");
+	// grandparent x grandchild z <- parent x offspring y & parent y offspring z
+	DictionaryEntry grandparentEntry = DictionaryAddClauseFromCString(
+		"grandparent x grandchild z | ! parent x offspring y | ! parent y offspring z");
+
+	size32 nCompiledBefore = ServiceRegistryNCompiled();
+	Atom queryTerm = CStringToTerm("grandparent x grandchild z");
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+
+	// The query service, and one (parent offspring) service per IO pattern its two terms
+	// asked for
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled() - nCompiledBefore, 3)
+
+	// Only a has a grandchild, which is c
+	Atom nodeA = CreateStringFromCString("a");
+	Atom nodeC = CreateStringFromCString("c");
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
+	void * context = OperatorCreateContext(services[0].op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	Atom x = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "grandparent", 1);
+	Atom z = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "grandchild", 1);
+	ASSERT_TRUE(SameAtoms(x, nodeA))
+	ASSERT_TRUE(SameAtoms(z, nodeC))
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	IFactRelease(nodeA);
+	IFactRelease(nodeC);
+	ServiceRegistryRemove(services[0].relation, services[0].op);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&grandparentEntry);
+	DictionaryRemoveClause(&parentEntry);
+	// Dropping the stored relation invalidates the compiled (parent offspring) services
+	TeardownRelationFixture(&fatherFixture);
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiledBefore)
+}
+
+
+/**
+ * A term is only offered to the rules once no term of the clause dispatches to a service
+ * that exists, so a term the rules answer never compiles ahead of a term that would bind
+ * its arguments. Here (start point) binds the argument (alias as) takes as an input, and
+ * the two terms have different forms, so which of them the clause iterates first is not
+ * something the test can arrange.
+ *
+ * The service compiled for the alias term is what shows the order taken: with the term
+ * bound there is a service taking the alias argument as an input, and none reading the
+ * relation unbound.
+ */
+static RelationFixture nodeFixture;
+static RelationFixture startFixture;
+
+void testCompileChainedRuleOrder(void)
+{
+	SetupRelationFixture(&nodeFixture, (char const * []) {"node", "label"}, 2);
+	RelationFixtureAddTuple(&nodeFixture, (char const * []) {"na", "la"});
+	RelationFixtureAddTuple(&nodeFixture, (char const * []) {"nb", "lb"});
+	SetupRelationFixture(&startFixture, (char const * []) {"start", "point"}, 2);
+	RelationFixtureAddTuple(&startFixture, (char const * []) {"sa", "na"});
+
+	// alias k as l <- node k label l
+	DictionaryEntry aliasEntry = DictionaryAddClauseFromCString(
+		"alias k as l | ! node k label l");
+	// pick p give g <- start p point k & alias k as g
+	DictionaryEntry pickEntry = DictionaryAddClauseFromCString(
+		"pick p give g | ! start p point k | ! alias k as g");
+
+	Atom queryTerm = CStringToTerm("pick \"sa\" give g");
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+
+	Atom labelA = CreateStringFromCString("la");
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
+	void * context = OperatorCreateContext(services[0].op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	Atom g = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "give", 1);
+	ASSERT_TRUE(SameAtoms(g, labelA))
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+	IFactRelease(labelA);
+
+	// The alias term compiled with its argument bound, and never unbound
+	Service aliasService;
+	index8 aliasPermutation[2];
+	Atom boundAlias = CStringToTerm("alias \"na\" as l");
+	ASSERT_TRUE(DispatchQueryFormula(boundAlias, &aliasService, aliasPermutation))
+	ReleaseFormula(boundAlias);
+	Atom unboundAlias = CStringToTerm("alias k as l");
+	ASSERT_FALSE(DispatchQueryFormula(unboundAlias, &aliasService, aliasPermutation))
+	ReleaseFormula(unboundAlias);
+
+	ServiceRegistryRemove(services[0].relation, services[0].op);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&pickEntry);
+	DictionaryRemoveClause(&aliasEntry);
+	TeardownRelationFixture(&startFixture);
+	TeardownRelationFixture(&nodeFixture);
+}
+
+
+/**
+ * Two rules recursive through one another have no base case: compiling (p) reaches (q),
+ * which reaches (p) again. A parameterized query already being compiled yields no service,
+ * so the clause fails to compile and the compilation terminates, which is what this test
+ * is here to show. Mutual recursion is a gap; see compiler.md.
+ */
+void testCompileMutualRecursion(void)
+{
+	DictionaryEntry pEntry = DictionaryAddClauseFromCString("p x | ! q x");
+	DictionaryEntry qEntry = DictionaryAddClauseFromCString("q x | ! p x");
+
+	Atom queryTerm = CStringToTerm("p n");
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nServices, 0)
+
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&qEntry);
+	DictionaryRemoveClause(&pEntry);
+}
+
+
+/**
+ * Compile a service to handle an IO pattern for which there is no existing service.
+ */
+void testCompileNewIOPattern(void)
+{
+	Atom queryTerm = CStringToTerm("list \"AB\" position _ element 'A");
+
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Service service = services[0];
+
+	ServiceRegistryRemove(service.relation, service.op);
+	ReleaseFormula(queryTerm);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -713,6 +878,15 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileNegatedTerm);
 	ExecuteTest(testCompiledServiceReadsFactsLive);
 	ExecuteTest(testCompileSquares);
+
+	ExecuteTest(testCompileChainedRules);
+	ExecuteTest(testCompileChainedRuleOrder);
+	ExecuteTest(testCompileMutualRecursion);
+
+	// TODO: an IO pattern no service provides needs a FILTER operator, which reads a
+	// service producing the columns the pattern takes as inputs and keeps the tuples where
+	// they equal the values the caller bound. Not implemented yet.
+	// ExecuteTest(testCompileNewIOPattern);
 
 	// TODO: compiling a recursive rule over an infinite domain. The relation has no
 	// finite fixpoint and the call bindings n = 4, 3, 2, 1, 0, -1, -2, ... do not
