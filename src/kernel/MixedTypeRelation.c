@@ -152,7 +152,7 @@ MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * 
 	else
 		relation->impl.concat.variableMap = 0;
 
-	GetQueryParameters(queryActors, relation->impl.concat.queryParameters);
+	ActorsToParameters(queryActors, relation->impl.concat.queryParameters);
 	DispatchIterate(
 		queryTermForm, relation->impl.concat.queryParameters, arity,
 		relation->impl.concat.permutation, &(relation->impl.concat.dispatchIterator));

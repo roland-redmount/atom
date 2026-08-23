@@ -16,7 +16,7 @@ static bool hasParameterAtom(TypedTuple const * tuple)
 }
 
 
-void GetQueryParameters(TypedTuple const * actors, Atom parameters[])
+void ActorsToParameters(TypedTuple const * actors, Atom parameters[])
 {
 	ASSERT(!hasParameterAtom(actors))
 	for(index8 i = 0; i < actors->nAtoms; i++) {

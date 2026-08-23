@@ -78,7 +78,7 @@ void testDispatchRepeatedParameter(void)
 	Atom query = CStringToTerm("list \"ab\" position p element e");
 	size8 arity = FormulaGetActors(query)->nAtoms;
 	Atom parameters[arity];
-	GetQueryParameters(FormulaGetActors(query), parameters);
+	ActorsToParameters(FormulaGetActors(query), parameters);
 
 	Service service;
 	index8 permutation[arity];
@@ -179,7 +179,7 @@ void testDispatchIterator(void)
 	// one match
 	Atom query = CStringToTerm("first x second y");
 	Atom parameters[2];
-	GetQueryParameters(FormulaGetActors(query), parameters);
+	ActorsToParameters(FormulaGetActors(query), parameters);
 	index8 permutation[2];
 	DispatchIterator iterator;
 	DispatchIterate(FormulaGetForm(query), parameters, 2, permutation, &iterator);
@@ -241,7 +241,7 @@ void testDispatchIterator(void)
 	// A query for a form with no relation yields no match at all
 	Atom unknownQuery = CStringToTerm("nowhere x nothing y");
 	Atom unknownParameters[2];
-	GetQueryParameters(FormulaGetActors(unknownQuery), unknownParameters);
+	ActorsToParameters(FormulaGetActors(unknownQuery), unknownParameters);
 	DispatchIterate(FormulaGetForm(unknownQuery), unknownParameters, 2, permutation, &iterator);
 	ASSERT_FALSE(DispatchIteratorNext(&iterator))
 	DispatchIteratorEnd(&iterator);

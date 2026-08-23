@@ -1203,7 +1203,7 @@ static void setupVariantRelation(
  * later dispatch to the relation being compiled, but this does not exist until compilation
  * is finished.)
  *
- * The parameter IO patttern of a recursive term can differ from that of the query term.
+ * The parameter IO pattern of a recursive term can differ from that of the query term.
  * A join binds the output arguments from its left child to the inputs of its right child,
  * so a recursive term may take as an input an argument that is an output it the query term.
  * 
@@ -1440,7 +1440,7 @@ bool FindOrCompileService(
 
 	size8 arity = queryActors->nAtoms;
 	Atom parameters[arity];
-	GetQueryParameters(queryActors, parameters);
+	ActorsToParameters(queryActors, parameters);
 	TypedTuple * queryParameters = CreateTypedTuple(arity);
 	for(index8 i = 0; i < arity; i++)
 		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameters[i]));
@@ -1461,11 +1461,12 @@ size8 CompileQuery(Atom queryTerm, Service services[], size8 maxServices)
 	FormulaView term = FormulaGetView(queryTerm);
 	ASSERT(IsTermForm(term.form))
 
-	// Parameterize the atoms of the query. The compilation works in tuples of typed atoms
-	// throughout, so the parameters are wrapped in one here.
+	// Parameterize the atoms of the query
 	size8 arity = term.actors->nAtoms;
 	Atom parameters[arity];
-	GetQueryParameters(term.actors, parameters);
+	ActorsToParameters(term.actors, parameters);
+	// The compiler works with typed tuples of typed atoms throughout,
+	// so wrap the parameters array in a TypedTuple
 	TypedTuple * queryParameters = CreateTypedTuple(arity);
 	for(index8 i = 0; i < arity; i++)
 		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameters[i]));

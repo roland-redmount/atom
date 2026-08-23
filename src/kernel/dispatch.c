@@ -219,7 +219,7 @@ bool DispatchQuery(
 {
 	size8 arity = queryActors->nAtoms;
 	Atom queryParameters[arity];
-	GetQueryParameters(queryActors, queryParameters);
+	ActorsToParameters(queryActors, queryParameters);
 
 	return DispatchParameterizedQuery(
 		queryTermForm, queryParameters, arity, service, permutation, 0, 0, 0);

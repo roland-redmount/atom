@@ -35,17 +35,17 @@
 
 
 /**
- * Generate the parameters of an actors tuple to an array of AT_PARAMETER atoms,
+ * Generate an array of AT_PARAMETER atoms corresponding to the actors tuple,
  * such that each non-variable atom in the actors tuple yields an input parameter
  * of the same type as the atom, and each variable yields an output parameter,
  * whose type is unknown.
- * The actors tuple must not contain AT_PARAMATER atoms.
+ * The actors tuple must not contain AT_PARAMETER atoms.
  * The parameters array must hold as many atoms as the actors tuple.
  * The generated parameter numbers are always equal to the tuple index (1-based), so
  * each actor is mapped to a distinct parameter, and any repeated variable loses its
  * equality constraint.
  */
-void GetQueryParameters(TypedTuple const * actors, Atom parameters[]);
+void ActorsToParameters(TypedTuple const * actors, Atom parameters[]);
 
 void PrintParameter(Atom parameter);
 
