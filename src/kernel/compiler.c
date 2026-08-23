@@ -41,66 +41,73 @@
  * points will have only one choice.
  *
  * We re-run the whole compilation once per combination, forcing a different choice each time.
- * A choice already taken at a choice point is named by the column types of the relation the
- * matched service reads, and a re-run asks dispatch for a match outside the names taken so
- * far; see DispatchParameterizedQuery(). Naming a match this way rather than by its
- * position in the dispatch enumeration is what keeps a re-run on the branch it means to be
- * on: compiling a term may register services of its own, which moves the relations of an
- * earlier choice point about in the enumeration.
+ * Each choice taken at a choice point is identified by the type signature of the chosen service.
+ * A re-run asks dispatch for a new matching service, besides those found so far;
+ * see DispatchParameterizedQuery().
  *
  * NOTE: a choice point is identified by the position at which it is encountered. That is
- * well defined because the terms of a clause are compiled in a deterministic order, and a
- * term compiled from the rules carries choice points of its own rather than adding to these.
- *
- * ChoicePoints describes the current position in a tree of ChoicePoints.depth,
- * where each level corresponds to a dispatched term.
+ * well defined because the terms of a clause are compiled in a deterministic order.
  */
 
+// Most choice points one compilation may reach, which is one per term dispatched
 #define MAX_CHOICE_POINTS	8
 
 // Most alternatives one choice point may enumerate
 #define MAX_CHOICE_POINT_MATCHES	8
 
-typedef struct s_ChoicePoints {
-	// Type signature of the service obtained from dispatch at each choice of each choice point.
-	// These are excluded in the next call to DispatchParameterizedQuery()
-	TypeSignature choiceSignatures[MAX_CHOICE_POINTS][MAX_CHOICE_POINT_MATCHES];
-	// Number of choices per choice point
-	size8 nChoices[MAX_CHOICE_POINTS];
-	// whether another match exists, at each choice poin
-	bool hasNextMatch[MAX_CHOICE_POINTS];
-	// number of choice points encountered in the current run
-	index8 depth;
+/**
+ * One dispatched term, and the choices made for it so far.
+ */
+typedef struct s_ChoicePoint {
+	// Type signature of the service each choice dispatched to. These are the signatures
+	// the next call to DispatchParameterizedQuery() excludes, so that it takes a match
+	// this choice point has not taken yet.
+	TypeSignature choiceSignatures[MAX_CHOICE_POINT_MATCHES];
+	size8 nChoices;
+	// whether a match outside choiceSignatures exists
+	bool hasNextMatch;
 #ifdef DEBUG
-	// The form of the term dispatched at each choice point.
-	// This is kept to verify that every compile run reaches that choice point with the same term.
-	Atom takenTermForm[MAX_CHOICE_POINTS];
+	// The form of the term dispatched here, kept to verify that every run reaches this
+	// choice point with the same term
+	Atom termForm;
 #endif
-} ChoicePoints;
+} ChoicePoint;
+
+/**
+ * The choice points of one compilation, which is the path the current run takes through
+ * the tree of combinations: one level per term dispatched, in the order the terms compile.
+ * A run walks the path from the root, so the choice points beyond its depth are the ones
+ * it has yet to reach.
+ */
+typedef struct s_ChoiceTree {
+	ChoicePoint choicePoints[MAX_CHOICE_POINTS];
+	// number of choice points the current run has reached
+	index8 depth;
+} ChoiceTree;
 
 
-static void resetChoicePoints(ChoicePoints * choicePoints)
+static void resetChoiceTree(ChoiceTree * choiceTree)
 {
-	SetMemory(choicePoints, sizeof(ChoicePoints), 0);
+	SetMemory(choiceTree, sizeof(ChoiceTree), 0);
 }
 
 
 /**
- * Advance to the deepest choice point that still has a next (untried) match,
- * and reset the choice points below it. Returns false when no choice point has a next match.
+ * Advance to the deepest choice point that still has a next (untried) match, and reset the
+ * choice points below it. Returns false when no choice point has a next match.
  */
-static bool nextChoiceBranch(ChoicePoints * choicePoints)
+static bool nextChoiceBranch(ChoiceTree * choiceTree)
 {
-	for(index8 i = choicePoints->depth; i > 0; i--) {
+	for(index8 i = choiceTree->depth; i > 0; i--) {
 		index8 d = i - 1;
-		if(choicePoints->hasNextMatch[d]) {
-			// The matches found at this choice point are kept, so that the next run takes
-			// a match outside them; the choice points below it start afresh
+		if(choiceTree->choicePoints[d].hasNextMatch) {
+			// The choices made at this choice point are kept, so that the next run takes a
+			// match outside them; the choice points below it start afresh
 			for(index8 j = i; j < MAX_CHOICE_POINTS; j++) {
-				choicePoints->nChoices[j] = 0;
-				choicePoints->hasNextMatch[j] = false;
+				choiceTree->choicePoints[j].nChoices = 0;
+				choiceTree->choicePoints[j].hasNextMatch = false;
 			}
-			choicePoints->depth = 0;
+			choiceTree->depth = 0;
 			return true;
 		}
 	}
@@ -220,32 +227,31 @@ static bool dispatchTermService(
  */
 static bool dispatchAtNewChoicePoint(
 	Atom termForm, TypedTuple const * termActors, int fallback, Service * service,
-	index8 permutation[], ChoicePoints * choicePoints)
+	index8 permutation[], ChoiceTree * choiceTree)
 {
 	// Add a new choice point
-	ASSERT(choicePoints->depth < MAX_CHOICE_POINTS)
-	index8 d = choicePoints->depth++;
+	ASSERT(choiceTree->depth < MAX_CHOICE_POINTS)
+	ChoicePoint * choicePoint = &(choiceTree->choicePoints[choiceTree->depth++]);
 	// dispatch term, parameterized
 	size8 termArity = termActors->nAtoms;
 	Atom termParameters[termArity];
 	getTermParameters(termActors, termParameters);
-	ASSERT(choicePoints->nChoices[d] < MAX_CHOICE_POINT_MATCHES)
+	ASSERT(choicePoint->nChoices < MAX_CHOICE_POINT_MATCHES)
 #ifdef DEBUG
-	if(choicePoints->nChoices[d])
-		ASSERT(SameAtoms(choicePoints->takenTermForm[d], termForm))
-	choicePoints->takenTermForm[d] = termForm;
+	if(choicePoint->nChoices)
+		ASSERT(SameAtoms(choicePoint->termForm, termForm))
+	choicePoint->termForm = termForm;
 #endif
 	if(!dispatchTermService(
 		termForm, termParameters, termArity, fallback, service, permutation,
-		choicePoints->choiceSignatures[d], choicePoints->nChoices[d],
-		&(choicePoints->hasNextMatch[d])))
+		choicePoint->choiceSignatures, choicePoint->nChoices,
+		&(choicePoint->hasNextMatch)))
 		return false;
 
 	// The relation the match reads is what names it, so recording its signature is what
 	// makes a later run take a different match here
-	choicePoints->choiceSignatures[d][choicePoints->nChoices[d]] =
-		service->relation->typeSignature;
-	choicePoints->nChoices[d]++;
+	choicePoint->choiceSignatures[choicePoint->nChoices] = service->relation->typeSignature;
+	choicePoint->nChoices++;
 	return true;
 }
 
@@ -315,14 +321,14 @@ static Operator * constrainRepeatedArguments(Operator * op, index8 clauseMap[])
  */
 static Operator * compileTerm(
 	Atom termForm, TypedTuple const * termActors, int fallback,
-	TypedTuple * serviceParameters, index8 clauseMap[], ChoicePoints * choicePoints)
+	TypedTuple * serviceParameters, index8 clauseMap[], ChoiceTree * choiceTree)
 {
 	// attempt to locate a service for the term
 	size8 termArity = termActors->nAtoms;
 	index8 permutation[termArity];
 	Service termService;
 	if(!dispatchAtNewChoicePoint(
-		termForm, termActors, fallback, &termService, permutation, choicePoints))
+		termForm, termActors, fallback, &termService, permutation, choiceTree))
 		return 0;
 
 	// Count the constants first: a permute operator indexes its constants after
@@ -452,7 +458,7 @@ typedef struct s_ClauseCompileState {
 	// The terms compiled so far, together with the matched term
 	bool * termExcluded;
 	// Choice points taken during the compilation
-	ChoicePoints * choicePoints;
+	ChoiceTree * choiceTree;
 } ClauseCompileState;
 
 
@@ -615,7 +621,7 @@ static Operator * compileConjunctionRecursive(
 				// If a term is found, a new choice point is added
 				op = compileTerm(
 					negatedTermForm, termActors, fallback, serviceParameters, termClauseMap,
-					clauseState->choicePoints);
+					clauseState->choiceTree);
 #ifdef DEBUG_COMPILER
 				PrintCString("serviceParameters = ");
 				TypedTuplePrint(serviceParameters);
@@ -781,7 +787,7 @@ static Operator * permuteToClauseArguments(
  */
 static Operator * compileConjunction(
 	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, Atom queryTermForm,
-	size8 nArguments, ChoicePoints * choicePoints)
+	size8 nArguments, ChoiceTree * choiceTree)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	index8 termActorsIndices[clauseNTerms + 1];
@@ -807,7 +813,7 @@ static Operator * compileConjunction(
 		.matchedTermArity =
 			termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex],
 		.termExcluded = termExcluded,
-		.choicePoints = choicePoints
+		.choiceTree = choiceTree
 	};
 
 	index8 clauseMap[clauseActors->nAtoms];
@@ -1117,8 +1123,8 @@ static size8 compileQueryClauses(
 					// Compile once per combination of choices. A term that leaves
 					// an output parameter untyped may match several services, each
 					// yielding a differently typed variant of the query service.
-					ChoicePoints choicePoints;
-					resetChoicePoints(&choicePoints);
+					ChoiceTree choiceTree;
+					resetChoiceTree(&choiceTree);
 					do {
 						// compileConjunction() updates parameter types in the clause
 						// actors, so re-derive them for each branch.
@@ -1131,7 +1137,7 @@ static size8 compileQueryClauses(
 
 						Operator * newService = compileConjunction(
 							clauseForm, substClauseActors, matchedTermIndex, queryTermForm,
-							queryTermArity, &choicePoints);
+							queryTermArity, &choiceTree);
 						if(!newService)
 							continue;
 						// Recover the unified parameters from the clause actors
@@ -1154,7 +1160,7 @@ static size8 compileQueryClauses(
 						// A variant a recursive clause compiled into needs a fixpoint
 						// operator to derive it
 						variant->isRecursive = variant->isRecursive || isRecursive;
-					} while(nextChoiceBranch(&choicePoints));
+					} while(nextChoiceBranch(&choiceTree));
 				}
 				FreeSubstitution(&querySubst);
 				FreeSubstitution(&matchedTermSubst);
