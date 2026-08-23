@@ -46,7 +46,7 @@ enum ServiceKind {
 typedef struct s_Service {
 	// The relation this service reads. Acquired; see Relation.h
 	Relation const * relation;
-	byte * parameterIO;
+	byte parameterIO[RELATION_MAX_ARITY];
 	// Pointer to the root of the operator tree defining this service.
 	// NOTE: cannot be const * if we want to do AcquireOperator(op).
 	// NOTE: not named "operator", which is a reserved word in C++

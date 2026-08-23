@@ -25,6 +25,11 @@
 #include "lang/Atom.h"
 
 
+// We limit the number of arguments a relation might have,
+// so that we can use fixed-size arrays in some places and avoid heap allocation.
+// In practice, services should rarely have arity higher than 3.
+#define RELATION_MAX_ARITY	8
+
 typedef struct s_Relation Relation;
 
 struct s_Relation {
@@ -39,7 +44,7 @@ struct s_Relation {
 	// whether this relation holds a reference to its forms; see RelationReleaseForm()
 	bool ownsForm;
 	size8 nColumns;
-	byte * atomTypes;
+	byte atomTypes[RELATION_MAX_ARITY];
 	/**
 	 * One reference per Service and per RelationTable naming this relation, plus the
 	 * creation reference held by whoever created it. The relation removes itself from the

@@ -62,8 +62,8 @@
 #define MAX_CHOICE_POINT_MATCHES	8
 
 typedef struct s_ChoicePoints {
-	// The matches already taken at each choice point, which dispatch is asked to avoid;
-	// see DispatchParameterizedQuery()
+	// Query parameter types obtained at each choice of each choice point.
+	// These excluded in next call to DispatchParameterizedQuery()
 	MatchTypes takenTypes[MAX_CHOICE_POINTS][MAX_CHOICE_POINT_MATCHES];
 	size8 nTaken[MAX_CHOICE_POINTS];
 	// whether a match the choice point has not taken exists at each choice point

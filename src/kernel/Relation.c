@@ -9,15 +9,16 @@
 Relation const * CreateRelationBootstrap(
 	Atom termForm, Atom predicateForm, size8 nColumns, byte const atomTypes[])
 {
+	ASSERT(nColumns <= RELATION_MAX_ARITY)
 	// NOTE: pool allocation would be preferable
 	Relation * relation = Allocate(sizeof(Relation));
+	SetMemory(relation, sizeof(Relation), 0);
 	relation->termForm = termForm;
 	IFactAcquire(termForm);
 	relation->predicateForm = predicateForm;
 	IFactAcquire(predicateForm);
 	relation->ownsForm = true;
 	relation->nColumns = nColumns;
-	relation->atomTypes = Allocate(nColumns);
 	CopyMemory(atomTypes, relation->atomTypes, nColumns);
 	relation->referenceCount = 1;
 
@@ -62,7 +63,6 @@ void ReleaseRelation(Relation const * relation)
 		IFactRelease(relation->termForm);
 		IFactRelease(relation->predicateForm);
 	}
-	Free(relation->atomTypes);
 	Free(mutableRelation);
 }
 

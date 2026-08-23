@@ -16,11 +16,6 @@
 #include "kernel/ServiceRegistry.h"
 #include "lang/formula.h"
 
-/**
- * Most parameters a query naming its matches may have; see DispatchParameterizedQuery().
- * A query that only wants the first match is not bounded by this.
- */
-#define MAX_MATCH_PARAMETERS	16
 
 /**
  * The column types of the relation a matched service reads, in relation column order and
@@ -28,7 +23,7 @@
  * the matches one at a time enumerates by; see DispatchParameterizedQuery().
  */
 typedef struct s_MatchTypes {
-	byte atomTypes[MAX_MATCH_PARAMETERS];
+	byte atomTypes[RELATION_MAX_ARITY];
 } MatchTypes;
 
 /**

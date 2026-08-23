@@ -52,24 +52,13 @@ static void setupService(
 	Service * service, Relation const * relation, byte const parameterIO[], Operator * op,
 	enum ServiceKind kind)
 {
+	ASSERT(relation->nColumns <= RELATION_MAX_ARITY)
+	SetMemory(service, sizeof(Service), 0);
 	service->relation = relation;
 	service->kind = kind;
-	if(parameterIO) {
-		service->parameterIO = Allocate(relation->nColumns);
+	if(parameterIO)
 		CopyMemory(parameterIO, service->parameterIO, relation->nColumns);
-	}
-	else
-		service->parameterIO = 0;
 	service->op = op;
-}
-
-
-// callback to free the parameterIO allocation upon B-tree deletion of a Service
-static void btreeFreeService(void * item, size32 itemSize)
-{
-	Service * service = item;
-	if(service->parameterIO)
-		Free(service->parameterIO);
 }
 
 
@@ -81,10 +70,9 @@ static int8 compareServices(Service const * service, Service const * serviceOrKe
 	else if(service->relation > serviceOrKey->relation)
 		return 1;
 	else {
-		// then compare parameter IO lists
-		if(!serviceOrKey->parameterIO)
+		// then compare parameter IO lists; a zero array for the key matches any IO
+		if(!serviceOrKey->parameterIO[0])
 			return 0;
-		ASSERT(service->parameterIO)
 		return CompareMemory(service->parameterIO, serviceOrKey->parameterIO, service->relation->nColumns);
 	}
 }
@@ -146,7 +134,7 @@ void SetupServiceRegistry(void)
 	services = BTreeCreate(
 		sizeof(Service),
 		btreeCompareServices,
-		btreeFreeService
+		0	// nothing to deallocate
 	);
 	operatorRelations = BTreeCreate(sizeof(OperatorRelation), btreeCompareOperatorRelations, 0);
 	dependencies = BTreeCreate(sizeof(OperatorDependency), btreeCompareDependencies, 0);
@@ -560,7 +548,7 @@ bool ServiceIteratorNext(ServiceIterator * iterator)
 {
 	Service key = {
 		.relation = iterator->relation,
-		.parameterIO = 0,
+		.parameterIO = {0},
 		.op = 0
 	};
 	bool foundItem;
@@ -598,7 +586,6 @@ Operator * ServiceRegistryFind(Relation const * relation, byte const parameterIO
 		op = service->op;
 	}
 	BTreeIteratorEnd(&iterator);
-	btreeFreeService(&key, 0);
 	return op;
 }
 

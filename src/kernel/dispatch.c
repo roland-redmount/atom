@@ -179,8 +179,8 @@ bool DispatchParameterizedQuery(
 	MatchTypes * matchTypes, bool * hasNextMatch)
 {
 	// Only a caller naming its matches is bounded by the width of MatchTypes
-	ASSERT(!nExcluded || (nParameters <= MAX_MATCH_PARAMETERS))
-	ASSERT(!matchTypes || (nParameters <= MAX_MATCH_PARAMETERS))
+	ASSERT(!nExcluded || (nParameters <= RELATION_MAX_ARITY))
+	ASSERT(!matchTypes || (nParameters <= RELATION_MAX_ARITY))
 
 	// The iterator overwrites its permutation array on every match, so iterate into
 	// a scratch array to avoid clobbering the returned permutation.
