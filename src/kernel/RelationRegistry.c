@@ -19,9 +19,10 @@ static int8 compareRelations(Relation const * relation, Relation const * relatio
 		return 1;
 	else {
 		// then compare atom types
-		if(!relationOrKey->atomTypes[0])
+		if(!relationOrKey->typeSignature.atomTypes[0])
 			return 0;
-		return CompareMemory(relation->atomTypes, relationOrKey->atomTypes, relation->nColumns);
+		return CompareMemory(
+			relation->typeSignature.atomTypes, relationOrKey->typeSignature.atomTypes, relation->nColumns);
 	}
 }
 
@@ -69,16 +70,14 @@ size32 RelationRegistryNRelations(void)
 }
 
 
-Relation const * RelationRegistryFind(Atom form, size8 nColumns, byte const atomTypes[])
+Relation const * RelationRegistryFind(Atom form, size8 nColumns, TypeSignature typeSignature)
 {
 	ASSERT(nColumns <= RELATION_MAX_ARITY)
 	Relation key = {
 		.termForm = form,
 		.nColumns = nColumns,
-		.atomTypes = {0}
+		.typeSignature = typeSignature
 	};
-	if(atomTypes)
-		CopyMemory(atomTypes, key.atomTypes, nColumns);
 
 	// the B-tree item must be a pointer to the key structure
 	Relation * keyPtr = &key;
@@ -103,7 +102,7 @@ bool RelationIteratorNext(RelationIterator * iterator)
 	Relation key = {
 		.termForm = iterator->form,
 		.nColumns = 0,
-		.atomTypes = {0}
+		.typeSignature = {.atomTypes = {0}},
 	};
 	Relation * keyPtr = &key;
 

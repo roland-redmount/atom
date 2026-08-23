@@ -346,9 +346,7 @@ static void createFacts(IFactDraft * draft, bool bootstrap)
 static data64 hashConjunction(IFactConjunction const * conjunction, Atom const * tuples, data64 initialHash)
 {
 	data64 hash = initialHash;
-	// hash the form and types
-	hash = DJB2DoubleHashAdd(&conjunction->table->relation->termForm.hash, sizeof(data64), initialHash);
-	hash = DJB2DoubleHashAdd(conjunction->table->relation->atomTypes, conjunction->table->relation->nColumns, hash);
+	hash = RelationHash(conjunction->table->relation, initialHash);
 	// hash all tuples (sorted)
 	return DJB2DoubleHashAdd(tuples, conjunction->nRows * conjunction->table->relation->nColumns * sizeof(Atom), hash);
 }

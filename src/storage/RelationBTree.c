@@ -150,7 +150,7 @@ byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint
 static void * createRelationBTree(RelationTable const * table)
 {
 	return CreateRelationBTree(
-		table->relation->nColumns, table->relation->atomTypes, table->indexColumns);
+		table->relation->nColumns, table->relation->typeSignature.atomTypes, table->indexColumns);
 }
 
 static size32 relationBTreeNTuples(RelationTable const * table)

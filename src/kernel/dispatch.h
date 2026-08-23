@@ -18,15 +18,6 @@
 
 
 /**
- * The column types of the relation a matched service reads, in relation column order and
- * zero filled. This names one match of a parameterized query, and is what a caller taking
- * the matches one at a time enumerates by; see DispatchParameterizedQuery().
- */
-typedef struct s_MatchTypes {
-	byte atomTypes[RELATION_MAX_ARITY];
-} MatchTypes;
-
-/**
  * Dispatch a query, copying the first matching service to *service, if any.
  * The queryAtoms tuple must not contain parameters (AT_PARAMETER) atoms;
  * see DispatchParameterizedQuery().
@@ -78,8 +69,8 @@ bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutatio
  */
 bool DispatchParameterizedQuery(
 	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, Service * service,
-	index8 permutation[], MatchTypes const excludedTypes[], size8 nExcluded,
-	MatchTypes * matchTypes, bool * hasNextMatch);
+	index8 permutation[], TypeSignature const excludedTypes[], size8 nExcluded,
+	TypeSignature * matchTypes, bool * hasNextMatch);
 
 
 /**

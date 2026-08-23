@@ -16,7 +16,7 @@
 
 struct {
 	Atom form;		// a term form
-	byte atomTypes[EXAMPLE_FORM_ARITY];
+	TypeSignature typeSignature;
 	// The relation the services under test are registered against. A computed relation:
 	// a service needs no tuple storage, which is the point of registering against a
 	// relation rather than against a table.
@@ -35,12 +35,14 @@ static void setupFixture(void)
 	// TODO: we should have a way to parse a form from a C string.
 	Atom formula = CStringToTerm("foo 0 bar 0 bar 0 baz 0");
 	fixture.form = FormulaGetForm(formula);
-	SetMemory(fixture.atomTypes, EXAMPLE_FORM_ARITY, AT_INT);
+	byte atomTypes[EXAMPLE_FORM_ARITY];
+	SetMemory(atomTypes, EXAMPLE_FORM_ARITY, AT_INT);
+	fixture.typeSignature = CreateTypeSignature(atomTypes, EXAMPLE_FORM_ARITY);
 	IFactAcquire(fixture.form);
 	ReleaseFormula(formula);
 
 	// services are registered per relation, so we need one to test with
-	fixture.relation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, fixture.atomTypes);
+	fixture.relation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, fixture.typeSignature);
 }
 
 
@@ -65,9 +67,9 @@ static Operator * createDummyMachineOperator(void)
  * column types, so that a service can be registered against it. Returns holding the
  * creation reference; see CreateRelation().
  */
-static Relation const * createComputedRelation(byte const atomTypes[])
+static Relation const * createComputedRelation(TypeSignature typeSignature)
 {
-	return CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, atomTypes);
+	return CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, typeSignature);
 }
 
 
@@ -128,13 +130,15 @@ void testInvalidateDependentServices(void)
 	ServiceRegistryAdd(fixture.relation, exampleParameterIO, machineOperator, SERVICE_PRIMITIVE);
 
 	// Hand-build a "compiled" service that depends on the machine service
-	byte firstTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_INT, AT_LETTER};
+	TypeSignature firstTypes = CreateTypeSignature(
+		(byte[]) {AT_INT, AT_INT, AT_INT, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation const * firstRelation = createComputedRelation(firstTypes);
 	Operator * firstOperator = addCompiledService(firstRelation, machineOperator);
 	ReleaseRelation(firstRelation);
 
 	// A second "compiled" service that depends on the first one
-	byte secondTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_LETTER, AT_LETTER};
+	TypeSignature secondTypes = CreateTypeSignature(
+		(byte[]) {AT_INT, AT_INT, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation const * secondRelation = createComputedRelation(secondTypes);
 	addCompiledService(secondRelation, firstOperator);
 	ReleaseRelation(secondRelation);
@@ -169,7 +173,8 @@ void testInvalidateOnPrimitiveService(void)
 	ServiceRegistryAdd(fixture.relation, exampleParameterIO, machineOperator, SERVICE_PRIMITIVE);
 
 	// Create a "compiled" relation depending on the machine service
-	byte compiledTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_INT, AT_LETTER};
+	TypeSignature compiledTypes = CreateTypeSignature(
+		(byte[]) {AT_INT, AT_INT, AT_INT, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation const * compiledRelation = createComputedRelation(compiledTypes);
 	addCompiledService(compiledRelation, machineOperator);
 	ReleaseRelation(compiledRelation);
@@ -177,7 +182,8 @@ void testInvalidateOnPrimitiveService(void)
 
 	// Create a second relation of the fixture form, with distinct atom types,
 	// and associated primitive services
-	byte storedTypes[EXAMPLE_FORM_ARITY] = {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER};
+	TypeSignature storedTypes = CreateTypeSignature(
+		(byte[]) {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation const * storedRelation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
 	RelationTable * storedTable = CreateRelationTable(
 		storedRelation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
@@ -208,7 +214,8 @@ void testInvalidateSharedOperator(void)
 	ServiceRegistryAdd(fixture.relation, exampleParameterIO, machineOperator, SERVICE_PRIMITIVE);
 
 	// Register a second service using the same machine operator
-	byte compiledTypes[EXAMPLE_FORM_ARITY] = {AT_INT, AT_INT, AT_INT, AT_LETTER};
+	TypeSignature compiledTypes = CreateTypeSignature(
+		(byte[]) {AT_INT, AT_INT, AT_INT, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation const * compiledRelation = createComputedRelation(compiledTypes);
 	ServiceRegistryAdd(compiledRelation, exampleParameterIO, machineOperator, SERVICE_COMPILED);
 	ReleaseRelation(compiledRelation);
@@ -251,7 +258,8 @@ static Operator * shareTableOperator(RelationTable * table)
 void testDropTableWithSharedOperator(void)
 {
 	setupFixture();
-	byte storedTypes[EXAMPLE_FORM_ARITY] = {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER};
+	TypeSignature storedTypes = CreateTypeSignature(
+		(byte[]) {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation const * relation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
@@ -286,7 +294,8 @@ void testDropTableWithSharedOperator(void)
 void testDropTableAfterSharedOperator(void)
 {
 	setupFixture();
-	byte storedTypes[EXAMPLE_FORM_ARITY] = {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER};
+	TypeSignature storedTypes = CreateTypeSignature(
+		(byte[]) {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation const * relation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});

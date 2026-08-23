@@ -54,8 +54,9 @@ int AssertFact(Atom termForm, TypedTuple const * actors, RelationTableProvider c
 		return ASSERT_FAIL;
 
 	// find existing relation table, or create new
-	Relation const * relation = FindOrCreateRelation(
-		termForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
+	TypeSignature typeSignature = CreateTypeSignature(
+		TypedTuplePeekAtomTypes(actors), actors->nAtoms);
+	Relation const * relation = FindOrCreateRelation(termForm, actors->nAtoms, typeSignature);
 	RelationTable * table = RelationTableRegistryFind(relation);
 	if(!table) {
 		table = CreateRelationTable(relation, provider ? provider : &btreeTableProvider, 0);
@@ -109,8 +110,9 @@ int AssertFormula(Atom formula)
 
 void RetractFact(Atom termForm, TypedTuple const * actors)
 {
-	Relation const * relation = RelationRegistryFind(
-		termForm, actors->nAtoms, TypedTuplePeekAtomTypes(actors));
+	TypeSignature typeSignature = CreateTypeSignature(
+		TypedTuplePeekAtomTypes(actors), actors->nAtoms);
+	Relation const * relation = RelationRegistryFind(termForm, actors->nAtoms, typeSignature);
 	if(!relation)
 		return;
 	RelationTable * table = RelationTableRegistryFind(relation);

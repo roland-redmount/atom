@@ -119,7 +119,7 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 		while(ServiceIteratorNext(&(iterator->serviceIterator))) {
 			Service const * currentService = ServiceIteratorPeekService(&(iterator->serviceIterator));
 			if(permutationMatch(
-				relation->predicateForm, relation->atomTypes, currentService->parameterIO,
+				relation->predicateForm, relation->typeSignature.atomTypes, currentService->parameterIO,
 				iterator->queryParameters, iterator->nParameters, iterator->permutation))
 			{
 				// Copy the service, as a pointer into the service registry is only
@@ -163,10 +163,10 @@ void DispatchIteratorEnd(DispatchIterator * iterator)
  */
 static bool isExcludedMatch(
 	Relation const * relation, size8 nParameters,
-	MatchTypes const excludedTypes[], size8 nExcluded)
+	TypeSignature const excludedTypes[], size8 nExcluded)
 {
 	for(index8 i = 0; i < nExcluded; i++) {
-		if(CompareMemory(relation->atomTypes, excludedTypes[i].atomTypes, nParameters) == 0)
+		if(CompareMemory(relation->typeSignature.atomTypes, excludedTypes[i].atomTypes, nParameters) == 0)
 			return true;
 	}
 	return false;
@@ -175,12 +175,11 @@ static bool isExcludedMatch(
 
 bool DispatchParameterizedQuery(
 	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, Service * service,
-	index8 permutation[], MatchTypes const excludedTypes[], size8 nExcluded,
-	MatchTypes * matchTypes, bool * hasNextMatch)
+	index8 permutation[], TypeSignature const excludedTypes[], size8 nExcluded,
+	TypeSignature * matchSignature, bool * hasNextMatch)
 {
-	// Only a caller naming its matches is bounded by the width of MatchTypes
 	ASSERT(!nExcluded || (nParameters <= RELATION_MAX_ARITY))
-	ASSERT(!matchTypes || (nParameters <= RELATION_MAX_ARITY))
+	ASSERT(!matchSignature || (nParameters <= RELATION_MAX_ARITY))
 
 	// The iterator overwrites its permutation array on every match, so iterate into
 	// a scratch array to avoid clobbering the returned permutation.
@@ -206,10 +205,8 @@ bool DispatchParameterizedQuery(
 		// copy the service struct, its permutation and its column types to the caller
 		*service = *candidate;
 		CopyMemory(candidatePermutation, permutation, nParameters * sizeof(index8));
-		if(matchTypes) {
-			SetMemory(matchTypes, sizeof(MatchTypes), 0);
-			CopyMemory(candidate->relation->atomTypes, matchTypes->atomTypes, nParameters);
-		}
+		if(matchSignature)
+			*matchSignature = candidate->relation->typeSignature;
 		// without a hasNextMatch request we can stop at the first match
 		if(hasNextMatch == 0)
 			break;

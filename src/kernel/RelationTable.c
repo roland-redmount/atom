@@ -78,7 +78,7 @@ byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint
 	if(result == TUPLE_ADDED) {
 		for(index8 i = 0; i < relation->nColumns; i++) {
 			if(i + 1 != idPosition)
-				AcquireAtom(tuple[i], relation->atomTypes[i]);
+				AcquireAtom(tuple[i], relation->typeSignature.atomTypes[i]);
 		}
 	}
 	return result;
@@ -98,7 +98,7 @@ byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], u
 	if(result == TUPLE_REMOVED) {
 		for(index32 i = 0; i < relation->nColumns; i++) {
 			if((i + 1) != idPosition)
-				ReleaseTypedAtom(CreateTypedAtom(relation->atomTypes[i], tuple[i]));
+				ReleaseTypedAtom(CreateTypedAtom(relation->typeSignature.atomTypes[i], tuple[i]));
 		}
 	}
 	return result;

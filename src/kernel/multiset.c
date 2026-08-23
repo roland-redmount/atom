@@ -69,7 +69,7 @@ static Relation const * lookupMultisetRelation(Atom multiset)
 static byte findMultisetElementType(Atom multiset)
 {
 	Relation const * relation = lookupMultisetRelation(multiset);
-	return relation->atomTypes[
+	return relation->typeSignature.atomTypes[
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)
 	];
 }

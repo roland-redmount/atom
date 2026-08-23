@@ -118,18 +118,18 @@ void testDispatchNegatedTerm(void)
 	Atom negatedTermForm = CreateTermForm(predicateForm, false);
 
 	// The two signs give two distinct relation tables
-	byte atomTypes[2] = {AT_ID, AT_ID};
-	Relation const * relation = CreateRelation(termForm, 2, atomTypes);
+	TypeSignature typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2);
+	Relation const * relation = CreateRelation(termForm, 2, typeSignature);
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(relation);
-	Relation const * negatedRelation = CreateRelation(negatedTermForm, 2, atomTypes);
+	Relation const * negatedRelation = CreateRelation(negatedTermForm, 2, typeSignature);
 	RelationTable * negatedTable = CreateRelationTable(
 		negatedRelation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(negatedRelation);
 	ASSERT_PTR_NOT_EQUAL(table, negatedTable)
-	ASSERT_PTR_EQUAL(RelationRegistryFind(termForm, 2, atomTypes), table->relation)
-	ASSERT_PTR_EQUAL(RelationRegistryFind(negatedTermForm, 2, atomTypes), negatedTable->relation)
+	ASSERT_PTR_EQUAL(RelationRegistryFind(termForm, 2, typeSignature), table->relation)
+	ASSERT_PTR_EQUAL(RelationRegistryFind(negatedTermForm, 2, typeSignature), negatedTable->relation)
 	// both tables report the predicate form the two term forms share
 	ASSERT_DATA64_EQUAL(table->relation->predicateForm.hash, predicateForm.hash)
 	ASSERT_DATA64_EQUAL(negatedTable->relation->predicateForm.hash, predicateForm.hash)
@@ -164,11 +164,13 @@ void testDispatchIterator(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	Relation const * idRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_ID});
+	Relation const * idRelation = CreateRelation(
+		termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2));
 	RelationTable * idTable = CreateRelationTable(
 		idRelation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(idRelation);
-	Relation const * intRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_INT});
+	Relation const * intRelation = CreateRelation(
+		termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
 	RelationTable * intTable = CreateRelationTable(
 		intRelation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(intRelation);
@@ -185,7 +187,7 @@ void testDispatchIterator(void)
 	// A match is named by the column types of the relation it reads, and excluding a name
 	// asks for the other match. This is what the compiler enumerates a choice point by;
 	// see compiler.c
-	MatchTypes excludedTypes[2];
+	TypeSignature excludedTypes[2];
 	bool foundIdRelation = false;
 	bool foundIntRelation = false;
 

@@ -72,9 +72,10 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 			(byte[]) {AT_ID, AT_INT, elementType},
 			atomTypes
 		);
+		TypeSignature typeSignature = CreateTypeSignature(atomTypes, 3);
 		Relation const * relation = RelationRegistryFind(
 			GetCoreTermForm(FORM_LIST_POSITION_ELEMENT),
-			3, atomTypes
+			3, typeSignature
 		);
 		ASSERT(relation);
 		RelationTable * table = RelationTableRegistryFind(relation);
@@ -272,7 +273,7 @@ void CopyListToTuple(Atom list, TypedTuple * tuple)
 {
 	ASSERT(ListLength(list) == tuple->nAtoms)
 	Relation const * relation = lookupListElementRelation(list);
-	byte elementType = relation->atomTypes[
+	byte elementType = relation->typeSignature.atomTypes[
 		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)
 	];
 	ListIterator iterator;
@@ -343,7 +344,7 @@ void PrintList(Atom list)
 	PrintCString("LIST{");
 	Relation const * relation = lookupListElementRelation(list);
 	ASSERT(relation)
-	byte elementType = relation->atomTypes[
+	byte elementType = relation->typeSignature.atomTypes[
 		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)
 	];
 

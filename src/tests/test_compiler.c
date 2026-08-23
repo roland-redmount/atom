@@ -350,7 +350,8 @@ void testCompileRecursiveJoin1(void)
 	// Create terminating fact, provide by a B-tree service
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
 	Relation const * relation = CreateRelation(
-		FormulaGetForm(terminatingFact), 2, TypedTuplePeekAtomTypes(FormulaGetActors(terminatingFact)));
+		FormulaGetForm(terminatingFact), 2,
+		CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(terminatingFact)), 2));
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(relation);
@@ -558,7 +559,8 @@ void testCompileNegatedTerm(void)
 {
 	// Setup the fact (odd 3)
 	Atom odd3term = CStringToTerm("odd 3");
-	Relation const * evenRelation = CreateRelation(FormulaGetForm(odd3term), 1, (byte[]) {AT_INT});
+	Relation const * evenRelation = CreateRelation(
+		FormulaGetForm(odd3term), 1, CreateTypeSignature((byte[]) {AT_INT}, 1));
 	RelationTable * evenTable = CreateRelationTable(
 		evenRelation, &btreeTableProvider, (index8[]) {0});
 	ReleaseRelation(evenRelation);
@@ -608,7 +610,8 @@ void testCompiledServiceReadsFactsLive(void)
 {
 	// (odd 3), and the rule making (! even x) follow from (odd x)
 	Atom odd3term = CStringToTerm("odd 3");
-	Relation const * oddRelation = CreateRelation(FormulaGetForm(odd3term), 1, (byte[]) {AT_INT});
+	Relation const * oddRelation = CreateRelation(
+		FormulaGetForm(odd3term), 1, CreateTypeSignature((byte[]) {AT_INT}, 1));
 	RelationTable * oddTable = CreateRelationTable(
 		oddRelation, &btreeTableProvider, (index8[]) {0});
 	ReleaseRelation(oddRelation);

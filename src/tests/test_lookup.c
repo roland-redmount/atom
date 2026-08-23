@@ -66,8 +66,9 @@ void testLookupPredicateRoles(void)
 	byte atomTypes[2];
 	atomTypes[nodeIndex] = AT_ID;
 	atomTypes[weightIndex] = AT_INT;
+	TypeSignature typeSignature = CreateTypeSignature(atomTypes, 2);
 	// a computed relation, as we only need it to describe the columns
-	Relation const * relation = CreateRelation(form, 2, atomTypes);
+	Relation const * relation = CreateRelation(form, 2, typeSignature);
 
 	Atom node = CreateStringFromCString("foo");
 	Atom actors[2];

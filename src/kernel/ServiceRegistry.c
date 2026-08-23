@@ -618,7 +618,7 @@ void PrintService(Service const * service)
 			(Atom) {
 				.parameter = {
 					.number = i + 1,
-					.atomType =	service->relation->atomTypes[i],
+					.atomType =	service->relation->typeSignature.atomTypes[i],
 					.io = service->parameterIO[i]
 				}
 			}
@@ -656,7 +656,7 @@ void RelationDump(Relation const * relation)
 	while(OperatorCall(context)) {
 		// TODO: we should probably not print the full representaiton
 		// of identified atoms, as it triggers repeated queries
-		PrintTuple(relation->atomTypes, arguments, relation->nColumns);
+		PrintTuple(relation->typeSignature.atomTypes, arguments, relation->nColumns);
 		PrintChar('\n');
 		nTuples++;
 	}

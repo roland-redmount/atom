@@ -61,7 +61,7 @@ static void openService(MixedTypeRelation * relation)
  */
 static void gatherTuple(MixedTypeRelation * relation)
 {
-	byte const * atomTypes = relation->impl.concat.service.relation->atomTypes;
+	byte const * atomTypes = relation->impl.concat.service.relation->typeSignature.atomTypes;
 	for(index8 i = 0; i < relation->tuple->nAtoms; i++)
 		TypedTupleSetElement(
 			relation->tuple,

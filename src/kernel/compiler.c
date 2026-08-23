@@ -64,7 +64,7 @@
 typedef struct s_ChoicePoints {
 	// Query parameter types obtained at each choice of each choice point.
 	// These excluded in next call to DispatchParameterizedQuery()
-	MatchTypes takenTypes[MAX_CHOICE_POINTS][MAX_CHOICE_POINT_MATCHES];
+	TypeSignature takenTypes[MAX_CHOICE_POINTS][MAX_CHOICE_POINT_MATCHES];
 	size8 nTaken[MAX_CHOICE_POINTS];
 	// whether a match the choice point has not taken exists at each choice point
 	bool hasNextMatch[MAX_CHOICE_POINTS];
@@ -195,8 +195,8 @@ static void setupParameterizedQuery(
 static bool dispatchTermService(
 	Atom termForm, Atom const termParameters[], size8 termArity, int fallback,
 	Service * service, index8 permutation[],
-	MatchTypes const excludedTypes[], size8 nExcluded,
-	MatchTypes * matchTypes, bool * hasNextMatch)
+	TypeSignature const excludedTypes[], size8 nExcluded,
+	TypeSignature * matchTypes, bool * hasNextMatch)
 {
 	if(DispatchParameterizedQuery(
 		termForm, termParameters, termArity, service, permutation,
@@ -242,7 +242,7 @@ static bool dispatchAtNewChoicePoint(
 		ASSERT(SameAtoms(choices->takenTermForm[d], termForm))
 	choices->takenTermForm[d] = termForm;
 #endif
-	MatchTypes * matchTypes = &(choices->takenTypes[d][choices->nTaken[d]]);
+	TypeSignature * matchTypes = &(choices->takenTypes[d][choices->nTaken[d]]);
 	if(!dispatchTermService(
 		termForm, termParameters, termArity, fallback, service, permutation,
 		choices->takenTypes[d], choices->nTaken[d],
@@ -368,7 +368,7 @@ static Operator * compileTerm(
 				(Atom) {
 					.parameter = {
 						.number = i + 1,
-						.atomType = termService.relation->atomTypes[i],
+						.atomType = termService.relation->typeSignature.atomTypes[i],
 						.io = termService.parameterIO[i]
 					}
 				}
@@ -898,17 +898,28 @@ static CompiledVariant * findVariant(
 
 
 /**
- * Copy the atom types and parameter IO arrays from the parameters of
- * a compiled variant. Both arrays have the query term arity.
+ * The type signature of a compiled variant, from the parameters resolved for it.
  */
-static void getVariantSignature(
-	CompiledVariant const * variant, byte atomTypes[], byte parameterIO[])
+static TypeSignature getVariantTypeSignature(CompiledVariant const * variant)
+{
+	size8 arity = variant->parameters->nAtoms;
+	byte atomTypes[arity];
+	Atom const * parameters = TypedTuplePeekAtoms(variant->parameters);
+	for(index8 i = 0; i < arity; i++)
+		atomTypes[i] = parameters[i].parameter.atomType;
+	return CreateTypeSignature(atomTypes, arity);
+}
+
+
+/**
+ * Copy the parameter IO of a compiled variant, from the parameters resolved for it, to an
+ * array of the query term arity.
+ */
+static void getVariantParameterIO(CompiledVariant const * variant, byte parameterIO[])
 {
 	Atom const * parameters = TypedTuplePeekAtoms(variant->parameters);
-	for(index8 i = 0; i < variant->parameters->nAtoms; i++) {
-		atomTypes[i] = parameters[i].parameter.atomType;
+	for(index8 i = 0; i < variant->parameters->nAtoms; i++)
 		parameterIO[i] = parameters[i].parameter.io;
-	}
 }
 
 
@@ -1173,10 +1184,8 @@ static void setupVariantRelation(
 {
 	if(variant->relation)
 		return;
-	byte atomTypes[arity];
-	byte parameterIO[arity];
-	getVariantSignature(variant, atomTypes, parameterIO);
-	variant->relation = FindOrCreateRelation(queryTermForm, arity, atomTypes);
+	variant->relation = FindOrCreateRelation(
+		queryTermForm, arity, getVariantTypeSignature(variant));
 }
 
 
@@ -1215,9 +1224,8 @@ static void registerTemporaryServices(
 {
 	setupVariantRelation(variant, queryTermForm, queryTermArity);
 
-	byte atomTypes[queryTermArity];
 	byte queryParameterIO[queryTermArity];
-	getVariantSignature(variant, atomTypes, queryParameterIO);
+	getVariantParameterIO(variant, queryParameterIO);
 
 	// Find the output arguments of the query, which a recursive term may bind
 	index8 outputArguments[queryTermArity];
@@ -1269,9 +1277,8 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
 	if(!variant->isRecursive)
 		return;
 
-	byte atomTypes[arity];
 	byte parameterIO[arity];
-	getVariantSignature(variant, atomTypes, parameterIO);
+	getVariantParameterIO(variant, parameterIO);
 	index8 inputArguments[arity];
 	size8 nInputs = findInputArguments(parameterIO, arity, inputArguments);
 
@@ -1398,9 +1405,8 @@ static size8 compileParameterizedQuery(
 
 	for(index8 i = 0; i < nVariants; i++) {
 		// Parameter types and the relation were resolved by compileQueryVariants()
-		byte atomTypes[arity];
 		byte parameterIO[arity];
-		getVariantSignature(&variants[i], atomTypes, parameterIO);
+		getVariantParameterIO(&variants[i], parameterIO);
 		services[i] = ServiceRegistryAdd(
 			variants[i].relation, parameterIO, variants[i].op, SERVICE_COMPILED);
 		// the service registry now holds the references to the operator and the relation
