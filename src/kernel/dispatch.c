@@ -214,21 +214,20 @@ bool DispatchParameterizedQuery(
 }
 
 
-bool DispatchQuery(
-	Atom queryTermForm, TypedTuple const * queryActors, Service * service, index8 permutation[])
+bool DispatchQuery(FormulaView query, Service * service, index8 permutation[])
 {
-	size8 arity = queryActors->nAtoms;
+	size8 arity = query.actors->nAtoms;
 	Atom queryParameters[arity];
-	ActorsToParameters(queryActors, queryParameters);
+	ActorsToParameters(query.actors, queryParameters);
 
 	return DispatchParameterizedQuery(
-		queryTermForm, queryParameters, arity, service, permutation, 0, 0, 0);
+		query.form, queryParameters, arity, service, permutation, 0, 0, 0);
 }
 
 
 bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutation)
 {
 	FormulaView term = FormulaGetView(queryTerm);
-	return DispatchQuery(term.form, term.actors, service, permutation);
+	return DispatchQuery(term, service, permutation);
 }
 

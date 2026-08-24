@@ -170,15 +170,6 @@ typedef struct s_CompilationState {
 } CompilationState;
 
 
-/**
- * What dispatchTermService() may do when the service registry holds no service for a term.
- * Compiling a term from the rules succeeds whatever the term binds, so a clause only offers
- * that to a term once none of its terms dispatches to a registered service; see
- * compileConjunctionRecursive().
- */
-#define COMPILE_FALLBACK_NONE	1
-#define COMPILE_FALLBACK_RULES	2
-
 static size8 compileParameterizedQuery(CompilationState * state, FormulaView query, Service services[]);
 
 
@@ -201,19 +192,16 @@ static void setupParameterizedQuery(
 
 
 /**
- * Find the service a term is to be compiled against: the one the service registry holds,
- * or, where the caller permits it, one compiled from the rules answering the term. This is
- * what lets a rule body term be answered by another rule, and is the same two steps
- * UserQuery() takes for a query the user asks.
- *
- * The compiled services are registered, so the second dispatch finds whichever of them this
- * term asks for. Dispatching again rather than picking from what the compilation returned
- * keeps permutation matching and the parameter type checks in one place.
- *
+ * Find a service for the given term (termForm, termParameters), either by dispatch,
+ * or if fallback = COMPILE_FALLBACK_RULES, by compiling the term.
  * The exclusion list, the resolved types and hasNextMatch are as for
  * DispatchParameterizedQuery(). Returns true if a service was found.
  */
-static bool dispatchTermService(
+
+#define COMPILE_FALLBACK_NONE	1
+#define COMPILE_FALLBACK_RULES	2
+
+static bool dispatchOrCompileTerm(
 	CompilationState * state, Atom termForm, Atom const termParameters[], size8 termArity, int fallback,
 	Service * service, index8 permutation[],
 	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch)
@@ -224,7 +212,8 @@ static bool dispatchTermService(
 		return true;
 	if(fallback != COMPILE_FALLBACK_RULES)
 		return false;
-
+	
+	// Else attempt to compile new services for the term
 	TypedTuple * queryParameters = CreateTypedTuple(termArity);
 	setupParameterizedQuery(termParameters, termArity, queryParameters);
 	size8 nServices = compileParameterizedQuery(
@@ -233,6 +222,7 @@ static bool dispatchTermService(
 	if(!nServices)
 		return false;
 
+	// New services were compiled, so re-try dispatch
 	return DispatchParameterizedQuery(
 		termForm, termParameters, termArity, service, permutation,
 		excludedSignatures, nExcluded, hasNextMatch);
@@ -240,33 +230,34 @@ static bool dispatchTermService(
 
 
 /**
- * Dispatch a term, adding a choice point for it
+ * Dispatch or compile a term, adding a choice point for it
  */
-static bool dispatchAtNewChoicePoint(
+static bool dispatchOrCompileAtNewChoicePoint(
 	CompilationState * state, Atom termForm, TypedTuple const * termActors, int fallback, Service * service,
 	index8 permutation[], ChoiceTree * choiceTree)
 {
 	// Add a new choice point
 	ASSERT(choiceTree->depth < MAX_CHOICE_POINTS)
 	ChoicePoint * choicePoint = &(choiceTree->choicePoints[choiceTree->depth++]);
+
 	// dispatch term, parameterized
 	size8 termArity = termActors->nAtoms;
 	Atom termParameters[termArity];
 	getTermParameters(termActors, termParameters);
+
 	ASSERT(choicePoint->nChoices < MAX_CHOICE_POINT_MATCHES)
 #ifdef DEBUG
 	if(choicePoint->nChoices)
 		ASSERT(SameAtoms(choicePoint->termForm, termForm))
 	choicePoint->termForm = termForm;
 #endif
-	if(!dispatchTermService(
+	if(!dispatchOrCompileTerm(
 		state, termForm, termParameters, termArity, fallback, service, permutation,
 		choicePoint->choiceSignatures, choicePoint->nChoices,
 		&(choicePoint->hasNextMatch)))
 		return false;
 
-	// The relation the match reads is what names it, so recording its signature is what
-	// makes a later run take a different match here
+	// Add the found relation's signature to the choices for the new choice point
 	choicePoint->choiceSignatures[choicePoint->nChoices] = service->relation->typeSignature;
 	choicePoint->nChoices++;
 	return true;
@@ -317,10 +308,10 @@ static Operator * constrainRepeatedArguments(Operator * op, index8 clauseMap[])
 
 
 /**
- * Build the operator of a term from the service answering it, taking only the arguments of
- * the term itself. Any non-parameter actor is a constant restricting one argument of that
- * service, and is bound by a PERMUTE operator wrapped around it; a term without constants
- * compiles to the service operator directly. The permutation needs no operator of its own:
+ * Build the operator of a term from the service it dispatches to.
+ * 
+ * Any non-parameter in termActors is a constant, which is provided to the service's operator,
+ * by a PERMUTE operator wrapped around it. The permutation needs no operator of its own:
  * it is carried by the clauseMap. (Variables occurring in the clause but not in the query
  * are given parameter numbers of their own by parameterizeLocalVariables() before we get
  * here.)
@@ -338,7 +329,7 @@ static Operator * constrainRepeatedArguments(Operator * op, index8 clauseMap[])
  *
  * The caller keeps its own reference to the service operator.
  */
-static Operator * compileTermService(
+static Operator * createTermOperator(
 	Service const * termService, TypedTuple const * termActors, index8 const permutation[],
 	TypedTuple * serviceParameters, index8 clauseMap[])
 {
@@ -410,7 +401,10 @@ static Operator * compileTermService(
 
 
 /**
- * A term compiles to the service that dispatch matches to it; see compileTermService().
+ * Compile a term into an operator by either locating an existing service,
+ * or by compiling a new service, if fallback =
+ * 
+
  * The fallback says whether a term the service registry cannot answer may be compiled from
  * the rules; see dispatchTermService().
  */
@@ -422,11 +416,11 @@ static Operator * compileTerm(
 	size8 termArity = termActors->nAtoms;
 	index8 permutation[termArity];
 	Service termService;
-	if(!dispatchAtNewChoicePoint(
+	if(!dispatchOrCompileAtNewChoicePoint(
 		state, termForm, termActors, fallback, &termService, permutation, choiceTree))
 		return 0;
 
-	return compileTermService(
+	return createTermOperator(
 		&termService, termActors, permutation, serviceParameters, clauseMap);
 }
 
@@ -690,9 +684,9 @@ static Operator * compileRecursiveTerm(
 		.kind = SERVICE_TEMPORARY
 	};
 	CopyMemory(parameterIO, recurseService.parameterIO, termArity);
-	Operator * op = compileTermService(
+	Operator * op = createTermOperator(
 		&recurseService, termActors, permutation, serviceParameters, clauseMap);
-	// compileTermService() took its own reference to the operator
+	// createTermOperator() took its own reference to the operator
 	ReleaseOperator(recurseOperator);
 	return op;
 }
@@ -1468,7 +1462,7 @@ static TypedTuple * parameterizeQuery(TypedTuple const * queryActors)
 bool FindOrCompileService(FormulaView query, Service * service, index8 permutation[])
 {
 	// First attempt to dispatch to an existing service
-	if(DispatchQuery(query.form, query.actors, service, permutation))
+	if(DispatchQuery(query, service, permutation))
 		return true;
 	// Else attempt to compile a service
 	TypedTuple * queryParameters = parameterizeQuery(query.actors);
@@ -1479,7 +1473,7 @@ bool FindOrCompileService(FormulaView query, Service * service, index8 permutati
 	if(!nServices)
 		return false;
 
-	return DispatchQuery(query.form, query.actors, service, permutation);
+	return DispatchQuery(query, service, permutation);
 }
 
 

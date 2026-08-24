@@ -35,8 +35,7 @@
  * the query contains repeated variables, for example (edge e from x to x).
  * The caller must filter out these tuples; see MixedTypeRelation.h.
  */
-bool DispatchQuery(
-	Atom queryTermForm, TypedTuple const * queryActors, Service * service, index8 permutation[]);
+bool DispatchQuery(FormulaView query, Service * service, index8 permutation[]);
 
 /**
  * Same, using a term (formula) instead of a termform and actors tuple
