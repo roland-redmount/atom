@@ -174,11 +174,7 @@ static size8 compileParameterizedQuery(CompilationState * state, FormulaView que
 
 
 /**
- * Number the parameters of a term by position, which is what a parameterized query is:
- * every position a parameter of its own, so that a parameter occurring twice in the term
- * loses its equality constraint. That constraint is not lost from the compiled term, which
- * applies it above the service; see constrainRepeatedArguments(). This is what
- * DispatchQuery() does to the actors it is given, done here to the parameters of a term.
+ * Copy the term parameters to queryParamters and renumber them 1, 2, ..., termArity
  */
 static void setupParameterizedQuery(
 	Atom const termParameters[], size8 termArity, TypedTuple * queryParameters)
@@ -495,14 +491,13 @@ static TypeSignature getVariantTypeSignature(CompiledVariant const * variant)
 
 
 /**
- * Copy the parameter IO of a compiled variant, from the parameters resolved for it, to an
- * array of the query term arity.
+ * Copy the parameter IO from a parameter tuple to an array of the same length.
  */
-static void getVariantParameterIO(CompiledVariant const * variant, byte parameterIO[])
+static void getVariantParameterIO(TypedTuple const * parameters, byte parameterIO[])
 {
-	Atom const * parameters = TypedTuplePeekAtoms(variant->parameters);
-	for(index8 i = 0; i < variant->parameters->nAtoms; i++)
-		parameterIO[i] = parameters[i].parameter.io;
+	Atom const * parametersArray = TypedTuplePeekAtoms(parameters);
+	for(index8 i = 0; i < parameters->nAtoms; i++)
+		parameterIO[i] = parametersArray[i].parameter.io;
 }
 
 
@@ -627,9 +622,8 @@ static size8 findInputArguments(
 
 
 /**
- * A recursive term reads the relation the compilation is deriving, which no service
- * answers yet, so it compiles to a RECURSE operator built for the term rather than to a
- * service dispatch finds. The operator enumerates the tuples derived so far by the FIXPOINT
+ * Compile a recursive term to a RECURSE operator.
+ * The operator enumerates the tuples derived so far by the FIXPOINT
  * operator that completeRecursiveVariant() puts above the clause.
  *
  * The term is taken last of the clause, so every argument another term provides is already
@@ -655,7 +649,7 @@ static Operator * compileRecursiveTerm(
 	getTermParameters(termActors, termParameters);
 	// The arguments the query binds, which this term has to bind too
 	byte queryParameterIO[termArity];
-	getVariantParameterIO(clauseState->recursiveVariant, queryParameterIO);
+	getVariantParameterIO(clauseState->recursiveVariant->parameters, queryParameterIO);
 
 	byte const * atomTypes = relation->typeSignature.atomTypes;
 	byte parameterIO[termArity];
@@ -1037,7 +1031,7 @@ static bool sameParameterSignature(TypedTuple const * first, TypedTuple const * 
  * Find a compiled variant whose signature matches the given parameters.
  */
 static CompiledVariant * findVariant(
-	CompiledVariant * variants, size8 nVariants, TypedTuple const * parameters)
+	CompiledVariant variants[], size8 nVariants, TypedTuple const * parameters)
 {
 	for(index8 i = 0; i < nVariants; i++) {
 		if(sameParameterSignature(variants[i].parameters, parameters))
@@ -1125,15 +1119,19 @@ static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
 
 /**
  * Find all clauses (rules) that match the given query term and compile them,
- * producing one or more CompiledVariant. If multiple clauses resolve to the same signature,
- * they are are combined with a UNION operaor. Returns the number of compiled variants.
- *
+ * producing one or more CompiledVariant.
  * The queryActors tuple must be a series of AT_PARAMETER atoms numbered 1, 2, ...
  * and is not modified; each compiled variant carries its own resolved parameters.
- *
- * Any recursive clauses found are compiled only if recursiveVariant != 0, in which case
- * it must hold a previously compiled variant for the query term.
- *
+ * 
+ * recursiveVariant is previously compiled variant for the query term.
+ * Any recursive clauses found are compiled only if recursiveVariant != 0.
+ * NOTE: so "recursiveVariant" actually is the variant from the previous non-recursive
+ * pass -- the name is confusing.
+ * 
+ * If multiple clauses resolve to the same signature, they are are combined with a UNION operator.
+ * Appends the new compiled variants to the variants array and returns the new number of variants
+ * in the array.
+ * 
  * foundRecursiveClause is set to true if any matched clause was recursive.
  * The second pass sets it again, to no effect. TODO: this is confusing, revise
  */
@@ -1144,7 +1142,7 @@ static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
 static size8 compileQueryClauses(
 	CompilationState * state, FormulaView query,
 	CompiledVariant * recursiveVariant, bool * foundRecursiveClause,
-	CompiledVariant * variants, size8 nVariants)
+	CompiledVariant variants[], size8 nVariants)
 {
 	size8 queryTermArity = TermFormArity(query.form);
 	*foundRecursiveClause = false;
@@ -1311,7 +1309,7 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
 		return;
 
 	byte parameterIO[arity];
-	getVariantParameterIO(variant, parameterIO);
+	getVariantParameterIO(variant->parameters, parameterIO);
 	index8 inputArguments[arity];
 	size8 nInputs = findInputArguments(parameterIO, arity, inputArguments);
 
@@ -1336,10 +1334,10 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
  * NOTE: a recursive service is not guaranteed to terminate; see the notes on termination
  * in compiler.md.
  */
-static size8 compileQueryVariants(CompilationState * state, FormulaView query, CompiledVariant * variants)
+static size8 compileQueryVariants(CompilationState * state, FormulaView query, CompiledVariant variants[])
 {
 	bool foundRecursiveClause;
-	// First pass compilation for the non-recursive matching clauses
+	// First pass compilation generates variants for the non-recursive matching clauses
 	size8 nVariants = compileQueryClauses(
 		state, query,
 		0,	// recursive variant
@@ -1414,6 +1412,7 @@ static size8 compileParameterizedQuery(
 #endif
 
 	size8 arity = query.actors->nAtoms;
+	// NOTE: this could go to the CompilerState struct
 	CompiledVariant variants[MAX_COMPILED_SERVICES];
 	size8 nVariants = compileQueryVariants(state, query, variants);
 
@@ -1423,7 +1422,7 @@ static size8 compileParameterizedQuery(
 	for(index8 i = 0; i < nVariants; i++) {
 		// Parameter types and the relation were resolved by compileQueryVariants()
 		byte parameterIO[arity];
-		getVariantParameterIO(&variants[i], parameterIO);
+		getVariantParameterIO(variants[i].parameters, parameterIO);
 		Service service = ServiceRegistryAdd(
 			variants[i].relation, parameterIO, variants[i].op, SERVICE_COMPILED);
 #ifdef DEBUG_COMPILER
