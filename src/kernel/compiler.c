@@ -179,8 +179,7 @@ typedef struct s_CompilationState {
 #define COMPILE_FALLBACK_NONE	1
 #define COMPILE_FALLBACK_RULES	2
 
-static size8 compileParameterizedQuery(
-	CompilationState * state, Atom queryTermForm, TypedTuple const * queryParameters, Service services[]);
+static size8 compileParameterizedQuery(CompilationState * state, FormulaView query, Service services[]);
 
 
 /**
@@ -228,7 +227,8 @@ static bool dispatchTermService(
 
 	TypedTuple * queryParameters = CreateTypedTuple(termArity);
 	setupParameterizedQuery(termParameters, termArity, queryParameters);
-	size8 nServices = compileParameterizedQuery(state, termForm, queryParameters, 0);
+	size8 nServices = compileParameterizedQuery(
+		state, (FormulaView) {.form = termForm, .actors = queryParameters},	0);
 	FreeTypedTuple(queryParameters);
 	if(!nServices)
 		return false;
@@ -1146,12 +1146,11 @@ static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
 #define RECURSIVE_PASS		2
 
 static size8 compileQueryClauses(
-	CompilationState * state,
-	Atom queryTermForm, TypedTuple const * queryActors,
+	CompilationState * state, FormulaView query,
 	CompiledVariant * recursiveVariant, bool * foundRecursiveClause,
 	CompiledVariant * variants, size8 nVariants)
 {
-	size8 queryTermArity = TermFormArity(queryTermForm);
+	size8 queryTermArity = TermFormArity(query.form);
 	*foundRecursiveClause = false;
 
 	// Determine whether to compile recursive or non-recursive clauses
@@ -1185,7 +1184,7 @@ static size8 compileQueryClauses(
 	while(OperatorCall(multisetContext)) {
 		Atom termForm = multisetQueryTuple[
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
-		if(!SameAtoms(termForm, queryTermForm))
+		if(!SameAtoms(termForm, query.form))
 			continue;
 		// Found a multiset where the term form occurs
 		Atom clauseForm = multisetQueryTuple[
@@ -1197,7 +1196,7 @@ static size8 compileQueryClauses(
 			continue;
 
 		// If the clause is recursive, we report this to the caller in foundRecursiveClause.
-		bool recursiveClauseForm = isRecursiveClauseForm(clauseForm, queryTermForm);
+		bool recursiveClauseForm = isRecursiveClauseForm(clauseForm, query.form);
 		if(recursiveClauseForm)
 			*foundRecursiveClause = true;
 		// Compile only recursive clauses in the RECURSIVE_PASS, and only non-recursive ones
@@ -1221,7 +1220,7 @@ static size8 compileQueryClauses(
 
 			// Iterate over all occurences of the query term in the matched clause
 			// and find one that unifies, if any.
-			index8 matchedTermActorsIndex = ClauseGetTermActorsIndex(clauseForm, queryTermForm, 1);
+			index8 matchedTermActorsIndex = ClauseGetTermActorsIndex(clauseForm, query.form, 1);
 			bool foundTerm = false;
 			for(index8 m = 1; !foundTerm && (m <= multiple); m++) {
 				// extract actors for the matching term in the clause
@@ -1229,9 +1228,9 @@ static size8 compileQueryClauses(
 				// unify the query with the matched term
 				Substitution querySubst;
 				Substitution matchedTermSubst;
-				foundTerm = UnifyTuples(queryActors, matchedTermActors, &querySubst, &matchedTermSubst);
+				foundTerm = UnifyTuples(query.actors, matchedTermActors, &querySubst, &matchedTermSubst);
 				if(foundTerm) {
-					index8 matchedTermIndex = ClauseGetTermIndex(clauseForm, queryTermForm, m);
+					index8 matchedTermIndex = ClauseGetTermIndex(clauseForm, query.form, m);
 					// Compile once per combination of choices. A term that leaves
 					// an output parameter untyped may match several services, each
 					// yielding a differently typed variant of the query service.
@@ -1248,7 +1247,7 @@ static size8 compileQueryClauses(
 #endif
 
 						Operator * newService = compileConjunction(
-							state, clauseForm, substClauseActors, matchedTermIndex, queryTermForm,
+							state, clauseForm, substClauseActors, matchedTermIndex, query.form,
 							queryTermArity, &choiceTree, recursiveVariant);
 						if(!newService)
 							continue;
@@ -1341,19 +1340,17 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
  * NOTE: a recursive service is not guaranteed to terminate; see the notes on termination
  * in compiler.md.
  */
-static size8 compileQueryVariants(
-	CompilationState * state, Atom queryTermForm, TypedTuple const * queryActors, CompiledVariant * variants)
+static size8 compileQueryVariants(CompilationState * state, FormulaView query, CompiledVariant * variants)
 {
 	bool foundRecursiveClause;
 	// First pass compilation for the non-recursive matching clauses
 	size8 nVariants = compileQueryClauses(
-		state,
-		queryTermForm, queryActors,
+		state, query,
 		0,	// recursive variant
 		&foundRecursiveClause,
 		variants, 0
 	);
-	size8 queryTermArity = TermFormArity(queryTermForm);
+	size8 queryTermArity = TermFormArity(query.form);
 
 	if(foundRecursiveClause) {
 		// Second pass, once per variant the non-recursive clauses yielded. A recursive
@@ -1363,13 +1360,13 @@ static size8 compileQueryVariants(
 		// against does not compile at all.
 		size8 nRecursiveVariants = nVariants;
 		for(index8 i = 0; i < nRecursiveVariants; i++) {
-			setupVariantRelation(&variants[i], queryTermForm, queryTermArity);
+			setupVariantRelation(&variants[i], query.form, queryTermArity);
 			nVariants = compileQueryClauses(
-				state,
-				queryTermForm, variants[i].parameters,
+				state, (FormulaView) {.form = query.form, .actors = variants[i].parameters},
 				&variants[i],
 				&foundRecursiveClause,
-				variants, nVariants);
+				variants, nVariants
+			);
 		}
 		for(index8 i = 0; i < nVariants; i++)
 			completeRecursiveVariant(&variants[i], queryTermArity);
@@ -1378,7 +1375,7 @@ static size8 compileQueryVariants(
 	// A service is registered against a relation, so every variant needs one. The variants
 	// a recursive clause compiles against have theirs already; here we cover the rest.
 	for(index8 i = 0; i < nVariants; i++)
-		setupVariantRelation(&variants[i], queryTermForm, queryTermArity);
+		setupVariantRelation(&variants[i], query.form, queryTermArity);
 	return nVariants;
 }
 
@@ -1386,11 +1383,11 @@ static size8 compileQueryVariants(
 /**
  * Test whether the given parameterized query is are being compiled.
  */
-static bool isBeingCompiled(CompilationState const * state, Atom queryTermForm, TypedTuple const * queryParameters)
+static bool isBeingCompiled(CompilationState const * state, FormulaView queryTerm)
 {
 	for(index8 i = 0; i < state->compilationDepth; i++) {
-		if(SameAtoms(state->compilationStack[i].form, queryTermForm)
-			&& sameParameterSignature(state->compilationStack[i].actors, queryParameters))
+		if(SameAtoms(state->compilationStack[i].form, queryTerm.form)
+			&& sameParameterSignature(state->compilationStack[i].actors, queryTerm.actors))
 			return true;
 	}
 	return false;
@@ -1405,26 +1402,24 @@ static bool isBeingCompiled(CompilationState const * state, Atom queryTermForm, 
  * this function does nothing and returns 0.
  */
 static size8 compileParameterizedQuery(
-	CompilationState * state, Atom queryTermForm, TypedTuple const * queryParameters, Service services[])
+	CompilationState * state, FormulaView query, Service services[])
 {
-	ASSERT(IsTermForm(queryTermForm))
-	if(isBeingCompiled(state, queryTermForm, queryParameters))
+	ASSERT(IsTermForm(query.form))
+	if(isBeingCompiled(state, query))
 		return 0;
 	// NOTE: this could be an addToStack() function
 	ASSERT(state->compilationDepth < MAX_COMPILATION_DEPTH)
-	state->compilationStack[state->compilationDepth++] = (FormulaView) {
-		.form = queryTermForm, .actors = queryParameters
-	};
+	state->compilationStack[state->compilationDepth++] = query;
 
 #ifdef DEBUG_COMPILER
 	PrintCString("\ncompileParameterizedQuery()\nqueryParameters: ");
-	PrintFormActorsAsFormula(queryTermForm, queryParameters);
+	PrintFormulaView(query);
 	PrintChar('\n');
 #endif
 
-	size8 arity = queryParameters->nAtoms;
+	size8 arity = query.actors->nAtoms;
 	CompiledVariant variants[MAX_COMPILED_SERVICES];
-	size8 nVariants = compileQueryVariants(state, queryTermForm, queryParameters, variants);
+	size8 nVariants = compileQueryVariants(state, query, variants);
 
 #ifdef DEBUG_COMPILER
 	PrintCString("-> compiled operators:\n");
@@ -1451,47 +1446,50 @@ static size8 compileParameterizedQuery(
 }
 
 
-bool FindOrCompileService(
-	Atom queryTermForm, TypedTuple const * queryActors, Service * service,
-	index8 permutation[])
+/**
+ * Parameterize a query. The caller must free the returned TypedTuple.
+ */
+static TypedTuple * parameterizeQuery(TypedTuple const * queryActors)
 {
-	if(DispatchQuery(queryTermForm, queryActors, service, permutation))
-		return true;
-
 	size8 arity = queryActors->nAtoms;
 	Atom parameters[arity];
 	ActorsToParameters(queryActors, parameters);
-	TypedTuple * queryParameters = CreateTypedTuple(arity);
-	for(index8 i = 0; i < arity; i++)
-		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameters[i]));
-
-	CompilationState state = {0};
-	size8 nServices = compileParameterizedQuery(&state, queryTermForm, queryParameters, 0);
-	FreeTypedTuple(queryParameters);
-	if(!nServices)
-		return false;
-
-	return DispatchQuery(queryTermForm, queryActors, service, permutation);
-}
-
-
-size8 CompileQuery(Atom queryTerm, Service services[])
-{
-	FormulaView term = FormulaGetView(queryTerm);
-	ASSERT(IsTermForm(term.form))
-
-	// Parameterize the atoms of the query
-	size8 arity = term.actors->nAtoms;
-	Atom parameters[arity];
-	ActorsToParameters(term.actors, parameters);
 	// The compiler works with typed tuples of typed atoms throughout,
 	// so wrap the parameters array in a TypedTuple
 	TypedTuple * queryParameters = CreateTypedTuple(arity);
 	for(index8 i = 0; i < arity; i++)
 		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameters[i]));
+	return queryParameters;
+}
 
+
+bool FindOrCompileService(FormulaView query, Service * service, index8 permutation[])
+{
+	// First attempt to dispatch to an existing service
+	if(DispatchQuery(query.form, query.actors, service, permutation))
+		return true;
+	// Else attempt to compile a service
+	TypedTuple * queryParameters = parameterizeQuery(query.actors);
 	CompilationState state = {0};
-	size8 nVariants = compileParameterizedQuery(&state, term.form, queryParameters, services);
+	size8 nServices = compileParameterizedQuery(
+		&state, (FormulaView) {.form = query.form, .actors = queryParameters}, 0);
+	FreeTypedTuple(queryParameters);
+	if(!nServices)
+		return false;
+
+	return DispatchQuery(query.form, query.actors, service, permutation);
+}
+
+
+size8 CompileQuery(Atom queryTerm, Service services[])
+{
+	FormulaView query = FormulaGetView(queryTerm);
+	ASSERT(IsTermForm(query.form))
+
+	TypedTuple * queryParameters = parameterizeQuery(query.actors);
+	CompilationState state = {0};
+	size8 nVariants = compileParameterizedQuery(
+		&state, (FormulaView) {.form = query.form, .actors = queryParameters}, services);
 	FreeTypedTuple(queryParameters);
 	return nVariants;
 }

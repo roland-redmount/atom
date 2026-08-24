@@ -6,13 +6,13 @@
 
 MixedTypeRelation * UserQuery(Atom queryTerm)
 {
-	FormulaView term = FormulaGetView(queryTerm);
-	ASSERT(IsTermForm(term.form))
+	FormulaView query = FormulaGetView(queryTerm);
+	ASSERT(IsTermForm(query.form))
 
 	// Compile the query unless a service answers it already; see FindOrCompileService()
 	Service service;
-	index8 permutation[term.actors->nAtoms];
-	FindOrCompileService(term.form, term.actors, &service, permutation);
+	index8 permutation[query.actors->nAtoms];
+	FindOrCompileService(query, &service, permutation);
 
-	return CreateConcatRelation(term.form, term.actors);
+	return CreateConcatRelation(query.form, query.actors);
 }
