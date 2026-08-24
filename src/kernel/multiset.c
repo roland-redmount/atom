@@ -185,7 +185,8 @@ void MultisetIterate(Atom multiset, byte elementType, MultisetIterator * iterato
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 		parameterIO
 	);
-	Operator const * op = ServiceRegistryFind(relation, parameterIO);
+	Operator const * op = ServiceRegistryFind(
+		relation, CreateIOSignature(parameterIO, 3));
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
 		(Atom[]) {multiset, (Atom) {0}, (Atom) {0}},

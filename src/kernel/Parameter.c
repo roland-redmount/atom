@@ -3,6 +3,15 @@
 #include "parser/Characters.h"
 
 
+IOSignature CreateIOSignature(byte const parameterIO[], size8 nColumns)
+{
+	ASSERT(nColumns <= RELATION_MAX_ARITY)
+	IOSignature ioSignature = {.parameterIO = {0}};
+	CopyMemory(parameterIO, ioSignature.parameterIO, nColumns);
+	return ioSignature;
+}
+
+
 /**
  * Test whether a tuple contains a parameter.
  */

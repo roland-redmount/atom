@@ -224,7 +224,8 @@ static Operator const * conjunctionOperator(IFactConjunction const * conjunction
 	byte parameterIO[relation->nColumns];
 	for(index8 i = 0; i < relation->nColumns; i++)
 		parameterIO[i] = (i == conjunction->idColumn) ? PARAMETER_IN : PARAMETER_OUT;
-	Operator const * op = ServiceRegistryFind(relation, parameterIO);
+	Operator const * op = ServiceRegistryFind(
+		relation, CreateIOSignature(parameterIO, relation->nColumns));
 	ASSERT(op)
 	return op;
 }

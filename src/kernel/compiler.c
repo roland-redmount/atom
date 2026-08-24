@@ -327,7 +327,7 @@ static Operator * constrainRepeatedArguments(Operator * op, index8 clauseMap[])
  * The caller keeps its own reference to the service operator.
  */
 static Operator * createTermOperator(
-	TypeSignature typeSignature, byte const parameterIO[], Operator * serviceOperator,
+	TypeSignature typeSignature, IOSignature ioSignature, Operator * serviceOperator,
 	TypedTuple const * termActors, index8 const permutation[],
 	TypedTuple * serviceParameters, index8 clauseMap[])
 {
@@ -373,7 +373,7 @@ static Operator * createTermOperator(
 					.parameter = {
 						.number = i + 1,
 						.atomType = typeSignature.atomTypes[i],
-						.io = parameterIO[i]
+						.io = ioSignature.parameterIO[i]
 					}
 				}
 			)
@@ -418,7 +418,7 @@ static Operator * compileTerm(
 		return 0;
 
 	return createTermOperator(
-		termService.relation->typeSignature, termService.parameterIO, termService.op,
+		termService.relation->typeSignature, termService.ioSignature, termService.op,
 		termActors, permutation, serviceParameters, clauseMap);
 }
 
@@ -565,15 +565,15 @@ static void propagateTermParameterTypes(
 
 
 /**
- * Find the indices of the input parameters in the parameterIO array
+ * Find the indices of the input parameters in the IO signature
  * and write into the inputArguments array. Returns the number of inputs found.
  */
 static size8 findInputArguments(
-	byte const parameterIO[], size8 arity, index8 inputArguments[])
+	IOSignature ioSignature, size8 arity, index8 inputArguments[])
 {
 	size8 nInputs = 0;
 	for(index8 i = 0; i < arity; i++) {
-		if(parameterIO[i] == PARAMETER_IN)
+		if(ioSignature.parameterIO[i] == PARAMETER_IN)
 			inputArguments[nInputs++] = i;
 	}
 	return nInputs;
@@ -626,8 +626,9 @@ static Operator * compileRecursiveTerm(
 			return 0;
 	}
 
+	IOSignature ioSignature = CreateIOSignature(parameterIO, termArity);
 	index8 inputArguments[termArity];
-	size8 nInputs = findInputArguments(parameterIO, termArity, inputArguments);
+	size8 nInputs = findInputArguments(ioSignature, termArity, inputArguments);
 	Operator * recurseOperator = CreateRecurseOperator(termArity, inputArguments, nInputs);
 
 	// The term reads the derived relation directly, so its arguments are the relation
@@ -636,7 +637,7 @@ static Operator * compileRecursiveTerm(
 	for(index8 i = 0; i < termArity; i++)
 		permutation[i] = i;
 	Operator * op = createTermOperator(
-		CreateTypeSignature(atomTypes, termArity), parameterIO, recurseOperator,
+		CreateTypeSignature(atomTypes, termArity), ioSignature, recurseOperator,
 		termActors, permutation, serviceParameters, clauseMap);
 	// createTermOperator() took its own reference to the operator
 	ReleaseOperator(recurseOperator);
@@ -998,13 +999,16 @@ static TypeSignature getVariantTypeSignature(CompiledVariant const * variant)
 
 
 /**
- * Copy the parameter IO from a parameter tuple to an array of the same length.
+ * The IO signature of a parameter tuple, from the direction of each parameter.
  */
-static void getVariantParameterIO(TypedTuple const * parameters, byte parameterIO[])
+static IOSignature getVariantIOSignature(TypedTuple const * parameters)
 {
+	size8 arity = parameters->nAtoms;
+	byte parameterIO[arity];
 	Atom const * parametersArray = TypedTuplePeekAtoms(parameters);
-	for(index8 i = 0; i < parameters->nAtoms; i++)
+	for(index8 i = 0; i < arity; i++)
 		parameterIO[i] = parametersArray[i].parameter.io;
+	return CreateIOSignature(parameterIO, arity);
 }
 
 
@@ -1308,10 +1312,9 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
 	if(!variant->isRecursive)
 		return;
 
-	byte parameterIO[arity];
-	getVariantParameterIO(variant->parameters, parameterIO);
 	index8 inputArguments[arity];
-	size8 nInputs = findInputArguments(parameterIO, arity, inputArguments);
+	size8 nInputs = findInputArguments(
+		getVariantIOSignature(variant->parameters), arity, inputArguments);
 
 	Operator * fixpointOperator = CreateFixpointOperator(
 		variant->op, inputArguments, nInputs);
@@ -1412,7 +1415,6 @@ static size8 compileParameterizedQuery(
 	PrintChar('\n');
 #endif
 
-	size8 arity = query.actors->nAtoms;
 	// NOTE: this could go to the CompilerState struct
 	CompiledVariant variants[MAX_COMPILED_SERVICES];
 	size8 nVariants = compileQueryVariants(state, query, variants);
@@ -1422,10 +1424,9 @@ static size8 compileParameterizedQuery(
 #endif
 	for(index8 i = 0; i < nVariants; i++) {
 		// Parameter types and the relation were resolved by compileQueryVariants()
-		byte parameterIO[arity];
-		getVariantParameterIO(variants[i].parameters, parameterIO);
 		Service service = ServiceRegistryAdd(
-			variants[i].relation, parameterIO, variants[i].op, SERVICE_COMPILED);
+			variants[i].relation, getVariantIOSignature(variants[i].parameters),
+			variants[i].op, SERVICE_COMPILED);
 #ifdef DEBUG_COMPILER
 		PrintService(&service);
 		PrintChar('\n');

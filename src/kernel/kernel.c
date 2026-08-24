@@ -664,9 +664,10 @@ static void setupCoreServices(void)
 			coreServiceParameterIO[i],
 			parameterIO
 		);
+		Relation const * relation = kernel.coreRelations[relationId]->relation;
 		kernel.coreOperators[i] = ServiceRegistryFind(
-			kernel.coreRelations[relationId]->relation,
-			parameterIO
+			relation,
+			CreateIOSignature(parameterIO, relation->nColumns)
 		);
 		ASSERT(kernel.coreOperators[i])
 	}

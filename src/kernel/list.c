@@ -188,7 +188,8 @@ Atom ListGetElement(Atom list, index32 position)
 		(byte[]) {PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT},
 		parameterIO
 	);
-	Operator const * op = ServiceRegistryFind(relation, parameterIO);
+	Operator const * op = ServiceRegistryFind(
+		relation, CreateIOSignature(parameterIO, 3));
 
 	Atom arguments[3];
 	CoreFormSetTuple(
@@ -217,7 +218,8 @@ index32 ListGetPosition(Atom list, Atom element)
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_IN},
 		parameterIO
 	);
-	Operator const * op = ServiceRegistryFind(relation, parameterIO);
+	Operator const * op = ServiceRegistryFind(
+		relation, CreateIOSignature(parameterIO, 3));
 	ASSERT(op)
 
 	Atom arguments[3];
@@ -306,7 +308,8 @@ void ListIterate(Atom list, ListIterator * iterator)
 			(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 			parameterIO
 		);
-		Operator const * op = ServiceRegistryFind(relation, parameterIO);
+		Operator const * op = ServiceRegistryFind(
+		relation, CreateIOSignature(parameterIO, 3));
 		iterator->context = OperatorCreateContext(op, iterator->queryTuple);
 	}
 	else

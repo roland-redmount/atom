@@ -29,15 +29,15 @@
  * Returns true if the query matches.
  */
 static bool signatureQueryTupleMatch(
-	byte const atomTypes[], byte const parameterIO[], Atom const queryParameters[],
+	TypeSignature typeSignature, IOSignature ioSignature, Atom const queryParameters[],
 	size8 nParameters, index8 const permutation[])
 {
 	// iterate over query parameters
 	for(index8 i = 0; i < nParameters; i++) {
 		Atom parameter = queryParameters[permutation[i]];
-		byte serviceParameterType = atomTypes[i];
+		byte serviceParameterType = typeSignature.atomTypes[i];
 
-		if(parameter.parameter.io != parameterIO[i])
+		if(parameter.parameter.io != ioSignature.parameterIO[i])
 			return false;
 		if(parameter.parameter.atomType
 			&& (parameter.parameter.atomType != serviceParameterType))
@@ -47,7 +47,7 @@ static bool signatureQueryTupleMatch(
 		// or no single atom could satisfy the query
 		for(index8 j = 0; j < i; j++) {
 			if((queryParameters[permutation[j]].parameter.number == parameter.parameter.number)
-				&& (atomTypes[j] != serviceParameterType))
+				&& (typeSignature.atomTypes[j] != serviceParameterType))
 				return false;
 		}
 	}
@@ -61,7 +61,7 @@ static bool signatureQueryTupleMatch(
  * Returns true if a match is found.
  */
 static bool permutationMatch(
-	Atom predicateForm, byte const atomTypes[], byte const parameterIO[],
+	Atom predicateForm, TypeSignature typeSignature, IOSignature ioSignature,
 	Atom const queryParameters[], size8 nParameters, index8 permutation[])
 {
 	// iterate over all permutations of the form
@@ -70,7 +70,7 @@ static bool permutationMatch(
 	do {
 		GetTuplePermutation(iter, permutation);
 		if(signatureQueryTupleMatch(
-			atomTypes, parameterIO, queryParameters, nParameters, permutation)) {
+			typeSignature, ioSignature, queryParameters, nParameters, permutation)) {
 			match = true;
 			break;
 		}
@@ -119,7 +119,7 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 		while(ServiceIteratorNext(&(iterator->serviceIterator))) {
 			Service const * currentService = ServiceIteratorPeekService(&(iterator->serviceIterator));
 			if(permutationMatch(
-				relation->predicateForm, relation->typeSignature.atomTypes, currentService->parameterIO,
+				relation->predicateForm, relation->typeSignature, currentService->ioSignature,
 				iterator->queryParameters, iterator->nParameters, iterator->permutation))
 			{
 				// Copy the service, as a pointer into the service registry is only

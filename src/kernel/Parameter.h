@@ -15,6 +15,7 @@
 #ifndef	PARAMETER_H
 #define	PARAMETER_H 
 
+#include "kernel/Relation.h"
 #include "kernel/typedtuple.h"
 #include "lang/TypedAtom.h"
 #include "lang/Atom.h"
@@ -32,6 +33,24 @@
  */
 #define PARAMETER_IN		1
 #define PARAMETER_OUT		2
+
+
+/**
+ * The parameter IO of a service: the direction of each of its parameters, in relation
+ * column order. This is what distinguishes the services of one relation from one another,
+ * and together with the relation it is the key a service is registered under; see
+ * ServiceRegistry.h. Analogous to the TypeSignature of a relation, and exists for the same
+ * reason: to pass a fixed-size array by value.
+ */
+typedef struct s_IOSignature {
+	byte parameterIO[RELATION_MAX_ARITY];
+} IOSignature;
+
+/**
+ * The IO signature of the given parameter directions, zero filled beyond nColumns. For a
+ * signature built from an array at hand.
+ */
+IOSignature CreateIOSignature(byte const parameterIO[], size8 nColumns);
 
 
 /**

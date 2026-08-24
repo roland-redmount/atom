@@ -26,8 +26,8 @@ struct {
 // Services the kernel registers, which every count here is relative to
 static size32 nCoreServices;
 
-static byte const exampleParameterIO[EXAMPLE_FORM_ARITY] = {
-	PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT};
+static IOSignature const exampleIOSignature = {.parameterIO = {
+	PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT}};
 
 
 static void setupFixture(void)
@@ -81,7 +81,7 @@ static Operator * addCompiledService(Relation const * relation, Operator * child
 {
 	Operator * op = CreatePermuteOperator(
 		EXAMPLE_FORM_ARITY, 0, 0, 0, (index8[]) {0, 1, 2, 3}, childOperator);
-	ServiceRegistryAdd(relation, exampleParameterIO, op, SERVICE_COMPILED);
+	ServiceRegistryAdd(relation, exampleIOSignature, op, SERVICE_COMPILED);
 	ReleaseOperator(op);
 	return op;
 }
@@ -101,11 +101,11 @@ void testAddRemoveService(void)
 	// Add a dummy service to the relation
 	Operator * op = createDummyMachineOperator();
 	ASSERT_INT32_EQUAL(op->referenceCount, 1)
-	ServiceRegistryAdd(fixture.relation, exampleParameterIO, op, SERVICE_PRIMITIVE);
+	ServiceRegistryAdd(fixture.relation, exampleIOSignature, op, SERVICE_PRIMITIVE);
 	ASSERT_INT32_EQUAL(op->referenceCount, 2)
 
 	ASSERT_PTR_EQUAL(
-		ServiceRegistryFind(fixture.relation, exampleParameterIO),
+		ServiceRegistryFind(fixture.relation, exampleIOSignature),
 		op
 	);
 
@@ -127,7 +127,7 @@ void testInvalidateDependentServices(void)
 
 	// Create dummy machine service
 	Operator * machineOperator = createDummyMachineOperator();
-	ServiceRegistryAdd(fixture.relation, exampleParameterIO, machineOperator, SERVICE_PRIMITIVE);
+	ServiceRegistryAdd(fixture.relation, exampleIOSignature, machineOperator, SERVICE_PRIMITIVE);
 
 	// Hand-build a "compiled" service that depends on the machine service
 	TypeSignature firstTypes = CreateTypeSignature(
@@ -170,7 +170,7 @@ void testInvalidateOnPrimitiveService(void)
 
 	// Register a dummy machine service
 	Operator * machineOperator = createDummyMachineOperator();
-	ServiceRegistryAdd(fixture.relation, exampleParameterIO, machineOperator, SERVICE_PRIMITIVE);
+	ServiceRegistryAdd(fixture.relation, exampleIOSignature, machineOperator, SERVICE_PRIMITIVE);
 
 	// Create a "compiled" relation depending on the machine service
 	TypeSignature compiledTypes = CreateTypeSignature(
@@ -211,13 +211,13 @@ void testInvalidateSharedOperator(void)
 
 	// Register a "dummy" machine service
 	Operator * machineOperator = createDummyMachineOperator();
-	ServiceRegistryAdd(fixture.relation, exampleParameterIO, machineOperator, SERVICE_PRIMITIVE);
+	ServiceRegistryAdd(fixture.relation, exampleIOSignature, machineOperator, SERVICE_PRIMITIVE);
 
 	// Register a second service using the same machine operator
 	TypeSignature compiledTypes = CreateTypeSignature(
 		(byte[]) {AT_INT, AT_INT, AT_INT, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation const * compiledRelation = createComputedRelation(compiledTypes);
-	ServiceRegistryAdd(compiledRelation, exampleParameterIO, machineOperator, SERVICE_COMPILED);
+	ServiceRegistryAdd(compiledRelation, exampleIOSignature, machineOperator, SERVICE_COMPILED);
 	ReleaseRelation(compiledRelation);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
 
@@ -239,9 +239,9 @@ void testInvalidateSharedOperator(void)
  */
 static Operator * shareTableOperator(RelationTable * table)
 {
-	Operator * op = ServiceRegistryFind(table->relation, exampleParameterIO);
+	Operator * op = ServiceRegistryFind(table->relation, exampleIOSignature);
 	ASSERT_NOT_NULL(op)
-	ServiceRegistryAdd(fixture.relation, exampleParameterIO, op, SERVICE_COMPILED);
+	ServiceRegistryAdd(fixture.relation, exampleIOSignature, op, SERVICE_COMPILED);
 	return op;
 }
 

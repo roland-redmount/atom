@@ -101,11 +101,12 @@ static MachineProvider machineServiceProvider = {
  * order.
  */
 static TypeSignature readSignatureParameters(
-	TypedTuple const * signatureActors, MachineServiceData * data, byte parameterIO[])
+	TypedTuple const * signatureActors, MachineServiceData * data, IOSignature * ioSignature)
 {
 	bool numberSeen[MACHINE_SERVICE_MAX_ARITY];
 	SetMemory(numberSeen, sizeof(numberSeen), 0);
 	byte atomTypes[MACHINE_SERVICE_MAX_ARITY];
+	byte parameterIO[MACHINE_SERVICE_MAX_ARITY];
 
 	for(index8 i = 0; i < data->nArguments; i++) {
 		TypedAtom actor = TypedTupleGetElement(signatureActors, i);
@@ -122,6 +123,7 @@ static TypeSignature readSignatureParameters(
 		numberSeen[number - 1] = true;
 		data->argumentIndex[number - 1] = i;
 	}
+	*ioSignature = CreateIOSignature(parameterIO, data->nArguments);
 	return CreateTypeSignature(atomTypes, data->nArguments);
 }
 
@@ -139,8 +141,8 @@ Service RegisterMachineService(
 	data->nArguments = arity;
 	data->stateSize = stateSize;
 
-	byte parameterIO[MACHINE_SERVICE_MAX_ARITY];
-	TypeSignature typeSignature = readSignatureParameters(termView.actors, data, parameterIO);
+	IOSignature ioSignature;
+	TypeSignature typeSignature = readSignatureParameters(termView.actors, data, &ioSignature);
 
 	// A machine service is computed, and so has no tuple storage: the relation exists
 	// only to name the signature the service is registered under, and is removed with the
@@ -154,7 +156,7 @@ Service RegisterMachineService(
 	Operator * op = CreateMachineOperator(
 		arity, indexOrder, &machineServiceProvider, data,
 		sizeof(MachineServiceContext) + stateSize);
-	Service service = ServiceRegistryAdd(relation, parameterIO, op, SERVICE_PRIMITIVE);
+	Service service = ServiceRegistryAdd(relation, ioSignature, op, SERVICE_PRIMITIVE);
 	// the service registry now holds the references to the operator and the relation
 	ReleaseOperator(op);
 	ReleaseRelation(relation);

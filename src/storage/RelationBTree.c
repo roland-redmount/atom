@@ -356,7 +356,8 @@ static void btreeRegisterServices(RelationTable * table)
 			else
 				parameterIO[table->indexColumns[i]] = PARAMETER_OUT;
 		}
-		ServiceRegistryAdd(table->relation, parameterIO, op, SERVICE_PRIMITIVE);
+		ServiceRegistryAdd(
+			table->relation, CreateIOSignature(parameterIO, nColumns), op, SERVICE_PRIMITIVE);
 		// The registry now holds the reference to the operator
 		ReleaseOperator(op);
 	}

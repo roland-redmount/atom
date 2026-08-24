@@ -14,11 +14,12 @@
 
 #include "btree/btree.h"
 #include "kernel/operator.h"
+#include "kernel/Parameter.h"
 #include "kernel/Relation.h"
 
 
 /**
- * A service is a relation with a particular parameter IO, together with the
+ * A service is a relation with a particular IO signature, together with the
  * operator tree evaluating it: the analogue of a procedure in atom, and what
  * dispatch matches a query against. Most operators are internal nodes of such a
  * tree and have no signature of their own; see operator.h.
@@ -46,7 +47,9 @@ enum ServiceKind {
 typedef struct s_Service {
 	// The relation this service reads. Acquired; see Relation.h
 	Relation const * relation;
-	byte parameterIO[RELATION_MAX_ARITY];
+	// The direction of each parameter, which with the relation is the key this service
+	// is registered under
+	IOSignature ioSignature;
 	// Pointer to the root of the operator tree defining this service.
 	// NOTE: cannot be const * if we want to do AcquireOperator(op).
 	// NOTE: not named "operator", which is a reserved word in C++
@@ -79,7 +82,7 @@ void SetupServiceRegistry(void);
  * that form.
  */
 Service ServiceRegistryAdd(
-	Relation const * relation, byte const parameterIO[], Operator * op,
+	Relation const * relation, IOSignature ioSignature, Operator * op,
 	enum ServiceKind kind);
 
 /**
@@ -156,11 +159,11 @@ Service const * ServiceIteratorPeekService(ServiceIterator const * iterator);
 void ServiceIteratorEnd(ServiceIterator * iterator);
 
 /**
- * Retrieve the operator of the service for the given relation and parameter IO
- * array, which must be the same length as the relation arity.
+ * Retrieve the operator of the service for the given relation and IO signature, which
+ * must be filled to the relation arity.
  * If a matching service does not exist, returns 0
  */
-Operator * ServiceRegistryFind(Relation const * relation, byte const parameterIO[]);
+Operator * ServiceRegistryFind(Relation const * relation, IOSignature ioSignature);
 
 /**
  * Copy some registered service evaluated by a machine operator of the given provider to
