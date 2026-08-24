@@ -1343,20 +1343,18 @@ static size8 compileQueryVariants(CompilationState * state, FormulaView query, C
 	// First pass compilation generates variants for the non-recursive matching clauses
 	size8 nVariants = compileQueryClauses(
 		state, query,
-		0,	// recursive variant
+		0,	// query signature is unknown at this point
 		&foundRecursiveClause,
 		variants, 0
 	);
 	size8 queryTermArity = TermFormArity(query.form);
 
 	if(foundRecursiveClause) {
-		// Second pass, once per variant the non-recursive clauses yielded. A recursive
-		// clause is compiled against one signature at a time, which its recursive term
-		// reads; that signature is also the query, as the types it settled are the ones
-		// the whole clause compiles against. A recursive clause with no such signature to
-		// compile against does not compile at all.
-		size8 nRecursiveVariants = nVariants;
-		for(index8 i = 0; i < nRecursiveVariants; i++) {
+		// Second pass, once per variant the non-recursive clauses yielded. All recursive
+		// clauses is tried against the given query signature of each variant, but only
+		// those recursive clauses that match the query signature will yield new variants.
+		size8 nKnownVariants = nVariants;
+		for(index8 i = 0; i < nKnownVariants; i++) {
 			setupVariantRelation(&variants[i], query.form, queryTermArity);
 			TypedTuple const * querySignature = variants[i].parameters;
 			nVariants = compileQueryClauses(

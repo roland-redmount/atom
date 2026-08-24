@@ -48,15 +48,11 @@ bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutatio
  * parameter of the same type at each position.
  *
  * Several services may match when a query output parameter type is NONE (untyped).
- * There can be at most one matching service for each relation, so the matches of one query
- * are 1:1 with the column types of the relations matched. Those are the MatchTypes of a
- * match, and they name it. The columns the query gives a type are the same in every match
- * and so say nothing about which match it is, but they cost nothing to carry along.
- *
+ * There can be at most one matching service for each relation, so each service is
+ * identified by the type signature of the corresponding relations.
+ * 
  * The excludedSignatures array holds type signatures to exclude; a candidate service
- * with one of these signatures is skipped. Setting nExcluded = 0 excludes nothing. The
- * signature of the match returned is the one of the relation it reads, so a caller
- * enumerating matches excludes service->relation->typeSignature to ask for the next.
+ * with one of these signatures is skipped. Setting nExcluded = 0 excludes nothing.
  *
  * *hasNextMatch is set to true if a match outside the exclusion list exists beyond the one
  * returned. Caller can pass hasNextMatch = 0 if only one match is required.
@@ -89,11 +85,9 @@ typedef struct {
 } DispatchIterator;
 
 /**
- * Create an iterator over the services matching the given query, which must be
- * parameterized as for DispatchParameterizedQuery(), and which must remain valid until
- * the iterator is ended. The order the services are visited in is unspecified, and a
- * caller that needs to name one names it by its column types; see
- * DispatchParameterizedQuery(), which is built on this iterator.
+ * Create an iterator over the services matching the given query.
+ * The queryParameters array must contain AT_PARAMETER atoms only must remain valid until
+ * the iterator is ended. 
  * The iterator is positioned before the first matching service, so
  * DispatchIteratorNext() must be called before DispatchIteratorPeekService().
  * The permutation array must hold at least nParameters elements,
