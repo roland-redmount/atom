@@ -45,6 +45,9 @@ typedef struct s_TypeSignature {
 TypeSignature CreateTypeSignature(byte const atomTypes[], size8 nColumns);
 
 
+bool SameTypeSignatures(TypeSignature signature1, TypeSignature signature2);
+
+
 typedef struct s_Relation Relation;
 
 struct s_Relation {

@@ -184,31 +184,28 @@ void testDispatchIterator(void)
 	DispatchIterator iterator;
 	DispatchIterate(FormulaGetForm(query), parameters, 2, permutation, &iterator);
 
-	// A match is named by the column types of the relation it reads, and excluding a name
-	// asks for the other match. This is what the compiler enumerates a choice point by;
-	// see compiler.c
 	TypeSignature excludedTypes[2];
 	bool foundIdRelation = false;
 	bool foundIntRelation = false;
 
 	size8 nMatches = 0;
 	while(DispatchIteratorNext(&iterator)) {
-		// The match the iterator is at is the one dispatch returns when every match before
-		// it is excluded, whatever order the two are enumerated in
+		Service const * service = DispatchIteratorPeekService(&iterator);
+		
+		// The service obtained from the iterator should be the same as the one obtained
+		// fromiDispatchParameterizedQuerys when previous iterations are excluded.
 		Service excludeService;
 		index8 excludePermutation[2];
 		bool hasNextMatch;
 		ASSERT_TRUE(DispatchParameterizedQuery(
 			FormulaGetForm(query), parameters, 2, &excludeService, excludePermutation,
 			excludedTypes, nMatches, &hasNextMatch))
-		Service const * service = DispatchIteratorPeekService(&iterator);
 		ASSERT_PTR_EQUAL(service->relation, excludeService.relation)
 		ASSERT_PTR_EQUAL(service->op, excludeService.op)
 		for(index8 i = 0; i < 2; i++)
 			ASSERT_UINT32_EQUAL(permutation[i], excludePermutation[i])
 
-		// The relation a match reads is what names it, so excluding its signature is what
-		// asks for the other match
+		// add the found service to the exclusion list for the next iteration
 		excludedTypes[nMatches] = excludeService.relation->typeSignature;
 		ASSERT_UINT32_EQUAL(excludedTypes[nMatches].atomTypes[0], AT_ID)
 		if(excludedTypes[nMatches].atomTypes[1] == AT_ID)
@@ -220,6 +217,7 @@ void testDispatchIterator(void)
 		ASSERT_TRUE(hasNextMatch == (nMatches < 2))
 	}
 	ASSERT_UINT32_EQUAL(nMatches, 2)
+
 	// Both relations are reached, whichever order the registry yields them in
 	ASSERT_TRUE(foundIdRelation)
 	ASSERT_TRUE(foundIntRelation)

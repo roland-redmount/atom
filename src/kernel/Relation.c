@@ -16,6 +16,12 @@ TypeSignature CreateTypeSignature(byte const atomTypes[], size8 nColumns)
 }
 
 
+bool SameTypeSignatures(TypeSignature signature1, TypeSignature signature2)
+{
+	return CompareMemory(signature1.atomTypes, signature2.atomTypes, RELATION_MAX_ARITY) == 0;
+}
+
+
 Relation const * CreateRelationBootstrap(
 	Atom termForm, Atom predicateForm, size8 nColumns, TypeSignature typeSignature)
 {

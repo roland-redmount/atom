@@ -36,19 +36,15 @@
 
 
 /**
- * The parameter IO of a service: the direction of each of its parameters, in relation
- * column order. This is what distinguishes the services of one relation from one another,
- * and together with the relation it is the key a service is registered under; see
- * ServiceRegistry.h. Analogous to the TypeSignature of a relation, and exists for the same
- * reason: to pass a fixed-size array by value.
+ * An IO signature (of a service) is the IO direction of each of its parameters
  */
 typedef struct s_IOSignature {
 	byte parameterIO[RELATION_MAX_ARITY];
 } IOSignature;
 
 /**
- * The IO signature of the given parameter directions, zero filled beyond nColumns. For a
- * signature built from an array at hand.
+ * Create an IO signature from given parameter IO array.
+ * The signature is zero filled beyond nColumns.
  */
 IOSignature CreateIOSignature(byte const parameterIO[], size8 nColumns);
 

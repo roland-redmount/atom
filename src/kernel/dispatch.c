@@ -157,16 +157,10 @@ void DispatchIteratorEnd(DispatchIterator * iterator)
 }
 
 
-/**
- * Test whether a match is one the caller has seen already, its column types naming it; see
- * DispatchParameterizedQuery().
- */
-static bool isExcludedMatch(
-	Relation const * relation, size8 nParameters,
-	TypeSignature const excludedSignatures[], size8 nExcluded)
+static bool isExcludedCandidate(TypeSignature candidateSignature, TypeSignature const excludedSignatures[], size8 nExcluded)
 {
 	for(index8 i = 0; i < nExcluded; i++) {
-		if(CompareMemory(relation->typeSignature.atomTypes, excludedSignatures[i].atomTypes, nParameters) == 0)
+		if(SameTypeSignatures(candidateSignature, excludedSignatures[i]))
 			return true;
 	}
 	return false;
@@ -193,7 +187,7 @@ bool DispatchParameterizedQuery(
 
 	while(DispatchIteratorNext(&iterator)) {
 		Service const * candidate = DispatchIteratorPeekService(&iterator);
-		if(isExcludedMatch(candidate->relation, nParameters, excludedSignatures, nExcluded))
+		if(isExcludedCandidate(candidate->relation->typeSignature, excludedSignatures, nExcluded))
 			continue;
 		if(match) {
 			// A match the caller has not seen exists beyond the one we return
