@@ -57,8 +57,8 @@ underneath one would modify them.
 
 A service is evaluated by a tree of **operators** (`src/kernel/operator.h`). The leaves
 are machine operators, which provide the stored and computed relations; the internal nodes
-are the operators of relational algebra — `PERMUTE`, `CONSTRAIN`, `JOIN`, `PROJECT`,
-`UNION` — together with `FIXPOINT` and `RECURSE`, which are what recursion adds. Every
+are the operators of relational algebra — `PERMUTE`, `CONSTRAIN`, `FILTER`, `JOIN`,
+`PROJECT`, `UNION` — together with `FIXPOINT` and `RECURSE`, which are what recursion adds. Every
 operator yields distinct tuples in a declared order; that contract is documented in
 `operator.h` and matters here in two places, noted below.
 
@@ -154,6 +154,43 @@ service is the relation with the two positions left free, and dispatch matches o
 parameter types rather than on equality. The constraint is applied to the tuples as they
 are read, by the mixed type relation answering the query; see `MixedTypeRelation.h` and
 `testConcatRepeatedVariable`.
+
+### An unprovided IO pattern: FILTER
+
+Which services a provider registers is its statement of what it can do, so a relation does
+not answer every signature over it. `RelationBTree` registers one service per prefix of its
+index column order, so the relation `(list:ID position:INT element:LETTER)` has four of the
+eight possible patterns, and
+
+    list <ID position >INT element <LETTER
+
+is not among them: it binds the element without binding the position the element follows.
+The query `(list "AB" position _ element 'A)` asks for exactly that.
+
+A `FILTER` operator answers it. It reads a service that *produces* the columns the signature
+binds, and keeps the tuples where the produced value equals the bound one. Here the child is
+`(list <ID position >INT element >LETTER)`, which enumerates the letters of the list, and the
+filter keeps those equal to `'A`. See `testCompileNewIOPattern`.
+
+Choosing the child is a search over the services of the relation. A service can be read this
+way when it produces every column the signature binds, which is to say its pattern is
+**componentwise greater or equal**: an output wherever the signature has an output, and
+either direction elsewhere. A service with an input where the signature has an output is no
+use, as no operator can invent a value the caller did not supply.
+
+Among the usable services the one binding the most is the one to read, since filtering scans
+whatever its child does not bind. That service is easy to find without a search: an input is
+1 and an output is 2, and the registry orders the services of a relation by their IO
+signature, so the first usable one in registry order is the one that binds the most. The
+all-out service is registered by every B-tree relation, so there is always a last resort — a
+full scan.
+
+The order alone is not the criterion, though. For the signature above, `(>ID <INT <LETTER)`
+comes later in the order but has an input where an output is needed, so it is passed over.
+
+`FILTER` is tried only after the rules, and only for a query no rule answered. So a relation
+with a rule is derived rather than read and filtered. This is a first cut rather than a
+settled choice.
 
 ### A conjunction: JOIN
 
@@ -511,6 +548,11 @@ or `MixedTypeRelation` write-locks against modification.
   stored service already answers registers a second service of the same signature, which
   `ServiceRegistryAdd()` asserts against. The generated service should replace the existing
   one and take it as a branch of its union.
+- **A filtered service is compiled for one relation only.** A query can match one relation
+  exactly and another only by filtering, which two list relations differing in element type
+  do. `FindOrCompileService()` returns on the first match dispatch finds, so nothing is
+  compiled and the second relation contributes no tuples. Fixing this means changing when
+  compilation is triggered, not what it produces.
 - **Evaluation is naive**, not semi-naive: every round re-expands every call binding,
   rather than only the tuples the previous round derived.
 - **Duplicate work across queries.** A fixpoint derives its relation afresh for every

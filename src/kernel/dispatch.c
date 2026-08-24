@@ -20,7 +20,9 @@
  *
  * 1) The direction of each query parameter must agree with the service parameter, and its
  *    atom type must equal the type of the service column, or be absent, which is the case
- *    of an output whose type is not known yet.
+ *    of an output whose type is not known yet. Under DISPATCH_MATCH_FILTERABLE a service
+ *    output also answers a query input, which a FILTER operator above the service makes
+ *    good; see DISPATCH_MATCH_EXACT.
  * 2) A parameter occurring at several positions of the query denotes one atom, and so
  *    must match service parameters of the same type. A query parameterized from actors
  *    numbers every position separately and never has such a repeat; a rule body term
@@ -30,15 +32,20 @@
  */
 static bool signatureQueryTupleMatch(
 	TypeSignature typeSignature, IOSignature ioSignature, Atom const queryParameters[],
-	size8 nParameters, index8 const permutation[])
+	size8 nParameters, int matchMode, index8 const permutation[])
 {
 	// iterate over query parameters
 	for(index8 i = 0; i < nParameters; i++) {
 		Atom parameter = queryParameters[permutation[i]];
 		byte serviceParameterType = typeSignature.atomTypes[i];
 
-		if(parameter.parameter.io != ioSignature.parameterIO[i])
-			return false;
+		// A service output answers a query input only when the caller filters; a service
+		// input never answers a query output, as no operator can invent the value
+		if(parameter.parameter.io != ioSignature.parameterIO[i]) {
+			if((matchMode != DISPATCH_MATCH_FILTERABLE)
+				|| (ioSignature.parameterIO[i] != PARAMETER_OUT))
+				return false;
+		}
 		if(parameter.parameter.atomType
 			&& (parameter.parameter.atomType != serviceParameterType))
 			return false;
@@ -62,7 +69,7 @@ static bool signatureQueryTupleMatch(
  */
 static bool permutationMatch(
 	Atom predicateForm, TypeSignature typeSignature, IOSignature ioSignature,
-	Atom const queryParameters[], size8 nParameters, index8 permutation[])
+	Atom const queryParameters[], size8 nParameters, int matchMode, index8 permutation[])
 {
 	// iterate over all permutations of the form
 	FormIterator * iter = CreateFormIterator(predicateForm);
@@ -70,7 +77,8 @@ static bool permutationMatch(
 	do {
 		GetTuplePermutation(iter, permutation);
 		if(signatureQueryTupleMatch(
-			typeSignature, ioSignature, queryParameters, nParameters, permutation)) {
+			typeSignature, ioSignature, queryParameters, nParameters, matchMode,
+			permutation)) {
 			match = true;
 			break;
 		}
@@ -81,13 +89,14 @@ static bool permutationMatch(
 
 
 void DispatchIterate(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters,
+	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
 	index8 permutation[], DispatchIterator * iterator)
 {
 	ASSERT(IsTermForm(queryTermForm))
 
 	iterator->queryParameters = queryParameters;
 	iterator->nParameters = nParameters;
+	iterator->matchMode = matchMode;
 	iterator->permutation = permutation;
 	iterator->inRelation = false;
 #ifdef DEBUG
@@ -120,7 +129,8 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 			Service const * currentService = ServiceIteratorPeekService(&(iterator->serviceIterator));
 			if(permutationMatch(
 				relation->predicateForm, relation->typeSignature, currentService->ioSignature,
-				iterator->queryParameters, iterator->nParameters, iterator->permutation))
+				iterator->queryParameters, iterator->nParameters, iterator->matchMode,
+				iterator->permutation))
 			{
 				// Copy the service, as a pointer into the service registry is only
 				// valid until the service iterator moves on.
@@ -132,6 +142,14 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 				ASSERT(relation != iterator->previousMatchRelation)
 				iterator->previousMatchRelation = relation;
 #endif
+				// Several services of one relation can be filterable, and the registry
+				// orders them with the most bound first, so the first is the one to read.
+				// Leaving the relation here also keeps one match per relation, which is
+				// what the assertion above states.
+				if(iterator->matchMode == DISPATCH_MATCH_FILTERABLE) {
+					ServiceIteratorEnd(&(iterator->serviceIterator));
+					iterator->inRelation = false;
+				}
 				return true;
 			}
 		}
@@ -168,9 +186,9 @@ static bool isExcludedCandidate(TypeSignature candidateSignature, TypeSignature 
 
 
 bool DispatchParameterizedQuery(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, Service * service,
-	index8 permutation[], TypeSignature const excludedSignatures[], size8 nExcluded,
-	bool * hasNextMatch)
+	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
+	Service * service, index8 permutation[],
+	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch)
 {
 	ASSERT(!nExcluded || (nParameters <= RELATION_MAX_ARITY))
 
@@ -179,7 +197,8 @@ bool DispatchParameterizedQuery(
 	index8 candidatePermutation[nParameters];
 	DispatchIterator iterator;
 	DispatchIterate(
-		queryTermForm, queryParameters, nParameters, candidatePermutation, &iterator);
+		queryTermForm, queryParameters, nParameters, matchMode, candidatePermutation,
+		&iterator);
 
 	bool match = false;
 	if(hasNextMatch)
@@ -215,7 +234,8 @@ bool DispatchQuery(FormulaView query, Service * service, index8 permutation[])
 	ActorsToParameters(query.actors, queryParameters);
 
 	return DispatchParameterizedQuery(
-		query.form, queryParameters, arity, service, permutation, 0, 0, 0);
+		query.form, queryParameters, arity, DISPATCH_MATCH_EXACT, service, permutation,
+		0, 0, 0);
 }
 
 

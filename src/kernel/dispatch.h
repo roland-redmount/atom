@@ -43,6 +43,23 @@ bool DispatchQuery(FormulaView query, Service * service, index8 permutation[]);
 bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutation);
 
 /**
+ * How DispatchParameterizedQuery() matches the direction of a query parameter against the
+ * service parameter it would read.
+ *
+ * DISPATCH_MATCH_EXACT requires the two to agree, which is what answering a query means.
+ *
+ * DISPATCH_MATCH_FILTERABLE also accepts a service that produces a parameter the query
+ * binds, as the caller can read that service and keep the tuples where the produced value
+ * equals the bound one. A service that binds a parameter the query produces is never
+ * accepted: no operator can invent a value the caller did not supply. The caller is
+ * responsible for the FILTER operator this implies; see compileFilterVariants() in
+ * compiler.c and OPERATOR_FILTER in operator.h.
+ */
+#define DISPATCH_MATCH_EXACT		1
+#define DISPATCH_MATCH_FILTERABLE	2
+
+
+/**
  * Dispatch a parameterized query. The queryParameters array must contain AT_PARAMETER
  * atoms only. A query parameter occurring at several positions must match a service
  * parameter of the same type at each position.
@@ -56,11 +73,15 @@ bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutatio
  *
  * *hasNextMatch is set to true if a match outside the exclusion list exists beyond the one
  * returned. Caller can pass hasNextMatch = 0 if only one match is required.
+ *
+ * The matchMode says which services count as matching; see DISPATCH_MATCH_EXACT. Under
+ * DISPATCH_MATCH_FILTERABLE several services of one relation may match, and the one
+ * returned is the one binding the most parameters, which reads the least.
  */
 bool DispatchParameterizedQuery(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, Service * service,
-	index8 permutation[], TypeSignature const excludedSignatures[], size8 nExcluded,
-	bool * hasNextMatch);
+	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
+	Service * service, index8 permutation[],
+	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch);
 
 
 /**
@@ -71,6 +92,8 @@ bool DispatchParameterizedQuery(
 typedef struct {
 	Atom const * queryParameters;
 	size8 nParameters;
+	// Which services count as matching; see DISPATCH_MATCH_EXACT
+	int matchMode;
 	index8 * permutation;
 	RelationIterator relationIterator;
 	ServiceIterator serviceIterator;
@@ -95,7 +118,7 @@ typedef struct {
  * The caller must call DispatchIteratorEnd() when done.
  */
 void DispatchIterate(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters,
+	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
 	index8 permutation[], DispatchIterator * iterator);
 
 /**
