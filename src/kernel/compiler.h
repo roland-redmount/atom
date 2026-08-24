@@ -10,17 +10,19 @@
 #define MAX_COMPILED_SERVICES	8
 
 /**
- * Attempt to compile a query, registering every generated service and writing
- * a copy to the services[] array. Returns the number of services written.
+ * Attempt to compile a query, registering every generated service.
+ * If the services[] array is not 0, a copy of each compiled service is written to it;
+ * at most MAX_COMPILED_SERVICES are written.
+ * Returns the number of services generated.
  * The service(s) to be compiled must not already exist before this call.
  *
- * A query may compile to more than one service: this occurs if at any point
- * in the compilation multiple services with same form but distinct types
- * are matched. For example, the query (list <my_list> position p element e)
+ * A query compiles to multiple services if at any point during the compilation
+ * several services with same form but distinct types are matched. For example,
+ * the query (list <my_list> position p element e)
  * compiles to one service per element type. Callers enumerating
  * results must therefore iterate over all returned services.
  */
-size8 CompileQuery(Atom queryTerm, Service services[], size8 maxServices);
+size8 CompileQuery(Atom queryTerm, Service services[]);
 
 /**
  * Find the service answering a query, compiling it from the rules if none is registered

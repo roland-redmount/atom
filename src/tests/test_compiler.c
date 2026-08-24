@@ -33,7 +33,7 @@ void testCompilePermute1(void)
 
 	// This will yield a new service from the existing (+ + =) service
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -67,7 +67,7 @@ void testCompilePermute2(void)
 	Atom queryTerm = CStringToTerm("number 3 addtwo z");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -109,7 +109,7 @@ void testCompileProject(void)
 	// Only the LETTER-element service yields tuples, as "alibaba" is a string;
 	// the ID-element service is registered but matches nothing.
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 2)
 
 	// The unique letters of "alibaba"
@@ -157,7 +157,7 @@ void testCompileUnconstrainedHeadVariable(void)
 	Atom queryTerm = CStringToTerm("set \"ab\" element e size z");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 0)
 
 	for(index8 i = 0; i < nServices; i++) {
@@ -177,7 +177,7 @@ void testCompileJoin1(void)
 	Atom queryTerm = CStringToTerm("first 3 second s third t");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -215,7 +215,7 @@ void testCompileJoin2(void)
 	Atom queryTerm = CStringToTerm("first 3 third t");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -249,7 +249,7 @@ void testCompileUnion(void)
 	Atom queryTerm = CStringToTerm("number 5 neighbor y");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -301,7 +301,7 @@ void testCompileConstrain(void)
 	Atom queryTerm = CStringToTerm("self y");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
 	// Only a and b have a self edge. The tuples are sorted by atom, so we do not
@@ -359,7 +359,7 @@ void testCompileRecursiveJoin1(void)
 	// Compile the query
 	Atom queryTerm = CStringToTerm("number 4 faculty f");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -410,7 +410,7 @@ void testCompileRecursiveJoin2(void)
 
 	Atom queryTerm = CStringToTerm("before \"a\" after \"d\"");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -455,7 +455,7 @@ void testCompileRecursiveReachable(void)
 
 	Atom queryTerm = CStringToTerm("before \"a\" after y");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -517,7 +517,7 @@ void testCompileRecursiveTermUnboundInput(void)
 
 	Atom queryTerm = CStringToTerm("reach \"a\" hop y");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
 	// Only the successors of a, which is b alone, and not the closure b, c, d
@@ -559,7 +559,7 @@ void testCompileRecursiveClosure(void)
 
 	Atom queryTerm = CStringToTerm("before x after y");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -624,7 +624,7 @@ void testCompileNegatedTerm(void)
 
 	// compile the query
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -673,7 +673,7 @@ void testCompiledServiceReadsFactsLive(void)
 
 	Atom queryTerm = CStringToTerm("! even 3");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 	size32 nCompiled = ServiceRegistryNCompiled();
@@ -725,7 +725,7 @@ void testCompileSquares(void)
 	Atom queryTerm = CStringToTerm("number n square s");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -777,7 +777,7 @@ void testCompileChainedRules(void)
 	size32 nCompiledBefore = ServiceRegistryNCompiled();
 	Atom queryTerm = CStringToTerm("grandparent x grandchild z");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
 	// The query service, and one (parent offspring) service per IO pattern its two terms
@@ -841,7 +841,7 @@ void testCompileChainedRuleOrder(void)
 
 	Atom queryTerm = CStringToTerm("pick \"sa\" give g");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
 	Atom labelA = CreateStringFromCString("la");
@@ -887,7 +887,7 @@ void testCompileMutualRecursion(void)
 
 	Atom queryTerm = CStringToTerm("p n");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 0)
 
 	ReleaseFormula(queryTerm);
@@ -904,7 +904,7 @@ void testCompileNewIOPattern(void)
 	Atom queryTerm = CStringToTerm("list \"AB\" position _ element 'A");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
