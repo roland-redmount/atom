@@ -514,28 +514,30 @@ static void getVariantParameterIO(CompiledVariant const * variant, byte paramete
 
 /**
  * The state of compiling one clause into a conjunction of operators, shared by the
- * recursion over its terms. Both the actors and the excluded flags are updated as terms
+ * recursion over its terms. The clause actors and the termExcluded flags are updated as terms
  * compile: an actor is given its atom type once a term providing it has dispatched, and
  * a term is marked excluded once it has been compiled.
  */
 typedef struct s_ClauseCompileState {
-	Atom form;
-	TypedTuple * actors;
-	// Index into actors of the first actor of each term, with a final entry for the end
+	Atom clauseForm;
+	TypedTuple * clauseActors;
+	// Index into clauseActors of the first actor of each term, plus one entry for the end
 	index8 const * termActorsIndices;
 	uint8 nTerms;
 	// Total number of clause arguments, including the local variables
 	size8 nArguments;
-	// The term the query matched, which is not part of the conjunction
+
+	// The term matched by the query, excluded from the conjunction
 	index8 matchedTermIndex;
-	// The form of that term, which is also the form of a recursive term in the clause
+	// The form of the query-matched term, which is the same as for a recursive term
 	Atom queryTermForm;
-	// Arity of that term. A parameter numbered beyond it is a clause-local variable,
-	// which does not occur in the query term.
+	// Arity of the query-matched term. A parameter number > matchedTermArity 
+	// is a clause-local variable, which does not occur in the query-matched term.
 	size8 matchedTermArity;
-	// The terms compiled so far, together with the matched term
+
+	// termExcluded[i] is true for each term compiled so far, and for the matched term
 	bool * termExcluded;
-	// Choice points taken during the compilation
+	// Choice points taken during the compilation of the clause
 	ChoiceTree * choiceTree;
 	// The variant a recursive term of this clause reads, or 0 when there is none to read,
 	// which is every clause of the non-recursive pass. A recursive term reads the relation
@@ -592,12 +594,12 @@ static void propagateTermParameterTypes(
 		if(parameterNumber <= clauseState->matchedTermArity) {
 			index8 matchedParameterIndex =
 				clauseState->termActorsIndices[clauseState->matchedTermIndex] + parameterNumber - 1;
-			TypedTupleSetAtom(clauseState->actors, matchedParameterIndex, outputParameter);
+			TypedTupleSetAtom(clauseState->clauseActors, matchedParameterIndex, outputParameter);
 		}
 		// Type the parameter in the term that compiled
 		// NOTE: not necessary, this term is not used for anything at this point
 		TypedTupleSetAtom(
-			clauseState->actors, clauseState->termActorsIndices[termIndex] + i, outputParameter);
+			clauseState->clauseActors, clauseState->termActorsIndices[termIndex] + i, outputParameter);
 
 		// The terms still to compile take the parameter as an input
 		for(index8 j = 0; j < clauseState->nTerms; j++) {
@@ -605,9 +607,9 @@ static void propagateTermParameterTypes(
 				continue;
 			index8 termEnd = clauseState->termActorsIndices[j + 1];
 			for(index8 k = clauseState->termActorsIndices[j]; k < termEnd; k++) {
-				TypedAtom actor = TypedTupleGetElement(clauseState->actors, k);
+				TypedAtom actor = TypedTupleGetElement(clauseState->clauseActors, k);
 				if(SameTypedAtoms(actor, termActor))
-					TypedTupleSetAtom(clauseState->actors, k, inputParameter);
+					TypedTupleSetAtom(clauseState->clauseActors, k, inputParameter);
 			}
 		}
 	}
@@ -717,7 +719,7 @@ static Operator * compileConjunctionRecursive(
 	Operator * op = 0;
 	// Clause arguments provided by the compiled term. A term may refer to the same
 	// clause argument more than once, so it may have more arguments than the clause.
-	index8 termClauseMap[clauseState->actors->nAtoms];
+	index8 termClauseMap[clauseState->clauseActors->nAtoms];
 
 	/**
 	 * Find a term that can be compiled, in three passes over the term forms of the clause.
@@ -747,7 +749,7 @@ static Operator * compileConjunctionRecursive(
 		int fallback = (pass == 1) ? COMPILE_FALLBACK_RULES : COMPILE_FALLBACK_NONE;
 		// Iterate over term forms in the clause form
 		MultisetIterator termFormIterator;
-		MultisetIterate(clauseState->form, AT_ID, &termFormIterator);
+		MultisetIterate(clauseState->clauseForm, AT_ID, &termFormIterator);
 		size8 termIndex = 0;
 		while(!op && nTermsExcluded < clauseState->nTerms && MultisetIteratorNext(&termFormIterator)) {
 			ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
@@ -777,7 +779,7 @@ static Operator * compileConjunctionRecursive(
 				if(clauseState->termExcluded[termIndex])
 					continue;
 				// Extract term actors
-				TypedTupleCopyAt(clauseState->actors, clauseState->termActorsIndices[termIndex], termActors);
+				TypedTupleCopyAt(clauseState->clauseActors, clauseState->termActorsIndices[termIndex], termActors);
 #ifdef DEBUG_COMPILER
 				PrintCString("Term: ");
 				PrintFormActorsAsFormula(negatedTermForm, termActors);
@@ -804,7 +806,7 @@ static Operator * compileConjunctionRecursive(
 					propagateTermParameterTypes(clauseState, termIndex, termActors, serviceParameters);
 #ifdef DEBUG_COMPILER
 					PrintCString("Updated clause: ");
-					PrintFormActorsAsFormula(clauseState->form, clauseState->actors);
+					PrintFormActorsAsFormula(clauseState->clauseForm, clauseState->clauseActors);
 					PrintChar('\n');
 #endif
 					break;
@@ -824,7 +826,7 @@ static Operator * compileConjunctionRecursive(
 
 	if(nTermsExcluded < clauseState->nTerms) {
 		// Recurse on remaining terms.
-		index8 nextClauseMap[clauseState->actors->nAtoms];
+		index8 nextClauseMap[clauseState->clauseActors->nAtoms];
 		Operator * nextOperator = compileConjunctionRecursive(
 			state, clauseState, nTermsExcluded, nextClauseMap);
 		if(nextOperator) {
@@ -978,8 +980,8 @@ static Operator * compileConjunction(
 		clauseActors, matchedTermIndex, termActorsIndices, nArguments);
 
 	ClauseCompileState clauseState = {
-		.form = clauseForm,
-		.actors = clauseActors,
+		.clauseForm = clauseForm,
+		.clauseActors = clauseActors,
 		.termActorsIndices = termActorsIndices,
 		.nTerms = clauseNTerms,
 		.nArguments = nArguments + nLocalVariables,
