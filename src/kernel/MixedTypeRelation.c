@@ -61,7 +61,7 @@ static void openService(MixedTypeRelation * relation)
  */
 static void gatherTuple(MixedTypeRelation * relation)
 {
-	byte const * atomTypes = relation->impl.concat.service.relation->atomTypes;
+	byte const * atomTypes = relation->impl.concat.service.relation->typeSignature.atomTypes;
 	for(index8 i = 0; i < relation->tuple->nAtoms; i++)
 		TypedTupleSetElement(
 			relation->tuple,
@@ -152,7 +152,7 @@ MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * 
 	else
 		relation->impl.concat.variableMap = 0;
 
-	GetQueryParameters(queryActors, relation->impl.concat.queryParameters);
+	ActorsToParameters(queryActors, relation->impl.concat.queryParameters);
 	DispatchIterate(
 		queryTermForm, relation->impl.concat.queryParameters, arity,
 		relation->impl.concat.permutation, &(relation->impl.concat.dispatchIterator));

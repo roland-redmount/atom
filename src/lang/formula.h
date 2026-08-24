@@ -152,13 +152,11 @@ uint8 FormulaArity(Atom formula);
 index32 FormulaRoleIndex(Atom formula, Atom roleName);
 
 /**
- * Store a list of the unique formula variables into the provided array,
- * in left-to-right canonical order, and return the number of variables.
- * NOTE: currently not used
+ * Print a formula
  */
-// size8 FormulaUniqueVariables(Atom formula, TypedAtom * variables);
-
 void PrintFormula(Atom formula);
+
+void PrintFormulaView(FormulaView formulaView);
 
 void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors);
 

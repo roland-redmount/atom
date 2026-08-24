@@ -214,7 +214,7 @@ void testQueryInvalidatedByRelation(void)
 	// A second relation of the (prec succ) form, whose services the compiled one knows
 	// nothing of
 	Relation const * intRelation = CreateRelation(
-		precSuccFixture.termForm, 2, (byte[]) {AT_ID, AT_INT});
+		precSuccFixture.termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
 	RelationTable * intTable = CreateRelationTable(
 		intRelation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(intRelation);

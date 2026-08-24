@@ -224,7 +224,8 @@ static Operator const * conjunctionOperator(IFactConjunction const * conjunction
 	byte parameterIO[relation->nColumns];
 	for(index8 i = 0; i < relation->nColumns; i++)
 		parameterIO[i] = (i == conjunction->idColumn) ? PARAMETER_IN : PARAMETER_OUT;
-	Operator const * op = ServiceRegistryFind(relation, parameterIO);
+	Operator const * op = ServiceRegistryFind(
+		relation, CreateIOSignature(parameterIO, relation->nColumns));
 	ASSERT(op)
 	return op;
 }
@@ -346,9 +347,7 @@ static void createFacts(IFactDraft * draft, bool bootstrap)
 static data64 hashConjunction(IFactConjunction const * conjunction, Atom const * tuples, data64 initialHash)
 {
 	data64 hash = initialHash;
-	// hash the form and types
-	hash = DJB2DoubleHashAdd(&conjunction->table->relation->termForm.hash, sizeof(data64), initialHash);
-	hash = DJB2DoubleHashAdd(conjunction->table->relation->atomTypes, conjunction->table->relation->nColumns, hash);
+	hash = RelationHash(conjunction->table->relation, initialHash);
 	// hash all tuples (sorted)
 	return DJB2DoubleHashAdd(tuples, conjunction->nRows * conjunction->table->relation->nColumns * sizeof(Atom), hash);
 }

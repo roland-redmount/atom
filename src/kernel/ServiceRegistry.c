@@ -49,27 +49,15 @@ static size32 nCompiledServices;
 
 
 static void setupService(
-	Service * service, Relation const * relation, byte const parameterIO[], Operator * op,
+	Service * service, Relation const * relation, IOSignature ioSignature, Operator * op,
 	enum ServiceKind kind)
 {
+	ASSERT(relation->nColumns <= RELATION_MAX_ARITY)
+	SetMemory(service, sizeof(Service), 0);
 	service->relation = relation;
 	service->kind = kind;
-	if(parameterIO) {
-		service->parameterIO = Allocate(relation->nColumns);
-		CopyMemory(parameterIO, service->parameterIO, relation->nColumns);
-	}
-	else
-		service->parameterIO = 0;
+	service->ioSignature = ioSignature;
 	service->op = op;
-}
-
-
-// callback to free the parameterIO allocation upon B-tree deletion of a Service
-static void btreeFreeService(void * item, size32 itemSize)
-{
-	Service * service = item;
-	if(service->parameterIO)
-		Free(service->parameterIO);
 }
 
 
@@ -81,11 +69,12 @@ static int8 compareServices(Service const * service, Service const * serviceOrKe
 	else if(service->relation > serviceOrKey->relation)
 		return 1;
 	else {
-		// then compare parameter IO lists
-		if(!serviceOrKey->parameterIO)
+		// then compare IO signatures; a zeroed signature for the key matches any IO
+		if(!serviceOrKey->ioSignature.parameterIO[0])
 			return 0;
-		ASSERT(service->parameterIO)
-		return CompareMemory(service->parameterIO, serviceOrKey->parameterIO, service->relation->nColumns);
+		return CompareMemory(
+			service->ioSignature.parameterIO, serviceOrKey->ioSignature.parameterIO,
+			service->relation->nColumns);
 	}
 }
 
@@ -146,7 +135,7 @@ void SetupServiceRegistry(void)
 	services = BTreeCreate(
 		sizeof(Service),
 		btreeCompareServices,
-		btreeFreeService
+		0	// nothing to deallocate
 	);
 	operatorRelations = BTreeCreate(sizeof(OperatorRelation), btreeCompareOperatorRelations, 0);
 	dependencies = BTreeCreate(sizeof(OperatorDependency), btreeCompareDependencies, 0);
@@ -169,7 +158,7 @@ void FreeServiceRegistry(void)
 static bool findService(Relation const * relation, Operator const * op, Service * service)
 {
 	Service key;
-	setupService(&key, relation, 0, (Operator *) op, SERVICE_PRIMITIVE);
+	setupService(&key, relation, (IOSignature) {0}, (Operator *) op, SERVICE_PRIMITIVE);
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, services);
 	bool found = false;
@@ -388,11 +377,11 @@ static void freeStaleOperators(ResizingArray * staleOperators)
 
 
 Service ServiceRegistryAdd(
-	Relation const * relation, byte const parameterIO[], Operator * op,
+	Relation const * relation, IOSignature ioSignature, Operator * op,
 	enum ServiceKind kind)
 {
 	Service service;
-	setupService(&service, relation, parameterIO, op, kind);
+	setupService(&service, relation, ioSignature, op, kind);
 	// add to the service registry
 	ASSERT(BTreeInsert(services, &service) == BTREE_INSERTED)
 	AcquireOperator(op);
@@ -414,7 +403,8 @@ Service ServiceRegistryAdd(
 		break;
 
 	case SERVICE_TEMPORARY:
-		// Compiler scaffolding, which nothing depends on and nothing invalidates
+		// Compiler scaffolding, which is never registered; see ServiceKind
+		ASSERT(false)
 		break;
 	}
 
@@ -429,12 +419,6 @@ void ServiceRegistryRemove(Relation const * relation, Operator * op)
 	Service service;
 	bool found = findService(relation, op, &service);
 	ASSERT(found)
-
-	if(service.kind == SERVICE_TEMPORARY) {
-		// Temporary services have no dependencies to invalidate; done
-		removeService(&service);
-		return;
-	}
 
 	// Add the operator to a new stale list
 	ResizingArray staleOperators;
@@ -454,7 +438,7 @@ void ServiceRegistryRemoveAll(Relation const * relation)
 	CreateResizingArray(&staleOperators, sizeof(Operator *), 8);
 
 	Service key;
-	setupService(&key, relation, 0, 0, SERVICE_PRIMITIVE);
+	setupService(&key, relation, (IOSignature) {0}, 0, SERVICE_PRIMITIVE);
 	Service service;
 	while(BTreeGetItem(services, &key, &service)) {
 		addStaleOperator(&staleOperators, service.op);
@@ -560,7 +544,7 @@ bool ServiceIteratorNext(ServiceIterator * iterator)
 {
 	Service key = {
 		.relation = iterator->relation,
-		.parameterIO = 0,
+		.ioSignature = {.parameterIO = {0}},
 		.op = 0
 	};
 	bool foundItem;
@@ -585,10 +569,10 @@ void ServiceIteratorEnd(ServiceIterator * iterator)
 }
 
 
-Operator * ServiceRegistryFind(Relation const * relation, byte const parameterIO[])
+Operator * ServiceRegistryFind(Relation const * relation, IOSignature ioSignature)
 {
 	Service key;
-	setupService(&key, relation, parameterIO, 0, SERVICE_PRIMITIVE);
+	setupService(&key, relation, ioSignature, 0, SERVICE_PRIMITIVE);
 
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, services);
@@ -598,7 +582,6 @@ Operator * ServiceRegistryFind(Relation const * relation, byte const parameterIO
 		op = service->op;
 	}
 	BTreeIteratorEnd(&iterator);
-	btreeFreeService(&key, 0);
 	return op;
 }
 
@@ -631,8 +614,8 @@ void PrintService(Service const * service)
 			(Atom) {
 				.parameter = {
 					.number = i + 1,
-					.atomType =	service->relation->atomTypes[i],
-					.io = service->parameterIO[i]
+					.atomType =	service->relation->typeSignature.atomTypes[i],
+					.io = service->ioSignature.parameterIO[i]
 				}
 			}
 		);
@@ -658,7 +641,8 @@ void RelationDump(Relation const * relation)
 	byte parameterIO[relation->nColumns];
 	for(index8 i = 0; i < relation->nColumns; i++)
 		parameterIO[i] = PARAMETER_OUT;
-	Operator const * op = ServiceRegistryFind(relation, parameterIO);
+	Operator const * op = ServiceRegistryFind(
+		relation, CreateIOSignature(parameterIO, relation->nColumns));
 	ASSERT(op);
 
 	PrintF("Relation %u columns\n", relation->nColumns);
@@ -669,7 +653,7 @@ void RelationDump(Relation const * relation)
 	while(OperatorCall(context)) {
 		// TODO: we should probably not print the full representaiton
 		// of identified atoms, as it triggers repeated queries
-		PrintTuple(relation->atomTypes, arguments, relation->nColumns);
+		PrintTuple(relation->typeSignature.atomTypes, arguments, relation->nColumns);
 		PrintChar('\n');
 		nTuples++;
 	}

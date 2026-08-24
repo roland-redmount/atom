@@ -145,11 +145,13 @@ void testConcatAcrossRelations(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	Relation const * idRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_ID});
+	Relation const * idRelation = CreateRelation(
+		termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2));
 	RelationTable * idTable = CreateRelationTable(
 		idRelation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(idRelation);
-	Relation const * intRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_INT});
+	Relation const * intRelation = CreateRelation(
+		termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
 	RelationTable * intTable = CreateRelationTable(
 		intRelation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(intRelation);

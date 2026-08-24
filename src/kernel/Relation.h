@@ -25,6 +25,29 @@
 #include "lang/Atom.h"
 
 
+// We limit the number of arguments a relation might have,
+// so that we can use fixed-size arrays in some places and avoid heap allocation.
+// In practice, services should rarely have arity higher than 3.
+#define RELATION_MAX_ARITY	8
+
+
+/**
+ * The column types of a relation. This exists to simplify array handling.
+ */
+typedef struct s_TypeSignature {
+	byte atomTypes[RELATION_MAX_ARITY];
+} TypeSignature;
+
+/**
+ * The type signature of the given atom types, zero filled beyond nColumns. For a signature
+ * built from an array at hand, such as the atom types of a TypedTuple.
+ */
+TypeSignature CreateTypeSignature(byte const atomTypes[], size8 nColumns);
+
+
+bool SameTypeSignatures(TypeSignature signature1, TypeSignature signature2);
+
+
 typedef struct s_Relation Relation;
 
 struct s_Relation {
@@ -39,7 +62,7 @@ struct s_Relation {
 	// whether this relation holds a reference to its forms; see RelationReleaseForm()
 	bool ownsForm;
 	size8 nColumns;
-	byte * atomTypes;
+	TypeSignature typeSignature;
 	/**
 	 * One reference per Service and per RelationTable naming this relation, plus the
 	 * creation reference held by whoever created it. The relation removes itself from the
@@ -57,7 +80,7 @@ struct s_Relation {
  * The relation must not already exist, or an ASSERT will occur.
  * The caller holds one reference to the relation.
  */
-Relation const * CreateRelation(Atom termForm, size8 nColumns, byte const atomTypes[]);
+Relation const * CreateRelation(Atom termForm, size8 nColumns, TypeSignature typeSignature);
 
 /**
  * Create a relation with the predicate form given explicitly, rather than computed from
@@ -65,14 +88,14 @@ Relation const * CreateRelation(Atom termForm, size8 nColumns, byte const atomTy
  * TermFormGetPredicateForm() is not yet available. See setupCoreServices() in kernel.c
  */
 Relation const * CreateRelationBootstrap(
-	Atom termForm, Atom predicateForm, size8 nColumns, byte const atomTypes[]);
+	Atom termForm, Atom predicateForm, size8 nColumns, TypeSignature typeSignature);
 
 /**
  * The registered relation of the given signature, creating and registering one if there
  * is none. Unlike CreateRelation(), an existing relation is not an error.
  * The caller holds one reference to the relation either way.
  */
-Relation const * FindOrCreateRelation(Atom termForm, size8 nColumns, byte const atomTypes[]);
+Relation const * FindOrCreateRelation(Atom termForm, size8 nColumns, TypeSignature typeSignature);
 
 /**
  * Acquire a reference to a relation.
@@ -106,5 +129,6 @@ void ReleaseRelation(Relation const * relation);
  */
 void RelationReleaseForm(Relation const * relation);
 
+data64 RelationHash(Relation const * relation, data64 initialHash);
 
 #endif	// RELATION_H

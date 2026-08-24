@@ -1,6 +1,7 @@
 
 #include "kernel/compiler.h"
 #include "kernel/dictionary.h"
+#include "kernel/dispatch.h"
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
 #include "kernel/letter.h"
@@ -32,7 +33,7 @@ void testCompilePermute1(void)
 
 	// This will yield a new service from the existing (+ + =) service
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -66,7 +67,7 @@ void testCompilePermute2(void)
 	Atom queryTerm = CStringToTerm("number 3 addtwo z");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -108,7 +109,7 @@ void testCompileProject(void)
 	// Only the LETTER-element service yields tuples, as "alibaba" is a string;
 	// the ID-element service is registered but matches nothing.
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 2)
 
 	// The unique letters of "alibaba"
@@ -156,7 +157,7 @@ void testCompileUnconstrainedHeadVariable(void)
 	Atom queryTerm = CStringToTerm("set \"ab\" element e size z");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 0)
 
 	for(index8 i = 0; i < nServices; i++) {
@@ -176,7 +177,7 @@ void testCompileJoin1(void)
 	Atom queryTerm = CStringToTerm("first 3 second s third t");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -214,7 +215,7 @@ void testCompileJoin2(void)
 	Atom queryTerm = CStringToTerm("first 3 third t");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -248,7 +249,7 @@ void testCompileUnion(void)
 	Atom queryTerm = CStringToTerm("number 5 neighbor y");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -300,7 +301,7 @@ void testCompileConstrain(void)
 	Atom queryTerm = CStringToTerm("self y");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
 	// Only a and b have a self edge. The tuples are sorted by atom, so we do not
@@ -349,7 +350,8 @@ void testCompileRecursiveJoin1(void)
 	// Create terminating fact, provide by a B-tree service
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
 	Relation const * relation = CreateRelation(
-		FormulaGetForm(terminatingFact), 2, TypedTuplePeekAtomTypes(FormulaGetActors(terminatingFact)));
+		FormulaGetForm(terminatingFact), 2,
+		CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(terminatingFact)), 2));
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(relation);
@@ -357,7 +359,7 @@ void testCompileRecursiveJoin1(void)
 	// Compile the query
 	Atom queryTerm = CStringToTerm("number 4 faculty f");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -408,7 +410,7 @@ void testCompileRecursiveJoin2(void)
 
 	Atom queryTerm = CStringToTerm("before \"a\" after \"d\"");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -453,7 +455,7 @@ void testCompileRecursiveReachable(void)
 
 	Atom queryTerm = CStringToTerm("before \"a\" after y");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -489,6 +491,59 @@ void testCompileRecursiveReachable(void)
 
 
 /**
+ * This test attemps to compile the term (reach "a" hop b) given the recursive rule
+ * 
+ *   reach a hop b <- reach c hop b & prec c succ a
+ * 
+ * This leads the compiler to the conjunction (reach c hop b & prec c succ <ID)
+ * 
+ * 
+ * The derivation of a recursive relation is keyed on the arguments the query binds, so a
+ * recursive term that leaves one of them free has no call binding to name it and the clause
+ * is refused; see compileRecursiveTerm(). Here the recursive term of
+ *
+ *   reach a hop b <- reach c hop b & prec c succ a
+ *
+ * walks the graph backwards, so it leaves the argument the query binds free. The clause
+ * does not compile, and the query is answered by the base clause alone.
+ */
+void testCompileRecursiveTermUnboundInput(void)
+{
+	SetupPrecSuccFixture(&precSuccFixture);
+	DictionaryEntry baseEntry = DictionaryAddClauseFromCString(
+		"reach a hop b | ! prec a succ b");
+	DictionaryEntry recursiveEntry = DictionaryAddClauseFromCString(
+		"reach a hop b | ! reach c hop b | ! prec c succ a");
+
+	Atom queryTerm = CStringToTerm("reach \"a\" hop y");
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+
+	// Only the successors of a, which is b alone, and not the closure b, c, d
+	Atom nodeB = CreateStringFromCString("b");
+	size32 nTuples = 0;
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
+	void * context = OperatorCreateContext(services[0].op, arguments);
+	while(OperatorCall(context)) {
+		Atom hop = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "hop", 1);
+		ASSERT_TRUE(SameAtoms(hop, nodeB))
+		nTuples++;
+	}
+	OperatorFreeContext(context);
+	ASSERT_UINT32_EQUAL(nTuples, 1)
+
+	IFactRelease(nodeB);
+	ServiceRegistryRemove(services[0].relation, services[0].op);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&recursiveEntry);
+	DictionaryRemoveClause(&baseEntry);
+	TeardownRelationFixture(&precSuccFixture);
+}
+
+
+/**
  * The same rules with both roles left free, which asks for the whole relation: the
  * transitive closure of the entire graph, both of its components included.
  *
@@ -504,7 +559,7 @@ void testCompileRecursiveClosure(void)
 
 	Atom queryTerm = CStringToTerm("before x after y");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -557,7 +612,8 @@ void testCompileNegatedTerm(void)
 {
 	// Setup the fact (odd 3)
 	Atom odd3term = CStringToTerm("odd 3");
-	Relation const * evenRelation = CreateRelation(FormulaGetForm(odd3term), 1, (byte[]) {AT_INT});
+	Relation const * evenRelation = CreateRelation(
+		FormulaGetForm(odd3term), 1, CreateTypeSignature((byte[]) {AT_INT}, 1));
 	RelationTable * evenTable = CreateRelationTable(
 		evenRelation, &btreeTableProvider, (index8[]) {0});
 	ReleaseRelation(evenRelation);
@@ -568,7 +624,7 @@ void testCompileNegatedTerm(void)
 
 	// compile the query
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -607,7 +663,8 @@ void testCompiledServiceReadsFactsLive(void)
 {
 	// (odd 3), and the rule making (! even x) follow from (odd x)
 	Atom odd3term = CStringToTerm("odd 3");
-	Relation const * oddRelation = CreateRelation(FormulaGetForm(odd3term), 1, (byte[]) {AT_INT});
+	Relation const * oddRelation = CreateRelation(
+		FormulaGetForm(odd3term), 1, CreateTypeSignature((byte[]) {AT_INT}, 1));
 	RelationTable * oddTable = CreateRelationTable(
 		oddRelation, &btreeTableProvider, (index8[]) {0});
 	ReleaseRelation(oddRelation);
@@ -616,7 +673,7 @@ void testCompiledServiceReadsFactsLive(void)
 
 	Atom queryTerm = CStringToTerm("! even 3");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 	size32 nCompiled = ServiceRegistryNCompiled();
@@ -668,7 +725,7 @@ void testCompileSquares(void)
 	Atom queryTerm = CStringToTerm("number n square s");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -692,6 +749,170 @@ void testCompileSquares(void)
 }
 
 
+/**
+ * A rule body term with no service of its own is compiled from the rules answering it, so
+ * one rule can be built on another. Here (grandparent grandchild) is defined over
+ * (parent offspring), which is itself a rule over the stored (father child) relation, and
+ * neither of the two (parent offspring) services exists until this query compiles them.
+ *
+ * The two terms of the grandparent rule ask for different IO patterns: the first leaves
+ * both arguments free, and the second takes as an input the argument the first produced.
+ * So the rule compiles twice, once per pattern.
+ */
+static RelationFixture fatherFixture;
+
+void testCompileChainedRules(void)
+{
+	SetupRelationFixture(&fatherFixture, (char const * []) {"father", "child"}, 2);
+	RelationFixtureAddTuple(&fatherFixture, (char const * []) {"a", "b"});
+	RelationFixtureAddTuple(&fatherFixture, (char const * []) {"b", "c"});
+
+	// parent p offspring c <- father p child c
+	DictionaryEntry parentEntry = DictionaryAddClauseFromCString(
+		"parent p offspring c | ! father p child c");
+	// grandparent x grandchild z <- parent x offspring y & parent y offspring z
+	DictionaryEntry grandparentEntry = DictionaryAddClauseFromCString(
+		"grandparent x grandchild z | ! parent x offspring y | ! parent y offspring z");
+
+	size32 nCompiledBefore = ServiceRegistryNCompiled();
+	Atom queryTerm = CStringToTerm("grandparent x grandchild z");
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+
+	// The query service, and one (parent offspring) service per IO pattern its two terms
+	// asked for
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled() - nCompiledBefore, 3)
+
+	// Only a has a grandchild, which is c
+	Atom nodeA = CreateStringFromCString("a");
+	Atom nodeC = CreateStringFromCString("c");
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
+	void * context = OperatorCreateContext(services[0].op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	Atom x = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "grandparent", 1);
+	Atom z = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "grandchild", 1);
+	ASSERT_TRUE(SameAtoms(x, nodeA))
+	ASSERT_TRUE(SameAtoms(z, nodeC))
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	IFactRelease(nodeA);
+	IFactRelease(nodeC);
+	ServiceRegistryRemove(services[0].relation, services[0].op);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&grandparentEntry);
+	DictionaryRemoveClause(&parentEntry);
+	// Dropping the stored relation invalidates the compiled (parent offspring) services
+	TeardownRelationFixture(&fatherFixture);
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiledBefore)
+}
+
+
+/**
+ * A term is only offered to the rules once no term of the clause dispatches to a service
+ * that exists, so a term the rules answer never compiles ahead of a term that would bind
+ * its arguments. Here (start point) binds the argument (alias as) takes as an input, and
+ * the two terms have different forms, so which of them the clause iterates first is not
+ * something the test can arrange.
+ *
+ * The service compiled for the alias term is what shows the order taken: with the term
+ * bound there is a service taking the alias argument as an input, and none reading the
+ * relation unbound.
+ */
+static RelationFixture nodeFixture;
+static RelationFixture startFixture;
+
+void testCompileChainedRuleOrder(void)
+{
+	SetupRelationFixture(&nodeFixture, (char const * []) {"node", "label"}, 2);
+	RelationFixtureAddTuple(&nodeFixture, (char const * []) {"na", "la"});
+	RelationFixtureAddTuple(&nodeFixture, (char const * []) {"nb", "lb"});
+	SetupRelationFixture(&startFixture, (char const * []) {"start", "point"}, 2);
+	RelationFixtureAddTuple(&startFixture, (char const * []) {"sa", "na"});
+
+	// alias k as l <- node k label l
+	DictionaryEntry aliasEntry = DictionaryAddClauseFromCString(
+		"alias k as l | ! node k label l");
+	// pick p give g <- start p point k & alias k as g
+	DictionaryEntry pickEntry = DictionaryAddClauseFromCString(
+		"pick p give g | ! start p point k | ! alias k as g");
+
+	Atom queryTerm = CStringToTerm("pick \"sa\" give g");
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+
+	Atom labelA = CreateStringFromCString("la");
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
+	void * context = OperatorCreateContext(services[0].op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	Atom g = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "give", 1);
+	ASSERT_TRUE(SameAtoms(g, labelA))
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+	IFactRelease(labelA);
+
+	// The alias term compiled with its argument bound, and never unbound
+	Service aliasService;
+	index8 aliasPermutation[2];
+	Atom boundAlias = CStringToTerm("alias \"na\" as l");
+	ASSERT_TRUE(DispatchQueryFormula(boundAlias, &aliasService, aliasPermutation))
+	ReleaseFormula(boundAlias);
+	Atom unboundAlias = CStringToTerm("alias k as l");
+	ASSERT_FALSE(DispatchQueryFormula(unboundAlias, &aliasService, aliasPermutation))
+	ReleaseFormula(unboundAlias);
+
+	ServiceRegistryRemove(services[0].relation, services[0].op);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&pickEntry);
+	DictionaryRemoveClause(&aliasEntry);
+	TeardownRelationFixture(&startFixture);
+	TeardownRelationFixture(&nodeFixture);
+}
+
+
+/**
+ * Two rules recursive through one another have no base case: compiling (p) reaches (q),
+ * which reaches (p) again. A parameterized query already being compiled yields no service,
+ * so the clause fails to compile and the compilation terminates, which is what this test
+ * is here to show. Mutual recursion is a gap; see compiler.md.
+ */
+void testCompileMutualRecursion(void)
+{
+	DictionaryEntry pEntry = DictionaryAddClauseFromCString("p x | ! q x");
+	DictionaryEntry qEntry = DictionaryAddClauseFromCString("q x | ! p x");
+
+	Atom queryTerm = CStringToTerm("p n");
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services);
+	ASSERT_UINT32_EQUAL(nServices, 0)
+
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&qEntry);
+	DictionaryRemoveClause(&pEntry);
+}
+
+
+/**
+ * Compile a service to handle an IO pattern for which there is no existing service.
+ */
+void testCompileNewIOPattern(void)
+{
+	Atom queryTerm = CStringToTerm("list \"AB\" position _ element 'A");
+
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Service service = services[0];
+
+	ServiceRegistryRemove(service.relation, service.op);
+	ReleaseFormula(queryTerm);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -709,10 +930,20 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileRecursiveJoin2);
 	ExecuteTest(testCompileRecursiveReachable);
 	ExecuteTest(testCompileRecursiveClosure);
+	ExecuteTest(testCompileRecursiveTermUnboundInput);
 
 	ExecuteTest(testCompileNegatedTerm);
 	ExecuteTest(testCompiledServiceReadsFactsLive);
 	ExecuteTest(testCompileSquares);
+
+	ExecuteTest(testCompileChainedRules);
+	ExecuteTest(testCompileChainedRuleOrder);
+	ExecuteTest(testCompileMutualRecursion);
+
+	// TODO: an IO pattern no service provides needs a FILTER operator, which reads a
+	// service producing the columns the pattern takes as inputs and keeps the tuples where
+	// they equal the values the caller bound. Not implemented yet.
+	// ExecuteTest(testCompileNewIOPattern);
 
 	// TODO: compiling a recursive rule over an infinite domain. The relation has no
 	// finite fixpoint and the call bindings n = 4, 3, 2, 1, 0, -1, -2, ... do not

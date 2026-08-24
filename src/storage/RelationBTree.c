@@ -150,7 +150,7 @@ byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint
 static void * createRelationBTree(RelationTable const * table)
 {
 	return CreateRelationBTree(
-		table->relation->nColumns, table->relation->atomTypes, table->indexColumns);
+		table->relation->nColumns, table->relation->typeSignature.atomTypes, table->indexColumns);
 }
 
 static size32 relationBTreeNTuples(RelationTable const * table)
@@ -356,7 +356,8 @@ static void btreeRegisterServices(RelationTable * table)
 			else
 				parameterIO[table->indexColumns[i]] = PARAMETER_OUT;
 		}
-		ServiceRegistryAdd(table->relation, parameterIO, op, SERVICE_PRIMITIVE);
+		ServiceRegistryAdd(
+			table->relation, CreateIOSignature(parameterIO, nColumns), op, SERVICE_PRIMITIVE);
 		// The registry now holds the reference to the operator
 		ReleaseOperator(op);
 	}

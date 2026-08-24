@@ -11,7 +11,7 @@
 
 struct {
 	Atom form;		// a term form
-	byte atomTypes[EXAMPLE_FORM_ARITY];
+	TypeSignature typeSignature;
 } fixture;
 
 
@@ -20,7 +20,9 @@ static void setupFixture(void)
 	// TODO: we should have a way to parse a form from a C string.
 	Atom formula = CStringToTerm("foo 0 bar 0 bar 0 baz 0");
 	fixture.form = FormulaGetForm(formula);
-	SetMemory(fixture.atomTypes, EXAMPLE_FORM_ARITY, AT_INT);
+	byte atomTypes[EXAMPLE_FORM_ARITY];
+	SetMemory(atomTypes, EXAMPLE_FORM_ARITY, AT_INT);
+	fixture.typeSignature = CreateTypeSignature(atomTypes, EXAMPLE_FORM_ARITY);
 	IFactAcquire(fixture.form);
 	ReleaseFormula(formula);
 }
@@ -42,12 +44,12 @@ void testAddRemoveRelation(void)
 	size32 nRelationsInitial = RelationRegistryNRelations();
 
 	Relation const * relation = CreateRelation(
-		fixture.form, EXAMPLE_FORM_ARITY, fixture.atomTypes);
+		fixture.form, EXAMPLE_FORM_ARITY, fixture.typeSignature);
 	ASSERT_UINT32_EQUAL(relation->nColumns, EXAMPLE_FORM_ARITY)
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 
 	ASSERT_PTR_EQUAL(
-		RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, fixture.atomTypes),
+		RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, fixture.typeSignature),
 		relation
 	)
 
@@ -60,7 +62,7 @@ void testAddRemoveRelation(void)
 	ReleaseRelation(relation);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial)
 
-	ASSERT_NULL(RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, fixture.atomTypes));
+	ASSERT_NULL(RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, fixture.typeSignature));
 
 	teardownFixture();
 }

@@ -27,14 +27,15 @@ void testAssertRetract(void)
 	Atom fact1 = CStringToTerm("foo \"barf\" bar 1");
 	Atom fact2 = CStringToTerm("foo \"baz\" bar 42");
 	size8 nColumns = FormulaGetActors(fact1)->nAtoms;
-	byte const * atomTypes = TypedTuplePeekAtomTypes(FormulaGetActors(fact1));
+	TypeSignature typeSignature = CreateTypeSignature(
+		TypedTuplePeekAtomTypes(FormulaGetActors(fact1)), nColumns);
 
 	// The relation does not exist until the first fact is asserted
-	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(fact1), nColumns, atomTypes))
+	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(fact1), nColumns, typeSignature))
 
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(fact1), FormulaGetActors(fact1), 0), ASSERT_OK)
 
-	Relation const * relation = RelationRegistryFind(FormulaGetForm(fact1), nColumns, atomTypes);
+	Relation const * relation = RelationRegistryFind(FormulaGetForm(fact1), nColumns, typeSignature);
 	ASSERT_NOT_NULL(relation)
 	RelationTable const * table = RelationTableRegistryFind(relation);
 	ASSERT_NOT_NULL(table)
@@ -53,7 +54,7 @@ void testAssertRetract(void)
 
 	// Retracting the last fact drops the table, and the relation with it
 	RetractFact(FormulaGetForm(fact1), FormulaGetActors(fact1));
-	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(fact1), nColumns, atomTypes))
+	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(fact1), nColumns, typeSignature))
 
 	ReleaseFormula(fact2);
 	ReleaseFormula(fact1);
@@ -70,14 +71,15 @@ void testAssertContradictsStoredFact(void)
 	Atom fact = CStringToTerm("prec \"a\" succ \"b\"");
 	Atom negatedFact = CStringToTerm("! prec \"a\" succ \"b\"");
 	size8 nColumns = FormulaGetActors(negatedFact)->nAtoms;
-	byte const * atomTypes = TypedTuplePeekAtomTypes(FormulaGetActors(negatedFact));
+	TypeSignature typeSignature = CreateTypeSignature(
+		TypedTuplePeekAtomTypes(FormulaGetActors(negatedFact)), nColumns);
 
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(fact), FormulaGetActors(fact), 0), ASSERT_OK)
 
 	// (! prec "a" succ "b") is refused, contradicting the fact just asserted
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(negatedFact), FormulaGetActors(negatedFact), 0), ASSERT_FAIL)
 	// and the refused assert leaves no relation behind
-	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(negatedFact), nColumns, atomTypes))
+	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(negatedFact), nColumns, typeSignature))
 
 	// Retracting the fact it contradicts makes the same assert succeed
 	RetractFact(FormulaGetForm(fact), FormulaGetActors(fact));
@@ -110,7 +112,10 @@ void testAssertContradictsDerivedFact(void)
 	// (even 3) is refused: no relation holds (! even 3), but the rule derives it
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(even3), FormulaGetActors(even3), 0), ASSERT_FAIL)
 	ASSERT_NULL(RelationRegistryFind(
-		FormulaGetForm(even3), FormulaGetActors(even3)->nAtoms, TypedTuplePeekAtomTypes(FormulaGetActors(even3))))
+		FormulaGetForm(even3), FormulaGetActors(even3)->nAtoms,
+		CreateTypeSignature(
+			TypedTuplePeekAtomTypes(FormulaGetActors(even3)),
+			FormulaGetActors(even3)->nAtoms)))
 
 	// (even 4) is accepted, as the rule derives (! even 4) only from (odd 4),
 	// which is not a fact

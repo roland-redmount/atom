@@ -3,6 +3,15 @@
 #include "parser/Characters.h"
 
 
+IOSignature CreateIOSignature(byte const parameterIO[], size8 nColumns)
+{
+	ASSERT(nColumns <= RELATION_MAX_ARITY)
+	IOSignature ioSignature = {.parameterIO = {0}};
+	CopyMemory(parameterIO, ioSignature.parameterIO, nColumns);
+	return ioSignature;
+}
+
+
 /**
  * Test whether a tuple contains a parameter.
  */
@@ -16,7 +25,7 @@ static bool hasParameterAtom(TypedTuple const * tuple)
 }
 
 
-void GetQueryParameters(TypedTuple const * actors, Atom parameters[])
+void ActorsToParameters(TypedTuple const * actors, Atom parameters[])
 {
 	ASSERT(!hasParameterAtom(actors))
 	for(index8 i = 0; i < actors->nAtoms; i++) {

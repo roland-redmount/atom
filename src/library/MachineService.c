@@ -96,22 +96,24 @@ static MachineProvider machineServiceProvider = {
 
 
 /**
- * Read the signature actors into the column types and parameter IO of the service,
- * and into the argument index of the function. The actors are in relation column order.
+ * Read the signature actors into the parameter IO of the service and into the argument
+ * index of the function, returning the column types. The actors are in relation column
+ * order.
  */
-static void readSignatureParameters(
-	TypedTuple const * signatureActors, MachineServiceData * data,
-	byte atomTypes[], byte parameterIO[])
+static TypeSignature readSignatureParameters(
+	TypedTuple const * signatureActors, MachineServiceData * data, IOSignature * ioSignature)
 {
 	bool numberSeen[MACHINE_SERVICE_MAX_ARITY];
 	SetMemory(numberSeen, sizeof(numberSeen), 0);
+	byte atomTypes[MACHINE_SERVICE_MAX_ARITY];
+	byte parameterIO[MACHINE_SERVICE_MAX_ARITY];
 
 	for(index8 i = 0; i < data->nArguments; i++) {
 		TypedAtom actor = TypedTupleGetElement(signatureActors, i);
 		// every actor of a signature is a parameter
 		ASSERT(actor.type == AT_PARAMETER)
+		ASSERT(actor.atom.parameter.atomType)
 		atomTypes[i] = actor.atom.parameter.atomType;
-		ASSERT(atomTypes[i])
 		parameterIO[i] = actor.atom.parameter.io;
 
 		// a signature numbers its arguments 1 to the arity, each exactly once
@@ -121,6 +123,8 @@ static void readSignatureParameters(
 		numberSeen[number - 1] = true;
 		data->argumentIndex[number - 1] = i;
 	}
+	*ioSignature = CreateIOSignature(parameterIO, data->nArguments);
+	return CreateTypeSignature(atomTypes, data->nArguments);
 }
 
 
@@ -137,14 +141,13 @@ Service RegisterMachineService(
 	data->nArguments = arity;
 	data->stateSize = stateSize;
 
-	byte atomTypes[MACHINE_SERVICE_MAX_ARITY];
-	byte parameterIO[MACHINE_SERVICE_MAX_ARITY];
-	readSignatureParameters(termView.actors, data, atomTypes, parameterIO);
+	IOSignature ioSignature;
+	TypeSignature typeSignature = readSignatureParameters(termView.actors, data, &ioSignature);
 
 	// A machine service is computed, and so has no tuple storage: the relation exists
 	// only to name the signature the service is registered under, and is removed with the
 	// last service naming it; see ReleaseRelation()
-	Relation const * relation = FindOrCreateRelation(termView.form, arity, atomTypes);
+	Relation const * relation = FindOrCreateRelation(termView.form, arity, typeSignature);
 
 	// A function with no state yields at most one tuple, and so declares no index order.
 	// A function with a state declares the order its signature writes its arguments in;
@@ -153,7 +156,7 @@ Service RegisterMachineService(
 	Operator * op = CreateMachineOperator(
 		arity, indexOrder, &machineServiceProvider, data,
 		sizeof(MachineServiceContext) + stateSize);
-	Service service = ServiceRegistryAdd(relation, parameterIO, op, SERVICE_PRIMITIVE);
+	Service service = ServiceRegistryAdd(relation, ioSignature, op, SERVICE_PRIMITIVE);
 	// the service registry now holds the references to the operator and the relation
 	ReleaseOperator(op);
 	ReleaseRelation(relation);

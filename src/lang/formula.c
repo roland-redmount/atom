@@ -564,8 +564,13 @@ static void printConjunction(Atom conjunctionForm, TypedTuple const * actors, in
  */
 void PrintFormula(Atom formula)
 {
-	FormulaView view = FormulaGetView(formula);
-	PrintFormActorsAsFormula(view.form, view.actors);
+	PrintFormulaView(FormulaGetView(formula));
+}
+
+
+void PrintFormulaView(FormulaView formulaView)
+{
+	PrintFormActorsAsFormula(formulaView.form, formulaView.actors);
 }
 
 

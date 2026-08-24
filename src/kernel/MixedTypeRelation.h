@@ -48,7 +48,7 @@ typedef struct s_MixedTypeRelation {
 		// for MIXED_TYPE_CONCAT
 		struct {
 			TypedTuple const * queryActors;
-			// The query generalized to parameters, which is what dispatch matches, and
+			// The parameterized query, which is what dispatch matches, and
 			// which the dispatch iterator reads as it goes; see GetQueryParameters()
 			Atom * queryParameters;
 			// Index of the first query actor denoting the same variable as query actor i,

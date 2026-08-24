@@ -327,9 +327,10 @@ void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
  */
 static RelationTable * createCoreRelationTable(uint32 relationId)
 {
-	byte atomTypes[CORE_FORMS_MAX_ARITY];
-	CoreFormSetByteArray(coreRelationFormId[relationId], coreRelationAtomTypes[relationId], atomTypes);
 	index32 formId = coreRelationFormId[relationId];
+	byte atomTypes[CORE_FORMS_MAX_ARITY];
+	CoreFormSetByteArray(formId, coreRelationAtomTypes[relationId], atomTypes);
+	TypeSignature typeSignature = CreateTypeSignature(atomTypes, corePredicateArity[formId]);
 
 	// The bootstrap constructor is used throughout, since the predicate form is at hand
 	// and the earliest core relations are keyed by a term form that has no tuples yet
@@ -337,7 +338,7 @@ static RelationTable * createCoreRelationTable(uint32 relationId)
 		kernel.coreTermForms[formId],
 		kernel.corePredicateForms[formId],
 		corePredicateArity[formId],
-		atomTypes
+		typeSignature
 	);
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeTableProvider, kernel.corePredicateRoleIndex[formId]);
@@ -349,13 +350,14 @@ static RelationTable * createCoreRelationTable(uint32 relationId)
 
 Relation const * GetCoreRelation(index32 relationId)
 {
-	byte atomTypes[CORE_FORMS_MAX_ARITY];
-	CoreFormSetByteArray(coreRelationFormId[relationId], coreRelationAtomTypes[relationId], atomTypes);
 	index32 formId = coreRelationFormId[relationId];
+	byte atomTypes[CORE_FORMS_MAX_ARITY];
+	CoreFormSetByteArray(formId, coreRelationAtomTypes[relationId], atomTypes);
+	TypeSignature typeSignature = CreateTypeSignature(atomTypes, corePredicateArity[formId]);
 	return RelationRegistryFind(
 		kernel.coreTermForms[formId],
 		corePredicateArity[formId],
-		atomTypes
+		typeSignature
 	);
 }
 
@@ -662,9 +664,10 @@ static void setupCoreServices(void)
 			coreServiceParameterIO[i],
 			parameterIO
 		);
+		Relation const * relation = kernel.coreRelations[relationId]->relation;
 		kernel.coreOperators[i] = ServiceRegistryFind(
-			kernel.coreRelations[relationId]->relation,
-			parameterIO
+			relation,
+			CreateIOSignature(parameterIO, relation->nColumns)
 		);
 		ASSERT(kernel.coreOperators[i])
 	}

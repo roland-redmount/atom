@@ -10,19 +10,28 @@
 #define MAX_COMPILED_SERVICES	8
 
 /**
- * Attempt to compile a query, registering every generated service and writing
- * a copy to the services[] array. Returns the number of services written.
+ * Attempt to compile a query, registering every generated service.
+ * If the services[] array is not 0, a copy of each compiled service is written to it;
+ * at most MAX_COMPILED_SERVICES are written.
+ * Returns the number of services generated.
  * The service(s) to be compiled must not already exist before this call.
  *
- * A query may compile to more than one service: this occurs if at any point
- * in the compilation multiple services with same form but distinct types
- * are matched. For example, the query (list <my_list> position p element e)
+ * A query compiles to multiple services if at any point during the compilation
+ * several services with same form but distinct types are matched. For example,
+ * the query (list <my_list> position p element e)
  * compiles to one service per element type. Callers enumerating
  * results must therefore iterate over all returned services.
- *
- * TODO: this should probably take a term form + a tuple; we don't need to
- * store a formula.
  */
-size8 CompileQuery(Atom queryTerm, Service services[], size8 maxServices);
+size8 CompileQuery(Atom queryTerm, Service services[]);
+
+/**
+ * Find the service answering a query, or compile a service if none is registered yet.
+ * Copies the resulting Service to *service. Returns true if a service was found.
+ * The permutation array receives the argument permutation of the match, as for DispatchQuery().
+ *
+ * NOTE: a query may compile to several services, of which this returns one.
+ * To obtain all services, see UserQuery().
+ */
+bool FindOrCompileService(FormulaView query, Service * service, index8 permutation[]);
 
 #endif	// COMPILER_H

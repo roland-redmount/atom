@@ -1,6 +1,6 @@
 /**
  * The relation registry keeps track of all registered relations, identified by their
- * (term form, column types) pair. Since a term form carries a sign, a predicate and its
+ * (term form, type signature) pair. Since a term form carries a sign, a predicate and its
  * negation are registered as two separate relations.
  *
  * The registry interns relations: one signature is one Relation record, so pointer
@@ -33,9 +33,9 @@ void RelationRegistryAdd(Relation const * relation);
 void RelationRegistryRemove(Relation const * relation);
 
 /**
- * Locate the relation for given (term form, column types), or 0 if there is none.
+ * Locate the relation for the given (term form, type signature) pair.
  */
-Relation const * RelationRegistryFind(Atom form, size8 nColumns, byte const atomTypes[]);
+Relation const * RelationRegistryFind(Atom form, size8 nColumns, TypeSignature typeSignature);
 
 /**
  * Deallocate the registry. Before calling this function,

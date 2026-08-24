@@ -14,7 +14,7 @@
 #include "lang/unification.h"
 
 /**
- * Test whether a generalized query matches a service signature, permuted according to the
+ * Test whether a parameterized query matches a service signature, permuted according to the
  * given permutation array (0-based indices). Both sides are parameters, so matching is
  * signature against signature:
  *
@@ -22,22 +22,22 @@
  *    atom type must equal the type of the service column, or be absent, which is the case
  *    of an output whose type is not known yet.
  * 2) A parameter occurring at several positions of the query denotes one atom, and so
- *    must match service parameters of the same type. A query generalized from actors
+ *    must match service parameters of the same type. A query parameterized from actors
  *    numbers every position separately and never has such a repeat; a rule body term
  *    does, which is what a CONSTRAIN operator is built on.
  *
  * Returns true if the query matches.
  */
 static bool signatureQueryTupleMatch(
-	byte const atomTypes[], byte const parameterIO[], Atom const queryParameters[],
+	TypeSignature typeSignature, IOSignature ioSignature, Atom const queryParameters[],
 	size8 nParameters, index8 const permutation[])
 {
 	// iterate over query parameters
 	for(index8 i = 0; i < nParameters; i++) {
 		Atom parameter = queryParameters[permutation[i]];
-		byte serviceParameterType = atomTypes[i];
+		byte serviceParameterType = typeSignature.atomTypes[i];
 
-		if(parameter.parameter.io != parameterIO[i])
+		if(parameter.parameter.io != ioSignature.parameterIO[i])
 			return false;
 		if(parameter.parameter.atomType
 			&& (parameter.parameter.atomType != serviceParameterType))
@@ -47,7 +47,7 @@ static bool signatureQueryTupleMatch(
 		// or no single atom could satisfy the query
 		for(index8 j = 0; j < i; j++) {
 			if((queryParameters[permutation[j]].parameter.number == parameter.parameter.number)
-				&& (atomTypes[j] != serviceParameterType))
+				&& (typeSignature.atomTypes[j] != serviceParameterType))
 				return false;
 		}
 	}
@@ -61,7 +61,7 @@ static bool signatureQueryTupleMatch(
  * Returns true if a match is found.
  */
 static bool permutationMatch(
-	Atom predicateForm, byte const atomTypes[], byte const parameterIO[],
+	Atom predicateForm, TypeSignature typeSignature, IOSignature ioSignature,
 	Atom const queryParameters[], size8 nParameters, index8 permutation[])
 {
 	// iterate over all permutations of the form
@@ -70,7 +70,7 @@ static bool permutationMatch(
 	do {
 		GetTuplePermutation(iter, permutation);
 		if(signatureQueryTupleMatch(
-			atomTypes, parameterIO, queryParameters, nParameters, permutation)) {
+			typeSignature, ioSignature, queryParameters, nParameters, permutation)) {
 			match = true;
 			break;
 		}
@@ -119,7 +119,7 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 		while(ServiceIteratorNext(&(iterator->serviceIterator))) {
 			Service const * currentService = ServiceIteratorPeekService(&(iterator->serviceIterator));
 			if(permutationMatch(
-				relation->predicateForm, relation->atomTypes, currentService->parameterIO,
+				relation->predicateForm, relation->typeSignature, currentService->ioSignature,
 				iterator->queryParameters, iterator->nParameters, iterator->permutation))
 			{
 				// Copy the service, as a pointer into the service registry is only
@@ -157,10 +157,23 @@ void DispatchIteratorEnd(DispatchIterator * iterator)
 }
 
 
-bool DispatchGeneralizedQuery(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, Service * service,
-	index8 permutation[], size8 nSkip, bool * hasNextMatch)
+static bool isExcludedCandidate(TypeSignature candidateSignature, TypeSignature const excludedSignatures[], size8 nExcluded)
 {
+	for(index8 i = 0; i < nExcluded; i++) {
+		if(SameTypeSignatures(candidateSignature, excludedSignatures[i]))
+			return true;
+	}
+	return false;
+}
+
+
+bool DispatchParameterizedQuery(
+	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, Service * service,
+	index8 permutation[], TypeSignature const excludedSignatures[], size8 nExcluded,
+	bool * hasNextMatch)
+{
+	ASSERT(!nExcluded || (nParameters <= RELATION_MAX_ARITY))
+
 	// The iterator overwrites its permutation array on every match, so iterate into
 	// a scratch array to avoid clobbering the returned permutation.
 	index8 candidatePermutation[nParameters];
@@ -169,26 +182,25 @@ bool DispatchGeneralizedQuery(
 		queryTermForm, queryParameters, nParameters, candidatePermutation, &iterator);
 
 	bool match = false;
-	// Number of matches seen so far, whether skipped or returned
-	size8 nMatches = 0;
 	if(hasNextMatch)
 		*hasNextMatch = false;
 
 	while(DispatchIteratorNext(&iterator)) {
+		Service const * candidate = DispatchIteratorPeekService(&iterator);
+		if(isExcludedCandidate(candidate->relation->typeSignature, excludedSignatures, nExcluded))
+			continue;
 		if(match) {
-			// An additional match exists beyond the one we return
+			// A match the caller has not seen exists beyond the one we return
 			*hasNextMatch = true;
 			break;
 		}
-		if(nMatches++ >= nSkip) {
-			match = true;
-			// copy the service struct and its permutation to the caller
-			*service = *DispatchIteratorPeekService(&iterator);
-			CopyMemory(candidatePermutation, permutation, nParameters * sizeof(index8));
-			// without a hasNextMatch request we can stop at the first match
-			if(hasNextMatch == 0)
-				break;
-		}
+		match = true;
+		// copy the service struct and its permutation to the caller
+		*service = *candidate;
+		CopyMemory(candidatePermutation, permutation, nParameters * sizeof(index8));
+		// without a hasNextMatch request we can stop at the first match
+		if(hasNextMatch == 0)
+			break;
 	}
 	DispatchIteratorEnd(&iterator);
 
@@ -196,21 +208,20 @@ bool DispatchGeneralizedQuery(
 }
 
 
-bool DispatchQuery(
-	Atom queryTermForm, TypedTuple const * queryActors, Service * service, index8 permutation[])
+bool DispatchQuery(FormulaView query, Service * service, index8 permutation[])
 {
-	size8 arity = queryActors->nAtoms;
+	size8 arity = query.actors->nAtoms;
 	Atom queryParameters[arity];
-	GetQueryParameters(queryActors, queryParameters);
+	ActorsToParameters(query.actors, queryParameters);
 
-	return DispatchGeneralizedQuery(
-		queryTermForm, queryParameters, arity, service, permutation, 0, 0);
+	return DispatchParameterizedQuery(
+		query.form, queryParameters, arity, service, permutation, 0, 0, 0);
 }
 
 
 bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutation)
 {
 	FormulaView term = FormulaGetView(queryTerm);
-	return DispatchQuery(term.form, term.actors, service, permutation);
+	return DispatchQuery(term, service, permutation);
 }
 

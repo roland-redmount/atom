@@ -68,7 +68,7 @@ void testDispatchRepeatedVariable(void)
 
 
 /**
- * A parameter occurring at several positions of a generalized query does denote one atom,
+ * A parameter occurring at several positions of a parameterized query does denote one atom,
  * which is the case of a rule body term with a repeated variable: the compiler dispatches
  * such a term and constrains the arguments providing it. Those positions can only match
  * service parameters of one type.
@@ -78,12 +78,12 @@ void testDispatchRepeatedParameter(void)
 	Atom query = CStringToTerm("list \"ab\" position p element e");
 	size8 arity = FormulaGetActors(query)->nAtoms;
 	Atom parameters[arity];
-	GetQueryParameters(FormulaGetActors(query), parameters);
+	ActorsToParameters(FormulaGetActors(query), parameters);
 
 	Service service;
 	index8 permutation[arity];
-	ASSERT_TRUE(DispatchGeneralizedQuery(
-		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0))
+	ASSERT_TRUE(DispatchParameterizedQuery(
+		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0, 0))
 
 	// Give the position and the element one parameter, as a term (list s position p
 	// element p) has. The service has an INT position and a LETTER element, so no atom
@@ -100,8 +100,8 @@ void testDispatchRepeatedParameter(void)
 	NameRelease(elementRole);
 	parameters[positionIndex] = repeatedParameter;
 	parameters[elementIndex] = repeatedParameter;
-	ASSERT_FALSE(DispatchGeneralizedQuery(
-		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0))
+	ASSERT_FALSE(DispatchParameterizedQuery(
+		FormulaGetForm(query), parameters, arity, &service, permutation, 0, 0, 0))
 
 	ReleaseFormula(query);
 }
@@ -118,18 +118,18 @@ void testDispatchNegatedTerm(void)
 	Atom negatedTermForm = CreateTermForm(predicateForm, false);
 
 	// The two signs give two distinct relation tables
-	byte atomTypes[2] = {AT_ID, AT_ID};
-	Relation const * relation = CreateRelation(termForm, 2, atomTypes);
+	TypeSignature typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2);
+	Relation const * relation = CreateRelation(termForm, 2, typeSignature);
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(relation);
-	Relation const * negatedRelation = CreateRelation(negatedTermForm, 2, atomTypes);
+	Relation const * negatedRelation = CreateRelation(negatedTermForm, 2, typeSignature);
 	RelationTable * negatedTable = CreateRelationTable(
 		negatedRelation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(negatedRelation);
 	ASSERT_PTR_NOT_EQUAL(table, negatedTable)
-	ASSERT_PTR_EQUAL(RelationRegistryFind(termForm, 2, atomTypes), table->relation)
-	ASSERT_PTR_EQUAL(RelationRegistryFind(negatedTermForm, 2, atomTypes), negatedTable->relation)
+	ASSERT_PTR_EQUAL(RelationRegistryFind(termForm, 2, typeSignature), table->relation)
+	ASSERT_PTR_EQUAL(RelationRegistryFind(negatedTermForm, 2, typeSignature), negatedTable->relation)
 	// both tables report the predicate form the two term forms share
 	ASSERT_DATA64_EQUAL(table->relation->predicateForm.hash, predicateForm.hash)
 	ASSERT_DATA64_EQUAL(negatedTable->relation->predicateForm.hash, predicateForm.hash)
@@ -164,11 +164,13 @@ void testDispatchIterator(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	Relation const * idRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_ID});
+	Relation const * idRelation = CreateRelation(
+		termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2));
 	RelationTable * idTable = CreateRelationTable(
 		idRelation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(idRelation);
-	Relation const * intRelation = CreateRelation(termForm, 2, (byte[]) {AT_ID, AT_INT});
+	Relation const * intRelation = CreateRelation(
+		termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
 	RelationTable * intTable = CreateRelationTable(
 		intRelation, &btreeTableProvider, (index8[]) {0, 1});
 	ReleaseRelation(intRelation);
@@ -177,30 +179,56 @@ void testDispatchIterator(void)
 	// one match
 	Atom query = CStringToTerm("first x second y");
 	Atom parameters[2];
-	GetQueryParameters(FormulaGetActors(query), parameters);
+	ActorsToParameters(FormulaGetActors(query), parameters);
 	index8 permutation[2];
 	DispatchIterator iterator;
 	DispatchIterate(FormulaGetForm(query), parameters, 2, permutation, &iterator);
 
+	TypeSignature excludedTypes[2];
+	bool foundIdRelation = false;
+	bool foundIntRelation = false;
+
 	size8 nMatches = 0;
 	while(DispatchIteratorNext(&iterator)) {
-		// Match number k is the same returned by DispatchGeneralizedQuery() with nSkip = k
-		Service skipService;
-		index8 skipPermutation[2];
-		bool hasNextMatch;
-		ASSERT_TRUE(DispatchGeneralizedQuery(
-			FormulaGetForm(query), parameters, 2, &skipService, skipPermutation, nMatches, &hasNextMatch))
 		Service const * service = DispatchIteratorPeekService(&iterator);
-		ASSERT_PTR_EQUAL(service->relation, skipService.relation)
-		ASSERT_PTR_EQUAL(service->op, skipService.op)
+		
+		// The service obtained from the iterator should be the same as the one obtained
+		// fromiDispatchParameterizedQuerys when previous iterations are excluded.
+		Service excludeService;
+		index8 excludePermutation[2];
+		bool hasNextMatch;
+		ASSERT_TRUE(DispatchParameterizedQuery(
+			FormulaGetForm(query), parameters, 2, &excludeService, excludePermutation,
+			excludedTypes, nMatches, &hasNextMatch))
+		ASSERT_PTR_EQUAL(service->relation, excludeService.relation)
+		ASSERT_PTR_EQUAL(service->op, excludeService.op)
 		for(index8 i = 0; i < 2; i++)
-			ASSERT_UINT32_EQUAL(permutation[i], skipPermutation[i])
+			ASSERT_UINT32_EQUAL(permutation[i], excludePermutation[i])
+
+		// add the found service to the exclusion list for the next iteration
+		excludedTypes[nMatches] = excludeService.relation->typeSignature;
+		ASSERT_UINT32_EQUAL(excludedTypes[nMatches].atomTypes[0], AT_ID)
+		if(excludedTypes[nMatches].atomTypes[1] == AT_ID)
+			foundIdRelation = true;
+		else if(excludedTypes[nMatches].atomTypes[1] == AT_INT)
+			foundIntRelation = true;
 
 		nMatches++;
 		ASSERT_TRUE(hasNextMatch == (nMatches < 2))
 	}
 	ASSERT_UINT32_EQUAL(nMatches, 2)
+
+	// Both relations are reached, whichever order the registry yields them in
+	ASSERT_TRUE(foundIdRelation)
+	ASSERT_TRUE(foundIntRelation)
 	DispatchIteratorEnd(&iterator);
+
+	// With every match excluded there is nothing left to return
+	Service exhaustedService;
+	index8 exhaustedPermutation[2];
+	ASSERT_FALSE(DispatchParameterizedQuery(
+		FormulaGetForm(query), parameters, 2, &exhaustedService, exhaustedPermutation,
+		excludedTypes, 2, 0))
 
 	// An iterator abandoned before the last match is released just as well
 	DispatchIterate(FormulaGetForm(query), parameters, 2, permutation, &iterator);
@@ -211,7 +239,7 @@ void testDispatchIterator(void)
 	// A query for a form with no relation yields no match at all
 	Atom unknownQuery = CStringToTerm("nowhere x nothing y");
 	Atom unknownParameters[2];
-	GetQueryParameters(FormulaGetActors(unknownQuery), unknownParameters);
+	ActorsToParameters(FormulaGetActors(unknownQuery), unknownParameters);
 	DispatchIterate(FormulaGetForm(unknownQuery), unknownParameters, 2, permutation, &iterator);
 	ASSERT_FALSE(DispatchIteratorNext(&iterator))
 	DispatchIteratorEnd(&iterator);

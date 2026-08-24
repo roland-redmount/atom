@@ -92,8 +92,7 @@ typedef bool (*MachineFunction)(Atom arguments[], void * state, bool isFirstCall
  * yields tuples differing only in @2, which ascends, so the inputs @1 and @3 can be in
  * any order. See the ordering contract in kernel/operator.h.
  *
- * Returns the registered service, whose parameterIO array is owned by the service
- * registry; see ServiceRegistryAdd()
+ * Returns the registered service; see ServiceRegistryAdd()
  */
 Service RegisterMachineService(
 	char const * signature, MachineFunction function, size32 stateSize);

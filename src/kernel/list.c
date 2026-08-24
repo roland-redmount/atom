@@ -72,9 +72,10 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 			(byte[]) {AT_ID, AT_INT, elementType},
 			atomTypes
 		);
+		TypeSignature typeSignature = CreateTypeSignature(atomTypes, 3);
 		Relation const * relation = RelationRegistryFind(
 			GetCoreTermForm(FORM_LIST_POSITION_ELEMENT),
-			3, atomTypes
+			3, typeSignature
 		);
 		ASSERT(relation);
 		RelationTable * table = RelationTableRegistryFind(relation);
@@ -187,7 +188,8 @@ Atom ListGetElement(Atom list, index32 position)
 		(byte[]) {PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT},
 		parameterIO
 	);
-	Operator const * op = ServiceRegistryFind(relation, parameterIO);
+	Operator const * op = ServiceRegistryFind(
+		relation, CreateIOSignature(parameterIO, 3));
 
 	Atom arguments[3];
 	CoreFormSetTuple(
@@ -216,7 +218,8 @@ index32 ListGetPosition(Atom list, Atom element)
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_IN},
 		parameterIO
 	);
-	Operator const * op = ServiceRegistryFind(relation, parameterIO);
+	Operator const * op = ServiceRegistryFind(
+		relation, CreateIOSignature(parameterIO, 3));
 	ASSERT(op)
 
 	Atom arguments[3];
@@ -272,7 +275,7 @@ void CopyListToTuple(Atom list, TypedTuple * tuple)
 {
 	ASSERT(ListLength(list) == tuple->nAtoms)
 	Relation const * relation = lookupListElementRelation(list);
-	byte elementType = relation->atomTypes[
+	byte elementType = relation->typeSignature.atomTypes[
 		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)
 	];
 	ListIterator iterator;
@@ -305,7 +308,8 @@ void ListIterate(Atom list, ListIterator * iterator)
 			(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 			parameterIO
 		);
-		Operator const * op = ServiceRegistryFind(relation, parameterIO);
+		Operator const * op = ServiceRegistryFind(
+		relation, CreateIOSignature(parameterIO, 3));
 		iterator->context = OperatorCreateContext(op, iterator->queryTuple);
 	}
 	else
@@ -343,7 +347,7 @@ void PrintList(Atom list)
 	PrintCString("LIST{");
 	Relation const * relation = lookupListElementRelation(list);
 	ASSERT(relation)
-	byte elementType = relation->atomTypes[
+	byte elementType = relation->typeSignature.atomTypes[
 		CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT)
 	];
 
