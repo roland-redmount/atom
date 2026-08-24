@@ -491,6 +491,59 @@ void testCompileRecursiveReachable(void)
 
 
 /**
+ * This test attemps to compile the term (reach "a" hop b) given the recursive rule
+ * 
+ *   reach a hop b <- reach c hop b & prec c succ a
+ * 
+ * This leads the compiler to the conjunction (reach c hop b & prec c succ <ID)
+ * 
+ * 
+ * The derivation of a recursive relation is keyed on the arguments the query binds, so a
+ * recursive term that leaves one of them free has no call binding to name it and the clause
+ * is refused; see compileRecursiveTerm(). Here the recursive term of
+ *
+ *   reach a hop b <- reach c hop b & prec c succ a
+ *
+ * walks the graph backwards, so it leaves the argument the query binds free. The clause
+ * does not compile, and the query is answered by the base clause alone.
+ */
+void testCompileRecursiveTermUnboundInput(void)
+{
+	SetupPrecSuccFixture(&precSuccFixture);
+	DictionaryEntry baseEntry = DictionaryAddClauseFromCString(
+		"reach a hop b | ! prec a succ b");
+	DictionaryEntry recursiveEntry = DictionaryAddClauseFromCString(
+		"reach a hop b | ! reach c hop b | ! prec c succ a");
+
+	Atom queryTerm = CStringToTerm("reach \"a\" hop y");
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services, MAX_COMPILED_SERVICES);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+
+	// Only the successors of a, which is b alone, and not the closure b, c, d
+	Atom nodeB = CreateStringFromCString("b");
+	size32 nTuples = 0;
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
+	void * context = OperatorCreateContext(services[0].op, arguments);
+	while(OperatorCall(context)) {
+		Atom hop = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "hop", 1);
+		ASSERT_TRUE(SameAtoms(hop, nodeB))
+		nTuples++;
+	}
+	OperatorFreeContext(context);
+	ASSERT_UINT32_EQUAL(nTuples, 1)
+
+	IFactRelease(nodeB);
+	ServiceRegistryRemove(services[0].relation, services[0].op);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&recursiveEntry);
+	DictionaryRemoveClause(&baseEntry);
+	TeardownRelationFixture(&precSuccFixture);
+}
+
+
+/**
  * The same rules with both roles left free, which asks for the whole relation: the
  * transitive closure of the entire graph, both of its components included.
  *
@@ -877,6 +930,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileRecursiveJoin2);
 	ExecuteTest(testCompileRecursiveReachable);
 	ExecuteTest(testCompileRecursiveClosure);
+	ExecuteTest(testCompileRecursiveTermUnboundInput);
 
 	ExecuteTest(testCompileNegatedTerm);
 	ExecuteTest(testCompiledServiceReadsFactsLive);

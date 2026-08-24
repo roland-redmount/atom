@@ -190,12 +190,12 @@ The first is a term the rules answer. Compiling a term produces a plan for which
 binding pattern it is asked in, so it always succeeds where a rule exists. The first pass
 offers no term to the rules, and the second offers them to every term in turn.
 
-The second is the recursive term. `registerTemporaryServices()` cannot tell in advance
-which IO pattern the clause will need, so it registers a service for every one of them, and
-the recursive term then dispatches whatever is bound at the time. It is also the term with
-nothing to contribute: its parameter types are settled by the non-recursive clauses before
-it compiles at all, and a clause whose other terms do not compile yields no fixpoint
-anyway. So it is taken last of all, in the third pass, which considers no other term.
+The second is the recursive term. It reads the relation being derived, so it compiles
+whatever is bound. It is also the term with nothing to contribute: its parameter types are
+settled by the non-recursive clauses before it compiles at all, and a clause whose other
+terms do not compile yields no fixpoint anyway. So it is taken last of all, in the third
+pass, which considers no other term. Taking it last is also what settles it: by then every
+argument another term provides is an input, and the rest are outputs.
 
 Back-substituting into the query gives the signature
 
@@ -369,27 +369,25 @@ derived; `FixpointNDerivedTuples()` reports that, and `testFixpointCallBinding` 
 The clauses are taken in two passes.
 
 The non-recursive clauses compile first, and fix the parameter types of each variant.
-Those types have to be settled before a recursive clause can compile, because the service
-its recursive term dispatches to is registered with them. A recursive clause therefore has
-to occur together with a non-recursive clause of the same signature; on its own it simply
-fails to compile.
+Those types have to be settled before a recursive clause can compile, because they are what
+its recursive term resolves its own outputs to. A recursive clause therefore has to occur
+together with a non-recursive clause of the same signature; on its own it simply fails to
+compile.
 
-Temporary services are then registered over the relation being compiled, each evaluated by
-a `RECURSE` operator, and the recursive clauses compile against them. Dispatch resolves the
-recursive term through its normal path, so permutation matching and the choice points apply
-to it unchanged. The temporary services are removed afterwards, and a variant that a
-recursive clause compiled into is wrapped in the `FIXPOINT` operator that derives it. Only
-the services are temporary: the relation they are registered against is the one the
-finished service provides.
+The recursive clauses then compile once per variant, against that variant's relation, and a
+variant a recursive clause compiled into is wrapped in the `FIXPOINT` operator that derives
+it. Compiling one variant at a time is what tells the recursive term which relation it
+reads: the term names that relation only by its form, and a query whose outputs are untyped
+may have a variant per column type.
 
 A recursive term does not have the binding pattern of the query. A join binds what its
 other terms provide, so the recursive term of the transitive closure takes `z` as an input
-however the query is asked. One temporary service is registered per pattern that binds the
-arguments of the query together with any of the ones it leaves free, as those are the
-patterns a recursive term can ask for; which of them is used is not known until the clauses
-compile. A pattern binding *fewer* arguments than the query is not among them, because the
-derivation is keyed on what the query binds, so a term asking for less has no call binding
-to name it.
+however the query is asked. It is dispatched last of the clause, though, so by then every
+argument another term provides is already an input and the rest are outputs: its pattern is
+settled, and `compileRecursiveTerm()` builds its `RECURSE` operator directly rather than
+looking a service up. A term leaving an argument free that the query binds is refused,
+because the derivation is keyed on what the query binds, so a term asking for less has no
+call binding to name it.
 
 ### Termination
 
@@ -476,10 +474,9 @@ reads, so the storage is deallocated when the last operator reading it is gone, 
 order things are dropped in. See `testDropTableWithSharedOperator` in
 `test_service_registry.c`, which drops the table while the shared operator is still held.
 
-None of this applies to the temporary services a recursive compilation registers for its
-own recursive terms. They are scaffolding, registered and removed within one compilation,
-so nothing outlives it to depend on them and nothing invalidates them; they are marked
-`SERVICE_TEMPORARY` and take no part in the bookkeeping.
+None of this reaches the service a recursive compilation builds for its own recursive term.
+That one is never registered, so nothing can depend on it and nothing invalidates it; it is
+marked `SERVICE_TEMPORARY` and takes no part in the bookkeeping.
 
 Three events drive it:
 
@@ -508,8 +505,8 @@ or `MixedTypeRelation` write-locks against modification.
 - **Mutual recursion** between two relations is not handled. A rule whose body reaches a
   parameterized query already being compiled fails to compile, as the compiler has no base
   case to offer it; see the section on a term the rules answer. Making it work needs the
-  temporary services and the fixpoint that same-form recursion already uses, keyed on
-  something other than the query's own form.
+  recursive pass and the fixpoint that same-form recursion already uses, keyed on something
+  other than the query's own form.
 - **A relation with both stored facts and rules** is not handled. Compiling a query that a
   stored service already answers registers a second service of the same signature, which
   `ServiceRegistryAdd()` asserts against. The generated service should replace the existing

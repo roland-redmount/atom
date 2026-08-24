@@ -35,11 +35,11 @@ enum ServiceKind {
 	// knowledge base, and is removed again when a change could alter what it yields;
 	// see ServiceRegistryInvalidateTermForm().
 	SERVICE_COMPILED = 2,
-	// Registered by the compiler for the duration of one compilation, so that a
-	// recursive term has something to dispatch to, and removed again when that
-	// compilation finishes; see registerTemporaryServices() in compiler.c. A temporary
-	// service is scaffolding rather than an answer: nothing outlives the compilation to
-	// depend on it, and nothing invalidates it.
+	// Built by the compiler while compiling a clause, and never registered: the recursive
+	// term of a recursive clause reads the relation being derived, which no registered
+	// service answers yet, so the compiler builds one for it; see compileRecursiveTerm()
+	// in compiler.c. A temporary service is scaffolding rather than an answer, and
+	// registering one is a program error.
 	SERVICE_TEMPORARY = 3,
 };
 

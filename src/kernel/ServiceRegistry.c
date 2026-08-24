@@ -402,7 +402,8 @@ Service ServiceRegistryAdd(
 		break;
 
 	case SERVICE_TEMPORARY:
-		// Compiler scaffolding, which nothing depends on and nothing invalidates
+		// Compiler scaffolding, which is never registered; see ServiceKind
+		ASSERT(false)
 		break;
 	}
 
@@ -417,12 +418,6 @@ void ServiceRegistryRemove(Relation const * relation, Operator * op)
 	Service service;
 	bool found = findService(relation, op, &service);
 	ASSERT(found)
-
-	if(service.kind == SERVICE_TEMPORARY) {
-		// Temporary services have no dependencies to invalidate; done
-		removeService(&service);
-		return;
-	}
 
 	// Add the operator to a new stale list
 	ResizingArray staleOperators;
