@@ -966,9 +966,11 @@ static Operator * compileConjunction(
 
 
 /**
- * A compiled service together with its resolved query parameters (signature).
+ * A compiled operator together with its resolved query parameters (signature).
  * One variant is emitted per distinct parameter signature; clauses that
  * resolve to the same signature are combined with a UNION operator.
+ * 
+ * NOTE: this could re-use the Service structure + the isRecursive flag?
  */
 typedef struct s_CompiledVariant {
 	// resolved query parameters, owned by the variant
@@ -977,7 +979,7 @@ typedef struct s_CompiledVariant {
 	// The relation this variant compiles to, and a reference to it. Created before the
 	// recursive clauses compile, as their recursive term reads it.
 	Relation const * relation;
-	// whether a recursive clause compiled into this variant
+	// whether this variant was derived from a recursive clause (and contains a FIXPOINT operator)
 	bool isRecursive;
 } CompiledVariant;
 
@@ -1403,8 +1405,7 @@ static size8 compileFilterVariants(
  * compile first, and determine the parameter types of the query for each compiled variant.
  * The recursive clauses then compile once per variant, against the relation of that variant,
  * which their recursive term reads and takes its parameter types from. A recursive clause
- * therefore must occur together with a non-recursive clause of the same signature, else it
- * will fail to compile.
+ * therefore must occur together with a non-recursive clause of the same signature.
  *
  * NOTE: a recursive service is not guaranteed to terminate; see the notes on termination
  * in compiler.md.
@@ -1423,8 +1424,14 @@ static size8 compileQueryVariants(CompilationState * state, FormulaView query, C
 
 	if(foundRecursiveClause) {
 		// Second pass, once per variant the non-recursive clauses yielded. All recursive
-		// clauses is tried against the given query signature of each variant, but only
+		// clauses are tried against the query signature of each variant, but only
 		// those recursive clauses that match the query signature will yield new variants.
+		
+		// QUESTION: How does this result in new variants? The recursive clause will have the
+		// same query signature as the non-recursive clause that determines that signature,
+		// so they will always form a UNION inside a FIXPOINT, e.g.
+		//   FIXPOINT(UNION(non-recursive(... ), recursive(..., RECURSE)))
+		// Hence we should always get nKnownVariants = nVariants?
 		size8 nKnownVariants = nVariants;
 		for(index8 i = 0; i < nKnownVariants; i++) {
 			setupVariantRelation(&variants[i], query.form, queryTermArity);
@@ -1455,7 +1462,8 @@ static size8 compileQueryVariants(CompilationState * state, FormulaView query, C
 
 
 /**
- * Test whether the given parameterized query is are being compiled.
+ * Test whether the given parameterized query is one the guard stack of items
+ * undergoing compilation.
  */
 static bool isBeingCompiled(CompilationState const * state, FormulaView queryTerm)
 {
@@ -1479,9 +1487,10 @@ static size8 compileParameterizedQuery(
 	CompilationState * state, FormulaView query, Service services[])
 {
 	ASSERT(IsTermForm(query.form))
+	// test if the query is on the compilation stack
 	if(isBeingCompiled(state, query))
 		return 0;
-	// NOTE: this could be an addToStack() function
+	// add the query to the compilation stack
 	ASSERT(state->compilationDepth < MAX_COMPILATION_DEPTH)
 	state->compilationStack[state->compilationDepth++] = query;
 
@@ -1490,14 +1499,15 @@ static size8 compileParameterizedQuery(
 	PrintFormulaView(query);
 	PrintChar('\n');
 #endif
-
-	// NOTE: this could go to the CompilerState struct
+	// Compile all variants for the query
+	// NOTE: the variants array could go to the CompilerState struct ?
 	CompiledVariant variants[MAX_COMPILED_SERVICES];
 	size8 nVariants = compileQueryVariants(state, query, variants);
 
 #ifdef DEBUG_COMPILER
 	PrintCString("-> compiled operators:\n");
 #endif
+
 	for(index8 i = 0; i < nVariants; i++) {
 		// Parameter types and the relation were resolved by compileQueryVariants()
 		Service service = ServiceRegistryAdd(
@@ -1514,6 +1524,7 @@ static size8 compileParameterizedQuery(
 		ReleaseRelation(variants[i].relation);
 		FreeTypedTuple(variants[i].parameters);
 	}
+	// pop the query from the compilation stack
 	state->compilationDepth--;
 	return nVariants;
 }
