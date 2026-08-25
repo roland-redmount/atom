@@ -246,6 +246,50 @@ void testJoinOperator2(void)
 
 
 /**
+ * Test a FILTER operator over the (list <ID position >INT element >LETTER) service.
+ * The service produces the element, and the filter keeps only the tuples whose element
+ * is the letter the caller bound, which gives the positions of that letter in the string.
+ * No service provides that IO pattern, which is what FILTER is for; see OPERATOR_FILTER.
+ */
+void testFilterOperator(void)
+{
+	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	index8 elementIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT);
+	index8 positionIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION);
+
+	Operator * filterOperator = CreateFilterOperator(
+		listOperator, (index8[]) {elementIndex}, 1);
+
+	// The letter 'a' of "alibaba" occurs at positions 1, 5 and 7
+	int64 const expectedPositions[] = {1, 5, 7};
+	Atom string = CreateStringFromCString("alibaba");
+	Atom arguments[3];
+	CoreFormSetTuple(
+		FORM_LIST_POSITION_ELEMENT,
+		(Atom[]) {string, (Atom) {0}, GetAlphabetLetter('a')},
+		arguments
+	);
+	OperatorContext * context = OperatorCreateContext(filterOperator, arguments);
+
+	for(index8 i = 0; i < 3; i++) {
+		ASSERT_TRUE(OperatorCall(context))
+		ASSERT_INT64_EQUAL(arguments[positionIndex]._int, expectedPositions[i])
+		ASSERT_CHAR_EQUAL(LetterToChar(arguments[elementIndex], LETTER_LOWERCASE), 'a')
+	}
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	// A filter yields its tuples in the index order of its child
+	ASSERT_NOT_NULL(filterOperator->indexOrder)
+	for(index8 i = 0; i < 3; i++)
+		ASSERT_UINT32_EQUAL(filterOperator->indexOrder[i], listOperator->indexOrder[i])
+
+	IFactRelease(string);
+	ReleaseOperator(filterOperator);
+}
+
+
+/**
  * Test a CONSTRAIN operator over the JOIN operator of testJoinOperator2().
  * Constraining the two position arguments of (l p s q e) to be equal gives the
  * letter at position p of the p'th string of a list of strings.
@@ -663,6 +707,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testJoinOperator1);
 	ExecuteTest(testJoinOperator2);
 	ExecuteTest(testConstrainOperator);
+	ExecuteTest(testFilterOperator);
 	ExecuteTest(testUnionOperator);
 	ExecuteTest(testUnionDuplicateAtExhaustion);
 	ExecuteTest(testIndexOrder);

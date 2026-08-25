@@ -154,7 +154,7 @@ MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * 
 
 	ActorsToParameters(queryActors, relation->impl.concat.queryParameters);
 	DispatchIterate(
-		queryTermForm, relation->impl.concat.queryParameters, arity,
+		queryTermForm, relation->impl.concat.queryParameters, arity, DISPATCH_MATCH_EXACT,
 		relation->impl.concat.permutation, &(relation->impl.concat.dispatchIterator));
 	return relation;
 }

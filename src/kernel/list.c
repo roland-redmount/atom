@@ -210,8 +210,9 @@ index32 ListGetPosition(Atom list, Atom element)
 
 	// TODO: this service is not one the B-tree provider registers, as its inputs are not
 	// a prefix of the index column order; see RelationTableProvider.registerServices().
-	// Calling this function will trigger the ASSERT below. An array-based storage
-	// provider for (list position element) could register it.
+	// Calling this function will trigger the ASSERT below, unless a query has already
+	// compiled a FILTER service for the pattern; see compileFilterVariants() in compiler.c.
+	// Asking the compiler here, or an array-based storage provider, would give one.
 	byte parameterIO[3];
 	CoreFormSetByteArray(
 		FORM_LIST_POSITION_ELEMENT,

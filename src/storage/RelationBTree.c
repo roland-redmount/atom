@@ -342,7 +342,8 @@ static Operator * createBTreeOperator(RelationTable * table, size8 nInputs)
  * A B-tree can search on any prefix of its index column order, and so registers one
  * service per prefix length: the first nInputs columns in index order are inputs and the
  * rest outputs. A signature binding a column out of that order, such as
- * (list< position> element<), is not among them; see ListGetPosition() in list.c
+ * (list< position> element<), is not among them. The compiler builds a service for such a
+ * signature by filtering one of these; see compileFilterVariants() in compiler.c.
  */
 static void btreeRegisterServices(RelationTable * table)
 {

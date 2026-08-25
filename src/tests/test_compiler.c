@@ -897,7 +897,10 @@ void testCompileMutualRecursion(void)
 
 
 /**
- * Compile a service to handle an IO pattern for which there is no existing service.
+ * Compile a service for an IO pattern no service provides. The B-tree registers a service
+ * per prefix of its index column order, so binding the element without binding the position
+ * has none, and the query compiles to a FILTER operator over the service that produces the
+ * element; see compileFilterVariants().
  */
 void testCompileNewIOPattern(void)
 {
@@ -908,7 +911,112 @@ void testCompileNewIOPattern(void)
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
+	// 'A is the first letter of "AB"
+	Atom arguments[3];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 3);
+	void * context = OperatorCreateContext(service.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	Atom position = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "position", 1);
+	ASSERT_INT64_EQUAL(position._int, 1)
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
 	ServiceRegistryRemove(service.relation, service.op);
+	ReleaseFormula(queryTerm);
+}
+
+
+/**
+ * A filtered service yields every tuple that matches, in the order its child yields them.
+ * The letter 'a of "alibaba" occurs at positions 1, 5 and 7.
+ */
+void testCompileNewIOPatternRepeated(void)
+{
+	Atom queryTerm = CStringToTerm("list \"alibaba\" position _ element 'a");
+
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Service service = services[0];
+
+	int64 const expectedPositions[] = {1, 5, 7};
+	Atom arguments[3];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 3);
+	void * context = OperatorCreateContext(service.op, arguments);
+	for(index8 i = 0; i < 3; i++) {
+		ASSERT_TRUE(OperatorCall(context))
+		Atom position = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "position", 1);
+		ASSERT_INT64_EQUAL(position._int, expectedPositions[i])
+	}
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	ServiceRegistryRemove(service.relation, service.op);
+	ReleaseFormula(queryTerm);
+}
+
+
+/**
+ * A term of a rule body can need a filter just as a query can. Here the body term
+ * (list s position p element e) is asked with the element bound and the position free,
+ * which no service provides, so compiling the term reaches compileFilterVariants() through
+ * the rules fallback of dispatchOrCompileTerm(). The filter sits under the PERMUTE operator
+ * that binds the term constants.
+ */
+void testCompileFilterInRuleBody(void)
+{
+	size32 nCompiledBefore = ServiceRegistryNCompiled();
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"at s position p letter e | ! list s position p element e");
+	Atom queryTerm = CStringToTerm("at \"abracadabra\" position q letter 'a");
+
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Service service = services[0];
+
+	// 'a occurs at positions 1, 4, 6, 8, 11 of "abracadabra"
+	int64 const expectedPositions[] = {1, 4, 6, 8, 11};
+	Atom arguments[3];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 3);
+	void * context = OperatorCreateContext(service.op, arguments);
+	for(index8 i = 0; i < 5; i++) {
+		ASSERT_TRUE(OperatorCall(context))
+		Atom position = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "position", 1);
+		ASSERT_INT64_EQUAL(position._int, expectedPositions[i])
+	}
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	// Compiling the query also compiled a service for its body term, which is a cache
+	// over the list relation and outlives the rule; remove both
+	ServiceRegistryRemove(service.relation, service.op);
+	ServiceRegistryInvalidateAll();
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiledBefore)
+
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+}
+
+
+/**
+ * A filtered service is compiled because no rule answered the query, so adding a rule for
+ * the query term form must remove it again; see ServiceRegistryInvalidateByTermForm().
+ */
+void testFilterServiceInvalidatedByRule(void)
+{
+	size32 nCompiledBefore = ServiceRegistryNCompiled();
+	Atom queryTerm = CStringToTerm("list \"AB\" position _ element 'A");
+	Service services[MAX_COMPILED_SERVICES];
+	ASSERT_UINT32_EQUAL(CompileQuery(queryTerm, services), 1)
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiledBefore + 1)
+
+	// A rule of the query's term form invalidates what was compiled for that form
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"list s position p element e | ! at s index p letter e");
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiledBefore)
+
+	DictionaryRemoveClause(&entry);
 	ReleaseFormula(queryTerm);
 }
 
@@ -940,10 +1048,10 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileChainedRuleOrder);
 	ExecuteTest(testCompileMutualRecursion);
 
-	// TODO: an IO pattern no service provides needs a FILTER operator, which reads a
-	// service producing the columns the pattern takes as inputs and keeps the tuples where
-	// they equal the values the caller bound. Not implemented yet.
-	// ExecuteTest(testCompileNewIOPattern);
+	ExecuteTest(testCompileNewIOPattern);
+	ExecuteTest(testCompileNewIOPatternRepeated);
+	ExecuteTest(testCompileFilterInRuleBody);
+	ExecuteTest(testFilterServiceInvalidatedByRule);
 
 	// TODO: compiling a recursive rule over an infinite domain. The relation has no
 	// finite fixpoint and the call bindings n = 4, 3, 2, 1, 0, -1, -2, ... do not

@@ -148,6 +148,49 @@ static void gatherArguments(
 }
 
 
+/**
+ * Store the indices of the arguments a caller binds, which restrict the tuples an
+ * operator yields. Shared by FILTER, FIXPOINT and RECURSE.
+ */
+static void setupInputArguments(
+	index8 ** storedInputArguments, size8 * storedNInputs,
+	index8 const * inputArguments, size8 nInputs, size8 nArguments)
+{
+	*storedNInputs = nInputs;
+	if(!nInputs) {
+		*storedInputArguments = 0;
+		return;
+	}
+#ifdef DEBUG
+	bool bound[nArguments];
+	SetMemory(bound, nArguments * sizeof(bool), 0);
+	for(index8 i = 0; i < nInputs; i++) {
+		ASSERT(inputArguments[i] < nArguments)
+		ASSERT(!bound[inputArguments[i]])
+		bound[inputArguments[i]] = true;
+	}
+#endif
+	*storedInputArguments = Allocate(nInputs);
+	CopyMemory(inputArguments, *storedInputArguments, nInputs);
+}
+
+
+/**
+ * Test whether a tuple agrees with the arguments the caller bound, at the arguments
+ * the caller binds.
+ */
+static bool tupleMatchesInputArguments(
+	Atom const * tuple, Atom const * arguments, index8 const * inputArguments, size8 nInputs)
+{
+	for(index8 i = 0; i < nInputs; i++) {
+		index8 argument = inputArguments[i];
+		if(CompareAtoms(tuple[argument], arguments[argument]))
+			return false;
+	}
+	return true;
+}
+
+
 #ifdef DEBUG
 /**
  * Verify that no two child arguments take the same argument of an operator, ignoring
@@ -402,6 +445,92 @@ static void constrainFinalizeContext(OperatorContext * context)
 	ConstrainContext * constrainContext = (ConstrainContext *) &context->data;
 	OperatorFreeContext(constrainContext->childContext);
 	Free(constrainContext->childArguments);
+}
+
+
+//------------------------------------- OPERATOR_FILTER -----------------------------------------
+
+typedef struct s_FilterContext {
+	Atom * childArguments;
+	OperatorContext * childContext;
+} FilterContext;
+
+
+Operator * CreateFilterOperator(
+	Operator * childOperator, index8 const * inputArguments, size8 nInputs)
+{
+	// A filter that tests nothing would yield the tuples of its child unchanged
+	ASSERT(nInputs > 0)
+	size8 nArguments = childOperator->nArguments;
+	Operator * op = createOperator(OPERATOR_FILTER, nArguments, sizeof(FilterContext));
+	op->impl.filter.childOperator = childOperator;
+	AcquireOperator(childOperator);
+	setupInputArguments(
+		&(op->impl.filter.inputArguments), &(op->impl.filter.nInputs),
+		inputArguments, nInputs, nArguments);
+
+	// Dropping tuples leaves the remaining ones in the order the child yielded them, and
+	// a child yielding at most one tuple still does so once filtered
+	if(childOperator->indexOrder) {
+		allocateIndexOrder(op);
+		CopyMemory(childOperator->indexOrder, op->indexOrder, nArguments);
+	}
+	return op;
+}
+
+
+static void filterSetupContext(OperatorContext * context)
+{
+	FilterContext * filterContext = (FilterContext *) &context->data;
+	Operator const * op = context->op;
+	size8 nArguments = op->nArguments;
+
+	// The child operator produces the filtered arguments, so it is called with the
+	// caller's arguments in a tuple of its own. Writing the child tuple there rather than
+	// into context->arguments is what keeps the bound values available to test against.
+	filterContext->childArguments = Allocate(nArguments * sizeof(Atom));
+	CopyMemory(context->arguments, filterContext->childArguments, nArguments * sizeof(Atom));
+
+	filterContext->childContext = createChildContext(
+		context,
+		op->impl.filter.childOperator,
+		filterContext->childArguments
+	);
+}
+
+
+static bool filterCall(OperatorContext * context)
+{
+	FilterContext * filterContext = (FilterContext *) &context->data;
+	Operator const * op = context->op;
+	size8 nArguments = op->nArguments;
+
+	// Obtain tuples from the child operator until one agrees with the bound arguments
+	while(OperatorCall(filterContext->childContext)) {
+		if(!tupleMatchesInputArguments(
+			filterContext->childArguments, context->arguments,
+			op->impl.filter.inputArguments, op->impl.filter.nInputs))
+			continue;
+		CopyMemory(filterContext->childArguments, context->arguments, nArguments * sizeof(Atom));
+		return true;
+	}
+	return false;
+}
+
+
+static void teardownFilterOperator(Operator * op)
+{
+	ASSERT(op->type == OPERATOR_FILTER)
+	ReleaseOperator(op->impl.filter.childOperator);
+	Free(op->impl.filter.inputArguments);
+}
+
+
+static void filterFinalizeContext(OperatorContext * context)
+{
+	FilterContext * filterContext = (FilterContext *) &context->data;
+	OperatorFreeContext(filterContext->childContext);
+	Free(filterContext->childArguments);
 }
 
 
@@ -930,48 +1059,6 @@ typedef struct s_RecurseContext {
 
 
 /**
- * Store the indices of the arguments a caller binds, shared by the two operators
- * reading a derived relation.
- */
-static void setupInputArguments(
-	index8 ** storedInputArguments, size8 * storedNInputs,
-	index8 const * inputArguments, size8 nInputs, size8 nArguments)
-{
-	*storedNInputs = nInputs;
-	if(!nInputs) {
-		*storedInputArguments = 0;
-		return;
-	}
-#ifdef DEBUG
-	bool bound[nArguments];
-	SetMemory(bound, nArguments * sizeof(bool), 0);
-	for(index8 i = 0; i < nInputs; i++) {
-		ASSERT(inputArguments[i] < nArguments)
-		ASSERT(!bound[inputArguments[i]])
-		bound[inputArguments[i]] = true;
-	}
-#endif
-	*storedInputArguments = Allocate(nInputs);
-	CopyMemory(inputArguments, *storedInputArguments, nInputs);
-}
-
-
-/**
- * Test whether a derived tuple agrees with the arguments the caller bound.
- */
-static bool tupleMatchesInputArguments(
-	Atom const * tuple, Atom const * arguments, index8 const * inputArguments, size8 nInputs)
-{
-	for(index8 i = 0; i < nInputs; i++) {
-		index8 argument = inputArguments[i];
-		if(CompareAtoms(tuple[argument], arguments[argument]))
-			return false;
-	}
-	return true;
-}
-
-
-/**
  * Yield the next tuple of a derived relation that agrees with the arguments the caller
  * bound, copying it to the arguments tuple. Returns false once the relation is exhausted.
  *
@@ -1370,6 +1457,7 @@ size8 OperatorNChildren(Operator const * op)
 	case OPERATOR_PROJECT:
 	case OPERATOR_CONSTRAIN:
 	case OPERATOR_FIXPOINT:
+	case OPERATOR_FILTER:
 		return 1;
 
 	case OPERATOR_MACHINE:
@@ -1401,6 +1489,9 @@ Operator * OperatorGetChild(Operator const * op, index8 index)
 
 	case OPERATOR_CONSTRAIN:
 		return op->impl.constrain.childOperator;
+
+	case OPERATOR_FILTER:
+		return op->impl.filter.childOperator;
 
 	case OPERATOR_FIXPOINT:
 		return op->impl.fixpoint.childOperator;
@@ -1441,6 +1532,10 @@ void ReleaseOperator(Operator * op)
 
 		case OPERATOR_CONSTRAIN:
 			teardownConstrainOperator(op);
+			break;
+
+		case OPERATOR_FILTER:
+			teardownFilterOperator(op);
 			break;
 
 		case OPERATOR_FIXPOINT:
@@ -1495,6 +1590,10 @@ static OperatorContext * createChildContext(
 
 	case OPERATOR_CONSTRAIN:
 		constrainSetupContext(context);
+		break;
+
+	case OPERATOR_FILTER:
+		filterSetupContext(context);
 		break;
 
 	case OPERATOR_FIXPOINT:
@@ -1572,6 +1671,10 @@ bool OperatorCall(OperatorContext * context)
 		success = constrainCall(context);
 		break;
 
+	case OPERATOR_FILTER:
+		success = filterCall(context);
+		break;
+
 	case OPERATOR_FIXPOINT:
 		success = fixpointCall(context);
 		break;
@@ -1618,6 +1721,10 @@ void OperatorFreeContext(OperatorContext * context)
 
 	case OPERATOR_CONSTRAIN:
 		constrainFinalizeContext(context);
+		break;
+
+	case OPERATOR_FILTER:
+		filterFinalizeContext(context);
 		break;
 
 	case OPERATOR_FIXPOINT:
@@ -1745,6 +1852,14 @@ void PrintOperator(Operator const * op)
 		for(index8 i = 0; i < op->impl.constrain.childOperator->nArguments; i++)
 			PrintF("%u ", op->impl.constrain.argumentMap[i]);
 		PrintOperator(op->impl.constrain.childOperator);
+		PrintChar(')');
+		break;
+
+	case OPERATOR_FILTER:
+		printOperatorHead(op, "FILTER");
+		printInputArguments(op->impl.filter.inputArguments, op->impl.filter.nInputs);
+		PrintChar('(');
+		PrintOperator(op->impl.filter.childOperator);
 		PrintChar(')');
 		break;
 

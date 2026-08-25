@@ -203,7 +203,7 @@ static bool dispatchOrCompileTerm(
 	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch)
 {
 	if(DispatchParameterizedQuery(
-		termForm, termParameters, termArity, service, permutation,
+		termForm, termParameters, termArity, DISPATCH_MATCH_EXACT, service, permutation,
 		excludedSignatures, nExcluded, hasNextMatch))
 		return true;
 	if(fallback != COMPILE_FALLBACK_RULES)
@@ -220,7 +220,7 @@ static bool dispatchOrCompileTerm(
 
 	// New services were compiled, so re-try dispatch
 	return DispatchParameterizedQuery(
-		termForm, termParameters, termArity, service, permutation,
+		termForm, termParameters, termArity, DISPATCH_MATCH_EXACT, service, permutation,
 		excludedSignatures, nExcluded, hasNextMatch);
 }
 
@@ -399,9 +399,7 @@ static Operator * createTermOperator(
 
 /**
  * Compile a term into an operator by either locating an existing service,
- * or by compiling a new service, if fallback =
- * 
-
+ * or by compiling a new service.
  * The fallback says whether a term the service registry cannot answer may be compiled from
  * the rules; see dispatchTermService().
  */
@@ -968,9 +966,11 @@ static Operator * compileConjunction(
 
 
 /**
- * A compiled service together with its resolved query parameters (signature).
+ * A compiled operator together with its resolved query parameters (signature).
  * One variant is emitted per distinct parameter signature; clauses that
  * resolve to the same signature are combined with a UNION operator.
+ * 
+ * NOTE: this could re-use the Service structure + the isRecursive flag?
  */
 typedef struct s_CompiledVariant {
 	// resolved query parameters, owned by the variant
@@ -979,7 +979,7 @@ typedef struct s_CompiledVariant {
 	// The relation this variant compiles to, and a reference to it. Created before the
 	// recursive clauses compile, as their recursive term reads it.
 	Relation const * relation;
-	// whether a recursive clause compiled into this variant
+	// whether this variant was derived from a recursive clause (and contains a FIXPOINT operator)
 	bool isRecursive;
 } CompiledVariant;
 
@@ -1324,6 +1324,78 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
 
 
 /**
+ * Compile a FILTER operator based on a child service matching the query using "relaxed" dispatch.
+ * Inputs to the FILTER operator that map to outputs in the child service are handled by
+ * filtering tuples for equality. See OPERATOR_FILTER in operator.h.
+ *
+ * One variant is emitted per matching relation. Returns the new number of variants.
+ */
+static size8 compileFilterVariants(
+	FormulaView query, CompiledVariant variants[], size8 nVariants)
+{
+	size8 arity = query.actors->nAtoms;
+	Atom const * queryParameters = TypedTuplePeekAtoms(query.actors);
+
+	// Perform "relaxed" dispatch to search for services whose IO pattern
+	// has an output everywhere the query has an output, and as few outputs as possible.
+	index8 permutation[arity];
+	DispatchIterator iterator;
+	DispatchIterate(
+		query.form, queryParameters, arity, DISPATCH_MATCH_RELAXED, permutation, &iterator);
+
+	while((nVariants < MAX_COMPILED_SERVICES) && DispatchIteratorNext(&iterator)) {
+		Service const * childService = DispatchIteratorPeekService(&iterator);
+
+		// The queyy arguments to filter are the ones that correspond to query inputs
+		// but child service outputs.
+		index8 filteredArguments[arity];
+		size8 nFiltered = 0;
+		for(index8 i = 0; i < arity; i++) {
+			if((queryParameters[permutation[i]].parameter.io == PARAMETER_IN)
+				&& (childService->ioSignature.parameterIO[i] == PARAMETER_OUT))
+				filteredArguments[nFiltered++] = i;
+		}
+		// If there are no argument to filter, the child service is an exact match.
+		if(nFiltered == 0) {
+			// NOTE: This case doesn't seem to occur in any test case, putting an ASSERT
+			// here to catch it, should it ever happen
+			ASSERT(false)
+			continue;
+		}
+
+		// Create a new compiled variant
+		CompiledVariant * variant = &(variants[nVariants++]);
+		SetMemory(variant, sizeof(CompiledVariant), 0);
+
+		// The FILTER service type signature is the same as that of the child,
+		// while its IO direction is the same as that of the query.
+		variant->parameters = CreateTypedTuple(arity);
+		for(index8 i = 0; i < arity; i++) {
+			TypedTupleSetElement(variant->parameters, permutation[i],
+				CreateTypedAtom(
+					AT_PARAMETER,
+					(Atom) {
+						.parameter = {
+							.number = permutation[i] + 1,
+							.atomType = childService->relation->typeSignature.atomTypes[i],
+							.io = queryParameters[permutation[i]].parameter.io
+						}
+					}
+				)
+			);
+		}
+		// The filter operator takes the arguments of the service it reads, so a form whose
+		// roles repeat needs a permute operator to place them in query argument order
+		variant->op = CreateFilterOperator(childService->op, filteredArguments, nFiltered);
+		variant->op = permuteToClauseArguments(variant->op, permutation, arity);
+		ASSERT(variant->op)
+	}
+	DispatchIteratorEnd(&iterator);
+	return nVariants;
+}
+
+
+/**
  * Attempt to compile a query into one or more services (variants).
  * Returns the number of variants written to the variants array.
  *
@@ -1331,8 +1403,7 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
  * compile first, and determine the parameter types of the query for each compiled variant.
  * The recursive clauses then compile once per variant, against the relation of that variant,
  * which their recursive term reads and takes its parameter types from. A recursive clause
- * therefore must occur together with a non-recursive clause of the same signature, else it
- * will fail to compile.
+ * therefore must occur together with a non-recursive clause of the same signature.
  *
  * NOTE: a recursive service is not guaranteed to terminate; see the notes on termination
  * in compiler.md.
@@ -1351,8 +1422,14 @@ static size8 compileQueryVariants(CompilationState * state, FormulaView query, C
 
 	if(foundRecursiveClause) {
 		// Second pass, once per variant the non-recursive clauses yielded. All recursive
-		// clauses is tried against the given query signature of each variant, but only
+		// clauses are tried against the query signature of each variant, but only
 		// those recursive clauses that match the query signature will yield new variants.
+		
+		// QUESTION: How does this result in new variants? The recursive clause will have the
+		// same query signature as the non-recursive clause that determines that signature,
+		// so they will always form a UNION inside a FIXPOINT, e.g.
+		//   FIXPOINT(UNION(non-recursive(... ), recursive(..., RECURSE)))
+		// Hence we should always get nKnownVariants = nVariants?
 		size8 nKnownVariants = nVariants;
 		for(index8 i = 0; i < nKnownVariants; i++) {
 			setupVariantRelation(&variants[i], query.form, queryTermArity);
@@ -1368,6 +1445,12 @@ static size8 compileQueryVariants(CompilationState * state, FormulaView query, C
 			completeRecursiveVariant(&variants[i], queryTermArity);
 	}
 
+	// A query the rules do not answer may still be answered by filtering a service that
+	// produces what the query binds; see compileFilterVariants(). The rules are tried
+	// first, so a rule answering the query wins over reading a relation and filtering.
+	if(!nVariants)
+		nVariants = compileFilterVariants(query, variants, nVariants);
+
 	// A service is registered against a relation, so every variant needs one. The variants
 	// a recursive clause compiles against have theirs already; here we cover the rest.
 	for(index8 i = 0; i < nVariants; i++)
@@ -1377,7 +1460,8 @@ static size8 compileQueryVariants(CompilationState * state, FormulaView query, C
 
 
 /**
- * Test whether the given parameterized query is are being compiled.
+ * Test whether the given parameterized query is on the guard stack of items
+ * undergoing compilation.
  */
 static bool isBeingCompiled(CompilationState const * state, FormulaView queryTerm)
 {
@@ -1401,9 +1485,10 @@ static size8 compileParameterizedQuery(
 	CompilationState * state, FormulaView query, Service services[])
 {
 	ASSERT(IsTermForm(query.form))
+	// test if the query is on the compilation stack
 	if(isBeingCompiled(state, query))
 		return 0;
-	// NOTE: this could be an addToStack() function
+	// add the query to the compilation stack
 	ASSERT(state->compilationDepth < MAX_COMPILATION_DEPTH)
 	state->compilationStack[state->compilationDepth++] = query;
 
@@ -1412,14 +1497,15 @@ static size8 compileParameterizedQuery(
 	PrintFormulaView(query);
 	PrintChar('\n');
 #endif
-
-	// NOTE: this could go to the CompilerState struct
+	// Compile all variants for the query
+	// NOTE: the variants array could go to the CompilerState struct ?
 	CompiledVariant variants[MAX_COMPILED_SERVICES];
 	size8 nVariants = compileQueryVariants(state, query, variants);
 
 #ifdef DEBUG_COMPILER
 	PrintCString("-> compiled operators:\n");
 #endif
+
 	for(index8 i = 0; i < nVariants; i++) {
 		// Parameter types and the relation were resolved by compileQueryVariants()
 		Service service = ServiceRegistryAdd(
@@ -1436,6 +1522,7 @@ static size8 compileParameterizedQuery(
 		ReleaseRelation(variants[i].relation);
 		FreeTypedTuple(variants[i].parameters);
 	}
+	// pop the query from the compilation stack
 	state->compilationDepth--;
 	return nVariants;
 }

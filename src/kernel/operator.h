@@ -98,6 +98,7 @@ typedef struct s_MachineProvider {
  *
  *   PERMUTE      rename, and restrict on a constant argument     rho, sigma
  *   CONSTRAIN    restrict on an equality between arguments       sigma
+ *   FILTER       restrict on an argument the caller bound        sigma
  *   JOIN         inner join                                      join
  *   PROJECT      projection                                      pi
  *   UNION        set union                                       union
@@ -201,6 +202,23 @@ typedef struct s_MachineProvider {
 	 * chain of parent pointers in the operator context when the recursion is evaluated.
 	 */
 	OPERATOR_RECURSE = 8,
+
+	/**
+	 * FILTER yields those tuples of its child operator that agree with the arguments the
+	 * caller bound, at the arguments named by inputArguments. Its child produces those
+	 * arguments as outputs, which is what distinguishes FILTER from every other operator:
+	 * an argument the caller binds is normally passed down to be sought.
+	 *
+	 * This is how a service is built for an IO pattern no service provides. A relation is
+	 * read by the services its storage registered, and a B-tree registers one per prefix
+	 * of its index column order, so a pattern binding a column out of that order has no
+	 * service; see compileFilterVariants() in compiler.c.
+	 *
+	 * NOTE: filtering reads every tuple the child yields, so it is a scan over whatever
+	 * the child does bind. The child binding the most is therefore the one to read; see
+	 * DispatchFilterableQuery().
+	 */
+	OPERATOR_FILTER = 9,
 };
 
 struct s_Operator {
@@ -271,6 +289,14 @@ struct s_Operator {
 			index8 * inputArguments;
 			size8 nInputs;
 		} recurse;
+		// for OPERATOR_FILTER
+		struct {
+			Operator * childOperator;
+			// Indices of the arguments the caller binds, which the child operator
+			// produces as outputs and this operator tests against the bound value
+			index8 * inputArguments;
+			size8 nInputs;
+		} filter;
 		// for OPERATOR_MACHINE
 		struct {
 			MachineProvider * provider;
@@ -360,6 +386,21 @@ Operator * CreateUnionOperator(Operator * first, Operator * second);
  */
 Operator * CreateConstrainOperator(
 	size8 nArguments, index8 const * argumentMap, Operator * childOperator);
+
+/**
+ * Create a FILTER operator over the given child operator, yielding those of its tuples that
+ * agree with the arguments the caller bound; see OPERATOR_FILTER.
+ *
+ * The inputArguments array holds the indices of the nInputs arguments the caller binds and
+ * this operator tests, which the child operator produces as outputs. The child must produce
+ * every one of them, or the tuples yielded would not be restricted as the caller asked.
+ *
+ * A filter keeps the arity of its child, dropping tuples rather than arguments, and yields
+ * them in the child's index order: dropping tuples from a strictly ascending sequence leaves
+ * it strictly ascending.
+ */
+Operator * CreateFilterOperator(
+	Operator * childOperator, index8 const * inputArguments, size8 nInputs);
 
 /**
  * Create a PROJECT operator with the given number of arguments, which may not exceed the

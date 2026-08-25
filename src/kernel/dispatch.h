@@ -42,6 +42,7 @@ bool DispatchQuery(FormulaView query, Service * service, index8 permutation[]);
  */
 bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutation);
 
+
 /**
  * Dispatch a parameterized query. The queryParameters array must contain AT_PARAMETER
  * atoms only. A query parameter occurring at several positions must match a service
@@ -56,11 +57,18 @@ bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutatio
  *
  * *hasNextMatch is set to true if a match outside the exclusion list exists beyond the one
  * returned. Caller can pass hasNextMatch = 0 if only one match is required.
+ *
+ * With matchMode = DISPATCH_MATCH_EXACT, returns a service with exact matching signatures.
+ * With matchMode = DISPATCH_MATCH_RELAXED, returns a service that matches all
+ * input parameters and has as few output parameters as possible.
  */
-bool DispatchParameterizedQuery(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, Service * service,
-	index8 permutation[], TypeSignature const excludedSignatures[], size8 nExcluded,
-	bool * hasNextMatch);
+#define DISPATCH_MATCH_EXACT		1
+#define DISPATCH_MATCH_RELAXED		2
+
+ bool DispatchParameterizedQuery(
+	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
+	Service * service, index8 permutation[],
+	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch);
 
 
 /**
@@ -71,6 +79,8 @@ bool DispatchParameterizedQuery(
 typedef struct {
 	Atom const * queryParameters;
 	size8 nParameters;
+	// Which services count as matching; see DISPATCH_MATCH_EXACT
+	int matchMode;
 	index8 * permutation;
 	RelationIterator relationIterator;
 	ServiceIterator serviceIterator;
@@ -93,9 +103,10 @@ typedef struct {
  * The permutation array must hold at least nParameters elements,
  * and receives the argument permutation of the current match; see DispatchQuery().
  * The caller must call DispatchIteratorEnd() when done.
+ * matchMode is the same as in DispatchParameterizedQuery()
  */
 void DispatchIterate(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters,
+	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
 	index8 permutation[], DispatchIterator * iterator);
 
 /**
