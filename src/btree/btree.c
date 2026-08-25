@@ -63,7 +63,7 @@ BTree * BTreeCreate(
  */
 static void * nodeItemArray(BTree const * btree, BTreeNode const * node)
 {
-	return (void *) (((addr64) node) + sizeof(node) + 2 * btree->minDegree * sizeof(BTreeNode *));
+	return (void *) (((addr64) node) + sizeof(BTreeNode) + 2 * btree->minDegree * sizeof(BTreeNode *));
 }
 
 
@@ -184,24 +184,51 @@ static index32 searchNodeItems(BTree const * btree, BTreeNode const * node, void
 }
 
 
+/**
+ * Find a lower bound, that is, the smallest item not less than the key.
+ * If a lower bound is found, *foundDepth is set to the level where it was found,
+ * and the function returns true; else every item is less than the key, and the function
+ * returns false.
+ * 
+ * The stack array must hold btree->height positions. Writes the path traversed from
+ * the root to the lower bound item into stack[0] ... stack[*foundDepth], but uses
+ * the entire stack array as working space.
+ *
+ * The descent does not stop at an item comparing equal to the key, since the left subtree of
+ * that item may hold earlier items that also compare equal; it keeps the deepest candidate.
+ */
+static bool descendToLowerBound(
+	BTree const * btree, void const * key, BTreePosition stack[], size32 * foundDepth)
+{
+	size32 depth = 0;
+	bool found = false;
+	stack[0].node = btree->root;
+	while(true) {
+		BTreePosition * position = &(stack[depth]);
+		position->index = searchNodeItems(btree, position->node, key);
+		if(position->index < position->node->nItems) {
+			found = true;
+			*foundDepth = depth;
+		}
+		if(isLeaf(position->node))
+			return found;
+		stack[depth + 1].node = position->node->children[position->index];
+		depth++;
+	}
+}
+
+
 void * BTreePeekItem(BTree * btree, void const * keyItem)
 {
 	if(btree->nItemsTotal == 0)
 		return 0;
-	BTreeNode * node = btree->root;
-	while(true) {
-		size32 itemIndex = searchNodeItems(btree, node, keyItem);
-		if(itemIndex < node->nItems) {
-			void * item = nodeGetItem(btree, node, itemIndex);
-			if(btree->compareItems(item, keyItem, btree->itemSize) == 0)
-				return item;
-		}
-		// else no match in this node
-		if(isLeaf(node))
-			return 0;
-		else
-			node = node->children[itemIndex];
-	}
+	BTreePosition stack[btree->height];
+	size32 foundDepth;
+	if(!descendToLowerBound(btree, keyItem, stack, &foundDepth))
+		return 0;
+	// the lower bound is only the first item not less than the key
+	void * item = nodeGetItem(btree, stack[foundDepth].node, stack[foundDepth].index);
+	return btree->compareItems(item, keyItem, btree->itemSize) ? 0 : item;
 }
 
 
@@ -563,9 +590,36 @@ static BTreeDeleteResult btreeDeleteRecursive(
 }
 
 
+#ifdef DEBUG
+/**
+ * CLAUDE: verify that the key matches one item at most, which BTreeDelete() requires.
+ */
+static void assertKeyMatchesOneItem(BTree * btree, void const * key)
+{
+	size32 nMatches = 0;
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, btree);
+	if(BTreeIteratorSeek(&iterator, key)) {
+		do {
+			void const * item = BTreeIteratorPeekItem(&iterator);
+			if(btree->compareItems(item, key, btree->itemSize))
+				break;
+			nMatches++;
+		} while(BTreeIteratorNext(&iterator));
+	}
+	BTreeIteratorEnd(&iterator);
+	ASSERT(nMatches <= 1)
+}
+#endif
+
+
 BTreeDeleteResult BTreeDelete(BTree * btree, void const * key, void * item)
 {
 	ASSERT(!BTreeIsWriteLocked(btree))
+#ifdef DEBUG
+	// CLAUDE: the key must match one item only; see BTreeDelete() in btree.h
+	assertKeyMatchesOneItem(btree, key);
+#endif
 	return btreeDeleteRecursive(btree, btree->root, BTREE_KEY, key, item);
 }
 
@@ -670,30 +724,20 @@ bool BTreeIteratorSeek(BTreeIterator * iterator, const void * keyItem)
 		position->index = 1;
 		return false;
 	}
-	while(true) {
-		position->index = searchNodeItems(iterator->btree, position->node, keyItem);
-		if(position->index < position->node->nItems) {
-			void const * item = nodeGetItem(iterator->btree, position->node, position->index);
-			if(iterator->btree->compareItems(item, keyItem, iterator->btree->itemSize) == 0) {
-				// iterator index must be after the matching item
-				position->index++;
-				return true;
-			}
-		}
-		// else no match in this node
-		if(isLeaf(position->node)) {
-			// at leaf node and no match, so no matching item in the tree
-			setIteratorAtEnd(iterator);
-			return false;
-		}
-		else {
-			// descend to next level
-			BTreeNode * child = position->node->children[position->index];
-			position = &(iterator->stack[++iterator->depth]);
-			position->node = child;
-			position->index = 0;
+	size32 foundDepth;
+	if(descendToLowerBound(iterator->btree, keyItem, iterator->stack, &foundDepth)) {
+		iterator->depth = foundDepth;
+		position = &(iterator->stack[foundDepth]);
+		void const * item = nodeGetItem(iterator->btree, position->node, position->index);
+		if(iterator->btree->compareItems(item, keyItem, iterator->btree->itemSize) == 0) {
+			// iterator index must be after the matching item
+			position->index++;
+			return true;
 		}
 	}
+	// no matching item in the tree
+	setIteratorAtEnd(iterator);
+	return false;
 }
 
 

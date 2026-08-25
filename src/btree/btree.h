@@ -124,6 +124,7 @@ typedef enum e_BTreeDeleteResult {
 /**
  * Delete an item that compares equal to the given key by compareItems(),
  * if any. The deleted item is copied to *item if item is not 0.
+ * If the key matches multiple items, one arbitrary matching item is deleted.
  */
 BTreeDeleteResult BTreeDelete(BTree * btree, void const * key, void * item);
 
