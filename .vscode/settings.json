@@ -31,7 +31,14 @@
 			"color": "#50c0d0", 
 			"backgroundColor": "#121314",
 			"fontWeight": "bold"
+		},
+		{
+			"text": "QUESTION:",
+			"color": "#2080e0", 
+			"backgroundColor": "#121314",
+			"fontWeight": "bold"
 		}
+
 	],
 	"todohighlight.defaultStyle": {},
 	"todohighlight.isCaseSensitive": true,
