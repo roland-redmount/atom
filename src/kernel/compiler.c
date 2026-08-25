@@ -189,16 +189,16 @@ static void setupParameterizedQuery(
 
 /**
  * Find a service for the given term (termForm, termParameters), either by dispatch,
- * or if fallback = COMPILE_FALLBACK_RULES, by compiling the term.
+ * or if mode = TERM_DISPATCH_OR_COMPILE, by compiling the term.
  * The exclusion list, the resolved types and hasNextMatch are as for
  * DispatchParameterizedQuery(). Returns true if a service was found.
  */
 
-#define COMPILE_FALLBACK_NONE	1
-#define COMPILE_FALLBACK_RULES	2
+#define TERM_DISPATCH_ONLY			1
+#define TERM_DISPATCH_OR_COMPILE	2
 
 static bool dispatchOrCompileTerm(
-	CompilationState * state, Atom termForm, Atom const termParameters[], size8 termArity, int fallback,
+	CompilationState * state, Atom termForm, Atom const termParameters[], size8 termArity, int mode,
 	Service * service, index8 permutation[],
 	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch)
 {
@@ -206,10 +206,11 @@ static bool dispatchOrCompileTerm(
 		termForm, termParameters, termArity, DISPATCH_MATCH_EXACT, service, permutation,
 		excludedSignatures, nExcluded, hasNextMatch))
 		return true;
-	if(fallback != COMPILE_FALLBACK_RULES)
+	if(mode == TERM_DISPATCH_ONLY)
 		return false;
 	
 	// Else attempt to compile new services for the term
+	ASSERT(mode == TERM_DISPATCH_OR_COMPILE)
 	TypedTuple * queryParameters = CreateTypedTuple(termArity);
 	setupParameterizedQuery(termParameters, termArity, queryParameters);
 	size8 nServices = compileParameterizedQuery(
@@ -226,10 +227,11 @@ static bool dispatchOrCompileTerm(
 
 
 /**
- * Dispatch or compile a term, adding a choice point for it
+ * Dispatch or compile a term, adding a choice point for it.
+ * See dispatchOrCompileTerm()
  */
 static bool dispatchOrCompileAtNewChoicePoint(
-	CompilationState * state, Atom termForm, TypedTuple const * termActors, int fallback, Service * service,
+	CompilationState * state, Atom termForm, TypedTuple const * termActors, int mode, Service * service,
 	index8 permutation[], ChoiceTree * choiceTree)
 {
 	// Add a new choice point
@@ -248,7 +250,7 @@ static bool dispatchOrCompileAtNewChoicePoint(
 	choicePoint->termForm = termForm;
 #endif
 	if(!dispatchOrCompileTerm(
-		state, termForm, termParameters, termArity, fallback, service, permutation,
+		state, termForm, termParameters, termArity, mode, service, permutation,
 		choicePoint->choiceSignatures, choicePoint->nChoices,
 		&(choicePoint->hasNextMatch)))
 		return false;
@@ -399,12 +401,10 @@ static Operator * createTermOperator(
 
 /**
  * Compile a term into an operator by either locating an existing service,
- * or by compiling a new service.
- * The fallback says whether a term the service registry cannot answer may be compiled from
- * the rules; see dispatchTermService().
+ * or if mode = TERM_DISPATCH_OR_COMPILE by compiling a new service.
  */
 static Operator * compileTerm(
-	CompilationState * state, Atom termForm, TypedTuple const * termActors, int fallback,
+	CompilationState * state, Atom termForm, TypedTuple const * termActors, int mode,
 	TypedTuple * serviceParameters, index8 clauseMap[], ChoiceTree * choiceTree)
 {
 	// attempt to locate a service for the term
@@ -412,7 +412,7 @@ static Operator * compileTerm(
 	index8 permutation[termArity];
 	Service termService;
 	if(!dispatchOrCompileAtNewChoicePoint(
-		state, termForm, termActors, fallback, &termService, permutation, choiceTree))
+		state, termForm, termActors, mode, &termService, permutation, choiceTree))
 		return 0;
 
 	return createTermOperator(
@@ -474,7 +474,8 @@ typedef struct s_ClauseCompileState {
 	// Total number of clause arguments, including the local variables
 	size8 nArguments;
 
-	// The term matched by the query, excluded from the conjunction
+	// The term matched by the query, excluded from the conjunction.
+	// To compile recursive clauses, the parameters of this term must be fully typed.
 	index8 matchedTermIndex;
 	// The form of the query-matched term, which is the same as for a recursive term
 	Atom queryTermForm;
@@ -486,9 +487,8 @@ typedef struct s_ClauseCompileState {
 	bool * termExcluded;
 	// Choice points taken during the compilation of the clause
 	ChoiceTree * choiceTree;
-	// The signature the query compiled to, which a recursive term of this clause reads,
-	// or 0 when there is none to read, which is every clause of the non-recursive pass.
-	// See compileRecursiveTerm().
+	// The fully typed signature of the query, if it has been determined; else 0.
+	// This is needed to compile recursive terms; see compileRecursiveTerm().
 	TypedTuple const * querySignature;
 } ClauseCompileState;
 
@@ -667,31 +667,17 @@ static Operator * compileConjunctionRecursive(
 	index8 termClauseMap[clauseState->clauseActors->nAtoms];
 
 	/**
-	 * Find a term that can be compiled, in three passes over the term forms of the clause.
-	 *
-	 * A term only dispatches to a registered service once its own inputs are available,
-	 * which is what makes taking the first term that compiles sound. Two kinds of term
-	 * compile whatever is bound and so must not be taken while another term still can.
-	 *
-	 * The first is a term compiled from the rules, which yields a plan for any binding
-	 * pattern the term is asked in. Taken early it would read a relation unbound where a
-	 * later binding would have restricted it. The first pass therefore offers no term to
-	 * the rules, and the second offers them to every term in turn.
-	 *
-	 * The second is the recursive term, which reads the relation being derived and so
-	 * compiles whatever is bound. It would win over a term whose outputs it should be
-	 * consuming, leaving that term to read its relation unbound. It is also the term with
-	 * nothing to contribute: its parameter types are already settled by the non-recursive
-	 * clauses, and a clause whose other terms do not compile yields no fixpoint anyway. So
-	 * it is taken last of all, in the third pass, and skipped by the two before it. Taken
-	 * last, every argument another term provides is an input by then, which is what settles
-	 * its operator; see compileRecursiveTerm().
+	 * Find a term that can be compiled, in three passes over the term forms of the clause:
+	 * 
+	 * pass = 0: only terms that dispatch to an existing service are considered.
+	 * pass = 1: we attempt to compile terms recursively, given the current rule dictionary.
+	 * pass = 2: recursive terms are compiled to a RECURSE operator, provided that the
+	 *         query-matched term has fully determined types.
+	 * 
 	 */
 	for(index8 pass = 0; !op && (pass < 3); pass++) {
-		// Only the second pass offers a term to the rules. The recursive term of the third
-		// pass compiles against the relation being derived, and offering it to the rules
-		// would re-enter the very compilation it belongs to.
-		int fallback = (pass == 1) ? COMPILE_FALLBACK_RULES : COMPILE_FALLBACK_NONE;
+		// We attempt to compile terms (recursively) only in the second pass.
+		int termCompileMode = (pass == 1) ? TERM_DISPATCH_OR_COMPILE : TERM_DISPATCH_ONLY;
 		// Iterate over term forms in the clause form
 		MultisetIterator termFormIterator;
 		MultisetIterate(clauseState->clauseForm, AT_ID, &termFormIterator);
@@ -709,8 +695,8 @@ static Operator * compileConjunctionRecursive(
 				TermFormGetPredicateForm(termForm),
 				!TermFormGetSign(termForm)
 			);
-			// A term of the query's own form is the recursive one, which only the third
-			// pass takes and only the third pass considers
+			// A term of the query's own form is recursive. Process these only in the third pass,
+			// and only if the query is fully typed.
 			bool isRecursiveTerm = SameAtoms(negatedTermForm, clauseState->queryTermForm);
 			if((isRecursiveTerm == (pass < 2)) || (isRecursiveTerm && !clauseState->querySignature)) {
 				termIndex += em.multiple;
@@ -738,7 +724,7 @@ static Operator * compileConjunctionRecursive(
 						clauseState->querySignature, termActors, serviceParameters,
 						termClauseMap)
 					: compileTerm(
-						state, negatedTermForm, termActors, fallback, serviceParameters,
+						state, negatedTermForm, termActors, termCompileMode, serviceParameters,
 						termClauseMap, clauseState->choiceTree);
 #ifdef DEBUG_COMPILER
 				PrintCString("serviceParameters = ");
@@ -900,21 +886,35 @@ static Operator * permuteToClauseArguments(
 
 
 /**
+ * Returns true iff the given tuple contains only fully types parameters.
+ */
+static bool checkParameterTypes(TypedTuple const * querySignature)
+{
+	for(index8 i = 0; i < querySignature->nAtoms; i++) {
+		TypedAtom parameter = TypedTupleGetElement(querySignature, i);
+		if((parameter.type != AT_PARAMETER) || !parameter.atom.parameter.atomType)
+			return false;
+	}
+	return true;
+}
+
+
+/**
  * Compile the conjunction formed by negating the given clause (clauseForm, clauseActors),
  * excepting the term matching the query, indicated by matchedTermIndex.
  *
- * A recursive clause is compiled against the signature the query compiled to, which its
- * recursive term reads; querySignature is 0 in the non-recursive pass, where no signature
- * is settled yet and a recursive term therefore does not compile.
+ * A recursive term of the clause is compiled against the signature of the query, which
+ * the query-matched term carries once its parameters are typed; see createQuerySignature().
  */
 static Operator * compileConjunction(
 	CompilationState * state,
 	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, Atom queryTermForm,
-	size8 nArguments, ChoiceTree * choiceTree, TypedTuple const * querySignature)
+	size8 nArguments, ChoiceTree * choiceTree)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	index8 termActorsIndices[clauseNTerms + 1];
 	ClauseGetTermActorsIndices(clauseForm, termActorsIndices);
+	// Exclude the match term from the conjunction
 	bool termExcluded[clauseNTerms];
 	for(index8 i = 0; i < clauseNTerms; i++)
 		termExcluded[i] = (i == matchedTermIndex);
@@ -925,6 +925,16 @@ static Operator * compileConjunction(
 	size8 nLocalVariables = parameterizeLocalVariables(
 		clauseActors, matchedTermIndex, termActorsIndices, nArguments);
 
+	// Extract the query parameters, if present
+	size8 matchedTermArity =
+		termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex];
+	TypedTuple * queryParameters = CreateTypedTuple(matchedTermArity);
+	TypedTupleCopyAt(clauseActors, termActorsIndices[matchedTermIndex], queryParameters);
+	if(!checkParameterTypes(queryParameters)) {
+		FreeTypedTuple(queryParameters);
+		queryParameters = 0;
+	}
+	// Setup the initial clause state
 	ClauseCompileState clauseState = {
 		.clauseForm = clauseForm,
 		.clauseActors = clauseActors,
@@ -933,19 +943,19 @@ static Operator * compileConjunction(
 		.nArguments = nArguments + nLocalVariables,
 		.matchedTermIndex = matchedTermIndex,
 		.queryTermForm = queryTermForm,
-		.matchedTermArity =
-			termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex],
+		.matchedTermArity = matchedTermArity,
 		.termExcluded = termExcluded,
 		.choiceTree = choiceTree,
-		.querySignature = querySignature
+		.querySignature = queryParameters
 	};
 
+	// Compile the conjunction recursively, joining one term at a time
 	index8 clauseMap[clauseActors->nAtoms];
-	// The matched term is excluded from the conjunction, and is the one term excluded
-	// when the recursion over the remaining terms begins
 	Operator * op = compileConjunctionRecursive(state, &clauseState, 1, clauseMap);
+	if(queryParameters)
+		FreeTypedTuple(queryParameters);
 	if(!op)
-		return 0;
+		return 0;	// conjunction could not be compiled
 
 	// The compiled terms provide the clause arguments in their own order
 	op = permuteToClauseArguments(op, clauseMap, clauseState.nArguments);
@@ -1125,13 +1135,13 @@ static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
 /**
  * Find all clauses (rules) that match the given query term and compile them,
  * producing one or more CompiledVariant.
- * The queryActors tuple must be a series of AT_PARAMETER atoms numbered 1, 2, ...
+ * The query.actors tuple must be a series of AT_PARAMETER atoms numbered 1, 2, ...
  * and is not modified; each compiled variant carries its own resolved parameters.
- * 
- * querySignature is the signature the query compiled to in the non-recursive pass, which a
- * recursive term reads; see compileRecursiveTerm(). A recursive clause is compiled only
- * when it is given, so passing 0 compiles the non-recursive clauses and passing a signature
- * compiles the recursive ones.
+ *
+ * Recursive terms are compiled when pass = RECURSIVE_PASS, in which case all parameters
+ * in query.actors must have specified types, so that the recursive term is well-defined.
+ * If pass = NON_RECURSIVE_PASS, only non-recursive terms are compiled, and query.actors may
+ * contain parameters with unknown type.
  * 
  * If multiple clauses resolve to the same signature, they are are combined with a UNION operator.
  * Appends the new compiled variants to the variants array and returns the new number of variants
@@ -1144,15 +1154,11 @@ static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
 #define RECURSIVE_PASS		2
 
 static size8 compileQueryClauses(
-	CompilationState * state, FormulaView query,
-	TypedTuple const * querySignature, bool * foundRecursiveClause,
+	CompilationState * state, FormulaView query, int pass, bool * foundRecursiveClause,
 	CompiledVariant variants[], size8 nVariants)
 {
 	size8 queryTermArity = TermFormArity(query.form);
 	*foundRecursiveClause = false;
-
-	// Determine whether to compile recursive or non-recursive clauses
-	uint8 pass = querySignature ? RECURSIVE_PASS : NON_RECURSIVE_PASS;
 
 	/**
 	 * To find rules (clauses) c that contains a matching term form,
@@ -1246,7 +1252,7 @@ static size8 compileQueryClauses(
 
 						Operator * newService = compileConjunction(
 							state, clauseForm, substClauseActors, matchedTermIndex, query.form,
-							queryTermArity, &choiceTree, querySignature);
+							queryTermArity, &choiceTree);
 						if(!newService)
 							continue;
 						// Recover the unified parameters from the clause actors
@@ -1413,11 +1419,7 @@ static size8 compileQueryVariants(CompilationState * state, FormulaView query, C
 	bool foundRecursiveClause;
 	// First pass compilation generates variants for the non-recursive matching clauses
 	size8 nVariants = compileQueryClauses(
-		state, query,
-		0,	// query signature is unknown at this point
-		&foundRecursiveClause,
-		variants, 0
-	);
+		state, query, NON_RECURSIVE_PASS, &foundRecursiveClause, variants, 0);
 	size8 queryTermArity = TermFormArity(query.form);
 
 	if(foundRecursiveClause) {
@@ -1436,8 +1438,7 @@ static size8 compileQueryVariants(CompilationState * state, FormulaView query, C
 			TypedTuple const * querySignature = variants[i].parameters;
 			nVariants = compileQueryClauses(
 				state, (FormulaView) {.form = query.form, .actors = querySignature},
-				querySignature,
-				&foundRecursiveClause,
+				RECURSIVE_PASS, &foundRecursiveClause,
 				variants, nVariants
 			);
 		}
