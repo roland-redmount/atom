@@ -92,9 +92,6 @@ void DispatchIterate(
 	iterator->matchMode = matchMode;
 	iterator->permutation = permutation;
 	iterator->inRelation = false;
-#ifdef DEBUG
-	iterator->previousMatchRelation = 0;
-#endif
 	// Iterate over relations matching the term form.
 	RelationRegistryIterate(queryTermForm, &(iterator->relationIterator));
 }
@@ -124,18 +121,12 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 				// Copy the service, as a pointer into the service registry is only
 				// valid until the service iterator moves on.
 				iterator->service = *currentService;
-#ifdef DEBUG
-				// There should only be one service per relation matching the query. 
-				// A second match indicates a service that should never have been registered,
-				// so that the service registry is corrupted. See ServiceRegistryAdd()
-				ASSERT(relation != iterator->previousMatchRelation)
-				iterator->previousMatchRelation = relation;
-#endif
-				// In "relaxed" matching mode, iteration ends after the first match
-				if(iterator->matchMode == DISPATCH_MATCH_RELAXED) {
-					ServiceIteratorEnd(&(iterator->serviceIterator));
-					iterator->inRelation = false;
-				}
+
+				// For DISPATCH_MATCH_EXACT, there can be only one match per relation,
+				// since we cannot have two services with the same IO signagure.
+				// For DISPATCH_MATCH_RELAXED, we arbitrarily pick the first match for each relation.
+				ServiceIteratorEnd(&(iterator->serviceIterator));
+				iterator->inRelation = false;
 				return true;
 			}
 		}
