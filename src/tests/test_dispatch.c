@@ -158,10 +158,9 @@ void testDispatchNegatedTerm(void)
 
 /**
  * A query binding a column the B-tree cannot seek on has no service, but under
- * DISPATCH_MATCH_RELAXED it matches a service that produces that column instead, which
- * the caller reads and filters; see DISPATCH_MATCH_EXACT.
+ * DISPATCH_MATCH_RELAXED it matches a service that produces that column instead,
  *
- * The query (list <ID position >INT element <LETTER) binds the element without binding the
+ * The query (list <ID position >INT element <LETTER) binds the "element" role without binding the
  * position. Of the two services that can produce the element, the one that also binds the
  * list reads the least, and is the one dispatch returns.
  */

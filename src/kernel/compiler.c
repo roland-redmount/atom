@@ -1324,15 +1324,11 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
 
 
 /**
- * Compile a filter variant for each relation that has a service producing the parameters the
- * query binds. This answers a query whose IO pattern no service provides: a FILTER operator
- * reads such a service and keeps the tuples where the produced value equals the bound one.
- * See OPERATOR_FILTER in operator.h.
+ * Compile a FILTER operator based on a child service matching the query using "relaxed" dispatch.
+ * Inputs to the FILTER operator that map to outputs in the child service are handled by
+ * filtering tuples for equality. See OPERATOR_FILTER in operator.h.
  *
  * One variant is emitted per matching relation. Returns the new number of variants.
- *
- * The child service produces a parameter wherever the query binds one, so the filtered
- * arguments are the query inputs the service gives as outputs.
  */
 static size8 compileFilterVariants(
 	FormulaView query, CompiledVariant variants[], size8 nVariants)
@@ -1340,37 +1336,39 @@ static size8 compileFilterVariants(
 	size8 arity = query.actors->nAtoms;
 	Atom const * queryParameters = TypedTuplePeekAtoms(query.actors);
 
-	// Perform "relaxed" dispatch to search for a service whose IO pattern that
-	// has an input everywhere the query has an input, and as few outputs as possible.
+	// Perform "relaxed" dispatch to search for services whose IO pattern
+	// has an output everywhere the query has an output, and as few outputs as possible.
 	index8 permutation[arity];
 	DispatchIterator iterator;
 	DispatchIterate(
 		query.form, queryParameters, arity, DISPATCH_MATCH_RELAXED, permutation, &iterator);
 
 	while((nVariants < MAX_COMPILED_SERVICES) && DispatchIteratorNext(&iterator)) {
-		Service const * service = DispatchIteratorPeekService(&iterator);
+		Service const * childService = DispatchIteratorPeekService(&iterator);
 
-		// The arguments to filter are the ones the query binds and the service produces.
-		// Service parameter i answers query parameter permutation[i], and the filter reads
-		// the service operator directly, so its arguments are the service parameters.
+		// The queyy arguments to filter are the ones that correspond to query inputs
+		// but child service outputs.
 		index8 filteredArguments[arity];
 		size8 nFiltered = 0;
 		for(index8 i = 0; i < arity; i++) {
 			if((queryParameters[permutation[i]].parameter.io == PARAMETER_IN)
-				&& (service->ioSignature.parameterIO[i] == PARAMETER_OUT))
+				&& (childService->ioSignature.parameterIO[i] == PARAMETER_OUT))
 				filteredArguments[nFiltered++] = i;
 		}
-		// A service answering the query exactly needs no filter, and a variant for it
-		// would duplicate a service that already exists. This is reached when the query
-		// was compiled before, as CompileQuery() does not dispatch first.
-		if(!nFiltered)
+		// If there are no argument to filter, the child service is an exact match.
+		if(nFiltered == 0) {
+			// NOTE: This case doesn't seem to occur in any test case, putting an ASSERT
+			// here to catch it, should it ever happen
+			ASSERT(false)
 			continue;
+		}
 
+		// Create a new compiled variant
 		CompiledVariant * variant = &(variants[nVariants++]);
 		SetMemory(variant, sizeof(CompiledVariant), 0);
 
-		// The query parameters resolved against the relation, which types the outputs the
-		// query left untyped
+		// The FILTER service type signature is the same as that of the child,
+		// while its IO direction is the same as that of the query.
 		variant->parameters = CreateTypedTuple(arity);
 		for(index8 i = 0; i < arity; i++) {
 			TypedTupleSetElement(variant->parameters, permutation[i],
@@ -1379,17 +1377,16 @@ static size8 compileFilterVariants(
 					(Atom) {
 						.parameter = {
 							.number = permutation[i] + 1,
-							.atomType = service->relation->typeSignature.atomTypes[i],
+							.atomType = childService->relation->typeSignature.atomTypes[i],
 							.io = queryParameters[permutation[i]].parameter.io
 						}
 					}
 				)
 			);
 		}
-
 		// The filter operator takes the arguments of the service it reads, so a form whose
 		// roles repeat needs a permute operator to place them in query argument order
-		variant->op = CreateFilterOperator(service->op, filteredArguments, nFiltered);
+		variant->op = CreateFilterOperator(childService->op, filteredArguments, nFiltered);
 		variant->op = permuteToClauseArguments(variant->op, permutation, arity);
 		ASSERT(variant->op)
 	}
@@ -1463,7 +1460,7 @@ static size8 compileQueryVariants(CompilationState * state, FormulaView query, C
 
 
 /**
- * Test whether the given parameterized query is one the guard stack of items
+ * Test whether the given parameterized query is on the guard stack of items
  * undergoing compilation.
  */
 static bool isBeingCompiled(CompilationState const * state, FormulaView queryTerm)
