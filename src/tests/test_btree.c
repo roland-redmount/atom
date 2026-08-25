@@ -34,6 +34,34 @@ static int8 compareTestItems(void const * item1, void const * item2, size32 item
 		return 0;
 }
 
+// A comparator reading the item key as two 16-bit parts, where a zero second part
+// of a key is ignored, so that such a key matches every item with the same first part.
+// This is similar to prefix keys used in the kernel registries; see for example compareServices().
+static int8 compareTestItemPrefix(void const * item, void const * itemOrKey, size32 itemSize)
+{
+	TestItem const * storedItem = item;
+	TestItem const * key = itemOrKey;
+
+	int16 itemFirst = storedItem->key >> 16;
+	int16 keyFirst = key->key >> 16;
+	if(itemFirst < keyFirst)
+		return -1;
+	else if(itemFirst > keyFirst)
+		return 1;
+
+	int16 keySecond = key->key & 0xFFFF;
+	if(!keySecond)
+		return 0;
+	int16 itemSecond = storedItem->key & 0xFFFF;
+	if(itemSecond < keySecond)
+		return -1;
+	else if(itemSecond > keySecond)
+		return 1;
+	else
+		return 0;
+}
+
+
 void printTestItem(void const * item)
 {
 	TestItem const * testItem = item;
@@ -315,6 +343,66 @@ void testBTreeIterator(void)
 }
 
 
+/**
+ * Test seeking with a prefix key, which several items compare equal to. In this case,
+ * the B-tree must always return the first of all matched items.
+ */
+#define N_TEST_GROUPS		10
+#define TEST_GROUP_SIZE		10
+
+void testBTreeSeekPrefixKey(void)
+{
+	// To test handling of internal nodes, the tree has to be tall enough
+	// for keys to be stoed in internal node.
+	const index32 nTestItems = N_TEST_GROUPS * TEST_GROUP_SIZE;
+	const size32 bTreeItemSize = 400;
+
+	// Each group of items shares the first key part. The second part counts from 1, as an
+	// item with a zero second part would act as a prefix key when BTreeInsert() compares
+	// against it.
+	BTree * btree = BTreeCreate(bTreeItemSize, compareTestItemPrefix, 0);
+	TestItem * items = Allocate(bTreeItemSize * nTestItems);
+	for(index32 group = 0; group < N_TEST_GROUPS; group++) {
+		for(index32 i = 0; i < TEST_GROUP_SIZE; i++) {
+			initTestItem(
+				&items[group * TEST_GROUP_SIZE + i], (group << 16) | (i + 1));
+			ASSERT_TRUE(
+				BTreeInsert(btree, &items[group * TEST_GROUP_SIZE + i]) == BTREE_INSERTED)
+		}
+	}
+	validateBTree(btree);
+	// a group must be able to straddle an internal node, or the test proves nothing
+	ASSERT_TRUE(btree->height > 1)
+
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, btree);
+	for(index32 group = 0; group < N_TEST_GROUPS; group++) {
+		TestItem groupKey = {.key = group << 16};
+		ASSERT_TRUE(BTreeIteratorSeek(&iterator, &groupKey))
+
+		// the whole group follows, beginning with its first item
+		for(index32 i = 0; i < TEST_GROUP_SIZE; i++) {
+			index32 itemIndex = group * TEST_GROUP_SIZE + i;
+			TestItem const * item = BTreeIteratorPeekItem(&iterator);
+			ASSERT_TRUE(testItemsEqual(&items[itemIndex], item))
+			ASSERT_TRUE(BTreeIteratorNext(&iterator) == (itemIndex < nTestItems - 1))
+		}
+	}
+	BTreeIteratorEnd(&iterator);
+
+	// BTreePeekItem() answers with the first item of the group as well
+	for(index32 group = 0; group < N_TEST_GROUPS; group++) {
+		TestItem groupKey = {.key = group << 16};
+		TestItem const * item = BTreePeekItem(btree, &groupKey);
+		ASSERT_NOT_NULL(item)
+		ASSERT_TRUE(testItemsEqual(&items[group * TEST_GROUP_SIZE], item))
+	}
+
+	BTreeFree(btree);
+	Free(items);
+}
+
+
 int main(int argc, char **argv)
 {
 	SetupMemory();
@@ -326,6 +414,7 @@ int main(int argc, char **argv)
 	ExecuteTest(testBTreeExample);
     ExecuteTest(testBTreeRandomized);
     ExecuteTest(testBTreeIterator);
+	ExecuteTest(testBTreeSeekPrefixKey);
 
 	CleanupMemory();
 

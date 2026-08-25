@@ -125,6 +125,10 @@ typedef enum e_BTreeDeleteResult {
  * Delete an item that compares equal to the given key by compareItems(),
  * if any. The deleted item is copied to *item if item is not 0.
  */
+
+// CLAUDE: the key must match at most one item, unlike the key of BTreeIteratorSeek().
+// Which of several matching items is deleted is not defined, as the descent rebalances
+// the tree and so cannot look for the first one.
 BTreeDeleteResult BTreeDelete(BTree * btree, void const * key, void * item);
 
 /**
