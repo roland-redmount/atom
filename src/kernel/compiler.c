@@ -231,7 +231,7 @@ static bool dispatchOrCompileTerm(
  * See dispatchOrCompileTerm()
  */
 static bool dispatchOrCompileAtNewChoicePoint(
-	CompilationState * state, Atom termForm, TypedTuple const * termActors, int mode, Service * service,
+	CompilationState * state, FormulaView term, int mode, Service * service,
 	index8 permutation[], ChoiceTree * choiceTree)
 {
 	// Add a new choice point
@@ -239,18 +239,18 @@ static bool dispatchOrCompileAtNewChoicePoint(
 	ChoicePoint * choicePoint = &(choiceTree->choicePoints[choiceTree->depth++]);
 
 	// dispatch term, parameterized
-	size8 termArity = termActors->nAtoms;
+	size8 termArity = term.actors->nAtoms;
 	Atom termParameters[termArity];
-	getTermParameters(termActors, termParameters);
+	getTermParameters(term.actors, termParameters);
 
 	ASSERT(choicePoint->nChoices < MAX_CHOICE_POINT_MATCHES)
 #ifdef DEBUG
 	if(choicePoint->nChoices)
-		ASSERT(SameAtoms(choicePoint->termForm, termForm))
-	choicePoint->termForm = termForm;
+		ASSERT(SameAtoms(choicePoint->termForm, term.form))
+	choicePoint->termForm = term.form;
 #endif
 	if(!dispatchOrCompileTerm(
-		state, termForm, termParameters, termArity, mode, service, permutation,
+		state, term.form, termParameters, termArity, mode, service, permutation,
 		choicePoint->choiceSignatures, choicePoint->nChoices,
 		&(choicePoint->hasNextMatch)))
 		return false;
@@ -404,20 +404,20 @@ static Operator * createTermOperator(
  * or if mode = TERM_DISPATCH_OR_COMPILE by compiling a new service.
  */
 static Operator * compileTerm(
-	CompilationState * state, Atom termForm, TypedTuple const * termActors, int mode,
+	CompilationState * state, FormulaView term, int mode,
 	TypedTuple * serviceParameters, index8 clauseMap[], ChoiceTree * choiceTree)
 {
 	// attempt to locate a service for the term
-	size8 termArity = termActors->nAtoms;
+	size8 termArity = term.actors->nAtoms;
 	index8 permutation[termArity];
 	Service termService;
 	if(!dispatchOrCompileAtNewChoicePoint(
-		state, termForm, termActors, mode, &termService, permutation, choiceTree))
+		state, term, mode, &termService, permutation, choiceTree))
 		return 0;
 
 	return createTermOperator(
 		termService.relation->typeSignature, termService.ioSignature, termService.op,
-		termActors, permutation, serviceParameters, clauseMap);
+		term.actors, permutation, serviceParameters, clauseMap);
 }
 
 
@@ -487,9 +487,9 @@ typedef struct s_ClauseCompileState {
 	bool * termExcluded;
 	// Choice points taken during the compilation of the clause
 	ChoiceTree * choiceTree;
-	// The fully typed signature of the query, if it has been determined; else 0.
+	// The fully typed parameters of the query, if known; else 0.
 	// This is needed to compile recursive terms; see compileRecursiveTerm().
-	TypedTuple const * querySignature;
+	TypedTuple const * queryParameters;
 } ClauseCompileState;
 
 
@@ -698,7 +698,7 @@ static Operator * compileConjunctionRecursive(
 			// A term of the query's own form is recursive. Process these only in the third pass,
 			// and only if the query is fully typed.
 			bool isRecursiveTerm = SameAtoms(negatedTermForm, clauseState->queryTermForm);
-			if((isRecursiveTerm == (pass < 2)) || (isRecursiveTerm && !clauseState->querySignature)) {
+			if((isRecursiveTerm == (pass < 2)) || (isRecursiveTerm && !clauseState->queryParameters)) {
 				termIndex += em.multiple;
 				IFactRelease(negatedTermForm);
 				continue;
@@ -719,13 +719,16 @@ static Operator * compileConjunctionRecursive(
 				// Attempt to compile this term. A recursive term reads the relation
 				// being derived and builds its own operator; every other term dispatches,
 				// adding a choice point.
-				op = isRecursiveTerm
-					? compileRecursiveTerm(
-						clauseState->querySignature, termActors, serviceParameters,
-						termClauseMap)
-					: compileTerm(
-						state, negatedTermForm, termActors, termCompileMode, serviceParameters,
-						termClauseMap, clauseState->choiceTree);
+				if(isRecursiveTerm) {
+					op = compileRecursiveTerm(
+						clauseState->queryParameters, termActors, serviceParameters,	termClauseMap);
+				}
+				else {
+					op = compileTerm(
+						state, (FormulaView) {.form = negatedTermForm, .actors = termActors},
+						termCompileMode, serviceParameters,	termClauseMap, clauseState->choiceTree
+					);
+				}
 #ifdef DEBUG_COMPILER
 				PrintCString("serviceParameters = ");
 				TypedTuplePrint(serviceParameters);
@@ -946,7 +949,7 @@ static Operator * compileConjunction(
 		.matchedTermArity = matchedTermArity,
 		.termExcluded = termExcluded,
 		.choiceTree = choiceTree,
-		.querySignature = queryParameters
+		.queryParameters = queryParameters
 	};
 
 	// Compile the conjunction recursively, joining one term at a time
@@ -1249,7 +1252,6 @@ static size8 compileQueryClauses(
 						PrintFormActorsAsFormula(clauseForm, substClauseActors);
 						PrintChar('\n');
 #endif
-
 						Operator * newService = compileConjunction(
 							state, clauseForm, substClauseActors, matchedTermIndex, query.form,
 							queryTermArity, &choiceTree);
