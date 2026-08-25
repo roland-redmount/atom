@@ -357,9 +357,8 @@ void testBTreeSeekPrefixKey(void)
 	const index32 nTestItems = N_TEST_GROUPS * TEST_GROUP_SIZE;
 	const size32 bTreeItemSize = 400;
 
-	// Each group of items shares the first key part. The second part counts from 1, as an
-	// item with a zero second part would act as a prefix key when BTreeInsert() compares
-	// against it.
+	// Each group of items shares the first int16 part of the key. The second int16 part
+	// counts from 1, since a 0 value is used for a prefix key.
 	BTree * btree = BTreeCreate(bTreeItemSize, compareTestItemPrefix, 0);
 	TestItem * items = Allocate(bTreeItemSize * nTestItems);
 	for(index32 group = 0; group < N_TEST_GROUPS; group++) {

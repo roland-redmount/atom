@@ -63,7 +63,7 @@ BTree * BTreeCreate(
  */
 static void * nodeItemArray(BTree const * btree, BTreeNode const * node)
 {
-	return (void *) (((addr64) node) + sizeof(node) + 2 * btree->minDegree * sizeof(BTreeNode *));
+	return (void *) (((addr64) node) + sizeof(BTreeNode) + 2 * btree->minDegree * sizeof(BTreeNode *));
 }
 
 
