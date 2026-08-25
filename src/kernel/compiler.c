@@ -1329,8 +1329,7 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
  * reads such a service and keeps the tuples where the produced value equals the bound one.
  * See OPERATOR_FILTER in operator.h.
  *
- * One variant is emitted per matching relation, as a query leaving an output untyped may
- * match a relation per column type. Returns the new number of variants.
+ * One variant is emitted per matching relation. Returns the new number of variants.
  *
  * The child service produces a parameter wherever the query binds one, so the filtered
  * arguments are the query inputs the service gives as outputs.
@@ -1341,10 +1340,12 @@ static size8 compileFilterVariants(
 	size8 arity = query.actors->nAtoms;
 	Atom const * queryParameters = TypedTuplePeekAtoms(query.actors);
 
+	// Perform "relaxed" dispatch to search for a service whose IO pattern that
+	// has an input everywhere the query has an input, and as few outputs as possible.
 	index8 permutation[arity];
 	DispatchIterator iterator;
 	DispatchIterate(
-		query.form, queryParameters, arity, DISPATCH_MATCH_FILTERABLE, permutation, &iterator);
+		query.form, queryParameters, arity, DISPATCH_MATCH_RELAXED, permutation, &iterator);
 
 	while((nVariants < MAX_COMPILED_SERVICES) && DispatchIteratorNext(&iterator)) {
 		Service const * service = DispatchIteratorPeekService(&iterator);

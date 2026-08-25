@@ -158,7 +158,7 @@ void testDispatchNegatedTerm(void)
 
 /**
  * A query binding a column the B-tree cannot seek on has no service, but under
- * DISPATCH_MATCH_FILTERABLE it matches a service that produces that column instead, which
+ * DISPATCH_MATCH_RELAXED it matches a service that produces that column instead, which
  * the caller reads and filters; see DISPATCH_MATCH_EXACT.
  *
  * The query (list <ID position >INT element <LETTER) binds the element without binding the
@@ -182,7 +182,7 @@ void testDispatchFilterable(void)
 
 	// Filtering finds one, which binds the list and produces the position and the element
 	ASSERT_TRUE(DispatchParameterizedQuery(
-		FormulaGetForm(query), parameters, arity, DISPATCH_MATCH_FILTERABLE, &service,
+		FormulaGetForm(query), parameters, arity, DISPATCH_MATCH_RELAXED, &service,
 		permutation, 0, 0, 0))
 	index8 listIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST);
 	index8 positionIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION);
