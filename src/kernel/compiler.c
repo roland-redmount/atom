@@ -904,7 +904,7 @@ static bool checkParameterTypes(TypedTuple const * querySignature)
  * excepting the term matching the query, indicated by matchedTermIndex.
  *
  * A recursive term of the clause is compiled against the signature of the query, which
- * the query-matched term carries once its parameters are typed; see createQuerySignature().
+ * the query-matched term carries once its parameters are typed.
  */
 static Operator * compileConjunction(
 	CompilationState * state,
@@ -1427,13 +1427,10 @@ static size8 compileQueryVariants(CompilationState * state, FormulaView query, C
 		// clauses are tried against the query signature of each variant, but only
 		// those recursive clauses that match the query signature will yield new variants.
 		
-		// QUESTION: How does this result in new variants? The recursive clause will have the
-		// same query signature as the non-recursive clause that determines that signature,
-		// so they will always form a UNION inside a FIXPOINT, e.g.
-		//   FIXPOINT(UNION(non-recursive(... ), recursive(..., RECURSE)))
-		// Hence we should always get nKnownVariants = nVariants?
-		size8 nKnownVariants = nVariants;
-		for(index8 i = 0; i < nKnownVariants; i++) {
+		// NOTE: each call gives at most one recursive variant, which is combined into the
+		// existing variants as a UNION, so nVariants never changes.
+		size8 nNonRecursiveVariants = nVariants;
+		for(index8 i = 0; i < nNonRecursiveVariants; i++) {
 			setupVariantRelation(&variants[i], query.form, queryTermArity);
 			TypedTuple const * querySignature = variants[i].parameters;
 			nVariants = compileQueryClauses(
@@ -1442,6 +1439,9 @@ static size8 compileQueryVariants(CompilationState * state, FormulaView query, C
 				variants, nVariants
 			);
 		}
+		// Verify that no new variants were added by the recursive pass
+		ASSERT(nVariants == nNonRecursiveVariants)
+
 		for(index8 i = 0; i < nVariants; i++)
 			completeRecursiveVariant(&variants[i], queryTermArity);
 	}
