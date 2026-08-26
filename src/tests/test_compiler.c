@@ -602,6 +602,91 @@ void testCompileRecursiveClosure(void)
 
 
 /**
+ * CLAUDE: The same graph together with a second (prec succ) relation over integers, which
+ * the same rules give a closure of its own. The query names no types, so it compiles one
+ * variant per relation, and the recursive clause has to compile into both of them. A
+ * recursive clause compiled against one variant alone leaves the other its edges only;
+ * see compileQueryVariants().
+ */
+void testCompileRecursiveVariants(void)
+{
+	// The (prec succ) fixture with types {AT_ID, AT_ID}
+	SetupPrecSuccFixture(&precSuccFixture);
+	DictionaryEntry entry1;
+	DictionaryEntry entry2;
+	AddTransitiveClosureRules(&entry1, &entry2);
+
+	// Add a (prec succ) relation with types {AT_INT, AT_INT}
+	Relation const * intRelation = CreateRelation(
+		precSuccFixture.termForm, 2, CreateTypeSignature((byte[]) {AT_INT, AT_INT}, 2));
+	RelationTable * intTable = CreateRelationTable(
+		intRelation, &btreeTableProvider, (index8[]) {0, 1});
+	ReleaseRelation(intRelation);
+	// Add the facts (prec 1 succ 2), (prec 2 succ 3)
+	index8 precIndex = RelationFixtureRoleIndex(&precSuccFixture, "prec");
+	index8 succIndex = RelationFixtureRoleIndex(&precSuccFixture, "succ");
+	Atom intEdges[2][2];
+	for(index8 i = 0; i < 2; i++) {
+		intEdges[i][precIndex] = (Atom) {._int = 1 + i};
+		intEdges[i][succIndex] = (Atom) {._int = 2 + i};
+		RelationTableAddTuple(intTable, intEdges[i], 0);
+	}
+	// The query (before x after y) should now generate a (before after) service
+	// for both the AT_ID and AT_INT versions, seeded by the non-recursive rule
+	// (before x after y <- prec x succ y)
+	Atom queryTerm = CStringToTerm("before x after y");
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(queryTerm, services);
+	ASSERT_UINT32_EQUAL(nServices, 2)
+
+	int64 expectedBefore[3] = {1, 2, 1};
+	int64 expectedAfter[3] = {2, 3, 3};
+	bool foundIntTuple[3] = {false, false, false};
+	size32 nIntTuples = 0;
+	size32 nIdTuples = 0;
+
+	for(index8 i = 0; i < nServices; i++) {
+		bool intService = (services[i].relation->typeSignature.atomTypes[0] == AT_INT);
+		Atom arguments[2];
+		TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
+		void * context = OperatorCreateContext(services[i].op, arguments);
+		while(OperatorCall(context)) {
+			if(!intService) {
+				// we have the AT_ID relation
+				nIdTuples++;
+				continue;
+			}
+			// else we have AT_INT relation
+			Atom before = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "before", 1);
+			Atom after = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "after", 1);
+			for(index8 j = 0; j < 3; j++)
+				foundIntTuple[j] = foundIntTuple[j] || (
+					(before._int == expectedBefore[j]) && (after._int == expectedAfter[j])
+				);
+			nIntTuples++;
+		}
+		OperatorFreeContext(context);
+	}
+
+	// Each variant holds the closure of the relation it was compiled from
+	ASSERT_UINT32_EQUAL(nIdTuples, PREC_SUCC_N_CLOSURE_TUPLES)
+	ASSERT_UINT32_EQUAL(nIntTuples, 3)
+	for(index8 i = 0; i < 3; i++)
+		ASSERT_TRUE(foundIntTuple[i])
+
+	for(index8 i = 0; i < nServices; i++)
+		ServiceRegistryRemove(services[i].relation, services[i].op);
+	ReleaseFormula(queryTerm);
+	for(index8 i = 0; i < 2; i++)
+		RelationTableRemoveTuple(intTable, intEdges[i], 0);
+	DropRelationTable(intTable);
+	DictionaryRemoveClause(&entry2);
+	DictionaryRemoveClause(&entry1);
+	TeardownRelationFixture(&precSuccFixture);
+}
+
+
+/**
  * Compute the query (! even 3) against the rule
  * 
  *   ! even x | ! odd x
@@ -1038,6 +1123,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileRecursiveJoin2);
 	ExecuteTest(testCompileRecursiveReachable);
 	ExecuteTest(testCompileRecursiveClosure);
+	ExecuteTest(testCompileRecursiveVariants);
 	ExecuteTest(testCompileRecursiveTermUnboundInput);
 
 	ExecuteTest(testCompileNegatedTerm);
