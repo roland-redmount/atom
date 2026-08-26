@@ -161,9 +161,7 @@ static void getTermParameters(TypedTuple const * termActors, Atom parameters[])
  * see compileParameterizedQuery()
  *
  * Recursion through a term the same form as the query is a different matter, and is handled by
- * the recursive pass of compileQueryVariants().
- *
- * CLAUDE: that recursive pass now lives in compileQueryClauses().
+ * the recursive pass compileQueryClauses().
  */
 #define MAX_COMPILATION_DEPTH	16
 
