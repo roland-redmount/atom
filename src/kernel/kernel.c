@@ -342,6 +342,7 @@ static RelationTable * createCoreRelationTable(uint32 relationId)
 	);
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeTableProvider, kernel.corePredicateRoleIndex[formId]);
+	table->isCore = true;
 	// the table holds its own reference to the relation
 	ReleaseRelation(relation);
 	return table;

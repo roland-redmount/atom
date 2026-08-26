@@ -524,6 +524,14 @@ void IFactRelease(Atom idAtom)
 		for(index8 i = 0; i < headerCopy.nConjunctions; i++) {
 			IFactConjunction * conjunction = &(headerCopy.conjunctions[i]);
 			removeIFactTuples(conjunction, idAtom);
+			// Drop the relation table if no tuples are left
+
+			// CLAUDE: a core table is kept, as the kernel holds it for the lifetime
+			// of the process; see createCoreRelationTable()
+			if(!conjunction->table->isCore && RelationTableNRows(conjunction->table) == 0) {
+				// NOTE: unclear how to best handle const correctness here
+				DropRelationTable((RelationTable *) conjunction->table);
+			}
 		}
 		LookupRemoveAllRoles(idAtom);
 

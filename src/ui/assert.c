@@ -140,7 +140,6 @@ void RetractFact(FormulaView fact)
 }
 
 
-
 /**
  * Structure for temporary storage of tuples for IFactCreate()
  */
@@ -168,75 +167,104 @@ static int8 compareIFactTuples(void const * item1, void const * item2, size32 it
 	}
 }
 
-
-Atom CreateIFact(FormulaView formula)
+/**
+ * Extract actors and their types from the term actors at element
+ * firstActor ... firstActor + termArity - 1 of the actros tuple.
+ * Return true if the term is valid.
+ */
+static bool extractIFactTuple(
+	TypedTuple const * actors, index8 firstActor, size8 termArity,
+	IFactTuple * ifactTuple, TypeSignature * termSignature)
 {
-	// TODO: handle other cases
-	ASSERT(IsConjunctionForm(formula.form))
+	bool hasGenerator = false;
+	for(index8 i = 0; i < termArity; i++) {
+		TypedAtom actor = TypedTupleGetElement(actors, firstActor + i);
+		if(SameTypedAtoms(actor, generatorAtom)) {
+			if(hasGenerator) {
+				// term contains more than one generator
+				return false;
+			}
+			hasGenerator = true;
+			ifactTuple->idColumn = i;
+			termSignature->atomTypes[i] = AT_ID;
+			ifactTuple->tuple[i] = (Atom) {0};
+		}
+		else {
+			termSignature->atomTypes[i] = actor.type;
+			ifactTuple->tuple[i] = actor.atom;
+		}
+	}
+	// the term is valid if it had a generator
+	return hasGenerator;
+}
 
-	// Iterate over clauses in the formula and gather tuples
-	ResizingArray ifactTupleArray;
-	CreateResizingArray(&ifactTupleArray, sizeof(IFactTuple), 10);
+/**
+ * Iterate over all terms in the formula and gather tuples.
+ */
+static bool collectIFactTuples(FormulaView formula, ResizingArray * ifactTupleArray)
+{
 	MultisetIterator iterator;
 	MultisetIterate(formula.form, AT_ID, &iterator);
 	index8 termActorIndex = 0;
-	size8 nTerms = 0;
-	while(MultisetIteratorNext(&iterator)) {
+	bool formulaIsValid = true;
+	// iterate over clause forms
+	while(formulaIsValid && MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
+		// iterate over clauses
 		for(index8 i = 0; i < elementMultiple.multiple; i++) {
 			// Each clause must have a single term.
 			Atom clauseForm = elementMultiple.element;
 			if(ClauseFormNTerms(clauseForm) != 1) {
-				MultisetIteratorEnd(&iterator);
-				return (Atom) {0};
+				formulaIsValid = false;
+				break;
 			}
 			Atom termForm = MultisetFindElement(clauseForm, AT_ID, 1);
 			size8 termArity = TermFormArity(termForm);
 			ASSERT(termArity <= RELATION_MAX_ARITY)
 			// Each term must contain exactly one generator, marking the identified atom.
-			// 
 			IFactTuple ifactTuple;
-			bool hasGenerator = false;
 			TypeSignature termSignature;
-			for(index8 j = 0; j < termArity; j++) {
-				TypedAtom actor = TypedTupleGetElement(formula.actors, termActorIndex + j);
-				if(SameTypedAtoms(actor, generatorAtom)) {
-					if(hasGenerator) {
-						// term contains more than one generator, not a valid ifact
-						MultisetIteratorEnd(&iterator);
-						return (Atom) {0};
-					}
-					hasGenerator = true;
-					ifactTuple.idColumn = j;
-					termSignature.atomTypes[j] = AT_ID;
-				}
-				else {
-					termSignature.atomTypes[j] = actor.type;
-					ifactTuple.tuple[j] = actor.atom;
-				}
-			}
-			if(!hasGenerator) {
-				// term contains no generator, not a valid ifact
-				MultisetIteratorEnd(&iterator);
-				return (Atom) {0};
+			if(!extractIFactTuple(formula.actors, termActorIndex, termArity, &ifactTuple, &termSignature)) {
+				formulaIsValid = false;
+				break;
 			}
 			ifactTuple.relation = FindOrCreateRelation(termForm, termArity, termSignature);
-			ResizingArrayAppend(&ifactTupleArray, &ifactTuple);
+			ResizingArrayAppend(ifactTupleArray, &ifactTuple);
 			termActorIndex += termArity;
-			nTerms++;
 		}
 	}
 	MultisetIteratorEnd(&iterator);
-	ASSERT(termActorIndex == formula.actors->nAtoms)
+	return formulaIsValid;
+}
+
+
+Atom CreateIFact(FormulaView formula)
+{
+	// TODO: handle other cases
+	ASSERT(IsConjunctionForm(formula.form))
+	Atom idAtom = {0};
+
+	// collect tuples from terms
+	ResizingArray ifactTupleArray;
+	CreateResizingArray(&ifactTupleArray, sizeof(IFactTuple), 10);
+	if(!collectIFactTuples(formula, &ifactTupleArray)) {
+		// CLAUDE: release the relations gathered before the formula turned out to be invalid
+		IFactTuple const * gatheredTuples = ResizingArrayGetMemory(&ifactTupleArray);
+		for(index32 i = 0; i < ifactTupleArray.nElements; i++)
+			ReleaseRelation(gatheredTuples[i].relation);
+		FreeResizingArray(&ifactTupleArray);
+		return (Atom) {0};
+	}
 
 	// Sort tuples by relation before creating conjunctions
 	IFactTuple * ifactTuples = ResizingArrayGetMemory(&ifactTupleArray);
-	QuickSort(ifactTuples, nTerms, sizeof(IFactTuple), &compareIFactTuples);
+	size8 nTuples = ifactTupleArray.nElements;
+	QuickSort(ifactTuples, nTuples, sizeof(IFactTuple), &compareIFactTuples);
 
 	// Create the ifact
 	IFactDraft draft;
 	IFactBegin(&draft);
-	for(index32 i = 0; i < nTerms; i++) {
+	for(index32 i = 0; i < nTuples; i++) {
 		if(i == 0 || ifactTuples[i].relation != ifactTuples[i-1].relation) {
 			// new relation
 			if(i > 0)
@@ -246,13 +274,14 @@ Atom CreateIFact(FormulaView formula)
 				// create new relation table, use B-tree provider as default
 				table = CreateRelationTable(ifactTuples[i].relation, &btreeTableProvider, 0);
 			}
-			ReleaseRelation(ifactTuples[i].relation);
 			IFactBeginConjunction(&draft, table, ifactTuples[i].idColumn);
 		}
 		IFactAddTuple(&draft, ifactTuples[i].tuple);
+		ReleaseRelation(ifactTuples[i].relation);	// each tuple holds a reference
 	}
 	IFactEndConjunction(&draft);
-	Atom idAtom = IFactEnd(&draft);
+	idAtom = IFactEnd(&draft);
+
 	FreeResizingArray(&ifactTupleArray);
 	return idAtom;
 }

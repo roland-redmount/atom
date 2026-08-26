@@ -106,6 +106,12 @@ struct s_RelationTable {
 	index8 * indexColumns;
 	RelationTableProvider const * provider;
 	void * storage;	// any implementation-dependent storage data
+
+	/* TEMPORARY: Whether the kernel owns this table for the lifetime of the process.
+	   This is required for the (list) and (string) tables, which are now "core tables",
+	   the kernel creates them once and hands out the same pointer from GetCoreRelationTable() thereafter. 
+	   We should move list and string out of the kernel, then this can be dropped. */
+	bool isCore;
 	// One reference per machine operator reading this table, plus the creation reference
 	// that DropRelationTable() releases.
 	size32 referenceCount;

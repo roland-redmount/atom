@@ -3,7 +3,10 @@
  */
 
 #include "kernel/dictionary.h"
+#include "kernel/ifact.h"
 #include "kernel/kernel.h"
+#include "kernel/letter.h"
+#include "kernel/list.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
 #include "kernel/RelationTableRegistry.h"
@@ -206,6 +209,159 @@ void testAssertFormulaRejects(void)
 }
 
 
+/**
+ * A conjunction of terms sharing one generator (*) defines an atom. The terms here are
+ * the ones a list is built from, so the atom CreateIFact() returns is the list ('A 'B),
+ * and CreateListFromArray() yields that same atom.
+ */
+void testCreateIFactList(void)
+{
+	RelationTable const * listLetter = GetCoreRelationTable(RELATION_LIST_LETTER);
+	RelationTable const * listLength = GetCoreRelationTable(RELATION_LIST_LENGTH);
+	size32 listLetterNRows = RelationTableNRows(listLetter);
+	size32 listLengthNRows = RelationTableNRows(listLength);
+
+	Atom formula = CStringToConjunction(
+		"list * position 1 element 'A & list * position 2 element 'B & list * length 2");
+	Atom ifact = CreateIFact(FormulaGetView(formula));
+	ASSERT_TRUE(ifact.hash != 0)
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
+
+	// One defining fact per term, in the two relations the terms name
+	ASSERT_UINT32_EQUAL(RelationTableNRows(listLetter), listLetterNRows + 2)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows + 1)
+
+	// The defining facts are those of the list ('A 'B), so the atom is that list
+	ASSERT_UINT32_EQUAL(ListLength(ifact), 2)
+	ASSERT_DATA64_EQUAL(ListGetElement(ifact, 1).hash, GetAlphabetLetter('A').hash)
+	ASSERT_DATA64_EQUAL(ListGetElement(ifact, 2).hash, GetAlphabetLetter('B').hash)
+
+	// Creating that list finds the atom already there, and adds no facts
+	Atom list = CreateListFromArray(
+		(Atom[]) {GetAlphabetLetter('A'), GetAlphabetLetter('B')}, AT_LETTER, 2);
+	ASSERT_DATA64_EQUAL(list.hash, ifact.hash)
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 2)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(listLetter), listLetterNRows + 2)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows + 1)
+
+	// Releasing the last reference retracts the defining facts
+	IFactRelease(list);
+	IFactRelease(ifact);
+	ASSERT_UINT32_EQUAL(RelationTableNRows(listLetter), listLetterNRows)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows)
+
+	ReleaseFormula(formula);
+}
+
+
+/**
+ * A conjunction whose terms name relations that do not exist beforehand.
+ * Each relation and its table are created to hold the defining facts.
+ */
+void testCreateIFactNewRelations(void)
+{
+	Atom formula = CStringToConjunction("colour * name \"red\" & colour * code 4");
+	Atom ifact = CreateIFact(FormulaGetView(formula));
+	ASSERT_TRUE(ifact.hash != 0)
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
+
+	IFactRelease(ifact);
+	ReleaseFormula(formula);
+}
+
+
+/**
+ * The same formula a second time yields the atom already defined by those facts,
+ * and adds no facts.
+ */
+void testCreateIFactExisting(void)
+{
+	RelationTable const * listLength = GetCoreRelationTable(RELATION_LIST_LENGTH);
+	size32 listLengthNRows = RelationTableNRows(listLength);
+
+	Atom formula = CStringToConjunction("list * position 1 element 'C & list * length 1");
+	Atom ifact = CreateIFact(FormulaGetView(formula));
+	ASSERT_TRUE(ifact.hash != 0)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows + 1)
+
+	Atom sameIFact = CreateIFact(FormulaGetView(formula));
+	ASSERT_DATA64_EQUAL(sameIFact.hash, ifact.hash)
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 2)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows + 1)
+
+	IFactRelease(sameIFact);
+	IFactRelease(ifact);
+	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows)
+	ReleaseFormula(formula);
+}
+
+
+/**
+ * A defining fact cannot be retracted; only releasing the atom it defines removes it.
+ */
+void testCreateIFactDefiningFactsProtected(void)
+{
+	RelationTable const * listLength = GetCoreRelationTable(RELATION_LIST_LENGTH);
+	size32 listLengthNRows = RelationTableNRows(listLength);
+
+	Atom formula = CStringToConjunction("list * position 1 element 'D & list * length 1");
+	FormulaView formulaView = FormulaGetView(formula);
+	Atom ifact = CreateIFact(formulaView);
+	ASSERT_TRUE(ifact.hash != 0)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows + 1)
+
+	// Build the (list length) term the ifact defines, by putting the identified atom
+	// where the generator stands. The conjunction holds the actors of both its terms,
+	// so the length term is found by its own form.
+	Atom lengthTerm = CStringToTerm("list \"x\" length 1");
+	size8 arity = FormulaGetActors(lengthTerm)->nAtoms;
+	TypedTuple * actors = CreateTypedTuple(arity);
+	for(index8 i = 0; i < arity; i++) {
+		TypedAtom actor = TypedTupleGetElement(formulaView.actors, formulaView.actors->nAtoms - arity + i);
+		TypedTupleSetElement(
+			actors, i,
+			SameTypedAtoms(actor, generatorAtom) ? CreateTypedAtom(AT_ID, ifact) : actor);
+	}
+	Atom definingFact = CreateFormula(FormulaGetForm(lengthTerm), actors);
+	FreeTypedTuple(actors);
+	ReleaseFormula(lengthTerm);
+
+	// Retracting it leaves it in place
+	RetractFact(FormulaGetView(definingFact));
+	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows + 1)
+
+	// Releasing the atom removes it. The defining fact formula holds a reference
+	// to the atom it names, so that formula goes first.
+	ReleaseFormula(definingFact);
+	IFactRelease(ifact);
+	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows)
+
+	ReleaseFormula(formula);
+}
+
+
+/**
+ * A formula that does not define an atom yields the zero atom.
+ */
+void testCreateIFactRejects(void)
+{
+	// a term with no generator says nothing about the atom being defined
+	Atom noGenerator = CStringToConjunction("list * length 1 & foo 1 bar 2");
+	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(noGenerator)).hash, 0)
+	ReleaseFormula(noGenerator);
+
+	// two generators in one term leave it unclear which one is being defined
+	Atom twoGenerators = CStringToConjunction("list * length 1 & foo * bar *");
+	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(twoGenerators)).hash, 0)
+	ReleaseFormula(twoGenerators);
+
+	// a clause of two terms is a disjunction, which defines nothing
+	Atom disjunction = CStringToConjunction("list * length 1 & foo * bar 1 | baz * qux 2");
+	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(disjunction)).hash, 0)
+	ReleaseFormula(disjunction);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
@@ -216,6 +372,11 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertFormulaFact);
 	ExecuteTest(testAssertFormulaRule);
 	ExecuteTest(testAssertFormulaRejects);
+	ExecuteTest(testCreateIFactList);
+	ExecuteTest(testCreateIFactNewRelations);
+	ExecuteTest(testCreateIFactExisting);
+	ExecuteTest(testCreateIFactDefiningFactsProtected);
+	ExecuteTest(testCreateIFactRejects);
 
 	KernelShutdown();
 
