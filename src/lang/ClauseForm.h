@@ -30,11 +30,6 @@ size8 ClauseFormNTerms(Atom clauseForm);
 size8 ClauseArity(Atom clauseForm);
 
 /**
- * Get the k'th term form in this clause form, by canonical ordering.
- */
-Atom ClauseFormGetTermForm(Atom clauseForm, index8 k);
-
-/**
  * Print a clause form to stdout
  */
 void PrintClauseForm(Atom clauseForm);

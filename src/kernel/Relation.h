@@ -98,6 +98,11 @@ Relation const * CreateRelationBootstrap(
 Relation const * FindOrCreateRelation(Atom termForm, size8 nColumns, TypeSignature typeSignature);
 
 /**
+ * Ordering of two relations
+ */
+int8 CompareRelations(Relation const * relation, Relation const * relationOrKey);
+
+/**
  * Acquire a reference to a relation.
  */
 void AcquireRelation(Relation const * relation);

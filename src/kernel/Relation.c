@@ -50,6 +50,23 @@ Relation const * CreateRelation(Atom termForm, size8 nColumns, TypeSignature typ
 }
 
 
+int8 CompareRelations(Relation const * relation, Relation const * relationOrKey)
+{
+	// First compare forms
+	if(relation->termForm.hash < relationOrKey->termForm.hash)
+		return -1;
+	else if(relation->termForm.hash > relationOrKey->termForm.hash)
+		return 1;
+	else {
+		// then compare atom types
+		if(!relationOrKey->typeSignature.atomTypes[0])
+			return 0;
+		return CompareMemory(
+			relation->typeSignature.atomTypes, relationOrKey->typeSignature.atomTypes, relation->nColumns);
+	}
+}
+
+
 Relation const * FindOrCreateRelation(Atom termForm, size8 nColumns, TypeSignature typeSignature)
 {
 	Relation const * relation = RelationRegistryFind(termForm, nColumns, typeSignature);

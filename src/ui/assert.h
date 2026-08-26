@@ -45,6 +45,11 @@ int AssertFormula(Atom formula);
  */
 void RetractFact(FormulaView fact);
 
+/**
+ * High level function to create an IFact from a formula containing
+ * one of more generator (*) atoms.
+ */
+Atom CreateIFact(FormulaView formula);
 
 
 #endif	// ASSERT_H

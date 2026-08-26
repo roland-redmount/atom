@@ -3,16 +3,18 @@
 #include "kernel/dispatch.h"
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
+#include "kernel/multiset.h"
 #include "kernel/Relation.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
 #include "kernel/RelationTableRegistry.h"
 #include "lang/ClauseForm.h"
+#include "lang/ConjunctionForm.h"
 #include "lang/TermForm.h"
+#include "storage/RelationBTree.h"
 #include "ui/assert.h"
 #include "ui/query.h"
-#include "storage/RelationBTree.h"
-
+#include "util/ResizingArray.h"
 
 /**
  * Test whether the given term interpreted as a fact contradicts the current knowledgebase,
@@ -48,11 +50,6 @@ int AssertFact(FormulaView fact, RelationTableProvider const * provider)
 {
 	ASSERT(IsTermForm(fact.form));
 	ASSERT(!TypedTupleContainsVariable(fact.actors));
-
-	if(TypedTupleContainsAtom(fact.actors, generatorAtom)) {
-		// TODO: create an ifact
-		ASSERT(false)
-	}
 	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
 
 	if(checkContradiction(fact))
@@ -79,13 +76,13 @@ int AssertFact(FormulaView fact, RelationTableProvider const * provider)
 /**
  * Add a clause to the rule dictionary.
  */
-static int assertRule(Atom clause, FormulaView view)
+static int assertRule(Atom clause, FormulaView clauseView)
 {
 	// A rule must have at least two terms
-	if(ClauseFormNTerms(view.form) < 2)
+	if(ClauseFormNTerms(clauseView.form) < 2)
 		return ASSERT_CLAUSE_ONE_TERM;
 	//  A clause with no variable is a disjunction of facts, not a rule
-	if(!TypedTupleContainsVariable(view.actors))
+	if(!TypedTupleContainsVariable(clauseView.actors))
 		return ASSERT_CLAUSE_NO_VARIABLE;
 
 	if(DictionaryContainsClause(clause))
@@ -97,17 +94,24 @@ static int assertRule(Atom clause, FormulaView view)
 
 int AssertFormula(Atom formula)
 {
-	FormulaView view = FormulaGetView(formula);
+	FormulaView formulaView = FormulaGetView(formula);
+
+	// Any formula that contains a generator (*) is a defining fact
+	if(TypedTupleContainsAtom(formulaView.actors, generatorAtom)) {
+		// TODO: create an ifact
+		ASSERT(false)
+	}
 
 	if(FormulaIsTerm(formula)) {
-		if(TypedTupleContainsVariable(view.actors))
+		// A term is interpreted as a fact, and may not contain variables
+		if(TypedTupleContainsVariable(formulaView.actors))
 			return ASSERT_TERM_VARIABLE;
-		// use default storage provider
-		return AssertFact(view, 0);
+		// Assert the fact, use default storage provider
+		return AssertFact(formulaView, 0);
 	}
 
 	if(FormulaIsClause(formula))
-		return assertRule(formula, view);
+		return assertRule(formula, formulaView);
 
 	return ASSERT_NOT_CLAUSE;
 }
@@ -133,4 +137,122 @@ void RetractFact(FormulaView fact)
 	if(RelationTableNRows(table) == 0) {
 		DropRelationTable(table);
 	}
+}
+
+
+
+/**
+ * Structure for temporary storage of tuples for IFactCreate()
+ */
+typedef struct s_IFactTuple {
+	Relation const * relation;
+	index8 idColumn;
+	Atom tuple[RELATION_MAX_ARITY];
+} IFactTuple;
+
+
+static int8 compareIFactTuples(void const * item1, void const * item2, size32 itemSize)
+{
+	IFactTuple const * tuple1 = item1;
+	IFactTuple const * tuple2 = item2;
+	int8 relationOrder = CompareRelations(tuple1->relation, tuple2->relation);
+	if(relationOrder != 0)
+		return relationOrder;
+	else {
+		if(tuple1->idColumn < tuple2->idColumn)
+			return -1;
+		else if(tuple1->idColumn > tuple2->idColumn)
+			return 1;
+		else
+			return 0;
+	}
+}
+
+
+Atom CreateIFact(FormulaView formula)
+{
+	// TODO: handle other cases
+	ASSERT(IsConjunctionForm(formula.form))
+
+	// Iterate over clauses in the formula and gather tuples
+	ResizingArray ifactTupleArray;
+	CreateResizingArray(&ifactTupleArray, sizeof(IFactTuple), 10);
+	MultisetIterator iterator;
+	MultisetIterate(formula.form, AT_ID, &iterator);
+	index8 termActorIndex = 0;
+	size8 nTerms = 0;
+	while(MultisetIteratorNext(&iterator)) {
+		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
+		for(index8 i = 0; i < elementMultiple.multiple; i++) {
+			// Each clause must have a single term.
+			Atom clauseForm = elementMultiple.element;
+			if(ClauseFormNTerms(clauseForm) != 1) {
+				MultisetIteratorEnd(&iterator);
+				return (Atom) {0};
+			}
+			Atom termForm = MultisetFindElement(clauseForm, AT_ID, 1);
+			size8 termArity = TermFormArity(termForm);
+			ASSERT(termArity <= RELATION_MAX_ARITY)
+			// Each term must contain exactly one generator, marking the identified atom.
+			// 
+			IFactTuple ifactTuple;
+			bool hasGenerator = false;
+			TypeSignature termSignature;
+			for(index8 j = 0; j < termArity; j++) {
+				TypedAtom actor = TypedTupleGetElement(formula.actors, termActorIndex + j);
+				if(SameTypedAtoms(actor, generatorAtom)) {
+					if(hasGenerator) {
+						// term contains more than one generator, not a valid ifact
+						MultisetIteratorEnd(&iterator);
+						return (Atom) {0};
+					}
+					hasGenerator = true;
+					ifactTuple.idColumn = j;
+					termSignature.atomTypes[j] = AT_ID;
+				}
+				else {
+					termSignature.atomTypes[j] = actor.type;
+					ifactTuple.tuple[j] = actor.atom;
+				}
+			}
+			if(!hasGenerator) {
+				// term contains no generator, not a valid ifact
+				MultisetIteratorEnd(&iterator);
+				return (Atom) {0};
+			}
+			ifactTuple.relation = FindOrCreateRelation(termForm, termArity, termSignature);
+			ResizingArrayAppend(&ifactTupleArray, &ifactTuple);
+			termActorIndex += termArity;
+			nTerms++;
+		}
+	}
+	MultisetIteratorEnd(&iterator);
+	ASSERT(termActorIndex == formula.actors->nAtoms)
+
+	// Sort tuples by relation before creating conjunctions
+	IFactTuple * ifactTuples = ResizingArrayGetMemory(&ifactTupleArray);
+	QuickSort(ifactTuples, nTerms, sizeof(IFactTuple), &compareIFactTuples);
+
+	// Create the ifact
+	IFactDraft draft;
+	IFactBegin(&draft);
+	for(index32 i = 0; i < nTerms; i++) {
+		if(i == 0 || ifactTuples[i].relation != ifactTuples[i-1].relation) {
+			// new relation
+			if(i > 0)
+				IFactEndConjunction(&draft);
+			RelationTable * table = RelationTableRegistryFind(ifactTuples[i].relation);
+			if(!table) {
+				// create new relation table, use B-tree provider as default
+				table = CreateRelationTable(ifactTuples[i].relation, &btreeTableProvider, 0);
+			}
+			ReleaseRelation(ifactTuples[i].relation);
+			IFactBeginConjunction(&draft, table, ifactTuples[i].idColumn);
+		}
+		IFactAddTuple(&draft, ifactTuples[i].tuple);
+	}
+	IFactEndConjunction(&draft);
+	Atom idAtom = IFactEnd(&draft);
+	FreeResizingArray(&ifactTupleArray);
+	return idAtom;
 }
