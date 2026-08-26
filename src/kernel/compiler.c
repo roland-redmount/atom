@@ -16,6 +16,7 @@
 #include "lang/Variable.h"
 #include "lang/unification.h"
 #include "memory/allocator.h"
+#include "util/ResizingArray.h"
 
 
 /**
@@ -116,17 +117,15 @@ static bool nextChoiceBranch(ChoiceTree * choiceTree)
 
 
 /**
- * Generalize the actors of a term to its signature, which is what dispatch matches: a
- * parameter stands for itself, and a constant for an input parameter of the constant's own
- * type, which is all a constant asks of a service. The number given to a constant is above
- * every number the term uses, so that it constrains nothing to be equal to it.
- *
- * The parameters array must hold as many atoms as the term has actors. Actors of a term
- * are parameters and constants only, every variable of the clause having been given a
- * parameter by parameterizeLocalVariables().
+ * Generalize the actors of a term termActors tuple to parameters. The termActors
+ * tuple may not contain variables (AT_VARIABLE). Parameters in the termActors tuple
+ * are copied directly to the parameters[] array; any non-parameter atom is considered
+ * a constant and is given the next consecutive parameter number.
+ * The parameters array must hold as many atoms as the term has actors.
  */
 static void getTermParameters(TypedTuple const * termActors, Atom parameters[])
 {
+	// Find the next parameter number after to the highest parameter number in termActors
 	uint8 nextNumber = 1;
 	for(index8 i = 0; i < termActors->nAtoms; i++) {
 		TypedAtom actor = TypedTupleGetElement(termActors, i);
@@ -136,10 +135,12 @@ static void getTermParameters(TypedTuple const * termActors, Atom parameters[])
 	}
 	for(index8 i = 0; i < termActors->nAtoms; i++) {
 		TypedAtom actor = TypedTupleGetElement(termActors, i);
-		if(actor.type == AT_PARAMETER)
+		if(actor.type == AT_PARAMETER) {
+			// copy parameters as is
 			parameters[i] = actor.atom;
+		}
 		else {
-			// a parameter number is a uint8, which a term arity cannot exhaust
+			// actor is a constant; assign it the next consecutive parameter number
 			ASSERT(nextNumber < 255)
 			parameters[i] = (Atom) {
 				.parameter = {
@@ -161,6 +162,8 @@ static void getTermParameters(TypedTuple const * termActors, Atom parameters[])
  *
  * Recursion through a term the same form as the query is a different matter, and is handled by
  * the recursive pass of compileQueryVariants().
+ *
+ * CLAUDE: that recursive pass now lives in compileQueryClauses().
  */
 #define MAX_COMPILATION_DEPTH	16
 
@@ -1136,47 +1139,39 @@ static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
 
 
 /**
- * Find all clauses (rules) that match the given query term and compile them,
- * producing one or more CompiledVariant.
- * The query.actors tuple must be a series of AT_PARAMETER atoms numbered 1, 2, ...
- * and is not modified; each compiled variant carries its own resolved parameters.
- *
- * Recursive terms are compiled when pass = RECURSIVE_PASS, in which case all parameters
- * in query.actors must have specified types, so that the recursive term is well-defined.
- * If pass = NON_RECURSIVE_PASS, only non-recursive terms are compiled, and query.actors may
- * contain parameters with unknown type.
- * 
- * If multiple clauses resolve to the same signature, they are are combined with a UNION operator.
- * Appends the new compiled variants to the variants array and returns the new number of variants
- * in the array.
- * 
- * foundRecursiveClause is set to true if any matched clause was recursive.
+ * Set the relation (signature) for a CompiledVariant for the given query term form,
+ * creating one if needed. Does nothing if the variant relation already is set.
  */
-
-#define NON_RECURSIVE_PASS	1
-#define RECURSIVE_PASS		2
-
-static size8 compileQueryClauses(
-	CompilationState * state, FormulaView query, int pass, bool * foundRecursiveClause,
-	CompiledVariant variants[], size8 nVariants)
+static void setupVariantRelation(
+	CompiledVariant * variant, Atom queryTermForm, size8 arity)
 {
-	size8 queryTermArity = TermFormArity(query.form);
-	*foundRecursiveClause = false;
+	if(variant->relation)
+		return;
+	variant->relation = FindOrCreateRelation(
+		queryTermForm, arity, getVariantTypeSignature(variant));
+}
 
-	/**
-	 * To find rules (clauses) c that contains a matching term form,
-	 * we query (multiset c element @term-form multiple m),
-	 *
-	 * If multiple rules match, we generate a UNION of
-	 * the resulting services. The first clause that yields a service
-	 * will determine the query parameter types; all other clauses must
-	 * then yield services with those same types.
-	 *
- 	 * TODO: it might happen that a generated UNION service has the same
-	 * signature as an existing service, which becomes part of the UNION.
-	 * In this case, the newly generated service should replace the existing one.
-	 */
 
+/**
+ * A record of a clause form that the query term form occurs in, as collected by
+ * findMatchingClauseForms().
+ */
+typedef struct QueryClauseMatch {
+	// The matched clause form
+	Atom clauseForm;
+	// Multiple of the query term form in the clause form
+	size8 termMultiple;
+	// Whether the clause is recursive for the query; see isRecursiveClauseForm()
+	bool recursive;
+} QueryClauseMatch;
+
+
+/**
+ * Collect every clause form that the given query term form occurs in, appending one
+ * QueryClauseMatch for each matched clause to the given array.
+ */
+static void findMatchingClauseForms(Atom queryTermForm, ResizingArray * queryClauseMatches)
+{
 	/**
 	 * TODO: here we need the service (multiset >ID element <ID multiple >INT) where element is input
 	 * Since the element role is not a leading column, RelationBTree does not support this.
@@ -1191,121 +1186,188 @@ static size8 compileQueryClauses(
 	while(OperatorCall(multisetContext)) {
 		Atom termForm = multisetQueryTuple[
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
-		if(!SameAtoms(termForm, query.form))
+		if(!SameAtoms(termForm, queryTermForm))
 			continue;
 		// Found a multiset where the term form occurs
 		Atom clauseForm = multisetQueryTuple[
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)];
-		size8 multiple = multisetQueryTuple[
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)]._int;
 		// Ensure the multiset is a clause form
 		if(!IsClauseForm(clauseForm))
 			continue;
 
-		// If the clause is recursive, we report this to the caller in foundRecursiveClause.
-		bool recursiveClauseForm = isRecursiveClauseForm(clauseForm, query.form);
-		if(recursiveClauseForm)
-			*foundRecursiveClause = true;
-		// Compile only recursive clauses in the RECURSIVE_PASS, and only non-recursive ones
-		// in the NON_RECURSIVE_PASS
-		if(recursiveClauseForm != (pass == RECURSIVE_PASS))
-			continue;
-
-		// Iterate over all rules (clauses) with this clause form.
-		DictionaryIterator dictIterator;
-		DictionaryIterate(clauseForm, &dictIterator);
-		TypedTuple * matchedTermActors = CreateTypedTuple(queryTermArity);
-		TypedTuple * substClauseActors = CreateTypedTuple(ClauseArity(clauseForm));
-		TypedTuple * resolvedParameters = CreateTypedTuple(queryTermArity);
-		while(DictionaryIteratorNext(&dictIterator)) {
-			TypedTuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
-#ifdef DEBUG_COMPILER
-			PrintCString("Matched rule: ");
-			PrintFormActorsAsFormula(clauseForm, clauseActors);
-			PrintChar('\n');
-#endif
-
-			// Iterate over all occurences of the query term in the matched clause
-			// and find one that unifies, if any.
-			index8 matchedTermActorsIndex = ClauseGetTermActorsIndex(clauseForm, query.form, 1);
-			bool foundTerm = false;
-			for(index8 m = 1; !foundTerm && (m <= multiple); m++) {
-				// extract actors for the matching term in the clause
-				TypedTupleCopyAt(clauseActors, matchedTermActorsIndex, matchedTermActors);
-				// unify the query with the matched term
-				Substitution querySubst;
-				Substitution matchedTermSubst;
-				foundTerm = UnifyTuples(query.actors, matchedTermActors, &querySubst, &matchedTermSubst);
-				if(foundTerm) {
-					index8 matchedTermIndex = ClauseGetTermIndex(clauseForm, query.form, m);
-					// Compile once per combination of choices. A term that leaves
-					// an output parameter untyped may match several services, each
-					// yielding a differently typed variant of the query service.
-					ChoiceTree choiceTree;
-					resetChoiceTree(&choiceTree);
-					do {
-						// compileConjunction() updates parameter types in the clause
-						// actors, so re-derive them for each branch.
-						SubstituteTuple(&matchedTermSubst, clauseActors, substClauseActors);
-#ifdef DEBUG_COMPILER
-						PrintCString("Unified rule: ");
-						PrintFormActorsAsFormula(clauseForm, substClauseActors);
-						PrintChar('\n');
-#endif
-						Operator * newService = compileConjunction(
-							state, clauseForm, substClauseActors, matchedTermIndex, query.form,
-							queryTermArity, &choiceTree);
-						if(!newService)
-							continue;
-						// Recover the unified parameters from the clause actors
-						TypedTupleCopyAt(substClauseActors, matchedTermActorsIndex, resolvedParameters);
-						// Check for previously compiled service with the same signature
-						CompiledVariant * variant = findVariant(variants, nVariants, resolvedParameters);
-						if(variant) {
-							// Another clause yielded the same signature: union them
-							variant->op = unionOperators(variant->op, newService);
-						}
-						else {
-							// add compiled variant of this clause
-							ASSERT(nVariants < MAX_COMPILED_SERVICES)
-							variant = &(variants[nVariants++]);
-							SetMemory(variant, sizeof(CompiledVariant), 0);
-							variant->parameters = CreateTypedTuple(queryTermArity);
-							TypedTupleCopy(resolvedParameters, variant->parameters);
-							variant->op = newService;
-						}
-						// A variant a recursive clause compiled into needs a fixpoint
-						// operator to derive it
-						variant->isRecursive = variant->isRecursive || recursiveClauseForm;
-					} while(nextChoiceBranch(&choiceTree));
-				}
-				FreeSubstitution(&querySubst);
-				FreeSubstitution(&matchedTermSubst);
-				matchedTermActorsIndex += queryTermArity;
-			}
-		}
-		DictionaryIteratorEnd(&dictIterator);
-		FreeTypedTuple(resolvedParameters);
-		FreeTypedTuple(substClauseActors);
-		FreeTypedTuple(matchedTermActors);
+		QueryClauseMatch matchedClauseForm = {
+			.clauseForm = clauseForm,
+			.termMultiple = multisetQueryTuple[
+				CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)]._int,
+			.recursive = isRecursiveClauseForm(clauseForm, queryTermForm)
+		};
+		ResizingArrayAppend(queryClauseMatches, &matchedClauseForm);
 	}
 	OperatorFreeContext(multisetContext);
-
-	return nVariants;
 }
 
 
 /**
- * Set the relation (signature) for a CompiledVariant for the given query term form,
- * creating one if needed. Does nothing if the variant relation already is set.
+ * Compile every rule (clause) of the given clause form that unifies with the query.
+ * 
+ * The query.actors tuple must be a series of AT_PARAMETER atoms numbered 1, 2, ...
+ * and is not modified; each compiled variant carries its own resolved parameters.
+ *
+ * Recursive terms are compiled only when all parameters in query.actors have specified types,
+ * so that the recursive term is well-defined.
+ * 
+ * If multiple clauses resolve to the same signature, they are are combined with a UNION operator.
+ * Appends the new compiled variants to the variants array and returns the new number of variants
+ * in the array.
+ * 
+ * Appends the new compiled variants to the variants array and returns the new
+ * number of variants in the array.
  */
-static void setupVariantRelation(
-	CompiledVariant * variant, Atom queryTermForm, size8 arity)
+static size8 compileClauseFormRules(
+	CompilationState * state, FormulaView query, QueryClauseMatch const * queryClauseMatch,
+	CompiledVariant variants[], size8 nVariants)
 {
-	if(variant->relation)
-		return;
-	variant->relation = FindOrCreateRelation(
-		queryTermForm, arity, getVariantTypeSignature(variant));
+	size8 queryTermArity = TermFormArity(query.form);
+	Atom clauseForm = queryClauseMatch->clauseForm;
+
+	// Iterate over all rules (clauses) with this clause form.
+	DictionaryIterator dictIterator;
+	DictionaryIterate(clauseForm, &dictIterator);
+	TypedTuple * matchedTermActors = CreateTypedTuple(queryTermArity);
+	TypedTuple * substClauseActors = CreateTypedTuple(ClauseArity(clauseForm));
+	TypedTuple * resolvedParameters = CreateTypedTuple(queryTermArity);
+	while(DictionaryIteratorNext(&dictIterator)) {
+		TypedTuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
+#ifdef DEBUG_COMPILER
+		PrintCString("Matched rule: ");
+		PrintFormActorsAsFormula(clauseForm, clauseActors);
+		PrintChar('\n');
+#endif
+
+		// Iterate over all occurences of the query term in the matched clause
+		// and find one that unifies, if any.
+		index8 matchedTermActorsIndex = ClauseGetTermActorsIndex(clauseForm, query.form, 1);
+		bool foundTerm = false;
+		for(index8 m = 1; !foundTerm && (m <= queryClauseMatch->termMultiple); m++) {
+			// extract actors for the matching term in the clause
+			TypedTupleCopyAt(clauseActors, matchedTermActorsIndex, matchedTermActors);
+			// unify the query with the matched term
+			Substitution querySubst;
+			Substitution matchedTermSubst;
+			foundTerm = UnifyTuples(query.actors, matchedTermActors, &querySubst, &matchedTermSubst);
+			if(foundTerm) {
+				index8 matchedTermIndex = ClauseGetTermIndex(clauseForm, query.form, m);
+				// Compile once per combination of choices. A term that leaves
+				// an output parameter untyped may match several services, each
+				// yielding a differently typed variant of the query service.
+				ChoiceTree choiceTree;
+				resetChoiceTree(&choiceTree);
+				do {
+					// compileConjunction() updates parameter types in the clause
+					// actors, so re-derive them for each branch.
+					SubstituteTuple(&matchedTermSubst, clauseActors, substClauseActors);
+#ifdef DEBUG_COMPILER
+					PrintCString("Unified rule: ");
+					PrintFormActorsAsFormula(clauseForm, substClauseActors);
+					PrintChar('\n');
+#endif
+					Operator * newService = compileConjunction(
+						state, clauseForm, substClauseActors, matchedTermIndex, query.form,
+						queryTermArity, &choiceTree);
+					if(!newService)
+						continue;
+					// Recover the unified parameters from the clause actors
+					TypedTupleCopyAt(substClauseActors, matchedTermActorsIndex, resolvedParameters);
+					// Check for previously compiled service with the same signature
+					CompiledVariant * variant = findVariant(variants, nVariants, resolvedParameters);
+					if(variant) {
+						// Another clause yielded the same signature: union them
+						variant->op = unionOperators(variant->op, newService);
+					}
+					else {
+						// add compiled variant of this clause
+						ASSERT(nVariants < MAX_COMPILED_SERVICES)
+						variant = &(variants[nVariants++]);
+						SetMemory(variant, sizeof(CompiledVariant), 0);
+						variant->parameters = CreateTypedTuple(queryTermArity);
+						TypedTupleCopy(resolvedParameters, variant->parameters);
+						variant->op = newService;
+					}
+					// A variant a recursive clause compiled into needs a fixpoint
+					// operator to derive it
+					variant->isRecursive = variant->isRecursive || queryClauseMatch->recursive;
+				} while(nextChoiceBranch(&choiceTree));
+			}
+			FreeSubstitution(&querySubst);
+			FreeSubstitution(&matchedTermSubst);
+			matchedTermActorsIndex += queryTermArity;
+		}
+	}
+	DictionaryIteratorEnd(&dictIterator);
+	FreeTypedTuple(resolvedParameters);
+	FreeTypedTuple(substClauseActors);
+	FreeTypedTuple(matchedTermActors);
+
+	return nVariants;
+}
+
+/**
+ * Find all rules (clauses) matching the given query and compile them to variants.
+ * 
+ * Matched rules are processed in two passes. Non-recursive clauses compile first, and determine
+ * the possible query type signatures. for each compiled variant. The recursive clauses then
+ * compile against these type signatures. A recursive clause therefore cannot occur without
+ * at least one non-recursive clause of the same signature.
+ */
+static size8 compileQueryClauses(
+	CompilationState * state, FormulaView query, CompiledVariant variants[])
+{
+	size8 queryTermArity = TermFormArity(query.form);
+
+	/**
+	 * To find rules (clauses) c that contains a matching term form,
+	 * we query (multiset c element @term-form multiple m),
+	 *
+ 	 * TODO: it might happen that a generated UNION service has the same
+	 * signature as an existing service, which becomes part of the UNION.
+	 * In this case, the newly generated service should replace the existing one.
+	 */
+
+	// Collect all clauses matching the query term
+	ResizingArray matchedClauseForms;
+	CreateResizingArray(&matchedClauseForms, sizeof(QueryClauseMatch), 8);
+	findMatchingClauseForms(query.form, &matchedClauseForms);
+	size32 nMatchedClauseForms = ResizingArrayNElements(&matchedClauseForms);
+	size8 nVariants = 0;
+
+	// The non-recursive clauses compile first, settling the query parameters of each variant
+	for(index32 i = 0; i < nMatchedClauseForms; i++) {
+		QueryClauseMatch const * clause = ResizingArrayGetElement(&matchedClauseForms, i);
+		if(!clause->recursive)
+			nVariants = compileClauseFormRules(state, query, clause, variants, nVariants);
+	}
+
+	// A recursive clause requires the query type signature to be fully determined.
+	// The possible options are the type signatures of the non-recursive variants compiled above.
+	// We try all possible such type such type signatures for each recursive clause.
+	size8 nNonRecursiveVariants = nVariants;
+	for(index8 v = 0; v < nNonRecursiveVariants; v++) {
+		setupVariantRelation(&variants[v], query.form, queryTermArity);
+		FormulaView variantQuery = {.form = query.form, .actors = variants[v].parameters};
+		for(index32 i = 0; i < nMatchedClauseForms; i++) {
+			QueryClauseMatch const * clause = ResizingArrayGetElement(&matchedClauseForms, i);
+			if(clause->recursive) {
+				nVariants = compileClauseFormRules(
+					state, variantQuery, clause, variants, nVariants);
+			}
+		}
+	}
+	// If compilaton succeeds, a recursive clause yields a UNION with the non-recursive variant,
+	// so no new variants are added
+	ASSERT(nVariants == nNonRecursiveVariants)
+
+	FreeResizingArray(&matchedClauseForms);
+	return nVariants;
 }
 
 
@@ -1406,47 +1468,17 @@ static size8 compileFilterVariants(
 /**
  * Attempt to compile a query into one or more services (variants).
  * Returns the number of variants written to the variants array.
- *
- * Rules (clauses) matching the query are processed in two passes. Non-recursive clauses
- * compile first, and determine the parameter types of the query for each compiled variant.
- * The recursive clauses then compile once per variant, against the relation of that variant,
- * which their recursive term reads and takes its parameter types from. A recursive clause
- * therefore must occur together with a non-recursive clause of the same signature.
- *
- * NOTE: a recursive service is not guaranteed to terminate; see the notes on termination
- * in compiler.md.
  */
 static size8 compileQueryVariants(CompilationState * state, FormulaView query, CompiledVariant variants[])
 {
-	bool foundRecursiveClause;
-	// First pass compilation generates variants for the non-recursive matching clauses
-	size8 nVariants = compileQueryClauses(
-		state, query, NON_RECURSIVE_PASS, &foundRecursiveClause, variants, 0);
 	size8 queryTermArity = TermFormArity(query.form);
+	// Every matching clause compiles here, the recursive ones into the variants the
+	// non-recursive ones settled
+	size8 nVariants = compileQueryClauses(state, query, variants);
 
-	if(foundRecursiveClause) {
-		// Second pass, once per variant the non-recursive clauses yielded. All recursive
-		// clauses are tried against the query signature of each variant, but only
-		// those recursive clauses that match the query signature will yield new variants.
-		
-		// NOTE: each call gives at most one recursive variant, which is combined into the
-		// existing variants as a UNION, so nVariants never changes.
-		size8 nNonRecursiveVariants = nVariants;
-		for(index8 i = 0; i < nNonRecursiveVariants; i++) {
-			setupVariantRelation(&variants[i], query.form, queryTermArity);
-			TypedTuple const * querySignature = variants[i].parameters;
-			nVariants = compileQueryClauses(
-				state, (FormulaView) {.form = query.form, .actors = querySignature},
-				RECURSIVE_PASS, &foundRecursiveClause,
-				variants, nVariants
-			);
-		}
-		// Verify that no new variants were added by the recursive pass
-		ASSERT(nVariants == nNonRecursiveVariants)
-
-		for(index8 i = 0; i < nVariants; i++)
-			completeRecursiveVariant(&variants[i], queryTermArity);
-	}
+	// A variant a recursive clause compiled into is derived by a fixpoint operator
+	for(index8 i = 0; i < nVariants; i++)
+		completeRecursiveVariant(&variants[i], queryTermArity);
 
 	// A query the rules do not answer may still be answered by filtering a service that
 	// produces what the query binds; see compileFilterVariants(). The rules are tried
