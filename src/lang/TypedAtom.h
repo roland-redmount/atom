@@ -17,8 +17,11 @@ typedef struct s_TypedAtom
 } __attribute__((packed)) TypedAtom;
 
 
-// the invalid atom, only used internally to signal errors
+// The invalid atom, only used internally to signal errors
 extern TypedAtom invalidAtom;
+
+// The generator atom (*)
+extern  TypedAtom generatorAtom;
 
 /**
  * Shorthand for (TypedAtom) {.type = type, .atom = atom}

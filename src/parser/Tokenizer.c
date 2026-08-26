@@ -26,9 +26,9 @@
 #include "kernel/Int.h"
 #include "kernel/letter.h"
 #include "kernel/Parameter.h"
-#include "lang/Variable.h"
 #include "kernel/string.h"
 #include "lang/name.h"
+#include "lang/Variable.h"
 #include "parser/Characters.h"
 #include "parser/Tokenizer.h"
 
@@ -463,7 +463,7 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 		break;
 
 	case TOKEN_GENERATOR:
-		token.typedAtom = CreateTypedAtom(AT_GENERATOR, (Atom) {.hash = 0});
+		token.typedAtom = generatorAtom;
 		break;
 
 	default:

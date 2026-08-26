@@ -526,8 +526,7 @@ static void testGeneratorActor(void)
 	NameRelease(elementRole);
 
 	TypedAtom element = TypedTupleGetElement(actors, elementIndex);
-	ASSERT_UINT32_EQUAL(element.type, AT_GENERATOR)
-	ASSERT_UINT64_EQUAL(element.atom.hash, 0)
+	ASSERT_TRUE(SameTypedAtoms(element, generatorAtom))
 	ReleaseFormula(term);
 }
 

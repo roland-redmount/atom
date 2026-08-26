@@ -33,7 +33,7 @@ void testAssertRetract(void)
 	// The relation does not exist until the first fact is asserted
 	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(fact1), nColumns, typeSignature))
 
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(fact1), FormulaGetActors(fact1), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact1), 0), ASSERT_OK)
 
 	Relation const * relation = RelationRegistryFind(FormulaGetForm(fact1), nColumns, typeSignature);
 	ASSERT_NOT_NULL(relation)
@@ -42,18 +42,18 @@ void testAssertRetract(void)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
 
 	// Asserting the same fact again changes nothing
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(fact1), FormulaGetActors(fact1), 0), ASSERT_EXISTED)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact1), 0), ASSERT_EXISTED)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
 
 	// The second fact goes in the same table
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(fact2), FormulaGetActors(fact2), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact2), 0), ASSERT_OK)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 2)
 
-	RetractFact(FormulaGetForm(fact2), FormulaGetActors(fact2));
+	RetractFact(FormulaGetView(fact2));
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
 
 	// Retracting the last fact drops the table, and the relation with it
-	RetractFact(FormulaGetForm(fact1), FormulaGetActors(fact1));
+	RetractFact(FormulaGetView(fact1));
 	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(fact1), nColumns, typeSignature))
 
 	ReleaseFormula(fact2);
@@ -74,21 +74,21 @@ void testAssertContradictsStoredFact(void)
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(FormulaGetActors(negatedFact)), nColumns);
 
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(fact), FormulaGetActors(fact), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_OK)
 
 	// (! prec "a" succ "b") is refused, contradicting the fact just asserted
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(negatedFact), FormulaGetActors(negatedFact), 0), ASSERT_FAIL)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(negatedFact), 0), ASSERT_FAIL)
 	// and the refused assert leaves no relation behind
 	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(negatedFact), nColumns, typeSignature))
 
 	// Retracting the fact it contradicts makes the same assert succeed
-	RetractFact(FormulaGetForm(fact), FormulaGetActors(fact));
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(negatedFact), FormulaGetActors(negatedFact), 0), ASSERT_OK)
+	RetractFact(FormulaGetView(fact));
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(negatedFact), 0), ASSERT_OK)
 
 	// and the positive fact is now the one refused
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(fact), FormulaGetActors(fact), 0), ASSERT_FAIL)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_FAIL)
 
-	RetractFact(FormulaGetForm(negatedFact), FormulaGetActors(negatedFact));
+	RetractFact(FormulaGetView(negatedFact));
 	ReleaseFormula(negatedFact);
 	ReleaseFormula(fact);
 }
@@ -107,10 +107,10 @@ void testAssertContradictsDerivedFact(void)
 	Atom even3 = CStringToTerm("even 3");
 	Atom even4 = CStringToTerm("even 4");
 
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(odd3), FormulaGetActors(odd3), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(odd3), 0), ASSERT_OK)
 
 	// (even 3) is refused: no relation holds (! even 3), but the rule derives it
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(even3), FormulaGetActors(even3), 0), ASSERT_FAIL)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even3), 0), ASSERT_FAIL)
 	ASSERT_NULL(RelationRegistryFind(
 		FormulaGetForm(even3), FormulaGetActors(even3)->nAtoms,
 		CreateTypeSignature(
@@ -119,11 +119,11 @@ void testAssertContradictsDerivedFact(void)
 
 	// (even 4) is accepted, as the rule derives (! even 4) only from (odd 4),
 	// which is not a fact
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetForm(even4), FormulaGetActors(even4), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even4), 0), ASSERT_OK)
 
 	DictionaryRemoveClause(&entry);
-	RetractFact(FormulaGetForm(even4), FormulaGetActors(even4));
-	RetractFact(FormulaGetForm(odd3), FormulaGetActors(odd3));
+	RetractFact(FormulaGetView(even4));
+	RetractFact(FormulaGetView(odd3));
 	ReleaseFormula(even4);
 	ReleaseFormula(even3);
 	ReleaseFormula(odd3);
@@ -146,7 +146,7 @@ void testAssertFormulaFact(void)
 	ASSERT_INT32_EQUAL(AssertFormula(negatedFact), ASSERT_FAIL)
 	ReleaseFormula(negatedFact);
 
-	RetractFact(FormulaGetForm(fact), FormulaGetActors(fact));
+	RetractFact(FormulaGetView(fact));
 	ReleaseFormula(fact);
 }
 

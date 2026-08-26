@@ -19,8 +19,9 @@
 #include "util/sort.h"
 
 
-// global constant invalid atom
 TypedAtom invalidAtom = {0};
+
+TypedAtom generatorAtom = {.type = AT_GENERATOR, .atom = {0}};
 
 /**
  * Create (typed) atom
@@ -150,6 +151,10 @@ void PrintTypedAtom(TypedAtom typedAtom)
 
 	case AT_PARAMETER:
 		PrintParameter(typedAtom.atom);
+		break;
+	
+	case AT_GENERATOR:
+		PrintChar('*');
 		break;
 
 	case AT_ID:

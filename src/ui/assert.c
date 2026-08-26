@@ -19,12 +19,12 @@
  * that is, whether the negation of the term is entailed by the knowledgebase.
  * The actors tuple cannot contain a variable. Returns true if there is a contradiction.
  */
-static bool checkContradiction(Atom termForm, TypedTuple const * actors)
+static bool checkContradiction(FormulaView fact)
 {
 	// Run a query for the negated term.
 	Atom negatedTermForm = CreateTermForm(
-		TermFormGetPredicateForm(termForm), !TermFormGetSign(termForm));
-	Atom negatedTerm = CreateFormula(negatedTermForm, actors);
+		TermFormGetPredicateForm(fact.form), !TermFormGetSign(fact.form));
+	Atom negatedTerm = CreateFormula(negatedTermForm, fact.actors);
 
 	MixedTypeRelation * negatedRelation = UserQuery(negatedTerm);
 	bool foundTuple = MixedTypeRelationNext(negatedRelation);
@@ -33,7 +33,7 @@ static bool checkContradiction(Atom termForm, TypedTuple const * actors)
 		// There was a matching tuple.  Since no actor is a variable,
 		// there can be at most one maching tuple, which is the negated term itself.
 		TypedTuple const * negatedTuple = MixedTypeRelationPeekTuple(negatedRelation);
-		ASSERT(TypedTupleEqual(negatedTuple, actors))
+		ASSERT(TypedTupleEqual(negatedTuple, fact.actors))
 		ASSERT(!MixedTypeRelationNext(negatedRelation))
 	}
 #endif
@@ -44,19 +44,24 @@ static bool checkContradiction(Atom termForm, TypedTuple const * actors)
 }
 
 
-int AssertFact(Atom termForm, TypedTuple const * actors, RelationTableProvider const * provider)
+int AssertFact(FormulaView fact, RelationTableProvider const * provider)
 {
-	ASSERT(IsTermForm(termForm));
-	ASSERT(!TypedTupleContainsVariable(actors));
-	Atom const * actorsArray = TypedTuplePeekAtoms(actors);
+	ASSERT(IsTermForm(fact.form));
+	ASSERT(!TypedTupleContainsVariable(fact.actors));
 
-	if(checkContradiction(termForm, actors))
+	if(TypedTupleContainsAtom(fact.actors, generatorAtom)) {
+		// TODO: create an ifact
+		ASSERT(false)
+	}
+	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
+
+	if(checkContradiction(fact))
 		return ASSERT_FAIL;
 
 	// find existing relation table, or create new
 	TypeSignature typeSignature = CreateTypeSignature(
-		TypedTuplePeekAtomTypes(actors), actors->nAtoms);
-	Relation const * relation = FindOrCreateRelation(termForm, actors->nAtoms, typeSignature);
+		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
+	Relation const * relation = FindOrCreateRelation(fact.form, fact.actors->nAtoms, typeSignature);
 	RelationTable * table = RelationTableRegistryFind(relation);
 	if(!table) {
 		table = CreateRelationTable(relation, provider ? provider : &btreeTableProvider, 0);
@@ -74,13 +79,13 @@ int AssertFact(Atom termForm, TypedTuple const * actors, RelationTableProvider c
 /**
  * Add a clause to the rule dictionary.
  */
-static int assertRule(Atom clause, FormulaView const * view)
+static int assertRule(Atom clause, FormulaView view)
 {
 	// A rule must have at least two terms
-	if(ClauseFormNTerms(view->form) < 2)
+	if(ClauseFormNTerms(view.form) < 2)
 		return ASSERT_CLAUSE_ONE_TERM;
 	//  A clause with no variable is a disjunction of facts, not a rule
-	if(!TypedTupleContainsVariable(view->actors))
+	if(!TypedTupleContainsVariable(view.actors))
 		return ASSERT_CLAUSE_NO_VARIABLE;
 
 	if(DictionaryContainsClause(clause))
@@ -98,27 +103,27 @@ int AssertFormula(Atom formula)
 		if(TypedTupleContainsVariable(view.actors))
 			return ASSERT_TERM_VARIABLE;
 		// use default storage provider
-		return AssertFact(view.form, view.actors, 0);
+		return AssertFact(view, 0);
 	}
 
 	if(FormulaIsClause(formula))
-		return assertRule(formula, &view);
+		return assertRule(formula, view);
 
 	return ASSERT_NOT_CLAUSE;
 }
 
 
-void RetractFact(Atom termForm, TypedTuple const * actors)
+void RetractFact(FormulaView fact)
 {
 	TypeSignature typeSignature = CreateTypeSignature(
-		TypedTuplePeekAtomTypes(actors), actors->nAtoms);
-	Relation const * relation = RelationRegistryFind(termForm, actors->nAtoms, typeSignature);
+		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
+	Relation const * relation = RelationRegistryFind(fact.form, fact.actors->nAtoms, typeSignature);
 	if(!relation)
 		return;
 	RelationTable * table = RelationTableRegistryFind(relation);
 	if(!table)
 		return;
-	Atom const * actorsArray = TypedTuplePeekAtoms(actors);
+	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
 	// Remove the lookup entries before the tuple: removing the tuple releases the
 	// relation's reference to each of its atoms, and releasing the last reference
 	// to an atom takes all of its lookup entries with it.

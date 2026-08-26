@@ -17,7 +17,7 @@
  * Creates a new relation table using the indicated storage provider if one
  * did not already exist; if provider = 0, RelationBTree is used by default.
  */
-int AssertFact(Atom termForm, TypedTuple const * actors, RelationTableProvider const * provider);
+int AssertFact(FormulaView fact, RelationTableProvider const * provider);
 
 /**
  * High level method to assert any formula: a single term without variables is a (ground) fact
@@ -43,7 +43,7 @@ int AssertFormula(Atom formula);
  * This function should always succeed, as (non-identifying) facts can be retracted
  * at any time.
  */
-void RetractFact(Atom termForm, TypedTuple const * actors);
+void RetractFact(FormulaView fact);
 
 
 
