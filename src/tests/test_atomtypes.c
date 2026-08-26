@@ -15,15 +15,15 @@ void testGetAtomTypeName(void)
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_NAME), "NAME")
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_ID), "ID")
 	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_FORMULA), "FORMULA")
+	ASSERT_STRING_EQUAL(GetAtomTypeName(AT_GENERATOR), "GENERATOR")
 }
 
 
 void testAtomTypeFromString(void)
 {
 	ASSERT_UINT32_EQUAL(AtomTypeFromString("NAME", 4), AT_NAME)
-	ASSERT_UINT32_EQUAL(AtomTypeFromString("PARAMETER", 9), AT_PARAMETER)
-	// the last type name is as reachable as the first
 	ASSERT_UINT32_EQUAL(AtomTypeFromString("FORMULA", 7), AT_FORMULA)
+	ASSERT_UINT32_EQUAL(AtomTypeFromString("PARAMETER", 9), AT_PARAMETER)
 	// an unknown name is no type
 	ASSERT_UINT32_EQUAL(AtomTypeFromString("FROB", 4), 0)
 }

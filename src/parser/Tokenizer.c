@@ -73,7 +73,7 @@ static bool finishParameter(Tokenizer * tokenizer)
 
 
 /**
- * Mark the token complete, given its type and that a single character decided it.
+ * Mark the current token complete (valid, full) and set its type.
  */
 static bool beginSingleCharacterToken(Tokenizer * tokenizer, enum TokenType type)
 {
@@ -149,6 +149,9 @@ static bool beginActorToken(Tokenizer * tokenizer, char c)
 		tokenizer->type = TOKEN_PARAMETER;
 		tokenizer->isValid = true;
 		return true;
+
+	case '*':
+		return beginSingleCharacterToken(tokenizer, TOKEN_GENERATOR);
 
 	case '[':
 		return beginSingleCharacterToken(tokenizer, TOKEN_BEGIN_REFLECT);
@@ -457,6 +460,10 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 				
 	case TOKEN_NAME:
 		token.typedAtom = CreateTypedAtom(AT_NAME, CreateName(string, stringLength));
+		break;
+
+	case TOKEN_GENERATOR:
+		token.typedAtom = CreateTypedAtom(AT_GENERATOR, (Atom) {.hash = 0});
 		break;
 
 	default:

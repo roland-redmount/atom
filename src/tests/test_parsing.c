@@ -512,6 +512,27 @@ static void testLetterActor(void)
 
 
 /**
+ * Test parsing a term containinga generator (*) actor
+ */
+static void testGeneratorActor(void)
+{
+	Atom term = CStringToTerm("list \"abc\" position 1 element *");
+	TypedTuple const * actors = FormulaGetActors(term);
+	ASSERT_UINT32_EQUAL(actors->nAtoms, 3)
+
+	Atom elementRole = CreateNameFromCString("element");
+	index8 elementIndex = PredicateRoleIndex(
+		TermFormGetPredicateForm(FormulaGetForm(term)), elementRole);
+	NameRelease(elementRole);
+
+	TypedAtom element = TypedTupleGetElement(actors, elementIndex);
+	ASSERT_UINT32_EQUAL(element.type, AT_GENERATOR)
+	ASSERT_UINT64_EQUAL(element.atom.hash, 0)
+	ReleaseFormula(term);
+}
+
+
+/**
  * ParseFormula() reads what CStringToFormula() reads, but reports invalid syntax
  * instead of aborting on it, naming the character where the string went wrong.
  */
@@ -528,7 +549,7 @@ static void testParseFormula(void)
 	ReleaseFormula(formula);
 
 	// a character belonging to no token is reported where it stands
-	ASSERT_UINT64_EQUAL(ParseFormula("foo x bar *", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x bar %", &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 10)
 
 	// a number stands where an actor does and not where a role name does, so it is
@@ -648,6 +669,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCStringToConjunction);
 	ExecuteTest(testCStringToFormula);
 	ExecuteTest(testLetterActor);
+	ExecuteTest(testGeneratorActor);
 	ExecuteTest(testParseFormula);
 	ExecuteTest(testReflectedTerm);
 	ExecuteTest(testReflectedNegatedTerm);

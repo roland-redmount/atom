@@ -8,7 +8,7 @@
  * depending on its type.
  */
 typedef union u_Atom {
-	// AT_NAME, AT_ID, AT_FORMULA
+	// AT_NAME, AT_ID, AT_FORMULA, AT_GENERATOR
 	data64 hash;
 	// AT_INT
 	int64 _int;
