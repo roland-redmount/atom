@@ -220,6 +220,19 @@ void MultisetIteratorEnd(MultisetIterator * iterator)
 }
 
 
+Atom MultisetFindElement(Atom multiset, byte elementType, index32 k)
+{
+	MultisetIterator iterator;
+	MultisetIterate(multiset, elementType, &iterator);
+	// Advance the iterator to element k
+	for(index32 i = 0; i < k; i++)
+		ASSERT(MultisetIteratorNext(&iterator))
+	Atom element = MultisetIteratorGetElement(&iterator).element;
+	MultisetIteratorEnd(&iterator);
+	return element;
+}
+
+
 size32 MultisetNUniqueElements(Atom multiset, byte elementType)
 {
 	MultisetIterator iterator;
