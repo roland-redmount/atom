@@ -587,7 +587,7 @@ static void setupGraphFixture(void)
  *
  * The caller obtains a reference to the operator.
  */
-static Operator * createClosureOperator(index8 const * inputArguments, size8 nInputs)
+static Operator * createClosureOperator(index8 const inputArguments[], size8 nInputs)
 {
 	index8 precIndex = RelationFixtureRoleIndex(&graphFixture, "prec");
 	index8 succIndex = RelationFixtureRoleIndex(&graphFixture, "succ");

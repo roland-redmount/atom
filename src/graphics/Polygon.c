@@ -4,7 +4,7 @@
 #include "graphics/Polygon.h"
 
 
-Polygon * CreatePolygon(Point const * vertices, size32 nVertices, RGBAColor color)
+Polygon * CreatePolygon(Point const vertices[], size32 nVertices, RGBAColor color)
 {
 	Polygon* polygon = malloc(sizeof(Polygon));
 	polygon->nVertices = nVertices;

@@ -133,7 +133,7 @@ static Atom arrayElementGenerator(index32 index, void const * data)
 }
 
 
-Atom CreateListFromArray(Atom const * atoms, byte elementType, size8 nAtoms)
+Atom CreateListFromArray(Atom const atoms[], byte elementType, size8 nAtoms)
 {
 	return CreateList(arrayElementGenerator, atoms, elementType, nAtoms);
 }

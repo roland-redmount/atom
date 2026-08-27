@@ -324,8 +324,8 @@ struct s_Operator {
  * bound to a constant drop out of it, being equal in every tuple.
  */
 Operator * CreatePermuteOperator(
-	size8 nArguments, Atom const * constants, byte const * constantTypes, size8 nConstants,
-	index8 const * argumentMap, Operator * childOperator);
+	size8 nArguments, Atom const constants[], byte const constantTypes[], size8 nConstants,
+	index8 const argumentMap[], Operator * childOperator);
 
 /**
  * Create a machine code operator. The indexOrder array has length nArguments and gives
@@ -334,7 +334,7 @@ Operator * CreatePermuteOperator(
  * The context size is the size of the context data allocated by OperatorCreateContext().
  */
 Operator * CreateMachineOperator(
-	size8 nArguments, index8 const * indexOrder, MachineProvider * provider,
+	size8 nArguments, index8 const indexOrder[], MachineProvider * provider,
 	void * providerData, size32 contextSize);
 
 /**
@@ -361,8 +361,8 @@ Operator * CreateMachineOperator(
  */
 Operator * CreateJoinOperator(
 	size8 nArguments,
-	Operator * leftChild, index8 const * leftMap,
-	Operator * rightChild, index8 const * rightMap);
+	Operator * leftChild, index8 const leftMap[],
+	Operator * rightChild, index8 const rightMap[]);
 
 /**
  * Setup a UNION operator, returning the union of two relations.
@@ -385,7 +385,7 @@ Operator * CreateUnionOperator(Operator * first, Operator * second);
  * appearing once: they are equal in every yielded tuple.
  */
 Operator * CreateConstrainOperator(
-	size8 nArguments, index8 const * argumentMap, Operator * childOperator);
+	size8 nArguments, index8 const argumentMap[], Operator * childOperator);
 
 /**
  * Create a FILTER operator over the given child operator, yielding those of its tuples that
@@ -400,7 +400,7 @@ Operator * CreateConstrainOperator(
  * it strictly ascending.
  */
 Operator * CreateFilterOperator(
-	Operator * childOperator, index8 const * inputArguments, size8 nInputs);
+	Operator * childOperator, index8 const inputArguments[], size8 nInputs);
 
 /**
  * Create a PROJECT operator with the given number of arguments, which may not exceed the
@@ -416,7 +416,7 @@ Operator * CreateFilterOperator(
  * B-tree, which both removes the duplicates and sorts tuples.
  */
 Operator * CreateProjectOperator(
-	Operator * childOperator, size8 nArguments, index8 const * argumentMap);
+	Operator * childOperator, size8 nArguments, index8 const argumentMap[]);
 
 /**
  * Create a FIXPOINT operator deriving a recursive relation from the given child
@@ -432,7 +432,7 @@ Operator * CreateProjectOperator(
  * distinct and in the identity index order.
  */
 Operator * CreateFixpointOperator(
-	Operator * childOperator, index8 const * inputArguments, size8 nInputs);
+	Operator * childOperator, index8 const inputArguments[], size8 nInputs);
 
 /**
  * Create a RECURSE operator enumerating the tuples derived so far by the nearest FIXPOINT
@@ -445,6 +445,10 @@ Operator * CreateFixpointOperator(
  * NOTE: taking the nearest enclosing fixpoint is what makes one recursive relation work.
  * Relations recursive through one another will need this operator to name which fixpoint
  * it belongs to.
+ *
+ * NOTE: inputArguments is here written as a pointer rather than as an array since
+ * compileRecursiveTerm() passes a variable length array, and array syntax causes an optimized
+ * build to read that as a zero length region; see -Wstringop-overread.
  */
 Operator * CreateRecurseOperator(
 	size8 nArguments, index8 const * inputArguments, size8 nInputs);

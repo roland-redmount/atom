@@ -41,7 +41,7 @@ TypedTuple * CreateTypedTuple(size8 nAtoms);
 /**
  * Create a tuple by copying an array of atoms
  */
-TypedTuple * CreateTypedTupleFromArray(TypedAtom const * typedAtoms, size8 nAtoms);
+TypedTuple * CreateTypedTupleFromArray(TypedAtom const typedAtoms[], size8 nAtoms);
 
 /**
  * Create a tuple by copying another tuple
@@ -107,7 +107,7 @@ void TypedTupleCopy(TypedTuple const * source, TypedTuple * destination);
  * Copy each element i from the source tuple to element order[i] of the destination tuple.
  * The order array must have at least as many elements as the source and destination tuples.
  */
-void TypedTupleCopyReorder(TypedTuple const * source, TypedTuple * destination, index8 const * order);
+void TypedTupleCopyReorder(TypedTuple const * source, TypedTuple * destination, index8 const order[]);
 
 /**
  * Copy destination->nAtoms from the source tuple into the destination,

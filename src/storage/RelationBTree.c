@@ -36,7 +36,7 @@ static size32 btreeTupleNBytes(size8 nAtoms)
 
 
 static BTreeTuple * createBTreeTuple(
-	size8 nColumns, uint8 idPosition, index8 nAtomsPresent, Atom const * atoms, index8 const indexColumns[])
+	size8 nColumns, uint8 idPosition, index8 nAtomsPresent, Atom const atoms[], index8 const indexColumns[])
 {
 	BTreeTuple * btreeTuple = Allocate(btreeTupleNBytes(nColumns));
 	btreeTuple->nAtoms = nColumns;

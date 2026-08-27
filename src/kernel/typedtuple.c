@@ -84,7 +84,7 @@ TypedTuple * CreateTypedTuple(size8 nAtoms)
 }
 
 
-TypedTuple * CreateTypedTupleFromArray(TypedAtom const * typedAtoms, size8 nAtoms)
+TypedTuple * CreateTypedTupleFromArray(TypedAtom const typedAtoms[], size8 nAtoms)
 {
 	TypedTuple * tuple = CreateTypedTuple(nAtoms);
 	for(index8 i = 0; i < nAtoms; i++)
@@ -181,7 +181,7 @@ void TypedTupleCopy(TypedTuple const * source, TypedTuple * destination)
 }
 
 
-void TypedTupleCopyReorder(TypedTuple const * source, TypedTuple * destination, index8 const * order)
+void TypedTupleCopyReorder(TypedTuple const * source, TypedTuple * destination, index8 const order[])
 {
 	ASSERT(source->nAtoms == destination->nAtoms)
 	for(index8 i = 0; i < source->nAtoms; i++) {

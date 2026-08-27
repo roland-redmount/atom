@@ -68,13 +68,13 @@ void LookupRemoveAllRoles(Atom atom);
  * Add lookup entries for all actors in a predicate, defined by an actor list
  * for a given relation
  */
-void LookupAddPredicateRoles(Relation const * relation, Atom const * actors);
+void LookupAddPredicateRoles(Relation const * relation, Atom const actors[]);
 
 /**
  * Remove lookup entries for each actor in a predicate, defined by an actor list
  * for a given relation.
  */
-void LookupRemovePredicateRoles(Relation const * relation, Atom const * actors);
+void LookupRemovePredicateRoles(Relation const * relation, Atom const actors[]);
 
 /**
  * Lookup the relation with the given predicate form where atom partipates in role.

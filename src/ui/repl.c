@@ -96,9 +96,9 @@ static void printParseError(index32 errorPosition)
 /*
  * Print a summary of the query results
  */
-static void printQueryResultSummary(MixedTypeRelation const * resultRelations, size32 nTuples)
+static void printQueryResultSummary(MixedTypeRelation const * mixedTypeRelation, size32 nTuples)
 {
-	size32 nServices = MixedTypeRelationNServices(resultRelations);
+	size32 nServices = MixedTypeRelationNServices(mixedTypeRelation);
 	printMargin();
 	PrintF("%d facts from %d matching services\n", nTuples, nServices);
 }

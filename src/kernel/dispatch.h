@@ -40,7 +40,7 @@ bool DispatchQuery(FormulaView query, Service * service, index8 permutation[]);
 /**
  * Same, using a term (formula) instead of a termform and actors tuple
  */
-bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutation);
+bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 permutation[]);
 
 
 /**

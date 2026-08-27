@@ -17,7 +17,7 @@ typedef struct s_Mesh
 	RGBAColor color;
 } Mesh;
 
-Mesh * CreateMesh(Triangle const * triangles, size32 nTriangles, RGBAColor color);
+Mesh * CreateMesh(Triangle const triangles[], size32 nTriangles, RGBAColor color);
 
 // create a mesh for rectangle ("quad")
 Mesh * CreateRectangleMesh(Point bottomLeft, Point topRight, RGBAColor color);

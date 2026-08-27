@@ -18,7 +18,7 @@ typedef struct s_Polygon
 } Polygon;
 
 // create by copying a list of vertices (can be NULL pointer)
-Polygon * CreatePolygon(Point const * vertices, size32 nVertices, RGBAColor color);
+Polygon * CreatePolygon(Point const vertices[], size32 nVertices, RGBAColor color);
 
 Point GetPolygonVertex(Polygon const * polygon, index32 i);
 void SetPolygonVertex(Polygon * polygon, index32 i, Point vertex);

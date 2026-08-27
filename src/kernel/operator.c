@@ -82,7 +82,7 @@ static index8 const * effectiveIndexOrder(Operator const * childOperator, index8
 /**
  * Verify that an index order is a permutation of the argument indices.
  */
-static void assertIsIndexOrder(index8 const * indexOrder, size8 nArguments)
+static void assertIsIndexOrder(index8 const indexOrder[], size8 nArguments)
 {
 	bool present[nArguments];
 	SetMemory(present, nArguments * sizeof(bool), 0);
@@ -130,7 +130,7 @@ static void deriveIndexOrderFromChild(
  * Copy parent arguments to a child arguments tuple, as given by an argument map.
  */
 static void scatterArguments(
-	Atom const * arguments, Atom * childArguments, index8 const * argumentMap, size8 nChildArguments)
+	Atom const arguments[], Atom childArguments[], index8 const argumentMap[], size8 nChildArguments)
 {
 	for(index8 i = 0; i < nChildArguments; i++)
 		childArguments[i] = arguments[argumentMap[i]];
@@ -141,7 +141,7 @@ static void scatterArguments(
  * Copy a child arguments tuple back to the parent arguments, as given by an argument map.
  */
 static void gatherArguments(
-	Atom * arguments, Atom const * childArguments, index8 const * argumentMap, size8 nChildArguments)
+	Atom arguments[], Atom const childArguments[], index8 const argumentMap[], size8 nChildArguments)
 {
 	for(index8 i = 0; i < nChildArguments; i++)
 		arguments[argumentMap[i]] = childArguments[i];
@@ -154,7 +154,7 @@ static void gatherArguments(
  */
 static void setupInputArguments(
 	index8 ** storedInputArguments, size8 * storedNInputs,
-	index8 const * inputArguments, size8 nInputs, size8 nArguments)
+	index8 const inputArguments[], size8 nInputs, size8 nArguments)
 {
 	*storedNInputs = nInputs;
 	if(!nInputs) {
@@ -180,7 +180,7 @@ static void setupInputArguments(
  * the caller binds.
  */
 static bool tupleMatchesInputArguments(
-	Atom const * tuple, Atom const * arguments, index8 const * inputArguments, size8 nInputs)
+	Atom const tuple[], Atom const arguments[], index8 const inputArguments[], size8 nInputs)
 {
 	for(index8 i = 0; i < nInputs; i++) {
 		index8 argument = inputArguments[i];
@@ -199,7 +199,7 @@ static bool tupleMatchesInputArguments(
  * expresses, and no other operator does so.
  */
 static void assertArgumentsAreDistinct(
-	index8 const * argumentMap, size8 nChildArguments, size8 nArguments)
+	index8 const argumentMap[], size8 nChildArguments, size8 nArguments)
 {
 	bool taken[nArguments];
 	SetMemory(taken, nArguments * sizeof(bool), 0);
@@ -222,8 +222,8 @@ typedef struct s_PermuteContext {
 
 
 Operator * CreatePermuteOperator(
-	size8 nArguments, Atom const * constants, byte const * constantTypes, size8 nConstants,
-	index8 const * argumentMap, Operator * childOperator)
+	size8 nArguments, Atom const constants[], byte const constantTypes[], size8 nConstants,
+	index8 const argumentMap[], Operator * childOperator)
 {
 	// The argument map indexes the parent arguments and the constants in turn,
 	// so together they must be addressable by an index8
@@ -346,7 +346,7 @@ typedef struct s_ConstrainContext {
 
 
 Operator * CreateConstrainOperator(
-	size8 nArguments, index8 const * argumentMap, Operator * childOperator)
+	size8 nArguments, index8 const argumentMap[], Operator * childOperator)
 {
 	Operator * op = createOperator(OPERATOR_CONSTRAIN, nArguments, sizeof(ConstrainContext));
 	op->impl.constrain.childOperator = childOperator;
@@ -398,7 +398,7 @@ static void constrainSetupContext(OperatorContext * context)
  * Test whether the child arguments taken from the same parent argument are equal.
  */
 static bool constrainedArgumentsAgree(
-	Atom const * childArguments, index8 const * argumentMap, size8 nChildArguments)
+	Atom const childArguments[], index8 const argumentMap[], size8 nChildArguments)
 {
 	for(index8 i = 0; i < nChildArguments; i++) {
 		for(index8 j = 0; j < i; j++) {
@@ -457,7 +457,7 @@ typedef struct s_FilterContext {
 
 
 Operator * CreateFilterOperator(
-	Operator * childOperator, index8 const * inputArguments, size8 nInputs)
+	Operator * childOperator, index8 const inputArguments[], size8 nInputs)
 {
 	// A filter that tests nothing would yield the tuples of its child unchanged
 	ASSERT(nInputs > 0)
@@ -549,7 +549,7 @@ typedef struct s_JoinContext {
 
 
 static index8 * copyJoinArgumentMap(
-	index8 const * argumentMap, size8 nChildArguments, size8 nArguments)
+	index8 const argumentMap[], size8 nChildArguments, size8 nArguments)
 {
 	index8 * copy = Allocate(nChildArguments);
 	for(index8 i = 0; i < nChildArguments; i++) {
@@ -563,8 +563,8 @@ static index8 * copyJoinArgumentMap(
 
 Operator * CreateJoinOperator(
 	size8 nArguments,
-	Operator * leftChild, index8 const * leftMap,
-	Operator * rightChild, index8 const * rightMap)
+	Operator * leftChild, index8 const leftMap[],
+	Operator * rightChild, index8 const rightMap[])
 {
 	Operator * op = createOperator(OPERATOR_JOIN, nArguments, sizeof(JoinContext));
 	op->impl.join.left = leftChild;
@@ -987,7 +987,7 @@ static void teardownProjectOperator(Operator * op)
 
 
 Operator * CreateProjectOperator(
-	Operator * childOperator, size8 nArguments, index8 const * argumentMap)
+	Operator * childOperator, size8 nArguments, index8 const argumentMap[])
 {
 	ASSERT(nArguments <= childOperator->nArguments)
 	Operator * op = createOperator(OPERATOR_PROJECT, nArguments, sizeof(ProjectContext));
@@ -1068,7 +1068,7 @@ typedef struct s_RecurseContext {
  */
 static bool yieldDerivedTuple(
 	OperatorContext * context, BTreeIterator * iterator,
-	index8 const * inputArguments, size8 nInputs)
+	index8 const inputArguments[], size8 nInputs)
 {
 	size8 nArguments = context->op->nArguments;
 	while(BTreeIteratorNext(iterator)) {
@@ -1083,7 +1083,7 @@ static bool yieldDerivedTuple(
 
 
 Operator * CreateFixpointOperator(
-	Operator * childOperator, index8 const * inputArguments, size8 nInputs)
+	Operator * childOperator, index8 const inputArguments[], size8 nInputs)
 {
 	size8 nArguments = childOperator->nArguments;
 	Operator * op = createOperator(OPERATOR_FIXPOINT, nArguments, sizeof(FixpointContext));
@@ -1172,8 +1172,8 @@ static size32 mergePendingTuples(ResizingArray * pendingTuples, BTree * tuples)
  * the remaining ones zeroed, so that bindings compare and store as ordinary tuples.
  */
 static void setupCallBinding(
-	Atom * binding, Atom const * arguments,
-	index8 const * inputArguments, size8 nInputs, size8 nArguments)
+	Atom binding[], Atom const arguments[],
+	index8 const inputArguments[], size8 nInputs, size8 nArguments)
 {
 	SetMemory(binding, nArguments * sizeof(Atom), 0);
 	for(index8 i = 0; i < nInputs; i++)
@@ -1190,7 +1190,7 @@ static void setupCallBinding(
  * The atoms print as their hash, an operator not knowing the types of its arguments.
  * Hardcoding a type here renders them readably when tracing a particular relation.
  */
-static void printFixpointTuple(char const * label, Atom const * tuple, size8 nArguments)
+static void printFixpointTuple(char const * label, Atom const tuple[], size8 nArguments)
 {
 	PrintCString(label);
 	for(index8 i = 0; i < nArguments; i++)
@@ -1417,7 +1417,7 @@ static void machineFinalizeContext(OperatorContext * context)
 
 
 Operator * CreateMachineOperator(
-	size8 nArguments, index8 const * indexOrder, MachineProvider * provider,
+	size8 nArguments, index8 const indexOrder[], MachineProvider * provider,
 	void * providerData, size32 contextSize)
 {
 	Operator * op = createOperator(OPERATOR_MACHINE, nArguments, contextSize);
@@ -1784,7 +1784,7 @@ static void printOperatorHead(Operator const * op, char const * name)
  * "<0 2>", following the convention that marks an input parameter of a service. An
  * operator binding none prints nothing.
  */
-static void printInputArguments(index8 const * inputArguments, size8 nInputs)
+static void printInputArguments(index8 const inputArguments[], size8 nInputs)
 {
 	if(!nInputs)
 		return;

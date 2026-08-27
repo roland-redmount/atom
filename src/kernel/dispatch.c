@@ -224,7 +224,7 @@ bool DispatchQuery(FormulaView query, Service * service, index8 permutation[])
 }
 
 
-bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutation)
+bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 permutation[])
 {
 	FormulaView term = FormulaGetView(queryTerm);
 	return DispatchQuery(term, service, permutation);

@@ -10,7 +10,7 @@
 /**
  * A conjunction form is a multiset of clause forms
  */
-Atom CreateConjunctionForm(Atom const * clauseForms, size8 nClauseForms)
+Atom CreateConjunctionForm(Atom const clauseForms[], size8 nClauseForms)
 {
 	Atom uniqueClauseForms[nClauseForms];
 	CopyMemory(clauseForms, uniqueClauseForms, nClauseForms * sizeof(Atom));

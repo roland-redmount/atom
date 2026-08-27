@@ -122,7 +122,7 @@ void AtomAddRole(Atom atom, Relation const * relation, Atom role)
 }
 
 
-void LookupAddPredicateRoles(Relation const * relation, Atom const * actors)
+void LookupAddPredicateRoles(Relation const * relation, Atom const actors[])
 {
 	// iterate over roles names in the predicate form
 	// and add corresponding actors to lookup table
@@ -188,7 +188,7 @@ void LookupRemoveAllRoles(Atom atom)
 }
 
 
-void LookupRemovePredicateRoles(Relation const * relation, Atom const * actors)
+void LookupRemovePredicateRoles(Relation const * relation, Atom const actors[])
 {
 	LookupRecord record;
 	record.relation = relation;

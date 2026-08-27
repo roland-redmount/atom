@@ -47,7 +47,7 @@ static inline void swapIndices(index32 * indexArray, index32 i, index32 j)
 // partition the index array between low - high indexes by a pivot value
 // return the index of the pivot
 static index32 partition(
-	void const * items, index32 * indexArray, index32 low, index32 high, size32 itemSize,
+	void const * items, index32 indexArray[], index32 low, index32 high, size32 itemSize,
 	ItemComparator compare)
 {
 	// randomly select a pivot element from the range
@@ -84,7 +84,7 @@ static index32 partition(
 // applies the recursive divide and conquer portion of the quicksort algorithm
 // to the array... applying quicksort to the array between the low-high indexes
 static void quicksort_recursive(
-	void const * items, index32 * indexArray, index32 low, index32 high, size32 itemSize,
+	void const * items, index32 indexArray[], index32 low, index32 high, size32 itemSize,
 	ItemComparator compare)
 {
 	// partition the array by a pivot item
@@ -136,7 +136,7 @@ void QuickSort(void * items, size32 nItems, size32 itemSize, ItemComparator comp
  */
 
 void ReorderRaggedArray(
-	void * array, index8 const * order, size32 const * blockSizes, size32 nBlocks)
+	void * array, index8 const order[], size32 const blockSizes[], size32 nBlocks)
 {
 	// compute block offsets as cumulative sums; last element is the size of the array
 	index32 blockOffsets[nBlocks + 1];
@@ -159,7 +159,7 @@ void ReorderRaggedArray(
 /**
  * Reorder (sort) an array of items, all of the same itemSize (in bytes), according to the order array.
  */
-void ReorderArray(void * array, index8 const * order, size8 nItems, size32 itemSize)
+void ReorderArray(void * array, index8 const order[], size8 nItems, size32 itemSize)
 {
 	// temporary c on stack
 	byte tmp[nItems*itemSize];
@@ -183,7 +183,7 @@ void ReorderArray(void * array, index8 const * order, size8 nItems, size32 itemS
 
 void FindArrayOrdering(
 	void const * data, size8 nItems, size32 itemSize, 
-	index8 * ordering, ItemComparator compare)
+	index8 ordering[], ItemComparator compare)
 {
 	byte const * bytes = (byte const *) data;
 	// initalize ordering to 1 ... n
@@ -250,14 +250,14 @@ void * BinarySearch(
 }
 
 
-void ReorderByteArray(byte const * array, index8 const * index, size8 n, byte * reordered)
+void ReorderByteArray(byte const array[], index8 const index[], size8 n, byte reordered[])
 {
 	for(index8 i = 0; i < n; i++)
 		reordered[i] = array[index[i]];
 }
 
 
-void InvertPermutation(const index8 * permutation, index8 * inverted, size8 n)
+void InvertPermutation(const index8 permutation[], index8 inverted[], size8 n)
 {
 	// compute reverse permutation
 	for(index8 i = 0; i < n; i++) {

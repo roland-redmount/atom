@@ -36,7 +36,7 @@ typedef union u_Atom {
  */
 void SortAtoms(Atom atoms[], size32 nAtoms);
 
-uint8 ReduceAtomsArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms);
+uint8 ReduceAtomsArray(Atom atoms[], uint32 multiplicities[], size8 nAtoms);
 
 int8 CompareAtoms(Atom atom1, Atom atom2);
 

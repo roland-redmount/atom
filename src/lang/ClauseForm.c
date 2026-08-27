@@ -8,7 +8,7 @@
 #include "kernel/RelationRegistry.h"
 
 
-Atom CreateClauseForm(Atom const * termForms, size8 nTermForms)
+Atom CreateClauseForm(Atom const termForms[], size8 nTermForms)
 {
 	// reduce to unique terms
 	// here we need an array of typed atoms, since they will be stored in a multiset

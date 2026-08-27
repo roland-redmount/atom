@@ -10,7 +10,7 @@
 /**
  * Create a clause form from a list of term forms, possibly containing duplicates.
  */
-Atom CreateClauseForm(Atom const * termForms, size8 nTerms);
+Atom CreateClauseForm(Atom const termForms[], size8 nTerms);
 
 bool IsClauseForm(Atom form);
 

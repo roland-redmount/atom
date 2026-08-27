@@ -24,7 +24,7 @@ void SwapMemory(void * address1, void * address2, size32 nBytes)
 }
 
 
-void PrintIndexArray(const index32* array, size32 n)
+void PrintIndexArray(const index32 array[], size32 n)
 {
     for(index32 i = 0; i < n-1; i++) {
         PrintF("%u ", array[i]);
@@ -32,7 +32,7 @@ void PrintIndexArray(const index32* array, size32 n)
     PrintF("%u", array[n-1]);
 }
 
-void PrintIndex8Array(const index8* array, size8 n)
+void PrintIndex8Array(const index8 array[], size8 n)
 {
     for(index8 i = 0; i < n-1; i++) {
         PrintF("%u ", array[i]);

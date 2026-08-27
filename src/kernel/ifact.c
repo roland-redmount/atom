@@ -151,7 +151,7 @@ void IFactAcquire(Atom ifact)
 /**
  * Create query tuple to retrieve all facts with the ifact atom in the idColumn (0-based)
  */ 
-static void setupQueryTuple(Atom * tuple, size8 nColumns, Atom ifact, index8 idColumn)
+static void setupQueryTuple(Atom tuple[], size8 nColumns, Atom ifact, index8 idColumn)
 {
 	SetMemory(tuple, nColumns * sizeof(Atom), 0);
 	tuple[idColumn] = ifact;

@@ -6,7 +6,7 @@
 /**
  * Create mesh by copying an array of triangles
  */
-Mesh * CreateMesh(Triangle const * triangles, size32 nTriangles, RGBAColor color)
+Mesh * CreateMesh(Triangle const triangles[], size32 nTriangles, RGBAColor color)
 {
 	Mesh* mesh = malloc(sizeof(Mesh));
 	mesh->nTriangles = nTriangles;
