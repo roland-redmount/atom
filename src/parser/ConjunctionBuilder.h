@@ -27,6 +27,17 @@ bool ConjunctionBuilderIsValid(ConjunctionBuilder const * builder);
  */
 bool ConjunctionBuilderIsSingleClause(ConjunctionBuilder const * builder);
 
+/**
+ * Complete the conjunction by adding the current term of the builder.
+ * This must be called before ClauseBuilderCreateFormula().
+ * Returns false if the completed conjunction is not valid; see ConjunctionBuilderIsValid().
+ */
+bool ConjunctionBuilderFinish(ConjunctionBuilder * builder);
+
+/**
+ * Create the conjunction the builder has collected. ConjunctionBuilderFinish()
+ * must have been called, and the builder must be valid.
+ */
 Atom ConjunctionBuilderCreateFormula(ConjunctionBuilder * builder);
 
 void ConjunctionBuilderReset(ConjunctionBuilder * builder);

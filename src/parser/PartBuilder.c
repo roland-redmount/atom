@@ -57,6 +57,9 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 		if(token.type == TOKEN_END_REFLECT) {
 			if(!FormulaBuilderIsValid(builder->formulaBuilder))
 				return false;
+			// Check that the completed reflected formula is valid
+			if(!FormulaBuilderFinish(builder->formulaBuilder))
+				return false;
 			// Create the reflected formula
 			Atom formula = FormulaBuilderCreateFormula(builder->formulaBuilder);
 			// the reference from FormulaBuilderCreateFormula() belongs to the actor,

@@ -280,6 +280,7 @@ static void testClauseBuilder(void)
 		}
 		ASSERT_FALSE(ClauseBuilderIsEmpty(&builder))
 	}
+	ASSERT_TRUE(ClauseBuilderFinish(&builder))
 	Atom clause = ClauseBuilderCreateFormula(&builder);
 	CleanupClauseBuilder(&builder);
 
@@ -583,6 +584,51 @@ static void testParseFormula(void)
 }
 
 
+/**
+ * A clause states each of its terms once, and a conjunction each of its clauses once,
+ * so a formula repeating one of them is not a formula. Repeating a term *form* is fine:
+ * two terms of one form differ by their actors.
+ */
+static void testRepeatedTermRejected(void)
+{
+	index32 errorPosition;
+
+	// A repeat with more formula after it is reported at the separator that completed it
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 | foo 1 | bar 2", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 14)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 & foo 1 & baz 3", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 14)
+
+	// A clause repeating a term is found when the clause is completed by the "&"
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 | foo 1 & bar 2", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 14)
+
+	// The last term or clause of a formula is only completed once the string has ended,
+	// so a repeat there is reported at the end
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 | foo 1", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 13)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 bar 2 & foo 1 bar 2", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 25)
+
+	// A reflection holds a formula, and is rejected at its closing bracket
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [ bar 1 | bar 1 ]", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 20)
+
+	// Two terms of one term form are distinct terms, and so are two such clauses
+	Atom clause = ParseFormula("foo 1 | foo 2", &errorPosition);
+	ASSERT_TRUE(clause.hash != 0)
+	ASSERT_UINT32_EQUAL(ClauseFormNTerms(FormulaGetForm(clause)), 2)
+	ASSERT_UINT32_EQUAL(ClauseFormNTermForms(FormulaGetForm(clause)), 1)
+	ReleaseFormula(clause);
+
+	Atom conjunction = ParseFormula("foo 1 & foo 2", &errorPosition);
+	ASSERT_TRUE(conjunction.hash != 0)
+	ASSERT_UINT32_EQUAL(ConjunctionFormNClauseFormsTotal(FormulaGetForm(conjunction)), 2)
+	ASSERT_UINT32_EQUAL(ConjunctionFormNUniqueClauseForms(FormulaGetForm(conjunction)), 1)
+	ReleaseFormula(conjunction);
+}
+
+
 static void testReflectedTerm(void)
 {
 	testReflection("foo \"a\" bar b", "term [foo \"a\" bar b] arity 2");
@@ -670,6 +716,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testLetterActor);
 	ExecuteTest(testGeneratorActor);
 	ExecuteTest(testParseFormula);
+	ExecuteTest(testRepeatedTermRejected);
 	ExecuteTest(testReflectedTerm);
 	ExecuteTest(testReflectedNegatedTerm);
 	ExecuteTest(testReflectedClause);
