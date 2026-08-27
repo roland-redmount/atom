@@ -511,10 +511,6 @@ reads, so the storage is deallocated when the last operator reading it is gone, 
 order things are dropped in. See `testDropTableWithSharedOperator` in
 `test_service_registry.c`, which drops the table while the shared operator is still held.
 
-None of this reaches the service a recursive compilation builds for its own recursive term.
-That one is never registered, so nothing can depend on it and nothing invalidates it; it is
-marked `SERVICE_TEMPORARY` and takes no part in the bookkeeping.
-
 Three events drive it:
 
 - **A primitive service is registered.** A query of its term form now has one more

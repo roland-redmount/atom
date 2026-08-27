@@ -13,6 +13,14 @@
 #include "lang/SubstitutionList.h"
 #include "lang/unification.h"
 
+bool DispatchParameterIOMatch(byte queryIO, byte serviceIO, int matchMode)
+{
+	if(queryIO == serviceIO)
+		return true;
+	return (matchMode == DISPATCH_MATCH_RELAXED) && (serviceIO == PARAMETER_OUT);
+}
+
+
 /**
  * Test whether query parameters matches a service signature (typeSignature, ioSignature),
  * permuted according to the given permutation array (0-based indices).
@@ -34,10 +42,9 @@ static bool signatureQueryTupleMatch(
 	for(index8 i = 0; i < nParameters; i++) {
 		Atom queryParameter = queryParameters[permutation[i]];
 		// test IO direction
-		if(queryParameter.parameter.io != ioSignature.parameterIO[i]) {
-			if((matchMode != DISPATCH_MATCH_RELAXED) || (ioSignature.parameterIO[i] != PARAMETER_OUT))
-				return false;
-		}
+		if(!DispatchParameterIOMatch(
+			queryParameter.parameter.io, ioSignature.parameterIO[i], matchMode))
+			return false;
 		// test parameter type
 		byte serviceParameterType = typeSignature.atomTypes[i];
 		if(queryParameter.parameter.atomType

@@ -47,7 +47,7 @@ void RetractFact(FormulaView fact);
 
 /**
  * High level function to create an IFact from a formula containing
- * one of more generator (*) atoms.
+ * one of more generator (*) atoms. The caller obtains a reference to the IFact.
  */
 Atom CreateIFact(FormulaView formula);
 

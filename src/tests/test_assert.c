@@ -271,6 +271,41 @@ void testCreateIFactNewRelations(void)
 
 
 /**
+ * Two terms of one relation, each with the generator (*) in a different role.
+ * The two defining facts are stored in the same table, but identify the atom by
+ * different columns, so each becomes a conjunction of its own.
+ */
+void testCreateIFactTwoIdColumns(void)
+{
+	// Both terms are of this form, and both their actors are strings,
+	// so the two defining facts belong to one relation
+	Atom sameFormTerm = CStringToTerm("pair \"a\" other \"b\"");
+	byte atomTypes[2] = {AT_ID, AT_ID};
+	TypeSignature typeSignature = CreateTypeSignature(atomTypes, 2);
+	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(sameFormTerm), 2, typeSignature))
+
+	Atom formula = CStringToConjunction("pair * other \"a\" & pair \"a\" other *");
+	Atom ifact = CreateIFact(FormulaGetView(formula));
+	ASSERT_TRUE(ifact.hash != 0)
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
+
+	// Both defining facts are stored in the one relation the two terms share
+	Relation const * relation = RelationRegistryFind(FormulaGetForm(sameFormTerm), 2, typeSignature);
+	ASSERT_NOT_NULL(relation)
+	RelationTable const * table = RelationTableRegistryFind(relation);
+	ASSERT_NOT_NULL(table)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 2)
+
+	// Releasing the atom retracts both facts, which drops the table
+	IFactRelease(ifact);
+	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(sameFormTerm), 2, typeSignature))
+
+	ReleaseFormula(formula);
+	ReleaseFormula(sameFormTerm);
+}
+
+
+/**
  * The same formula a second time yields the atom already defined by those facts,
  * and adds no facts.
  */
@@ -341,6 +376,102 @@ void testCreateIFactDefiningFactsProtected(void)
 
 
 /**
+ * A term of one generator (*) defines an atom, without a clause or conjunction
+ * around it. The relation holding the defining fact is created to hold it,
+ * and dropped again once the atom is released.
+ */
+void testCreateIFactTerm(void)
+{
+	Atom term = CStringToTerm("colour * code 4");
+	size8 nColumns = FormulaGetActors(term)->nAtoms;
+
+	// The relation of the defining fact carries the identified atom in the generator
+	// column, so its type there is AT_ID rather than the generator's own type
+	byte atomTypes[2];
+	for(index8 i = 0; i < nColumns; i++) {
+		TypedAtom actor = TypedTupleGetElement(FormulaGetActors(term), i);
+		atomTypes[i] = SameTypedAtoms(actor, generatorAtom) ? AT_ID : actor.type;
+	}
+	TypeSignature typeSignature = CreateTypeSignature(atomTypes, nColumns);
+	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(term), nColumns, typeSignature))
+
+	Atom ifact = CreateIFact(FormulaGetView(term));
+	ASSERT_TRUE(ifact.hash != 0)
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
+
+	// The defining fact is the one row of the relation the term names
+	Relation const * relation = RelationRegistryFind(FormulaGetForm(term), nColumns, typeSignature);
+	ASSERT_NOT_NULL(relation)
+	RelationTable const * table = RelationTableRegistryFind(relation);
+	ASSERT_NOT_NULL(table)
+	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
+
+	// Releasing the atom retracts the defining fact, which drops the table
+	// and the relation with it
+	IFactRelease(ifact);
+	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(term), nColumns, typeSignature))
+
+	ReleaseFormula(term);
+}
+
+
+/**
+ * A term whose generator (*) is not the first actor of its form. The order of the
+ * actors follows the role names of the form, not the order they were written in,
+ * so the identified atom can land in any column.
+ */
+void testCreateIFactIdColumnNotFirst(void)
+{
+	// The roles of this form order as (alpha zebra), so the generator is the second actor
+	Atom term = CStringToTerm("zebra * alpha 1");
+	TypedAtom firstActor = TypedTupleGetElement(FormulaGetActors(term), 0);
+	ASSERT_FALSE(SameTypedAtoms(firstActor, generatorAtom))
+
+	Atom ifact = CreateIFact(FormulaGetView(term));
+	ASSERT_TRUE(ifact.hash != 0)
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
+
+	// The same term a second time compares the defining fact against the one stored,
+	// which reads the table by the identified column as well
+	Atom sameIFact = CreateIFact(FormulaGetView(term));
+	ASSERT_DATA64_EQUAL(sameIFact.hash, ifact.hash)
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 2)
+
+	IFactRelease(sameIFact);
+	IFactRelease(ifact);
+	ReleaseFormula(term);
+}
+
+
+/**
+ * A clause of one term defines the atom that term defines. The clause form differs
+ * from the term form, but the defining fact is the same fact, so both formulas
+ * yield the same atom.
+ */
+void testCreateIFactClause(void)
+{
+	Atom term = CStringToTerm("colour * code 7");
+	Atom clause = CStringToClause("colour * code 7");
+	ASSERT_TRUE(FormulaIsTerm(term))
+	ASSERT_TRUE(FormulaIsClause(clause))
+
+	Atom clauseIFact = CreateIFact(FormulaGetView(clause));
+	ASSERT_TRUE(clauseIFact.hash != 0)
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(clauseIFact), 1)
+
+	// The term states the same fact, so it defines the atom already there
+	Atom termIFact = CreateIFact(FormulaGetView(term));
+	ASSERT_DATA64_EQUAL(termIFact.hash, clauseIFact.hash)
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(clauseIFact), 2)
+
+	IFactRelease(termIFact);
+	IFactRelease(clauseIFact);
+	ReleaseFormula(clause);
+	ReleaseFormula(term);
+}
+
+
+/**
  * A formula that does not define an atom yields the zero atom.
  */
 void testCreateIFactRejects(void)
@@ -359,6 +490,24 @@ void testCreateIFactRejects(void)
 	Atom disjunction = CStringToConjunction("list * length 1 & foo * bar 1 | baz * qux 2");
 	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(disjunction)).hash, 0)
 	ReleaseFormula(disjunction);
+
+	// the same three, without a conjunction around them
+	Atom termNoGenerator = CStringToTerm("foo 1 bar 2");
+	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(termNoGenerator)).hash, 0)
+	ReleaseFormula(termNoGenerator);
+
+	Atom termTwoGenerators = CStringToTerm("foo * bar *");
+	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(termTwoGenerators)).hash, 0)
+	ReleaseFormula(termTwoGenerators);
+
+	Atom clauseDisjunction = CStringToClause("foo * bar 1 | baz * qux 2");
+	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(clauseDisjunction)).hash, 0)
+	ReleaseFormula(clauseDisjunction);
+
+	// a clause of one term with no generator defines nothing either
+	Atom clauseNoGenerator = CStringToClause("foo 1 bar 2");
+	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(clauseNoGenerator)).hash, 0)
+	ReleaseFormula(clauseNoGenerator);
 }
 
 
@@ -372,8 +521,12 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertFormulaFact);
 	ExecuteTest(testAssertFormulaRule);
 	ExecuteTest(testAssertFormulaRejects);
+	ExecuteTest(testCreateIFactTerm);
+	ExecuteTest(testCreateIFactIdColumnNotFirst);
+	ExecuteTest(testCreateIFactClause);
 	ExecuteTest(testCreateIFactList);
 	ExecuteTest(testCreateIFactNewRelations);
+	ExecuteTest(testCreateIFactTwoIdColumns);
 	ExecuteTest(testCreateIFactExisting);
 	ExecuteTest(testCreateIFactDefiningFactsProtected);
 	ExecuteTest(testCreateIFactRejects);

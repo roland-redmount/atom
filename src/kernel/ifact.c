@@ -207,6 +207,48 @@ void IFactReserve(data64 hash)
 
 
 /**
+ * Register a service for the given relation with idColumn as the sole input parameter.
+ * Creates a FILTER operator based on an existing service for the relation.
+ * Returns 0 if the relation has no suitable service to filter.
+ */
+static Operator * createIdColumnService(
+	Relation const * relation, index8 idColumn, IOSignature ioSignature)
+{
+	// Find a service yielding an output wherever this one does, and at the identified
+	// column, which is the one the filter tests.
+	Operator * childOperator = 0;
+	enum ServiceKind childServiceKind = 0;
+	ServiceIterator iterator;
+	ServiceRegistryIterate(relation, &iterator);
+	while(!childOperator && ServiceIteratorNext(&iterator)) {
+		Service const * service = ServiceIteratorPeekService(&iterator);
+		bool matches = (service->ioSignature.parameterIO[idColumn] == PARAMETER_OUT);
+		for(index8 i = 0; matches && (i < relation->nColumns); i++)
+			matches = DispatchParameterIOMatch(
+				ioSignature.parameterIO[i], service->ioSignature.parameterIO[i],
+				DISPATCH_MATCH_RELAXED);
+		if(matches) {
+			childOperator = service->op;
+			childServiceKind = service->kind;
+		}
+	}
+	ServiceIteratorEnd(&iterator);
+	if(!childOperator)
+		return 0;
+	// Create the FILTER operator
+	Operator * op = CreateFilterOperator(childOperator, &idColumn, 1);
+	// Register the new service.
+	// NOTE: the service kind is set to be the same as its child, although currently
+	// this should always be SERVICE_PRIMITIVE since IFactBeginConjunction()
+	// requies a RelationTable, as the ifact obviously requires storage.
+	ServiceRegistryAdd(relation, ioSignature, op, childServiceKind);
+	// the registry now holds the reference to the operator
+	ReleaseOperator(op);
+	return op;
+}
+
+
+/**
  * The operator of the service enumerating the tuples of a conjunction by its identified
  * atom, which sameIFacts() and removeIFactTuples() read the stored tuples with. Every
  * relation table storing ifact tuples must have this service; see
@@ -224,8 +266,11 @@ static Operator const * conjunctionOperator(IFactConjunction const * conjunction
 	byte parameterIO[relation->nColumns];
 	for(index8 i = 0; i < relation->nColumns; i++)
 		parameterIO[i] = (i == conjunction->idColumn) ? PARAMETER_IN : PARAMETER_OUT;
-	Operator const * op = ServiceRegistryFind(
-		relation, CreateIOSignature(parameterIO, relation->nColumns));
+	IOSignature ioSignature = CreateIOSignature(parameterIO, relation->nColumns);
+	Operator const * op = ServiceRegistryFind(relation, ioSignature);
+	// CLAUDE: the relation may not have the service yet; build it
+	if(!op)
+		op = createIdColumnService(relation, conjunction->idColumn, ioSignature);
 	ASSERT(op)
 	return op;
 }
