@@ -19,16 +19,41 @@ void InitializeConjunctionBuilder(ConjunctionBuilder * builder)
 }
 
 
-static void addCurrentClause(ConjunctionBuilder * builder)
+/**
+ * Return true if the conjunction under construction contains the given clause.
+ */
+static bool conjunctionHasClause(ConjunctionBuilder const * builder, Atom clause)
+{
+	size8 nClauses = ResizingArrayNElements(&(builder->clauses));
+	for(index8 i = 0; i < nClauses; i++) {
+		if(SameAtoms(clause, *((Atom *) ResizingArrayGetElement(&(builder->clauses), i))))
+			return true;
+	}
+	return false;
+}
+
+
+/**
+ * Add the builder's current clause to the conjunction under construction.
+ * Returns false if that clause is invalid, or if the conjunction already contains the clause.
+ */
+static bool addCurrentClause(ConjunctionBuilder * builder)
 {
 	// add current clause to array
+	if(!ClauseBuilderFinish(&(builder->clauseBuilder)))
+		return false;
 	Atom clause = ClauseBuilderCreateFormula(&(builder->clauseBuilder));
+	if(conjunctionHasClause(builder, clause)) {
+		ReleaseFormula(clause);
+		return false;
+	}
 	ClauseBuilderReset(&(builder->clauseBuilder));
 	// update arity
 	uint8 clauseArity = FormulaArity(clause);
 	ASSERT(builder->arity <= 255 - clauseArity);
 	builder->arity += clauseArity;
 	ResizingArrayAppend(&(builder->clauses), &clause);
+	return true;
 }
 
 
@@ -43,7 +68,8 @@ bool ConjunctionBuilderPush(ConjunctionBuilder * builder, Token token)
 
 	if((token.type != TOKEN_AND) || !ClauseBuilderIsValid(&(builder->clauseBuilder)))
 		return false;
-	addCurrentClause(builder);
+	if(!addCurrentClause(builder))
+		return false;
 	builder->isValid = false;
 	return true;
 }
@@ -63,19 +89,24 @@ bool ConjunctionBuilderIsSingleClause(ConjunctionBuilder const * builder)
 }
 
 
-static void finishConjunctionBuilder(ConjunctionBuilder * builder)
+/**
+ * Complete the conjunction builder by adding the current clause, if one exists.
+ * Returns false if that clause cannot be added; see addCurrentClause().
+ */
+bool ConjunctionBuilderFinish(ConjunctionBuilder * builder)
 {
 	ASSERT(builder->isValid);
 	if(!ClauseBuilderIsEmpty(&(builder->clauseBuilder))) {
 		ASSERT(ClauseBuilderIsValid(&(builder->clauseBuilder)));
-		addCurrentClause(builder);
+		builder->isValid = addCurrentClause(builder);
 	}
+	return builder->isValid;
 }
 
 
 Atom ConjunctionBuilderCreateFormula(ConjunctionBuilder * builder)
 {
-	finishConjunctionBuilder(builder);
+	ASSERT(builder->isValid);
 
 	size8 nClauses = ResizingArrayNElements(&(builder->clauses));
 	Atom const * clauses = ResizingArrayGetMemory(&(builder->clauses));
@@ -116,6 +147,8 @@ Atom CStringToConjunction(char const * cString)
 	TokenizeCString(cString, pushToConjunctionBuilder, &builder);
 
 	ASSERT(ConjunctionBuilderIsValid(&builder))
+	bool isFinished = ConjunctionBuilderFinish(&builder);
+	ASSERT(isFinished)
 	Atom conjunction = ConjunctionBuilderCreateFormula(&builder);
 	CleanupConjunctionBuilder(&builder);
 	return conjunction;

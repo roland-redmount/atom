@@ -37,7 +37,7 @@ struct s_Tokenizer {
 								// e.g. a variable "x" or a terminated string "\"foo\""
 
 	enum TokenizerMode mode;	// which of a role name and an actor is being read
-	enum TokenType type;		// initially TOKEN_INVALID
+	enum TokenType type;		// type of the token currently being read; initially TOKEN_INVALID
 	StringBuffer buffer;
 	union {
 		struct {

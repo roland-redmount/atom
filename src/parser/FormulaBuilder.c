@@ -25,6 +25,21 @@ bool FormulaBuilderIsValid(FormulaBuilder const * builder)
 }
 
 
+bool FormulaBuilderFinish(FormulaBuilder * builder)
+{
+	ConjunctionBuilder * conjunctionBuilder = &(builder->conjunctionBuilder);
+	if(!ConjunctionBuilderIsSingleClause(conjunctionBuilder))
+		return ConjunctionBuilderFinish(conjunctionBuilder);
+
+	ClauseBuilder * clauseBuilder = &(conjunctionBuilder->clauseBuilder);
+	if(!ClauseBuilderIsSingleTerm(clauseBuilder))
+		return ClauseBuilderFinish(clauseBuilder);
+
+	// a single term is held by the term builder, and has nothing to finish
+	return true;
+}
+
+
 /*
  * A conjunction of one clause, or a clause of one term, says no more than the
  * term itself. Each builder still holds the formulas it has collected, so the
@@ -137,11 +152,13 @@ Atom ParseFormula(char const * cString, index32 * errorPosition)
 
 	Atom formula = (Atom) {0};
 	if(tokenizeToFormulaBuilder(cString, &builder, errorPosition)) {
-		if(FormulaBuilderIsValid(&builder))
+		if(FormulaBuilderIsValid(&builder) && FormulaBuilderFinish(&builder))
 			formula = FormulaBuilderCreateFormula(&builder);
 		else
-			// every token was accepted, but they do not add up to a formula:
-			// the string ends where the missing syntax should have been
+			// Either every token was accepted but they do not add up to a formula, or
+			// the last term or clause repeats one before it, which is only known once
+			// no more tokens follow. Either way the string ends where the missing
+			// syntax should have been.
 			*errorPosition = CStringLength(cString);
 	}
 	// A builder abandoned part way through releases whatever it had collected,

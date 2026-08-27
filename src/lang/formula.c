@@ -158,7 +158,7 @@ Atom CreateFormula(Atom form, TypedTuple const * actors)
 }
 
 
-Atom CreateFormulaFromArray(Atom form, TypedAtom const * actors)
+Atom CreateFormulaFromArray(Atom form, TypedAtom const actors[])
 {
 	return internFormula(form, CreateTypedTupleFromArray(actors, FormArity(form)));
 }
@@ -270,7 +270,7 @@ index32 FormulaRoleIndex(Atom formula, Atom roleName)
 }
 
 
-Atom CreatePredicate(Atom const * roleNames, TypedAtom * actors, size8 arity)
+Atom CreatePredicate(Atom const roleNames[], TypedAtom actors[], size8 arity)
 {
 	Atom predicateForm = CreatePredicateForm(roleNames, arity);
 
@@ -309,10 +309,25 @@ Atom TermGetRoleActor(Atom termForm, Atom const termActors[], const char * role,
 }
 
 
-Atom CreateClause(Atom const * terms, size8 nTerms)
+/**
+ * Returhs true if the formulas array contains repeated formula atoms.
+ */
+static bool FormulasRepeat(Atom const formulas[], size8 nFormulas)
+{
+	for(index8 i = 1; i < nFormulas; i++)
+		for(index8 j = 0; j < i; j++)
+			if(SameAtoms(formulas[i], formulas[j]))
+				return true;
+	return false;
+}
+
+
+Atom CreateClause(Atom const terms[], size8 nTerms)
 {
 	// a clause without terms is meaningless, and would give zero length arrays below
 	ASSERT(nTerms > 0);
+	// All terms must be unique
+	ASSERT(!FormulasRepeat(terms, nTerms))
 
 	// Take a view of every term before building the clause, so that the terms
 	// are read with one registry lookup each
@@ -356,10 +371,12 @@ Atom CreateClause(Atom const * terms, size8 nTerms)
 
 
 // NOTE: this is very similar to CreateClause, could be refactored
-Atom CreateConjunction(Atom const * clauses, size8 nClauses)
+Atom CreateConjunction(Atom const clauses[], size8 nClauses)
 {
 	// as in CreateClause(), a conjunction without clauses is meaningless
 	ASSERT(nClauses > 0);
+	// All clauses must be unique
+	ASSERT(!FormulasRepeat(clauses, nClauses))
 
 	// Take a view of every clause before building the conjunction, so that the
 	// clauses are read with one registry lookup each
@@ -458,7 +475,7 @@ index8 ClauseGetTermActorsIndex(Atom clauseForm, Atom termForm, uint8 m)
 }
 
 
-void ClauseGetTermActorsIndices(Atom clauseForm, index8 * termActorsIndices)
+void ClauseGetTermActorsIndices(Atom clauseForm, index8 termActorsIndices[])
 {
 	// iterate over terms in the clause and compute indices
 	MultisetIterator iterator;

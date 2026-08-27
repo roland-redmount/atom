@@ -13,6 +13,7 @@ char const * atomTypeNames[N_ATOMTYPES + 1] = {
 	"VARIABLE",
 	"PARAMETER",
 	"FORMULA",
+	"GENERATOR"
 };
 
 

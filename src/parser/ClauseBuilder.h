@@ -36,6 +36,17 @@ bool ClauseBuilderIsValid(ClauseBuilder const * builder);
  */
 bool ClauseBuilderIsSingleTerm(ClauseBuilder const * builder);
 
+/**
+ * Complete the clause by adding the current term of the builder.
+ * This must be called before ClauseBuilderCreateFormula().
+ * Returns false if the completed clause is not valid; see ClauseBuilderIsValid().
+ */
+bool ClauseBuilderFinish(ClauseBuilder * builder);
+
+/**
+ * Create the clause the builder has collected. ClauseBuilderFinish() must have
+ * been called, and the builder must be valid.
+ */
 Atom ClauseBuilderCreateFormula(ClauseBuilder * builder);
 
 void ClauseBuilderReset(ClauseBuilder * builder);

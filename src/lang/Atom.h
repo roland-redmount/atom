@@ -8,7 +8,7 @@
  * depending on its type.
  */
 typedef union u_Atom {
-	// AT_NAME, AT_ID, AT_FORMULA
+	// AT_NAME, AT_ID, AT_FORMULA, AT_GENERATOR
 	data64 hash;
 	// AT_INT
 	int64 _int;
@@ -36,7 +36,7 @@ typedef union u_Atom {
  */
 void SortAtoms(Atom atoms[], size32 nAtoms);
 
-uint8 ReduceAtomsArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms);
+uint8 ReduceAtomsArray(Atom atoms[], uint32 multiplicities[], size8 nAtoms);
 
 int8 CompareAtoms(Atom atom1, Atom atom2);
 

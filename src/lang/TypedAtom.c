@@ -19,8 +19,9 @@
 #include "util/sort.h"
 
 
-// global constant invalid atom
 TypedAtom invalidAtom = {0};
+
+TypedAtom generatorAtom = {.type = AT_GENERATOR, .atom = {0}};
 
 /**
  * Create (typed) atom
@@ -81,20 +82,20 @@ static int8 quickSortCompareTypedAtoms(void const * item1, void const * item2, s
 }
 
 
-void SortTypedAtoms(TypedAtom * typedAtoms, size32 nAtoms)
+void SortTypedAtoms(TypedAtom typedAtoms[], size32 nAtoms)
 {
 	QuickSort(typedAtoms, nAtoms, sizeof(TypedAtom), quickSortCompareTypedAtoms);
 }
 
 
-static void shiftAtomArrayLeft(TypedAtom * typedAtoms, uint8 nAtoms, uint8 steps)
+static void shiftAtomArrayLeft(TypedAtom typedAtoms[], uint8 nAtoms, uint8 steps)
 {
 	for(index8 i = 0; i < nAtoms - steps; i++)
 		typedAtoms[i] = typedAtoms[i + steps];
 }
 
 
-size8 ReduceTypedAtomsArray(TypedAtom * typedAtoms, uint32 * multiplicities, size8 nAtoms)
+size8 ReduceTypedAtomsArray(TypedAtom typedAtoms[], uint32 multiplicities[], size8 nAtoms)
 {
 	for(index8 k = 0; k < nAtoms; k++) {
 		index8 i = k + 1;
@@ -150,6 +151,10 @@ void PrintTypedAtom(TypedAtom typedAtom)
 
 	case AT_PARAMETER:
 		PrintParameter(typedAtom.atom);
+		break;
+	
+	case AT_GENERATOR:
+		PrintChar('*');
 		break;
 
 	case AT_ID:

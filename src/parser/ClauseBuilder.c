@@ -22,16 +22,39 @@ void InitializeClauseBuilder(ClauseBuilder * builder)
 }
 
 
-static void addCurrentTerm(ClauseBuilder * builder)
+/**
+ * Return true if the clause under construction already has the given term.
+ */
+static bool clauseHasTerm(ClauseBuilder const * builder, Atom term)
+{
+	size8 nTerms = ResizingArrayNElements(&(builder->terms));
+	for(index8 i = 0; i < nTerms; i++) {
+		if(SameAtoms(term, *((Atom *) ResizingArrayGetElement(&(builder->terms), i))))
+			return true;
+	}
+	return false;
+}
+
+
+/**
+ * Add the current term to the clause under construction.
+ * Returns false if the clause already contains that rerm.
+ */
+static bool addCurrentTerm(ClauseBuilder * builder)
 {
 	// add current term to array
 	Atom term = TermBuilderCreateFormula(&(builder->termBuilder));
+	if(clauseHasTerm(builder, term)) {
+		ReleaseFormula(term);
+		return false;
+	}
 	TermBuilderReset(&(builder->termBuilder));
 	// update arity
 	uint8 termArity = FormulaArity(term);
 	ASSERT(builder->arity <= 255 - termArity);
 	builder->arity += termArity;
 	ResizingArrayAppend(&(builder->terms), &term);
+	return true;
 }
 
 
@@ -47,7 +70,8 @@ bool ClauseBuilderPush(ClauseBuilder * builder, Token token)
 
 	if((token.type != TOKEN_OR) || !TermBuilderIsValid(&(builder->termBuilder)))
 		return false;
-	addCurrentTerm(builder);
+	if(!addCurrentTerm(builder))
+		return false;
 	builder->isValid = false;
 	return true;
 }
@@ -72,19 +96,24 @@ bool ClauseBuilderIsSingleTerm(ClauseBuilder const * builder)
 }
 
 
-static void finishClauseBuilder(ClauseBuilder * builder)
+/**
+ * Complete the clause builder by adding the current term, if one exists.
+ * Returns false if the current term already exists in the clause.
+ */
+bool ClauseBuilderFinish(ClauseBuilder * builder)
 {
 	ASSERT(builder->isValid);
 	if(!TermBuilderIsEmpty(&(builder->termBuilder))) {
 		ASSERT(TermBuilderIsValid(&(builder->termBuilder)));
-		addCurrentTerm(builder);
+		builder->isValid = addCurrentTerm(builder);
 	}
+	return builder->isValid;
 }
 
 
 Atom ClauseBuilderCreateFormula(ClauseBuilder * builder)
 {
-	finishClauseBuilder(builder);
+	ASSERT(builder->isValid);
 
 	size8 nTerms = ResizingArrayNElements(&(builder->terms));
 	Atom const * terms = ResizingArrayGetMemory(&(builder->terms));
@@ -125,6 +154,8 @@ Atom CStringToClause(char const * cString)
 	TokenizeCString(cString, pushToClauseBuilder, &builder);
 
 	ASSERT(ClauseBuilderIsValid(&builder))
+	bool isFinished = ClauseBuilderFinish(&builder);
+	ASSERT(isFinished)
 	Atom clause = ClauseBuilderCreateFormula(&builder);
 	CleanupClauseBuilder(&builder);
 	return clause;

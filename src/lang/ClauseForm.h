@@ -10,7 +10,7 @@
 /**
  * Create a clause form from a list of term forms, possibly containing duplicates.
  */
-Atom CreateClauseForm(Atom const * termForms, size8 nTerms);
+Atom CreateClauseForm(Atom const termForms[], size8 nTerms);
 
 bool IsClauseForm(Atom form);
 
@@ -28,11 +28,6 @@ size8 ClauseFormNTerms(Atom clauseForm);
  * Total number of actors in a clause of this form, including multiplicities.
  */
 size8 ClauseArity(Atom clauseForm);
-
-/**
- * Get the k'th term form in this clause form, by canonical ordering.
- */
-Atom ClauseFormGetTermForm(Atom clauseForm, index8 k);
 
 /**
  * Print a clause form to stdout

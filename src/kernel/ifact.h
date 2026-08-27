@@ -116,6 +116,7 @@ size32 IFactDraftCurrentNTuples(IFactDraft * draft);
 /**
  * Finalize the IFactDraft to create an AT_ID atom. Computes the AT_ID atom's
  * hash from all identifying facts, asserts all facts and returns the AT_ID atom.
+ * The caller obtain a reference to the returned AT_ID atom.
  */
 Atom IFactEnd(IFactDraft * draft);
 

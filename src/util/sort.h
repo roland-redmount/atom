@@ -35,14 +35,14 @@ void QuickSort(void * items, size32 nItems, size32 itemSize, ItemComparator comp
 /**
  * Reorder an array of equally sized items.
  */
-void ReorderArray(void * array, index8 const * order, size8 nItems, size32 itemSize);
+void ReorderArray(void * array, index8 const order[], size8 nItems, size32 itemSize);
 
 void ReorderRaggedArray(
-    void * array, index8 const * order, size32 const * blockSizes, size32 nBlocks);
+    void * array, index8 const order[], size32 const blockSizes[], size32 nBlocks);
 
 void FindArrayOrdering(
     void const * data, size8 nItems, size32 itemSize, 
-    index8 * ordering, ItemComparator compare);
+    index8 ordering[], ItemComparator compare);
 
 /**
  * Given an array of items of given size and an item index, return a pointer to
@@ -76,13 +76,13 @@ void * BinarySearch(
 /**
  * Reorder a byte array accoring to an index vector.
  */
-void ReorderByteArray(byte const * array, index8 const * index, size8 n, byte * reordered);
+void ReorderByteArray(byte const array[], index8 const index[], size8 n, byte reordered[]);
 
 /**
  * Invert a permutation perm. If inv = invertPermutation(perm, n),
  * then y[i] = x[perm[i]] iff y[rev[i]] = x[i].
  */
-void InvertPermutation(const index8 * permutation, index8 * inverted, size8 n);
+void InvertPermutation(const index8 permutation[], index8 inverted[], size8 n);
 
 /**
  * Perform a random permutation of the given items array using the

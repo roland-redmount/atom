@@ -27,6 +27,13 @@ bool FormulaBuilderPush(FormulaBuilder * builder, Token token);
  */
 bool FormulaBuilderIsValid(FormulaBuilder const * builder);
 
+/**
+ * Finalize the formula builder, adding any remaining clause or term.
+ * This must be called before calling FormulaBuilderCreateFormula().
+ * Returns false if the formula is not valid.
+ */
+bool FormulaBuilderFinish(FormulaBuilder * builder);
+
 Atom FormulaBuilderCreateFormula(FormulaBuilder * builder);
 
 void FormulaBuilderReset(FormulaBuilder * builder);

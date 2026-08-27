@@ -17,8 +17,11 @@ typedef struct s_TypedAtom
 } __attribute__((packed)) TypedAtom;
 
 
-// the invalid atom, only used internally to signal errors
+// The invalid atom, only used internally to signal errors
 extern TypedAtom invalidAtom;
+
+// The generator atom (*)
+extern  TypedAtom generatorAtom;
 
 /**
  * Shorthand for (TypedAtom) {.type = type, .atom = atom}
@@ -40,7 +43,7 @@ int8 CompareTypedAtoms(TypedAtom atom1, TypedAtom atom2);
 /**
  * Sort a list of atoms in-place, ordered by CompareTypedAtoms()
  */
-void SortTypedAtoms(TypedAtom * atoms, size32 nAtoms);
+void SortTypedAtoms(TypedAtom atoms[], size32 nAtoms);
 
 /**
  * Reduce a list of tyoed atoms in-place so that each atom occurs only once,
@@ -48,7 +51,7 @@ void SortTypedAtoms(TypedAtom * atoms, size32 nAtoms);
  * Writes the multiplicities of each atom to the
  * provided multiplicities array and returns the number of unique atoms.
  */
-size8 ReduceTypedAtomsArray(TypedAtom * atoms, uint32 * multiplicities, size8 nAtoms);
+size8 ReduceTypedAtomsArray(TypedAtom atoms[], uint32 multiplicities[], size8 nAtoms);
 
 /**
  * Pretty-print an atom to stdout.

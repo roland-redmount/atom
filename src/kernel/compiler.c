@@ -809,7 +809,7 @@ static Operator * compileConjunctionRecursive(
  * and so obtains a parameter of its own. SameVariable() gives us this for free.
  */
 static size8 parameterizeLocalVariables(
-	TypedTuple * clauseActors, index8 matchedTermIndex, index8 const * termActorsIndices,
+	TypedTuple * clauseActors, index8 matchedTermIndex, index8 const termActorsIndices[],
 	size8 matchedTermArity)
 {
 	index8 matchedTermBegin = termActorsIndices[matchedTermIndex];

@@ -27,7 +27,7 @@ Atom CreateList(ListElementGenerator generator, void const * data, byte elementT
 /**
  * Create a list from an array of typed atoms
  */
-Atom CreateListFromArray(Atom const * listElements, byte elementType, size8 nAtoms);
+Atom CreateListFromArray(Atom const listElements[], byte elementType, size8 nAtoms);
 
 // Atom CreateListFromTuple(TypedTuple const * tuple);
 

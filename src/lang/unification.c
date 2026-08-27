@@ -35,7 +35,7 @@ static void graphSetNode(TypedAtom * edges, index8 edgeIndex, enum EdgeSide  sid
  * Replace all occurences of source with dest in the given graph,
  * starting from a given edge
  */
-static void graphSubstitute(TypedAtom source, TypedAtom dest, TypedAtom * edges, uint8 nEdges, uint8 startEdge)
+static void graphSubstitute(TypedAtom source, TypedAtom dest, TypedAtom edges[], uint8 nEdges, uint8 startEdge)
 {
 	for(index8 i = startEdge; i < nEdges; i++) {
 		if(SameTypedAtoms(edges[2*i], source))
@@ -48,7 +48,7 @@ static void graphSubstitute(TypedAtom source, TypedAtom dest, TypedAtom * edges,
 /**
  * Check if an undirected edge {a1, a2} exists in the graph given by the edges list.
  */
-static bool findInUGraph(TypedAtom a1, TypedAtom a2, TypedAtom const * edges, uint8 nEdges)
+static bool findInUGraph(TypedAtom a1, TypedAtom a2, TypedAtom const edges[], uint8 nEdges)
 {
 	for(index8 j = 0; j < nEdges; j++) {
 		TypedAtom left = graphGetNode(edges, j, EDGE_LEFT_NODE);

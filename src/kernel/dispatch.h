@@ -40,7 +40,7 @@ bool DispatchQuery(FormulaView query, Service * service, index8 permutation[]);
 /**
  * Same, using a term (formula) instead of a termform and actors tuple
  */
-bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutation);
+bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 permutation[]);
 
 
 /**
@@ -65,10 +65,18 @@ bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutatio
 #define DISPATCH_MATCH_EXACT		1
 #define DISPATCH_MATCH_RELAXED		2
 
- bool DispatchParameterizedQuery(
+bool DispatchParameterizedQuery(
 	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
 	Service * service, index8 permutation[],
 	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch);
+
+
+/**
+ * Test if a service parameter IO direction matches a query parameter IO direction.
+ * With matchMode = DISPATCH_MATCH_EXACT, the two must agree; with DISPATCH_MATCH_RELAXED
+ * a service output also serves a query input.
+ */
+bool DispatchParameterIOMatch(byte queryIO, byte serviceIO, int matchMode);
 
 
 /**

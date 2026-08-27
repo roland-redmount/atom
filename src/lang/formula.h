@@ -43,7 +43,7 @@ Atom CreateFormula(Atom form, TypedTuple const * actors);
  * Create a formula from a form and an array of actors, whose length must be
  * the arity of the form.
  */
-Atom CreateFormulaFromArray(Atom form, TypedAtom const * actors);
+Atom CreateFormulaFromArray(Atom form, TypedAtom const actors[]);
 
 /**
  * Add a reference to a formula.
@@ -90,7 +90,7 @@ void FormulaDump(void);
  * Create a predicate from two arrays of role names (AT_NAME) and actors,
  * both of the same length nParts.
  */
-Atom CreatePredicate(Atom const * roleNames, TypedAtom * actors, size8 arity);
+Atom CreatePredicate(Atom const roleNames[], TypedAtom actors[], size8 arity);
 
 /**
  * Create a term from a predicate and sign
@@ -105,8 +105,9 @@ Atom TermGetRoleActor(Atom termForm, Atom const termActors[], const char * role,
 
 /**
  * Create a clause from a list of term formulas, in any order.
+ * No term may be repeated.
  */
-Atom CreateClause(Atom const * terms, size8 nTerms);
+Atom CreateClause(Atom const terms[], size8 nTerms);
 
 /**
  * Find the index into the list of terms corresponding the given clause form
@@ -125,12 +126,13 @@ index8 ClauseGetTermActorsIndex(Atom clauseForm, Atom termForm, uint8 m);
  * including multiples. The termIndices array must have at least as many elements
  * as the total number of terms + 1; the last element will be set to the total clause arity.
  */
-void ClauseGetTermActorsIndices(Atom clauseForm, index8 * termActorsIndices);
+void ClauseGetTermActorsIndices(Atom clauseForm, index8 termActorsIndices[]);
 
 /**
  * Create a conjunction from a list of terms, in any order.
+ * No clause may be repeated.
  */
-Atom CreateConjunction(Atom const * clauses, size8 nClauses);
+Atom CreateConjunction(Atom const clauses[], size8 nClauses);
 
 
 /**

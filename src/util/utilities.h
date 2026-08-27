@@ -24,8 +24,8 @@ void SwapMemory(void * address1, void * address2, size32 nBytes);
 /**
  * Printing arrays to stdout
  */
-void PrintIndexArray(index32 const * array, size32 n);
-void PrintIndex8Array(index8 const * array, size8 n);
+void PrintIndexArray(index32 const array[], size32 n);
+void PrintIndex8Array(index8 const array[], size8 n);
 
 
 #endif // UTILITIES_H

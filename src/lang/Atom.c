@@ -20,7 +20,7 @@ bool SameAtoms(Atom atom1, Atom atom2)
 }
 
 
-static void shiftAtomsArrayLeft(Atom * atoms, uint8 nDatums, uint8 steps)
+static void shiftAtomsArrayLeft(Atom atoms[], uint8 nDatums, uint8 steps)
 {
 	for(index8 i = 0; i < nDatums - steps; i++)
 		atoms[i] = atoms[i + steps];
@@ -48,7 +48,7 @@ void SortAtoms(Atom atoms[], size32 nAtoms)
  * Writes the multiplicities of each atom to the
  * provided multiplicities array and returns the number of unique atoms.
  */
-uint8 ReduceAtomsArray(Atom * atoms, uint32 * multiplicities, size8 nAtoms)
+uint8 ReduceAtomsArray(Atom atoms[], uint32 multiplicities[], size8 nAtoms)
 {
 	for(index8 k = 0; k < nAtoms; k++) {
 		index8 i = k + 1;

@@ -151,7 +151,7 @@ void IFactAcquire(Atom ifact)
 /**
  * Create query tuple to retrieve all facts with the ifact atom in the idColumn (0-based)
  */ 
-static void setupQueryTuple(Atom * tuple, size8 nColumns, Atom ifact, index8 idColumn)
+static void setupQueryTuple(Atom tuple[], size8 nColumns, Atom ifact, index8 idColumn)
 {
 	SetMemory(tuple, nColumns * sizeof(Atom), 0);
 	tuple[idColumn] = ifact;
@@ -207,6 +207,48 @@ void IFactReserve(data64 hash)
 
 
 /**
+ * Register a service for the given relation with idColumn as the sole input parameter.
+ * Creates a FILTER operator based on an existing service for the relation.
+ * Returns 0 if the relation has no suitable service to filter.
+ */
+static Operator * createIdColumnService(
+	Relation const * relation, index8 idColumn, IOSignature ioSignature)
+{
+	// Find a service yielding an output wherever this one does, and at the identified
+	// column, which is the one the filter tests.
+	Operator * childOperator = 0;
+	enum ServiceKind childServiceKind = 0;
+	ServiceIterator iterator;
+	ServiceRegistryIterate(relation, &iterator);
+	while(!childOperator && ServiceIteratorNext(&iterator)) {
+		Service const * service = ServiceIteratorPeekService(&iterator);
+		bool matches = (service->ioSignature.parameterIO[idColumn] == PARAMETER_OUT);
+		for(index8 i = 0; matches && (i < relation->nColumns); i++)
+			matches = DispatchParameterIOMatch(
+				ioSignature.parameterIO[i], service->ioSignature.parameterIO[i],
+				DISPATCH_MATCH_RELAXED);
+		if(matches) {
+			childOperator = service->op;
+			childServiceKind = service->kind;
+		}
+	}
+	ServiceIteratorEnd(&iterator);
+	if(!childOperator)
+		return 0;
+	// Create the FILTER operator
+	Operator * op = CreateFilterOperator(childOperator, &idColumn, 1);
+	// Register the new service.
+	// NOTE: the service kind is set to be the same as its child, although currently
+	// this should always be SERVICE_PRIMITIVE since IFactBeginConjunction()
+	// requies a RelationTable, as the ifact obviously requires storage.
+	ServiceRegistryAdd(relation, ioSignature, op, childServiceKind);
+	// the registry now holds the reference to the operator
+	ReleaseOperator(op);
+	return op;
+}
+
+
+/**
  * The operator of the service enumerating the tuples of a conjunction by its identified
  * atom, which sameIFacts() and removeIFactTuples() read the stored tuples with. Every
  * relation table storing ifact tuples must have this service; see
@@ -224,8 +266,11 @@ static Operator const * conjunctionOperator(IFactConjunction const * conjunction
 	byte parameterIO[relation->nColumns];
 	for(index8 i = 0; i < relation->nColumns; i++)
 		parameterIO[i] = (i == conjunction->idColumn) ? PARAMETER_IN : PARAMETER_OUT;
-	Operator const * op = ServiceRegistryFind(
-		relation, CreateIOSignature(parameterIO, relation->nColumns));
+	IOSignature ioSignature = CreateIOSignature(parameterIO, relation->nColumns);
+	Operator const * op = ServiceRegistryFind(relation, ioSignature);
+	// If the relation lacks the necessary service yet, build it
+	if(!op)
+		op = createIdColumnService(relation, conjunction->idColumn, ioSignature);
 	ASSERT(op)
 	return op;
 }
@@ -473,83 +518,6 @@ Atom IFactEnd(IFactDraft * draft)
 }
 
 
-/**
- * NOTE: I am not convinced the below is needed at all. Commented away for now.
- * It seems that we are fine as long as tuples storing a protected (identified)
- * atom cannot be deleted, except when removing the identified atom. In the "cat"
- * example, it is true that adding (list @cat element 4 position @s) should
- * cause a logical contradiction with (list @cat length 3), but that must be
- * inferred by logical reasononing. Also, we certainly cannot assert new identifying
- * facts for an already existing AT_ID atom, but that cannot happen since IFactEnd()
- * prevents creating duplicate AT_ID atoms.
- * 
- * Check whether a tuple can be added to a relation without violating an
- * IFact definition.
- * 
- * It is illegal to delete tuples from a relation that are part of an ifact.
- * Also, an ifact must be "complete" in the sense that we cannot add tuples like
- * 
- *  list @cat element 4 position @s
- * 
- * once @cat has been defined. The only possible use for this might be partially
- * defined structures like a "prefix list" without the length constraint, where we
- * would define 
- * 
- * prefix-list *cat element 1 position @c &
- * prefix-list *cat element 2 position @a &
- * prefix-list *cat element 3 position @t &
- * 
- * so that @cat is defined as "any list that begins with c,a,t". But then it does
- * not make sense to add (list @cat element 4 position @s) because this contradicts
- * the logical definition (we have now extended the prefix). I think all cases are
- * analogous to such a prefex list. So it seems this should not be allowed.
- *
- * Hence, whenever the user attempts to either remove or add a tuple containing a
- * AT_ID from a table, we must check:
- * 
- *   IF the ifact corresponding to the AT_ID refers to the table as a conjuction
- *   AND the AT_ID is in the defining position
- *   THEN the tuple cannot be added/removed
- * 
- * Note that adding a tuple like (list @animals element 12 position @cat) is valid
- * since @cat is not in the definiting position.
- * 
- * For the (list element position) case, enforcing logical consistency would also 
- * forbid adding a fourth tuple, as it would violate (list @cat length 3),
- * but this is not yet implemented and likely cannot be invoked for core tables.
- * Conversely, the above checks render the explicit fact (list @cat length 3)
- * unnecessary as part of the ifact, as it can be inferred when the list elements
- * are fixed.
- */
-
- /*
-bool IFactCheckTuple(BTree const * tree, TypedTuple const * tuple)
-{
-	ASSERT(tuple->nAtoms == RelationBTreeNColumns(tree))
-	// ASSERT(tuple->protectedAtom)	// otherwise we have nothing to check
-	index8 protectedIndex = tuple->protectedAtom - 1;
-	for(index8 i = 0; i < tuple->nAtoms; i++) {
-		if(i == protectedIndex) {
-			// atom is defined by an IFact currently being created, skip check
-			continue;
-		}
-		TypedAtom typedAtom = TypedTupleGetElement(tuple, i);
-		if(typedAtom.type != AT_ID)
-			continue;
-		// check this atom
-		IFactHeader * header = peekIFactHeader(typedAtom.atom.hash);
-		ASSERT(header);
-		size8 nConjunctions = header->nConjunctions;
-		IFactConjunction * conjunctions = header->conjunctions;
-		for(index32 j = 0; j < nConjunctions; j++) {
-			if((conjunctions[j].btree == tree) && (conjunctions[j].idColumn == i))
-				return false;
-		}
-	}
- 	return true;
-}
-*/
-
 void removeIFactTuples(IFactConjunction * conjunction, Atom idAtom)
 {
 	RelationTable const * table = conjunction->table;
@@ -601,6 +569,14 @@ void IFactRelease(Atom idAtom)
 		for(index8 i = 0; i < headerCopy.nConjunctions; i++) {
 			IFactConjunction * conjunction = &(headerCopy.conjunctions[i]);
 			removeIFactTuples(conjunction, idAtom);
+			// Drop the relation table if no tuples are left
+
+			// CLAUDE: a core table is kept, as the kernel holds it for the lifetime
+			// of the process; see createCoreRelationTable()
+			if(!conjunction->table->isCore && RelationTableNRows(conjunction->table) == 0) {
+				// NOTE: unclear how to best handle const correctness here
+				DropRelationTable((RelationTable *) conjunction->table);
+			}
 		}
 		LookupRemoveAllRoles(idAtom);
 

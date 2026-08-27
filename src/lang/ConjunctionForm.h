@@ -9,7 +9,7 @@
 #include "lang/ClauseForm.h"
 
 
-Atom CreateConjunctionForm(Atom const * clauseForms, size8 nClauseForms);
+Atom CreateConjunctionForm(Atom const clauseForms[], size8 nClauseForms);
 void ReleaseConjunctionForm(Atom form);
 
 bool IsConjunctionForm(Atom form);

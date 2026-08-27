@@ -34,7 +34,7 @@ static void reverseRange(index8* array, index8 a, index8 b)
  * to the identity permutatíon
  */
 
-bool PermuteArray(index8 * perm, index8 a, size8 n)
+bool PermuteArray(index8 perm[], index8 a, size8 n)
 {
 	if(n <= 1) {
 		// trivial case {a}, no permutations
@@ -427,7 +427,7 @@ void FreeFormIterator(const FormIterator* iter)
  * Writes to the supplied permutation array, which must be at least n bytes
  * for a form with arity n.
  */
-void GetTuplePermutation(const FormIterator * iter, index8 * permutation)
+void GetTuplePermutation(const FormIterator * iter, index8 permutation[])
 {
 	// TODO: the permutation vector should probably be supplied by caller
 	if(IsPredicateForm(iter->form))

@@ -99,6 +99,13 @@ ElementMultiple MultisetIteratorGetElement(MultisetIterator const * iterator);
 
 void MultisetIteratorEnd(MultisetIterator * iterator);
 
+/**
+ * Find the element at position k in a multiset, according to the iteration order.
+ * This uses MultisetIterator to reach position k.
+ */
+Atom MultisetFindElement(Atom multiset, byte elementType, index32 k);
+
+
 void PrintMultiset(Atom multiset);
 
 

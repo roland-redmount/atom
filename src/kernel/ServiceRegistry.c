@@ -401,11 +401,6 @@ Service ServiceRegistryAdd(
 		// whatever was compiled for it is incomplete
 		ServiceRegistryInvalidateByTermForm(relation->termForm);
 		break;
-
-	case SERVICE_TEMPORARY:
-		// Compiler scaffolding, which is never registered; see ServiceKind
-		ASSERT(false)
-		break;
 	}
 
 	// NOTE: this returns a copy of the Service struct, but the allocated

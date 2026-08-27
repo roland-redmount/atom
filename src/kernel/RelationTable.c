@@ -18,6 +18,7 @@ RelationTable * CreateRelationTable(
 	AcquireRelation(relation);
 	table->provider = provider;
 	table->referenceCount = 1;
+	table->isCore = false;
 	// not readable by createStorage() below, which is what produces it
 	table->storage = 0;
 
