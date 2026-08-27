@@ -98,8 +98,14 @@ int AssertFormula(Atom formula)
 
 	// Any formula that contains a generator (*) is a defining fact
 	if(TypedTupleContainsAtom(formulaView.actors, generatorAtom)) {
-		// TODO: create an ifact
-		ASSERT(false)
+		Atom idAtom = CreateIFact(formulaView);
+		if(idAtom.hash) {
+			return ASSERT_OK;
+			// TODO: decide how to manage the reference to the new idAtom.
+			// Somehow the UI "owns it" ...
+		}
+		else
+			return ASSERT_INVALID_IFACT;
 	}
 
 	if(FormulaIsTerm(formula)) {

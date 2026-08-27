@@ -20,9 +20,13 @@
 int AssertFact(FormulaView fact, RelationTableProvider const * provider);
 
 /**
- * High level method to assert any formula: a single term without variables is a (ground) fact
- * and will be asserted by AssertFact(); a clause with at least two terms and at least one
- * variable is a rule and will be DictionaryAddClause().
+ * High level method to assert any formula.
+ * 1) any formula that contains a generator (*) is an ifact,
+ *    sent to CreateIFact()
+ * 1) a single term without variables is a (ground) fact,
+ *    sent to AssertFact()
+ * 2) a clause with at least two terms and at least one variable is a rule,
+ *    sent to DictionaryAddClause()
  */
 int AssertFormula(Atom formula);
 
@@ -34,6 +38,7 @@ int AssertFormula(Atom formula);
 #define ASSERT_CLAUSE_NO_VARIABLE	5	// a clause with no variables cannot be a rule
 #define ASSERT_CLAUSE_ONE_TERM		6	// a clause of one term cannot be a rule
 #define ASSERT_NOT_CLAUSE			7	// a conjunction
+#define ASSERT_INVALID_IFACT		8	// a formula with generators that is not an ifact
 
 /**
  * High level method to retract a fact. Removes the tuple from the corresponding
