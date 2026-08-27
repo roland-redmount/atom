@@ -11,7 +11,9 @@
 #include "lang/formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
+#include "library/list.h"
 #include "library/MachineService.h"
+#include "library/string.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
 
@@ -271,6 +273,8 @@ static void testMachineServiceSharedRelation(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 
 	ExecuteTest(testMachineServiceArgumentOrder);
 	ExecuteTest(testMachineServiceTestPredicate);
@@ -278,6 +282,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testMachineServiceIteratorState);
 	ExecuteTest(testMachineServiceSharedRelation);
 
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

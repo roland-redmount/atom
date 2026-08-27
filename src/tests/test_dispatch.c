@@ -14,6 +14,8 @@
 #include "kernel/Parameter.h"
 #include "lang/name.h"
 #include "storage/RelationBTree.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "testing/testing.h"
 
 
@@ -183,9 +185,10 @@ void testDispatchFilterable(void)
 	ASSERT_TRUE(DispatchParameterizedQuery(
 		FormulaGetForm(query), parameters, arity, DISPATCH_MATCH_RELAXED, &service,
 		permutation, 0, 0, 0))
-	index8 listIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST);
-	index8 positionIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION);
-	index8 elementIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT);
+	index8 const * listRoleIndex = GetListRoleIndex();
+	index8 listIndex = listRoleIndex[LIST_ROLE_LIST];
+	index8 positionIndex = listRoleIndex[LIST_ROLE_POSITION];
+	index8 elementIndex = listRoleIndex[LIST_ROLE_ELEMENT];
 	ASSERT_UINT32_EQUAL(service.ioSignature.parameterIO[listIndex], PARAMETER_IN)
 	ASSERT_UINT32_EQUAL(service.ioSignature.parameterIO[positionIndex], PARAMETER_OUT)
 	ASSERT_UINT32_EQUAL(service.ioSignature.parameterIO[elementIndex], PARAMETER_OUT)
@@ -298,6 +301,8 @@ void testDispatchIterator(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 	MathSetup();
 
 	ExecuteTest(testDispatchToService);
@@ -308,6 +313,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testDispatchFilterable);
 
 	FreeMachineServices();
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 	TestSummary();
 }

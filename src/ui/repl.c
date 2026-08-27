@@ -14,7 +14,9 @@
 #include "ui/assert.h"
 #include "lang/TermForm.h"
 #include "library/MachineService.h"
+#include "library/list.h"
 #include "library/math.h"
+#include "library/string.h"
 #include "parser/FormulaBuilder.h"
 #include "platform.h"
 #include "ui/query.h"
@@ -276,6 +278,8 @@ static int executeLine(char const * line)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 	MathSetup();
 	printBanner();
 

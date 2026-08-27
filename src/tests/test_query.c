@@ -8,6 +8,8 @@
 #include "library/MachineService.h"
 #include "parser/TermBuilder.h"
 #include "testing/fixtures.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "testing/testing.h"
 #include "ui/query.h"
 
@@ -281,6 +283,8 @@ void testQueryInvalidatedByRule(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 
 	ExecuteTest(testQueryStoredFacts);
 	ExecuteTest(testQueryIntegerLiteral);
@@ -293,6 +297,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testQueryInvalidatedByRule);
 
 	FreeMachineServices();
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 	TestSummary();
 }

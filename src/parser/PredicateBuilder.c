@@ -1,6 +1,5 @@
 
 #include "kernel/ifact.h"
-#include "kernel/string.h"
 #include "kernel/multiset.h"
 #include "lang/formula.h"
 #include "lang/name.h"

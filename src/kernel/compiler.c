@@ -2,7 +2,6 @@
 #include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
 #include "kernel/kernel.h"
-#include "kernel/list.h"
 #include "kernel/multiset.h"
 #include "kernel/operator.h"
 #include "kernel/Parameter.h"

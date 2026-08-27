@@ -3,18 +3,19 @@
 #include "kernel/kernel.h"
 #include "kernel/lookup.h"
 #include "kernel/Relation.h"
-#include "kernel/string.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "testing/testing.h"
 
 
 void testLookup(void)
 {
 	Atom string = CreateStringFromCString("foo");
-	Relation const * stringRelation = GetCoreRelation(RELATION_STRING);
-	Atom stringRole = GetCoreRoleName(ROLE_STRING);
+	Relation const * stringRelation = GetStringRelation();
+	Atom stringRole = GetStringRoleName();
 
 	ASSERT_TRUE(AtomHasRole(string, stringRelation, stringRole))
 	ASSERT_TRUE(AtomHasRole(string, stringRelation, (Atom) {0}))
@@ -110,8 +111,8 @@ void testLookupIterator(void)
 		Atom role = LookupIteratorGetRole(&iterator);
 		// the role is either list or string
 		ASSERT_TRUE(
-			SameAtoms(role, GetCoreRoleName(ROLE_LIST)) ||
-			SameAtoms(role, GetCoreRoleName(ROLE_STRING))
+			SameAtoms(role, GetListRoleName()) ||
+			SameAtoms(role, GetStringRoleName())
 		)
 	}
 	ASSERT_FALSE(LookupIteratorNext(&iterator))
@@ -189,12 +190,16 @@ void testLookupIterator(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 
 	ExecuteTest(testLookup);
 	ExecuteTest(testLookupPredicateRoles);
 	ExecuteTest(testLookupIterator);
 	// ExecuteTest(testRemoveAllPredicateRoles);
 
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

@@ -5,11 +5,11 @@
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
 #include "kernel/letter.h"
-#include "kernel/list.h"
+#include "library/list.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
-#include "kernel/string.h"
+#include "library/string.h"
 #include "kernel/tuple.h"
 #include "lang/formula.h"
 #include "lang/name.h"
@@ -1109,6 +1109,8 @@ void testFilterServiceInvalidatedByRule(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 	MathSetup();
 
 	ExecuteTest(testCompilePermute1);
@@ -1146,5 +1148,7 @@ int main(int argc, char * argv[])
 	// ExecuteTest(testCompileRecursiveJoin1);
 
 	FreeMachineServices();
+	StringShutdown();
+	ListShutdown();
 	TestSummary();
 }

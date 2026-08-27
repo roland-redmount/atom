@@ -1,7 +1,7 @@
 
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
-#include "kernel/pair.h"
+#include "library/pair.h"
 #include "testing/testing.h"
 
 
@@ -46,9 +46,11 @@ static void testPair(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	PairSetup();
 
 	ExecuteTest(testPair);
 
+	PairShutdown();
 	KernelShutdown();
 
 	TestSummary();

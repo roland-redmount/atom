@@ -1,6 +1,5 @@
 #include "btree/btree.h"
 #include "kernel/dictionary.h"
-#include "kernel/list.h"
 #include "kernel/multiset.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/typedtuple.h"

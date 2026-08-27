@@ -2,7 +2,8 @@
 #include "kernel/operator.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/list.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
@@ -113,6 +114,8 @@ void testRange(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 	MathSetup();
 
 	ExecuteTest(testAdd1);
@@ -120,6 +123,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testRange);
 
 	FreeMachineServices();
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

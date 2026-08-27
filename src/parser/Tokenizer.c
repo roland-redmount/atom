@@ -26,9 +26,9 @@
 #include "kernel/Int.h"
 #include "kernel/letter.h"
 #include "kernel/Parameter.h"
-#include "kernel/string.h"
 #include "lang/name.h"
 #include "lang/Variable.h"
+#include "library/string.h"
 #include "parser/Characters.h"
 #include "parser/Tokenizer.h"
 

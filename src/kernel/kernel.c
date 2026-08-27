@@ -50,10 +50,7 @@ static const size8 corePredicateArity[N_CORE_FORMS + 1] = {
 	3,	// (term-form predicate-form sign)
 	1,	// (clause-form)
 	1,	// (conjunction-form)
-	3,	// (list position element)
-	2,	// (list length)
 	2,	// (quote quoted)
-	1,	// (string)
 };
 
 /**
@@ -70,10 +67,7 @@ static const index32 coreFormRoleIds[N_CORE_FORMS + 1][CORE_FORMS_MAX_ARITY] = {
 	{ROLE_TERM_FORM, ROLE_PREDICATE_FORM, ROLE_SIGN},
 	{ROLE_CLAUSE_FORM},
 	{ROLE_CONJUNCTION_FORM},
-	{ROLE_LIST, ROLE_POSITION, ROLE_ELEMENT},
-	{ROLE_LIST, ROLE_LENGTH},
 	{ROLE_QUOTE, ROLE_QUOTED},
-	{ROLE_STRING},
 };
 
 /**
@@ -87,11 +81,7 @@ static const index32 coreRelationFormId[N_CORE_RELATIONS + 1] = {
 	FORM_TERM_FORM,
 	FORM_CLAUSE_FORM,
 	FORM_CONJUNCTION_FORM,
-	FORM_LIST_POSITION_ELEMENT,
-	FORM_LIST_POSITION_ELEMENT,
-	FORM_LIST_LENGTH,
 	FORM_QUOTE_QUOTED,
-	FORM_STRING,
 };
 
 /**
@@ -112,16 +102,8 @@ static const byte coreRelationAtomTypes[N_CORE_RELATIONS + 1][CORE_FORMS_MAX_ARI
 	{AT_ID},
 	// (conjunction-form:ID)
 	{AT_ID},
-	// (list:ID position:INT element:LETTER)
-	{AT_ID, AT_INT, AT_LETTER},
-	// (list:ID position:INT element:ID)
-	{AT_ID, AT_INT, AT_ID},
-	// (list:ID length:INT)
-	{AT_ID, AT_INT},
 	// (quote:ID quoted:ID)
 	{AT_ID, AT_ID},
-	// (string:ID)
-	{AT_ID},
 };
 
 /**
@@ -139,12 +121,6 @@ static const index32 coreServiceRelationId[N_CORE_SERVICES + 1] = {
 	RELATION_MULTISET_ID,
 	// (term-form <ID predicate-form >ID)
 	RELATION_TERM_FORM,
-	// (list <ID length >INT)
-	RELATION_LIST_LENGTH,
-	// (list <ID position >INT element >LETTER)
-	RELATION_LIST_LETTER,
-	// (list <ID position >INT element >ID)
-	RELATION_LIST_ID,
 };
 
 
@@ -162,12 +138,6 @@ static const byte coreServiceParameterIO[N_CORE_SERVICES + 1][CORE_FORMS_MAX_ARI
 	// (multiset >ID element >ID multiple >INT)
 	{PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT},
 	// (term-form <ID predicate-form >ID sign >INT)
-	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
-	// (list <ID length >INT)
-	{PARAMETER_IN, PARAMETER_OUT},
-	// (list <ID position >INT element >LETTER)
-	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
-	// (list <ID position >INT element >ID)
 	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 };
 
@@ -283,13 +253,9 @@ static void setupCoreRoleNames(void)
 	kernel.coreRoleNames[ROLE_TERM_FORM] = CreateNameFromCString("term-form");
 	kernel.coreRoleNames[ROLE_CLAUSE_FORM] = CreateNameFromCString("clause-form");
 	kernel.coreRoleNames[ROLE_CONJUNCTION_FORM] = CreateNameFromCString("conjunction-form");
-	kernel.coreRoleNames[ROLE_LIST] = CreateNameFromCString("list");
-	kernel.coreRoleNames[ROLE_POSITION] = CreateNameFromCString("position");
-	kernel.coreRoleNames[ROLE_LENGTH] = CreateNameFromCString("length");
+	kernel.coreRoleNames[ROLE_SIGN] = CreateNameFromCString("sign");
 	kernel.coreRoleNames[ROLE_QUOTE] = CreateNameFromCString("quote");
 	kernel.coreRoleNames[ROLE_QUOTED] = CreateNameFromCString("quoted");
-	kernel.coreRoleNames[ROLE_STRING] = CreateNameFromCString("string");
-	kernel.coreRoleNames[ROLE_SIGN] = CreateNameFromCString("sign");
 }
 
 
@@ -308,15 +274,19 @@ static void setupCoreRoleNames(void)
  */
 void CoreFormSetTuple(index32 formId, Atom const inputTuple[], Atom tuple[])
 {
-	for(index8 i = 0; i < corePredicateArity[formId]; i++)
-		tuple[kernel.corePredicateRoleIndex[formId][i]] = inputTuple[i];
+	TupleCopyPermuted(
+		inputTuple, tuple, kernel.corePredicateRoleIndex[formId], corePredicateArity[formId]);
+	// for(index8 i = 0; i < corePredicateArity[formId]; i++)
+	// 	tuple[kernel.corePredicateRoleIndex[formId][i]] = inputTuple[i];
 }
 
 
 void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
 {
-	for(index8 i = 0; i < corePredicateArity[formId]; i++)
-		array[kernel.corePredicateRoleIndex[formId][i]] = inputArray[i];
+	CopyBytesPermuted(
+		inputArray, array, kernel.corePredicateRoleIndex[formId], corePredicateArity[formId]);
+	// for(index8 i = 0; i < corePredicateArity[formId]; i++)
+	// 	array[kernel.corePredicateRoleIndex[formId][i]] = inputArray[i];
 }
 
 

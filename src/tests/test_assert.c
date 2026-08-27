@@ -6,11 +6,12 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
-#include "kernel/list.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
 #include "kernel/RelationTableRegistry.h"
 #include "lang/formula.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/ConjunctionBuilder.h"
 #include "parser/TermBuilder.h"
@@ -216,8 +217,8 @@ void testAssertFormulaRejects(void)
  */
 void testCreateIFactList(void)
 {
-	RelationTable const * listLetter = GetCoreRelationTable(RELATION_LIST_LETTER);
-	RelationTable const * listLength = GetCoreRelationTable(RELATION_LIST_LENGTH);
+	RelationTable const * listLetter = GetListRelationTable(AT_LETTER);
+	RelationTable const * listLength = GetListLengthRelationTable();
 	size32 listLetterNRows = RelationTableNRows(listLetter);
 	size32 listLengthNRows = RelationTableNRows(listLength);
 
@@ -311,7 +312,7 @@ void testCreateIFactTwoIdColumns(void)
  */
 void testCreateIFactExisting(void)
 {
-	RelationTable const * listLength = GetCoreRelationTable(RELATION_LIST_LENGTH);
+	RelationTable const * listLength = GetListLengthRelationTable();
 	size32 listLengthNRows = RelationTableNRows(listLength);
 
 	Atom formula = CStringToConjunction("list * position 1 element 'C & list * length 1");
@@ -336,7 +337,7 @@ void testCreateIFactExisting(void)
  */
 void testCreateIFactDefiningFactsProtected(void)
 {
-	RelationTable const * listLength = GetCoreRelationTable(RELATION_LIST_LENGTH);
+	RelationTable const * listLength = GetListLengthRelationTable();
 	size32 listLengthNRows = RelationTableNRows(listLength);
 
 	Atom formula = CStringToConjunction("list * position 1 element 'D & list * length 1");
@@ -514,6 +515,8 @@ void testCreateIFactRejects(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 
 	ExecuteTest(testAssertRetract);
 	ExecuteTest(testAssertContradictsStoredFact);
@@ -531,6 +534,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCreateIFactDefiningFactsProtected);
 	ExecuteTest(testCreateIFactRejects);
 
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

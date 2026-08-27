@@ -126,8 +126,27 @@ void MoveMemory(void const * source, void * destination, size32 size);
  */
 int8 CompareMemory(void const * address1, void const * address2, size32 size);
 
+/**
+ * Copy a byte array with permutation, so that
+ * destinationTuple[permutation[i]] = sourceTuple[i]
+ */
+void CopyBytesPermuted(
+	byte const sourceTuple[], byte destinationTuple[], index8 const permutation[], size8 nBytes);
+
+/**
+ * Find the length of a zero-terminated string, excluding the zero terminator.
+ */
 size32 CStringLength(char const * string);
+
+/**
+ * Return the lexiographic order of two zero-terminated strings.
+ */
 int8 CStringCompare(char const * string1, char const * string2);
+
+/**
+ * Return the lexiographic order of two zero-terminated strings, up to at
+ * most maxLength characters.
+ */
 int8 CStringCompareLimited(char const * string1, char const * string2, size32 maxLength);
 
 /**
@@ -141,6 +160,10 @@ void CStringCopy(char const * source, char * destination);
  */
 void CStringCopyLimited(char const * source, char * destination, size32 maxLength);
 
+/**
+ * Find a character in a zero-terminated string. Returns a pointer to
+ * the characters, or 0 if not found
+ */
 char const * CStringFindChar(char const * string, char c);
 
 /**
@@ -153,7 +176,14 @@ void CStringAppend(const char * suffix, char * buffer, size32 bufferSize);
  */
 void CStringPrepend(const char * prefix, char * buffer, size32 bufferSize);
 
+/**
+ * Parse a zero-terminated string into a 64-bit signed integer.
+ */
 int64 StringToInt64(char const * string, size32 length);
+
+/**
+ * Parse a zero-terminated string into a 64-bit floatining point number.
+ */
 float64 StringToFloat64(char const * string, size32 length);
 
 /**

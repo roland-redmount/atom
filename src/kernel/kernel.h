@@ -46,18 +46,11 @@ void KernelShutdown(void);
 #define	ROLE_TERM_FORM				5
 #define	ROLE_CLAUSE_FORM			6
 #define	ROLE_CONJUNCTION_FORM		7
+#define ROLE_SIGN					8
+#define	ROLE_QUOTE					9
+#define	ROLE_QUOTED					10
 
-#define ROLE_LIST					8       // was required for formula -- can be skipped 
-#define ROLE_POSITION				9
-#define ROLE_LENGTH					10
-
-#define	ROLE_QUOTE					11
-#define	ROLE_QUOTED					12
-
-#define	ROLE_STRING					13		// not really core language
-#define ROLE_SIGN					14
-
-#define N_CORE_ROLES				14
+#define N_CORE_ROLES				10
 
 
 /**
@@ -68,14 +61,9 @@ void KernelShutdown(void);
 #define FORM_TERM_FORM						3	// (term-form predicate-form sign)
 #define FORM_CLAUSE_FORM					4	// (clause-form)
 #define FORM_CONJUNCTION_FORM				5	// (conjunction-form)
-#define FORM_LIST_POSITION_ELEMENT			6	// (list position element)
-#define FORM_LIST_LENGTH					7	// (list length)
-#define FORM_QUOTE_QUOTED					8	// (quote quoted)
-#define FORM_STRING							9	// (string)
+#define FORM_QUOTE_QUOTED					6	// (quote quoted)
 
-// #define FORM_PAIR_LEFT_RIGHT				X 	// (pair left right)
-
-#define N_CORE_FORMS					9
+#define N_CORE_FORMS						6
 
 
 /**
@@ -88,15 +76,9 @@ void KernelShutdown(void);
 #define RELATION_TERM_FORM					4	// (term-form:ID predicate-form:ID sign:INT)
 #define RELATION_CLAUSE_FORM				5	// (clause-form:ID)
 #define RELATION_CONJUNCTION_FORM			6	// (conjunction-form:ID)
-#define RELATION_LIST_LETTER        		7	// (list:ID position:INT element:LETTER)
-#define RELATION_LIST_ID  	 	     		8	// (list:ID position:INT element:ID)
-#define RELATION_LIST_LENGTH				9	// (list:ID length:INT)
-#define RELATION_QUOTE	    				10	// (quote:ID quoted:ID)
-#define RELATION_STRING						11	// (string:ID)
+#define RELATION_QUOTE	    				7	// (quote:ID quoted:ID)
 
-// #define RELATION_PAIR_LEFT_RIGHT			X 	// (pair:ID left right)
-
-#define N_CORE_RELATIONS					11
+#define N_CORE_RELATIONS					7
 
 /**
  * Stable identifiers for a small set of core services.
@@ -107,11 +89,8 @@ void KernelShutdown(void);
 #define SERVICE_MULTISET_ID					3	// (multiset <ID element >ID multiple >INT)
 #define SERVICE_MULTISET_ID_ALL				4	// (multiset >ID element >ID multiple >INT)
 #define SERVICE_TERM_FORM					5	// (term-form <ID predicate-form >ID)
-#define SERVICE_LIST_LENGTH                 6	// (list <ID length >INT)
-#define SERVICE_LIST_LETTER					7	// (list <ID position >INT element >LETTER)	
-#define SERVICE_LIST_ID						8	// (list <ID position >INT element >ID)	
 
-#define N_CORE_SERVICES                     8
+#define N_CORE_SERVICES                     5
 
 /**
  * Lookup one of the "primitive" forms for core tables

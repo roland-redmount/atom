@@ -4,7 +4,7 @@
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
-#include "kernel/string.h"
+#include "library/string.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"

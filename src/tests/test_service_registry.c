@@ -9,6 +9,8 @@
 #include "lang/formula.h"
 #include "storage/RelationBTree.h"
 #include "parser/TermBuilder.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "testing/testing.h"
 
 
@@ -318,6 +320,8 @@ void testDropTableAfterSharedOperator(void)
 int main(void)
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 	nCoreServices = ServiceRegistryCount();
 
 	ExecuteTest(testAddRemoveService);
@@ -327,6 +331,8 @@ int main(void)
 	ExecuteTest(testDropTableWithSharedOperator);
 	ExecuteTest(testDropTableAfterSharedOperator);
 
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

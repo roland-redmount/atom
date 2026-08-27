@@ -67,6 +67,14 @@ int8 CompareMemory(void const * address1, void const * address2, size32 size)
 }
 
 
+void CopyBytesPermuted(
+	byte const sourceTuple[], byte destinationTuple[], index8 const permutation[], size8 nBytes)
+{
+	for(index8 i = 0; i < nBytes; i++)
+		destinationTuple[permutation[i]] = sourceTuple[i];
+}
+
+
 /**
  * Get the highest set bit of a 32-bit value x.
  * x must not be zero, or we have undefined behavior

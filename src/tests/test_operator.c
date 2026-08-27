@@ -4,12 +4,12 @@
 #include "kernel/letter.h"
 #include "kernel/operator.h"
 #include "kernel/kernel.h"
-#include "kernel/list.h"
+#include "library/list.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
-#include "kernel/string.h"
+#include "library/string.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
 #include "lang/formula.h"
@@ -30,7 +30,7 @@ void testMachineOperator(void)
 	Atom arguments[3];
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
-		(Atom[]) {GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT), (Atom) {0}, (Atom) {0}},
+		(Atom[]) {GetListPredicateForm(), (Atom) {0}, (Atom) {0}},
 		arguments
 	);
 	void * context = OperatorCreateContext(op, arguments);
@@ -53,10 +53,9 @@ void testMachineOperator(void)
 static Operator * createReorderedListOperator(void)
 {
 	// The operator (list <ID position >INT element >LETTER)
-	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	Operator * listOperator = GetListOperator(AT_LETTER);
 	index8 argumentMap[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetByteArray(
 		(index8[]) {0, 2, 1},		// (l p e) -> (l e p)
 		argumentMap
 	);
@@ -148,7 +147,7 @@ void testJoinOperator1(void)
 	);
 
 	// Evaluate with arguments (@list-form, _ , _)
-	Atom arguments[3] = {GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT), (Atom) {0}, (Atom) {0}};
+	Atom arguments[3] = {GetListPredicateForm(), (Atom) {0}, (Atom) {0}};
 	// Setup execution context
 	OperatorContext * context = OperatorCreateContext(joinOperator, arguments);
 
@@ -177,18 +176,16 @@ void testJoinOperator2(void)
 	// elements); the right child enumerates each string (a list of letters).
 	// So they use different machine operators, with different argument maps.
 	// The argument map determines the join operator argument order.
-	Operator * listIdOperator = GetCoreOperator(SERVICE_LIST_ID);
-	Operator * listLetterOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	Operator * listIdOperator = GetListOperator(AT_ID);
+	Operator * listLetterOperator = GetListOperator(AT_LETTER);
 
 	index8 leftArgumentMap[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetByteArray(
 		(index8[]) {0, 1, 2},		// (l p s) -> (l p s q e)
 		leftArgumentMap
 	);
 	index8 rightArgumentMap[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetByteArray(
 		(index8[]) {2, 3, 4},		// (s q e) -> (l p s q e)
 		rightArgumentMap
 	);
@@ -253,9 +250,9 @@ void testJoinOperator2(void)
  */
 void testFilterOperator(void)
 {
-	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
-	index8 elementIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT);
-	index8 positionIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION);
+	Operator * listOperator = GetListOperator(AT_LETTER);
+	index8 elementIndex = GetListRoleIndex()[LIST_ROLE_ELEMENT];
+	index8 positionIndex = GetListRoleIndex()[LIST_ROLE_POSITION];
 
 	Operator * filterOperator = CreateFilterOperator(
 		listOperator, (index8[]) {elementIndex}, 1);
@@ -264,8 +261,7 @@ void testFilterOperator(void)
 	int64 const expectedPositions[] = {1, 5, 7};
 	Atom string = CreateStringFromCString("alibaba");
 	Atom arguments[3];
-	CoreFormSetTuple(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetTuple(
 		(Atom[]) {string, (Atom) {0}, GetAlphabetLetter('a')},
 		arguments
 	);
@@ -296,18 +292,16 @@ void testFilterOperator(void)
  */
 void testConstrainOperator(void)
 {
-	Operator * listIdOperator = GetCoreOperator(SERVICE_LIST_ID);
-	Operator * listLetterOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	Operator * listIdOperator = GetListOperator(AT_ID);
+	Operator * listLetterOperator = GetListOperator(AT_LETTER);
 
 	index8 leftArgumentMap[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetByteArray(
 		(index8[]) {0, 1, 2},		// (l p s) -> (l p s q e)
 		leftArgumentMap
 	);
 	index8 rightArgumentMap[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetByteArray(
 		(index8[]) {2, 3, 4},		// (s q e) -> (l p s q e)
 		rightArgumentMap
 	);
@@ -354,12 +348,11 @@ void testConstrainOperator(void)
 void testUnionOperator(void)
 {
 	// The UNION operator (list @list1 position p element e) | (list @list2 position p element e)
-	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	Operator * listOperator = GetListOperator(AT_LETTER);
 
 	// use PERMUTE to bind the list role to a constant
 	index8 argumentMap[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetByteArray(
 		(index8[]) {2, 0, 1},		// (@list p s) -> (p s), the list is constant 0
 		argumentMap
 	);
@@ -409,10 +402,9 @@ void testUnionOperator(void)
  */
 void testUnionDuplicateAtExhaustion(void)
 {
-	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	Operator * listOperator = GetListOperator(AT_LETTER);
 	index8 argumentMap[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetByteArray(
 		(index8[]) {2, 0, 1},		// (@list p s) -> (p s), the list is constant 0
 		argumentMap
 	);
@@ -458,8 +450,8 @@ void testUnionDuplicateAtExhaustion(void)
 void testIndexOrder(void)
 {
 	// A B-tree operator yields its tuples in the index column order of its relation
-	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
-	RelationTable const * listRelation = GetCoreRelationTable(RELATION_LIST_LETTER);
+	Operator * listOperator = GetListOperator(AT_LETTER);
+	RelationTable const * listRelation = GetListRelationTable(AT_LETTER);
 	ASSERT_NOT_NULL(listOperator->indexOrder)
 	for(index8 i = 0; i < 3; i++)
 		ASSERT_UINT32_EQUAL(listOperator->indexOrder[i], listRelation->indexColumns[i])
@@ -483,11 +475,11 @@ void testIndexOrder(void)
 	// (2 0 1) and the right child to (2 3 4), they share argument 2, which the left
 	// child orders first.
 	index8 leftMap[3];
-	CoreFormSetByteArray(FORM_LIST_POSITION_ELEMENT, (index8[]) {2, 0, 1}, leftMap);
+	ListSetByteArray((index8[]) {2, 0, 1}, leftMap);
 	index8 rightMap[3];
-	CoreFormSetByteArray(FORM_LIST_POSITION_ELEMENT, (index8[]) {2, 3, 4}, rightMap);
+	ListSetByteArray((index8[]) {2, 3, 4}, rightMap);
 	Operator * joinOperator = CreateJoinOperator(
-		5, listOperator, leftMap, GetCoreOperator(SERVICE_LIST_ID), rightMap);
+		5, listOperator, leftMap, GetListOperator(AT_ID), rightMap);
 	index8 expectedJoinOrder[5] = {2, 0, 1, 3, 4};
 	for(index8 i = 0; i < 5; i++)
 		ASSERT_UINT32_EQUAL(joinOperator->indexOrder[i], expectedJoinOrder[i])
@@ -700,6 +692,8 @@ void testFixpointCallBinding(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 
 	ExecuteTest(testMachineOperator);
 	ExecuteTest(testPermuteOperator);
@@ -714,6 +708,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testFixpointOperator);
 	ExecuteTest(testFixpointCallBinding);
 
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

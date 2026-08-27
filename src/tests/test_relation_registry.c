@@ -3,6 +3,8 @@
 #include "kernel/kernel.h"
 #include "kernel/RelationRegistry.h"
 #include "lang/formula.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
 
@@ -102,11 +104,11 @@ void testIterateRelations(void)
 	ASSERT_UINT32_EQUAL(nRelations, 2)
 
 	// a form with a single relation
-	form = GetCoreTermForm(FORM_LIST_LENGTH);
+	form = GetListLengthTermForm();
 	nRelations = 0;
 	RelationRegistryIterate(form, &iterator);
 	while(RelationIteratorNext(&iterator)) {
-		ASSERT_PTR_EQUAL(RelationIteratorGet(&iterator), GetCoreRelation(RELATION_LIST_LENGTH))
+		ASSERT_PTR_EQUAL(RelationIteratorGet(&iterator), GetListLengthRelation())
 		nRelations++;
 	}
 	RelationIteratorEnd(&iterator);
@@ -124,10 +126,14 @@ void testIterateRelations(void)
 int main(void)
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 
 	ExecuteTest(testAddRemoveRelation);
 	ExecuteTest(testIterateRelations);
 
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();
