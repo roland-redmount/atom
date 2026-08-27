@@ -310,8 +310,7 @@ Atom TermGetRoleActor(Atom termForm, Atom const termActors[], const char * role,
 
 
 /**
- * CLAUDE: Whether the given array holds any formula twice. A formula is an atom,
- * so a repeat is the same atom twice.
+ * Returhs true if the formulas array contains repeated formula atoms.
  */
 static bool FormulasRepeat(Atom const * formulas, size8 nFormulas)
 {
@@ -327,7 +326,7 @@ Atom CreateClause(Atom const * terms, size8 nTerms)
 {
 	// a clause without terms is meaningless, and would give zero length arrays below
 	ASSERT(nTerms > 0);
-	// CLAUDE: a clause states each of its terms once
+	// All terms must be unique
 	ASSERT(!FormulasRepeat(terms, nTerms))
 
 	// Take a view of every term before building the clause, so that the terms
@@ -376,7 +375,7 @@ Atom CreateConjunction(Atom const * clauses, size8 nClauses)
 {
 	// as in CreateClause(), a conjunction without clauses is meaningless
 	ASSERT(nClauses > 0);
-	// CLAUDE: a conjunction states each of its clauses once
+	// All clauses must be unique
 	ASSERT(!FormulasRepeat(clauses, nClauses))
 
 	// Take a view of every clause before building the conjunction, so that the

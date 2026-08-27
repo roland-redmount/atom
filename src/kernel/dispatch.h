@@ -65,18 +65,18 @@ bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 * permutatio
 #define DISPATCH_MATCH_EXACT		1
 #define DISPATCH_MATCH_RELAXED		2
 
-/**
- * CLAUDE: Whether a service parameter direction can serve a query parameter direction.
- * The two must agree, except that with DISPATCH_MATCH_RELAXED a service output also
- * serves a query input: the caller reads the service and keeps the tuples agreeing with
- * the atom it bound; see CreateFilterOperator().
- */
-bool DispatchParameterIOMatch(byte queryIO, byte serviceIO, int matchMode);
-
- bool DispatchParameterizedQuery(
+bool DispatchParameterizedQuery(
 	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
 	Service * service, index8 permutation[],
 	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch);
+
+
+/**
+ * Test if a service parameter IO direction matches a query parameter IO direction.
+ * With matchMode = DISPATCH_MATCH_EXACT, the two must agree; with DISPATCH_MATCH_RELAXED
+ * a service output also serves a query input.
+ */
+bool DispatchParameterIOMatch(byte queryIO, byte serviceIO, int matchMode);
 
 
 /**

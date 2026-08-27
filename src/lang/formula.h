@@ -105,7 +105,7 @@ Atom TermGetRoleActor(Atom termForm, Atom const termActors[], const char * role,
 
 /**
  * Create a clause from a list of term formulas, in any order.
- * CLAUDE: A clause states each of its terms once, so no term may be repeated.
+ * No term may be repeated.
  */
 Atom CreateClause(Atom const * terms, size8 nTerms);
 
@@ -130,7 +130,7 @@ void ClauseGetTermActorsIndices(Atom clauseForm, index8 * termActorsIndices);
 
 /**
  * Create a conjunction from a list of terms, in any order.
- * CLAUDE: A conjunction states each of its clauses once, so no clause may be repeated.
+ * No clause may be repeated.
  */
 Atom CreateConjunction(Atom const * clauses, size8 nClauses);
 
