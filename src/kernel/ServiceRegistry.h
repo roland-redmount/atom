@@ -51,11 +51,9 @@ void SetupServiceRegistry(void);
  * Associates an Operator with a Relation in the service registry, giving a service.
  * Acquires a reference to both Relation and the Operator. Returns a copy of the created service.
  *
- * If kind = SERVICE_COMPILED, this also records which services its operator tree is built on, so that it
+ * If kind = SERVICE_COMPILED, this also records wht  root operator.
+ * 
  * can be invalidated when one of them changes; see ServiceRegistryInvalidateTermForm().
- * Registering a primitive service is itself such a change, as a query of its term form
- * may now have one more relation to match, and so invalidates the compiled services of
- * that form.
  * 
  * NOTE: For services whose form contain repeated roles, such as `(a b b)`,
  * the signature must be unique under form permutation: for example, the two services
@@ -105,15 +103,14 @@ size32 ServiceRegistryNCompiled(void);
 
 
 /**
- * Invalidate compiled services depending on the given term form.
- * Removes every compiled service whose signature matches the given form, or that
- * calls a service of that form, transitively. A compiled service answers a query as the
- * rules and the facts stood when it was compiled, so a change to either has to remove the
- * services it could affect; the next query then compiles them again. Removing too much
- * costs a compilation, removing too little gives a wrong answer.
- *
- * A relation nothing names any longer is removed with the last service naming it; see
- * ReleaseRelation().
+ * Invalidate compiled services for the given term form. This is called whenever
+ * a service or rule involving the term form is added or removed.
+ * This function removes (1) every compiled Service for each Relation matching the given form,
+ * and (2) every compiled Service that calls any services matching the term form, transitively.
+ * 
+ * A compiled service answers a query as the rules and the facts stood when it was compiled,
+ * so a change to either has to remove the services it could affect; the next query then
+ * compiles them again. Removing too much costs a compilation, removing too little gives a wrong answer.
  *
  * NOTE: this modifies the registries, so it cannot run while a query is being read: an
  * open DispatchIterator or MixedTypeRelation write-locks against modification.

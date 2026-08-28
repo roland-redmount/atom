@@ -18,50 +18,8 @@
  */
 static BTree * services;
 
-/**
- * Index mapping each root operator to each Relation for which a Service is registered
- * that has the operator as root operator;
- * 
- * the pair (operator, relation) is 1:1 with a Service, so this allows lookup of services
- * by root operator. Note that two services may share the same root operator.
- * 
- * NOTE: this seems convoluted. Why not simply associate the root operator with its service?
- */
-typedef struct {
-	Operator const * op;
-	Relation const * relation;
-} OperatorRelation;
-
-static BTree * operatorRelations;
-
-/**
- * A record of a dependency where the operator "dependent" depends on the operator "dependency".
- * Both operators must be the root operator in some service. The dependent operator is
- * always from a compiled service.
- * If a dependent = 0, the record is a prefix key matching every dependent of the dependency.
- */
-typedef struct {
-	Operator * dependency;
-	Operator * dependent;
-} OperatorDependency;
-
-static BTree * dependencies;
-
 // Number of registered services compiled from the rules
 static size32 nCompiledServices;
-
-
-static void setupService(
-	Service * service, Relation const * relation, IOSignature ioSignature, Operator * op,
-	enum ServiceKind kind)
-{
-	ASSERT(relation->nColumns <= RELATION_MAX_ARITY)
-	SetMemory(service, sizeof(Service), 0);
-	service->relation = relation;
-	service->kind = kind;
-	service->ioSignature = ioSignature;
-	service->op = op;
-}
 
 
 static int8 compareServices(Service const * service, Service const * serviceOrKey)
@@ -89,6 +47,23 @@ static int8 btreeCompareServices(void const * item, void const * itemOrKey, size
 
 
 /**
+ * Index mapping each root operator to each Relation for which a Service exists
+ * that has the operator as root operator;
+ * 
+ * the pair (operator, relation) is 1:1 with a Service, so this allows lookup of services
+ * by root operator. Note that two services may share the same root operator.
+ * 
+ * NOTE: this doesn't specify the IOSignature, so does not fully reconstruct a Service record.
+ */
+typedef struct {
+	Operator const * rootOp;
+	Relation const * relation;
+} OperatorRelation;
+
+static BTree * operatorRelations;
+
+
+/**
  * Order OperatorRelation records by operator, the by relation.
  * A null relation is a prefix key matching every service of the operator.
  */
@@ -96,9 +71,9 @@ static int8 btreeCompareOperatorRelations(void const * item, void const * itemOr
 {
 	OperatorRelation const * record = item;
 	OperatorRelation const * recordOrKey = itemOrKey;
-	if(record->op < recordOrKey->op)
+	if(record->rootOp < recordOrKey->rootOp)
 		return -1;
-	if(record->op > recordOrKey->op)
+	if(record->rootOp > recordOrKey->rootOp)
 		return 1;
 	if(!recordOrKey->relation)
 		return 0;
@@ -111,24 +86,50 @@ static int8 btreeCompareOperatorRelations(void const * item, void const * itemOr
 
 
 /**
- * Order OperatorDependency records by the the dependency, then by the dependent operator.
- * A null dependent is a prefix key matching every dependent of the operator.
+ * A record of a root operator from a compiled service and its descendant operator, on which
+ * the root operator depends. The descendant operator must not be a root operator in any service.
+ * 
+ * NOTE: it seems this belongs to operator.c ?
+ */
+typedef struct {
+	Operator * descendantOp;
+	Operator * rootOp;
+} OperatorDependency;
+
+static BTree * dependencies;
+
+/**
+ * Order OperatorDependency records first by the descendant operator, then by the root operator.
+ * A null rootOp is a prefix key matching every root operator.
  */
 static int8 btreeCompareDependencies(void const * item, void const * itemOrKey, size32 itemSize)
 {
 	OperatorDependency const * record = item;
 	OperatorDependency const * recordOrKey = itemOrKey;
-	if(record->dependency < recordOrKey->dependency)
+	if(record->descendantOp < recordOrKey->descendantOp)
 		return -1;
-	if(record->dependency > recordOrKey->dependency)
+	if(record->descendantOp > recordOrKey->descendantOp)
 		return 1;
-	if(!recordOrKey->dependent)
+	if(!recordOrKey->rootOp)
 		return 0;
-	if(record->dependent < recordOrKey->dependent)
+	if(record->rootOp < recordOrKey->rootOp)
 		return -1;
-	if(record->dependent > recordOrKey->dependent)
+	if(record->rootOp > recordOrKey->rootOp)
 		return 1;
 	return 0;
+}
+
+
+static void setupService(
+	Service * service, Relation const * relation, IOSignature ioSignature, Operator * op,
+	enum ServiceKind kind)
+{
+	ASSERT(relation->nColumns <= RELATION_MAX_ARITY)
+	SetMemory(service, sizeof(Service), 0);
+	service->relation = relation;
+	service->kind = kind;
+	service->ioSignature = ioSignature;
+	service->op = op;
 }
 
 
@@ -189,7 +190,7 @@ static bool findService(Relation const * relation, Operator const * op, Service 
  */
 static bool isServiceRootOperator(Operator const * op)
 {
-	OperatorRelation key = {.op = op, .relation = 0};
+	OperatorRelation key = {.rootOp = op, .relation = 0};
 	return BTreeContainsItem(operatorRelations, &key);
 }
 
@@ -201,13 +202,13 @@ static bool isServiceRootOperator(Operator const * op)
  */
 static void collectOperatorRelations(Operator const * op, ResizingArray * relations)
 {
-	OperatorRelation key = {.op = op, .relation = 0};
+	OperatorRelation key = {.rootOp = op, .relation = 0};
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, operatorRelations);
 	if(BTreeIteratorSeek(&iterator, &key)) {
 		do {
 			OperatorRelation const * record = BTreeIteratorPeekItem(&iterator);
-			if(record->op != op)
+			if(record->rootOp != op)
 				break;
 			ResizingArrayAppend(relations, &(record->relation));
 		} while(BTreeIteratorNext(&iterator));
@@ -220,13 +221,17 @@ static void collectOperatorRelations(Operator const * op, ResizingArray * relati
  * Record dependencies between a root operator rootOp (of some service)
  * and every child operator of op that not itself a root operator.
  * Recursively follows child operators that are not root operators.
+ * 
+ * QUESTION: why do we exclude root operators? If a root operator goes stale,
+ * and another root operator depends on it, then it should also be stale?
+ * So *any* operator that depends on a stale operator is stale, right?
  */
 static void recordDependencies(Operator * rootOp, Operator const * op)
 {
 	for(index8 i = 0; i < OperatorNChildren(op); i++) {
 		Operator * child = OperatorGetChild(op, i);
 		if(isServiceRootOperator(child)) {
-			OperatorDependency dependency = {.dependency = child, .dependent = rootOp};
+			OperatorDependency dependency = {.descendantOp = child, .rootOp = rootOp};
 			BTreeInsert(dependencies, &dependency);
 		}
 		else
@@ -236,22 +241,22 @@ static void recordDependencies(Operator * rootOp, Operator const * op)
 
 
 /**
- * Remove the dependency records where the given operator is the dependent.
+ * Remove the dependency records where the given operator is the root operator.
  * This is used when a service is removed to release the dependencies of its root operator.
  */
-static void removeDependencyRecords(Operator const * dependent)
+static void removeDependencyRecords(Operator const * rootOp)
 {
 	// Array of dependencies to be removed
 	ResizingArray staleDependencies;
 	CreateResizingArray(&staleDependencies, sizeof(OperatorDependency), 8);
 
-	// Collect before removing: a B-tree cannot be modified while it is iterated
+	// Collect records before removing: a B-tree cannot be modified while it is iterated
 	// NOTE: this scans the entire dependencies B-tree
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, dependencies);
 	while(BTreeIteratorNext(&iterator)) {
 		OperatorDependency const * dependency = BTreeIteratorPeekItem(&iterator);
-		if(dependency->dependent == dependent)
+		if(dependency->rootOp == rootOp)
 			ResizingArrayAppend(&staleDependencies, dependency);
 	}
 	BTreeIteratorEnd(&iterator);
@@ -265,14 +270,14 @@ static void removeDependencyRecords(Operator const * dependent)
 
 /**
  * Remove a service from the registry and its index, releasing the references to its
- * operator and its relation. Nothing is invalidated here; see invalidateDependents().
+ * Operator and Relation. Nothing is invalidated here; see invalidateDependents().
  */
 static void removeService(Service const * service)
 {
 	if(service->kind == SERVICE_COMPILED)
 		nCompiledServices--;
-	// Remove the service from its root operator 
-	OperatorRelation record = {.op = service->op, .relation = service->relation};
+	// Remove the root operator record
+	OperatorRelation record = {.rootOp = service->op, .relation = service->relation};
 	ASSERT(BTreeDelete(operatorRelations, &record, 0) == BTREE_DELETED)
 	// The dependencies are the operator's, so they stand as long as another service is
 	// evaluated by it
@@ -306,11 +311,10 @@ static void addStaleOperator(ResizingArray * staleOperators, Operator * op)
 
 /**
  * Remove every compiled service (SERVICE_COMPILED) that has the given operator as its root
- * operator. A primitive service is not removed, being part of the knowledge base rather
- * than derived from it.
+ * operator.
  *
- * One operator may be the root of several services, one per relation. Such service yield
- * the same tuples under different signatures, and so are all stale when op is stale.
+ * One Operator may be the root of several services, at most one Service per Relation.
+ * Such service yield the same tuples under different signatures, and so are all stale when op is stale.
  */
 static void removeOperatorServices(Operator const * op)
 {
@@ -349,18 +353,18 @@ static void invalidateDependents(ResizingArray * staleOperators)
 		Operator * stale = *(Operator **) ResizingArrayGetElement(staleOperators, i);
 		removeOperatorServices(stale);
 
-		// Every root operator depending on the stale one is stale in turn,
+		// Every root operator depending on a stale operator is stale in turn,
 		// so add it to the stale list
-		OperatorDependency key = {.dependency = stale, .dependent = 0};
+		OperatorDependency key = {.descendantOp = stale, .rootOp = 0};
 		BTreeIterator iterator;
 		BTreeIterate(&iterator, dependencies);
 		if(BTreeIteratorSeek(&iterator, &key)) {
 			do {
 				OperatorDependency const * dependency = BTreeIteratorPeekItem(&iterator);
-				if(dependency->dependency != stale)
+				if(dependency->descendantOp != stale)
 					break;	// no more matches
 				// Appending modifies no B-tree, and so is safe under the iterator
-				addStaleOperator(staleOperators, dependency->dependent);
+				addStaleOperator(staleOperators, dependency->rootOp);
 			} while(BTreeIteratorNext(&iterator));
 		}
 		BTreeIteratorEnd(&iterator);
@@ -391,7 +395,7 @@ Service ServiceRegistryAdd(
 	AcquireOperator(op);
 	AcquireRelation(relation);
 	// add to the operator-relation index
-	OperatorRelation record = {.op = op, .relation = relation};
+	OperatorRelation record = {.rootOp = op, .relation = relation};
 	ASSERT(BTreeInsert(operatorRelations, &record) == BTREE_INSERTED)
 
 	switch(kind) {
@@ -417,7 +421,7 @@ void ServiceRegistryRemove(Relation const * relation, Operator * op)
 	bool found = findService(relation, op, &service);
 	ASSERT(found)
 
-	// Add the operator to a new stale list
+	// Add the root operator to a new stale list
 	ResizingArray staleOperators;
 	CreateResizingArray(&staleOperators, sizeof(Operator *), 8);
 	addStaleOperator(&staleOperators, op);
@@ -449,20 +453,6 @@ void ServiceRegistryRemoveAll(Relation const * relation)
 }
 
 
-/**
- * Remove every compiled service the given operator evaluates, and every compiled service
- * built on one of them, transitively.
- */
-static void invalidateOperator(Operator * op)
-{
-	ResizingArray staleOperators;
-	CreateResizingArray(&staleOperators, sizeof(Operator *), 8);
-	addStaleOperator(&staleOperators, op);
-	invalidateDependents(&staleOperators);
-	freeStaleOperators(&staleOperators);
-}
-
-
 void ServiceRegistryInvalidateByTermForm(Atom termForm)
 {
 	if(nCompiledServices == 0)
@@ -474,6 +464,7 @@ void ServiceRegistryInvalidateByTermForm(Atom termForm)
 	CreateResizingArray(&staleOperators, sizeof(Operator *), 8);
 
 	// Iterate over all relations matching the the termForm
+	// and add them to the stale operators list
 	RelationIterator relationIterator;
 	RelationRegistryIterate(termForm, &relationIterator);
 	while(RelationIteratorNext(&relationIterator)) {
@@ -481,13 +472,28 @@ void ServiceRegistryInvalidateByTermForm(Atom termForm)
 		// Iterate over all services for the relation
 		ServiceIterator serviceIterator;
 		ServiceRegistryIterate(relation, &serviceIterator);
-		while(ServiceIteratorNext(&serviceIterator))
-			addStaleOperator(
-				&staleOperators, ServiceIteratorPeekService(&serviceIterator)->op);
+		while(ServiceIteratorNext(&serviceIterator)) {
+			Service const * service = ServiceIteratorPeekService(&serviceIterator);
+			addStaleOperator(&staleOperators, service->op);
+		}
 		ServiceIteratorEnd(&serviceIterator);
 	}
 	RelationIteratorEnd(&relationIterator);
 
+	invalidateDependents(&staleOperators);
+	freeStaleOperators(&staleOperators);
+}
+
+
+/**
+ * Remove every compiled service the given operator evaluates, and every compiled service
+ * built on one of them, transitively.
+ */
+static void invalidateOperator(Operator * op)
+{
+	ResizingArray staleOperators;
+	CreateResizingArray(&staleOperators, sizeof(Operator *), 8);
+	addStaleOperator(&staleOperators, op);
 	invalidateDependents(&staleOperators);
 	freeStaleOperators(&staleOperators);
 }
