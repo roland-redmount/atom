@@ -7,7 +7,6 @@
 #include "kernel/Relation.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
-#include "kernel/RelationTableRegistry.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"
 #include "lang/TermForm.h"

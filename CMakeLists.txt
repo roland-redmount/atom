@@ -100,7 +100,6 @@ add_library(atom SHARED
     src/kernel/Relation.c
     src/kernel/RelationRegistry.c
     src/kernel/RelationTable.c
-    src/kernel/RelationTableRegistry.c
     src/kernel/operator.c
     src/kernel/ServiceRegistry.c
     src/kernel/tuple.c

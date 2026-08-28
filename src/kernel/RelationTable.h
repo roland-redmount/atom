@@ -1,7 +1,7 @@
 /**
- * A RelationTable keep track of the tuple storage of one Relation, and provides the interface
- * for mutating the relation. Reading from a relation is done by  services; see ServiceRegistry.h.
- * Computed relations do not have RelationTable.
+ * A RelationTable keeps track of the tuple storage of one Relation, and provides the interface
+ * for mutating the relation. Reading from a relation is done by services; see ServiceRegistry.h.
+ * Computed relations do not have a RelationTable.
  *
  * NOTE: in the future, we want to be able to hot-load implementations into a running atom
  * process. This would involve loading code into executable memory and registering services
@@ -96,6 +96,7 @@ struct s_RelationTable {
 	// The relation whose tuples this table stores. Acquired, as the table may outlive
 	// its registration.
 	Relation const * relation;
+
 	// Desired order of index columns, so that tuples are effectively ordered
 	// lexicographically by indexColumns[0], ..., indexColumns[nColumns-1]. Hence, lookup
 	// should be fast when leading columns are specified in this order, while out-of-order
@@ -103,7 +104,9 @@ struct s_RelationTable {
 	// (element list position) and indexColumns = {1, 0, 2} will be ordered as
 	// (list position element), so that queries (@list _ _) and (@list @position _) are
 	// fast, but (_ _ @element) may be slow.
-	index8 * indexColumns;
+	index8 indexColumns[RELATION_MAX_ARITY];
+
+	// The storage provider for this relation table
 	RelationTableProvider const * provider;
 	void * storage;	// any implementation-dependent storage data
 
@@ -112,22 +115,22 @@ struct s_RelationTable {
 	   the kernel creates them once and hands out the same pointer from GetCoreRelationTable() thereafter. 
 	   We should move list and string out of the kernel, then this can be dropped. */
 	bool isCore;
-	// One reference per machine operator reading this table, plus the creation reference
-	// that DropRelationTable() releases.
+
 	size32 referenceCount;
 };
 
 /**
- * Create tuple storage for the given relation using the specified provider, register it,
- * and let the provider register its services. The caller acquires a RelationTable reference,
- * which DropRelationTable() releases. The RelationTable acquires the given relation.
+ * Create a relation table for the given Relation and record it in the relation table registry.
+ * The RelationTable acquires the given Relation.
+ * Storage for the new RelationTable is created using the specified provider.
+ * The provider also registers services during creation.
+ * The caller acquires a reference to the returned RelationTable.
  *
- * The indexColumns array gives the desired order of the index columns; see
+ * The indexColumns array indicates the desired order of the index columns; see
  * RelationTable.indexColumns. Passing 0 gives the identity order.
  */
 RelationTable * CreateRelationTable(
-	Relation const * relation, RelationTableProvider const * provider,
-	index8 const indexColumns[]);
+	Relation const * relation, RelationTableProvider const * provider, index8 const indexColumns[]);
 
 /**
  * Acquire a reference to a relation table.
@@ -135,8 +138,8 @@ RelationTable * CreateRelationTable(
 void AcquireRelationTable(RelationTable * table);
 
 /**
- * Remove one reference to a relation table. When the last reference goes, the storage is
- * deallocated and the relation released.
+ * Remove one reference to a relation table. When the last reference is removed,
+ * the RelationTable is deallocated and the corresponding Relation is released.
  */
 void ReleaseRelationTable(RelationTable * table);
 
@@ -169,6 +172,26 @@ byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint
  * Does not remove lookup entries; see RetractFact()
  */
 byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
+
+/**
+ * Setup an empty relation table registry. Called during bootstrapping only.
+ */
+void SetupRelationTableRegistry(void);
+
+/**
+ * The table storing the tuples of the given relation, or 0 if the relation is computed.
+ */
+RelationTable * RelationTableRegistryFind(Relation const * relation);
+
+/**
+ * Deallocate the registry. Before calling this function, all tables must have been dropped.
+ */
+void FreeRelationTableRegistry(void);
+
+/**
+ * Number of registered relation tables.
+ */
+size32 RelationTableRegistryNTables(void);
 
 
 #endif	// RELATION_TABLE_H

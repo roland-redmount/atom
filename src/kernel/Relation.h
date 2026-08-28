@@ -12,7 +12,7 @@
  *
  *   RelationRegistry       relations by (term form, column types); see RelationRegistry.h
  *   ServiceRegistry        how a relation can be read; see ServiceRegistry.h
- *   RelationTableRegistry  where its tuples are stored; see RelationTableRegistry.h
+ *   RelationTable          where its tuples are stored; see RelationTable.h
  *
  * A relation with no table registered is a computed relation: it has services, but no
  * tuples to mutate. This is the case of a machine service such as those in library/math.c,

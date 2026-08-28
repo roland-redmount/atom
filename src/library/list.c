@@ -7,7 +7,6 @@
 #include "kernel/Parameter.h"
 #include "kernel/RelationTable.h"
 #include "kernel/RelationRegistry.h"
-#include "kernel/RelationTableRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"

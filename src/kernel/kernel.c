@@ -9,7 +9,6 @@
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
 #include "kernel/RelationTable.h"
-#include "kernel/RelationTableRegistry.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "storage/RelationBTree.h"

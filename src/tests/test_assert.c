@@ -8,7 +8,6 @@
 #include "kernel/letter.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
-#include "kernel/RelationTableRegistry.h"
 #include "lang/formula.h"
 #include "library/list.h"
 #include "library/string.h"

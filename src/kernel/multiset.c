@@ -5,7 +5,6 @@
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
-#include "kernel/RelationTableRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "util/sort.h"
 

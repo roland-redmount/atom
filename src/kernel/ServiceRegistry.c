@@ -13,16 +13,19 @@
 
 /**
  * The registry of services, as a B-tree storing Service items.
- * The relations these refer to are registered separately; see RelationRegistry.h
+ * This provides an index for lookup of a Service by Relation and IOSignature;
+ * see compareServices().
  */
 static BTree * services;
 
 /**
- * Index mapping each root operator to the relations for which it is a root operator;
- * the pair (operator, relation) is 1:1 with a registered Service, so this allows
- * lookup of services by root operator.
- * Note that two services may share the same root operator.
- * A lookup with a null relation is a prefix key matching every service with root operator op.
+ * Index mapping each root operator to each Relation for which a Service is registered
+ * that has the operator as root operator;
+ * 
+ * the pair (operator, relation) is 1:1 with a Service, so this allows lookup of services
+ * by root operator. Note that two services may share the same root operator.
+ * 
+ * NOTE: this seems convoluted. Why not simply associate the root operator with its service?
  */
 typedef struct {
 	Operator const * op;
@@ -184,7 +187,7 @@ static bool findService(Relation const * relation, Operator const * op, Service 
 /**
  * Test whether the given operator is the root operator of some service.
  */
-static bool isServiceOperator(Operator const * op)
+static bool isServiceRootOperator(Operator const * op)
 {
 	OperatorRelation key = {.op = op, .relation = 0};
 	return BTreeContainsItem(operatorRelations, &key);
@@ -214,20 +217,20 @@ static void collectOperatorRelations(Operator const * op, ResizingArray * relati
 
 
 /**
- * Record dependencies between the dependent (a root operator of some service) and
- * every child operator that is also a root operator in some other service.
+ * Record dependencies between a root operator rootOp (of some service)
+ * and every child operator of op that not itself a root operator.
  * Recursively follows child operators that are not root operators.
  */
-static void recordDependencies(Operator * dependent, Operator const * op)
+static void recordDependencies(Operator * rootOp, Operator const * op)
 {
 	for(index8 i = 0; i < OperatorNChildren(op); i++) {
 		Operator * child = OperatorGetChild(op, i);
-		if(isServiceOperator(child)) {
-			OperatorDependency dependency = {.dependency = child, .dependent = dependent};
+		if(isServiceRootOperator(child)) {
+			OperatorDependency dependency = {.dependency = child, .dependent = rootOp};
 			BTreeInsert(dependencies, &dependency);
 		}
 		else
-			recordDependencies(dependent, child);
+			recordDependencies(rootOp, child);
 	}
 }
 
@@ -268,11 +271,12 @@ static void removeService(Service const * service)
 {
 	if(service->kind == SERVICE_COMPILED)
 		nCompiledServices--;
+	// Remove the service from its root operator 
 	OperatorRelation record = {.op = service->op, .relation = service->relation};
 	ASSERT(BTreeDelete(operatorRelations, &record, 0) == BTREE_DELETED)
 	// The dependencies are the operator's, so they stand as long as another service is
 	// evaluated by it
-	if(!isServiceOperator(service->op))
+	if(!isServiceRootOperator(service->op))
 		removeDependencyRecords(service->op);
 
 	Operator * op = service->op;
@@ -393,6 +397,7 @@ Service ServiceRegistryAdd(
 	switch(kind) {
 	case SERVICE_COMPILED:
 		nCompiledServices++;
+		// Record dependencies between the root operator and its descendants
 		recordDependencies(op, op);
 		break;
 
@@ -402,9 +407,6 @@ Service ServiceRegistryAdd(
 		ServiceRegistryInvalidateByTermForm(relation->termForm);
 		break;
 	}
-
-	// NOTE: this returns a copy of the Service struct, but the allocated
-	// service.paramaeterIO array is still owned by the registry.
 	return service;
 }
 
@@ -432,6 +434,7 @@ void ServiceRegistryRemoveAll(Relation const * relation)
 	ResizingArray staleOperators;
 	CreateResizingArray(&staleOperators, sizeof(Operator *), 8);
 
+	// Add all services for the given relation to 
 	Service key;
 	setupService(&key, relation, (IOSignature) {0}, 0, SERVICE_PRIMITIVE);
 	Service service;

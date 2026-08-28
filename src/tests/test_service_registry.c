@@ -4,7 +4,6 @@
 #include "kernel/Parameter.h"
 #include "kernel/Relation.h"
 #include "kernel/RelationRegistry.h"
-#include "kernel/RelationTableRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/formula.h"
 #include "storage/RelationBTree.h"
@@ -32,6 +31,9 @@ static IOSignature const exampleIOSignature = {.parameterIO = {
 	PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT}};
 
 
+/**
+ * Setup a relation (foo:INT bar:INT bar:INT baz:INT), but no relation table
+ */
 static void setupFixture(void)
 {
 	// TODO: we should have a way to parse a form from a C string.
@@ -235,13 +237,12 @@ void testInvalidateSharedOperator(void)
 
 
 /**
- * Register a compiled service of the fixture relation evaluated by an operator of the
- * given stored table, which is what a rule that merely renames roles compiles to; see
- * compileTerm() in compiler.c. Returns that operator, which the two services now share.
+ * Register a compiled service (simulated) for the fixture relation, whose root operator is shared
+ * with a service of the given relation. Returns that root operator, which the two services now share.
  */
-static Operator * shareTableOperator(RelationTable * table)
+static Operator * shareTableOperator(Relation const * relation)
 {
-	Operator * op = ServiceRegistryFind(table->relation, exampleIOSignature);
+	Operator * op = ServiceRegistryFind(relation, exampleIOSignature);
 	ASSERT_NOT_NULL(op)
 	ServiceRegistryAdd(fixture.relation, exampleIOSignature, op, SERVICE_COMPILED);
 	return op;
@@ -252,14 +253,17 @@ static Operator * shareTableOperator(RelationTable * table)
  * Dropping a table whose operator a compiled service shares removes that service, and
  * leaves the storage alive until the shared operator is released.
  *
- * The two are independent: the compiled service goes because the relation it reads has
- * left the knowledge base, while the storage survives because an operator still points at
+ * The two are independent: the compiled service is removed because the relation it reads has
+ * been removed, while the storage survives because an operator still points at
  * it. Before relation tables were reference counted, the removal was the only thing
  * standing between this case and a dangling pointer.
  */
 void testDropTableWithSharedOperator(void)
 {
+	// Setup a relation (foo bar bar baz) without a relation table
 	setupFixture();
+	// Create a second relation with the same form but distinct type signature,
+	// with an associated RelationTable (B-tree storage)
 	TypeSignature storedTypes = CreateTypeSignature(
 		(byte[]) {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation const * relation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
@@ -267,18 +271,27 @@ void testDropTableWithSharedOperator(void)
 		relation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
 	ReleaseRelation(relation);
 
-	Operator * sharedOperator = shareTableOperator(table);
+	// Register a "compiled" service for fixture.relation
+	// using an operator from a service the second relation
+	Operator * sharedOperator = shareTableOperator(table->relation);
 	AcquireOperator(sharedOperator);
+	// We now have 1 compiled service, associated with the fixture relation
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
 
-	// The table holds the creation reference, and one per registered service operator
+	// The second table has 1 reference, and one per registered service operator
 	ASSERT_UINT32_EQUAL(table->referenceCount, 1 + EXAMPLE_FORM_ARITY + 1)
 
+	// Drop the second table, removing all its services.
+	// NOTE: this actually does NOT remove the RelationTable! See below.
+	// It remove the RelationTable from the registry and 
 	DropRelationTable(table);
+
 	// The compiled service went with the services of the table it shared an operator with
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
+	// The RelationTable was dropped from the registry
 	ASSERT_NULL(RelationTableRegistryFind(table->relation))
-	// but the storage is still there, as this test still holds the shared operator
+	// but the RelationTable still exists, and its storage too,
+	// Since we still have the shared operator which has a reference to the RelationTable
 	ASSERT_UINT32_EQUAL(table->referenceCount, 1)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 0)
 
@@ -303,7 +316,7 @@ void testDropTableAfterSharedOperator(void)
 		relation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
 	ReleaseRelation(relation);
 
-	Operator * sharedOperator = shareTableOperator(table);
+	Operator * sharedOperator = shareTableOperator(table->relation);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
 
 	// Remove the compiled service first, so the operator is the stored service's alone

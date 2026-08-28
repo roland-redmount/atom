@@ -4,7 +4,6 @@
 #include "kernel/kernel.h"
 #include "kernel/operator.h"
 #include "kernel/RelationRegistry.h"
-#include "kernel/RelationTableRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
