@@ -115,18 +115,24 @@ Atom ParseString(char const * syntax, size32 length)
 
 void StringSetup(void)
 {
-	// Create the (string) form
+	// Create the (string) predicate form
 	stringRoleName = CreateNameFromCString("string");
 	stringPredicateForm = CreatePredicateForm((Atom[]) {stringRoleName},	1);
+	NameRelease(stringRoleName);
+	
+	// Create the (string) term form
 	stringTermForm = CreateTermForm(stringPredicateForm, true);
+	IFactRelease(stringPredicateForm);
 
 	// Create the (string:ID) relation, with B-tree provider
 	TypeSignature typeSignature = {
 		.atomTypes = {AT_ID}
 	};
 	stringRelation = CreateRelation(stringTermForm, 1, typeSignature);
+	IFactRelease(stringTermForm);
+
 	stringRelationTable = CreateRelationTable(stringRelation, &btreeTableProvider, 0);
-	stringRelationTable->isCore = true;
+	ReleaseRelation(stringRelation);
 
 	// Store a pointer to the (string<ID) service, created by the B-tree provider.
 	IOSignature ioSignature = {0};
@@ -138,9 +144,5 @@ void StringSetup(void)
 
 void StringShutdown(void)
 {
-	DropRelationTable(stringRelationTable);
-	ReleaseRelation(stringRelation);
-	IFactRelease(stringTermForm);
-	IFactRelease(stringPredicateForm);
-	NameRelease(stringRoleName);
+	ReleaseRelationTable(stringRelationTable);
 }

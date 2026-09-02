@@ -30,11 +30,29 @@ static Operator * createOperator(enum OperatorType type, size8 nArguments, size3
 	SetMemory(op, sizeof(Operator), 0);
 	op->type = type;
 	op->nArguments = nArguments;
-	op->referenceCount = 1;
+	op->relation = 0;	// set by CreateService()
+	op->nParents = 0;
 	op->contextSize = contextSize;
 	op->indexOrder = 0;
 	return op;
 }
+
+
+static void increaseNParents(Operator * op)
+{
+	op->nParents++;
+}
+
+
+static void decreaseNParents(Operator * op)
+{
+	ASSERT(op->nParents > 0)
+	op->nParents--;
+	CheckOperator(op);
+}
+
+
+static void teardownOperator(Operator * op);
 
 
 /**
@@ -96,8 +114,8 @@ static void assertIsIndexOrder(index8 const indexOrder[], size8 nArguments)
 
 
 /**
- * Derive the index order of an operator that relabels its child arguments, by taking
- * the child arguments in the child's order and mapping each to the argument it provides.
+ * Derive the index order of an operator that relabels its child arguments (PERMUTE, CONSTRAIN)
+ * by taking the child arguments in the child's order and mapping each to the argument it provides.
  * A child argument taken from elsewhere (the constants of a permute operator) has no
  * argument to contribute, and one whose argument was already contributed by an earlier
  * child argument (the collapsed arguments of a constrain operator) contributes nothing
@@ -230,7 +248,7 @@ Operator * CreatePermuteOperator(
 	ASSERT(nArguments + nConstants <= 256)
 	Operator * op = createOperator(OPERATOR_PERMUTE, nArguments, sizeof(PermuteContext));
 	op->impl.permute.childOperator = childOperator;
-	AcquireOperator(childOperator);
+	increaseNParents(childOperator);
 
 	op->impl.permute.nConstants = nConstants;
 	if(nConstants) {
@@ -315,7 +333,7 @@ static bool permuteCall(OperatorContext * context)
 static void teardownPermuteOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_PERMUTE)
-	ReleaseOperator(op->impl.permute.childOperator);
+	decreaseNParents(op->impl.permute.childOperator);
 	if(op->impl.permute.nConstants) {
 		TupleRelease(
 			op->impl.permute.constantTypes,
@@ -350,7 +368,7 @@ Operator * CreateConstrainOperator(
 {
 	Operator * op = createOperator(OPERATOR_CONSTRAIN, nArguments, sizeof(ConstrainContext));
 	op->impl.constrain.childOperator = childOperator;
-	AcquireOperator(childOperator);
+	childOperator->nParents++;
 
 #ifdef DEBUG
 	// Bounds check the argument map, and verify that the child operator provides
@@ -435,7 +453,7 @@ static bool constrainCall(OperatorContext * context)
 static void teardownConstrainOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_CONSTRAIN)
-	ReleaseOperator(op->impl.constrain.childOperator);
+	decreaseNParents(op->impl.constrain.childOperator);
 	Free(op->impl.constrain.argumentMap);
 }
 
@@ -464,7 +482,7 @@ Operator * CreateFilterOperator(
 	size8 nArguments = childOperator->nArguments;
 	Operator * op = createOperator(OPERATOR_FILTER, nArguments, sizeof(FilterContext));
 	op->impl.filter.childOperator = childOperator;
-	AcquireOperator(childOperator);
+	increaseNParents(childOperator);
 	setupInputArguments(
 		&(op->impl.filter.inputArguments), &(op->impl.filter.nInputs),
 		inputArguments, nInputs, nArguments);
@@ -521,7 +539,7 @@ static bool filterCall(OperatorContext * context)
 static void teardownFilterOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_FILTER)
-	ReleaseOperator(op->impl.filter.childOperator);
+	decreaseNParents(op->impl.filter.childOperator);
 	Free(op->impl.filter.inputArguments);
 }
 
@@ -568,9 +586,9 @@ Operator * CreateJoinOperator(
 {
 	Operator * op = createOperator(OPERATOR_JOIN, nArguments, sizeof(JoinContext));
 	op->impl.join.left = leftChild;
-	AcquireOperator(leftChild);
+	increaseNParents(leftChild);
 	op->impl.join.right = rightChild;
-	AcquireOperator(rightChild);
+	increaseNParents(rightChild);
 	op->impl.join.leftMap = copyJoinArgumentMap(leftMap, leftChild->nArguments, nArguments);
 	op->impl.join.rightMap = copyJoinArgumentMap(rightMap, rightChild->nArguments, nArguments);
 
@@ -591,7 +609,7 @@ Operator * CreateJoinOperator(
 	assertArgumentsAreDistinct(rightMap, rightChild->nArguments, nArguments);
 #endif
 
-	// The left child gives the major key: it yields ascending and the join keeps every
+	// CLAUDE: The left child gives the major key: it yields ascending and the join keeps every
 	// one of its arguments. The join arguments are then constant within one left tuple,
 	// so the right child orders only the arguments it does not share with the left.
 	// Joining two relations of at most one tuple gives at most one tuple, and only then
@@ -627,8 +645,8 @@ Operator * CreateJoinOperator(
 static void teardownJoinOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_JOIN)
-	ReleaseOperator(op->impl.join.left);
-	ReleaseOperator(op->impl.join.right);
+	decreaseNParents(op->impl.join.left);
+	decreaseNParents(op->impl.join.right);
 	Free(op->impl.join.leftMap);
 	Free(op->impl.join.rightMap);
 }
@@ -775,9 +793,9 @@ Operator * CreateUnionOperator(Operator * first, Operator * second)
 	allocateIndexOrder(op);
 	CopyMemory(indexOrder, op->indexOrder, first->nArguments);
 	op->impl._union.first = first;
-	AcquireOperator(first);
+	increaseNParents(first);
 	op->impl._union.second = second;
-	AcquireOperator(second);
+	increaseNParents(second);
 	return op;
 }
 
@@ -785,8 +803,8 @@ Operator * CreateUnionOperator(Operator * first, Operator * second)
 static void teardownUnionOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_UNION)
-	ReleaseOperator(op->impl._union.first);
-	ReleaseOperator(op->impl._union.second);
+	decreaseNParents(op->impl._union.first);
+	decreaseNParents(op->impl._union.second);
 }
 
 
@@ -903,11 +921,39 @@ static void unionFinalizeContext(OperatorContext * context)
  * reorders the arguments the child ordered below it, so the child's order does not carry
  * over to the projected tuples.
  */
+
 typedef struct s_ProjectContext {
 	// B-tree holding the unique, ordered tuples
 	BTree * btree;
 	BTreeIterator iterator;
 } ProjectContext;
+
+
+Operator * CreateProjectOperator(
+	Operator * childOperator, size8 nArguments, index8 const argumentMap[])
+{
+	ASSERT(nArguments <= childOperator->nArguments)
+	Operator * op = createOperator(OPERATOR_PROJECT, nArguments, sizeof(ProjectContext));
+	op->impl.project.childOperator = childOperator;
+	increaseNParents(childOperator);
+	
+#ifdef DEBUG
+	// Each kept argument must name a distinct child argument
+	bool kept[childOperator->nArguments];
+	SetMemory(kept, childOperator->nArguments * sizeof(bool), 0);
+	for(index8 i = 0; i < nArguments; i++) {
+		ASSERT(argumentMap[i] < childOperator->nArguments)
+		ASSERT(!kept[argumentMap[i]])
+		kept[argumentMap[i]] = true;
+	}
+#endif
+
+	op->impl.project.argumentMap = Allocate(nArguments);
+	CopyMemory(argumentMap, op->impl.project.argumentMap, nArguments);
+	// The B-tree orders the projected tuples as they are laid out
+	setIdentityIndexOrder(op);
+	return op;
+}
 
 
 int8 btreeCompareTuples(void const * item1, void const * item2, size32 itemSize)
@@ -981,35 +1027,8 @@ static void projectFinalizeContext(OperatorContext * context)
 static void teardownProjectOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_PROJECT)
-	ReleaseOperator(op->impl.project.childOperator);
+	decreaseNParents(op->impl.project.childOperator);
 	Free(op->impl.project.argumentMap);
-}
-
-
-Operator * CreateProjectOperator(
-	Operator * childOperator, size8 nArguments, index8 const argumentMap[])
-{
-	ASSERT(nArguments <= childOperator->nArguments)
-	Operator * op = createOperator(OPERATOR_PROJECT, nArguments, sizeof(ProjectContext));
-	op->impl.project.childOperator = childOperator;
-	AcquireOperator(childOperator);
-
-#ifdef DEBUG
-	// Each kept argument must name a distinct child argument
-	bool kept[childOperator->nArguments];
-	SetMemory(kept, childOperator->nArguments * sizeof(bool), 0);
-	for(index8 i = 0; i < nArguments; i++) {
-		ASSERT(argumentMap[i] < childOperator->nArguments)
-		ASSERT(!kept[argumentMap[i]])
-		kept[argumentMap[i]] = true;
-	}
-#endif
-
-	op->impl.project.argumentMap = Allocate(nArguments);
-	CopyMemory(argumentMap, op->impl.project.argumentMap, nArguments);
-	// The B-tree orders the projected tuples as they are laid out
-	setIdentityIndexOrder(op);
-	return op;
 }
 
 
@@ -1088,7 +1107,7 @@ Operator * CreateFixpointOperator(
 	size8 nArguments = childOperator->nArguments;
 	Operator * op = createOperator(OPERATOR_FIXPOINT, nArguments, sizeof(FixpointContext));
 	op->impl.fixpoint.childOperator = childOperator;
-	AcquireOperator(childOperator);
+	increaseNParents(childOperator);
 	setupInputArguments(
 		&(op->impl.fixpoint.inputArguments), &(op->impl.fixpoint.nInputs),
 		inputArguments, nInputs, nArguments);
@@ -1117,7 +1136,7 @@ Operator * CreateRecurseOperator(
 static void teardownFixpointOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_FIXPOINT)
-	ReleaseOperator(op->impl.fixpoint.childOperator);
+	decreaseNParents(op->impl.fixpoint.childOperator);
 	if(op->impl.fixpoint.inputArguments)
 		Free(op->impl.fixpoint.inputArguments);
 }
@@ -1503,61 +1522,88 @@ Operator * OperatorGetChild(Operator const * op, index8 index)
 }
 
 
-void AcquireOperator(Operator * op)
+static void teardownOperator(Operator * op)
 {
-	op->referenceCount++;
+	switch(op->type) {
+	case OPERATOR_PERMUTE:
+		teardownPermuteOperator(op);
+		break;
+
+	case OPERATOR_JOIN:
+		teardownJoinOperator(op);
+		break;
+
+	case OPERATOR_UNION:
+		teardownUnionOperator(op);
+		break;
+
+	case OPERATOR_PROJECT:
+		teardownProjectOperator(op);
+		break;
+
+	case OPERATOR_CONSTRAIN:
+		teardownConstrainOperator(op);
+		break;
+
+	case OPERATOR_FILTER:
+		teardownFilterOperator(op);
+		break;
+
+	case OPERATOR_FIXPOINT:
+		teardownFixpointOperator(op);
+		break;
+
+	case OPERATOR_RECURSE:
+		teardownRecurseOperator(op);
+		break;
+
+	case OPERATOR_MACHINE:
+		teardownMachineOperator(op);
+		break;
+	
+	default:
+		ASSERT(false)
+		break;
+	}
+	if(op->indexOrder)
+		Free(op->indexOrder);
+	Free(op);
 }
 
 
-void ReleaseOperator(Operator * op)
+// static void AcquireOperator(Operator * op)
+// {
+// 	op->nParents++;
+// }
+
+
+// static void ReleaseOperator(Operator * op)
+// {
+// 	ASSERT(op->nParents > 0)
+// 	op->nParents--;
+// 	CheckOperator(op);
+// }
+
+
+void AttachOperator(Operator * op, Relation const * relation)
 {
-	op->referenceCount--;
-	if(op->referenceCount == 0) {
-		switch(op->type) {
-		case OPERATOR_PERMUTE:
-			teardownPermuteOperator(op);
-			break;
+	ASSERT(!op->relation)
+	op->relation = relation;
+}
 
-		case OPERATOR_JOIN:
-			teardownJoinOperator(op);
-			break;
 
-		case OPERATOR_UNION:
-			teardownUnionOperator(op);
-			break;
+void DetachOperator(Operator * op)
+{
+	ASSERT(op->relation)
+	op->relation = 0;
+	CheckOperator(op);
+}
 
-		case OPERATOR_PROJECT:
-			teardownProjectOperator(op);
-			break;
 
-		case OPERATOR_CONSTRAIN:
-			teardownConstrainOperator(op);
-			break;
-
-		case OPERATOR_FILTER:
-			teardownFilterOperator(op);
-			break;
-
-		case OPERATOR_FIXPOINT:
-			teardownFixpointOperator(op);
-			break;
-
-		case OPERATOR_RECURSE:
-			teardownRecurseOperator(op);
-			break;
-
-		case OPERATOR_MACHINE:
-			teardownMachineOperator(op);
-			break;
-		
-		default:
-			ASSERT(false)
-			break;
-		}
-		if(op->indexOrder)
-			Free(op->indexOrder);
-		Free(op);
-	}
+void CheckOperator(Operator * op)
+{
+	if(!op->relation && op->nParents == 0)
+		teardownOperator(op);	
 }
 
 

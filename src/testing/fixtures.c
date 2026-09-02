@@ -90,7 +90,7 @@ void TeardownRelationFixture(RelationFixture * fixture)
 			fixture->table, TypedTuplePeekAtoms(fixture->tuples[i]), 0);
 		FreeTypedTuple(fixture->tuples[i]);
 	}
-	DropRelationTable(fixture->table);
+	ReleaseRelationTable(fixture->table);
 	IFactRelease(fixture->termForm);
 	SetMemory(fixture, sizeof(RelationFixture), 0);
 }

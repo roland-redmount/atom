@@ -275,8 +275,6 @@ void CoreFormSetTuple(index32 formId, Atom const inputTuple[], Atom tuple[])
 {
 	TupleCopyPermuted(
 		inputTuple, tuple, kernel.corePredicateRoleIndex[formId], corePredicateArity[formId]);
-	// for(index8 i = 0; i < corePredicateArity[formId]; i++)
-	// 	tuple[kernel.corePredicateRoleIndex[formId][i]] = inputTuple[i];
 }
 
 
@@ -284,14 +282,11 @@ void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
 {
 	CopyBytesPermuted(
 		inputArray, array, kernel.corePredicateRoleIndex[formId], corePredicateArity[formId]);
-	// for(index8 i = 0; i < corePredicateArity[formId]; i++)
-	// 	array[kernel.corePredicateRoleIndex[formId][i]] = inputArray[i];
 }
 
 
 /**
- * Create a core relation table using the B-tree implementation,
- * and create associated services.
+ * Create a core relation table using the B-tree implementation, with primitive services.
  * This requires kernel.corePredicateRoleIndex to be initialized for the correponding form
  */
 static RelationTable * createCoreRelationTable(uint32 relationId)
@@ -301,18 +296,17 @@ static RelationTable * createCoreRelationTable(uint32 relationId)
 	CoreFormSetByteArray(formId, coreRelationAtomTypes[relationId], atomTypes);
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, corePredicateArity[formId]);
 
-	// The bootstrap constructor is used throughout, since the predicate form is at hand
-	// and the earliest core relations are keyed by a term form that has no tuples yet
+	// The bootstrap constructor is used to specify the predicate form explicitly
 	Relation const * relation = CreateRelationBootstrap(
 		kernel.coreTermForms[formId],
 		kernel.corePredicateForms[formId],
 		corePredicateArity[formId],
 		typeSignature
 	);
+	// Create the relation storage and associated primitive services
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeTableProvider, kernel.corePredicateRoleIndex[formId]);
-	table->isCore = true;
-	// the table holds its own reference to the relation
+	// the table now holds its own reference to the relation
 	ReleaseRelation(relation);
 	return table;
 }
@@ -700,13 +694,13 @@ void KernelShutdown(void)
 	 // the associated predicate form and term form of each.
 	for(index32 relationId = N_CORE_RELATIONS; relationId > RELATION_TERM_FORM; relationId--)
 		// This removes the services, and releases the associated forms
-		DropRelationTable(kernel.coreRelations[relationId]);
+		ReleaseRelationTable(kernel.coreRelations[relationId]);
 
 	/*
 	 * RELATION_MULTISET_ID is not circular, but shares the term form of
 	 * RELATION_MULTISET_NAME, so it goes before the three tables handled below.
 	 */
-	DropRelationTable(kernel.coreRelations[RELATION_MULTISET_ID]);
+	ReleaseRelationTable(kernel.coreRelations[RELATION_MULTISET_ID]);
 
 	/**
 	 * Remove RELATION_TERM_FORM, RELATION_PREDICATE_FORM and RELATION_MULTISET_NAME.
@@ -755,9 +749,9 @@ void KernelShutdown(void)
 	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_PREDICATE_FORM]) == 0)
 	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_MULTISET_NAME]) == 0)
 
-	DropRelationTable(kernel.coreRelations[RELATION_TERM_FORM]);
+	ReleaseRelationTable(kernel.coreRelations[RELATION_TERM_FORM]);
 	for(index32 relationId = RELATION_PREDICATE_FORM; relationId >= RELATION_MULTISET_NAME; relationId--)
-		DropRelationTable(kernel.coreRelations[relationId]);
+		ReleaseRelationTable(kernel.coreRelations[relationId]);
 
 	// Every formula must have been released before the ifacts, since a formula
 	// holds a reference to its form

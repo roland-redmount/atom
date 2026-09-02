@@ -156,9 +156,7 @@ Service RegisterMachineService(
 	Operator * op = CreateMachineOperator(
 		arity, indexOrder, &machineServiceProvider, data,
 		sizeof(MachineServiceContext) + stateSize);
-	Service service = ServiceRegistryAdd(relation, ioSignature, op, SERVICE_PRIMITIVE);
-	// the service registry now holds the references to the operator and the relation
-	ReleaseOperator(op);
+	Service service = CreateService(relation, ioSignature, op, SERVICE_PRIMITIVE);
 	ReleaseRelation(relation);
 	ReleaseFormula(term);
 	return service;
@@ -171,5 +169,5 @@ void FreeMachineServices(void)
 	// NOTE: this is highly inefficient, but typically only called prior to kernel shutdown.
 	Service service;
 	while(ServiceRegistryFindByMachineProvider(&machineServiceProvider, &service))
-		ServiceRegistryRemove(service.relation, service.op);
+		RemoveService(service.relation, service.op);
 }

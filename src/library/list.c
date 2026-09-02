@@ -473,44 +473,56 @@ void ListSetup(void)
 		PredicateRoleIndex(listLengthPredicateForm, lengthRoleName);
 	listLengthTermForm = CreateTermForm(listLengthPredicateForm, true);
 
-	// The service (list <ID position >INT element >_) of a (list position element) relation
-	IOSignature elementIOSignature = {0};
-	CopyBytesPermuted(
-		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
-		elementIOSignature.parameterIO, listRoleIndex, 3);
+	NameRelease(lengthRoleName);
+	NameRelease(elementRoleName);
+	NameRelease(positionRoleName);
+	NameRelease(listRoleName);
 
-	// Create the (list:ID position:INT element:ID) relation
+	// Create relations
 	TypeSignature typeSignature = {0};
+	// (list:ID position:INT element:ID)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_ID}, typeSignature.atomTypes, listRoleIndex, 3);
 	listIDRelation = CreateRelation(listTermForm, 3, typeSignature);
-	listIDRelationTable = CreateRelationTable(listIDRelation, &btreeTableProvider, listRoleIndex);
-	/* CLAUDE: the library holds each list table until ListShutdown(), so releasing the
-	   last list must not drop it; see RelationTable.isCore */
-	listIDRelationTable->isCore = true;
-	listIDOperator = ServiceRegistryFind(listIDRelation, elementIOSignature);
-	ASSERT(listIDOperator)
-
-	// Create the (list:ID position:INT element:LETTER) relation
+	// (list:ID position:INT element:LETTER)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_LETTER}, typeSignature.atomTypes, listRoleIndex, 3);
 	listLetterRelation = CreateRelation(listTermForm, 3, typeSignature);
-	listLetterRelationTable = CreateRelationTable(
-		listLetterRelation, &btreeTableProvider, listRoleIndex);
-	listLetterRelationTable->isCore = true;
-	listLetterOperator = ServiceRegistryFind(listLetterRelation, elementIOSignature);
-	ASSERT(listLetterOperator)
-
-	// Create the (list:ID length:INT) relation
+	// (list:ID length:INT)
 	typeSignature = (TypeSignature) {0};
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT}, typeSignature.atomTypes, listLengthRoleIndex, 2);
 	listLengthRelation = CreateRelation(listLengthTermForm, 2, typeSignature);
+
+	IFactRelease(listLengthTermForm);
+	IFactRelease(listLengthPredicateForm);
+	IFactRelease(listTermForm);
+	IFactRelease(listPredicateForm);
+
+	// Create relation tables
+	// (list:ID position:INT element:ID)
+	listIDRelationTable = CreateRelationTable(listIDRelation, &btreeTableProvider, listRoleIndex);
+	// (list:ID position:INT element:LETTER)
+	listLetterRelationTable = CreateRelationTable(listLetterRelation, &btreeTableProvider, listRoleIndex);
+	// (list:ID length:INT)
 	listLengthRelationTable = CreateRelationTable(
 		listLengthRelation, &btreeTableProvider, listLengthRoleIndex);
-	listLengthRelationTable->isCore = true;
 
-	// Store a pointer to the (list <ID length >INT) service
+	ReleaseRelation(listLengthRelation);
+	ReleaseRelation(listLetterRelation);
+	ReleaseRelation(listIDRelation);
+
+	// Get operators
+	// for (list <ID position >INT element >_)
+	IOSignature elementIOSignature = {0};
+	CopyBytesPermuted(
+		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
+		elementIOSignature.parameterIO, listRoleIndex, 3);
+	listIDOperator = ServiceRegistryFind(listIDRelation, elementIOSignature);
+	ASSERT(listIDOperator)
+	listLetterOperator = ServiceRegistryFind(listLetterRelation, elementIOSignature);
+	ASSERT(listLetterOperator)
+	// for (list <ID length >INT)
 	IOSignature lengthIOSignature = {0};
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT},
@@ -522,22 +534,7 @@ void ListSetup(void)
 
 void ListShutdown(void)
 {
-	DropRelationTable(listLengthRelationTable);
-	DropRelationTable(listLetterRelationTable);
-	DropRelationTable(listIDRelationTable);
-
-	// Release the creation reference of each relation, and of the forms they are built on
-	ReleaseRelation(listLengthRelation);
-	ReleaseRelation(listLetterRelation);
-	ReleaseRelation(listIDRelation);
-
-	IFactRelease(listLengthTermForm);
-	IFactRelease(listLengthPredicateForm);
-	IFactRelease(listTermForm);
-	IFactRelease(listPredicateForm);
-
-	NameRelease(lengthRoleName);
-	NameRelease(elementRoleName);
-	NameRelease(positionRoleName);
-	NameRelease(listRoleName);
+	ReleaseRelationTable(listLengthRelationTable);
+	ReleaseRelationTable(listLetterRelationTable);
+	ReleaseRelationTable(listIDRelationTable);
 }

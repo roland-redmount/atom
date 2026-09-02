@@ -51,7 +51,7 @@ void testCompilePermute1(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -87,7 +87,7 @@ void testCompilePermute2(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -137,7 +137,7 @@ void testCompileProject(void)
 	ASSERT_UINT32_EQUAL(k, 4);
 
 	for(index8 i = 0; i < nServices; i++) {
-		ServiceRegistryRemove(services[i].relation, services[i].op);
+		RemoveService(services[i].relation, services[i].op);
 	}
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -161,7 +161,7 @@ void testCompileUnconstrainedHeadVariable(void)
 	ASSERT_UINT32_EQUAL(nServices, 0)
 
 	for(index8 i = 0; i < nServices; i++) {
-		ServiceRegistryRemove(services[i].relation, services[i].op);
+		RemoveService(services[i].relation, services[i].op);
 	}
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -196,7 +196,7 @@ void testCompileJoin1(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -231,7 +231,7 @@ void testCompileJoin2(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -275,7 +275,7 @@ void testCompileUnion(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry1);
 	DictionaryRemoveClause(&entry2);
@@ -327,7 +327,7 @@ void testCompileConstrain(void)
 
 	IFactRelease(nodeA);
 	IFactRelease(nodeB);
-	ServiceRegistryRemove(services[0].relation, services[0].op);
+	RemoveService(services[0].relation, services[0].op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 	TeardownRelationFixture(&edgeFixture);
@@ -375,10 +375,10 @@ void testCompileRecursiveJoin1(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	RelationTableRemoveTuple(table, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
-	DropRelationTable(table);
+	ReleaseRelationTable(table);
 	ReleaseFormula(terminatingFact);
 	DictionaryRemoveClause(&entry);
 }
@@ -433,7 +433,7 @@ void testCompileRecursiveJoin2(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -482,7 +482,7 @@ void testCompileRecursiveReachable(void)
 	for(index8 i = 0; i < 3; i++)
 		ASSERT_TRUE(found[i])
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -535,7 +535,7 @@ void testCompileRecursiveTermUnboundInput(void)
 	ASSERT_UINT32_EQUAL(nTuples, 1)
 
 	IFactRelease(nodeB);
-	ServiceRegistryRemove(services[0].relation, services[0].op);
+	RemoveService(services[0].relation, services[0].op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&recursiveEntry);
 	DictionaryRemoveClause(&baseEntry);
@@ -593,7 +593,7 @@ void testCompileRecursiveClosure(void)
 	for(index8 i = 0; i < PREC_SUCC_N_CLOSURE_TUPLES; i++)
 		ASSERT_TRUE(found[i])
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -675,11 +675,11 @@ void testCompileRecursiveVariants(void)
 		ASSERT_TRUE(foundIntTuple[i])
 
 	for(index8 i = 0; i < nServices; i++)
-		ServiceRegistryRemove(services[i].relation, services[i].op);
+		RemoveService(services[i].relation, services[i].op);
 	ReleaseFormula(queryTerm);
 	for(index8 i = 0; i < 2; i++)
 		RelationTableRemoveTuple(intTable, intEdges[i], 0);
-	DropRelationTable(intTable);
+	ReleaseRelationTable(intTable);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
 	TeardownRelationFixture(&precSuccFixture);
@@ -727,13 +727,13 @@ void testCompileNegatedTerm(void)
 	OperatorFreeContext(context);
 
 	// teardown
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	
 	DictionaryRemoveClause(&entry);
 
 	RelationTableRemoveTuple(evenTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
-	DropRelationTable(evenTable);
+	ReleaseRelationTable(evenTable);
 	ReleaseFormula(odd3term);
 }
 
@@ -786,11 +786,11 @@ void testCompiledServiceReadsFactsLive(void)
 	ASSERT_TRUE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 	RelationTableRemoveTuple(oddTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
-	DropRelationTable(oddTable);
+	ReleaseRelationTable(oddTable);
 	ReleaseFormula(odd3term);
 }
 
@@ -828,7 +828,7 @@ void testCompileSquares(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -885,7 +885,7 @@ void testCompileChainedRules(void)
 
 	IFactRelease(nodeA);
 	IFactRelease(nodeC);
-	ServiceRegistryRemove(services[0].relation, services[0].op);
+	RemoveService(services[0].relation, services[0].op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&grandparentEntry);
 	DictionaryRemoveClause(&parentEntry);
@@ -950,7 +950,7 @@ void testCompileChainedRuleOrder(void)
 	ASSERT_FALSE(DispatchQueryFormula(unboundAlias, &aliasService, aliasPermutation))
 	ReleaseFormula(unboundAlias);
 
-	ServiceRegistryRemove(services[0].relation, services[0].op);
+	RemoveService(services[0].relation, services[0].op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&pickEntry);
 	DictionaryRemoveClause(&aliasEntry);
@@ -1006,7 +1006,7 @@ void testCompileNewIOPattern(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 }
 
@@ -1036,7 +1036,7 @@ void testCompileNewIOPatternRepeated(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 }
 
@@ -1075,7 +1075,7 @@ void testCompileFilterInRuleBody(void)
 
 	// Compiling the query also compiled a service for its body term, which is a cache
 	// over the list relation and outlives the rule; remove both
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ServiceRegistryInvalidateAll();
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiledBefore)
 

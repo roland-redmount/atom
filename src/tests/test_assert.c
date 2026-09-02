@@ -296,8 +296,9 @@ void testCreateIFactTwoIdColumns(void)
 	ASSERT_NOT_NULL(table)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 2)
 
-	// Releasing the atom retracts both facts, which drops the table
+	// Releasing the atom retracts both facts
 	IFactRelease(ifact);
+	// The (pair other)
 	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(sameFormTerm), 2, typeSignature))
 
 	ReleaseFormula(formula);
@@ -386,7 +387,7 @@ void testCreateIFactTerm(void)
 	size8 nColumns = FormulaGetActors(term)->nAtoms;
 
 	// The relation of the defining fact carries the identified atom in the generator
-	// column, so its type there is AT_ID rather than the generator's own type
+	// column, with type AT_ID
 	byte atomTypes[2];
 	for(index8 i = 0; i < nColumns; i++) {
 		TypedAtom actor = TypedTupleGetElement(FormulaGetActors(term), i);
@@ -399,7 +400,7 @@ void testCreateIFactTerm(void)
 	ASSERT_TRUE(ifact.hash != 0)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
 
-	// The defining fact is the one row of the relation the term names
+	// The defining fact is the only row in the corresponding RelationTable
 	Relation const * relation = RelationRegistryFind(FormulaGetForm(term), nColumns, typeSignature);
 	ASSERT_NOT_NULL(relation)
 	RelationTable const * table = RelationTableRegistryFind(relation);

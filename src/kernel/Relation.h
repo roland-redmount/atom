@@ -108,11 +108,16 @@ int8 CompareRelations(Relation const * relation, Relation const * relationOrKey)
 void AcquireRelation(Relation const * relation);
 
 /**
- * Remove one reference to the given relation. When the last reference goes, the relation
- * removes itself from the relation registry and is deallocated: a signature nothing names
- * any longer is a signature nothing can dispatch to.
+ * Remove one reference to the given relation.
  */
 void ReleaseRelation(Relation const * relation);
+
+/**
+ * Explicitly remove a Relation, its RelationTable (storage) and all its services.
+ * This would be used for cleanup. Not sure if this is ever needed.
+ */
+void DropRelation(Relation const * relation);
+
 
 /**
  * Release the references this relation holds to its term form and predicate form,

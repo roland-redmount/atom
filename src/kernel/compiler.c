@@ -300,7 +300,6 @@ static Operator * constrainRepeatedArguments(Operator * op, index8 clauseMap[])
 		return op;
 
 	Operator * constrainOperator = CreateConstrainOperator(nArguments, argumentMap, op);
-	ReleaseOperator(op);
 	return constrainOperator;
 }
 
@@ -386,7 +385,6 @@ static Operator * createTermOperator(
 	Operator * op;
 	if(!nConstants) {
 		// Without constants to bind, the service operator is used as it is
-		AcquireOperator(serviceOperator);
 		op = serviceOperator;
 	}
 	else {
@@ -637,8 +635,6 @@ static Operator * compileRecursiveTerm(
 	Operator * op = createTermOperator(
 		CreateTypeSignature(atomTypes, termArity), ioSignature, recurseOperator,
 		termActors, permutation, serviceParameters, clauseMap);
-	// createTermOperator() took its own reference to the operator
-	ReleaseOperator(recurseOperator);
 	return op;
 }
 
@@ -777,13 +773,11 @@ static Operator * compileConjunctionRecursive(
 			);
 			Operator * joinOperator = CreateJoinOperator(
 				nJoinArguments, op, leftMap, nextOperator, rightMap);
-			ReleaseOperator(op);
-			ReleaseOperator(nextOperator);
 			return joinOperator;
 		}
 		else {
 			// Failed to compile the rest of the cojnunction
-			ReleaseOperator(op);
+			CheckOperator(op);
 			return 0;
 		}
 	}
@@ -856,7 +850,7 @@ static size8 parameterizeLocalVariables(
  * The terms of the conjunction must together provide every clause argument. If they
  * do not, the clause cannot yield a valid relation: the arguments no term provides
  * would be left undefined. This is not a program error but an invalid rule, so we
- * release the service and return 0.
+ * free the operator and return 0.
  */
 static Operator * permuteToClauseArguments(
 	Operator * op, index8 const clauseMap[], size8 clauseNArguments)
@@ -874,7 +868,7 @@ static Operator * permuteToClauseArguments(
 #ifdef DEBUG_COMPILER
 			PrintCString("Clause does not provide every argument\n");
 #endif
-			ReleaseOperator(op);
+			CheckOperator(op);
 			return 0;
 		}
 	}
@@ -883,7 +877,7 @@ static Operator * permuteToClauseArguments(
 
 	Operator * permuteOperator = CreatePermuteOperator(
 		clauseNArguments, 0, 0, 0, clauseMap, op);
-	ReleaseOperator(op);
+	CheckOperator(op);
 	return permuteOperator;
 }
 
@@ -971,7 +965,6 @@ static Operator * compileConjunction(
 		for(index8 i = 0; i < nArguments; i++)
 			keptArguments[i] = i;
 		Operator * projectOperator = CreateProjectOperator(op, nArguments, keptArguments);
-		ReleaseOperator(op);
 		op = projectOperator;
 	}
 	return op;
@@ -1092,7 +1085,6 @@ static Operator * sortOperatorToIndexOrder(Operator * op)
 	for(index8 i = 0; i < op->nArguments; i++)
 		argumentMap[i] = i;
 	Operator * sortOperator = CreateProjectOperator(op, op->nArguments, argumentMap);
-	ReleaseOperator(op);
 	return sortOperator;
 }
 
@@ -1111,8 +1103,6 @@ static Operator * unionOperators(Operator * first, Operator * second)
 		second = sortOperatorToIndexOrder(second);
 	}
 	Operator * unionOperator = CreateUnionOperator(first, second);
-	ReleaseOperator(first);
-	ReleaseOperator(second);
 	return unionOperator;
 }
 
@@ -1385,7 +1375,6 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
 
 	Operator * fixpointOperator = CreateFixpointOperator(
 		variant->op, inputArguments, nInputs);
-	ReleaseOperator(variant->op);
 	variant->op = fixpointOperator;
 }
 
@@ -1540,17 +1529,19 @@ static size8 compileParameterizedQuery(
 
 	for(index8 i = 0; i < nVariants; i++) {
 		// Parameter types and the relation were resolved by compileQueryVariants()
-		Service service = ServiceRegistryAdd(
-			variants[i].relation, getVariantIOSignature(variants[i].parameters),
-			variants[i].op, SERVICE_COMPILED);
+		Service service = CreateService(
+			variants[i].relation,
+			getVariantIOSignature(variants[i].parameters),
+			variants[i].op,
+			SERVICE_COMPILED
+		);
+		
 #ifdef DEBUG_COMPILER
 		PrintService(&service);
 		PrintChar('\n');
 #endif
 		if(services)
 			services[i] = service;
-		// the service registry now holds the references to the operator and the relation
-		ReleaseOperator(variants[i].op);
 		ReleaseRelation(variants[i].relation);
 		FreeTypedTuple(variants[i].parameters);
 	}

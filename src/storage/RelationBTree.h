@@ -44,10 +44,8 @@ typedef struct s_RelationBTree {
  *
  * The arity and index column order are copied here rather than read off the RelationTable
  * on every call, so that a RelationBTree stays usable as a data structure on its own.
- *
- * NOTE: the B-tree relation does not store the column types.
  */
-RelationBTree * CreateRelationBTree(size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
+RelationBTree * CreateRelationBTree(size8 nColumns, index8 const indexColumns[]);
 
 void FreeRelationBTree(RelationBTree * relation);
 

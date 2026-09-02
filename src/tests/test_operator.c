@@ -46,11 +46,10 @@ void testMachineOperator(void)
 
 
 /**
- * Reorder the relation (list position element) to (list element position).
- * A PERMUTE operator keeps every argument of its child operator, so its
- * tuples remain unique and it provides a valid relation.
+ * Create a PERMUTE operator reordering the relation (list position element)
+ * to (list element position) 
  */
-static Operator * createReorderedListOperator(void)
+static Operator * createPermutedListOperator(void)
 {
 	// The operator (list <ID position >INT element >LETTER)
 	Operator * listOperator = GetListOperator(AT_LETTER);
@@ -59,13 +58,17 @@ static Operator * createReorderedListOperator(void)
 		(index8[]) {0, 2, 1},		// (l p e) -> (l e p)
 		argumentMap
 	);
-	return CreatePermuteOperator(3, 0, 0, 0, argumentMap, listOperator);
+	return CreatePermuteOperator(
+		3,
+		0, 0, 0,	// no constants
+		argumentMap, listOperator
+	);
 }
 
 
 void testPermuteOperator(void)
 {
-	Operator * permuteOperator = createReorderedListOperator();
+	Operator * permuteOperator = createPermutedListOperator();
 
 	// Arguments tuple (@stringList _ _) for the reordered operator
 	Atom string = CreateStringFromCString("alibaba");
@@ -84,7 +87,7 @@ void testPermuteOperator(void)
 	OperatorFreeContext(context);
 
 	IFactRelease(string);
-	ReleaseOperator(permuteOperator);
+	CheckOperator(permuteOperator);
 }
 
 
@@ -96,9 +99,8 @@ void testPermuteOperator(void)
  */
 void testProjectOperator(void)
 {
-	Operator * permuteOperator = createReorderedListOperator();
+	Operator * permuteOperator = createPermutedListOperator();
 	Operator * projectOperator = CreateProjectOperator(permuteOperator, 2, (index8[]) {0, 1});
-	ReleaseOperator(permuteOperator);
 
 	// Arguments tuple (@stringList _) for the marginalize operator
 	Atom string = CreateStringFromCString("alibaba");
@@ -116,7 +118,7 @@ void testProjectOperator(void)
 	OperatorFreeContext(context);
 
 	IFactRelease(string);
-	ReleaseOperator(projectOperator);
+	CheckOperator(projectOperator);
 }
 
 
@@ -161,7 +163,7 @@ void testJoinOperator1(void)
 	ASSERT_INT32_EQUAL(nElements, 3);
 	OperatorFreeContext(context);
 	// This frees the child operators
-	ReleaseOperator(joinOperator);
+	CheckOperator(joinOperator);
 }
 
 
@@ -238,7 +240,7 @@ void testJoinOperator2(void)
 	ASSERT_INT32_EQUAL(nElements, 2 * 3)
 	OperatorFreeContext(context);
 	IFactRelease(stringList);
-	ReleaseOperator(joinOperator);
+	CheckOperator(joinOperator);
 }
 
 
@@ -281,7 +283,7 @@ void testFilterOperator(void)
 		ASSERT_UINT32_EQUAL(filterOperator->indexOrder[i], listOperator->indexOrder[i])
 
 	IFactRelease(string);
-	ReleaseOperator(filterOperator);
+	CheckOperator(filterOperator);
 }
 
 
@@ -314,7 +316,7 @@ void testConstrainOperator(void)
 	// are yielded: (l p s q e) -> (l p s e)
 	Operator * constrainOperator = CreateConstrainOperator(
 		4, (index8[]) {0, 1, 2, 1, 3}, joinOperator);
-	ReleaseOperator(joinOperator);
+	CheckOperator(joinOperator);
 
 	// test case, a list of two strings (two lists of letters)
 	Atom string1 = CreateStringFromCString("foo");
@@ -339,7 +341,7 @@ void testConstrainOperator(void)
 	OperatorFreeContext(context);
 
 	IFactRelease(stringList);
-	ReleaseOperator(constrainOperator);
+	CheckOperator(constrainOperator);
 }
 
 
@@ -368,8 +370,6 @@ void testUnionOperator(void)
 	IFactRelease(string2);
 
 	Operator * unionOperator = CreateUnionOperator(service1, service2);
-	ReleaseOperator(service1);
-	ReleaseOperator(service2);
 
 	// Setup execution context
 	Atom arguments[2] = {0};
@@ -387,7 +387,7 @@ void testUnionOperator(void)
 	}
 	ASSERT_FALSE(OperatorCall(context));
 	OperatorFreeContext(context);
-	ReleaseOperator(unionOperator);
+	CheckOperator(unionOperator);
 }
 
 
@@ -420,8 +420,6 @@ void testUnionDuplicateAtExhaustion(void)
 	IFactRelease(longString);
 
 	Operator * unionOperator = CreateUnionOperator(shortService, longService);
-	ReleaseOperator(shortService);
-	ReleaseOperator(longService);
 
 	Atom arguments[2] = {0};
 	OperatorContext * context = OperatorCreateContext(unionOperator, arguments);
@@ -437,13 +435,12 @@ void testUnionDuplicateAtExhaustion(void)
 	}
 	ASSERT_FALSE(OperatorCall(context));
 	OperatorFreeContext(context);
-	ReleaseOperator(unionOperator);
+	CheckOperator(unionOperator);
 }
 
 
 /**
- * Every operator declares the order in which it yields its tuples, deriving it from
- * its children rather than being told; see the ordering contract in operator.h.
+ * Every operator determines its index order from that of its children; see contract in operator.h.
  * A relation stored in a particular column order propagates that order upwards through
  * the operators applied to it.
  */
@@ -459,13 +456,12 @@ void testIndexOrder(void)
 	// The relation is stored in the kernel order (list position element), so reordering
 	// it to (list element position) yields tuples ordered by argument 0 (the list),
 	// then argument 2 (the position), then argument 1 (the element)
-	Operator * permuteOperator = createReorderedListOperator();
+	Operator * permuteOperator = createPermutedListOperator();
 	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[0], 0)
 	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[1], 2)
 	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[2], 1)
 
-	// PROJECT materializes into a B-tree keyed on the arguments it keeps,
-	// so it yields them in their own order
+	// PROJECT sorts tuple using a B-tree, and always give the identity index order
 	Operator * projectOperator = CreateProjectOperator(permuteOperator, 2, (index8[]) {0, 1});
 	ASSERT_UINT32_EQUAL(projectOperator->indexOrder[0], 0)
 	ASSERT_UINT32_EQUAL(projectOperator->indexOrder[1], 1)
@@ -484,8 +480,7 @@ void testIndexOrder(void)
 	for(index8 i = 0; i < 5; i++)
 		ASSERT_UINT32_EQUAL(joinOperator->indexOrder[i], expectedJoinOrder[i])
 
-	// An operator yielding at most one tuple declares no order, as any order it named
-	// would be arbitrary, and an operator relabeling its arguments declares none either
+	// An operator yielding at most one tuple has no index order
 	MachineProvider singleTupleProvider = {
 		.setupContext = 0,
 		.call = 0,
@@ -494,6 +489,8 @@ void testIndexOrder(void)
 	};
 	Operator * singleTupleOperator = CreateMachineOperator(2, 0, &singleTupleProvider, 0, 0);
 	ASSERT_NULL(singleTupleOperator->indexOrder)
+
+	// A PERMUTE of an operator with no index order does not have an index order either
 	Operator * singleTuplePermute = CreatePermuteOperator(
 		2, 0, 0, 0, (index8[]) {1, 0}, singleTupleOperator);
 	ASSERT_NULL(singleTuplePermute->indexOrder)
@@ -503,17 +500,15 @@ void testIndexOrder(void)
 	Operator * unionOperator = CreateUnionOperator(projectOperator, singleTuplePermute);
 	ASSERT_UINT32_EQUAL(unionOperator->indexOrder[0], 0)
 	ASSERT_UINT32_EQUAL(unionOperator->indexOrder[1], 1)
+
 	Operator * reversedUnionOperator = CreateUnionOperator(singleTuplePermute, projectOperator);
 	ASSERT_UINT32_EQUAL(reversedUnionOperator->indexOrder[0], 0)
 	ASSERT_UINT32_EQUAL(reversedUnionOperator->indexOrder[1], 1)
 
-	ReleaseOperator(reversedUnionOperator);
-	ReleaseOperator(unionOperator);
-	ReleaseOperator(singleTuplePermute);
-	ReleaseOperator(singleTupleOperator);
-	ReleaseOperator(joinOperator);
-	ReleaseOperator(projectOperator);
-	ReleaseOperator(permuteOperator);
+	// Drop all operators
+	CheckOperator(joinOperator);
+	CheckOperator(unionOperator);
+	CheckOperator(reversedUnionOperator);
 }
 
 
@@ -544,17 +539,17 @@ static void setupGraphFixture(void)
 
 
 /**
- * Build an operator evalutaing (before x after y) defined by the rules
+ * Create a FIXPOINT operator evaluating (before x after y) defined by the rules
  *
  *  (1) before x after y  <-  succ y prec x
  *  (2) before x after y  <-  succ z prec x & before z after y
- *
+ * 
+ * Here x is a constant if nInputs > 0; and both x, y are constants if nInputs > 1.
  * The graph relation is written here in its canonical role order (succ prec), so that
- * its roles line up with the argument indices below: argument 0 is the succ role and
- * argument 1 the prec role.
+ * argument 0 is the succ role and argument 1 the prec role.
  *
  * The (before after) relation is a FIXPOINT/2 operator with argument order (x y).
- * Called with x bound, the rules give the operator tree
+ * With inputs = 1, this yieds the operator tree
  *
  *	FIXPOINT/2[0 1]<0>(                      // derives (before after), x bound
  *		UNION/2[0 1](
@@ -614,26 +609,21 @@ static Operator * createClosureOperator(index8 const inputArguments[], size8 nIn
 	Operator * recurseOperator = CreateRecurseOperator(2, (index8[]) {0}, 1);
 	Operator * joinOperator = CreateJoinOperator(
 		3, edgeOperator, edgeToJoinMap, recurseOperator, recurseMap);
-	ReleaseOperator(recurseOperator);
 
 	// Drop the shared z, keeping the closure arguments
 	Operator * projectOperator = CreateProjectOperator(joinOperator, 2, (index8[]) {0, 1});
-	ReleaseOperator(joinOperator);
 
 	Operator * unionOperator = CreateUnionOperator(baseOperator, projectOperator);
-	ReleaseOperator(baseOperator);
-	ReleaseOperator(projectOperator);
 
 	Operator * fixpointOperator = CreateFixpointOperator(
 		unionOperator, inputArguments, nInputs);
-	ReleaseOperator(unionOperator);
 	return fixpointOperator;
 }
 
 
 /**
- * A FIXPOINT operator derives a recursive relation by rounds, and terminates on the
- * cyclic graph of the fixture, where a top-down evaluation would descend forever.
+ * Test that the FIXPOINT operator terminates on the cyclic graph of the fixture.
+ * Because the graph contains cycles, a naive top-down evaluation would descend forever.
  * A caller binding nothing asks for the whole relation, which is the closure of both
  * components of the graph.
  */
@@ -650,7 +640,7 @@ void testFixpointOperator(void)
 	ASSERT_UINT32_EQUAL(nTuples, TEST_N_CYCLE_CLOSURE + TEST_N_PATH_CLOSURE)
 	OperatorFreeContext(context);
 
-	ReleaseOperator(closureOperator);
+	CheckOperator(closureOperator);
 	TeardownRelationFixture(&graphFixture);
 }
 
@@ -684,7 +674,7 @@ void testFixpointCallBinding(void)
 	OperatorFreeContext(context);
 
 	IFactRelease(nodeA);
-	ReleaseOperator(closureOperator);
+	CheckOperator(closureOperator);
 	TeardownRelationFixture(&graphFixture);
 }
 

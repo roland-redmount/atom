@@ -18,9 +18,10 @@ static RelationFixture precSuccFixture;
 
 
 /**
- * Number of tuples the given query is answered with
+ * Run a UserQuery (possibly compiling the query) and count the number of tuples
+ * in the resulting relations
  */
-static size32 countQueryTuples(char const * queryString)
+static size32 runQueryAndCountTuples(char const * queryString)
 {
 	Atom query = CStringToTerm(queryString);
 	MixedTypeRelation * relation = UserQuery(query);
@@ -42,7 +43,7 @@ void testQueryStoredFacts(void)
 	SetupPrecSuccFixture(&precSuccFixture);
 	size32 nServices = ServiceRegistryCount();
 
-	ASSERT_UINT32_EQUAL(countQueryTuples("prec x succ y"), PREC_SUCC_N_EDGES)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("prec x succ y"), PREC_SUCC_N_EDGES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices)
 
 	TeardownRelationFixture(&precSuccFixture);
@@ -60,12 +61,12 @@ void testQueryIntegerLiteral(void)
 {
 	// "ab" is a list of letters, so only the LETTER service answers; the ID service
 	// of the same form contributes nothing
-	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position 1 element e"), 1)
-	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position 2 element e"), 1)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("list \"ab\" position 1 element e"), 1)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("list \"ab\" position 2 element e"), 1)
 	// a position no element of the list has
-	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position 3 element e"), 0)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("list \"ab\" position 3 element e"), 0)
 	// the length of the list, whose service takes an INT column too
-	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" length 2"), 1)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("list \"ab\" length 2"), 1)
 }
 
 
@@ -83,11 +84,11 @@ void testQueryCompilesOnce(void)
 	size32 nServices = ServiceRegistryCount();
 
 	// The first query compiles the service deriving the closure
-	ASSERT_UINT32_EQUAL(countQueryTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
 	// The same query is answered by that service, and compiles nothing further
-	ASSERT_UINT32_EQUAL(countQueryTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
 	DictionaryRemoveClause(&entry2);
@@ -110,13 +111,13 @@ void testQueryParameterIO(void)
 	AddTransitiveClosureRules(&entry1, &entry2);
 	size32 nServices = ServiceRegistryCount();
 
-	ASSERT_UINT32_EQUAL(countQueryTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
 	// b, c and d come after a, and this query compiles a service of its own
-	ASSERT_UINT32_EQUAL(countQueryTuples("before \"a\" after y"), 3)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before \"a\" after y"), 3)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 2)
-	ASSERT_UINT32_EQUAL(countQueryTuples("before \"a\" after y"), 3)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before \"a\" after y"), 3)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 2)
 
 	DictionaryRemoveClause(&entry2);
@@ -137,13 +138,13 @@ void testQueryRepeatedVariable(void)
 	size32 nServices = ServiceRegistryCount();
 
 	// b and c lie on a cycle, and so come after themselves
-	ASSERT_UINT32_EQUAL(countQueryTuples("before x after x"), 2)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after x"), 2)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
 	// This query yields no tuples, since the (list position element) service
 	// has distinct parameter types for the position and element roles, and
 	// therefore all tuples from the servuce will fail the equality constraint.
-	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position x element x"), 0)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("list \"ab\" position x element x"), 0)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 1)
 
 	DictionaryRemoveClause(&entry2);
@@ -167,12 +168,12 @@ void testQueryCompileIgnoresRepeatedVariable(void)
 	// This query compiles two services since we have two (list position element)
 	// services with element types AT_ID and AT_NAME; it yields the letters of "ab"
 	// and their positions.
-	ASSERT_UINT32_EQUAL(countQueryTuples("item e index p"), 2)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("item e index p"), 2)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 2)
 
 	// This query re-uses the above compiled services, but yields no tuples
 	// since the element type is never an INT.
-	ASSERT_UINT32_EQUAL(countQueryTuples("item z index z"), 0)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("item z index z"), 0)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices + 2)
 
 	DictionaryRemoveClause(&entry);
@@ -189,20 +190,18 @@ void testQueryWithoutAnswer(void)
 {
 	size32 nServices = ServiceRegistryCount();
 
-	ASSERT_UINT32_EQUAL(countQueryTuples("nowhere x nothing y"), 0)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("nowhere x nothing y"), 0)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices)
-	ASSERT_UINT32_EQUAL(countQueryTuples("nowhere x nothing y"), 0)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("nowhere x nothing y"), 0)
 	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices)
 }
 
 
 /**
- * A compiled service is a cache over the knowledge base. A relation of the same term form
- * appearing gives a query one more relation to match, so the service is removed and the
- * next query compiles it again; removing the relation it was compiled from removes it for
- * good.
+ * Test that a compiled service is invalidated when adding a new relation for
+ * a term the compilation depends on.
  */
-void testQueryInvalidatedByRelation(void)
+void testInvalidateServiceByNewRelation(void)
 {
 	SetupPrecSuccFixture(&precSuccFixture);
 	DictionaryEntry entry1;
@@ -210,11 +209,15 @@ void testQueryInvalidatedByRelation(void)
 	AddTransitiveClosureRules(&entry1, &entry2);
 	size32 nServices = ServiceRegistryCount();
 
-	ASSERT_UINT32_EQUAL(countQueryTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
+	// compile and run (before x after y)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
 
-	// A second relation of the (prec succ) form, whose services the compiled one knows
-	// nothing of
+	// Add a second RelationTable of the (prec succ) form, creating new primitive services
+	// not present during the compilation above. This invalidates the compiled service
+	// since we now may have additional facts.
+	// NOTE: this is overly conservative: the compiled service actually does not depend
+	// on this new relation, since its type signature differs from the service found during compilation.
 	Relation const * intRelation = CreateRelation(
 		precSuccFixture.termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
 	RelationTable * intTable = CreateRelationTable(
@@ -222,16 +225,16 @@ void testQueryInvalidatedByRelation(void)
 	ReleaseRelation(intRelation);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
 
-	// Asking again compiles the query anew, over both relations, and the new one holds
-	// no tuples to add
-	ASSERT_UINT32_EQUAL(countQueryTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
-	ASSERT_TRUE(ServiceRegistryNCompiled() > 0)
+	// Asking again compiles the query again, yielding a new (before after) relation.
+	// Since the (prec:ID succ:INT) relation was empty, there are no additional tuples.
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
+	ASSERT_TRUE(ServiceRegistryNCompiled() > 0)	// == 2?
 
-	// Removing that relation again takes the service compiled over it, and only that
-	// one: the service over the remaining relation still answers what it always did
-	DropRelationTable(intTable);
+	// Removing the (prec:ID succ:INT) relation again invalides the compiled service,
+	// while the service over the remaining relation still answers what it always did
+	ReleaseRelationTable(intTable);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
-	ASSERT_UINT32_EQUAL(countQueryTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
 
 	// Removing the relation the service was compiled from takes the service with it,
@@ -258,20 +261,20 @@ void testQueryInvalidatedByRule(void)
 	size32 nServices = ServiceRegistryCount();
 
 	// With the base rule alone, the derived relation is the edge relation itself
-	ASSERT_UINT32_EQUAL(countQueryTuples("before x after y"), PREC_SUCC_N_EDGES)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_EDGES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
 
 	// The recursive rule makes the same query a different question
 	DictionaryEntry recursiveEntry = DictionaryAddClauseFromCString(
 		"before x after y | ! prec x succ z | ! before z after y");
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
-	ASSERT_UINT32_EQUAL(countQueryTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
 
 	// And removing it again makes it the first question once more
 	DictionaryRemoveClause(&recursiveEntry);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
-	ASSERT_UINT32_EQUAL(countQueryTuples("before x after y"), PREC_SUCC_N_EDGES)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_EDGES)
 
 	DictionaryRemoveClause(&baseEntry);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
@@ -293,7 +296,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testQueryRepeatedVariable);
 	ExecuteTest(testQueryCompileIgnoresRepeatedVariable);
 	ExecuteTest(testQueryWithoutAnswer);
-	ExecuteTest(testQueryInvalidatedByRelation);
+	ExecuteTest(testInvalidateServiceByNewRelation);
 	ExecuteTest(testQueryInvalidatedByRule);
 
 	FreeMachineServices();

@@ -105,19 +105,25 @@ void PairSetup(void)
 	pairRoleNames[1] = CreateNameFromCString("left");
 	pairRoleNames[2] = CreateNameFromCString("right");
 
-	// Create the (pair left right) form
+	// Create the (pair left right) predicate form
 	pairPredicateForm = CreatePredicateForm(pairRoleNames,	3);
 	for(index8 i = 0; i < 3; i++)
 		pairTermRoleIndex[i] = PredicateRoleIndex(pairPredicateForm, pairRoleNames[i]);
+	for(index8 i = 0; i < 3; i++)
+		NameRelease(pairRoleNames[i]);
+	// Create the (pair left right) term form
 	pairTermForm = CreateTermForm(pairPredicateForm, true);
+	IFactRelease(pairPredicateForm);
 	
 	// Create the (pair:ID left:ID right:ID) relation, with B-tree provider
 	TypeSignature typeSignature = {0};
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_ID, AT_ID}, typeSignature.atomTypes, pairTermRoleIndex, 3);		
-	
 	pairRelation = CreateRelation(pairTermForm, 3, typeSignature);
+	IFactRelease(pairTermForm);
+	
 	pairRelationTable = CreateRelationTable(pairRelation, &btreeTableProvider, pairTermRoleIndex);
+	ReleaseRelation(pairRelation);
 
 	// Store a pointer to the (pair<ID left>ID right<ID) service,
 	// created by the B-tree provider.
@@ -127,16 +133,10 @@ void PairSetup(void)
 		ioSignature.parameterIO, pairTermRoleIndex, 3);
 	pairOperator = ServiceRegistryFind(pairRelation, ioSignature);
 	ASSERT(pairOperator);
-	pairRelationTable->isCore = true;
 }
 
 
 void PairShutdown(void)
 {
-	DropRelationTable(pairRelationTable);
-	ReleaseRelation(pairRelation);
-	IFactRelease(pairTermForm);
-	IFactRelease(pairPredicateForm);
-	for(index8 i = 0; i < 3; i++)
-		NameRelease(pairRoleNames[i]);
+	ReleaseRelationTable(pairRelationTable);
 }

@@ -29,9 +29,8 @@ struct {
 
 static void setupFixture(void)
 {
-	byte atomTypes[TEST_N_COLUMNS] = {AT_INT, AT_FLOAT, AT_LETTER} ;
 	index8 indexColumns[TEST_N_COLUMNS] = {0, 1, 2};
-	fixture.relation = CreateRelationBTree(TEST_N_COLUMNS, atomTypes, indexColumns);
+	fixture.relation = CreateRelationBTree(TEST_N_COLUMNS, indexColumns);
 
 	// C99 does not allow assigning array values
 	CopyMemory(

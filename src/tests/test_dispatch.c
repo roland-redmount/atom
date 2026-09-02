@@ -151,8 +151,8 @@ void testDispatchNegatedTerm(void)
 	ASSERT_PTR_EQUAL(service.relation, table->relation)
 	ReleaseFormula(query);
 
-	DropRelationTable(negatedTable);
-	DropRelationTable(table);
+	ReleaseRelationTable(negatedTable);
+	ReleaseRelationTable(table);
 	IFactRelease(negatedTermForm);
 	IFactRelease(termForm);
 }
@@ -292,8 +292,8 @@ void testDispatchIterator(void)
 	DispatchIteratorEnd(&iterator);
 	ReleaseFormula(unknownQuery);
 
-	DropRelationTable(intTable);
-	DropRelationTable(idTable);
+	ReleaseRelationTable(intTable);
+	ReleaseRelationTable(idTable);
 	IFactRelease(termForm);
 }
 

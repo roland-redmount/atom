@@ -36,15 +36,15 @@ typedef struct s_RelationTableProvider {
 	void * (*createStorage)(RelationTable const * table);
 
 	/**
-	 * Register the services available for this relation. The provider should use
+	 * Register the primitive services available for this relation table. The provider should use
 	 * RelationTableAddService() to register each service.
 	 *
 	 * Required services:
-	 * 1) The all-output service that enumerates every tuple is required by RelationDump().
-	 * 2) If the relation stores tuples of an identifying fact, it must have the service taking
-	 *    the identified column as its only input; see IFactBeginConjunction().
+	 * 1) The all-input service is required for contradiction checking by AssertFact()
+	 * 2) The all-output service that enumerates every tuple is required by RelationDump(),
+	 *    and in order to generate FILTER services (table scanning)
 	 * 
-	 * NOTE: this related to Service, not RelationTable, doesn't quite fit in here
+	 * NOTE: this could be folded into createStorage() ?
 	 */
 	void (*registerServices)(RelationTable * table);
 
@@ -85,6 +85,7 @@ typedef struct s_RelationTableProvider {
 #define TUPLE_NOT_FOUND		2
 #define TUPLE_PROTECTED		3
 
+
 /**
  * The tuple storage of one relation, held by a storage provider.
  *
@@ -93,8 +94,9 @@ typedef struct s_RelationTableProvider {
  * the underlying storage.
  */
 struct s_RelationTable {
-	// The relation whose tuples this table stores. Acquired, as the table may outlive
-	// its registration.
+	// NOTE: the Relation points here is merely used to find the RelationTable.
+	// The storage does not need to know the Relation; we could have multiple synonym
+	// term forms for one stored table. Storage also doesn't need to know the atom types.
 	Relation const * relation;
 
 	// Desired order of index columns, so that tuples are effectively ordered
@@ -108,22 +110,20 @@ struct s_RelationTable {
 
 	// The storage provider for this relation table
 	RelationTableProvider const * provider;
-	void * storage;	// any implementation-dependent storage data
-
-	/* TEMPORARY: Whether the kernel owns this table for the lifetime of the process.
-	   This is required for the (list) and (string) tables, which are now "core tables",
-	   the kernel creates them once and hands out the same pointer from GetCoreRelationTable() thereafter. 
-	   We should move list and string out of the kernel, then this can be dropped. */
-	bool isCore;
+	void * storage;			// any implementation-dependent storage data
 
 	size32 referenceCount;
 };
 
+
 /**
  * Create a relation table for the given Relation and record it in the relation table registry.
  * The RelationTable acquires the given Relation.
- * Storage for the new RelationTable is created using the specified provider.
- * The provider also registers services during creation.
+ * 
+ * Storage for the new RelationTable is created using the specified storage provider,
+ * which also registers primitive services.
+ * TODO: I think the storage provider should only create Operators, not register services.
+ * 
  * The caller acquires a reference to the returned RelationTable.
  *
  * The indexColumns array indicates the desired order of the index columns; see
@@ -138,19 +138,11 @@ RelationTable * CreateRelationTable(
 void AcquireRelationTable(RelationTable * table);
 
 /**
- * Remove one reference to a relation table. When the last reference is removed,
- * the RelationTable is deallocated and the corresponding Relation is released.
+ * Remove one reference to a relation table. When the last reference is removed
+ * AND the relation holds no tuples, the RelationTable is removed. A caller can therefore
+ * release its reference to a table to render it "transient", removed when no longer needed.
  */
 void ReleaseRelationTable(RelationTable * table);
-
-/**
- * Remove the tuple storage of a relation: remove every service of the relation, unregister
- * the table and release the reference added by CreateRelationTable(). The table must be empty.
- *
- * The relation storage is deallocated only if no machine operator is still reading it;
- * see the note on reference counting on RelationTable.
- */
-void DropRelationTable(RelationTable * table);
 
 /**
  * Return the number of rows in a relation table

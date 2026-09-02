@@ -74,7 +74,7 @@ static int8 btreeCompareItems(void const * item, void const * itemOrKey, size32 
 }
 
 
-RelationBTree * CreateRelationBTree(size8 nColumns, byte const atomTypes[], index8 const indexColumns[])
+RelationBTree * CreateRelationBTree(size8 nColumns, index8 const indexColumns[])
 {
 	RelationBTree * relation = Allocate(sizeof(RelationBTree));
 	relation->nColumns = nColumns;
@@ -149,8 +149,7 @@ byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint
 
 static void * createRelationBTree(RelationTable const * table)
 {
-	return CreateRelationBTree(
-		table->relation->nColumns, table->relation->typeSignature.atomTypes, table->indexColumns);
+	return CreateRelationBTree(table->relation->nColumns, table->indexColumns);
 }
 
 static size32 relationBTreeNTuples(RelationTable const * table)
@@ -327,7 +326,6 @@ MachineProvider bTreeProvider = {
 static Operator * createBTreeOperator(RelationTable * table, size8 nInputs)
 {
 	RelationBTreeProviderData * providerData = Allocate(sizeof(RelationBTreeProviderData));
-	AcquireRelationTable(table);
 	providerData->table = table;
 	providerData->nInputs = nInputs;
 	// Tuples are stored permuted into index column order, so that is the order
@@ -339,11 +337,12 @@ static Operator * createBTreeOperator(RelationTable * table, size8 nInputs)
 
 
 /**
- * A B-tree can search on any prefix of its index column order, and so registers one
- * service per prefix length: the first nInputs columns in index order are inputs and the
- * rest outputs. A signature binding a column out of that order, such as
- * (list< position> element<), is not among them. The compiler builds a service for such a
- * signature by filtering one of these; see compileFilterVariants() in compiler.c.
+ * A B-tree can search on any prefix of its index column order, so we registers one primitive
+ * service for each prefix, where the first nInputs columns in index order are inputs and the
+ * rest outputs.
+ * 
+ * NOTE: I'm not happy with how this interacts with the ServiceRegistry, which seems like
+ * a higher level. Perhaps we instead return (IOSignature, Operators) pairs?
  */
 static void btreeRegisterServices(RelationTable * table)
 {
@@ -357,9 +356,7 @@ static void btreeRegisterServices(RelationTable * table)
 			else
 				parameterIO[table->indexColumns[i]] = PARAMETER_OUT;
 		}
-		ServiceRegistryAdd(
+		CreateService(
 			table->relation, CreateIOSignature(parameterIO, nColumns), op, SERVICE_PRIMITIVE);
-		// The registry now holds the reference to the operator
-		ReleaseOperator(op);
 	}
 }

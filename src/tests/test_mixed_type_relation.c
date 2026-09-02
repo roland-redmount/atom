@@ -21,7 +21,7 @@ static RelationFixture edgeFixture;
 /**
  * Return the number of tuples in the relation returned for the given query
  */
-static size32 countQueryTuples(char const * queryString)
+static size32 runQueryAndCountTuples(char const * queryString)
 {
 	Atom query = CStringToTerm(queryString);
 	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
@@ -115,7 +115,7 @@ void testConcatRepeatedVariable(void)
 
 	// Each occurence of the anonymous variable is a variable of its own, and so
 	// constrains nothing
-	ASSERT_UINT32_EQUAL(countQueryTuples("edge _ from _ to _"), EDGE_N_EDGES)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("edge _ from _ to _"), EDGE_N_EDGES)
 
 	TeardownRelationFixture(&edgeFixture);
 }
@@ -129,8 +129,8 @@ void testConcatConstantQuery(void)
 	SetupEdgeFixture(&edgeFixture);
 
 	// The edge eq is the self edge of a
-	ASSERT_UINT32_EQUAL(countQueryTuples("edge \"eq\" from \"a\" to \"a\""), 1)
-	ASSERT_UINT32_EQUAL(countQueryTuples("edge \"eq\" from \"a\" to \"b\""), 0)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("edge \"eq\" from \"a\" to \"a\""), 1)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("edge \"eq\" from \"a\" to \"b\""), 0)
 
 	TeardownRelationFixture(&edgeFixture);
 }
@@ -198,8 +198,8 @@ void testConcatAcrossRelations(void)
 	RelationTableRemoveTuple(intTable, TypedTuplePeekAtoms(intTuple), 0);
 	FreeTypedTuple(idTuple);
 	FreeTypedTuple(intTuple);
-	DropRelationTable(intTable);
-	DropRelationTable(idTable);
+	ReleaseRelationTable(intTable);
+	ReleaseRelationTable(idTable);
 	IFactRelease(termForm);
 }
 
@@ -211,8 +211,8 @@ void testConcatAcrossRelations(void)
  */
 void testConcatRepeatedVariableAcrossTypes(void)
 {
-	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position p element e"), 2)
-	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position x element x"), 0)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("list \"ab\" position p element e"), 2)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("list \"ab\" position x element x"), 0)
 }
 
 
@@ -223,16 +223,16 @@ void testConcatRepeatedVariableAcrossTypes(void)
 void testConcatServiceCount(void)
 {
 	// two services answer the (list position element) form, one per element type
-	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position p element e"), 2)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("list \"ab\" position p element e"), 2)
 	ASSERT_UINT32_EQUAL(countQueryServices("list \"ab\" position p element e"), 2)
 
 	// those same services are read for this query, whose repeated variable drops
 	// every tuple they yield
-	ASSERT_UINT32_EQUAL(countQueryTuples("list \"ab\" position x element x"), 0)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("list \"ab\" position x element x"), 0)
 	ASSERT_UINT32_EQUAL(countQueryServices("list \"ab\" position x element x"), 2)
 
 	// no service answers this form at all
-	ASSERT_UINT32_EQUAL(countQueryTuples("nowhere x nothing y"), 0)
+	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("nowhere x nothing y"), 0)
 	ASSERT_UINT32_EQUAL(countQueryServices("nowhere x nothing y"), 0)
 }
 
