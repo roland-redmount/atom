@@ -99,7 +99,7 @@ void testAssertContradictsStoredFact(void)
 
 /**
  * A fact also contradicts the knowledge base when its negation is not stored, but
- * derived by a rule. Finding the contradiction then compiles the query for the
+ * can be derived from a rule. Finding the contradiction then compiles the query for the
  * negated term; see checkContradiction() in assert.c.
  */
 void testAssertContradictsDerivedFact(void)

@@ -267,7 +267,7 @@ static bool dispatchOrCompileAtNewChoicePoint(
  * which happens when a variable occurs more than once in the term. Emits a
  * CONSTRAIN operator yielding only those tuples in which the merged arguments are
  * equal, and compacts clauseMap accordingly, so that the clause arguments a term
- * provides are distinct. Takes over the caller's reference to the operator.
+ * provides are distinct.
  *
  * For example, a term whose four arguments provide the clause arguments
  * {2, 0, 2, 1} has its first and third argument merged, as both provide clause
@@ -1469,7 +1469,7 @@ static size8 compileQueryVariants(CompilationState * state, FormulaView query, C
 	// A query the rules do not answer may still be answered by filtering a service that
 	// produces what the query binds; see compileFilterVariants(). The rules are tried
 	// first, so a rule answering the query wins over reading a relation and filtering.
-	if(!nVariants)
+	if(nVariants == 0)
 		nVariants = compileFilterVariants(query, variants, nVariants);
 
 	// A service is registered against a relation, so every variant needs one. The variants
