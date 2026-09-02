@@ -1528,6 +1528,20 @@ static size8 compileParameterizedQuery(
 #endif
 
 	for(index8 i = 0; i < nVariants; i++) {
+		// If a variant re-uses operator of an existing service, wrap it in an identity PERMUTE operator
+		//  so that we can attach a service (an operator can only attacht to one Service).
+		// NOTE: this is the only case where an identity PERMUTE is needed, unlike
+		// permuteToClauseArguments() where we avoid emitting one.
+		// NOTE: alternatively, we could introduce an IDENTITY operator that does nothing.
+		if(variants[i].op->relation) {
+			size8 nArguments = variants[i].op->nArguments;
+			index8 identityMap[RELATION_MAX_ARITY];
+			for(index8 j = 0; j < nArguments; j++)
+				identityMap[j] = j;
+			variants[i].op = CreatePermuteOperator(
+				nArguments, 0, 0, 0, identityMap, variants[i].op);
+		}
+
 		// Parameter types and the relation were resolved by compileQueryVariants()
 		Service service = CreateService(
 			variants[i].relation,
