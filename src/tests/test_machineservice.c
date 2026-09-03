@@ -232,14 +232,14 @@ static bool difference(Atom arguments[], void * state, bool isFirstCall)
 static void testMachineServiceSharedRelation(void)
 {
 	size32 nRelationsInitial = RelationRegistryNRelations();
-	size32 nTablesInitial = RelationTableRegistryNTables();
+	size32 nTablesInitial = NumberOfRelationTables();
 
 	Service adding = RegisterMachineService(
 		"term @1<INT term @2<INT total @3>INT", &sum, 0);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 	// a computed service has no storage to register
-	ASSERT_UINT32_EQUAL(RelationTableRegistryNTables(), nTablesInitial)
-	ASSERT_NULL(RelationTableRegistryFind(adding.relation))
+	ASSERT_UINT32_EQUAL(NumberOfRelationTables(), nTablesInitial)
+	ASSERT_NULL(FindRelationTable(adding.relation))
 
 	Service subtracting = RegisterMachineService(
 		"term @1<INT term @2>INT total @3<INT", &difference, 0);
@@ -265,7 +265,7 @@ static void testMachineServiceSharedRelation(void)
 	// FreeMachineServices() keep no record of what it registered
 	FreeMachineServices();
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial)
-	ASSERT_UINT32_EQUAL(RelationTableRegistryNTables(), nTablesInitial)
+	ASSERT_UINT32_EQUAL(NumberOfRelationTables(), nTablesInitial)
 }
 
 

@@ -40,7 +40,7 @@ void testAssertRetract(void)
 
 	Relation const * relation = RelationRegistryFind(FormulaGetForm(fact1), nColumns, typeSignature);
 	ASSERT_NOT_NULL(relation)
-	RelationTable const * table = RelationTableRegistryFind(relation);
+	RelationTable const * table = FindRelationTable(relation);
 	ASSERT_NOT_NULL(table)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
 
@@ -292,7 +292,7 @@ void testCreateIFactTwoIdColumns(void)
 	// Both defining facts are stored in the one relation the two terms share
 	Relation const * relation = RelationRegistryFind(FormulaGetForm(sameFormTerm), 2, typeSignature);
 	ASSERT_NOT_NULL(relation)
-	RelationTable const * table = RelationTableRegistryFind(relation);
+	RelationTable const * table = FindRelationTable(relation);
 	ASSERT_NOT_NULL(table)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 2)
 
@@ -406,7 +406,7 @@ void testCreateIFactTerm(void)
 	// The defining fact is the only row in the corresponding RelationTable
 	Relation const * relation = RelationRegistryFind(FormulaGetForm(term), nColumns, typeSignature);
 	ASSERT_NOT_NULL(relation)
-	RelationTable const * table = RelationTableRegistryFind(relation);
+	RelationTable const * table = FindRelationTable(relation);
 	ASSERT_NOT_NULL(table)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
 

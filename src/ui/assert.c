@@ -58,7 +58,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
 	Relation const * relation = FindOrCreateRelation(fact.form, fact.actors->nAtoms, typeSignature);
-	RelationTable * table = RelationTableRegistryFind(relation);
+	RelationTable * table = FindRelationTable(relation);
 	bool tableWasCreated = false;
 	if(!table) {
 		table = CreateRelationTable(relation, provider ? provider : &btreeStorageProvider, 0);
@@ -136,7 +136,7 @@ void RetractFact(FormulaView fact)
 	Relation const * relation = RelationRegistryFind(fact.form, fact.actors->nAtoms, typeSignature);
 	if(!relation)
 		return;
-	RelationTable * table = RelationTableRegistryFind(relation);
+	RelationTable * table = FindRelationTable(relation);
 	if(!table)
 		return;
 	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);

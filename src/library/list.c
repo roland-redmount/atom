@@ -294,7 +294,7 @@ Atom ListGetElement(Atom list, index32 position)
 	byte parameterIO[3];
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT}, parameterIO, listRoleIndex, 3);
-	Operator const * op = ServiceRegistryFind(
+	Operator const * op = FindService(
 		relation, CreateIOSignature(parameterIO, 3));
 
 	Atom arguments[3];
@@ -320,7 +320,7 @@ index32 ListGetPosition(Atom list, Atom element)
 	byte parameterIO[3];
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_IN}, parameterIO, listRoleIndex, 3);
-	Operator const * op = ServiceRegistryFind(
+	Operator const * op = FindService(
 		relation, CreateIOSignature(parameterIO, 3));
 
 	Atom arguments[3];
@@ -397,7 +397,7 @@ void ListIterate(Atom list, ListIterator * iterator)
 		byte parameterIO[3];
 		CopyBytesPermuted(
 			(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT}, parameterIO, listRoleIndex, 3);
-		Operator const * op = ServiceRegistryFind(
+		Operator const * op = FindService(
 			relation, CreateIOSignature(parameterIO, 3));
 		iterator->context = OperatorCreateContext(op, iterator->queryTuple);
 	}
@@ -518,16 +518,16 @@ void ListSetup(void)
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 		elementIOSignature.parameterIO, listRoleIndex, 3);
-	listIDOperator = ServiceRegistryFind(listIDRelation, elementIOSignature);
+	listIDOperator = FindService(listIDRelation, elementIOSignature);
 	ASSERT(listIDOperator)
-	listLetterOperator = ServiceRegistryFind(listLetterRelation, elementIOSignature);
+	listLetterOperator = FindService(listLetterRelation, elementIOSignature);
 	ASSERT(listLetterOperator)
 	// for (list <ID length >INT)
 	IOSignature lengthIOSignature = {0};
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT},
 		lengthIOSignature.parameterIO, listLengthRoleIndex, 2);
-	listLengthOperator = ServiceRegistryFind(listLengthRelation, lengthIOSignature);
+	listLengthOperator = FindService(listLengthRelation, lengthIOSignature);
 	ASSERT(listLengthOperator)
 }
 

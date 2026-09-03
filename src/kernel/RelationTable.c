@@ -35,7 +35,7 @@ RelationTable * CreateRelationTable(
 	Relation const * relation, StorageProvider const * provider, index8 const indexColumns[])
 {
 	// The relation must not already exist in the registry
-	ASSERT(!RelationTableRegistryFind(relation))
+	ASSERT(!FindRelationTable(relation))
 	ASSERT(provider)
 
 	// NOTE: pool allocation would be preferable
@@ -65,7 +65,7 @@ RelationTable * CreateRelationTable(
 
 RelationTable * FindOrCreateRelationTable(Relation const * relation, StorageProvider const * provider)
 {
-	RelationTable * table = RelationTableRegistryFind(relation);
+	RelationTable * table = FindRelationTable(relation);
 	if(table)
 		AcquireRelationTable(table);
 	else
@@ -217,7 +217,7 @@ void FreeRelationTableRegistry(void)
 }
 
 
-RelationTable * RelationTableRegistryFind(Relation const * relation)
+RelationTable * FindRelationTable(Relation const * relation)
 {
 	// the B-tree item is a RelationTable * pointer
 	RelationTable key = {.relation = relation};
@@ -230,7 +230,7 @@ RelationTable * RelationTableRegistryFind(Relation const * relation)
 }
 
 
-size32 RelationTableRegistryNTables(void)
+size32 NumberOfRelationTables(void)
 {
 	return BTreeNItems(tableRegistry);
 }

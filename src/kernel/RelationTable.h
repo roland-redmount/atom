@@ -124,7 +124,7 @@ void SetupRelationTableRegistry(void);
 /**
  * The table storing the tuples of the given relation, or 0 if the relation is computed.
  */
-RelationTable * RelationTableRegistryFind(Relation const * relation);
+RelationTable * FindRelationTable(Relation const * relation);
 
 /**
  * Deallocate the registry. Before calling this function, all tables must have been dropped.
@@ -134,7 +134,7 @@ void FreeRelationTableRegistry(void);
 /**
  * Number of registered relation tables.
  */
-size32 RelationTableRegistryNTables(void);
+size32 NumberOfRelationTables(void);
 
 
 #endif	// RELATION_TABLE_H

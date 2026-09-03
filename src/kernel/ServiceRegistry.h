@@ -96,12 +96,12 @@ void FreeServiceRegistry(void);
 /**
  * Total number of registered services.
  */
-size32 ServiceRegistryCount(void);
+size32 NumberOfServices(void);
 
 /**
  * Number of registered services compiled from the rules; see ServiceKind.
  */
-size32 ServiceRegistryNCompiled(void);
+size32 NumberOfCompiledServices(void);
 
 
 /**
@@ -117,7 +117,7 @@ size32 ServiceRegistryNCompiled(void);
  * NOTE: this modifies the registries, so it cannot run while a query is being read: an
  * open DispatchIterator or MixedTypeRelation write-locks against modification.
  */
-void ServiceRegistryInvalidateByTermForm(Atom termForm);
+void InvalidateServicesByTermForm(Atom termForm);
 
 /**
  * Remove all compiled services from the registry.
@@ -149,7 +149,7 @@ void ServiceIteratorEnd(ServiceIterator * iterator);
  * must be filled to the relation arity.
  * If a matching service does not exist, returns 0
  */
-Operator * ServiceRegistryFind(Relation const * relation, IOSignature ioSignature);
+Operator * FindService(Relation const * relation, IOSignature ioSignature);
 
 /**
  * CLAUDE: Copy some registered service evaluated by a machine operator of the given provider to
@@ -159,7 +159,7 @@ Operator * ServiceRegistryFind(Relation const * relation, IOSignature ioSignatur
  * record of them: removing services until this returns false unregisters the provider.
  * See FreeMachineServices() in library/MachineService.c
  */
-bool ServiceRegistryFindByMachineProvider(
+bool FindServiceByMachineProvider(
 	MachineOperatorProvider const * provider, Service * service);
 
 /**

@@ -131,7 +131,7 @@ void PairSetup(void)
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 		ioSignature.parameterIO, pairTermRoleIndex, 3);
-	pairOperator = ServiceRegistryFind(pairRelation, ioSignature);
+	pairOperator = FindService(pairRelation, ioSignature);
 	ASSERT(pairOperator);
 }
 

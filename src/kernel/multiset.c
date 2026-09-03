@@ -45,7 +45,7 @@ Relation const * findMultisetRelation(byte elementType)
  */
 static RelationTable * findMultisetTable(byte elementType)
 {
-	return RelationTableRegistryFind(findMultisetRelation(elementType));
+	return FindRelationTable(findMultisetRelation(elementType));
 }
 
 
@@ -184,7 +184,7 @@ void MultisetIterate(Atom multiset, byte elementType, MultisetIterator * iterato
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 		parameterIO
 	);
-	Operator const * op = ServiceRegistryFind(
+	Operator const * op = FindService(
 		relation, CreateIOSignature(parameterIO, 3));
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,

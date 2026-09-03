@@ -768,7 +768,7 @@ void testCompiledServiceReadsFactsLive(void)
 	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
-	size32 nCompiled = ServiceRegistryNCompiled();
+	size32 nCompiled = NumberOfCompiledServices();
 
 	Atom arguments[1];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 1);
@@ -778,7 +778,7 @@ void testCompiledServiceReadsFactsLive(void)
 
 	// Retracting the fact leaves the service registered, as the relation still exists
 	RelationTableRemoveTuple(oddTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiled)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiled)
 
 	// and that same service now yields nothing, having read the change
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 1);
@@ -866,7 +866,7 @@ void testCompileChainedRules(void)
 	DictionaryEntry grandparentEntry = DictionaryAddClauseFromCString(
 		"grandparent x grandchild z | ! parent x offspring y | ! parent y offspring z");
 
-	size32 nCompiledBefore = ServiceRegistryNCompiled();
+	size32 nCompiledBefore = NumberOfCompiledServices();
 	Atom queryTerm = CStringToTerm("grandparent x grandchild z");
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileQuery(queryTerm, services);
@@ -874,7 +874,7 @@ void testCompileChainedRules(void)
 
 	// The query service, and one (parent offspring) service per IO pattern its two terms
 	// asked for
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled() - nCompiledBefore, 3)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices() - nCompiledBefore, 3)
 
 	// Only a has a grandchild, which is c
 	Atom nodeA = CreateStringFromCString("a");
@@ -898,7 +898,7 @@ void testCompileChainedRules(void)
 	DictionaryRemoveClause(&parentEntry);
 	// Dropping the stored relation invalidates the compiled (parent offspring) services
 	TeardownRelationFixture(&fatherFixture);
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiledBefore)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 }
 
 
@@ -1057,7 +1057,7 @@ void testCompileNewIOPatternRepeated(void)
  */
 void testCompileFilterInRuleBody(void)
 {
-	size32 nCompiledBefore = ServiceRegistryNCompiled();
+	size32 nCompiledBefore = NumberOfCompiledServices();
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
 		"at s position p letter e | ! list s position p element e");
 	Atom queryTerm = CStringToTerm("at \"abracadabra\" position q letter 'a");
@@ -1084,7 +1084,7 @@ void testCompileFilterInRuleBody(void)
 	// over the list relation and outlives the rule; remove both
 	RemoveService(service.relation, service.op);
 	RemoveAllCompiledServices();
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiledBefore)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -1097,16 +1097,16 @@ void testCompileFilterInRuleBody(void)
  */
 void testFilterServiceInvalidatedByRule(void)
 {
-	size32 nCompiledBefore = ServiceRegistryNCompiled();
+	size32 nCompiledBefore = NumberOfCompiledServices();
 	Atom queryTerm = CStringToTerm("list \"AB\" position _ element 'A");
 	Service services[MAX_COMPILED_SERVICES];
 	ASSERT_UINT32_EQUAL(CompileQuery(queryTerm, services), 1)
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiledBefore + 1)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore + 1)
 
 	// A rule of the query's term form invalidates what was compiled for that form
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
 		"list s position p element e | ! at s index p letter e");
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiledBefore)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 
 	DictionaryRemoveClause(&entry);
 	ReleaseFormula(queryTerm);

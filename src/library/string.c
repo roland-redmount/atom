@@ -137,7 +137,7 @@ void StringSetup(void)
 	// Store a pointer to the (string<ID) service, created by the B-tree provider.
 	IOSignature ioSignature = {0};
 	ioSignature.parameterIO[0] = PARAMETER_IN;
-	stringOperator = ServiceRegistryFind(stringRelation, ioSignature);
+	stringOperator = FindService(stringRelation, ioSignature);
 	ASSERT(stringOperator);
 }
 

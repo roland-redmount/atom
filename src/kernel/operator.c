@@ -1596,7 +1596,7 @@ void CheckOperator(Operator * op)
 			// A MACHINE operator may be attached to a PRIMITIVE Service for
 			// a RelationTable, which could now become stale.
 			if(op->type == OPERATOR_MACHINE) {
-				RelationTable * table = RelationTableRegistryFind(op->relation);
+				RelationTable * table = FindRelationTable(op->relation);
 				if(table)
 					CheckRelationTable(table);
 			}

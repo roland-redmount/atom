@@ -243,7 +243,7 @@ Service CreateService(
 		// whatever was compiled for it is incomplete.
 		// QUESTION: the invalidation scope seems to broad: wouldn't it be enough to invalidate
 		// services from the same relation (so that type signature must agree) ?
-		ServiceRegistryInvalidateByTermForm(relation->termForm);
+		InvalidateServicesByTermForm(relation->termForm);
 		break;
 	}
 	return service;
@@ -305,7 +305,7 @@ static void collectParentServices(Service const * service, ResizingArray * ances
 }
 
 
-void ServiceRegistryInvalidateByTermForm(Atom termForm)
+void InvalidateServicesByTermForm(Atom termForm)
 {
 	if(nCompiledServices == 0)
 		return;
@@ -375,13 +375,13 @@ void RemoveAllCompiledServices(void)
 }
 
 
-size32 ServiceRegistryCount(void)
+size32 NumberOfServices(void)
 {
 	return BTreeNItems(services);
 }
 
 
-size32 ServiceRegistryNCompiled(void)
+size32 NumberOfCompiledServices(void)
 {
 	return nCompiledServices;
 }
@@ -429,7 +429,7 @@ void ServiceIteratorEnd(ServiceIterator * iterator)
 }
 
 
-Operator * ServiceRegistryFind(Relation const * relation, IOSignature ioSignature)
+Operator * FindService(Relation const * relation, IOSignature ioSignature)
 {
 	Service key = {.relation = relation, .ioSignature = ioSignature};
 	// QUESTION: Why use an iterator here to seek to a single item?
@@ -445,7 +445,7 @@ Operator * ServiceRegistryFind(Relation const * relation, IOSignature ioSignatur
 }
 
 
-bool ServiceRegistryFindByMachineProvider(
+bool FindServiceByMachineProvider(
 	MachineOperatorProvider const * provider, Service * service)
 {
 	bool found = false;
@@ -501,7 +501,7 @@ void RelationDump(Relation const * relation)
 	byte parameterIO[relation->nColumns];
 	for(index8 i = 0; i < relation->nColumns; i++)
 		parameterIO[i] = PARAMETER_OUT;
-	Operator const * op = ServiceRegistryFind(
+	Operator const * op = FindService(
 		relation, CreateIOSignature(parameterIO, relation->nColumns));
 	ASSERT(op);
 

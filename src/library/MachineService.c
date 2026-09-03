@@ -168,6 +168,6 @@ void FreeMachineServices(void)
 	// Remove all services registered by machineServiceProvider.
 	// NOTE: this is highly inefficient, but typically only called prior to kernel shutdown.
 	Service service;
-	while(ServiceRegistryFindByMachineProvider(&machineServiceProvider, &service))
+	while(FindServiceByMachineProvider(&machineServiceProvider, &service))
 		RemoveService(service.relation, service.op);
 }

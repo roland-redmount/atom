@@ -586,7 +586,7 @@ static Operator * createClosureOperator(index8 const inputArguments[], size8 nIn
 	byte parameterIO[2];
 	parameterIO[precIndex] = nInputs ? PARAMETER_IN : PARAMETER_OUT;
 	parameterIO[succIndex] = PARAMETER_OUT;
-	Operator * edgeOperator = ServiceRegistryFind(
+	Operator * edgeOperator = FindService(
 		graphFixture.table->relation, CreateIOSignature(parameterIO, 2));
 	ASSERT_NOT_NULL(edgeOperator)
 

@@ -260,7 +260,7 @@ static Operator const * conjunctionOperator(IFactConjunction const * conjunction
 	for(index8 i = 0; i < relation->nColumns; i++)
 		parameterIO[i] = (i == conjunction->idColumn) ? PARAMETER_IN : PARAMETER_OUT;
 	IOSignature ioSignature = CreateIOSignature(parameterIO, relation->nColumns);
-	Operator const * op = ServiceRegistryFind(relation, ioSignature);
+	Operator const * op = FindService(relation, ioSignature);
 	// If the relation lacks the necessary service yet, build it
 	if(!op)
 		op = createIdColumnService(relation, conjunction->idColumn, ioSignature);

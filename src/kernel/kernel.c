@@ -328,7 +328,7 @@ Relation const * GetCoreRelation(index32 relationId)
 
 RelationTable * GetCoreRelationTable(index32 relationId)
 {
-	return RelationTableRegistryFind(GetCoreRelation(relationId));
+	return FindRelationTable(GetCoreRelation(relationId));
 }
 
 
@@ -629,7 +629,7 @@ static void setupCoreServices(void)
 			parameterIO
 		);
 		Relation const * relation = kernel.coreRelations[relationId]->relation;
-		kernel.coreOperators[i] = ServiceRegistryFind(
+		kernel.coreOperators[i] = FindService(
 			relation,
 			CreateIOSignature(parameterIO, relation->nColumns)
 		);
