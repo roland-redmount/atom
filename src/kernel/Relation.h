@@ -12,7 +12,7 @@
  *
  *   RelationRegistry       relations by (term form, column types); see RelationRegistry.h
  *   ServiceRegistry        how a relation can be read; see ServiceRegistry.h
- *   RelationTableRegistry  where its tuples are stored; see RelationTableRegistry.h
+ *   RelationTable          where its tuples are stored; see RelationTable.h
  *
  * A relation with no table registered is a computed relation: it has services, but no
  * tuples to mutate. This is the case of a machine service such as those in library/math.c,
@@ -108,9 +108,7 @@ int8 CompareRelations(Relation const * relation, Relation const * relationOrKey)
 void AcquireRelation(Relation const * relation);
 
 /**
- * Remove one reference to the given relation. When the last reference goes, the relation
- * removes itself from the relation registry and is deallocated: a signature nothing names
- * any longer is a signature nothing can dispatch to.
+ * Remove one reference to the given relation.
  */
 void ReleaseRelation(Relation const * relation);
 

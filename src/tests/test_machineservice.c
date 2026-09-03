@@ -4,14 +4,15 @@
 #include "kernel/kernel.h"
 #include "kernel/operator.h"
 #include "kernel/RelationRegistry.h"
-#include "kernel/RelationTableRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
 #include "lang/formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
+#include "library/list.h"
 #include "library/MachineService.h"
+#include "library/string.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
 
@@ -231,14 +232,14 @@ static bool difference(Atom arguments[], void * state, bool isFirstCall)
 static void testMachineServiceSharedRelation(void)
 {
 	size32 nRelationsInitial = RelationRegistryNRelations();
-	size32 nTablesInitial = RelationTableRegistryNTables();
+	size32 nTablesInitial = NumberOfRelationTables();
 
 	Service adding = RegisterMachineService(
 		"term @1<INT term @2<INT total @3>INT", &sum, 0);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 	// a computed service has no storage to register
-	ASSERT_UINT32_EQUAL(RelationTableRegistryNTables(), nTablesInitial)
-	ASSERT_NULL(RelationTableRegistryFind(adding.relation))
+	ASSERT_UINT32_EQUAL(NumberOfRelationTables(), nTablesInitial)
+	ASSERT_NULL(FindRelationTable(adding.relation))
 
 	Service subtracting = RegisterMachineService(
 		"term @1<INT term @2>INT total @3<INT", &difference, 0);
@@ -264,13 +265,15 @@ static void testMachineServiceSharedRelation(void)
 	// FreeMachineServices() keep no record of what it registered
 	FreeMachineServices();
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial)
-	ASSERT_UINT32_EQUAL(RelationTableRegistryNTables(), nTablesInitial)
+	ASSERT_UINT32_EQUAL(NumberOfRelationTables(), nTablesInitial)
 }
 
 
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 
 	ExecuteTest(testMachineServiceArgumentOrder);
 	ExecuteTest(testMachineServiceTestPredicate);
@@ -278,6 +281,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testMachineServiceIteratorState);
 	ExecuteTest(testMachineServiceSharedRelation);
 
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

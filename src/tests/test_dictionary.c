@@ -1,11 +1,11 @@
 
 #include "kernel/dictionary.h"
 #include "kernel/ifact.h"
-#include "kernel/list.h"
 #include "kernel/kernel.h"
-#include "kernel/string.h"
 #include "lang/ClauseForm.h"
 #include "lang/formula.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "parser/ClauseBuilder.h"
 #include "testing/testing.h"
 
@@ -72,10 +72,14 @@ void testDictionaryAddTwice(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 
 	ExecuteTest(testDictionary);
 	ExecuteTest(testDictionaryAddTwice);
 
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

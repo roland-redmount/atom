@@ -4,12 +4,12 @@
 #include "kernel/letter.h"
 #include "kernel/operator.h"
 #include "kernel/kernel.h"
-#include "kernel/list.h"
+#include "library/list.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
-#include "kernel/string.h"
+#include "library/string.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
 #include "lang/formula.h"
@@ -30,7 +30,7 @@ void testMachineOperator(void)
 	Atom arguments[3];
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
-		(Atom[]) {GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT), (Atom) {0}, (Atom) {0}},
+		(Atom[]) {GetListPredicateForm(), (Atom) {0}, (Atom) {0}},
 		arguments
 	);
 	void * context = OperatorCreateContext(op, arguments);
@@ -46,27 +46,29 @@ void testMachineOperator(void)
 
 
 /**
- * Reorder the relation (list position element) to (list element position).
- * A PERMUTE operator keeps every argument of its child operator, so its
- * tuples remain unique and it provides a valid relation.
+ * Create a PERMUTE operator reordering the relation (list position element)
+ * to (list element position) 
  */
-static Operator * createReorderedListOperator(void)
+static Operator * createPermutedListOperator(void)
 {
 	// The operator (list <ID position >INT element >LETTER)
-	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	Operator * listOperator = GetListOperator(AT_LETTER);
 	index8 argumentMap[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetByteArray(
 		(index8[]) {0, 2, 1},		// (l p e) -> (l e p)
 		argumentMap
 	);
-	return CreatePermuteOperator(3, 0, 0, 0, argumentMap, listOperator);
+	return CreatePermuteOperator(
+		3,
+		0, 0, 0,	// no constants
+		argumentMap, listOperator
+	);
 }
 
 
 void testPermuteOperator(void)
 {
-	Operator * permuteOperator = createReorderedListOperator();
+	Operator * permuteOperator = createPermutedListOperator();
 
 	// Arguments tuple (@stringList _ _) for the reordered operator
 	Atom string = CreateStringFromCString("alibaba");
@@ -85,7 +87,7 @@ void testPermuteOperator(void)
 	OperatorFreeContext(context);
 
 	IFactRelease(string);
-	ReleaseOperator(permuteOperator);
+	CheckOperator(permuteOperator);
 }
 
 
@@ -97,9 +99,8 @@ void testPermuteOperator(void)
  */
 void testProjectOperator(void)
 {
-	Operator * permuteOperator = createReorderedListOperator();
+	Operator * permuteOperator = createPermutedListOperator();
 	Operator * projectOperator = CreateProjectOperator(permuteOperator, 2, (index8[]) {0, 1});
-	ReleaseOperator(permuteOperator);
 
 	// Arguments tuple (@stringList _) for the marginalize operator
 	Atom string = CreateStringFromCString("alibaba");
@@ -117,7 +118,7 @@ void testProjectOperator(void)
 	OperatorFreeContext(context);
 
 	IFactRelease(string);
-	ReleaseOperator(projectOperator);
+	CheckOperator(projectOperator);
 }
 
 
@@ -148,7 +149,7 @@ void testJoinOperator1(void)
 	);
 
 	// Evaluate with arguments (@list-form, _ , _)
-	Atom arguments[3] = {GetCorePredicateForm(FORM_LIST_POSITION_ELEMENT), (Atom) {0}, (Atom) {0}};
+	Atom arguments[3] = {GetListPredicateForm(), (Atom) {0}, (Atom) {0}};
 	// Setup execution context
 	OperatorContext * context = OperatorCreateContext(joinOperator, arguments);
 
@@ -162,7 +163,7 @@ void testJoinOperator1(void)
 	ASSERT_INT32_EQUAL(nElements, 3);
 	OperatorFreeContext(context);
 	// This frees the child operators
-	ReleaseOperator(joinOperator);
+	CheckOperator(joinOperator);
 }
 
 
@@ -177,18 +178,16 @@ void testJoinOperator2(void)
 	// elements); the right child enumerates each string (a list of letters).
 	// So they use different machine operators, with different argument maps.
 	// The argument map determines the join operator argument order.
-	Operator * listIdOperator = GetCoreOperator(SERVICE_LIST_ID);
-	Operator * listLetterOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	Operator * listIdOperator = GetListOperator(AT_ID);
+	Operator * listLetterOperator = GetListOperator(AT_LETTER);
 
 	index8 leftArgumentMap[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetByteArray(
 		(index8[]) {0, 1, 2},		// (l p s) -> (l p s q e)
 		leftArgumentMap
 	);
 	index8 rightArgumentMap[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetByteArray(
 		(index8[]) {2, 3, 4},		// (s q e) -> (l p s q e)
 		rightArgumentMap
 	);
@@ -241,7 +240,7 @@ void testJoinOperator2(void)
 	ASSERT_INT32_EQUAL(nElements, 2 * 3)
 	OperatorFreeContext(context);
 	IFactRelease(stringList);
-	ReleaseOperator(joinOperator);
+	CheckOperator(joinOperator);
 }
 
 
@@ -253,9 +252,9 @@ void testJoinOperator2(void)
  */
 void testFilterOperator(void)
 {
-	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
-	index8 elementIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT);
-	index8 positionIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION);
+	Operator * listOperator = GetListOperator(AT_LETTER);
+	index8 elementIndex = GetListRoleIndex()[LIST_ROLE_ELEMENT];
+	index8 positionIndex = GetListRoleIndex()[LIST_ROLE_POSITION];
 
 	Operator * filterOperator = CreateFilterOperator(
 		listOperator, (index8[]) {elementIndex}, 1);
@@ -264,8 +263,7 @@ void testFilterOperator(void)
 	int64 const expectedPositions[] = {1, 5, 7};
 	Atom string = CreateStringFromCString("alibaba");
 	Atom arguments[3];
-	CoreFormSetTuple(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetTuple(
 		(Atom[]) {string, (Atom) {0}, GetAlphabetLetter('a')},
 		arguments
 	);
@@ -285,7 +283,7 @@ void testFilterOperator(void)
 		ASSERT_UINT32_EQUAL(filterOperator->indexOrder[i], listOperator->indexOrder[i])
 
 	IFactRelease(string);
-	ReleaseOperator(filterOperator);
+	CheckOperator(filterOperator);
 }
 
 
@@ -296,18 +294,16 @@ void testFilterOperator(void)
  */
 void testConstrainOperator(void)
 {
-	Operator * listIdOperator = GetCoreOperator(SERVICE_LIST_ID);
-	Operator * listLetterOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	Operator * listIdOperator = GetListOperator(AT_ID);
+	Operator * listLetterOperator = GetListOperator(AT_LETTER);
 
 	index8 leftArgumentMap[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetByteArray(
 		(index8[]) {0, 1, 2},		// (l p s) -> (l p s q e)
 		leftArgumentMap
 	);
 	index8 rightArgumentMap[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetByteArray(
 		(index8[]) {2, 3, 4},		// (s q e) -> (l p s q e)
 		rightArgumentMap
 	);
@@ -320,7 +316,7 @@ void testConstrainOperator(void)
 	// are yielded: (l p s q e) -> (l p s e)
 	Operator * constrainOperator = CreateConstrainOperator(
 		4, (index8[]) {0, 1, 2, 1, 3}, joinOperator);
-	ReleaseOperator(joinOperator);
+	CheckOperator(joinOperator);
 
 	// test case, a list of two strings (two lists of letters)
 	Atom string1 = CreateStringFromCString("foo");
@@ -345,7 +341,7 @@ void testConstrainOperator(void)
 	OperatorFreeContext(context);
 
 	IFactRelease(stringList);
-	ReleaseOperator(constrainOperator);
+	CheckOperator(constrainOperator);
 }
 
 
@@ -354,12 +350,11 @@ void testConstrainOperator(void)
 void testUnionOperator(void)
 {
 	// The UNION operator (list @list1 position p element e) | (list @list2 position p element e)
-	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	Operator * listOperator = GetListOperator(AT_LETTER);
 
 	// use PERMUTE to bind the list role to a constant
 	index8 argumentMap[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetByteArray(
 		(index8[]) {2, 0, 1},		// (@list p s) -> (p s), the list is constant 0
 		argumentMap
 	);
@@ -375,8 +370,6 @@ void testUnionOperator(void)
 	IFactRelease(string2);
 
 	Operator * unionOperator = CreateUnionOperator(service1, service2);
-	ReleaseOperator(service1);
-	ReleaseOperator(service2);
 
 	// Setup execution context
 	Atom arguments[2] = {0};
@@ -394,7 +387,7 @@ void testUnionOperator(void)
 	}
 	ASSERT_FALSE(OperatorCall(context));
 	OperatorFreeContext(context);
-	ReleaseOperator(unionOperator);
+	CheckOperator(unionOperator);
 }
 
 
@@ -409,10 +402,9 @@ void testUnionOperator(void)
  */
 void testUnionDuplicateAtExhaustion(void)
 {
-	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
+	Operator * listOperator = GetListOperator(AT_LETTER);
 	index8 argumentMap[3];
-	CoreFormSetByteArray(
-		FORM_LIST_POSITION_ELEMENT,
+	ListSetByteArray(
 		(index8[]) {2, 0, 1},		// (@list p s) -> (p s), the list is constant 0
 		argumentMap
 	);
@@ -428,8 +420,6 @@ void testUnionDuplicateAtExhaustion(void)
 	IFactRelease(longString);
 
 	Operator * unionOperator = CreateUnionOperator(shortService, longService);
-	ReleaseOperator(shortService);
-	ReleaseOperator(longService);
 
 	Atom arguments[2] = {0};
 	OperatorContext * context = OperatorCreateContext(unionOperator, arguments);
@@ -445,21 +435,20 @@ void testUnionDuplicateAtExhaustion(void)
 	}
 	ASSERT_FALSE(OperatorCall(context));
 	OperatorFreeContext(context);
-	ReleaseOperator(unionOperator);
+	CheckOperator(unionOperator);
 }
 
 
 /**
- * Every operator declares the order in which it yields its tuples, deriving it from
- * its children rather than being told; see the ordering contract in operator.h.
+ * Every operator determines its index order from that of its children; see contract in operator.h.
  * A relation stored in a particular column order propagates that order upwards through
  * the operators applied to it.
  */
 void testIndexOrder(void)
 {
 	// A B-tree operator yields its tuples in the index column order of its relation
-	Operator * listOperator = GetCoreOperator(SERVICE_LIST_LETTER);
-	RelationTable const * listRelation = GetCoreRelationTable(RELATION_LIST_LETTER);
+	Operator * listOperator = GetListOperator(AT_LETTER);
+	RelationTable const * listRelation = GetListRelationTable(AT_LETTER);
 	ASSERT_NOT_NULL(listOperator->indexOrder)
 	for(index8 i = 0; i < 3; i++)
 		ASSERT_UINT32_EQUAL(listOperator->indexOrder[i], listRelation->indexColumns[i])
@@ -467,13 +456,12 @@ void testIndexOrder(void)
 	// The relation is stored in the kernel order (list position element), so reordering
 	// it to (list element position) yields tuples ordered by argument 0 (the list),
 	// then argument 2 (the position), then argument 1 (the element)
-	Operator * permuteOperator = createReorderedListOperator();
+	Operator * permuteOperator = createPermutedListOperator();
 	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[0], 0)
 	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[1], 2)
 	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[2], 1)
 
-	// PROJECT materializes into a B-tree keyed on the arguments it keeps,
-	// so it yields them in their own order
+	// PROJECT sorts tuple using a B-tree, and always give the identity index order
 	Operator * projectOperator = CreateProjectOperator(permuteOperator, 2, (index8[]) {0, 1});
 	ASSERT_UINT32_EQUAL(projectOperator->indexOrder[0], 0)
 	ASSERT_UINT32_EQUAL(projectOperator->indexOrder[1], 1)
@@ -483,18 +471,17 @@ void testIndexOrder(void)
 	// (2 0 1) and the right child to (2 3 4), they share argument 2, which the left
 	// child orders first.
 	index8 leftMap[3];
-	CoreFormSetByteArray(FORM_LIST_POSITION_ELEMENT, (index8[]) {2, 0, 1}, leftMap);
+	ListSetByteArray((index8[]) {2, 0, 1}, leftMap);
 	index8 rightMap[3];
-	CoreFormSetByteArray(FORM_LIST_POSITION_ELEMENT, (index8[]) {2, 3, 4}, rightMap);
+	ListSetByteArray((index8[]) {2, 3, 4}, rightMap);
 	Operator * joinOperator = CreateJoinOperator(
-		5, listOperator, leftMap, GetCoreOperator(SERVICE_LIST_ID), rightMap);
+		5, listOperator, leftMap, GetListOperator(AT_ID), rightMap);
 	index8 expectedJoinOrder[5] = {2, 0, 1, 3, 4};
 	for(index8 i = 0; i < 5; i++)
 		ASSERT_UINT32_EQUAL(joinOperator->indexOrder[i], expectedJoinOrder[i])
 
-	// An operator yielding at most one tuple declares no order, as any order it named
-	// would be arbitrary, and an operator relabeling its arguments declares none either
-	MachineProvider singleTupleProvider = {
+	// An operator yielding at most one tuple has no index order
+	MachineOperatorProvider singleTupleProvider = {
 		.setupContext = 0,
 		.call = 0,
 		.finalizeContext = 0,
@@ -502,6 +489,8 @@ void testIndexOrder(void)
 	};
 	Operator * singleTupleOperator = CreateMachineOperator(2, 0, &singleTupleProvider, 0, 0);
 	ASSERT_NULL(singleTupleOperator->indexOrder)
+
+	// A PERMUTE of an operator with no index order does not have an index order either
 	Operator * singleTuplePermute = CreatePermuteOperator(
 		2, 0, 0, 0, (index8[]) {1, 0}, singleTupleOperator);
 	ASSERT_NULL(singleTuplePermute->indexOrder)
@@ -511,17 +500,15 @@ void testIndexOrder(void)
 	Operator * unionOperator = CreateUnionOperator(projectOperator, singleTuplePermute);
 	ASSERT_UINT32_EQUAL(unionOperator->indexOrder[0], 0)
 	ASSERT_UINT32_EQUAL(unionOperator->indexOrder[1], 1)
+
 	Operator * reversedUnionOperator = CreateUnionOperator(singleTuplePermute, projectOperator);
 	ASSERT_UINT32_EQUAL(reversedUnionOperator->indexOrder[0], 0)
 	ASSERT_UINT32_EQUAL(reversedUnionOperator->indexOrder[1], 1)
 
-	ReleaseOperator(reversedUnionOperator);
-	ReleaseOperator(unionOperator);
-	ReleaseOperator(singleTuplePermute);
-	ReleaseOperator(singleTupleOperator);
-	ReleaseOperator(joinOperator);
-	ReleaseOperator(projectOperator);
-	ReleaseOperator(permuteOperator);
+	// Drop all operators
+	CheckOperator(joinOperator);
+	CheckOperator(unionOperator);
+	CheckOperator(reversedUnionOperator);
 }
 
 
@@ -552,17 +539,17 @@ static void setupGraphFixture(void)
 
 
 /**
- * Build an operator evalutaing (before x after y) defined by the rules
+ * Create a FIXPOINT operator evaluating (before x after y) defined by the rules
  *
  *  (1) before x after y  <-  succ y prec x
  *  (2) before x after y  <-  succ z prec x & before z after y
- *
+ * 
+ * Here x is a constant if nInputs > 0; and both x, y are constants if nInputs > 1.
  * The graph relation is written here in its canonical role order (succ prec), so that
- * its roles line up with the argument indices below: argument 0 is the succ role and
- * argument 1 the prec role.
+ * argument 0 is the succ role and argument 1 the prec role.
  *
  * The (before after) relation is a FIXPOINT/2 operator with argument order (x y).
- * Called with x bound, the rules give the operator tree
+ * With inputs = 1, this yieds the operator tree
  *
  *	FIXPOINT/2[0 1]<0>(                      // derives (before after), x bound
  *		UNION/2[0 1](
@@ -599,7 +586,7 @@ static Operator * createClosureOperator(index8 const inputArguments[], size8 nIn
 	byte parameterIO[2];
 	parameterIO[precIndex] = nInputs ? PARAMETER_IN : PARAMETER_OUT;
 	parameterIO[succIndex] = PARAMETER_OUT;
-	Operator * edgeOperator = ServiceRegistryFind(
+	Operator * edgeOperator = FindService(
 		graphFixture.table->relation, CreateIOSignature(parameterIO, 2));
 	ASSERT_NOT_NULL(edgeOperator)
 
@@ -622,26 +609,21 @@ static Operator * createClosureOperator(index8 const inputArguments[], size8 nIn
 	Operator * recurseOperator = CreateRecurseOperator(2, (index8[]) {0}, 1);
 	Operator * joinOperator = CreateJoinOperator(
 		3, edgeOperator, edgeToJoinMap, recurseOperator, recurseMap);
-	ReleaseOperator(recurseOperator);
 
 	// Drop the shared z, keeping the closure arguments
 	Operator * projectOperator = CreateProjectOperator(joinOperator, 2, (index8[]) {0, 1});
-	ReleaseOperator(joinOperator);
 
 	Operator * unionOperator = CreateUnionOperator(baseOperator, projectOperator);
-	ReleaseOperator(baseOperator);
-	ReleaseOperator(projectOperator);
 
 	Operator * fixpointOperator = CreateFixpointOperator(
 		unionOperator, inputArguments, nInputs);
-	ReleaseOperator(unionOperator);
 	return fixpointOperator;
 }
 
 
 /**
- * A FIXPOINT operator derives a recursive relation by rounds, and terminates on the
- * cyclic graph of the fixture, where a top-down evaluation would descend forever.
+ * Test that the FIXPOINT operator terminates on the cyclic graph of the fixture.
+ * Because the graph contains cycles, a naive top-down evaluation would descend forever.
  * A caller binding nothing asks for the whole relation, which is the closure of both
  * components of the graph.
  */
@@ -658,7 +640,7 @@ void testFixpointOperator(void)
 	ASSERT_UINT32_EQUAL(nTuples, TEST_N_CYCLE_CLOSURE + TEST_N_PATH_CLOSURE)
 	OperatorFreeContext(context);
 
-	ReleaseOperator(closureOperator);
+	CheckOperator(closureOperator);
 	TeardownRelationFixture(&graphFixture);
 }
 
@@ -692,7 +674,7 @@ void testFixpointCallBinding(void)
 	OperatorFreeContext(context);
 
 	IFactRelease(nodeA);
-	ReleaseOperator(closureOperator);
+	CheckOperator(closureOperator);
 	TeardownRelationFixture(&graphFixture);
 }
 
@@ -700,6 +682,8 @@ void testFixpointCallBinding(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 
 	ExecuteTest(testMachineOperator);
 	ExecuteTest(testPermuteOperator);
@@ -714,6 +698,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testFixpointOperator);
 	ExecuteTest(testFixpointCallBinding);
 
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

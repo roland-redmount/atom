@@ -26,8 +26,7 @@
 
 
 // TODO: replace this with a machine provider registry ...
-extern MachineProvider bTreeProvider;
-extern RelationTableProvider btreeTableProvider;
+extern StorageProvider btreeStorageProvider;
 
 // NOTE: "RelationBTree" sounds more like a B-tree of relations than a relation
 // backed by a B-tree ... rename to BTreeRelation ?
@@ -44,10 +43,8 @@ typedef struct s_RelationBTree {
  *
  * The arity and index column order are copied here rather than read off the RelationTable
  * on every call, so that a RelationBTree stays usable as a data structure on its own.
- *
- * NOTE: the B-tree relation does not store the column types.
  */
-RelationBTree * CreateRelationBTree(size8 nColumns, byte const atomTypes[], index8 const indexColumns[]);
+RelationBTree * CreateRelationBTree(size8 nColumns, index8 const indexColumns[]);
 
 void FreeRelationBTree(RelationBTree * relation);
 

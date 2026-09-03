@@ -19,7 +19,7 @@ A relation is identity and nothing else — a term form and a column type per ar
 are registered *against* it, and neither is reachable from the relation:
 
 - the **service registry** records how a relation can be read (`ServiceRegistry.h`),
-- the **relation table registry** records where its tuples are stored (`RelationTableRegistry.h`).
+- the **relation table registry** records where its tuples are stored (`RelationTable.h`).
 
 A relation with no table registered is a **computed** relation: it has services but no
 tuples of its own, which is what a machine service such as `library/math.c` is, and what

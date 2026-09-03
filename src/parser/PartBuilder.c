@@ -1,6 +1,5 @@
 
 #include "kernel/ifact.h"
-#include "kernel/string.h"
 #include "lang/name.h"
 #include "memory/allocator.h"
 #include "parser/FormulaBuilder.h"

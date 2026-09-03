@@ -1,22 +1,20 @@
 
- #ifndef OPERATOR_H
- #define OPERATOR_H
+#ifndef OPERATOR_H
+#define OPERATOR_H
 
- #include "lang/Atom.h"
+#include "kernel/Relation.h"
 
+struct s_Releation;
 
 typedef struct s_Operator Operator;
 typedef struct s_OperatorContext OperatorContext;
 
 /**
- * A machine provider is an implementation of a particular type of machine
+ * A MachineOperatorProvider is an implementation of a particular type of machine
  * operator, such as B-Tree relations or arithmetic functions.
- * One MachineProvider can provide the machine operators of several relations.
+ * One MachineOperatorProvider can provide the machine operators of several relations.
  */
- 
-typedef bool (*MachineProviderCall)(OperatorContext * context);
-
-typedef struct s_MachineProvider {
+typedef struct s_MachineOperatorProvider {
 	/**
 	 * Initialize the context data, such as an iterator structure.
 	 * This pointer may be 0 if the zeroed context data needs no initialization.
@@ -30,7 +28,7 @@ typedef struct s_MachineProvider {
 	 * If the various operators provided need different entry points, this function
 	 * is responsible for calling the relevant one.
 	 */
-	MachineProviderCall call;
+	bool (*call)(OperatorContext * context);
 
 	/**
 	 * Finalize an operator context after termination.
@@ -41,19 +39,11 @@ typedef struct s_MachineProvider {
 	/**
 	 * Finalize the machine operator (deallocate data structures, &c), called once when
 	 * the last reference to the operator is released.
-	 *
-	 * Operator.impl.machine.providerData is the provider's private state for one
-	 * operator, and this is where the provider lets go of whatever that state points at.
-	 * A provider reading storage owned by somebody else must hold a counted reference to
-	 * it for as long as the operator lives, and release it here. An operator may be shared
-	 * by multiple services; this occurs for example with a rule that merely renames roles.
-	 * See createBTreeOperator() in RelationBTree.c, which acquires the RelationTable it reads.
-	 *
 	 * This pointer may be 0 if no finalization is required.
 	 */
 	void (*finalizeOperator)(Operator * op);
 
-} MachineProvider;
+} MachineOperatorProvider;
 
 
 /**
@@ -66,7 +56,7 @@ typedef struct s_MachineProvider {
  * An operator is evaluated stepwise, at each call yielding one tuple,
  * similar to a co-routine.
  *
- * Every operator declares an index order, which is a permutation of its arguments
+ * Every operator defines an index order, which is a permutation of its arguments
  * such that tuples are lexiographically ordered. For example, an operator
  * with arguments (a b c) and index order {1, 0, 2} orders its tuples lexiographically
  * w.r.t. (b a c). The tuples an operator yields must be distinct and strictly
@@ -74,7 +64,7 @@ typedef struct s_MachineProvider {
  * (without materializing the entire union relation), and could in the future allow
  * streaming PROJECT or merge JOIN operators.
  *
- * The relational operators derive their index order from their children; only
+ * The relational operators compute their index order from their children; only
  * MACHINE operators specify index order explicitly. Correctness of index order declared
  * by a MACHINE operator cannot be verified statically; it is the responsibility of whoever
  * implements the machine provider to produce correctly ordered relations. In DEBUG
@@ -149,12 +139,6 @@ typedef struct s_MachineProvider {
 	OPERATOR_PROJECT = 4,
 
 	/**
-	 * Call a machine code function. Machine operators are the leaves of an operator
-	 * tree, providing the relations that the operators above are applied to.
-	 */
-	OPERATOR_MACHINE = 5,
-
-	/**
 	 * CONSTRAIN is a restriction on an equality between arguments: it yields those
 	 * tuples of its child operator in which all child arguments taken from the same
 	 * argument of this operator are equal. This expresses the equality constraint of
@@ -164,7 +148,7 @@ typedef struct s_MachineProvider {
 	 * NOTE: this is the only operator whose call may consume several child tuples,
 	 * as it can only test the constraint once the child operator has produced a tuple.
 	 */
-	OPERATOR_CONSTRAIN = 6,
+	OPERATOR_CONSTRAIN = 5,
 
 	/**
 	 * FIXPOINT evaluates a recursive clause. Its child operator must contains a RECURSE
@@ -192,16 +176,15 @@ typedef struct s_MachineProvider {
 	 * would improve upon this. See for example
 	 * https://stackoverflow.com/questions/47043937/what-is-the-difference-between-naive-and-semi-naive-evaluation
 	 */
-	OPERATOR_FIXPOINT = 7,
+	OPERATOR_FIXPOINT = 6,
 
 	/**
 	 * RECURSE is the recursive occurrence of the relation that an enclosing FIXPOINT
 	 * operator is deriving: it enumerates the tuples derived by the rounds so far.
-	 * It is always a leaf, and holds no reference to the fixpoint operator, so that the
-	 * operator tree stays a tree. The enclosing FIXPOINT operator is found via the
+	 * It is always a leaf. The enclosing FIXPOINT operator is found via the
 	 * chain of parent pointers in the operator context when the recursion is evaluated.
 	 */
-	OPERATOR_RECURSE = 8,
+	OPERATOR_RECURSE = 7,
 
 	/**
 	 * FILTER yields those tuples of its child operator that agree with the arguments the
@@ -218,7 +201,12 @@ typedef struct s_MachineProvider {
 	 * the child does bind. The child binding the most is therefore the one to read; see
 	 * DispatchFilterableQuery().
 	 */
-	OPERATOR_FILTER = 9,
+	OPERATOR_FILTER = 8,
+
+	/**
+	 * Call a machine code function. Leaf of the operator tree
+	 */
+	OPERATOR_MACHINE = 9,
 };
 
 struct s_Operator {
@@ -231,7 +219,10 @@ struct s_Operator {
 	index8 * indexOrder;
 	// Context size, in addition to sizeof(Context)
 	size32 contextSize;
-	size32 referenceCount;
+	size32 nParents;		// number of parent operators
+	// This pointer is nonzero only for a service's root operator,
+	// and is used only to locate that service.
+	const struct s_Relation * relation;
 	union {
 		// for OPERATOR_PERMUTE
 		struct {
@@ -299,7 +290,7 @@ struct s_Operator {
 		} filter;
 		// for OPERATOR_MACHINE
 		struct {
-			MachineProvider * provider;
+			MachineOperatorProvider * provider;
 			void * providerData;
 		} machine;
 	} impl;
@@ -332,9 +323,10 @@ Operator * CreatePermuteOperator(
  * the order in which the provider yields its tuples; see the ordering contract above.
  * A provider yielding at most one tuple declares no order and passes 0.
  * The context size is the size of the context data allocated by OperatorCreateContext().
+ * The returned operator has zero references.
  */
 Operator * CreateMachineOperator(
-	size8 nArguments, index8 const indexOrder[], MachineProvider * provider,
+	size8 nArguments, index8 const indexOrder[], MachineOperatorProvider * provider,
 	void * providerData, size32 contextSize);
 
 /**
@@ -424,9 +416,11 @@ Operator * CreateProjectOperator(
  * The child is applied to the tuples derived so far until a round derives nothing new;
  * the RECURSE operators in its subtree read those tuples.
  *
- * The inputArguments array holds the indices of the nInputs arguments the caller binds,
- * and may be 0 if there are none. Those arguments restrict the tuples yielded, and not
- * the ones derived: the child always derives the whole relation.
+ * The inputArguments array holds the indices of the input arguments, and may be 0 if
+ * nInputs = 0. The input arguments are used to filter the tuples yielded by the child operator.
+ * 
+ * QUESTION: could this be handled by a surrounding FILTER operator to simplify? Or would
+ * this incur additional overhead by filtering later?
  *
  * The derived tuples are accumulated in a B-tree, so this operator yields them
  * distinct and in the identity index order.
@@ -476,16 +470,20 @@ size8 OperatorNChildren(Operator const * op);
  */
 Operator * OperatorGetChild(Operator const * op, index8 index);
 
+/**
+ * Attach an operator to a service, specified by its Relation
+ */
+void AttachOperator(Operator * op, Relation const * relation);
 
 /**
- * Acquire a reference to an operator.
+ * Detach an operator from its a service. This may deallocate the operator.
  */
-void AcquireOperator(Operator * op);
+void DetachOperator(Operator * op);
 
 /**
- * Remove one reference to the given operator, deallocate if references reach zero.
+ * Deallocate an operator if it has no parents and no associated Service.
  */
-void ReleaseOperator(Operator * op);
+void CheckOperator(Operator * op);
 
 
 /**
@@ -500,6 +498,7 @@ struct s_OperatorContext {
 	// The context that created this one, or null for a context created by a caller
 	// outside the operator tree. A RECURSE operator follows this chain to reach the
 	// FIXPOINT operator deriving the relation it enumerates.
+	// NOTE: this is redundant with the parent-operator B-tree, but pointer chasing is faster
 	OperatorContext * parent;
 #ifdef DEBUG
 	// The previously yielded tuple, kept to verify that this operator upholds the

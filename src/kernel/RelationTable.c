@@ -1,28 +1,52 @@
 
 #include "kernel/Relation.h"
 #include "kernel/RelationTable.h"
-#include "kernel/RelationTableRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/TypedAtom.h"
 #include "memory/allocator.h"
+#include "util/ResizingArray.h"
+
+
+/**
+ * B-tree for lookup of a RelationTable by its Relation (signature).
+ * Stores RelationTable * pointers as items so that we can return
+ * stable RelationTable * pointers to callers.
+ * NOTE: an alternative would be to return a RelationTable copy.
+ */
+static BTree * tableRegistry;
+
+/**
+ * Callback used by StorageProvider.createStorage()
+ */
+static void providerCreateOperatorCallback(
+	void * data, MachineOperatorProvider * operatorProvider, void * providerData, size32 contextSize,
+	IOSignature ioSignature)
+{
+	RelationTable * table = data;
+	Operator * op = CreateMachineOperator(
+		table->relation->nColumns, table->indexColumns, operatorProvider, providerData,
+		contextSize);
+	CreateService(
+		table->relation, ioSignature, op, SERVICE_PRIMITIVE);
+}
 
 
 RelationTable * CreateRelationTable(
-	Relation const * relation, RelationTableProvider const * provider,
-	index8 const indexColumns[])
+	Relation const * relation, StorageProvider const * provider, index8 const indexColumns[])
 {
+	// The relation must not already exist in the registry
+	ASSERT(!FindRelationTable(relation))
 	ASSERT(provider)
+
 	// NOTE: pool allocation would be preferable
 	RelationTable * table = Allocate(sizeof(RelationTable));
 	table->relation = relation;
 	AcquireRelation(relation);
 	table->provider = provider;
-	table->referenceCount = 1;
-	table->isCore = false;
-	// not readable by createStorage() below, which is what produces it
-	table->storage = 0;
+	table->referenceCount = 1;		// the caller owns this reference
 
-	table->indexColumns = Allocate(relation->nColumns);
+	// setup index column array
+	SetMemory(&table->indexColumns, RELATION_MAX_ARITY, 0);
 	if(indexColumns)
 		CopyMemory(indexColumns, table->indexColumns, relation->nColumns);
 	else {
@@ -30,11 +54,23 @@ RelationTable * CreateRelationTable(
 		for(index8 i = 0; i < relation->nColumns; i++)
 			table->indexColumns[i] = i;
 	}
-
-	table->storage = provider->createStorage(table);
-	RelationTableRegistryAdd(table);
-	provider->registerServices(table);
+	// Call the storage provider to prepare storage for the table
+	table->storage = provider->createStorage(
+		table->indexColumns, relation->nColumns, table, providerCreateOperatorCallback);
+	// Add the relation table to the registry
+	ASSERT(BTreeInsert(tableRegistry, &table) == BTREE_INSERTED)
 	return table;
+}
+
+
+RelationTable * FindOrCreateRelationTable(Relation const * relation, StorageProvider const * provider)
+{
+	RelationTable * table = FindRelationTable(relation);
+	if(table)
+		AcquireRelationTable(table);
+	else
+		table = CreateRelationTable(relation, provider, 0);
+	return table;		
 }
 
 
@@ -44,38 +80,84 @@ void AcquireRelationTable(RelationTable * table)
 }
 
 
-void ReleaseRelationTable(RelationTable * table)
+/**
+ * Remove the primitive services of this table.
+ */
+static void removePrimitiveServices(RelationTable * table)
 {
-	table->referenceCount--;
-	if(table->referenceCount > 0)
-		return;
+	Service const * service;
+	do {
+		ServiceIterator iterator;
+		ServiceRegistryIterate(table->relation, &iterator);
+		service = 0;
+		while(ServiceIteratorNext(&iterator)) {
+			Service const * candidate = ServiceIteratorPeekService(&iterator);
+			if(candidate->kind == SERVICE_PRIMITIVE) {
+				service = candidate;
+				break;
+			}
+		}
+		// Close the iterator, since RemoveService() alters the service registry B-tree
+		ServiceIteratorEnd(&iterator);
+		if(service)
+			RemoveService(service->relation, service->op);
+	} while(service);
+}
 
-	table->provider->free(table);
+/**
+ * A RelationTable is "stale" (can be deallocated) when (1) it has zero references,
+ * (2) it contains zero rows, and (3) no service depends on any of its primitive services
+ */
+static bool tableIsStale(RelationTable const * table)
+{
+	if(table->referenceCount > 0 || RelationTableNRows(table) > 0)
+		return false;
+		
+	bool hasDependentOperator = false;
+	ServiceIterator serviceIterator;
+	ServiceRegistryIterate(table->relation, &serviceIterator);
+	while(ServiceIteratorNext(&serviceIterator)) {
+		Service const * service = ServiceIteratorPeekService(&serviceIterator);
+		if(service->kind == SERVICE_PRIMITIVE && ServiceHasDependents(service)) {
+			hasDependentOperator = true;
+			break;
+		}
+	}
+	ServiceIteratorEnd(&serviceIterator);
+
+	return !hasDependentOperator;
+}
+
+
+static void removeTable(RelationTable * table)
+{
+	removePrimitiveServices(table);
+	ASSERT(BTreeDelete(tableRegistry, &table, 0) == BTREE_DELETED)
+	table->provider->free(table->storage);
 	ReleaseRelation(table->relation);
-	Free(table->indexColumns);
 	Free(table);
 }
 
 
-void DropRelationTable(RelationTable * table)
+void ReleaseRelationTable(RelationTable * table)
 {
-	ASSERT(RelationTableNRows(table) == 0)
-
-	// Removing a service releases the reference the registry holds to its operator, which
-	// may free the operator and so release this table. The creation reference released at
-	// the end keeps the table alive until then, and the reference the table holds to its
-	// relation keeps the relation alive across the loop inside ServiceRegistryRemoveAll().
-	ServiceRegistryRemoveAll(table->relation);
-
-	RelationTableRegistryRemove(table);
-	ReleaseRelationTable(table);
+	table->referenceCount--;
+	CheckRelationTable(table);
 }
+
+
+void CheckRelationTable(RelationTable * table)
+{
+	if(tableIsStale(table))
+		removeTable(table);
+}
+
 
 
 byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)
 {
 	Relation const * relation = table->relation;
-	byte result = table->provider->addTuple(table, tuple, idPosition);
+	byte result = table->provider->addTuple(table->storage, tuple, idPosition);
 	if(result == TUPLE_ADDED) {
 		for(index8 i = 0; i < relation->nColumns; i++) {
 			if(i + 1 != idPosition)
@@ -88,19 +170,68 @@ byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint
 
 size32 RelationTableNRows(RelationTable const * table)
 {
-	return table->provider->numberOfTuples(table);
+	return table->provider->numberOfTuples(table->storage);
 }
 
 
 byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)
 {
 	Relation const * relation = table->relation;
-	byte result = table->provider->removeTuple(table, tuple, idPosition);
+	byte result = table->provider->removeTuple(table->storage, tuple, idPosition);
 	if(result == TUPLE_REMOVED) {
 		for(index32 i = 0; i < relation->nColumns; i++) {
 			if((i + 1) != idPosition)
 				ReleaseTypedAtom(CreateTypedAtom(relation->typeSignature.atomTypes[i], tuple[i]));
 		}
 	}
+	CheckRelationTable((RelationTable *) table);
 	return result;
 }
+
+
+/**
+ * This compares RelationTables by the Relation * pointers.
+ * TODO: it seems better to use CompareRelations() ?
+ */
+static int8 btreeCompareTables(void const * item, void const * itemOrKey, size32 itemSize)
+{
+	Relation const * relation = (*(RelationTable * const *) item)->relation;
+	Relation const * relationOrKey = (*(RelationTable * const *) itemOrKey)->relation;
+	if(relation < relationOrKey)
+		return -1;
+	if(relation > relationOrKey)
+		return 1;
+	return 0;
+}
+
+
+void SetupRelationTableRegistry(void)
+{
+	tableRegistry = BTreeCreate(sizeof(RelationTable *), btreeCompareTables, 0);
+}
+
+
+void FreeRelationTableRegistry(void)
+{
+	BTreeFree(tableRegistry);
+}
+
+
+RelationTable * FindRelationTable(Relation const * relation)
+{
+	// the B-tree item is a RelationTable * pointer
+	RelationTable key = {.relation = relation};
+	RelationTable * keyPtr = &key;
+	RelationTable ** tablePtr = BTreePeekItem(tableRegistry, &keyPtr);
+	if(tablePtr)
+		return *tablePtr;
+	else
+		return 0;
+}
+
+
+size32 NumberOfRelationTables(void)
+{
+	return BTreeNItems(tableRegistry);
+}
+

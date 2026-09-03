@@ -7,6 +7,14 @@ void TupleCopy(Atom const sourceTuple[], Atom destinationTuple[], size8 nAtoms)
 }
 
 
+void TupleCopyPermuted(
+	Atom const sourceTuple[], Atom destinationTuple[], index8 const permutation[], size8 nAtoms)
+{
+	for(index8 i = 0; i < nAtoms; i++)
+		destinationTuple[permutation[i]] = sourceTuple[i];
+}
+
+
 int8 TupleCompare(Atom const tuple1[], Atom const tuple2[], size8 nAtoms)
 {
     for(index8 i = 0; i < nAtoms; i++) {

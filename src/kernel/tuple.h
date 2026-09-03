@@ -7,9 +7,21 @@
 
 #include "lang/Atom.h"
 
-
+/**
+ * Copy the source tuple contents to the destination tuple.
+ */
 void TupleCopy(Atom const sourceTuple[], Atom destinationTuple[], size8 nAtoms);
 
+/**
+ * Copy a tuple with permutation, so that
+ * destinationTuple[permutation[i]] = sourceTuple[i]
+ */
+void TupleCopyPermuted(
+	Atom const sourceTuple[], Atom destinationTuple[], index8 const permutation[], size8 nAtoms);
+
+/**
+ * Determine the ordering of two tuples
+ */
 int8 TupleCompare(Atom const tuple1[], Atom const tuple2[], size8 nAtoms);
 
 /**
@@ -21,6 +33,9 @@ int8 TupleCompare(Atom const tuple1[], Atom const tuple2[], size8 nAtoms);
 int8 TupleCompareInOrder(
 	Atom const tuple1[], Atom const tuple2[], index8 const indexOrder[], size8 nAtoms);
 
+/**
+ * Compare two tuples for equality
+ */
 bool TupleEqual(Atom const tuple1[], Atom const tuple2[], size8 nAtoms);
 
 /**

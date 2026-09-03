@@ -1,7 +1,8 @@
 /**
- * A RelationTable keep track of the tuple storage of one Relation, and provides the interface
- * for mutating the relation. Reading from a relation is done by  services; see ServiceRegistry.h.
- * Computed relations do not have RelationTable.
+ * A RelationTable represents the tuple storage of one Relation, implemented by a StorageProvider,
+ * and provides the interface for mutating (writing to) the relation.
+ * Reading from a relation is done by services; see ServiceRegistry.h.
+ * Computed relations do not have a RelationTable.
  *
  * NOTE: in the future, we want to be able to hot-load implementations into a running atom
  * process. This would involve loading code into executable memory and registering services
@@ -12,69 +13,10 @@
 #define RELATION_TABLE_H
 
 #include "kernel/operator.h"
+#include "kernel/Parameter.h"
 #include "kernel/Relation.h"
+#include "storage/StorageProvider.h"
 
-typedef struct s_RelationTable RelationTable;
-
-/**
- * Description of a relation storage provider, such as RelationBTree.
- * One provider may provide the storage of many relations, sharing the same callbacks.
- * Providers live under src/storage/, RelationBTree being the only one so far.
- *
- * Every hook receives the RelationTable, and so can read the column types and arity off
- * table->relation and the index column order off table->indexColumns. Only createStorage()
- * is called before table->storage is set.
- */
-typedef struct s_RelationTableProvider {
-
-	/**
-	 * Create storage for a new relation table.
-	 * The returned storage data pointer is assigned to the RelationTable.storage field,
-	 * and so is not yet readable from the table when this is called.
-	 * See also CreateRelationTable()
-	 */
-	void * (*createStorage)(RelationTable const * table);
-
-	/**
-	 * Register the services available for this relation. The provider should use
-	 * RelationTableAddService() to register each service.
-	 *
-	 * Required services:
-	 * 1) The all-output service that enumerates every tuple is required by RelationDump().
-	 * 2) If the relation stores tuples of an identifying fact, it must have the service taking
-	 *    the identified column as its only input; see IFactBeginConjunction().
-	 * 
-	 * NOTE: this related to Service, not RelationTable, doesn't quite fit in here
-	 */
-	void (*registerServices)(RelationTable * table);
-
-	/**
-	 * Add a tuple to storage.
-	 * The atom types are fixed, so providing an Atom array is sufficient.
-	 * If idPosition is > 0 it indicates the 1-based position of an identified
-	 * atom (the tuple is part of an ifact).
-	 */
-	byte (*addTuple)(RelationTable const * table, Atom const tuple[], uint8 idPosition);
-
-	/**
-	 * Remove a specific tuple from storage.
-	 * If the stored tuple had an identified atom, it must match the given idPosition,
-	 * or an error occurs.
-	 */
-	byte (*removeTuple)(RelationTable const * table, Atom const tuple[], uint8 idPosition);
-
-	/**
-	 * Return number of tuples in the relation table
-	 */
-	size32 (*numberOfTuples)(RelationTable const * table);
-
-	/**
-	 * Free the storage of a relation table, deallocating the underlying data structures.
-	 * The table is empty by this point; see DropRelationTable().
-	 */
-	void (*free)(RelationTable const * table);
-
-} RelationTableProvider;
 
 // result codes for addTuple()
 #define TUPLE_ADDED			1
@@ -85,49 +27,50 @@ typedef struct s_RelationTableProvider {
 #define TUPLE_NOT_FOUND		2
 #define TUPLE_PROTECTED		3
 
-/**
- * The tuple storage of one relation, held by a storage provider.
- *
- * A RelationTable is reference counted. A machine operator (or any code) reading from storage
- * must acquire a reference to prevent premature deallocation of the RelationTable and
- * the underlying storage.
- */
-struct s_RelationTable {
-	// The relation whose tuples this table stores. Acquired, as the table may outlive
-	// its registration.
+
+typedef struct s_RelationTable {
+	// NOTE: the Relation points here is merely used to find the RelationTable.
 	Relation const * relation;
-	// Desired order of index columns, so that tuples are effectively ordered
-	// lexicographically by indexColumns[0], ..., indexColumns[nColumns-1]. Hence, lookup
-	// should be fast when leading columns are specified in this order, while out-of-order
-	// columns may lead to table scanning. For example, a relation with canonical order
-	// (element list position) and indexColumns = {1, 0, 2} will be ordered as
-	// (list position element), so that queries (@list _ _) and (@list @position _) are
-	// fast, but (_ _ @element) may be slow.
-	index8 * indexColumns;
-	RelationTableProvider const * provider;
-	void * storage;	// any implementation-dependent storage data
 
-	/* TEMPORARY: Whether the kernel owns this table for the lifetime of the process.
-	   This is required for the (list) and (string) tables, which are now "core tables",
-	   the kernel creates them once and hands out the same pointer from GetCoreRelationTable() thereafter. 
-	   We should move list and string out of the kernel, then this can be dropped. */
-	bool isCore;
-	// One reference per machine operator reading this table, plus the creation reference
-	// that DropRelationTable() releases.
+	/*
+	 * The order of index columns. The stored tuples will be ordered  lexicographically by
+	 * indexColumns[0], ..., indexColumns[nColumns-1]. Hence, lookup should be fast when
+	 * leading columns are specified in this order, while out-of-order
+	 * columns may lead to table scanning.
+	 * For example, a relation with canonical order (element list position) and
+	 * indexColumns = {1, 2, 0} will be ordered first by list, then by position, then by element;
+	 * queries (@list _ _) and (@list @position _) should be fast, but (_ _ @element) may be slow.
+	 */
+	index8 indexColumns[RELATION_MAX_ARITY];
+
+	StorageProvider const * provider;
+	void * storage;			// implementation-dependent data, allocated by the StorageProvider
+
 	size32 referenceCount;
-};
+} RelationTable;
+
 
 /**
- * Create tuple storage for the given relation using the specified provider, register it,
- * and let the provider register its services. The caller acquires a RelationTable reference,
- * which DropRelationTable() releases. The RelationTable acquires the given relation.
+ * Create a relation table for the given Relation and record it in the relation table registry.
+ * The RelationTable acquires the given Relation.
+ * 
+ * Storage for the new RelationTable is created using the specified storage provider,
+ * which also provides operators for primitive services.
+ * 
+ * The caller acquires a reference to the returned RelationTable.
  *
- * The indexColumns array gives the desired order of the index columns; see
+ * The indexColumns array indicates the desired order of the index columns; see
  * RelationTable.indexColumns. Passing 0 gives the identity order.
  */
 RelationTable * CreateRelationTable(
-	Relation const * relation, RelationTableProvider const * provider,
-	index8 const indexColumns[]);
+	Relation const * relation, StorageProvider const * provider, index8 const indexColumns[]);
+
+/**
+ * Find a relation table, or create one with the given storage provider if it does not exist.
+ * If created, the table's indexColumns will be set to 0 (identity order).
+ * The caller obtains a reference to the table in either case.
+ */
+RelationTable * FindOrCreateRelationTable(Relation const * relation, StorageProvider const * provider);
 
 /**
  * Acquire a reference to a relation table.
@@ -135,19 +78,22 @@ RelationTable * CreateRelationTable(
 void AcquireRelationTable(RelationTable * table);
 
 /**
- * Remove one reference to a relation table. When the last reference goes, the storage is
- * deallocated and the relation released.
+ * Remove one reference to a relation table, and call CheckRelationTable()
+ * to remove the table if this causes it to become stale.
+ * A caller can release its reference to a table to render it "transient",
+ * so that it will automatically be removed when no longer needed.
  */
 void ReleaseRelationTable(RelationTable * table);
 
 /**
- * Remove the tuple storage of a relation: remove every service of the relation, unregister
- * the table and release the reference added by CreateRelationTable(). The table must be empty.
- *
- * The relation storage is deallocated only if no machine operator is still reading it;
- * see the note on reference counting on RelationTable.
+ * Check whether a relation table is stale, and if so remove it.
+ * A relation table is stale if
+ *   (1) it has zero references,
+ *   (2) it contains zero rows, and
+ *   (3) no service depends on any of its primitive services.
+ * Only certain kernel functions need to call this function.
  */
-void DropRelationTable(RelationTable * table);
+void CheckRelationTable(RelationTable * table);
 
 /**
  * Return the number of rows in a relation table
@@ -169,6 +115,26 @@ byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint
  * Does not remove lookup entries; see RetractFact()
  */
 byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
+
+/**
+ * Setup an empty relation table registry. Called during kernel bootstrapping only.
+ */
+void SetupRelationTableRegistry(void);
+
+/**
+ * The table storing the tuples of the given relation, or 0 if the relation is computed.
+ */
+RelationTable * FindRelationTable(Relation const * relation);
+
+/**
+ * Deallocate the registry. Before calling this function, all tables must have been dropped.
+ */
+void FreeRelationTableRegistry(void);
+
+/**
+ * Number of registered relation tables.
+ */
+size32 NumberOfRelationTables(void);
 
 
 #endif	// RELATION_TABLE_H

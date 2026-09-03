@@ -4,7 +4,7 @@
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
-#include "kernel/string.h"
+#include "library/string.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
@@ -49,7 +49,7 @@ void SetupRelationFixture(
 	Relation const * relation = CreateRelation(
 		fixture->termForm, nColumns, CreateTypeSignature(atomTypes, nColumns));
 	fixture->table = CreateRelationTable(
-		relation, &btreeTableProvider, fixture->roleIndex);
+		relation, &btreeStorageProvider, fixture->roleIndex);
 	// the table holds its own reference to the relation
 	ReleaseRelation(relation);
 }
@@ -90,12 +90,15 @@ void TeardownRelationFixture(RelationFixture * fixture)
 			fixture->table, TypedTuplePeekAtoms(fixture->tuples[i]), 0);
 		FreeTypedTuple(fixture->tuples[i]);
 	}
-	DropRelationTable(fixture->table);
+	ReleaseRelationTable(fixture->table);
 	IFactRelease(fixture->termForm);
 	SetMemory(fixture, sizeof(RelationFixture), 0);
 }
 
-
+/**
+ * Setup the a precededent-successor relation (prec succ) describing a
+ * graph with two components, one of which has a cycle b -> c -> b.
+ */
 void SetupPrecSuccFixture(RelationFixture * fixture)
 {
 	SetupRelationFixture(fixture, (char const * []) {"prec", "succ"}, 2);

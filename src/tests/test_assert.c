@@ -6,11 +6,11 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
-#include "kernel/list.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
-#include "kernel/RelationTableRegistry.h"
 #include "lang/formula.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/ConjunctionBuilder.h"
 #include "parser/TermBuilder.h"
@@ -40,7 +40,7 @@ void testAssertRetract(void)
 
 	Relation const * relation = RelationRegistryFind(FormulaGetForm(fact1), nColumns, typeSignature);
 	ASSERT_NOT_NULL(relation)
-	RelationTable const * table = RelationTableRegistryFind(relation);
+	RelationTable const * table = FindRelationTable(relation);
 	ASSERT_NOT_NULL(table)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
 
@@ -99,7 +99,7 @@ void testAssertContradictsStoredFact(void)
 
 /**
  * A fact also contradicts the knowledge base when its negation is not stored, but
- * derived by a rule. Finding the contradiction then compiles the query for the
+ * can be derived from a rule. Finding the contradiction then compiles the query for the
  * negated term; see checkContradiction() in assert.c.
  */
 void testAssertContradictsDerivedFact(void)
@@ -216,8 +216,8 @@ void testAssertFormulaRejects(void)
  */
 void testCreateIFactList(void)
 {
-	RelationTable const * listLetter = GetCoreRelationTable(RELATION_LIST_LETTER);
-	RelationTable const * listLength = GetCoreRelationTable(RELATION_LIST_LENGTH);
+	RelationTable const * listLetter = GetListRelationTable(AT_LETTER);
+	RelationTable const * listLength = GetListLengthRelationTable();
 	size32 listLetterNRows = RelationTableNRows(listLetter);
 	size32 listLengthNRows = RelationTableNRows(listLength);
 
@@ -292,12 +292,16 @@ void testCreateIFactTwoIdColumns(void)
 	// Both defining facts are stored in the one relation the two terms share
 	Relation const * relation = RelationRegistryFind(FormulaGetForm(sameFormTerm), 2, typeSignature);
 	ASSERT_NOT_NULL(relation)
-	RelationTable const * table = RelationTableRegistryFind(relation);
+	RelationTable const * table = FindRelationTable(relation);
 	ASSERT_NOT_NULL(table)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 2)
 
-	// Releasing the atom retracts both facts, which drops the table
+	// Releasing the atom retracts both facts
 	IFactRelease(ifact);
+	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 0)
+	// Cleanup any generated services
+	RemoveAllCompiledServices();
+	// The (pair other)
 	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(sameFormTerm), 2, typeSignature))
 
 	ReleaseFormula(formula);
@@ -311,7 +315,7 @@ void testCreateIFactTwoIdColumns(void)
  */
 void testCreateIFactExisting(void)
 {
-	RelationTable const * listLength = GetCoreRelationTable(RELATION_LIST_LENGTH);
+	RelationTable const * listLength = GetListLengthRelationTable();
 	size32 listLengthNRows = RelationTableNRows(listLength);
 
 	Atom formula = CStringToConjunction("list * position 1 element 'C & list * length 1");
@@ -336,7 +340,7 @@ void testCreateIFactExisting(void)
  */
 void testCreateIFactDefiningFactsProtected(void)
 {
-	RelationTable const * listLength = GetCoreRelationTable(RELATION_LIST_LENGTH);
+	RelationTable const * listLength = GetListLengthRelationTable();
 	size32 listLengthNRows = RelationTableNRows(listLength);
 
 	Atom formula = CStringToConjunction("list * position 1 element 'D & list * length 1");
@@ -386,7 +390,7 @@ void testCreateIFactTerm(void)
 	size8 nColumns = FormulaGetActors(term)->nAtoms;
 
 	// The relation of the defining fact carries the identified atom in the generator
-	// column, so its type there is AT_ID rather than the generator's own type
+	// column, with type AT_ID
 	byte atomTypes[2];
 	for(index8 i = 0; i < nColumns; i++) {
 		TypedAtom actor = TypedTupleGetElement(FormulaGetActors(term), i);
@@ -399,10 +403,10 @@ void testCreateIFactTerm(void)
 	ASSERT_TRUE(ifact.hash != 0)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
 
-	// The defining fact is the one row of the relation the term names
+	// The defining fact is the only row in the corresponding RelationTable
 	Relation const * relation = RelationRegistryFind(FormulaGetForm(term), nColumns, typeSignature);
 	ASSERT_NOT_NULL(relation)
-	RelationTable const * table = RelationTableRegistryFind(relation);
+	RelationTable const * table = FindRelationTable(relation);
 	ASSERT_NOT_NULL(table)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
 
@@ -427,6 +431,8 @@ void testCreateIFactIdColumnNotFirst(void)
 	TypedAtom firstActor = TypedTupleGetElement(FormulaGetActors(term), 0);
 	ASSERT_FALSE(SameTypedAtoms(firstActor, generatorAtom))
 
+	// CreateIFact() here creates a COMPILED service using a FILTER operator
+	// to find its identifying fact tuples
 	Atom ifact = CreateIFact(FormulaGetView(term));
 	ASSERT_TRUE(ifact.hash != 0)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
@@ -440,6 +446,8 @@ void testCreateIFactIdColumnNotFirst(void)
 	IFactRelease(sameIFact);
 	IFactRelease(ifact);
 	ReleaseFormula(term);
+	// Clean up the compiled service
+	RemoveAllCompiledServices();
 }
 
 
@@ -514,6 +522,8 @@ void testCreateIFactRejects(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 
 	ExecuteTest(testAssertRetract);
 	ExecuteTest(testAssertContradictsStoredFact);
@@ -531,6 +541,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCreateIFactDefiningFactsProtected);
 	ExecuteTest(testCreateIFactRejects);
 
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

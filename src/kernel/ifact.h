@@ -30,7 +30,7 @@ struct s_Service;
  */
 typedef struct s_IFactConjunction {
 	// relation table storing tuples for this conjunction
-	RelationTable const * table;
+	RelationTable * table;
 	index8 idColumn;		// position of the identified atom in the tuple
 	byte pad;
 	size16 nRows;			// number of tuples in this conjunction
@@ -91,8 +91,9 @@ void IFactBegin(IFactDraft * draft);
 /**
  * Begin a new conjunction for the IFactDraft, storing tuples in the given table.
  * The idColumn indicates the actor that is being defined by the IFact.
+ * The new conjunction acquires a reference to the given RelationTable.
  */
-void IFactBeginConjunction(IFactDraft * draft, RelationTable const * table, index8 idColumn);
+void IFactBeginConjunction(IFactDraft * draft, RelationTable * table, index8 idColumn);
 
 /**
  * Add one tuple, defining one predicate of the current conjunction (predicate form).

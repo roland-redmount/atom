@@ -17,7 +17,7 @@
  * Creates a new relation table using the indicated storage provider if one
  * did not already exist; if provider = 0, RelationBTree is used by default.
  */
-int AssertFact(FormulaView fact, RelationTableProvider const * provider);
+int AssertFact(FormulaView fact, StorageProvider const * provider);
 
 /**
  * High level method to assert any formula.

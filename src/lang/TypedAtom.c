@@ -3,10 +3,8 @@
 #include "kernel/ifact.h"
 #include "kernel/Int.h"
 #include "kernel/letter.h"
-#include "kernel/list.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
-#include "kernel/string.h"
 #include "lang/Atom.h"
 #include "lang/ClauseForm.h"
 #include "lang/formula.h"
@@ -17,6 +15,11 @@
 #include "lang/Variable.h"
 #include "util/hashing.h"
 #include "util/sort.h"
+
+// NOTE: These are currently needed for printing. See PrintTypedAtom()
+#include "library/list.h"
+#include "library/pair.h"
+#include "library/string.h"
 
 
 TypedAtom invalidAtom = {0};
@@ -163,19 +166,12 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		// string representations, so there is no straightforward switch/case.
 		// Here we somewhat arbitrarily try the "most specific" type predicate first
 		
-		// TODO: move this somewhere better
-		
-		// if(IsPair(typedAtom.atom)) {
-		// 	if(IsQuote(typedAtom.atom))
-		// 		PrintQuoted(typedAtom.atom);
-		// 	else
-		// 		PrintPair(typedAtom.atom);
-		// }
-		if(IsList(typedAtom.atom)) {
+		if(IsPair(typedAtom.atom)) {
+			PrintPair(typedAtom.atom);
+		}
+		else if(IsList(typedAtom.atom)) {
 			if(IsString(typedAtom.atom))
 				PrintString(typedAtom.atom);
-			else if(IsName(typedAtom))
-				PrintName(typedAtom.atom);
 			else
 				PrintList(typedAtom.atom);
 		}

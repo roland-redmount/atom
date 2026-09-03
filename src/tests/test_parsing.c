@@ -1,17 +1,17 @@
 
 #include "kernel/float.h"
-#include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
-#include "kernel/list.h"
 #include "kernel/Parameter.h"
-#include "kernel/string.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"
 #include "lang/formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
+#include "lang/Variable.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/ConjunctionBuilder.h"
 #include "parser/FormulaBuilder.h"
@@ -703,6 +703,8 @@ static void testReflectionRejected(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 
 	ExecuteTest(testPartBuilder);
 	ExecuteTest(testPredicateBuilder);
@@ -724,6 +726,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testNestedReflection);
 	ExecuteTest(testReflectionRejected);
 
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

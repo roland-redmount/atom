@@ -2,6 +2,8 @@
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "lang/name.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "testing/testing.h"
 
 #define TEST_MULTISET_N_UNIQUE	3
@@ -74,9 +76,13 @@ static void testMultiset(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 
 	ExecuteTest(testMultiset);
 	
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

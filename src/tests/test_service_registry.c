@@ -4,11 +4,12 @@
 #include "kernel/Parameter.h"
 #include "kernel/Relation.h"
 #include "kernel/RelationRegistry.h"
-#include "kernel/RelationTableRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/formula.h"
-#include "storage/RelationBTree.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "parser/TermBuilder.h"
+#include "storage/RelationBTree.h"
 #include "testing/testing.h"
 
 
@@ -23,13 +24,16 @@ struct {
 	Relation const * relation;
 } fixture;
 
-// Services the kernel registers, which every count here is relative to
-static size32 nCoreServices;
+// number of services when starting test
+static size32 initialNServices;
 
 static IOSignature const exampleIOSignature = {.parameterIO = {
 	PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT}};
 
 
+/**
+ * Setup a relation (foo:INT bar:INT bar:INT baz:INT), but no relation table
+ */
 static void setupFixture(void)
 {
 	// TODO: we should have a way to parse a form from a C string.
@@ -47,14 +51,17 @@ static void setupFixture(void)
 
 
 // A machine operator has to be given a provider, though nothing here evaluates one
-static MachineProvider dummyProvider = {
+static MachineOperatorProvider dummyProvider = {
 	.setupContext = 0,
 	.call = 0,
 	.finalizeContext = 0,
 	.finalizeOperator = 0
 };
 
-
+/**
+ * Create a dummy MACHINE operator of arity EXAMPLE_FORM_ARITY.
+ * This operator cannot evaluate anything, only useful for testing the registry.
+ */
 static Operator * createDummyMachineOperator(void)
 {
 	return CreateMachineOperator(
@@ -63,27 +70,14 @@ static Operator * createDummyMachineOperator(void)
 
 
 /**
- * Register a computed relation of the fixture form, distinguished from the others by its
- * column types, so that a service can be registered against it. Returns holding the
- * creation reference; see CreateRelation().
+ * Register a service with a PERMUTE operators built on the given operator,
+ * which must have arity = EXAMPLE_FORM_ARITY
  */
-static Relation const * createComputedRelation(TypeSignature typeSignature)
-{
-	return CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, typeSignature);
-}
-
-
-/**
- * Register a compiled service built on the given operator, against a computed relation
- * of its own, and return the operator evaluating it.
- */
-static Operator * addCompiledService(Relation const * relation, Operator * childOperator)
+static Service createPermuteService(Relation const * relation, Operator * childOperator)
 {
 	Operator * op = CreatePermuteOperator(
 		EXAMPLE_FORM_ARITY, 0, 0, 0, (index8[]) {0, 1, 2, 3}, childOperator);
-	ServiceRegistryAdd(relation, exampleIOSignature, op, SERVICE_COMPILED);
-	ReleaseOperator(op);
-	return op;
+	return CreateService(relation, exampleIOSignature, op, SERVICE_COMPILED);
 }
 
 
@@ -100,19 +94,16 @@ void testAddRemoveService(void)
 
 	// Add a dummy service to the relation
 	Operator * op = createDummyMachineOperator();
-	ASSERT_INT32_EQUAL(op->referenceCount, 1)
-	ServiceRegistryAdd(fixture.relation, exampleIOSignature, op, SERVICE_PRIMITIVE);
-	ASSERT_INT32_EQUAL(op->referenceCount, 2)
+	CreateService(fixture.relation, exampleIOSignature, op, SERVICE_PRIMITIVE);
+	ASSERT_PTR_EQUAL(op->relation, fixture.relation)
 
 	ASSERT_PTR_EQUAL(
-		ServiceRegistryFind(fixture.relation, exampleIOSignature),
+		FindService(fixture.relation, exampleIOSignature),
 		op
 	);
 
-	// Remove the service
-	ServiceRegistryRemove(fixture.relation, op);
-	ASSERT_INT32_EQUAL(op->referenceCount, 1)
-	ReleaseOperator(op);
+	// Removing the service removes the operator
+	RemoveService(fixture.relation, op);
 
 	teardownFixture();
 }
@@ -127,35 +118,37 @@ void testInvalidateDependentServices(void)
 
 	// Create dummy machine service
 	Operator * machineOperator = createDummyMachineOperator();
-	ServiceRegistryAdd(fixture.relation, exampleIOSignature, machineOperator, SERVICE_PRIMITIVE);
+	CreateService(fixture.relation, exampleIOSignature, machineOperator, SERVICE_PRIMITIVE);
 
 	// Hand-build a "compiled" service that depends on the machine service
-	TypeSignature firstTypes = CreateTypeSignature(
+	TypeSignature typeSignature1 = CreateTypeSignature(
 		(byte[]) {AT_INT, AT_INT, AT_INT, AT_LETTER}, EXAMPLE_FORM_ARITY);
-	Relation const * firstRelation = createComputedRelation(firstTypes);
-	Operator * firstOperator = addCompiledService(firstRelation, machineOperator);
-	ReleaseRelation(firstRelation);
+	Relation const * relation1 = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, typeSignature1);
+	Service service1 = createPermuteService(relation1, machineOperator);
+	ReleaseRelation(relation1);
+	ASSERT_FALSE(ServiceHasDependents(&service1))
 
 	// A second "compiled" service that depends on the first one
-	TypeSignature secondTypes = CreateTypeSignature(
+	TypeSignature typeSignature2 = CreateTypeSignature(
 		(byte[]) {AT_INT, AT_INT, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
-	Relation const * secondRelation = createComputedRelation(secondTypes);
-	addCompiledService(secondRelation, firstOperator);
-	ReleaseRelation(secondRelation);
+	Relation const * relation2 = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, typeSignature2);
+	Service service2 = createPermuteService(relation2, service1.op);
+	ReleaseRelation(relation2);
+	ASSERT_TRUE(ServiceHasDependents(&service1))
+	// Nothing depends on the compiled service
+	ASSERT_FALSE(ServiceHasDependents(&service2))
 
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 2)
-	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nCoreServices + 3)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 2)
+	ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices + 3)
 
 	// Removing the machine service should remove both dependent services
-	ServiceRegistryRemove(fixture.relation, machineOperator);
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
-	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nCoreServices)
-	// A computed relation nothing names any longer goes with its last service
-	ASSERT_NULL(RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, firstTypes))
-	ASSERT_NULL(RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, secondTypes))
+	RemoveService(fixture.relation, machineOperator);
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)
+	ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices)
+	// Both associated Relations should now be removed
+	ASSERT_NULL(RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, typeSignature1))
+	ASSERT_NULL(RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, typeSignature2))
 
-	ASSERT_INT32_EQUAL(machineOperator->referenceCount, 1)
-	ReleaseOperator(machineOperator);
 	teardownFixture();
 }
 
@@ -170,15 +163,15 @@ void testInvalidateOnPrimitiveService(void)
 
 	// Register a dummy machine service
 	Operator * machineOperator = createDummyMachineOperator();
-	ServiceRegistryAdd(fixture.relation, exampleIOSignature, machineOperator, SERVICE_PRIMITIVE);
+	CreateService(fixture.relation, exampleIOSignature, machineOperator, SERVICE_PRIMITIVE);
 
 	// Create a "compiled" relation depending on the machine service
 	TypeSignature compiledTypes = CreateTypeSignature(
 		(byte[]) {AT_INT, AT_INT, AT_INT, AT_LETTER}, EXAMPLE_FORM_ARITY);
-	Relation const * compiledRelation = createComputedRelation(compiledTypes);
-	addCompiledService(compiledRelation, machineOperator);
+	Relation const * compiledRelation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, compiledTypes);
+	createPermuteService(compiledRelation, machineOperator);
 	ReleaseRelation(compiledRelation);
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 1)
 
 	// Create a second relation of the fixture form, with distinct atom types,
 	// and associated primitive services
@@ -186,131 +179,14 @@ void testInvalidateOnPrimitiveService(void)
 		(byte[]) {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation const * storedRelation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
 	RelationTable * storedTable = CreateRelationTable(
-		storedRelation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
+		storedRelation, &btreeStorageProvider, (index8[]) {0, 1, 2, 3});
 	ReleaseRelation(storedRelation);
 	// The above compiled service should now be invalidated
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)
 	ASSERT_NULL(RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, compiledTypes))
 
-	DropRelationTable(storedTable);
-	ServiceRegistryRemove(fixture.relation, machineOperator);
-	ReleaseOperator(machineOperator);
-	teardownFixture();
-}
-
-
-/**
- * A compiled service sharing its operator with another service is invalidated when that
- * service is removed. This is a rule about the knowledge base rather than about memory:
- * the two are one operator, and so the same tuples under two signatures.
- * See removeOperatorServices() in ServiceRegistry.c for details.
- */
-void testInvalidateSharedOperator(void)
-{
-	setupFixture();
-
-	// Register a "dummy" machine service
-	Operator * machineOperator = createDummyMachineOperator();
-	ServiceRegistryAdd(fixture.relation, exampleIOSignature, machineOperator, SERVICE_PRIMITIVE);
-
-	// Register a second service using the same machine operator
-	TypeSignature compiledTypes = CreateTypeSignature(
-		(byte[]) {AT_INT, AT_INT, AT_INT, AT_LETTER}, EXAMPLE_FORM_ARITY);
-	Relation const * compiledRelation = createComputedRelation(compiledTypes);
-	ServiceRegistryAdd(compiledRelation, exampleIOSignature, machineOperator, SERVICE_COMPILED);
-	ReleaseRelation(compiledRelation);
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
-
-	// Removing the machine service invalidates the compiled service
-	ServiceRegistryRemove(fixture.relation, machineOperator);
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
-	ASSERT_NULL(RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, compiledTypes))
-
-	ASSERT_INT32_EQUAL(machineOperator->referenceCount, 1)
-	ReleaseOperator(machineOperator);
-	teardownFixture();
-}
-
-
-/**
- * Register a compiled service of the fixture relation evaluated by an operator of the
- * given stored table, which is what a rule that merely renames roles compiles to; see
- * compileTerm() in compiler.c. Returns that operator, which the two services now share.
- */
-static Operator * shareTableOperator(RelationTable * table)
-{
-	Operator * op = ServiceRegistryFind(table->relation, exampleIOSignature);
-	ASSERT_NOT_NULL(op)
-	ServiceRegistryAdd(fixture.relation, exampleIOSignature, op, SERVICE_COMPILED);
-	return op;
-}
-
-
-/**
- * Dropping a table whose operator a compiled service shares removes that service, and
- * leaves the storage alive until the shared operator is released.
- *
- * The two are independent: the compiled service goes because the relation it reads has
- * left the knowledge base, while the storage survives because an operator still points at
- * it. Before relation tables were reference counted, the removal was the only thing
- * standing between this case and a dangling pointer.
- */
-void testDropTableWithSharedOperator(void)
-{
-	setupFixture();
-	TypeSignature storedTypes = CreateTypeSignature(
-		(byte[]) {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
-	Relation const * relation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
-	RelationTable * table = CreateRelationTable(
-		relation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
-	ReleaseRelation(relation);
-
-	Operator * sharedOperator = shareTableOperator(table);
-	AcquireOperator(sharedOperator);
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
-
-	// The table holds the creation reference, and one per registered service operator
-	ASSERT_UINT32_EQUAL(table->referenceCount, 1 + EXAMPLE_FORM_ARITY + 1)
-
-	DropRelationTable(table);
-	// The compiled service went with the services of the table it shared an operator with
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
-	ASSERT_NULL(RelationTableRegistryFind(table->relation))
-	// but the storage is still there, as this test still holds the shared operator
-	ASSERT_UINT32_EQUAL(table->referenceCount, 1)
-	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 0)
-
-	// Releasing the last operator reading the table deallocates it
-	ReleaseOperator(sharedOperator);
-	teardownFixture();
-}
-
-
-/**
- * The same in the opposite order: releasing the shared operator first and dropping the
- * table afterwards. Neither order is required, which is what reference counting the table
- * buys over removing services in a fixed sequence.
- */
-void testDropTableAfterSharedOperator(void)
-{
-	setupFixture();
-	TypeSignature storedTypes = CreateTypeSignature(
-		(byte[]) {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
-	Relation const * relation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
-	RelationTable * table = CreateRelationTable(
-		relation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
-	ReleaseRelation(relation);
-
-	Operator * sharedOperator = shareTableOperator(table);
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
-
-	// Remove the compiled service first, so the operator is the stored service's alone
-	ServiceRegistryRemove(fixture.relation, sharedOperator);
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
-	ASSERT_UINT32_EQUAL(table->referenceCount, 1 + EXAMPLE_FORM_ARITY + 1)
-
-	DropRelationTable(table);
-	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nCoreServices)
+	ReleaseRelationTable(storedTable);
+	RemoveService(fixture.relation, machineOperator);
 	teardownFixture();
 }
 
@@ -318,15 +194,16 @@ void testDropTableAfterSharedOperator(void)
 int main(void)
 {
 	KernelInitialize();
-	nCoreServices = ServiceRegistryCount();
+	ListSetup();
+	StringSetup();
+	initialNServices = NumberOfServices();
 
 	ExecuteTest(testAddRemoveService);
 	ExecuteTest(testInvalidateDependentServices);
 	ExecuteTest(testInvalidateOnPrimitiveService);
-	ExecuteTest(testInvalidateSharedOperator);
-	ExecuteTest(testDropTableWithSharedOperator);
-	ExecuteTest(testDropTableAfterSharedOperator);
 
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

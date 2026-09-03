@@ -1,5 +1,4 @@
 
-#include "kernel/string.h"
 #include "memory/allocator.h"
 #include "parser/StringBuffer.h"
 

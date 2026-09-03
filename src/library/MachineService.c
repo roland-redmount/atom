@@ -85,7 +85,7 @@ static void machineServiceFinalizeOperator(Operator * op)
  * One provider serves every machine service. The function to call for a specific
  * service is stored in the impl.machine.providerData field of each operator.
  */
-static MachineProvider machineServiceProvider = {
+static MachineOperatorProvider machineServiceProvider = {
 	// nothing to set up: the zeroed context is the state before the first call
 	.setupContext = 0,
 	.call = &machineServiceCall,
@@ -156,9 +156,7 @@ Service RegisterMachineService(
 	Operator * op = CreateMachineOperator(
 		arity, indexOrder, &machineServiceProvider, data,
 		sizeof(MachineServiceContext) + stateSize);
-	Service service = ServiceRegistryAdd(relation, ioSignature, op, SERVICE_PRIMITIVE);
-	// the service registry now holds the references to the operator and the relation
-	ReleaseOperator(op);
+	Service service = CreateService(relation, ioSignature, op, SERVICE_PRIMITIVE);
 	ReleaseRelation(relation);
 	ReleaseFormula(term);
 	return service;
@@ -170,6 +168,6 @@ void FreeMachineServices(void)
 	// Remove all services registered by machineServiceProvider.
 	// NOTE: this is highly inefficient, but typically only called prior to kernel shutdown.
 	Service service;
-	while(ServiceRegistryFindByMachineProvider(&machineServiceProvider, &service))
-		ServiceRegistryRemove(service.relation, service.op);
+	while(FindServiceByMachineProvider(&machineServiceProvider, &service))
+		RemoveService(service.relation, service.op);
 }

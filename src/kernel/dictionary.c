@@ -1,6 +1,5 @@
 #include "btree/btree.h"
 #include "kernel/dictionary.h"
-#include "kernel/list.h"
 #include "kernel/multiset.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/typedtuple.h"
@@ -80,7 +79,7 @@ static void setupEntry(DictionaryEntry * entry, Atom clauseForm, TypedTuple cons
  */
 static void invalidateClauseServices(Atom clauseForm)
 {
-	if(ServiceRegistryNCompiled() == 0)
+	if(NumberOfCompiledServices() == 0)
 		return;
 
 	// Collect the term forms before invalidating any service: the multiset iterator
@@ -97,7 +96,7 @@ static void invalidateClauseServices(Atom clauseForm)
 
 	// Invalidate all term forms
 	for(index32 i = 0; i < ResizingArrayNElements(&termForms); i++)
-		ServiceRegistryInvalidateByTermForm(*(Atom *) ResizingArrayGetElement(&termForms, i));
+		InvalidateServicesByTermForm(*(Atom *) ResizingArrayGetElement(&termForms, i));
 	FreeResizingArray(&termForms);
 }
 
@@ -165,7 +164,7 @@ void DictionaryRemoveClause(DictionaryEntry * entry)
 void DictionaryRemoveAll(void)
 {
 	BTreeClear(dictionary.btree);
-	ServiceRegistryInvalidateAll();
+	RemoveAllCompiledServices();
 }
 
 

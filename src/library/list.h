@@ -5,7 +5,7 @@
  * of a form and and a list of actors. It was then untyped and stored
  * arbitrary elements. The new version is typed, and so there may be
  * multiple relation tables, one for each element type (esssentially
- * a typed array). This could be removed from the kernel.
+ * a typed array).
  */
 
 #ifndef LIST_H
@@ -14,6 +14,16 @@
 #include "lang/TypedAtom.h"
 #include "kernel/ifact.h"
 #include "kernel/operator.h"
+#include "kernel/Relation.h"
+#include "kernel/RelationTable.h"
+
+
+/**
+ * Create the list relations and their services. ListShutdown() removes them.
+ */
+void ListSetup(void);
+
+void ListShutdown(void);
 
 
 /**
@@ -89,6 +99,80 @@ void PrintList(Atom list);
  * which leads to infinite recursion when comparing B-tree ḱeys.
  */
 int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(Atom, Atom));
+
+
+/**
+ * Roles of the (list position element) predicate, naming a column
+ * of the relation; see GetListRoleIndex()
+ */
+#define LIST_ROLE_LIST			0
+#define LIST_ROLE_POSITION		1
+#define LIST_ROLE_ELEMENT		2
+
+/**
+ * Roles of the (list length) predicate, naming a column
+ * of the relation; see GetListLengthRoleIndex()
+ */
+#define LIST_LENGTH_ROLE_LIST	0
+#define LIST_LENGTH_ROLE_LENGTH	1
+
+/**
+ * The role name "list", an AT_NAME atom.
+ */
+Atom GetListRoleName(void);
+
+Atom GetListPredicateForm(void);
+Atom GetListTermForm(void);
+
+Atom GetListLengthPredicateForm(void);
+Atom GetListLengthTermForm(void);
+
+/**
+ * The column index of each role of (list position element), indexed by LIST_ROLE_*.
+ * The array has 3 entries.
+ */
+index8 const * GetListRoleIndex(void);
+
+/**
+ * Set a tuple of the (list position element) relation in canonical column order,
+ * given a tuple in the role order (list position element).
+ */
+void ListSetTuple(Atom const inputTuple[], Atom tuple[]);
+
+/**
+ * Set a byte array in the canonical column order of (list position element),
+ * given an array in the role order (list position element).
+ */
+void ListSetByteArray(byte const inputArray[], byte array[]);
+
+/**
+ * The column index of each role of (list length), indexed by LIST_LENGTH_ROLE_*.
+ * The array has 2 entries.
+ */
+index8 const * GetListLengthRoleIndex(void);
+
+/**
+ * The (list position element) relation storing elements of the given type,
+ * which is AT_ID or AT_LETTER.
+ */
+Relation const * GetListRelation(byte elementType);
+
+RelationTable * GetListRelationTable(byte elementType);
+
+/**
+ * The service (list <ID position >INT element >elementType) of the relation
+ * returned by GetListRelation()
+ */
+Operator * GetListOperator(byte elementType);
+
+Relation const * GetListLengthRelation(void);
+
+RelationTable * GetListLengthRelationTable(void);
+
+/**
+ * The service (list <ID length >INT)
+ */
+Operator * GetListLengthOperator(void);
 
 
 typedef struct s_ListIterator

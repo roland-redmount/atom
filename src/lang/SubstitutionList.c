@@ -1,5 +1,4 @@
 
-#include "kernel/list.h"
 #include "lang/SubstitutionList.h"
 #include "memory/allocator.h"
 

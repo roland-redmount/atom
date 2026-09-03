@@ -1,7 +1,8 @@
 
 #include "lang/Variable.h"
 #include "kernel/kernel.h"
-#include "kernel/list.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "kernel/letter.h"
 #include "kernel/lookup.h"
 
@@ -15,8 +16,8 @@
 
 static void testCreateList(void)
 {
-	RelationTable const * listLength = GetCoreRelationTable(RELATION_LIST_LENGTH);
-	RelationTable const * listPositionElement = GetCoreRelationTable(RELATION_LIST_LETTER);
+	RelationTable const * listLength = GetListLengthRelationTable();
+	RelationTable const * listPositionElement = GetListRelationTable(AT_LETTER);
 
 	size32 listLengthNRowsInitial = RelationTableNRows(listLength);
 	size32 listPositionElementNRowsInitial = RelationTableNRows(listPositionElement);
@@ -109,11 +110,15 @@ static void testCreateEmptyList(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 
 	ExecuteTest(testCreateList);
 	ExecuteTest(testNestedList);
 	ExecuteTest(testCreateEmptyList);
 
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

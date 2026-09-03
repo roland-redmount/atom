@@ -6,7 +6,7 @@
 #ifndef SUBSTITUTION_H
 #define SUBSTITUTION_H
 
-#include "lang/TypedAtom.h"
+#include "kernel/typedtuple.h"
 
 
 typedef struct s_Substitution {

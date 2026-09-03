@@ -7,7 +7,6 @@
 #include "kernel/Relation.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
-#include "kernel/RelationTableRegistry.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"
 #include "lang/TermForm.h"
@@ -46,7 +45,7 @@ static bool checkContradiction(FormulaView fact)
 }
 
 
-int AssertFact(FormulaView fact, RelationTableProvider const * provider)
+int AssertFact(FormulaView fact, StorageProvider const * provider)
 {
 	ASSERT(IsTermForm(fact.form));
 	ASSERT(!TypedTupleContainsVariable(fact.actors));
@@ -59,16 +58,23 @@ int AssertFact(FormulaView fact, RelationTableProvider const * provider)
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
 	Relation const * relation = FindOrCreateRelation(fact.form, fact.actors->nAtoms, typeSignature);
-	RelationTable * table = RelationTableRegistryFind(relation);
+	RelationTable * table = FindRelationTable(relation);
+	bool tableWasCreated = false;
 	if(!table) {
-		table = CreateRelationTable(relation, provider ? provider : &btreeTableProvider, 0);
+		table = CreateRelationTable(relation, provider ? provider : &btreeStorageProvider, 0);
+		tableWasCreated = true;
 	}
 	ReleaseRelation(relation);
 	// Attempt to add the tuple
-	if(RelationTableAddTuple(table, actorsArray, 0) == TUPLE_EXISTS)
+	if(RelationTableAddTuple(table, actorsArray, 0) == TUPLE_EXISTS) {
 		return ASSERT_EXISTED;
-	// else tuple was added
+	}
+	// Else a new tuple was added.
 	LookupAddPredicateRoles(relation, actorsArray);
+	// If we created the table above, we drop our reference to it,
+	// so that it is deallocated when all tuples are removed.
+	if(tableWasCreated)
+		ReleaseRelationTable(table);
 	return ASSERT_OK;
 }
 
@@ -130,7 +136,7 @@ void RetractFact(FormulaView fact)
 	Relation const * relation = RelationRegistryFind(fact.form, fact.actors->nAtoms, typeSignature);
 	if(!relation)
 		return;
-	RelationTable * table = RelationTableRegistryFind(relation);
+	RelationTable * table = FindRelationTable(relation);
 	if(!table)
 		return;
 	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
@@ -138,11 +144,10 @@ void RetractFact(FormulaView fact)
 	// relation's reference to each of its atoms, and releasing the last reference
 	// to an atom takes all of its lookup entries with it.
 	LookupRemovePredicateRoles(relation, actorsArray);
-	// this will not remove defining facts
+	// Remove the tuple. This will not remove defining facts
 	RelationTableRemoveTuple(table, actorsArray, 0);
-	if(RelationTableNRows(table) == 0) {
-		DropRelationTable(table);
-	}
+	// The RelationTable will be dropped if it was created by AssertFact(),
+	// which retains no reference to it
 }
 
 
@@ -305,21 +310,21 @@ Atom CreateIFact(FormulaView formula)
 	IFactBegin(&draft);
 	for(index32 i = 0; i < nTuples; i++) {
 		if(i == 0 || compareIFactTuples(&ifactTuples[i], &ifactTuples[i-1], sizeof(IFactTuple)) != 0) {
-			// new relation
+			// Begin new conjunction, from a new RelationTable
 			if(i > 0)
 				IFactEndConjunction(&draft);
-			RelationTable * table = RelationTableRegistryFind(ifactTuples[i].relation);
-			if(!table) {
-				// create new relation table, use B-tree provider as default
-				table = CreateRelationTable(ifactTuples[i].relation, &btreeTableProvider, 0);
-			}
+			RelationTable * table = FindOrCreateRelationTable(ifactTuples[i].relation, &btreeStorageProvider);
 			IFactBeginConjunction(&draft, table, ifactTuples[i].idColumn);
+			ReleaseRelationTable(table);	// the draft ifact now holds its own reference
 		}
 		IFactAddTuple(&draft, ifactTuples[i].tuple);
 	}
+	// End the last conjunction
 	IFactEndConjunction(&draft);
+	
 	idAtom = IFactEnd(&draft);
 
 	freeIFactTuples(&ifactTupleArray);
 	return idAtom;
 }
+

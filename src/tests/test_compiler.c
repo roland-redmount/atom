@@ -5,11 +5,11 @@
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
 #include "kernel/letter.h"
-#include "kernel/list.h"
+#include "library/list.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
-#include "kernel/string.h"
+#include "library/string.h"
 #include "kernel/tuple.h"
 #include "lang/formula.h"
 #include "lang/name.h"
@@ -51,7 +51,7 @@ void testCompilePermute1(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -87,7 +87,7 @@ void testCompilePermute2(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -137,7 +137,7 @@ void testCompileProject(void)
 	ASSERT_UINT32_EQUAL(k, 4);
 
 	for(index8 i = 0; i < nServices; i++) {
-		ServiceRegistryRemove(services[i].relation, services[i].op);
+		RemoveService(services[i].relation, services[i].op);
 	}
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -161,7 +161,7 @@ void testCompileUnconstrainedHeadVariable(void)
 	ASSERT_UINT32_EQUAL(nServices, 0)
 
 	for(index8 i = 0; i < nServices; i++) {
-		ServiceRegistryRemove(services[i].relation, services[i].op);
+		RemoveService(services[i].relation, services[i].op);
 	}
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -196,7 +196,7 @@ void testCompileJoin1(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -231,7 +231,7 @@ void testCompileJoin2(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -275,7 +275,7 @@ void testCompileUnion(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry1);
 	DictionaryRemoveClause(&entry2);
@@ -327,7 +327,7 @@ void testCompileConstrain(void)
 
 	IFactRelease(nodeA);
 	IFactRelease(nodeB);
-	ServiceRegistryRemove(services[0].relation, services[0].op);
+	RemoveService(services[0].relation, services[0].op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 	TeardownRelationFixture(&edgeFixture);
@@ -353,7 +353,7 @@ void testCompileRecursiveJoin1(void)
 		FormulaGetForm(terminatingFact), 2,
 		CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(terminatingFact)), 2));
 	RelationTable * table = CreateRelationTable(
-		relation, &btreeTableProvider, (index8[]) {0, 1});
+		relation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(relation);
 	RelationTableAddTuple(table, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	// Compile the query
@@ -375,10 +375,10 @@ void testCompileRecursiveJoin1(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	RelationTableRemoveTuple(table, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
-	DropRelationTable(table);
+	ReleaseRelationTable(table);
 	ReleaseFormula(terminatingFact);
 	DictionaryRemoveClause(&entry);
 }
@@ -433,7 +433,7 @@ void testCompileRecursiveJoin2(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -482,7 +482,7 @@ void testCompileRecursiveReachable(void)
 	for(index8 i = 0; i < 3; i++)
 		ASSERT_TRUE(found[i])
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -535,11 +535,15 @@ void testCompileRecursiveTermUnboundInput(void)
 	ASSERT_UINT32_EQUAL(nTuples, 1)
 
 	IFactRelease(nodeB);
-	ServiceRegistryRemove(services[0].relation, services[0].op);
+	RemoveService(services[0].relation, services[0].op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&recursiveEntry);
 	DictionaryRemoveClause(&baseEntry);
 	TeardownRelationFixture(&precSuccFixture);
+	// The above leaves behind a (succ <ID prec >ID) compiled service generated as part
+	// of the process of compiling (reach "a" hop y) query, which is not invalidated
+	// by removing the rules. Clean this out.
+	RemoveAllCompiledServices();
 }
 
 
@@ -593,7 +597,7 @@ void testCompileRecursiveClosure(void)
 	for(index8 i = 0; i < PREC_SUCC_N_CLOSURE_TUPLES; i++)
 		ASSERT_TRUE(found[i])
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -612,51 +616,53 @@ void testCompileRecursiveVariants(void)
 {
 	// The (prec succ) fixture with types {AT_ID, AT_ID}
 	SetupPrecSuccFixture(&precSuccFixture);
-	DictionaryEntry entry1;
-	DictionaryEntry entry2;
-	AddTransitiveClosureRules(&entry1, &entry2);
+	DictionaryEntry baseRule;
+	DictionaryEntry recursiveRule;
+	AddTransitiveClosureRules(&baseRule, &recursiveRule);
 
-	// Add a (prec succ) relation with types {AT_INT, AT_INT}
-	Relation const * intRelation = CreateRelation(
+	// Add a second (prec succ) relation with types {AT_INT, AT_INT},
+	// defining a separate graph.
+	Relation const * precSuccIntRelation = CreateRelation(
 		precSuccFixture.termForm, 2, CreateTypeSignature((byte[]) {AT_INT, AT_INT}, 2));
-	RelationTable * intTable = CreateRelationTable(
-		intRelation, &btreeTableProvider, (index8[]) {0, 1});
-	ReleaseRelation(intRelation);
+	RelationTable * precSuccIntTable = CreateRelationTable(
+		precSuccIntRelation, &btreeStorageProvider, (index8[]) {0, 1});
+	ReleaseRelation(precSuccIntRelation);
 	// Add the facts (prec 1 succ 2), (prec 2 succ 3)
-	index8 precIndex = RelationFixtureRoleIndex(&precSuccFixture, "prec");
-	index8 succIndex = RelationFixtureRoleIndex(&precSuccFixture, "succ");
-	Atom intEdges[2][2];
+	index8 precRoleIndex = RelationFixtureRoleIndex(&precSuccFixture, "prec");
+	index8 succRoleIndex = RelationFixtureRoleIndex(&precSuccFixture, "succ");
+	Atom precSuccIntEdges[2][2];
 	for(index8 i = 0; i < 2; i++) {
-		intEdges[i][precIndex] = (Atom) {._int = 1 + i};
-		intEdges[i][succIndex] = (Atom) {._int = 2 + i};
-		RelationTableAddTuple(intTable, intEdges[i], 0);
+		precSuccIntEdges[i][precRoleIndex] = (Atom) {._int = 1 + i};
+		precSuccIntEdges[i][succRoleIndex] = (Atom) {._int = 2 + i};
+		RelationTableAddTuple(precSuccIntTable, precSuccIntEdges[i], 0);
 	}
 	// The query (before x after y) should now generate a (before after) service
 	// for both the AT_ID and AT_INT versions, seeded by the non-recursive rule
 	// (before x after y <- prec x succ y)
 	Atom queryTerm = CStringToTerm("before x after y");
-	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
-	ASSERT_UINT32_EQUAL(nServices, 2)
+	Service compiledServices[MAX_COMPILED_SERVICES];
+	size8 nCompiledServices = CompileQuery(queryTerm, compiledServices);
+	ASSERT_UINT32_EQUAL(nCompiledServices, 2)
 
+	// Expected values for the transitive closure of the AT_INT relation
 	int64 expectedBefore[3] = {1, 2, 1};
 	int64 expectedAfter[3] = {2, 3, 3};
 	bool foundIntTuple[3] = {false, false, false};
+
 	size32 nIntTuples = 0;
 	size32 nIdTuples = 0;
-
-	for(index8 i = 0; i < nServices; i++) {
-		bool intService = (services[i].relation->typeSignature.atomTypes[0] == AT_INT);
+	for(index8 i = 0; i < nCompiledServices; i++) {
+		bool intService = (compiledServices[i].relation->typeSignature.atomTypes[0] == AT_INT);
 		Atom arguments[2];
 		TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
-		void * context = OperatorCreateContext(services[i].op, arguments);
+		void * context = OperatorCreateContext(compiledServices[i].op, arguments);
 		while(OperatorCall(context)) {
 			if(!intService) {
 				// we have the AT_ID relation
 				nIdTuples++;
 				continue;
 			}
-			// else we have AT_INT relation
+			// else we have AT_INT relation, check tuple
 			Atom before = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "before", 1);
 			Atom after = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "after", 1);
 			for(index8 j = 0; j < 3; j++)
@@ -668,20 +674,21 @@ void testCompileRecursiveVariants(void)
 		OperatorFreeContext(context);
 	}
 
-	// Each variant holds the closure of the relation it was compiled from
+	// Check that all tuples in each graph's transitive closure are found
 	ASSERT_UINT32_EQUAL(nIdTuples, PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(nIntTuples, 3)
 	for(index8 i = 0; i < 3; i++)
 		ASSERT_TRUE(foundIntTuple[i])
 
-	for(index8 i = 0; i < nServices; i++)
-		ServiceRegistryRemove(services[i].relation, services[i].op);
+	// Cleanup
+	for(index8 i = 0; i < nCompiledServices; i++)
+		RemoveService(compiledServices[i].relation, compiledServices[i].op);
 	ReleaseFormula(queryTerm);
 	for(index8 i = 0; i < 2; i++)
-		RelationTableRemoveTuple(intTable, intEdges[i], 0);
-	DropRelationTable(intTable);
-	DictionaryRemoveClause(&entry2);
-	DictionaryRemoveClause(&entry1);
+		RelationTableRemoveTuple(precSuccIntTable, precSuccIntEdges[i], 0);
+	ReleaseRelationTable(precSuccIntTable);
+	DictionaryRemoveClause(&recursiveRule);
+	DictionaryRemoveClause(&baseRule);
 	TeardownRelationFixture(&precSuccFixture);
 }
 
@@ -700,7 +707,7 @@ void testCompileNegatedTerm(void)
 	Relation const * evenRelation = CreateRelation(
 		FormulaGetForm(odd3term), 1, CreateTypeSignature((byte[]) {AT_INT}, 1));
 	RelationTable * evenTable = CreateRelationTable(
-		evenRelation, &btreeTableProvider, (index8[]) {0});
+		evenRelation, &btreeStorageProvider, (index8[]) {0});
 	ReleaseRelation(evenRelation);
 	RelationTableAddTuple(evenTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	// setup the rule
@@ -727,13 +734,13 @@ void testCompileNegatedTerm(void)
 	OperatorFreeContext(context);
 
 	// teardown
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	
 	DictionaryRemoveClause(&entry);
 
 	RelationTableRemoveTuple(evenTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
-	DropRelationTable(evenTable);
+	ReleaseRelationTable(evenTable);
 	ReleaseFormula(odd3term);
 }
 
@@ -751,7 +758,7 @@ void testCompiledServiceReadsFactsLive(void)
 	Relation const * oddRelation = CreateRelation(
 		FormulaGetForm(odd3term), 1, CreateTypeSignature((byte[]) {AT_INT}, 1));
 	RelationTable * oddTable = CreateRelationTable(
-		oddRelation, &btreeTableProvider, (index8[]) {0});
+		oddRelation, &btreeStorageProvider, (index8[]) {0});
 	ReleaseRelation(oddRelation);
 	RelationTableAddTuple(oddTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
@@ -761,7 +768,7 @@ void testCompiledServiceReadsFactsLive(void)
 	size8 nServices = CompileQuery(queryTerm, services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
-	size32 nCompiled = ServiceRegistryNCompiled();
+	size32 nCompiled = NumberOfCompiledServices();
 
 	Atom arguments[1];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 1);
@@ -771,7 +778,7 @@ void testCompiledServiceReadsFactsLive(void)
 
 	// Retracting the fact leaves the service registered, as the relation still exists
 	RelationTableRemoveTuple(oddTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiled)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiled)
 
 	// and that same service now yields nothing, having read the change
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 1);
@@ -786,11 +793,11 @@ void testCompiledServiceReadsFactsLive(void)
 	ASSERT_TRUE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 	RelationTableRemoveTuple(oddTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
-	DropRelationTable(oddTable);
+	ReleaseRelationTable(oddTable);
 	ReleaseFormula(odd3term);
 }
 
@@ -828,7 +835,7 @@ void testCompileSquares(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -859,7 +866,7 @@ void testCompileChainedRules(void)
 	DictionaryEntry grandparentEntry = DictionaryAddClauseFromCString(
 		"grandparent x grandchild z | ! parent x offspring y | ! parent y offspring z");
 
-	size32 nCompiledBefore = ServiceRegistryNCompiled();
+	size32 nCompiledBefore = NumberOfCompiledServices();
 	Atom queryTerm = CStringToTerm("grandparent x grandchild z");
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileQuery(queryTerm, services);
@@ -867,7 +874,7 @@ void testCompileChainedRules(void)
 
 	// The query service, and one (parent offspring) service per IO pattern its two terms
 	// asked for
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled() - nCompiledBefore, 3)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices() - nCompiledBefore, 3)
 
 	// Only a has a grandchild, which is c
 	Atom nodeA = CreateStringFromCString("a");
@@ -885,13 +892,13 @@ void testCompileChainedRules(void)
 
 	IFactRelease(nodeA);
 	IFactRelease(nodeC);
-	ServiceRegistryRemove(services[0].relation, services[0].op);
+	RemoveService(services[0].relation, services[0].op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&grandparentEntry);
 	DictionaryRemoveClause(&parentEntry);
 	// Dropping the stored relation invalidates the compiled (parent offspring) services
 	TeardownRelationFixture(&fatherFixture);
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiledBefore)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 }
 
 
@@ -950,7 +957,7 @@ void testCompileChainedRuleOrder(void)
 	ASSERT_FALSE(DispatchQueryFormula(unboundAlias, &aliasService, aliasPermutation))
 	ReleaseFormula(unboundAlias);
 
-	ServiceRegistryRemove(services[0].relation, services[0].op);
+	RemoveService(services[0].relation, services[0].op);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&pickEntry);
 	DictionaryRemoveClause(&aliasEntry);
@@ -1006,7 +1013,7 @@ void testCompileNewIOPattern(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 }
 
@@ -1036,7 +1043,7 @@ void testCompileNewIOPatternRepeated(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	ServiceRegistryRemove(service.relation, service.op);
+	RemoveService(service.relation, service.op);
 	ReleaseFormula(queryTerm);
 }
 
@@ -1050,7 +1057,7 @@ void testCompileNewIOPatternRepeated(void)
  */
 void testCompileFilterInRuleBody(void)
 {
-	size32 nCompiledBefore = ServiceRegistryNCompiled();
+	size32 nCompiledBefore = NumberOfCompiledServices();
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
 		"at s position p letter e | ! list s position p element e");
 	Atom queryTerm = CStringToTerm("at \"abracadabra\" position q letter 'a");
@@ -1075,9 +1082,9 @@ void testCompileFilterInRuleBody(void)
 
 	// Compiling the query also compiled a service for its body term, which is a cache
 	// over the list relation and outlives the rule; remove both
-	ServiceRegistryRemove(service.relation, service.op);
-	ServiceRegistryInvalidateAll();
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiledBefore)
+	RemoveService(service.relation, service.op);
+	RemoveAllCompiledServices();
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -1090,16 +1097,16 @@ void testCompileFilterInRuleBody(void)
  */
 void testFilterServiceInvalidatedByRule(void)
 {
-	size32 nCompiledBefore = ServiceRegistryNCompiled();
+	size32 nCompiledBefore = NumberOfCompiledServices();
 	Atom queryTerm = CStringToTerm("list \"AB\" position _ element 'A");
 	Service services[MAX_COMPILED_SERVICES];
 	ASSERT_UINT32_EQUAL(CompileQuery(queryTerm, services), 1)
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiledBefore + 1)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore + 1)
 
 	// A rule of the query's term form invalidates what was compiled for that form
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
 		"list s position p element e | ! at s index p letter e");
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), nCompiledBefore)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 
 	DictionaryRemoveClause(&entry);
 	ReleaseFormula(queryTerm);
@@ -1109,6 +1116,8 @@ void testFilterServiceInvalidatedByRule(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 	MathSetup();
 
 	ExecuteTest(testCompilePermute1);
@@ -1146,5 +1155,7 @@ int main(int argc, char * argv[])
 	// ExecuteTest(testCompileRecursiveJoin1);
 
 	FreeMachineServices();
+	StringShutdown();
+	ListShutdown();
 	TestSummary();
 }

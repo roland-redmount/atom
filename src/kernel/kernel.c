@@ -9,7 +9,6 @@
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
 #include "kernel/RelationTable.h"
-#include "kernel/RelationTableRegistry.h"
 #include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "storage/RelationBTree.h"
@@ -50,10 +49,7 @@ static const size8 corePredicateArity[N_CORE_FORMS + 1] = {
 	3,	// (term-form predicate-form sign)
 	1,	// (clause-form)
 	1,	// (conjunction-form)
-	3,	// (list position element)
-	2,	// (list length)
 	2,	// (quote quoted)
-	1,	// (string)
 };
 
 /**
@@ -70,10 +66,7 @@ static const index32 coreFormRoleIds[N_CORE_FORMS + 1][CORE_FORMS_MAX_ARITY] = {
 	{ROLE_TERM_FORM, ROLE_PREDICATE_FORM, ROLE_SIGN},
 	{ROLE_CLAUSE_FORM},
 	{ROLE_CONJUNCTION_FORM},
-	{ROLE_LIST, ROLE_POSITION, ROLE_ELEMENT},
-	{ROLE_LIST, ROLE_LENGTH},
 	{ROLE_QUOTE, ROLE_QUOTED},
-	{ROLE_STRING},
 };
 
 /**
@@ -87,11 +80,7 @@ static const index32 coreRelationFormId[N_CORE_RELATIONS + 1] = {
 	FORM_TERM_FORM,
 	FORM_CLAUSE_FORM,
 	FORM_CONJUNCTION_FORM,
-	FORM_LIST_POSITION_ELEMENT,
-	FORM_LIST_POSITION_ELEMENT,
-	FORM_LIST_LENGTH,
 	FORM_QUOTE_QUOTED,
-	FORM_STRING,
 };
 
 /**
@@ -112,16 +101,8 @@ static const byte coreRelationAtomTypes[N_CORE_RELATIONS + 1][CORE_FORMS_MAX_ARI
 	{AT_ID},
 	// (conjunction-form:ID)
 	{AT_ID},
-	// (list:ID position:INT element:LETTER)
-	{AT_ID, AT_INT, AT_LETTER},
-	// (list:ID position:INT element:ID)
-	{AT_ID, AT_INT, AT_ID},
-	// (list:ID length:INT)
-	{AT_ID, AT_INT},
 	// (quote:ID quoted:ID)
 	{AT_ID, AT_ID},
-	// (string:ID)
-	{AT_ID},
 };
 
 /**
@@ -139,12 +120,6 @@ static const index32 coreServiceRelationId[N_CORE_SERVICES + 1] = {
 	RELATION_MULTISET_ID,
 	// (term-form <ID predicate-form >ID)
 	RELATION_TERM_FORM,
-	// (list <ID length >INT)
-	RELATION_LIST_LENGTH,
-	// (list <ID position >INT element >LETTER)
-	RELATION_LIST_LETTER,
-	// (list <ID position >INT element >ID)
-	RELATION_LIST_ID,
 };
 
 
@@ -162,12 +137,6 @@ static const byte coreServiceParameterIO[N_CORE_SERVICES + 1][CORE_FORMS_MAX_ARI
 	// (multiset >ID element >ID multiple >INT)
 	{PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT},
 	// (term-form <ID predicate-form >ID sign >INT)
-	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
-	// (list <ID length >INT)
-	{PARAMETER_IN, PARAMETER_OUT},
-	// (list <ID position >INT element >LETTER)
-	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
-	// (list <ID position >INT element >ID)
 	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 };
 
@@ -283,13 +252,9 @@ static void setupCoreRoleNames(void)
 	kernel.coreRoleNames[ROLE_TERM_FORM] = CreateNameFromCString("term-form");
 	kernel.coreRoleNames[ROLE_CLAUSE_FORM] = CreateNameFromCString("clause-form");
 	kernel.coreRoleNames[ROLE_CONJUNCTION_FORM] = CreateNameFromCString("conjunction-form");
-	kernel.coreRoleNames[ROLE_LIST] = CreateNameFromCString("list");
-	kernel.coreRoleNames[ROLE_POSITION] = CreateNameFromCString("position");
-	kernel.coreRoleNames[ROLE_LENGTH] = CreateNameFromCString("length");
+	kernel.coreRoleNames[ROLE_SIGN] = CreateNameFromCString("sign");
 	kernel.coreRoleNames[ROLE_QUOTE] = CreateNameFromCString("quote");
 	kernel.coreRoleNames[ROLE_QUOTED] = CreateNameFromCString("quoted");
-	kernel.coreRoleNames[ROLE_STRING] = CreateNameFromCString("string");
-	kernel.coreRoleNames[ROLE_SIGN] = CreateNameFromCString("sign");
 }
 
 
@@ -308,21 +273,20 @@ static void setupCoreRoleNames(void)
  */
 void CoreFormSetTuple(index32 formId, Atom const inputTuple[], Atom tuple[])
 {
-	for(index8 i = 0; i < corePredicateArity[formId]; i++)
-		tuple[kernel.corePredicateRoleIndex[formId][i]] = inputTuple[i];
+	TupleCopyPermuted(
+		inputTuple, tuple, kernel.corePredicateRoleIndex[formId], corePredicateArity[formId]);
 }
 
 
 void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
 {
-	for(index8 i = 0; i < corePredicateArity[formId]; i++)
-		array[kernel.corePredicateRoleIndex[formId][i]] = inputArray[i];
+	CopyBytesPermuted(
+		inputArray, array, kernel.corePredicateRoleIndex[formId], corePredicateArity[formId]);
 }
 
 
 /**
- * Create a core relation table using the B-tree implementation,
- * and create associated services.
+ * Create a core relation table using the B-tree implementation, with primitive services.
  * This requires kernel.corePredicateRoleIndex to be initialized for the correponding form
  */
 static RelationTable * createCoreRelationTable(uint32 relationId)
@@ -332,18 +296,17 @@ static RelationTable * createCoreRelationTable(uint32 relationId)
 	CoreFormSetByteArray(formId, coreRelationAtomTypes[relationId], atomTypes);
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, corePredicateArity[formId]);
 
-	// The bootstrap constructor is used throughout, since the predicate form is at hand
-	// and the earliest core relations are keyed by a term form that has no tuples yet
+	// The bootstrap constructor is used to specify the predicate form explicitly
 	Relation const * relation = CreateRelationBootstrap(
 		kernel.coreTermForms[formId],
 		kernel.corePredicateForms[formId],
 		corePredicateArity[formId],
 		typeSignature
 	);
+	// Create the relation storage and associated primitive services
 	RelationTable * table = CreateRelationTable(
-		relation, &btreeTableProvider, kernel.corePredicateRoleIndex[formId]);
-	table->isCore = true;
-	// the table holds its own reference to the relation
+		relation, &btreeStorageProvider, kernel.corePredicateRoleIndex[formId]);
+	// the table now holds its own reference to the relation
 	ReleaseRelation(relation);
 	return table;
 }
@@ -365,7 +328,7 @@ Relation const * GetCoreRelation(index32 relationId)
 
 RelationTable * GetCoreRelationTable(index32 relationId)
 {
-	return RelationTableRegistryFind(GetCoreRelation(relationId));
+	return FindRelationTable(GetCoreRelation(relationId));
 }
 
 
@@ -666,7 +629,7 @@ static void setupCoreServices(void)
 			parameterIO
 		);
 		Relation const * relation = kernel.coreRelations[relationId]->relation;
-		kernel.coreOperators[i] = ServiceRegistryFind(
+		kernel.coreOperators[i] = FindService(
 			relation,
 			CreateIOSignature(parameterIO, relation->nColumns)
 		);
@@ -720,6 +683,8 @@ void KernelShutdown(void)
 		ASSERT(false);
 	}
 
+	RemoveAllCompiledServices();
+
 	/**
 	 * NOTE: The below removes all core services to rewind everything
 	 * back to initial state. This is unnecessary in practise, as
@@ -731,13 +696,13 @@ void KernelShutdown(void)
 	 // the associated predicate form and term form of each.
 	for(index32 relationId = N_CORE_RELATIONS; relationId > RELATION_TERM_FORM; relationId--)
 		// This removes the services, and releases the associated forms
-		DropRelationTable(kernel.coreRelations[relationId]);
+		ReleaseRelationTable(kernel.coreRelations[relationId]);
 
 	/*
 	 * RELATION_MULTISET_ID is not circular, but shares the term form of
 	 * RELATION_MULTISET_NAME, so it goes before the three tables handled below.
 	 */
-	DropRelationTable(kernel.coreRelations[RELATION_MULTISET_ID]);
+	ReleaseRelationTable(kernel.coreRelations[RELATION_MULTISET_ID]);
 
 	/**
 	 * Remove RELATION_TERM_FORM, RELATION_PREDICATE_FORM and RELATION_MULTISET_NAME.
@@ -786,9 +751,9 @@ void KernelShutdown(void)
 	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_PREDICATE_FORM]) == 0)
 	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_MULTISET_NAME]) == 0)
 
-	DropRelationTable(kernel.coreRelations[RELATION_TERM_FORM]);
+	ReleaseRelationTable(kernel.coreRelations[RELATION_TERM_FORM]);
 	for(index32 relationId = RELATION_PREDICATE_FORM; relationId >= RELATION_MULTISET_NAME; relationId--)
-		DropRelationTable(kernel.coreRelations[relationId]);
+		ReleaseRelationTable(kernel.coreRelations[relationId]);
 
 	// Every formula must have been released before the ifacts, since a formula
 	// holds a reference to its form

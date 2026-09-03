@@ -14,6 +14,8 @@
 #include "kernel/Parameter.h"
 #include "lang/name.h"
 #include "storage/RelationBTree.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "testing/testing.h"
 
 
@@ -123,11 +125,11 @@ void testDispatchNegatedTerm(void)
 	TypeSignature typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2);
 	Relation const * relation = CreateRelation(termForm, 2, typeSignature);
 	RelationTable * table = CreateRelationTable(
-		relation, &btreeTableProvider, (index8[]) {0, 1});
+		relation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(relation);
 	Relation const * negatedRelation = CreateRelation(negatedTermForm, 2, typeSignature);
 	RelationTable * negatedTable = CreateRelationTable(
-		negatedRelation, &btreeTableProvider, (index8[]) {0, 1});
+		negatedRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(negatedRelation);
 	ASSERT_PTR_NOT_EQUAL(table, negatedTable)
 	ASSERT_PTR_EQUAL(RelationRegistryFind(termForm, 2, typeSignature), table->relation)
@@ -149,8 +151,8 @@ void testDispatchNegatedTerm(void)
 	ASSERT_PTR_EQUAL(service.relation, table->relation)
 	ReleaseFormula(query);
 
-	DropRelationTable(negatedTable);
-	DropRelationTable(table);
+	ReleaseRelationTable(negatedTable);
+	ReleaseRelationTable(table);
 	IFactRelease(negatedTermForm);
 	IFactRelease(termForm);
 }
@@ -183,9 +185,10 @@ void testDispatchFilterable(void)
 	ASSERT_TRUE(DispatchParameterizedQuery(
 		FormulaGetForm(query), parameters, arity, DISPATCH_MATCH_RELAXED, &service,
 		permutation, 0, 0, 0))
-	index8 listIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_LIST);
-	index8 positionIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_POSITION);
-	index8 elementIndex = CorePredicateRoleIndex(FORM_LIST_POSITION_ELEMENT, ROLE_ELEMENT);
+	index8 const * listRoleIndex = GetListRoleIndex();
+	index8 listIndex = listRoleIndex[LIST_ROLE_LIST];
+	index8 positionIndex = listRoleIndex[LIST_ROLE_POSITION];
+	index8 elementIndex = listRoleIndex[LIST_ROLE_ELEMENT];
 	ASSERT_UINT32_EQUAL(service.ioSignature.parameterIO[listIndex], PARAMETER_IN)
 	ASSERT_UINT32_EQUAL(service.ioSignature.parameterIO[positionIndex], PARAMETER_OUT)
 	ASSERT_UINT32_EQUAL(service.ioSignature.parameterIO[elementIndex], PARAMETER_OUT)
@@ -207,12 +210,12 @@ void testDispatchIterator(void)
 	Relation const * idRelation = CreateRelation(
 		termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2));
 	RelationTable * idTable = CreateRelationTable(
-		idRelation, &btreeTableProvider, (index8[]) {0, 1});
+		idRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(idRelation);
 	Relation const * intRelation = CreateRelation(
 		termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
 	RelationTable * intTable = CreateRelationTable(
-		intRelation, &btreeTableProvider, (index8[]) {0, 1});
+		intRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(intRelation);
 
 	// Only the service with two output parameters matches, so each table contributes
@@ -289,8 +292,8 @@ void testDispatchIterator(void)
 	DispatchIteratorEnd(&iterator);
 	ReleaseFormula(unknownQuery);
 
-	DropRelationTable(intTable);
-	DropRelationTable(idTable);
+	ReleaseRelationTable(intTable);
+	ReleaseRelationTable(idTable);
 	IFactRelease(termForm);
 }
 
@@ -298,6 +301,8 @@ void testDispatchIterator(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 	MathSetup();
 
 	ExecuteTest(testDispatchToService);
@@ -308,6 +313,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testDispatchFilterable);
 
 	FreeMachineServices();
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 	TestSummary();
 }

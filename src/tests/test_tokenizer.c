@@ -4,7 +4,8 @@
 #include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
-#include "kernel/list.h"
+#include "library/list.h"
+#include "library/string.h"
 #include "kernel/Parameter.h"
 #include "parser/Tokenizer.h"
 #include "testing/testing.h"
@@ -398,6 +399,8 @@ static void testSeparatorTerminatesToken(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	ListSetup();
+	StringSetup();
 
 	ExecuteTest(testStringBuffer);
 	ExecuteTest(testTokenizer);
@@ -408,6 +411,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCreateTokenFromCString);
 	ExecuteTest(testSeparatorTerminatesToken);
 
+	StringShutdown();
+	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();
