@@ -221,7 +221,7 @@ void testInvalidateServiceByNewRelation(void)
 	Relation const * intRelation = CreateRelation(
 		precSuccFixture.termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
 	RelationTable * intTable = CreateRelationTable(
-		intRelation, &btreeTableProvider, (index8[]) {0, 1});
+		intRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(intRelation);
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
 

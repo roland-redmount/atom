@@ -158,7 +158,7 @@ Operator * ServiceRegistryFind(Relation const * relation, IOSignature ioSignatur
  * See FreeMachineServices() in library/MachineService.c
  */
 bool ServiceRegistryFindByMachineProvider(
-	MachineProvider const * provider, Service * service);
+	MachineOperatorProvider const * provider, Service * service);
 
 /**
  * For debugging

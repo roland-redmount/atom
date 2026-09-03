@@ -45,7 +45,7 @@ static bool checkContradiction(FormulaView fact)
 }
 
 
-int AssertFact(FormulaView fact, RelationTableProvider const * provider)
+int AssertFact(FormulaView fact, StorageProvider const * provider)
 {
 	ASSERT(IsTermForm(fact.form));
 	ASSERT(!TypedTupleContainsVariable(fact.actors));
@@ -61,7 +61,7 @@ int AssertFact(FormulaView fact, RelationTableProvider const * provider)
 	RelationTable * table = RelationTableRegistryFind(relation);
 	bool tableWasCreated = false;
 	if(!table) {
-		table = CreateRelationTable(relation, provider ? provider : &btreeTableProvider, 0);
+		table = CreateRelationTable(relation, provider ? provider : &btreeStorageProvider, 0);
 		tableWasCreated = true;
 	}
 	ReleaseRelation(relation);
@@ -322,7 +322,7 @@ Atom CreateIFact(FormulaView formula)
 			RelationTable * table = RelationTableRegistryFind(ifactTuples[i].relation);
 			if(!table) {
 				// Create new relation table, use B-tree provider as default
-				table = CreateRelationTable(ifactTuples[i].relation, &btreeTableProvider, 0);
+				table = CreateRelationTable(ifactTuples[i].relation, &btreeStorageProvider, 0);
 				// keep track of the table so we can release it once all tuples have been added
 				previousTableWasCreated = true;
 				previousTable = table;

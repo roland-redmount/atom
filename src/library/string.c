@@ -131,7 +131,7 @@ void StringSetup(void)
 	stringRelation = CreateRelation(stringTermForm, 1, typeSignature);
 	IFactRelease(stringTermForm);
 
-	stringRelationTable = CreateRelationTable(stringRelation, &btreeTableProvider, 0);
+	stringRelationTable = CreateRelationTable(stringRelation, &btreeStorageProvider, 0);
 	ReleaseRelation(stringRelation);
 
 	// Store a pointer to the (string<ID) service, created by the B-tree provider.

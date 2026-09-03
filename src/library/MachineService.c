@@ -85,7 +85,7 @@ static void machineServiceFinalizeOperator(Operator * op)
  * One provider serves every machine service. The function to call for a specific
  * service is stored in the impl.machine.providerData field of each operator.
  */
-static MachineProvider machineServiceProvider = {
+static MachineOperatorProvider machineServiceProvider = {
 	// nothing to set up: the zeroed context is the state before the first call
 	.setupContext = 0,
 	.call = &machineServiceCall,

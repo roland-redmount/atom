@@ -1416,7 +1416,7 @@ static void recurseFinalizeContext(OperatorContext * context)
 
 static void machineSetupContext(OperatorContext * context)
 {
-	MachineProvider * provider = context->op->impl.machine.provider;
+	MachineOperatorProvider * provider = context->op->impl.machine.provider;
 	if(provider->setupContext)
 		provider->setupContext(context);
 }
@@ -1430,14 +1430,14 @@ static bool machineCall(OperatorContext * context)
 
 static void machineFinalizeContext(OperatorContext * context)
 {
-	MachineProvider * provider = context->op->impl.machine.provider;
+	MachineOperatorProvider * provider = context->op->impl.machine.provider;
 	if(provider->finalizeContext)
 		provider->finalizeContext(context);
 }
 
 
 Operator * CreateMachineOperator(
-	size8 nArguments, index8 const indexOrder[], MachineProvider * provider,
+	size8 nArguments, index8 const indexOrder[], MachineOperatorProvider * provider,
 	void * providerData, size32 contextSize)
 {
 	Operator * op = createOperator(OPERATOR_MACHINE, nArguments, contextSize);
@@ -1457,7 +1457,7 @@ Operator * CreateMachineOperator(
 
 static void teardownMachineOperator(Operator * op)
 {
-	MachineProvider * provider = op->impl.machine.provider;
+	MachineOperatorProvider * provider = op->impl.machine.provider;
 	if(provider->finalizeOperator)
 		provider->finalizeOperator(op);
 }
@@ -1592,13 +1592,15 @@ void CheckOperator(Operator * op)
 	if(op->nParents == 0) {
 		if(!op->relation)
 			teardownOperator(op);
-	
-		// TODO: A MACHINE operator may belong to a Service tied
-		// to a RelationTable which now becomes stale. If so we should call
-		// CheckRelationTable(), but this requires moving the RelationTable *
-		// pointer out of the service provider.
-		// if(op->type == OPERATOR_MACHINE)
-		// 	CheckRelationTable(op->relation);
+		else {
+			// A MACHINE operator may be attached to a PRIMITIVE Service for
+			// a RelationTable, which could now become stale.
+			if(op->type == OPERATOR_MACHINE) {
+				RelationTable * table = RelationTableRegistryFind(op->relation);
+				if(table)
+					CheckRelationTable(table);
+			}
+		}
 	}
 }
 

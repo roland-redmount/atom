@@ -15,9 +15,24 @@
  */
 static BTree * tableRegistry;
 
+/**
+ * Callback used by StorageProvider.createStorage()
+ */
+static void providerCreateOperatorCallback(
+	void * data, MachineOperatorProvider * operatorProvider, void * providerData, size32 contextSize,
+	IOSignature ioSignature)
+{
+	RelationTable * table = data;
+	Operator * op = CreateMachineOperator(
+		table->relation->nColumns, table->indexColumns, operatorProvider, providerData,
+		contextSize);
+	CreateService(
+		table->relation, ioSignature, op, SERVICE_PRIMITIVE);
+}
+
 
 RelationTable * CreateRelationTable(
-	Relation const * relation, RelationTableProvider const * provider, index8 const indexColumns[])
+	Relation const * relation, StorageProvider const * provider, index8 const indexColumns[])
 {
 	// The relation must not already exist in the registry
 	ASSERT(!RelationTableRegistryFind(relation))
@@ -40,12 +55,10 @@ RelationTable * CreateRelationTable(
 			table->indexColumns[i] = i;
 	}
 	// Call the storage provider to prepare storage for the table
-	table->storage = provider->createStorage(table);
+	table->storage = provider->createStorage(
+		table->indexColumns, relation->nColumns, table, providerCreateOperatorCallback);
 	// Add the relation table to the registry
 	ASSERT(BTreeInsert(tableRegistry, &table) == BTREE_INSERTED)
-	// Let the storage provider register its primitive services
-	provider->registerServices(table);
-
 	return table;
 }
 
@@ -111,7 +124,7 @@ static void removeTable(RelationTable * table)
 {
 	removePrimitiveServices(table);
 	ASSERT(BTreeDelete(tableRegistry, &table, 0) == BTREE_DELETED)
-	table->provider->free(table);
+	table->provider->free(table->storage);
 	ReleaseRelation(table->relation);
 	Free(table);
 }
@@ -135,7 +148,7 @@ void CheckRelationTable(RelationTable * table)
 byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)
 {
 	Relation const * relation = table->relation;
-	byte result = table->provider->addTuple(table, tuple, idPosition);
+	byte result = table->provider->addTuple(table->storage, tuple, idPosition);
 	if(result == TUPLE_ADDED) {
 		for(index8 i = 0; i < relation->nColumns; i++) {
 			if(i + 1 != idPosition)
@@ -148,22 +161,21 @@ byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint
 
 size32 RelationTableNRows(RelationTable const * table)
 {
-	return table->provider->numberOfTuples(table);
+	return table->provider->numberOfTuples(table->storage);
 }
 
 
 byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)
 {
 	Relation const * relation = table->relation;
-	byte result = table->provider->removeTuple(table, tuple, idPosition);
+	byte result = table->provider->removeTuple(table->storage, tuple, idPosition);
 	if(result == TUPLE_REMOVED) {
 		for(index32 i = 0; i < relation->nColumns; i++) {
 			if((i + 1) != idPosition)
 				ReleaseTypedAtom(CreateTypedAtom(relation->typeSignature.atomTypes[i], tuple[i]));
 		}
 	}
-	if(tableIsStale(table))
-		removeTable((RelationTable *) table);
+	CheckRelationTable((RelationTable *) table);
 	return result;
 }
 

@@ -10,14 +10,11 @@ typedef struct s_Operator Operator;
 typedef struct s_OperatorContext OperatorContext;
 
 /**
- * A machine provider is an implementation of a particular type of machine
+ * A MachineOperatorProvider is an implementation of a particular type of machine
  * operator, such as B-Tree relations or arithmetic functions.
- * One MachineProvider can provide the machine operators of several relations.
+ * One MachineOperatorProvider can provide the machine operators of several relations.
  */
- 
-typedef bool (*MachineProviderCall)(OperatorContext * context);
-
-typedef struct s_MachineProvider {
+typedef struct s_MachineOperatorProvider {
 	/**
 	 * Initialize the context data, such as an iterator structure.
 	 * This pointer may be 0 if the zeroed context data needs no initialization.
@@ -31,7 +28,7 @@ typedef struct s_MachineProvider {
 	 * If the various operators provided need different entry points, this function
 	 * is responsible for calling the relevant one.
 	 */
-	MachineProviderCall call;
+	bool (*call)(OperatorContext * context);
 
 	/**
 	 * Finalize an operator context after termination.
@@ -46,7 +43,7 @@ typedef struct s_MachineProvider {
 	 */
 	void (*finalizeOperator)(Operator * op);
 
-} MachineProvider;
+} MachineOperatorProvider;
 
 
 /**
@@ -293,7 +290,7 @@ struct s_Operator {
 		} filter;
 		// for OPERATOR_MACHINE
 		struct {
-			MachineProvider * provider;
+			MachineOperatorProvider * provider;
 			void * providerData;
 		} machine;
 	} impl;
@@ -329,7 +326,7 @@ Operator * CreatePermuteOperator(
  * The returned operator has zero references.
  */
 Operator * CreateMachineOperator(
-	size8 nArguments, index8 const indexOrder[], MachineProvider * provider,
+	size8 nArguments, index8 const indexOrder[], MachineOperatorProvider * provider,
 	void * providerData, size32 contextSize);
 
 /**

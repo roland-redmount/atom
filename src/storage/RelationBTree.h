@@ -26,8 +26,7 @@
 
 
 // TODO: replace this with a machine provider registry ...
-extern MachineProvider bTreeProvider;
-extern RelationTableProvider btreeTableProvider;
+extern StorageProvider btreeStorageProvider;
 
 // NOTE: "RelationBTree" sounds more like a B-tree of relations than a relation
 // backed by a B-tree ... rename to BTreeRelation ?

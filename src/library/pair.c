@@ -122,7 +122,7 @@ void PairSetup(void)
 	pairRelation = CreateRelation(pairTermForm, 3, typeSignature);
 	IFactRelease(pairTermForm);
 	
-	pairRelationTable = CreateRelationTable(pairRelation, &btreeTableProvider, pairTermRoleIndex);
+	pairRelationTable = CreateRelationTable(pairRelation, &btreeStorageProvider, pairTermRoleIndex);
 	ReleaseRelation(pairRelation);
 
 	// Store a pointer to the (pair<ID left>ID right<ID) service,

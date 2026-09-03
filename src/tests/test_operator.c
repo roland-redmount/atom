@@ -481,7 +481,7 @@ void testIndexOrder(void)
 		ASSERT_UINT32_EQUAL(joinOperator->indexOrder[i], expectedJoinOrder[i])
 
 	// An operator yielding at most one tuple has no index order
-	MachineProvider singleTupleProvider = {
+	MachineOperatorProvider singleTupleProvider = {
 		.setupContext = 0,
 		.call = 0,
 		.finalizeContext = 0,

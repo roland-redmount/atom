@@ -12,69 +12,10 @@
 #define RELATION_TABLE_H
 
 #include "kernel/operator.h"
+#include "kernel/Parameter.h"
 #include "kernel/Relation.h"
+#include "storage/StorageProvider.h"
 
-typedef struct s_RelationTable RelationTable;
-
-/**
- * Description of a relation storage provider, such as RelationBTree.
- * One provider may provide the storage of many relations, sharing the same callbacks.
- * Providers live under src/storage/, RelationBTree being the only one so far.
- *
- * Every hook receives the RelationTable, and so can read the column types and arity off
- * table->relation and the index column order off table->indexColumns. Only createStorage()
- * is called before table->storage is set.
- */
-typedef struct s_RelationTableProvider {
-
-	/**
-	 * Create storage for a new relation table.
-	 * The returned storage data pointer is assigned to the RelationTable.storage field,
-	 * and so is not yet readable from the table when this is called.
-	 * See also CreateRelationTable()
-	 */
-	void * (*createStorage)(RelationTable const * table);
-
-	/**
-	 * Register the primitive services available for this relation table. The provider should use
-	 * RelationTableAddService() to register each service.
-	 *
-	 * Required services:
-	 * 1) The all-input service is required for contradiction checking by AssertFact()
-	 * 2) The all-output service that enumerates every tuple is required by RelationDump(),
-	 *    and in order to generate FILTER services (table scanning)
-	 * 
-	 * NOTE: this could be folded into createStorage() ?
-	 */
-	void (*registerServices)(RelationTable * table);
-
-	/**
-	 * Add a tuple to storage.
-	 * The atom types are fixed, so providing an Atom array is sufficient.
-	 * If idPosition is > 0 it indicates the 1-based position of an identified
-	 * atom (the tuple is part of an ifact).
-	 */
-	byte (*addTuple)(RelationTable const * table, Atom const tuple[], uint8 idPosition);
-
-	/**
-	 * Remove a specific tuple from storage.
-	 * If the stored tuple had an identified atom, it must match the given idPosition,
-	 * or an error occurs.
-	 */
-	byte (*removeTuple)(RelationTable const * table, Atom const tuple[], uint8 idPosition);
-
-	/**
-	 * Return number of tuples in the relation table
-	 */
-	size32 (*numberOfTuples)(RelationTable const * table);
-
-	/**
-	 * Free the storage of a relation table, deallocating the underlying data structures.
-	 * The table is empty by this point; see DropRelationTable().
-	 */
-	void (*free)(RelationTable const * table);
-
-} RelationTableProvider;
 
 // result codes for addTuple()
 #define TUPLE_ADDED			1
@@ -93,7 +34,7 @@ typedef struct s_RelationTableProvider {
  * must acquire a reference to prevent premature deallocation of the RelationTable and
  * the underlying storage.
  */
-struct s_RelationTable {
+typedef struct s_RelationTable {
 	// NOTE: the Relation points here is merely used to find the RelationTable.
 	// The storage does not need to know the Relation; we could have multiple synonym
 	// term forms for one stored table. Storage also doesn't need to know the atom types.
@@ -108,12 +49,11 @@ struct s_RelationTable {
 	// fast, but (_ _ @element) may be slow.
 	index8 indexColumns[RELATION_MAX_ARITY];
 
-	// The storage provider for this relation table
-	RelationTableProvider const * provider;
-	void * storage;			// any implementation-dependent storage data
+	StorageProvider const * provider;
+	void * storage;			// implementation-dependent data, allocated by the StorageProvider
 
 	size32 referenceCount;
-};
+} RelationTable;
 
 
 /**
@@ -130,7 +70,7 @@ struct s_RelationTable {
  * RelationTable.indexColumns. Passing 0 gives the identity order.
  */
 RelationTable * CreateRelationTable(
-	Relation const * relation, RelationTableProvider const * provider, index8 const indexColumns[]);
+	Relation const * relation, StorageProvider const * provider, index8 const indexColumns[]);
 
 /**
  * Acquire a reference to a relation table.

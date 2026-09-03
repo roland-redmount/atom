@@ -366,8 +366,8 @@ void RemoveAllCompiledServices(void)
 			}
 		}
 		BTreeIteratorEnd(&iterator);
-		if(service.relation)
-			removeService(service);
+		ASSERT(service.relation)
+		removeService(service);
 		// restart from the beginning, cannot iterate while modifying
 	}
 }
@@ -444,7 +444,7 @@ Operator * ServiceRegistryFind(Relation const * relation, IOSignature ioSignatur
 
 
 bool ServiceRegistryFindByMachineProvider(
-	MachineProvider const * provider, Service * service)
+	MachineOperatorProvider const * provider, Service * service)
 {
 	bool found = false;
 	// NOTE: this is a full table scan

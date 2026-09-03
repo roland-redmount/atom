@@ -51,7 +51,7 @@ static void setupFixture(void)
 
 
 // A machine operator has to be given a provider, though nothing here evaluates one
-static MachineProvider dummyProvider = {
+static MachineOperatorProvider dummyProvider = {
 	.setupContext = 0,
 	.call = 0,
 	.finalizeContext = 0,
@@ -180,7 +180,7 @@ void testInvalidateOnPrimitiveService(void)
 		(byte[]) {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation const * storedRelation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
 	RelationTable * storedTable = CreateRelationTable(
-		storedRelation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
+		storedRelation, &btreeStorageProvider, (index8[]) {0, 1, 2, 3});
 	ReleaseRelation(storedRelation);
 	// The above compiled service should now be invalidated
 	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
@@ -249,7 +249,7 @@ void testServicesWithSharedOperator(void)
 		(byte[]) {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation const * relation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
 	RelationTable * table = CreateRelationTable(
-		relation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
+		relation, &btreeStorageProvider, (index8[]) {0, 1, 2, 3});
 	ReleaseRelation(relation);
 	
 	// The RelationTable has 1 reference (ours)
@@ -290,7 +290,7 @@ void testDropTableAfterSharedOperator(void)
 		(byte[]) {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation const * relation = CreateRelation(fixture.form, EXAMPLE_FORM_ARITY, storedTypes);
 	RelationTable * table = CreateRelationTable(
-		relation, &btreeTableProvider, (index8[]) {0, 1, 2, 3});
+		relation, &btreeStorageProvider, (index8[]) {0, 1, 2, 3});
 	ReleaseRelation(relation);
 
 	Service compiledService = createServiceSharedOperator(table->relation);
