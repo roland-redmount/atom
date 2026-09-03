@@ -563,8 +563,13 @@ void * Allocate(size32 allocSize)
 
 	BlockOffset block = allocateBlock(requiredLogSize);
 	ASSERT(block != NULL_OFFSET)
-	allocator.nBytesFree -= (1 << requiredLogSize);
-	return offsetToAllocPointer(block);
+	size32 blockSizeBytes = 1 << requiredLogSize;
+	allocator.nBytesFree -= blockSizeBytes;
+
+	void * memory = offsetToAllocPointer(block);
+	// Clear the memory block, except for the block header
+	SetMemory(memory, blockSizeBytes - ALLOC_HEADER_SIZE, 0);
+	return memory;
 }
 
 #ifdef DEBUG_ALLOCATE
@@ -665,7 +670,8 @@ void * Reallocate(void * memory, size32 newSize)
 	size8 logSize = getLogBlockSize(block);
 	size8 newLogSize = requiredBlockLogSize(newSize);
 	if(newLogSize <= logSize) {
-		// new allocation fits in same block
+		// New allocation fits in same block.
+		// The additional bytes were cleared by the original Allocate() call.
 		return memory;
 	}
 	else {

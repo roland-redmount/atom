@@ -10,7 +10,7 @@ void CloseAllocator(void);
 /**
  * Allocate a memory block of at least the given size (in bytes).
  * The actual size can be found using GetAllocatedSize().
- * The returned memory is not cleared.
+ * The returned memory is cleared.
  */
 
 #ifdef DEBUG_ALLOCATE
@@ -23,7 +23,7 @@ void * Allocate(size32 size);
 /**
  * Reallocate the given memory block fit the the new size, if necessary.
  * Returns a pointer to the new memory block.
- * If the memory block was reallocated, it is moved and the the previous
+ * If the memory block was reallocated, it is moved and the previous
  * pointer is invalid; if not, the memory pointer is returned.
  * If the given memory pointer is null, this is equivalent to Allocate().
  * 

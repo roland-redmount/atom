@@ -80,20 +80,22 @@ static void * indexToAddress(PoolPage * page, index16 index)
 void * PoolAllocate(void * pool)
 {
 	PoolPage * firstPage = pool;
+	size32 itemSize = firstPage->itemSize;
+	void * memory;
 	if(firstPage->firstFreeItem) {
 		// remove item from free list
 		FreeItem * item = firstPage->firstFreeItem;
 		firstPage->firstFreeItem = item->next;
 		if(item->next)
 			item->next->previous = 0;
-		return item;
+		memory = item;
 	}
 	else {
 		// Nothing on the free list, so append to last page
 		PoolPage * page = firstPage->lastPage;
 		if(pageIsFull(page)) {
 			// allocate new page
-			PoolPage * newPage = createPage(page->itemSize);
+			PoolPage * newPage = createPage(itemSize);
 			newPage->previousPage = page;
 			newPage->nextPage = 0;
 			page->nextPage = newPage;
@@ -101,10 +103,11 @@ void * PoolAllocate(void * pool)
 			page = newPage;
 		}
 		// page now has at least one free item
-		void * item = indexToAddress(page, page->pageNItems);
+		memory = indexToAddress(page, page->pageNItems);
 		page->pageNItems++;
-		return item;
 	}
+	SetMemory(memory, itemSize, 0);
+	return memory;
 }
 
 

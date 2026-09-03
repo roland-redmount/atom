@@ -23,7 +23,7 @@ void * CreatePool(size16 itemSize);
 void FreePool(void * pool);
 
 /**
- * Allocate one item
+ * Allocate one item. The returned memory is cleared.
  */
 void * PoolAllocate(void * pool);
 
