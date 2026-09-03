@@ -46,7 +46,6 @@ RelationTable * CreateRelationTable(
 	table->referenceCount = 1;		// the caller owns this reference
 
 	// setup index column array
-	SetMemory(&table->indexColumns, RELATION_MAX_ARITY, 0);
 	if(indexColumns)
 		CopyMemory(indexColumns, table->indexColumns, relation->nColumns);
 	else {

@@ -280,7 +280,6 @@ void IFactBeginConjunction(IFactDraft * draft, RelationTable * table, index8 idC
 		draft->header.nConjunctions * sizeof(IFactConjunction)
 	);
 	IFactConjunction * conjunction = lastConjunction(&(draft->header));
-	SetMemory(conjunction, sizeof(IFactConjunction), 0);
 	conjunction->table = table;
 	AcquireRelationTable(table);		// ensure the table is valid until IFactEnd()
 	conjunction->idColumn = idColumn;

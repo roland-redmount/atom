@@ -147,6 +147,7 @@ void InitializeThing(Thing * thing, ...)
 }
 ```
 
+Heap allocation with `Allocate()` always returns cleared (zeroed) memory; so do `PoolAllocate()` and `AllocatePage()`. Therefore, zero initialization is redundant and should be avoided. It it recommended to design data structures so that zero values is a valid default, as far as possible; then, simply allocating a structure with `Thing * thing = Allocate(sizeof(Thing))` gives a valid data structure.
 
 ## Use of const
 

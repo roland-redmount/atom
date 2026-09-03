@@ -28,7 +28,6 @@ Relation const * CreateRelationBootstrap(
 	ASSERT(nColumns <= RELATION_MAX_ARITY)
 	// NOTE: pool allocation would be preferable
 	Relation * relation = Allocate(sizeof(Relation));
-	SetMemory(relation, sizeof(Relation), 0);
 	relation->termForm = termForm;
 	IFactAcquire(termForm);
 	relation->predicateForm = predicateForm;

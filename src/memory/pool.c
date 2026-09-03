@@ -31,8 +31,6 @@ static PoolPage * createPage(size16 itemSize)
 
 	// item size must be at least 16 bytes to fit two pointers for free items
 	page->itemSize = itemSize >= 16 ? itemSize : 16;
-	page->pageNItems = 0;
-	page->firstFreeItem = 0;
 	return page;
 }
 
@@ -41,8 +39,6 @@ void * CreatePool(size16 itemSize)
 {
 	ASSERT(itemSize < MAX_ITEM_SIZE)
 	PoolPage * page = createPage(itemSize);
-	page->previousPage = 0;
-	page->nextPage = 0;
 	page->lastPage = page;
 	return page;
 }
@@ -97,7 +93,6 @@ void * PoolAllocate(void * pool)
 			// allocate new page
 			PoolPage * newPage = createPage(itemSize);
 			newPage->previousPage = page;
-			newPage->nextPage = 0;
 			page->nextPage = newPage;
 			firstPage->lastPage = newPage;
 			page = newPage;

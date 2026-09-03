@@ -131,9 +131,6 @@ MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * 
 	relation->termForm = queryTermForm;
 	relation->tuple = CreateTypedTuple(arity);
 	relation->impl.concat.queryActors = queryActors;
-	relation->impl.concat.context = 0;
-	relation->impl.concat.isExhausted = false;
-	relation->impl.concat.nServices = 0;
 
 	// The arguments, query parameters and permutation arrays share one allocation, the
 	// atoms first so that they keep the alignment of an Atom
@@ -149,8 +146,6 @@ MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * 
 		relation->impl.concat.variableMap = Allocate(arity * sizeof(index8));
 		CopyMemory(variableMap, relation->impl.concat.variableMap, arity * sizeof(index8));
 	}
-	else
-		relation->impl.concat.variableMap = 0;
 
 	ActorsToParameters(queryActors, relation->impl.concat.queryParameters);
 	DispatchIterate(
