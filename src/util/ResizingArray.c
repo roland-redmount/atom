@@ -30,6 +30,16 @@ void * ResizingArrayGetElement(ResizingArray const * array, index32 index)
 }
 
 
+bool ResizingArrayContainsElement(ResizingArray const * array, const void * element)
+{
+	for(index32 i = 0; i < array->nElements; i++) {
+		if(CompareMemory(ResizingArrayGetElement(array, i), element, array->elementSize) == 0)
+			return true;
+	}
+	return false;
+}
+
+
 size32 ResizingArrayNElements(const ResizingArray * array)
 {
 	return array->nElements;

@@ -138,11 +138,22 @@ RelationTable * CreateRelationTable(
 void AcquireRelationTable(RelationTable * table);
 
 /**
- * Remove one reference to a relation table. When the last reference is removed
- * AND the relation holds no tuples, the RelationTable is removed. A caller can therefore
- * release its reference to a table to render it "transient", removed when no longer needed.
+ * Remove one reference to a relation table, and call CheckRelationTable()
+ * to remove the table if this causes it to become stale.
+ * A caller can release its reference to a table to render it "transient",
+ * so that it will automatically be removed when no longer needed.
  */
 void ReleaseRelationTable(RelationTable * table);
+
+/**
+ * Check whether a relation table is stale, and if so remove it.
+ * A relation table is stalte if
+ *   (1) it has zero references,
+ *   (2) it contains zero rows, and
+ *   (3) no service depends on any of its primitive services.
+ * Only certain kernel functions need to call this function.
+ */
+void CheckRelationTable(RelationTable * table);
 
 /**
  * Return the number of rows in a relation table

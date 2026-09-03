@@ -118,9 +118,9 @@ size32 ServiceRegistryNCompiled(void);
 void ServiceRegistryInvalidateByTermForm(Atom termForm);
 
 /**
- * Remove all compiled services, whatever its form; see ServiceRegistryInvalidateTermForm().
+ * Remove all compiled services from the registry.
  */
-void ServiceRegistryInvalidateAll(void);
+void RemoveAllCompiledServices(void);
 
 
 /**

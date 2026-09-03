@@ -31,6 +31,10 @@ void FreeResizingArray(ResizingArray * array);
  */
 void * ResizingArrayGetMemory(ResizingArray const * array);
 
+/**
+ * Test if the array contains the given element. This requires scanning the array.
+ */
+bool ResizingArrayContainsElement(ResizingArray const * array, const void * element);
 
 /**
  * Get pointer to a specific element in the array.

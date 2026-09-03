@@ -1,6 +1,7 @@
 
 #include "btree/btree.h"
 #include "kernel/operator.h"
+#include "kernel/RelationTable.h"
 #include "kernel/tuple.h"
 #include "memory/allocator.h"
 #include "util/ResizingArray.h"
@@ -38,13 +39,13 @@ static Operator * createOperator(enum OperatorType type, size8 nArguments, size3
 }
 
 
-static void increaseNParents(Operator * op)
+static void addParent(Operator * op)
 {
 	op->nParents++;
 }
 
 
-static void decreaseNParents(Operator * op)
+static void removeParent(Operator * op)
 {
 	ASSERT(op->nParents > 0)
 	op->nParents--;
@@ -248,7 +249,7 @@ Operator * CreatePermuteOperator(
 	ASSERT(nArguments + nConstants <= 256)
 	Operator * op = createOperator(OPERATOR_PERMUTE, nArguments, sizeof(PermuteContext));
 	op->impl.permute.childOperator = childOperator;
-	increaseNParents(childOperator);
+	addParent(childOperator);
 
 	op->impl.permute.nConstants = nConstants;
 	if(nConstants) {
@@ -333,7 +334,7 @@ static bool permuteCall(OperatorContext * context)
 static void teardownPermuteOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_PERMUTE)
-	decreaseNParents(op->impl.permute.childOperator);
+	removeParent(op->impl.permute.childOperator);
 	if(op->impl.permute.nConstants) {
 		TupleRelease(
 			op->impl.permute.constantTypes,
@@ -453,7 +454,7 @@ static bool constrainCall(OperatorContext * context)
 static void teardownConstrainOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_CONSTRAIN)
-	decreaseNParents(op->impl.constrain.childOperator);
+	removeParent(op->impl.constrain.childOperator);
 	Free(op->impl.constrain.argumentMap);
 }
 
@@ -482,7 +483,7 @@ Operator * CreateFilterOperator(
 	size8 nArguments = childOperator->nArguments;
 	Operator * op = createOperator(OPERATOR_FILTER, nArguments, sizeof(FilterContext));
 	op->impl.filter.childOperator = childOperator;
-	increaseNParents(childOperator);
+	addParent(childOperator);
 	setupInputArguments(
 		&(op->impl.filter.inputArguments), &(op->impl.filter.nInputs),
 		inputArguments, nInputs, nArguments);
@@ -539,7 +540,7 @@ static bool filterCall(OperatorContext * context)
 static void teardownFilterOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_FILTER)
-	decreaseNParents(op->impl.filter.childOperator);
+	removeParent(op->impl.filter.childOperator);
 	Free(op->impl.filter.inputArguments);
 }
 
@@ -586,9 +587,9 @@ Operator * CreateJoinOperator(
 {
 	Operator * op = createOperator(OPERATOR_JOIN, nArguments, sizeof(JoinContext));
 	op->impl.join.left = leftChild;
-	increaseNParents(leftChild);
+	addParent(leftChild);
 	op->impl.join.right = rightChild;
-	increaseNParents(rightChild);
+	addParent(rightChild);
 	op->impl.join.leftMap = copyJoinArgumentMap(leftMap, leftChild->nArguments, nArguments);
 	op->impl.join.rightMap = copyJoinArgumentMap(rightMap, rightChild->nArguments, nArguments);
 
@@ -645,8 +646,8 @@ Operator * CreateJoinOperator(
 static void teardownJoinOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_JOIN)
-	decreaseNParents(op->impl.join.left);
-	decreaseNParents(op->impl.join.right);
+	removeParent(op->impl.join.left);
+	removeParent(op->impl.join.right);
 	Free(op->impl.join.leftMap);
 	Free(op->impl.join.rightMap);
 }
@@ -793,9 +794,9 @@ Operator * CreateUnionOperator(Operator * first, Operator * second)
 	allocateIndexOrder(op);
 	CopyMemory(indexOrder, op->indexOrder, first->nArguments);
 	op->impl._union.first = first;
-	increaseNParents(first);
+	addParent(first);
 	op->impl._union.second = second;
-	increaseNParents(second);
+	addParent(second);
 	return op;
 }
 
@@ -803,8 +804,8 @@ Operator * CreateUnionOperator(Operator * first, Operator * second)
 static void teardownUnionOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_UNION)
-	decreaseNParents(op->impl._union.first);
-	decreaseNParents(op->impl._union.second);
+	removeParent(op->impl._union.first);
+	removeParent(op->impl._union.second);
 }
 
 
@@ -935,7 +936,7 @@ Operator * CreateProjectOperator(
 	ASSERT(nArguments <= childOperator->nArguments)
 	Operator * op = createOperator(OPERATOR_PROJECT, nArguments, sizeof(ProjectContext));
 	op->impl.project.childOperator = childOperator;
-	increaseNParents(childOperator);
+	addParent(childOperator);
 	
 #ifdef DEBUG
 	// Each kept argument must name a distinct child argument
@@ -1027,7 +1028,7 @@ static void projectFinalizeContext(OperatorContext * context)
 static void teardownProjectOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_PROJECT)
-	decreaseNParents(op->impl.project.childOperator);
+	removeParent(op->impl.project.childOperator);
 	Free(op->impl.project.argumentMap);
 }
 
@@ -1107,7 +1108,7 @@ Operator * CreateFixpointOperator(
 	size8 nArguments = childOperator->nArguments;
 	Operator * op = createOperator(OPERATOR_FIXPOINT, nArguments, sizeof(FixpointContext));
 	op->impl.fixpoint.childOperator = childOperator;
-	increaseNParents(childOperator);
+	addParent(childOperator);
 	setupInputArguments(
 		&(op->impl.fixpoint.inputArguments), &(op->impl.fixpoint.nInputs),
 		inputArguments, nInputs, nArguments);
@@ -1136,7 +1137,7 @@ Operator * CreateRecurseOperator(
 static void teardownFixpointOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_FIXPOINT)
-	decreaseNParents(op->impl.fixpoint.childOperator);
+	removeParent(op->impl.fixpoint.childOperator);
 	if(op->impl.fixpoint.inputArguments)
 		Free(op->impl.fixpoint.inputArguments);
 }
@@ -1571,20 +1572,6 @@ static void teardownOperator(Operator * op)
 }
 
 
-// static void AcquireOperator(Operator * op)
-// {
-// 	op->nParents++;
-// }
-
-
-// static void ReleaseOperator(Operator * op)
-// {
-// 	ASSERT(op->nParents > 0)
-// 	op->nParents--;
-// 	CheckOperator(op);
-// }
-
-
 void AttachOperator(Operator * op, Relation const * relation)
 {
 	ASSERT(!op->relation)
@@ -1602,8 +1589,17 @@ void DetachOperator(Operator * op)
 
 void CheckOperator(Operator * op)
 {
-	if(!op->relation && op->nParents == 0)
-		teardownOperator(op);	
+	if(op->nParents == 0) {
+		if(!op->relation)
+			teardownOperator(op);
+	
+		// TODO: A MACHINE operator may belong to a Service tied
+		// to a RelationTable which now becomes stale. If so we should call
+		// CheckRelationTable(), but this requires moving the RelationTable *
+		// pointer out of the service provider.
+		// if(op->type == OPERATOR_MACHINE)
+		// 	CheckRelationTable(op->relation);
+	}
 }
 
 

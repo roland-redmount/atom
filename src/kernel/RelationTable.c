@@ -120,9 +120,16 @@ static void removeTable(RelationTable * table)
 void ReleaseRelationTable(RelationTable * table)
 {
 	table->referenceCount--;
+	CheckRelationTable(table);
+}
+
+
+void CheckRelationTable(RelationTable * table)
+{
 	if(tableIsStale(table))
 		removeTable(table);
 }
+
 
 
 byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)

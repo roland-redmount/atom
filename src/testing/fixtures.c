@@ -95,7 +95,10 @@ void TeardownRelationFixture(RelationFixture * fixture)
 	SetMemory(fixture, sizeof(RelationFixture), 0);
 }
 
-
+/**
+ * Setup the a precededent-successor relation (prec succ) describing a
+ * graph with two components, one of which has a cycle b -> c -> b.
+ */
 void SetupPrecSuccFixture(RelationFixture * fixture)
 {
 	SetupRelationFixture(fixture, (char const * []) {"prec", "succ"}, 2);

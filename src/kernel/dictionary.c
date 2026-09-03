@@ -164,7 +164,7 @@ void DictionaryRemoveClause(DictionaryEntry * entry)
 void DictionaryRemoveAll(void)
 {
 	BTreeClear(dictionary.btree);
-	ServiceRegistryInvalidateAll();
+	RemoveAllCompiledServices();
 }
 
 

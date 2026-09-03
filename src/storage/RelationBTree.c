@@ -307,7 +307,6 @@ static void btreeFinalizeContext(OperatorContext * context)
 static void finalizeBTreeOperator(Operator * op)
 {
 	RelationBTreeProviderData * providerData = op->impl.machine.providerData;
-	ReleaseRelationTable(providerData->table);
 	Free(providerData);
 }
 
