@@ -16,6 +16,11 @@
 #include "util/hashing.h"
 #include "util/sort.h"
 
+// NOTE: These are currently needed for printing. See PrintTypedAtom()
+#include "library/list.h"
+#include "library/pair.h"
+#include "library/string.h"
+
 
 TypedAtom invalidAtom = {0};
 
@@ -161,22 +166,16 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		// string representations, so there is no straightforward switch/case.
 		// Here we somewhat arbitrarily try the "most specific" type predicate first
 		
-		// TODO: move these to the library sources
-		
-		// if(IsPair(typedAtom.atom)) {
-		// 	if(IsQuote(typedAtom.atom))
-		// 		PrintQuoted(typedAtom.atom);
-		// 	else
-		// 		PrintPair(typedAtom.atom);
-		// }
-		// if(IsList(typedAtom.atom)) {
-		// 	if(IsString(typedAtom.atom))
-		// 		PrintString(typedAtom.atom);
-		// 	else
-		// 		PrintList(typedAtom.atom);
-		// }
-
-		if(IsMultiset(typedAtom.atom)) {
+		if(IsPair(typedAtom.atom)) {
+			PrintPair(typedAtom.atom);
+		}
+		else if(IsList(typedAtom.atom)) {
+			if(IsString(typedAtom.atom))
+				PrintString(typedAtom.atom);
+			else
+				PrintList(typedAtom.atom);
+		}
+		else if(IsMultiset(typedAtom.atom)) {
 			if(IsPredicateForm(typedAtom.atom))
 				PrintPredicateForm(typedAtom.atom);
 			else if(IsClauseForm(typedAtom.atom))

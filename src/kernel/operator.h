@@ -64,7 +64,7 @@ typedef struct s_MachineOperatorProvider {
  * (without materializing the entire union relation), and could in the future allow
  * streaming PROJECT or merge JOIN operators.
  *
- * The relational operators copute their index order from their children; only
+ * The relational operators compute their index order from their children; only
  * MACHINE operators specify index order explicitly. Correctness of index order declared
  * by a MACHINE operator cannot be verified statically; it is the responsibility of whoever
  * implements the machine provider to produce correctly ordered relations. In DEBUG

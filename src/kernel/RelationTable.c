@@ -85,9 +85,6 @@ void AcquireRelationTable(RelationTable * table)
  */
 static void removePrimitiveServices(RelationTable * table)
 {
-	// TODO: here we must reset the iterator after every removal,
-	// since RemoveService() alters the service registry B-tree
-	// and invalidates any pointers obtained. See CreateService()
 	Service const * service;
 	do {
 		ServiceIterator iterator;
@@ -100,6 +97,7 @@ static void removePrimitiveServices(RelationTable * table)
 				break;
 			}
 		}
+		// Close the iterator, since RemoveService() alters the service registry B-tree
 		ServiceIteratorEnd(&iterator);
 		if(service)
 			RemoveService(service->relation, service->op);
@@ -209,8 +207,6 @@ static int8 btreeCompareTables(void const * item, void const * itemOrKey, size32
 
 void SetupRelationTableRegistry(void)
 {
-	// The registry holds no reference to a table, and so has no free-item callback:
-	// a table removes itself from the registry when it is dropped.
 	tableRegistry = BTreeCreate(sizeof(RelationTable *), btreeCompareTables, 0);
 }
 
@@ -223,7 +219,7 @@ void FreeRelationTableRegistry(void)
 
 RelationTable * RelationTableRegistryFind(Relation const * relation)
 {
-	// the B-tree item is a pointer to a table, so the key must be one too
+	// the B-tree item is a RelationTable * pointer
 	RelationTable key = {.relation = relation};
 	RelationTable * keyPtr = &key;
 	RelationTable ** tablePtr = BTreePeekItem(tableRegistry, &keyPtr);

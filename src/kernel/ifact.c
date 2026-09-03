@@ -585,7 +585,7 @@ void IFactPrint(Atom atom)
 {
 	IFactHeader * header = peekIFactHeader(atom.hash);
 	ASSERT(header)
-	PrintF("ID %llx (%llu) refCount = %u", atom.hash, atom.hash, header->refCount);
+	PrintF("ID(..%x)", atom.hash & 0xFFFF);
 }
 
 

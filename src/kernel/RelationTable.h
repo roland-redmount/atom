@@ -1,6 +1,7 @@
 /**
- * A RelationTable keeps track of the tuple storage of one Relation, and provides the interface
- * for mutating the relation. Reading from a relation is done by services; see ServiceRegistry.h.
+ * A RelationTable represents the tuple storage of one Relation, implemented by a StorageProvider,
+ * and provides the interface for mutating (writing to) the relation.
+ * Reading from a relation is done by services; see ServiceRegistry.h.
  * Computed relations do not have a RelationTable.
  *
  * NOTE: in the future, we want to be able to hot-load implementations into a running atom
@@ -27,26 +28,19 @@
 #define TUPLE_PROTECTED		3
 
 
-/**
- * The tuple storage of one relation, held by a storage provider.
- *
- * A RelationTable is reference counted. A machine operator (or any code) reading from storage
- * must acquire a reference to prevent premature deallocation of the RelationTable and
- * the underlying storage.
- */
 typedef struct s_RelationTable {
 	// NOTE: the Relation points here is merely used to find the RelationTable.
-	// The storage does not need to know the Relation; we could have multiple synonym
-	// term forms for one stored table. Storage also doesn't need to know the atom types.
 	Relation const * relation;
 
-	// Desired order of index columns, so that tuples are effectively ordered
-	// lexicographically by indexColumns[0], ..., indexColumns[nColumns-1]. Hence, lookup
-	// should be fast when leading columns are specified in this order, while out-of-order
-	// columns may lead to table scanning. For example, a relation with canonical order
-	// (element list position) and indexColumns = {1, 0, 2} will be ordered as
-	// (list position element), so that queries (@list _ _) and (@list @position _) are
-	// fast, but (_ _ @element) may be slow.
+	/*
+	 * The order of index columns. The stored tuples will be ordered  lexicographically by
+	 * indexColumns[0], ..., indexColumns[nColumns-1]. Hence, lookup should be fast when
+	 * leading columns are specified in this order, while out-of-order
+	 * columns may lead to table scanning.
+	 * For example, a relation with canonical order (element list position) and
+	 * indexColumns = {1, 2, 0} will be ordered first by list, then by position, then by element;
+	 * queries (@list _ _) and (@list @position _) should be fast, but (_ _ @element) may be slow.
+	 */
 	index8 indexColumns[RELATION_MAX_ARITY];
 
 	StorageProvider const * provider;
@@ -61,8 +55,7 @@ typedef struct s_RelationTable {
  * The RelationTable acquires the given Relation.
  * 
  * Storage for the new RelationTable is created using the specified storage provider,
- * which also registers primitive services.
- * TODO: I think the storage provider should only create Operators, not register services.
+ * which also provides operators for primitive services.
  * 
  * The caller acquires a reference to the returned RelationTable.
  *
@@ -94,7 +87,7 @@ void ReleaseRelationTable(RelationTable * table);
 
 /**
  * Check whether a relation table is stale, and if so remove it.
- * A relation table is stalte if
+ * A relation table is stale if
  *   (1) it has zero references,
  *   (2) it contains zero rows, and
  *   (3) no service depends on any of its primitive services.
@@ -124,7 +117,7 @@ byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint
 byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
 
 /**
- * Setup an empty relation table registry. Called during bootstrapping only.
+ * Setup an empty relation table registry. Called during kernel bootstrapping only.
  */
 void SetupRelationTableRegistry(void);
 

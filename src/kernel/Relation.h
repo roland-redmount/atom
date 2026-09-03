@@ -113,13 +113,6 @@ void AcquireRelation(Relation const * relation);
 void ReleaseRelation(Relation const * relation);
 
 /**
- * Explicitly remove a Relation, its RelationTable (storage) and all its services.
- * This would be used for cleanup. Not sure if this is ever needed.
- */
-void DropRelation(Relation const * relation);
-
-
-/**
  * Release the references this relation holds to its term form and predicate form,
  * without releasing the relation.
  *

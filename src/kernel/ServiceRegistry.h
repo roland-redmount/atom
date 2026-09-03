@@ -46,10 +46,9 @@ typedef struct s_Service {
 void SetupServiceRegistry(void);
 
 /**
- * Create a new service wiht the given signature and Operator, adding it to
- * the service registry. Acquires a reference to both Relation.
- * Takes ownership of the operator.
- * Returns a copy of the created service.
+ * Create a new service with the given signature and Operator, adding it to
+ * the service registry. Acquires a reference to the Relation and attaches the new Service
+ * to the operator. Returns a copy of the created service.
  * 
  * NOTE: For services whose form contain repeated roles, such as `(a b b)`,
  * the signature must be unique under form permutation: for example, the two services
@@ -65,7 +64,7 @@ void SetupServiceRegistry(void);
  * that pointers are valid until the Service is removed.
  * 
  * NOTE: kind should always be SERVICE_COMPILED, except for primitive services that are
- * created by CreateRelationTable. 
+ * created by CreateRelationTable. We could perhaps remove the kind argument.
  */
 Service CreateService(
 	Relation const * relation, IOSignature ioSignature, Operator * op,

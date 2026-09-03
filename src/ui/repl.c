@@ -16,6 +16,7 @@
 #include "library/MachineService.h"
 #include "library/list.h"
 #include "library/math.h"
+#include "library/pair.h"
 #include "library/string.h"
 #include "parser/FormulaBuilder.h"
 #include "platform.h"
@@ -279,6 +280,7 @@ int main(int argc, char * argv[])
 {
 	KernelInitialize();
 	ListSetup();
+	PairSetup();
 	StringSetup();
 	MathSetup();
 	printBanner();
