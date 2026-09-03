@@ -298,6 +298,9 @@ void testCreateIFactTwoIdColumns(void)
 
 	// Releasing the atom retracts both facts
 	IFactRelease(ifact);
+	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 0)
+	// Cleanup any generated services
+	RemoveAllCompiledServices();
 	// The (pair other)
 	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(sameFormTerm), 2, typeSignature))
 
@@ -428,6 +431,8 @@ void testCreateIFactIdColumnNotFirst(void)
 	TypedAtom firstActor = TypedTupleGetElement(FormulaGetActors(term), 0);
 	ASSERT_FALSE(SameTypedAtoms(firstActor, generatorAtom))
 
+	// CreateIFact() here creates a COMPILED service using a FILTER operator
+	// to find its identifying fact tuples
 	Atom ifact = CreateIFact(FormulaGetView(term));
 	ASSERT_TRUE(ifact.hash != 0)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
@@ -441,6 +446,8 @@ void testCreateIFactIdColumnNotFirst(void)
 	IFactRelease(sameIFact);
 	IFactRelease(ifact);
 	ReleaseFormula(term);
+	// Clean up the compiled service
+	RemoveAllCompiledServices();
 }
 
 

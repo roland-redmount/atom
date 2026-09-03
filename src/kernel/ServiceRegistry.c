@@ -233,10 +233,12 @@ Service CreateService(
 
 	switch(kind) {
 	case SERVICE_COMPILED:
+		ASSERT(op->type != OPERATOR_MACHINE)
 		nCompiledServices++;
 		break;
 
 	case SERVICE_PRIMITIVE:
+		ASSERT(op->type == OPERATOR_MACHINE)
 		// A query of this term form may now have one more relation to match, so
 		// whatever was compiled for it is incomplete.
 		// QUESTION: the invalidation scope seems to broad: wouldn't it be enough to invalidate

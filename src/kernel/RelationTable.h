@@ -73,6 +73,13 @@ RelationTable * CreateRelationTable(
 	Relation const * relation, StorageProvider const * provider, index8 const indexColumns[]);
 
 /**
+ * Find a relation table, or create one with the given storage provider if it does not exist.
+ * If created, the table's indexColumns will be set to 0 (identity order).
+ * The caller obtains a reference to the table in either case.
+ */
+RelationTable * FindOrCreateRelationTable(Relation const * relation, StorageProvider const * provider);
+
+/**
  * Acquire a reference to a relation table.
  */
 void AcquireRelationTable(RelationTable * table);

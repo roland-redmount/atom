@@ -217,7 +217,6 @@ static Operator * createIdColumnService(
 	// Find a service yielding an output wherever this one does, and at the identified
 	// column, which is the one the filter tests.
 	Operator * childOperator = 0;
-	enum ServiceKind childServiceKind = 0;
 	ServiceIterator iterator;
 	ServiceRegistryIterate(relation, &iterator);
 	while(!childOperator && ServiceIteratorNext(&iterator)) {
@@ -229,7 +228,6 @@ static Operator * createIdColumnService(
 				DISPATCH_MATCH_RELAXED);
 		if(matches) {
 			childOperator = service->op;
-			childServiceKind = service->kind;
 		}
 	}
 	ServiceIteratorEnd(&iterator);
@@ -237,11 +235,8 @@ static Operator * createIdColumnService(
 		return 0;
 	// Create the FILTER operator
 	Operator * op = CreateFilterOperator(childOperator, &idColumn, 1);
-	// Register the new service.
-	// NOTE: the service kind is set to be the same as its child, although currently
-	// this should always be SERVICE_PRIMITIVE since IFactBeginConjunction()
-	// requies a RelationTable, as the ifact obviously requires storage.
-	CreateService(relation, ioSignature, op, childServiceKind);
+	// Register the new service
+	CreateService(relation, ioSignature, op, SERVICE_COMPILED);
 	return op;
 }
 
@@ -274,7 +269,7 @@ static Operator const * conjunctionOperator(IFactConjunction const * conjunction
 }
 
 
-void IFactBeginConjunction(IFactDraft * draft, RelationTable const * table, index8 idColumn)
+void IFactBeginConjunction(IFactDraft * draft, RelationTable * table, index8 idColumn)
 {
 	ASSERT(!draft->hasBegunConjunction);
 
@@ -287,6 +282,7 @@ void IFactBeginConjunction(IFactDraft * draft, RelationTable const * table, inde
 	IFactConjunction * conjunction = lastConjunction(&(draft->header));
 	SetMemory(conjunction, sizeof(IFactConjunction), 0);
 	conjunction->table = table;
+	AcquireRelationTable(table);		// ensure the table is valid until IFactEnd()
 	conjunction->idColumn = idColumn;
 	// Fail here rather than at the first read if the table cannot be queried on its
 	// identified column; see conjunctionOperator()
@@ -461,38 +457,41 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash) // , void (* assertFact)
 	ASSERT(draft->header.conjunctions);
 
 	sortIFactDraft(draft);
+	// Use the provided hash if present
 	if(hash == 0) {
 		draft->header.hash = hashIFact(draft);
 	}
 	else
 		draft->header.hash = hash;
 
-	// check for existing IFact with the same hash value
-	IFactHeader * existingIFact = peekIFactHeader(draft->header.hash);
-	if(existingIFact && (existingIFact->flags & IFACT_RESERVED)) {
-		// Finalize a header reserved by IFactReserve(): adopt the draft's
-		// conjunctions, retaining references already acquired against the
-		// reserved header (typically by the relation tables storing its
-		// defining facts).
-		ASSERT(existingIFact->nConjunctions == 0);
-		existingIFact->nConjunctions = draft->header.nConjunctions;
-		existingIFact->conjunctions = draft->header.conjunctions;
-		existingIFact->flags &= ~((data8) IFACT_RESERVED);
-		createFacts(draft, hash != 0);
-		acquireIFact(existingIFact);
-		if(ifactStorage.flagCreatedIFacts)
-			existingIFact->flags |= IFACT_NEW;
-	}
-	else if(existingIFact) {
-		if(sameIFact(draft, existingIFact)) {
-			// reuse existing ifact
-			acquireIFact(existingIFact);
-			Free(draft->header.conjunctions);
+	// check for an existing IFactHeader with the same hash value
+	IFactHeader * existingHeader = peekIFactHeader(draft->header.hash);
+	bool keepConjunctions;
+	if(existingHeader) {
+		if(existingHeader->flags & IFACT_RESERVED) {
+			// Finalize an IFactHeader previously registered by IFactReserve()
+			// Copy the draft ifact contents to the existing header
+			ASSERT(existingHeader->nConjunctions == 0);
+			existingHeader->nConjunctions = draft->header.nConjunctions;
+			existingHeader->conjunctions = draft->header.conjunctions;
+			existingHeader->flags &= ~((data8) IFACT_RESERVED);	// no longer reserved
+			createFacts(draft, hash != 0);
+			acquireIFact(existingHeader);
+			if(ifactStorage.flagCreatedIFacts)
+				existingHeader->flags |= IFACT_NEW;
+			keepConjunctions = true;
 		}
 		else {
-			// we have a hash collision
-			// this is possible but should be highly unusual, crash it to investigate
-			ASSERT(false);
+			// A previously existed ifact with the same hash
+			if(sameIFact(draft, existingHeader)) {
+				// reuse existing ifact
+				acquireIFact(existingHeader);
+				keepConjunctions = false;
+			}
+			else {
+				// We have a hash collision. Possible, but should be highly unusual.
+				Panic("Hash collision for ifact hash = %llu", draft->header.hash);
+			}
 		}
 	}
 	else {
@@ -502,8 +501,13 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash) // , void (* assertFact)
 		if(ifactStorage.flagCreatedIFacts)
 			draft->header.flags |= IFACT_NEW;
 		ASSERT(BTreeInsert(ifactStorage.btree, &(draft->header)) == BTREE_INSERTED)
-			
+		keepConjunctions = true;
 	}
+	// Release acquired table references
+	for(index8 i = 0; i < draft->header.nConjunctions; i++)
+		ReleaseRelationTable(draft->header.conjunctions[i].table);
+	if(!keepConjunctions)
+		Free(draft->header.conjunctions);
 	FreePage(draft->tupleStorage);
 
 	return (Atom) {.hash = draft->header.hash};

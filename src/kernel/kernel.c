@@ -683,6 +683,8 @@ void KernelShutdown(void)
 		ASSERT(false);
 	}
 
+	RemoveAllCompiledServices();
+
 	/**
 	 * NOTE: The below removes all core services to rewind everything
 	 * back to initial state. This is unnecessary in practise, as

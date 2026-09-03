@@ -63,6 +63,17 @@ RelationTable * CreateRelationTable(
 }
 
 
+RelationTable * FindOrCreateRelationTable(Relation const * relation, StorageProvider const * provider)
+{
+	RelationTable * table = RelationTableRegistryFind(relation);
+	if(table)
+		AcquireRelationTable(table);
+	else
+		table = CreateRelationTable(relation, provider, 0);
+	return table;		
+}
+
+
 void AcquireRelationTable(RelationTable * table)
 {
 	table->referenceCount++;

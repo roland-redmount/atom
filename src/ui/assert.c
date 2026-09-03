@@ -308,36 +308,19 @@ Atom CreateIFact(FormulaView formula)
 	// Create the ifact
 	IFactDraft draft;
 	IFactBegin(&draft);
-	RelationTable * previousTable = 0;
-	bool previousTableWasCreated = false;
 	for(index32 i = 0; i < nTuples; i++) {
 		if(i == 0 || compareIFactTuples(&ifactTuples[i], &ifactTuples[i-1], sizeof(IFactTuple)) != 0) {
 			// Begin new conjunction, from a new RelationTable
-			if(i > 0) {
+			if(i > 0)
 				IFactEndConjunction(&draft);
-				// Release created tables, so that they deallocate once no tuples remain
-				if(previousTableWasCreated)
-					ReleaseRelationTable(previousTable);
-			}
-			RelationTable * table = RelationTableRegistryFind(ifactTuples[i].relation);
-			if(!table) {
-				// Create new relation table, use B-tree provider as default
-				table = CreateRelationTable(ifactTuples[i].relation, &btreeStorageProvider, 0);
-				// keep track of the table so we can release it once all tuples have been added
-				previousTableWasCreated = true;
-				previousTable = table;
-			}
-			else
-				previousTableWasCreated = false;
-			
+			RelationTable * table = FindOrCreateRelationTable(ifactTuples[i].relation, &btreeStorageProvider);
 			IFactBeginConjunction(&draft, table, ifactTuples[i].idColumn);
+			ReleaseRelationTable(table);	// the draft ifact now holds its own reference
 		}
 		IFactAddTuple(&draft, ifactTuples[i].tuple);
 	}
 	// End the last conjunction
 	IFactEndConjunction(&draft);
-	if(previousTableWasCreated)
-		ReleaseRelationTable(previousTable);
 	
 	idAtom = IFactEnd(&draft);
 

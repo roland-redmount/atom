@@ -203,7 +203,7 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void const * data, byte elementType, size32 nElements)
 {
 	if(nElements > 0) {
-		RelationTable const * table = GetListRelationTable(elementType);
+		RelationTable * table = GetListRelationTable(elementType);
 		// assert (ĺist position elements) facts for each element
 		IFactBeginConjunction(draft, table, listRoleIndex[0]);
 		Atom listElementTuple[3];

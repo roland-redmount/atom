@@ -63,6 +63,9 @@ void SetupServiceRegistry(void);
  * the callers's copy may become invalide if the Service is deleted. We should probably
  * move to a stable storage an always return const * pointers, with an explicit contract
  * that pointers are valid until the Service is removed.
+ * 
+ * NOTE: kind should always be SERVICE_COMPILED, except for primitive services that are
+ * created by CreateRelationTable. 
  */
 Service CreateService(
 	Relation const * relation, IOSignature ioSignature, Operator * op,

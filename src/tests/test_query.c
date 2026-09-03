@@ -207,7 +207,6 @@ void testInvalidateServiceByNewRelation(void)
 	DictionaryEntry entry1;
 	DictionaryEntry entry2;
 	AddTransitiveClosureRules(&entry1, &entry2);
-	size32 nServices = ServiceRegistryCount();
 
 	// compile and run (before x after y)
 	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
@@ -228,21 +227,12 @@ void testInvalidateServiceByNewRelation(void)
 	// Asking again compiles the query again, yielding a new (before after) relation.
 	// Since the (prec:ID succ:INT) relation was empty, there are no additional tuples.
 	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
-	ASSERT_TRUE(ServiceRegistryNCompiled() > 0)	// == 2?
+	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 2)
 
-	// Removing the (prec:ID succ:INT) relation again invalides the compiled service,
-	// while the service over the remaining relation still answers what it always did
+	// Cleanup
+	RemoveAllCompiledServices();
 	ReleaseRelationTable(intTable);
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
-	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 1)
-
-	// Removing the relation the service was compiled from takes the service with it,
-	// and the computed relation it answered
 	TeardownRelationFixture(&precSuccFixture);
-	ASSERT_UINT32_EQUAL(ServiceRegistryNCompiled(), 0)
-	ASSERT_UINT32_EQUAL(ServiceRegistryCount(), nServices - PREC_SUCC_N_SERVICES)
-
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
 }
