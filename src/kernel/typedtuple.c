@@ -35,7 +35,7 @@ static Atom * tupleAtomArray(TypedTuple * tuple)
 
 Atom const * TypedTuplePeekAtoms(TypedTuple const * tuple)
 {
-	return (Atom const *) (((byte *) tuple) + tupleAtomArrayOffset(tuple->nAtoms));
+	return (Atom const *) (((byte const *) tuple) + tupleAtomArrayOffset(tuple->nAtoms));
 }
 
 

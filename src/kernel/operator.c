@@ -951,7 +951,7 @@ Operator * CreateProjectOperator(
 
 int8 btreeCompareTuples(void const * item1, void const * item2, size32 itemSize)
 {
-	return TupleCompare((Atom *) item1, (Atom *) item2, itemSize / sizeof(Atom));
+	return TupleCompare(item1, item2, itemSize / sizeof(Atom));
 }
 
 

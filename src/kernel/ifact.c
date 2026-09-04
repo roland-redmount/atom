@@ -86,8 +86,8 @@ static struct {
 
 static int8 btreeCompareHeaders(void const * item1, void const * item2, size32 itemSize)
 {
-	IFactHeader * ifact1 = (IFactHeader *) item1;
-	IFactHeader * ifact2 = (IFactHeader *) item2;
+	IFactHeader const * ifact1 = item1;
+	IFactHeader const * ifact2 = item2;
 	if(ifact1->hash < ifact2->hash)
 		return -1;
 	if(ifact1->hash > ifact2->hash)

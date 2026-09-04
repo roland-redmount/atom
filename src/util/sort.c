@@ -58,7 +58,7 @@ static index32 partition(
 		swapIndices(indexArray, pivot, high);
 
 	// the pivot item is now at the high index
-	void const * pivotItem = ((byte *) items) + indexArray[high]*itemSize;
+	void const * pivotItem = ((byte const *) items) + indexArray[high]*itemSize;
 
 	// the partioning algorithm will shift elements that are less than the pivot
 	// value to the front portion of the low - high array indexes, with i keeping
@@ -66,7 +66,7 @@ static index32 partition(
 	index32 i = low;
 
 	for(index32 j = low; j < high; j++) {
-		byte const * item_j = ((byte *) items) + indexArray[j]*itemSize;
+		byte const * item_j = ((byte const *) items) + indexArray[j]*itemSize;
 		if(compare(item_j, pivotItem, itemSize) <= 0)	{
 			// item j should precede the pivot item
 			swapIndices(indexArray, i, j);
@@ -224,7 +224,7 @@ index32 BinarySearchLowerBound(
 	{
 		// test halfway between lower and upper bound
 		index32 pos = lower + (upper - lower)/2;
-		int sign = compare(((byte *) items) + pos*itemSize, key, itemSize);
+		int sign = compare(((byte const *) items) + pos*itemSize, key, itemSize);
 		if(sign == -1)
 			lower = pos + 1;	// pos < key, increase lower bound
    		else
@@ -237,12 +237,12 @@ index32 BinarySearchLowerBound(
 }
 
 
-void * BinarySearch(
+void const * BinarySearch(
 	void const * key, void const * items, size32 nItems, size32 itemSize, ItemComparator compare)
 {
 	index32 lowerBound = BinarySearchLowerBound(key, items, nItems, itemSize, compare);
 	if(lowerBound < nItems) {
-		void * candidate = ((byte * ) items) + lowerBound * itemSize;
+		void const * candidate = ((byte const *) items) + lowerBound * itemSize;
 		if(compare(candidate, key, itemSize) == 0)
 			return candidate;
 	}

@@ -24,6 +24,12 @@ add_compile_options(
     -Wno-error=unused-function
     -Wno-error=unused-but-set-variable
     -Wpointer-arith
+    # CLAUDE: -Wcast-qual flags casts that drop const. Eight warnings remain: the
+    # reference counts in Relation.c and RelationTable.c, the dictionary lookup key
+    # in dictionary.c, and the three FreeSomething() wrappers calling the C library
+    # free(), which takes a non-const pointer. Not an error until those are resolved.
+    -Wcast-qual
+    -Wno-error=cast-qual
     -m64
 )
 

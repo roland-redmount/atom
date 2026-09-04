@@ -46,7 +46,7 @@ static int8 compareServices(Service const * service, Service const * serviceOrKe
 
 static int8 btreeCompareServices(void const * item, void const * itemOrKey, size32 itemSize)
 {
-	return compareServices((Service *) item, (Service *) itemOrKey);
+	return compareServices(item, itemOrKey);
 }
 
 /**

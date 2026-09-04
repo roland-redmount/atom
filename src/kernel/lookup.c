@@ -55,7 +55,7 @@ static int8 compareRecords(LookupRecord const * record, LookupRecord const * rec
 
 static int8 btreeCompareRecords(void const * item, void const * itemOrKey, size32 itemSize)
 {
-	return compareRecords((LookupRecord *) item, (LookupRecord *) itemOrKey);
+	return compareRecords(item, itemOrKey);
 }
 
 

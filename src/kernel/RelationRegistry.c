@@ -12,7 +12,7 @@ static BTree * relationRegistry;
 
 static int8 btreeCompareRelations(void const * item, void const * itemOrKey, size32 itemSize)
 {
-	return CompareRelations(*((Relation **) item), *((Relation **) itemOrKey));
+	return CompareRelations(*((Relation * const *) item), *((Relation * const *) itemOrKey));
 }
 
 

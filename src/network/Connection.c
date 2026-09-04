@@ -87,7 +87,7 @@ void StreamDataBlock(Connection * conn, const void * data, size_t nBytes)
 {
 	// check that connection is in write mode
 	ASSERT(conn->flags & CONNECTION_WRITE);
-	byte const * p = (byte*) data;
+	byte const * p = data;
 	while(true) {
 		// check that data fits in buffer
 		size_t bytesFree = CONNECTION_BUFFER_SIZE - conn->offset;
