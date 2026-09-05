@@ -11,7 +11,7 @@ void CreateResizingArray(ResizingArray * array, size32 elementSize, size32 capac
 }
 
 
-void FreeResizingArray(ResizingArray * array)
+void FreeResizingArray(ResizingArray const * array)
 {
 	FreeResizingBuffer(&array->buffer);
 }

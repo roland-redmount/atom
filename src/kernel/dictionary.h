@@ -12,7 +12,7 @@
 // This structure uniquely defines a dictionary entry
 typedef struct  s_DictionaryEntry {
 	Atom clauseForm;
-	TypedTuple * tuple;
+	TypedTuple const * tuple;
 } DictionaryEntry;
 
 

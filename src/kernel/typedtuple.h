@@ -57,7 +57,7 @@ void SetupTypedTuple(TypedTuple * tuple, size8 nAtoms);
 /**
  * Deallocate a types tuple.
  */
-void FreeTypedTuple(TypedTuple * tuple);
+void FreeTypedTuple(TypedTuple const * tuple);
 
 /**
  * Set all atoms to zero

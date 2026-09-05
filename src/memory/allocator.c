@@ -14,9 +14,9 @@
  */
 
 typedef struct {
-	const char * fileName;
+	char const * fileName;
 	uint32 lineNumber;
-	void * address;
+	void const * address;
 } AllocateRecord;
 
 BTree * allocateLog;
@@ -537,9 +537,9 @@ static void * offsetToAllocPointer(BlockOffset offset)
 }
 
 
-static BlockOffset allocPointerToOffset(void * allocPointer)
+static BlockOffset allocPointerToOffset(void const * allocPointer)
 {
-	byte * headerAddress = ((byte *) allocPointer) - ALLOC_HEADER_SIZE;
+	byte const * headerAddress = ((byte const *) allocPointer) - ALLOC_HEADER_SIZE;
 	ASSERT(headerAddress > allocator.memoryArea)
 
 	BlockOffset offset = (BlockOffset) (headerAddress - allocator.memoryArea);
@@ -573,7 +573,7 @@ void * Allocate(size32 allocSize)
 }
 
 #ifdef DEBUG_ALLOCATE
-void * _LogAllocate(const char * fileName, uint32 lineNumber, size32 allocSize)
+void * _LogAllocate(char const * fileName, uint32 lineNumber, size32 allocSize)
 {
 	void * block = _Allocate(allocSize);
 	if(logAllocations) {
@@ -618,9 +618,9 @@ static void freeBlock(BlockOffset block)
 }
 
 #ifdef DEBUG_ALLOCATE
-void _Free(void * memory)
+void _Free(void const * memory)
 #else
-void Free(void * memory)
+void Free(void const * memory)
 #endif
 {
 	BlockOffset block = allocPointerToOffset(memory);
@@ -635,7 +635,7 @@ void Free(void * memory)
 /**
  * Remove the allocation record and free the block.
  */
-void _LogFree(const char * fileName, uint32 lineNumber, void * block)
+void _LogFree(char const * fileName, uint32 lineNumber, void const * block)
 {
 	if(logAllocations) {
 		ASSERT(CStringCompare(fileName, "src/btree/btree.c") != 0)
@@ -652,7 +652,7 @@ void _LogFree(const char * fileName, uint32 lineNumber, void * block)
 }
 #endif
 
-size32 GetAllocatedSize(void * memory)
+size32 GetAllocatedSize(void const * memory)
 {
 	BlockOffset block = allocPointerToOffset(memory);
 	return (1 << getLogBlockSize(block)) - ALLOC_HEADER_SIZE;

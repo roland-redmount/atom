@@ -521,7 +521,7 @@ Atom IFactEnd(IFactDraft * draft)
 
 void removeIFactTuples(IFactConjunction * conjunction, Atom idAtom)
 {
-	RelationTable const * table = conjunction->table;
+	RelationTable * table = conjunction->table;
 	size8 nColumns = table->nColumns;
 
 	// Retrieve all tuples having idAtom in the idColumn.

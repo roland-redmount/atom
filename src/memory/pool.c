@@ -44,12 +44,12 @@ void * CreatePool(size16 itemSize)
 }
 
 
-void FreePool(void * pool)
+void FreePool(void const * pool)
 {
-	PoolPage * firstPage = pool;
-	PoolPage * page = firstPage->lastPage;
+	PoolPage const * firstPage = pool;
+	PoolPage const * page = firstPage->lastPage;
 	while(page) {
-		PoolPage * tmp = page;
+		PoolPage const * tmp = page;
 		page = page->previousPage;
 		FreePage(tmp);
 	}

@@ -154,7 +154,7 @@ void CheckRelationTable(RelationTable * table)
 
 
 
-byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)
+byte RelationTableAddTuple(RelationTable * table, Atom const tuple[], uint8 idPosition)
 {
 	byte result = table->provider->addTuple(table->storage, tuple, idPosition);
 	if(result == TUPLE_ADDED) {
@@ -173,7 +173,7 @@ size32 RelationTableNRows(RelationTable const * table)
 }
 
 
-byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)
+byte RelationTableRemoveTuple(RelationTable * table, Atom const tuple[], uint8 idPosition)
 {
 	byte result = table->provider->removeTuple(table->storage, tuple, idPosition);
 	if(result == TUPLE_REMOVED) {
@@ -182,7 +182,7 @@ byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], u
 				ReleaseTypedAtom(CreateTypedAtom(table->relation.typeSignature.atomTypes[i], tuple[i]));
 		}
 	}
-	CheckRelationTable((RelationTable *) table);
+	CheckRelationTable(table);
 	return result;
 }
 

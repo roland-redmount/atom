@@ -140,7 +140,7 @@ static void * pageToAddress(index32 page)
 	return (void *) (BASE_ADDRESS + page * MEMORY_PAGE_SIZE);
 }
 
-static index32 pointerToPage(void * ptr)
+static index32 pointerToPage(void const * ptr)
 {
 	addr64 address = (addr64) ptr;
 	// verify address is on an even page boundary
@@ -168,7 +168,7 @@ void * AllocatePage(void)
 }
 
 
-void FreePage(void * pageAddress)
+void FreePage(void const * pageAddress)
 {
 	index32 page = pointerToPage(pageAddress);
 	clearPageBit(page);
@@ -196,7 +196,7 @@ void * AllocatePages(size32 nPages)
 }
 
 
-void FreePages(void * firstPageAddress, size32 nPages)
+void FreePages(void const * firstPageAddress, size32 nPages)
 {
 	index32 firstPage = pointerToPage(firstPageAddress);
 	for(index32 page = firstPage; page < firstPage + nPages; page++)

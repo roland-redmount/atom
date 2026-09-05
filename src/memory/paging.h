@@ -32,14 +32,14 @@ void InitializePaging(void);
  * Allocate single pages
  */
 void * AllocatePage(void);
-void FreePage(void * page);
+void FreePage(void const * page);
 
 
 /**
  * Allocate a number of consecutive pages.
  */
 void * AllocatePages(size32 nPages);
-void FreePages(void * firstPage, size32 nPages);
+void FreePages(void const * firstPage, size32 nPages);
 
 
 /**

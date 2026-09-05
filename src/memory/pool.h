@@ -20,7 +20,7 @@ void * CreatePool(size16 itemSize);
 /**
  * Free an allocation pool and all its allocated items.
  */
-void FreePool(void * pool);
+void FreePool(void const * pool);
 
 /**
  * Allocate one item. The returned memory is cleared.

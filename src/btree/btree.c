@@ -31,7 +31,7 @@ static void freeNode(BTreeNode * node)
 BTree * BTreeCreate(
 	size32 itemSize,
 	ItemComparator compareItems,
-	void (*freeItem)(void * item, size32 itemSize))
+	void (*freeItem)(void const * item, size32 itemSize))
 {
 	BTree * btree = btreeAllocate(sizeof(BTree));
 

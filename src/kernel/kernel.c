@@ -735,9 +735,9 @@ void KernelShutdown(void)
 	 * retract their own term form from. Once all three are detached, the tables are empty
 	 * and can be torn down in the usual way.
 	 */
-	RelationReleaseForms(kernel.coreRelations[RELATION_TERM_FORM]->relation);
-	RelationReleaseForms(kernel.coreRelations[RELATION_MULTISET_NAME]->relation);
-	RelationReleaseForms(kernel.coreRelations[RELATION_PREDICATE_FORM]->relation);
+	RelationReleaseTermForm(kernel.coreRelations[RELATION_TERM_FORM]->relation);
+	RelationReleaseTermForm(kernel.coreRelations[RELATION_MULTISET_NAME]->relation);
+	RelationReleaseTermForm(kernel.coreRelations[RELATION_PREDICATE_FORM]->relation);
 
 	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_TERM_FORM]) == 0)
 	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_PREDICATE_FORM]) == 0)

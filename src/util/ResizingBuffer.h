@@ -23,7 +23,7 @@ void CreateResizingBuffer(ResizingBuffer * buffer, size32 capacity);
 /**
  * Deallocate a buffer
  */
-void FreeResizingBuffer(ResizingBuffer * buffer);
+void FreeResizingBuffer(ResizingBuffer const * buffer);
 
 /**
  * Get pointer to underlying memory block.

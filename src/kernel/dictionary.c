@@ -38,9 +38,9 @@ static int8 btreeCompareItems(void const * item, void const * itemOrKey, size32 
 }
 
 
-static void btreeFreeItem(void * item, size32 itemSize)
+static void btreeFreeItem(void const * item, size32 itemSize)
 {
-	DictionaryEntry * entry = item;
+	DictionaryEntry const * entry = item;
 	IFactRelease(entry->clauseForm);
 	for(index8 i = 0; i < entry->tuple->nAtoms; i++)
 		ReleaseTypedAtom(TypedTupleGetElement(entry->tuple, i));
@@ -64,8 +64,9 @@ static void setupEntry(DictionaryEntry * entry, Atom clauseForm, TypedTuple cons
 {
 	entry->clauseForm = clauseForm;
 	IFactAcquire(clauseForm);
-	entry->tuple = CreateTypedTuple(actors->nAtoms);
-	TypedTupleCopy(actors, entry->tuple);
+	TypedTuple * tuple = CreateTypedTuple(actors->nAtoms);
+	TypedTupleCopy(actors, tuple);
+	entry->tuple = tuple;
 	for(index8 i = 0; i < actors->nAtoms; i++) 
 		AcquireTypedAtom(TypedTupleGetElement(actors, i));
 }
@@ -112,7 +113,7 @@ static bool findEntry(Atom clause, DictionaryEntry * entry)
 	FormulaView clauseView = FormulaGetView(clause);
 	DictionaryEntry key = {
 		.clauseForm = clauseView.form,
-		.tuple = (TypedTuple *) clauseView.actors
+		.tuple = clauseView.actors
 	};
 	if(entry)
 		return BTreeGetItem(dictionary.btree, &key, entry);

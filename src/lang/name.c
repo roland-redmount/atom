@@ -40,9 +40,9 @@ static int8 btreeCompareNameRecords(void const * item1, void const * item2, size
 }
 
 // when deallocating from the tree, we need to Free() the name string
-static void btreeFreeNameRecord(void * item, size32 itemSize)
+static void btreeFreeNameRecord(void const * item, size32 itemSize)
 {
-	NameRecord * record = (NameRecord *) item;
+	NameRecord const * record = item;
 	Free(record->string);
 }
 

@@ -57,7 +57,7 @@ void * GetBufferMemBlock(ResizingBuffer const * buffer)
 }
 
 
-void FreeResizingBuffer(ResizingBuffer * buffer)
+void FreeResizingBuffer(ResizingBuffer const * buffer)
 {
 	Free(buffer->block);
 }

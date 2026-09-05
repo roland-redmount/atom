@@ -27,7 +27,7 @@ struct s_BTreeNode {
 	size32 nodeMaxNItems;
 
 	ItemComparator compareItems;
-	void (*freeItem)(void * item, size32 itemSize);
+	void (*freeItem)(void const * item, size32 itemSize);
 	
 	uint32 writeLockCount;	// semaphore preventing mutating operations
 	bool readLocked;		// lock for exclusive access
@@ -51,7 +51,7 @@ struct s_BTreeNode {
 BTree * BTreeCreate(
 	size32 item_size,
 	ItemComparator compareItems,
-	void (*freeItem)(void * item, size32 itemSize)
+	void (*freeItem)(void const * item, size32 itemSize)
 );
 
 /**
@@ -125,6 +125,8 @@ typedef enum e_BTreeDeleteResult {
  * Delete an item that compares equal to the given key by compareItems(),
  * if any. The deleted item is copied to *item if item is not 0.
  * If the key matches multiple items, one arbitrary matching item is deleted.
+ * Is is assumed the key is valid during the deletion process, so it must not
+ * be a pointer to an item in the B-tree itself.
  */
 BTreeDeleteResult BTreeDelete(BTree * btree, void const * key, void * item);
 

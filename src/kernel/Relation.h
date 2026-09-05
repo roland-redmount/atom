@@ -95,24 +95,20 @@ void ReleaseRelation(Relation relation);
 bool IsNullRelation(Relation relation);
 
 /**
- * CLAUDE: Release the references this relation holds to its term form and predicate form,
- * without releasing the relation.
+ * Release the references this relation holds to its term form, without releasing the relation.
  *
- * This is only for shutting down the self-referential core relations, whose own defining
+ * This is only used for teardown of the self-referential core relations, whose own defining
  * facts are stored in their own tables. Such a relation cannot be released directly:
  * dropping its table requires it to be empty, but the tuples are only retracted once the
  * form's reference count drops to zero, which cannot happen while the relation holds a
  * reference. Detaching the references first lets the ifact drain its tuples out of a
  * relation that is still registered and still serviced.
  *
- * The term form is released before the predicate form, since the defining fact of the
- * term form holds a reference to the predicate form.
- *
  * The relation must still be registered (its form is the registry B-tree key) and must
  * still have its services, which are used to locate the tuples to retract. It should be
  * released immediately afterwards.
  */
-void RelationReleaseForms(Relation relation);
+void RelationReleaseTermForm(Relation relation);
 
 /**
  * Compute the hash of a relation, on top of an initialHash

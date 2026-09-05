@@ -57,7 +57,7 @@ void SubstituteTuple(Substitution const * subst, TypedTuple const * source, Type
 }
 
 
-void FreeSubstitution(Substitution * subst)
+void FreeSubstitution(Substitution const * subst)
 {
 	// free atom arrays
 	Free(subst->keys);

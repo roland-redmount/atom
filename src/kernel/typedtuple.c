@@ -108,7 +108,7 @@ void SetupTypedTuple(TypedTuple * tuple, size8 nAtoms)
 }
 
 
-void FreeTypedTuple(TypedTuple * tuple)
+void FreeTypedTuple(TypedTuple const * tuple)
 {
 	Free(tuple);
 }

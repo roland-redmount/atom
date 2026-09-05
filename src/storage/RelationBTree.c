@@ -89,7 +89,7 @@ size32 RelationBTreeNRows(RelationBTree const * relation)
 }
 
 
-void FreeRelationBTree(RelationBTree * relation)
+void FreeRelationBTree(RelationBTree const * relation)
 {
 	Free(relation->indexColumns);
 	BTreeFree(relation->btree);

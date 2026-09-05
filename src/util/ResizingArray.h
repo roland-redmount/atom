@@ -23,7 +23,7 @@ void CreateResizingArray(ResizingArray * array, size32 elementSize, size32 capac
 /**
  * Deallocate an array
  */
-void FreeResizingArray(ResizingArray * array);
+void FreeResizingArray(ResizingArray const * array);
 
 /**
  * Get pointer to underlying memory block.

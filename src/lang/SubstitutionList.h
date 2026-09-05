@@ -44,7 +44,7 @@ void SubstituteTuple(Substitution const * subst, TypedTuple const * source, Type
 /**
  * Deallocate a substitution
  */
-void FreeSubstitution(Substitution * subst);
+void FreeSubstitution(Substitution const * subst);
 
 void PrintSubstitution(Substitution * subst);
 

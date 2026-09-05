@@ -28,16 +28,9 @@ typedef struct s_RelationRecord {
 	// would fail when creating the predicate form FORM_TERM_FORM in setupCoreService().
 	Atom predicateForm;
 
-	// whether this relation holds a reference to its forms; see RelationReleaseForm()
+	// Whether this relation holds a reference to its forms; see RelationReleaseForm()
 	bool ownsForm;
-	/**
-	 * One reference per Service and per RelationTable naming this relation, plus the
-	 * creation reference held by whoever created it. The relation removes itself from the
-	 * registry when the last reference is released; see ReleaseRelation().
-	 *
-	 * NOTE: mutable through a const pointer, as a reference count is not part of the
-	 * value a relation denotes. Nearly everything holds a Relation const *.
-	 */
+
 	size32 referenceCount;
 } RelationRecord;
 
@@ -63,18 +56,6 @@ static RelationRecord * findRelationRecord(Relation relation)
 }
 
 
-void RelationRegistryAdd(RelationRecord * record)
-{
-	ASSERT(BTreeInsert(relationRegistry, record) == BTREE_INSERTED)
-}
-
-
-void RelationRegistryRemove(Relation const * relation)
-{
-	ASSERT(BTreeDelete(relationRegistry, &relation, 0) == BTREE_DELETED)
-}
-
-
 Relation CreateRelationBootstrap(Atom termForm, Atom predicateForm, TypeSignature typeSignature)
 {
 	Relation relation = {.termForm = termForm, .typeSignature = typeSignature};
@@ -93,7 +74,7 @@ Relation CreateRelationBootstrap(Atom termForm, Atom predicateForm, TypeSignatur
 	};
 	IFactAcquire(termForm);
 	// Store a copy of the record in the B-tree
-	RelationRegistryAdd(&record);
+	ASSERT(BTreeInsert(relationRegistry, &record) == BTREE_INSERTED)
 	return record.relation;
 }
 
@@ -134,7 +115,8 @@ int8 CompareRelations(Relation relation, Relation relationOrKey)
 
 bool SameRelations(Relation relation1, Relation relation2)
 {
-	return CompareMemory(&relation1, &relation2, sizeof(Relation)) == 0;
+	return SameAtoms(relation1.termForm, relation2.termForm) &&
+		SameTypeSignatures(relation1.typeSignature, relation2.typeSignature);
 }
 
 
@@ -160,21 +142,21 @@ void ReleaseRelation(Relation relation)
 	if(record->referenceCount > 0)
 		return;
 	// Else remove the relation
-	RelationRecord recordCopy;
-	BTreeDelete(relationRegistry, record, &recordCopy);
-	if(recordCopy.ownsForm) {
+	if(record->ownsForm) {
 		// for all relatons except a few "core" relations
-		IFactRelease(recordCopy.relation.termForm);
+		IFactRelease(relation.termForm);
 	}
+	RelationRecord key = {.relation = relation};
+	BTreeDelete(relationRegistry, &key, 0);
 }
 
 
-void RelationReleaseForms(Relation relation)
+void RelationReleaseTermForm(Relation relation)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
 	ASSERT(record->ownsForm)
-	// clear the flag first, as the release may retract tuples from this relation
+	// Clear the flag first, as IFactRelease() may retract tuples from this relation
 	record->ownsForm = false;
 	IFactRelease(record->relation.termForm);
 }

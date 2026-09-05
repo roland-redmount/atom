@@ -106,15 +106,18 @@ size32 RelationTableNRows(RelationTable const * table);
  * Acquires a reference to each atom in the tuple, except an identified atom.
  * Does not add lookup entries; see AssertFact()
  */
-byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
+byte RelationTableAddTuple(RelationTable * table, Atom const tuple[], uint8 idPosition);
 
 /**
  * Remove the given tuple from the relation table.
  * If the tuple contains an identified atom, its position must match the given idPosition
  * to remove the tuple.
  * Does not remove lookup entries; see RetractFact()
+ *
+ * CLAUDE: removing the last tuple can leave the table stale, in which case
+ * CheckRelationTable() removes it and the table pointer becomes invalid.
  */
-byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
+byte RelationTableRemoveTuple(RelationTable * table, Atom const tuple[], uint8 idPosition);
 
 /**
  * Setup an empty relation table registry. Called during kernel bootstrapping only.
