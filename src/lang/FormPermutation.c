@@ -1,12 +1,11 @@
 
-#include <stdlib.h>
-
 #include "kernel/multiset.h"
 #include "lang/ClauseForm.h"
 #include "lang/AtomType.h"
 #include "lang/ConjunctionForm.h"
 #include "lang/FormPermutation.h"
 #include "lang/PredicateForm.h"
+#include "memory/allocator.h"
 #include "util/utilities.h"
 
 
@@ -77,7 +76,7 @@ bool PermuteArray(index8 perm[], index8 a, size8 n)
  */
 static Permutation * CreatePermutation(size8 size)
 {
-	Permutation * permutation = malloc(sizeof(Permutation) + sizeof(index8) * size);
+	Permutation * permutation = Allocate(sizeof(Permutation) + sizeof(index8) * size);
 	permutation->size = size;
 	// set identity permutation 1...m 
 	for(index8 i = 0; i < size; i++)
@@ -97,10 +96,10 @@ static bool NextPermutation(Permutation * permutation)
  */
 PredicateIterator * CreatePredicateIterator(Atom predicateForm)
 {
-	PredicateIterator* iter = malloc(sizeof(PredicateIterator));
+	PredicateIterator* iter = Allocate(sizeof(PredicateIterator));
 	iter->nUniqueRoles = PredicateNRoles(predicateForm);
 
-	iter->rolePerm = malloc(iter->nUniqueRoles * sizeof(Permutation *));
+	iter->rolePerm = Allocate(iter->nUniqueRoles * sizeof(Permutation *));
 	// create iterators for each unique role
 	MultisetIterator iterator;
 	MultisetIterate(predicateForm, AT_NAME, &iterator);
@@ -160,10 +159,10 @@ void FreePredicateIterator(PredicateIterator * iter)
 {
 	// free permutations
 	for(index8 i = 0; i < iter->nUniqueRoles; i++) {
-		free(iter->rolePerm[i]);
+		Free(iter->rolePerm[i]);
 	}
-	free(iter->rolePerm);
-	free(iter);
+	Free(iter->rolePerm);
+	Free(iter);
 }
 
 
@@ -172,12 +171,12 @@ void FreePredicateIterator(PredicateIterator * iter)
  */
 ClauseIterator * CreateClauseIterator(Atom clauseForm)
 {
-	ClauseIterator* iter = malloc(sizeof(ClauseIterator));
+	ClauseIterator* iter = Allocate(sizeof(ClauseIterator));
 	iter->nUniqueTerms = ClauseFormNTermForms(clauseForm);
 	
 	// allocate arrays
-	iter->predFormPerm = malloc(iter->nUniqueTerms * sizeof(Permutation *));
-	iter->predIter = malloc(iter->nUniqueTerms * sizeof(PredicateIterator **));
+	iter->predFormPerm = Allocate(iter->nUniqueTerms * sizeof(Permutation *));
+	iter->predIter = Allocate(iter->nUniqueTerms * sizeof(PredicateIterator **));
 	
 	// create permutations and corresponding iterators
 	MultisetIterator iterator;
@@ -190,7 +189,7 @@ ClauseIterator * CreateClauseIterator(Atom clauseForm)
 		iter->predFormPerm[i] = CreatePermutation(em.multiple);
 
 		// create a predicate iterator for each multiple of each term form
-		iter->predIter[i] = malloc(em.multiple * sizeof(PredicateIterator *));
+		iter->predIter[i] = Allocate(em.multiple * sizeof(PredicateIterator *));
 		Atom predicateForm = TermFormGetPredicateForm(em.element);
 		for(index8 j = 0; j < em.multiple; j++) {
 			iter->predIter[i][j] = CreatePredicateIterator(predicateForm);
@@ -260,20 +259,20 @@ static void getClausePermutation(ClauseIterator const * iter, index8 * tuplePerm
 void FreeClauseIterator(ClauseIterator * iter)
 {
 	// free predicate iterators
-	for(index8 i = 0; i < iter->predFormPerm[i]->size; i++) {
+	for(index8 i = 0; i < iter->nUniqueTerms; i++) {
 		size8 multiplicity = iter->predFormPerm[i]->size;
 		for(index8 j = 0; j < multiplicity; j++) {
 			FreePredicateIterator(iter->predIter[i][j]);
 		}
-		free(iter->predIter[i]);
+		Free(iter->predIter[i]);
 	}
-	free(iter->predIter);
+	Free(iter->predIter);
 	// free permutations
-	for(index8 i = 0; i < iter->predFormPerm[i]->size; i++) {
-		free(iter->predFormPerm[i]);
+	for(index8 i = 0; i < iter->nUniqueTerms; i++) {
+		Free(iter->predFormPerm[i]);
 	}
-	free(iter->predFormPerm);
-	free(iter);
+	Free(iter->predFormPerm);
+	Free(iter);
 }
 
 
@@ -282,12 +281,12 @@ void FreeClauseIterator(ClauseIterator * iter)
  */
 ConjunctionIterator * CreateConjunctionIterator(Atom form)
 {
-	ConjunctionIterator* iter = malloc(sizeof(ConjunctionIterator));
+	ConjunctionIterator* iter = Allocate(sizeof(ConjunctionIterator));
 	iter->nClauses = ConjunctionFormNUniqueClauseForms(form);
 
 	// allocate arrays
-	iter->clauseFormPerm = malloc(iter->nClauses * sizeof(Permutation *));
-	iter->clauseIter = malloc(iter->nClauses * sizeof(ClauseIterator **));
+	iter->clauseFormPerm = Allocate(iter->nClauses * sizeof(Permutation *));
+	iter->clauseIter = Allocate(iter->nClauses * sizeof(ClauseIterator **));
 
 	MultisetIterator iterator;
 	MultisetIterate(form, AT_ID, &iterator);
@@ -298,7 +297,7 @@ ConjunctionIterator * CreateConjunctionIterator(Atom form)
 		iter->clauseFormPerm[i] = CreatePermutation(em.multiple);
 
 		// create a clause iterator for each multiple of each clause form
-		iter->clauseIter[i] = malloc(em.multiple * sizeof(ClauseIterator *));
+		iter->clauseIter[i] = Allocate(em.multiple * sizeof(ClauseIterator *));
 		for(index8 j = 0; j < em.multiple; j++) {
 			iter->clauseIter[i][j] = CreateClauseIterator(em.element);
 		}
@@ -341,15 +340,15 @@ void FreeConjunctionIterator(ConjunctionIterator* iter)
 		for(index8 j = 0; j < multiplicity; j++) {
 			FreeClauseIterator(iter->clauseIter[i][j]);
 		}
-		free(iter->clauseIter[i]);
+		Free(iter->clauseIter[i]);
 	}
-	free(iter->clauseIter);
+	Free(iter->clauseIter);
 	// free permutations
 	for(index8 i = 0; i < iter->nClauses; i++) {
-		free(iter->clauseFormPerm[i]);
+		Free(iter->clauseFormPerm[i]);
 	}
-	free(iter->clauseFormPerm);
-	free(iter);
+	Free(iter->clauseFormPerm);
+	Free(iter);
 }
 
 
@@ -378,7 +377,7 @@ static void getConjunctionPermutation(const ConjunctionIterator * iter, index8 *
 
 FormIterator* CreateFormIterator(Atom form)
 {
-	FormIterator * iter = malloc(sizeof(FormIterator));
+	FormIterator * iter = Allocate(sizeof(FormIterator));
 	iter->form = form;
 	if(IsPredicateForm(form))
 		iter->topIterator = CreatePredicateIterator(form);
@@ -418,7 +417,7 @@ void FreeFormIterator(const FormIterator* iter)
 		FreeConjunctionIterator(iter->topIterator);
 	else
 		ASSERT(false);
-	free((void *) iter);
+	Free(iter);
 }
 
 

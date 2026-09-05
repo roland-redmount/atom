@@ -93,7 +93,7 @@ int64 StringToInt64(char const * string, size32 length)
 	char intString[length + 1];
 	CopyMemory(string, intString, length);
 	intString[length] = 0;
-	return strtoll(intString, NULL, 10);
+	return strtoll(intString, 0, 10);
 }
 
 

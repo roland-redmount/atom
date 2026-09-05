@@ -24,12 +24,9 @@ add_compile_options(
     -Wno-error=unused-function
     -Wno-error=unused-but-set-variable
     -Wpointer-arith
-    # CLAUDE: -Wcast-qual flags casts that drop const. Three warnings remain, in
-    # FormPermutation.c, Connection.c and LinkedList.c. Each frees a const pointer
-    # with the C library free(), which takes a non-const pointer. They go away once
-    # those files use Allocate() and Free(). Not an error until then.
+    # Flag any cast that drops const, such as freeing a const pointer with the
+    # C library free(). Our own Free() takes a const pointer; see allocator.h.
     -Wcast-qual
-    -Wno-error=cast-qual
     -m64
 )
 

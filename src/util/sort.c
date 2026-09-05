@@ -1,6 +1,6 @@
 
-#include <stdlib.h>
-#include <time.h>
+#include <stdlib.h>		// rand(), srand()
+#include <time.h>		// time()
 
 #include "util/sort.h"
 
@@ -105,7 +105,7 @@ void QuickSort(void * items, size32 nItems, size32 itemSize, ItemComparator comp
 	}
 
 	// seed the random number generator
-	srand(time(NULL));
+	srand(time(0));
 
 	// fall back to memcmp() as comparator if compare() is not provided
 	ItemComparator _compare = compare ? compare : CompareMemory;
@@ -172,11 +172,10 @@ void ReorderArray(void * array, index8 const order[], size8 nItems, size32 itemS
 
 
 /**
- * Generic ordering function for an array of up to 255 items of the given size (bytes)
- * The compare function is used to determine ordering between any two items
+ * Generic ordering function for an array of up to 255 items of the given size (bytes).
+ * The compare function is used to determine ordering between any two items.
  * Writes to the given ordering array so that its i'th element is index of the item
- * in sorted position i
- * If compare function is NULL, we fall back on memcmp()
+ * in sorted position i. If compare function is 0, we fall back on CompareMemory().
  * 
  * TODO: this could be replaced with QuickSort (above) except this uses 8-byte ordering array
  */ 

@@ -19,7 +19,7 @@ struct s_Lookup {
 /**
  * Comparison function for lookup records, used for both queries and item ordering.
  * If the recordOrKey->predicateForm is 0, any item matching the atom is considered a match,
- * so a key with NULL role can be passed as first argument to match all roles
+ * so a key with null role can be passed as first argument to match all roles
  * associated with a given atom.
  */
 static int8 compareRecords(LookupRecord const * record, LookupRecord const * recordOrKey)
