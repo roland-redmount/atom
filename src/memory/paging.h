@@ -9,7 +9,6 @@
 
 
 #define MEMORY_PAGE_SIZE	0x1000					// 4096 bytes
-#define PAGE_ADDRESS_MASK	0xFFFFFFFFFFFFF000L		// mask to convert any address to the page address
 
 // location of paging area
 #define BASE_ADDRESS		(1 * TB)                // 1024^4 = 0x400^4 = (0x10000)^2 = 0x10_000_000_000
@@ -32,14 +31,22 @@ void InitializePaging(void);
  * Allocate single pages
  */
 void * AllocatePage(void);
-void FreePage(void * page);
+void FreePage(void const * page);
 
 
 /**
  * Allocate a number of consecutive pages.
  */
 void * AllocatePages(size32 nPages);
-void FreePages(void * firstPage, size32 nPages);
+void FreePages(void const * firstPage, size32 nPages);
+
+
+/**
+ * Get an aligned pointer to the page containing the given address, which may be anywhere in the page.
+ * The returned pointer is built from the paging memory area, so a caller holding a
+ * const pointer into a page can still write to the page it owns; see PoolFreeItem().
+ */
+void * GetPageOfAddress(void const * address);
 
 
 /**

@@ -7,7 +7,8 @@
 #ifdef DEBUG_ALLOCATE
 // When debugging Allocate() we need a different allocator for B-tree memory
 #include <stdlib.h>
-#define btreeAllocate malloc
+// We use calloc() rather than malloc() so that memory is cleared
+#define btreeAllocate(size) calloc(1, size)
 #define btreeFree free
 #else
 #include "memory/allocator.h"
@@ -30,10 +31,9 @@ static void freeNode(BTreeNode * node)
 BTree * BTreeCreate(
 	size32 itemSize,
 	ItemComparator compareItems,
-	void (*freeItem)(void * item, size32 itemSize))
+	void (*freeItem)(void const * item, size32 itemSize))
 {
 	BTree * btree = btreeAllocate(sizeof(BTree));
-	SetMemory(btree, sizeof(BTree), 0);
 
 	btree->itemSize = itemSize;
 	btree->spareItem = btreeAllocate(itemSize);
@@ -747,7 +747,6 @@ void BTreeIterate(BTreeIterator * iterator, BTree * btree)
 
 	iterator->btree = btree;
 	iterator->stack = btreeAllocate(sizeof(BTreePosition) * btree->height);
-	SetMemory(iterator->stack, sizeof(BTreePosition) * btree->height, 0);
 	setIteratorBeforeFirst(iterator);
 }
 

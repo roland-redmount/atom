@@ -4,8 +4,6 @@
 
 #include "kernel/Relation.h"
 
-struct s_Releation;
-
 typedef struct s_Operator Operator;
 typedef struct s_OperatorContext OperatorContext;
 
@@ -222,7 +220,7 @@ struct s_Operator {
 	size32 nParents;		// number of parent operators
 	// This pointer is nonzero only for a service's root operator,
 	// and is used only to locate that service.
-	const struct s_Relation * relation;
+	Relation relation;
 	union {
 		// for OPERATOR_PERMUTE
 		struct {
@@ -473,7 +471,7 @@ Operator * OperatorGetChild(Operator const * op, index8 index);
 /**
  * Attach an operator to a service, specified by its Relation
  */
-void AttachOperator(Operator * op, Relation const * relation);
+void AttachOperator(Operator * op, Relation relation);
 
 /**
  * Detach an operator from its a service. This may deallocate the operator.

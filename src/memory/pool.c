@@ -31,8 +31,6 @@ static PoolPage * createPage(size16 itemSize)
 
 	// item size must be at least 16 bytes to fit two pointers for free items
 	page->itemSize = itemSize >= 16 ? itemSize : 16;
-	page->pageNItems = 0;
-	page->firstFreeItem = 0;
 	return page;
 }
 
@@ -41,19 +39,17 @@ void * CreatePool(size16 itemSize)
 {
 	ASSERT(itemSize < MAX_ITEM_SIZE)
 	PoolPage * page = createPage(itemSize);
-	page->previousPage = 0;
-	page->nextPage = 0;
 	page->lastPage = page;
 	return page;
 }
 
 
-void FreePool(void * pool)
+void FreePool(void const * pool)
 {
-	PoolPage * firstPage = pool;
-	PoolPage * page = firstPage->lastPage;
+	PoolPage const * firstPage = pool;
+	PoolPage const * page = firstPage->lastPage;
 	while(page) {
-		PoolPage * tmp = page;
+		PoolPage const * tmp = page;
 		page = page->previousPage;
 		FreePage(tmp);
 	}
@@ -80,39 +76,41 @@ static void * indexToAddress(PoolPage * page, index16 index)
 void * PoolAllocate(void * pool)
 {
 	PoolPage * firstPage = pool;
+	size32 itemSize = firstPage->itemSize;
+	void * memory;
 	if(firstPage->firstFreeItem) {
 		// remove item from free list
 		FreeItem * item = firstPage->firstFreeItem;
 		firstPage->firstFreeItem = item->next;
 		if(item->next)
 			item->next->previous = 0;
-		return item;
+		memory = item;
 	}
 	else {
 		// Nothing on the free list, so append to last page
 		PoolPage * page = firstPage->lastPage;
 		if(pageIsFull(page)) {
 			// allocate new page
-			PoolPage * newPage = createPage(page->itemSize);
+			PoolPage * newPage = createPage(itemSize);
 			newPage->previousPage = page;
-			newPage->nextPage = 0;
 			page->nextPage = newPage;
 			firstPage->lastPage = newPage;
 			page = newPage;
 		}
 		// page now has at least one free item
-		void * item = indexToAddress(page, page->pageNItems);
+		memory = indexToAddress(page, page->pageNItems);
 		page->pageNItems++;
-		return item;
 	}
+	SetMemory(memory, itemSize, 0);
+	return memory;
 }
 
 
-void PoolFreeItem(void * pool, void * item)
+void PoolFreeItem(void * pool, void const * item)
 {
 	PoolPage * firstPage = pool;
 
-	PoolPage * itemPage = (PoolPage *) (((addr64) item) & PAGE_ADDRESS_MASK); 	
+	PoolPage * itemPage = GetPageOfAddress(item);
 	if(itemPage->pageNItems == 1) {
 		// item is the only item on its page
 		if(itemPage == firstPage) {
@@ -130,7 +128,11 @@ void PoolFreeItem(void * pool, void * item)
 	}
 	else {
 		// add the item to the top of the free list
-		FreeItem * newFreeItem = item;
+
+		// CLAUDE: the free list links are written through itemPage, so that the item
+		// pointer given by the caller is only read; see GetPageOfAddress().
+		size32 itemOffset = ((addr64) item) - ((addr64) itemPage);
+		FreeItem * newFreeItem = (FreeItem *) (((byte *) itemPage) + itemOffset);
 		newFreeItem->next = firstPage->firstFreeItem;
 		newFreeItem->previous = 0;
 		firstPage->firstFreeItem = newFreeItem;

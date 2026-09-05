@@ -70,7 +70,7 @@ index32 BinarySearchLowerBound(
  * Find the first item in the array comparing equal to key.
  * Returns a pointer to the item, or 0 if none exists 
  */
-void * BinarySearch(
+void const * BinarySearch(
 	void const * key, void const * items, size32 nItems, size32 itemSize, ItemComparator compare);
 
 /**

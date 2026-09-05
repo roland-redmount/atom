@@ -7,7 +7,6 @@ void SetupSubstitution(Substitution * subst, size8 capacity)
 {
 	// Do a single allocation for keys and values arrays
 	subst->keys = Allocate(2 * sizeof(TypedAtom) * capacity);
-	SetMemory(subst->keys, 2 * sizeof(TypedAtom) * capacity, 0); 
 	subst->values = subst->keys + capacity;
 	subst->capacity = capacity;
 	subst->nPairs = 0;
@@ -58,7 +57,7 @@ void SubstituteTuple(Substitution const * subst, TypedTuple const * source, Type
 }
 
 
-void FreeSubstitution(Substitution * subst)
+void FreeSubstitution(Substitution const * subst)
 {
 	// free atom arrays
 	Free(subst->keys);

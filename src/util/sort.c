@@ -1,6 +1,6 @@
 
-#include <stdlib.h>
-#include <time.h>
+#include <stdlib.h>		// rand(), srand()
+#include <time.h>		// time()
 
 #include "util/sort.h"
 
@@ -58,7 +58,7 @@ static index32 partition(
 		swapIndices(indexArray, pivot, high);
 
 	// the pivot item is now at the high index
-	void const * pivotItem = ((byte *) items) + indexArray[high]*itemSize;
+	void const * pivotItem = ((byte const *) items) + indexArray[high]*itemSize;
 
 	// the partioning algorithm will shift elements that are less than the pivot
 	// value to the front portion of the low - high array indexes, with i keeping
@@ -66,7 +66,7 @@ static index32 partition(
 	index32 i = low;
 
 	for(index32 j = low; j < high; j++) {
-		byte const * item_j = ((byte *) items) + indexArray[j]*itemSize;
+		byte const * item_j = ((byte const *) items) + indexArray[j]*itemSize;
 		if(compare(item_j, pivotItem, itemSize) <= 0)	{
 			// item j should precede the pivot item
 			swapIndices(indexArray, i, j);
@@ -105,7 +105,7 @@ void QuickSort(void * items, size32 nItems, size32 itemSize, ItemComparator comp
 	}
 
 	// seed the random number generator
-	srand(time(NULL));
+	srand(time(0));
 
 	// fall back to memcmp() as comparator if compare() is not provided
 	ItemComparator _compare = compare ? compare : CompareMemory;
@@ -172,11 +172,10 @@ void ReorderArray(void * array, index8 const order[], size8 nItems, size32 itemS
 
 
 /**
- * Generic ordering function for an array of up to 255 items of the given size (bytes)
- * The compare function is used to determine ordering between any two items
+ * Generic ordering function for an array of up to 255 items of the given size (bytes).
+ * The compare function is used to determine ordering between any two items.
  * Writes to the given ordering array so that its i'th element is index of the item
- * in sorted position i
- * If compare function is NULL, we fall back on memcmp()
+ * in sorted position i. If compare function is 0, we fall back on CompareMemory().
  * 
  * TODO: this could be replaced with QuickSort (above) except this uses 8-byte ordering array
  */ 
@@ -224,7 +223,7 @@ index32 BinarySearchLowerBound(
 	{
 		// test halfway between lower and upper bound
 		index32 pos = lower + (upper - lower)/2;
-		int sign = compare(((byte *) items) + pos*itemSize, key, itemSize);
+		int sign = compare(((byte const *) items) + pos*itemSize, key, itemSize);
 		if(sign == -1)
 			lower = pos + 1;	// pos < key, increase lower bound
    		else
@@ -237,12 +236,12 @@ index32 BinarySearchLowerBound(
 }
 
 
-void * BinarySearch(
+void const * BinarySearch(
 	void const * key, void const * items, size32 nItems, size32 itemSize, ItemComparator compare)
 {
 	index32 lowerBound = BinarySearchLowerBound(key, items, nItems, itemSize, compare);
 	if(lowerBound < nItems) {
-		void * candidate = ((byte * ) items) + lowerBound * itemSize;
+		void const * candidate = ((byte const *) items) + lowerBound * itemSize;
 		if(compare(candidate, key, itemSize) == 0)
 			return candidate;
 	}

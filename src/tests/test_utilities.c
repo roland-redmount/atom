@@ -53,7 +53,7 @@ static bool stringComparator(const void* string1, const void* string2)
 void testLinkedList(void)
 {
 	char const * item1 = "one";
-	LinkedList * list1 = CreateLinkedList((void *) item1);
+	LinkedList * list1 = CreateLinkedList(item1);
 	ASSERT_PTR_EQUAL(GetLinkedListItem(list1), item1)
 	ASSERT_TRUE(!LinkedListHasNext(list1))
 	ASSERT_PTR_EQUAL(GetNextLinkedList(list1), 0)

@@ -1,6 +1,5 @@
 
-#include <stdlib.h>
-
+#include "memory/allocator.h"
 #include "network/Connection.h"
 
 /**
@@ -23,9 +22,9 @@ struct s_Connection
  */
 Connection* CreateConnection(NetworkSocket socket)
 {
-	Connection* conn = malloc(sizeof(Connection));
+	Connection* conn = Allocate(sizeof(Connection));
 	conn->socket = socket;
-	conn->buffer = malloc(CONNECTION_BUFFER_SIZE);
+	conn->buffer = Allocate(CONNECTION_BUFFER_SIZE);
 	conn->flags = CONNECTION_OPEN;		// connection free to use
 	conn->nextMessageId = 1;
 	return conn;
@@ -39,8 +38,8 @@ Connection* CreateConnection(NetworkSocket socket)
 void CloseConnection(const Connection* conn)
 {
 	CloseSocket(conn->socket);
-	free(conn->buffer);
-	free((void*) conn);
+	Free(conn->buffer);
+	Free(conn);
 }
 
 /**
@@ -87,7 +86,7 @@ void StreamDataBlock(Connection * conn, const void * data, size_t nBytes)
 {
 	// check that connection is in write mode
 	ASSERT(conn->flags & CONNECTION_WRITE);
-	byte const * p = (byte*) data;
+	byte const * p = data;
 	while(true) {
 		// check that data fits in buffer
 		size_t bytesFree = CONNECTION_BUFFER_SIZE - conn->offset;
@@ -368,7 +367,7 @@ char* ReceiveString(Connection* conn)
 {
 	uint32 length = ReceiveData32(conn);
 	//printf("ReceiveString() length = %u\n", length);
-	char* str = malloc(length + 1);
+	char* str = Allocate(length + 1);
 	ReceiveDataBlock(conn, str, length);
 	str[length] = '\0';
 	return str;
@@ -379,5 +378,5 @@ byte* ReceiveMessage(Connection* conn)
 {
 	// NOTE: is this used anymore?
 	ASSERT(false);
-	return NULL;
+	return 0;
 }

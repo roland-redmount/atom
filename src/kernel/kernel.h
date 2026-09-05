@@ -100,7 +100,6 @@ Atom GetCorePredicateForm(index32 formId);
 
 /**
  * Lookup the positive term form of one of the "primitive" forms for core tables.
- * This is the key the core relation tables are registered under; see RelationRegistry.h
  * Returns an AT_ID atom.
  */
 Atom GetCoreTermForm(index32 formId);
@@ -122,7 +121,7 @@ void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
  */
 Atom GetCoreRoleName(index32 roleId);
 
-Relation const * GetCoreRelation(index32 relationId);
+Relation GetCoreRelation(index32 relationId);
 
 RelationTable * GetCoreRelationTable(index32 relationId);
 

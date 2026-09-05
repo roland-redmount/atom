@@ -298,6 +298,7 @@ static void testPredicatePermutation(void)
 		else
 			ASSERT_FALSE(NextFormPermutation(iterator))
 	}
+	FreeFormIterator(iterator);
 	IFactRelease(predicateForm);
 }
 

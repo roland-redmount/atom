@@ -24,6 +24,9 @@ add_compile_options(
     -Wno-error=unused-function
     -Wno-error=unused-but-set-variable
     -Wpointer-arith
+    # Flag any cast that drops const, such as freeing a const pointer with the
+    # C library free(). Our own Free() takes a const pointer; see allocator.h.
+    -Wcast-qual
     -m64
 )
 
@@ -98,7 +101,6 @@ add_library(atom SHARED
     src/kernel/multiset.c
     src/kernel/Parameter.c
     src/kernel/Relation.c
-    src/kernel/RelationRegistry.c
     src/kernel/RelationTable.c
     src/kernel/operator.c
     src/kernel/ServiceRegistry.c

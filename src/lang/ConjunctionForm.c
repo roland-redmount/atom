@@ -4,7 +4,7 @@
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
-#include "kernel/RelationRegistry.h"
+#include "kernel/Relation.h"
 
 
 /**

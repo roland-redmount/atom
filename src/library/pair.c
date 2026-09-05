@@ -18,7 +18,7 @@ static Atom pairRoleNames[3];
 // the canonical order indexes for roles (pair left right)
 static index8 pairTermRoleIndex[3];
 
-static Relation const * pairRelation;
+static Relation pairRelation;
 static RelationTable * pairRelationTable;
 static Operator * pairOperator;
 
@@ -119,7 +119,7 @@ void PairSetup(void)
 	TypeSignature typeSignature = {0};
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_ID, AT_ID}, typeSignature.atomTypes, pairTermRoleIndex, 3);		
-	pairRelation = CreateRelation(pairTermForm, 3, typeSignature);
+	pairRelation = CreateRelation(pairTermForm, typeSignature);
 	IFactRelease(pairTermForm);
 	
 	pairRelationTable = CreateRelationTable(pairRelation, &btreeStorageProvider, pairTermRoleIndex);

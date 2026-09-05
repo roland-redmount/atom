@@ -24,7 +24,7 @@ Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size3
  * Find the relation (multiset m element e multiple n) where
  * e has the given atom type. Currently we only support multisets of ID or NAME atoms.
  */
-Relation const * findMultisetRelation(byte elementType)
+Relation findMultisetRelation(byte elementType)
 {
 	switch(elementType) {
 		case AT_ID:
@@ -35,7 +35,7 @@ Relation const * findMultisetRelation(byte elementType)
 
 		default:
 		ASSERT(false)
-		return 0;
+		return (Relation) {0};
 	}
 }
 
@@ -52,11 +52,11 @@ static RelationTable * findMultisetTable(byte elementType)
 /**
  * Find the relation associated with a multiset.
  */
-static Relation const * lookupMultisetRelation(Atom multiset)
+static Relation lookupMultisetRelation(Atom multiset)
 {
 	return LookupFindRelation(
 		multiset,
-		GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE),
+		GetCoreTermForm(FORM_MULTISET_ELEMENT_MULTIPLE),
 		GetCoreRoleName(ROLE_MULTISET)
 	);
 }
@@ -67,8 +67,8 @@ static Relation const * lookupMultisetRelation(Atom multiset)
  */
 static byte findMultisetElementType(Atom multiset)
 {
-	Relation const * relation = lookupMultisetRelation(multiset);
-	return relation->typeSignature.atomTypes[
+	Relation relation = lookupMultisetRelation(multiset);
+	return relation.typeSignature.atomTypes[
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)
 	];
 }
@@ -177,7 +177,7 @@ size32 MultisetGetElementMultiple(Atom multiset, Atom element)
  */
 void MultisetIterate(Atom multiset, byte elementType, MultisetIterator * iterator)
 {
-	Relation const * relation = findMultisetRelation(elementType);
+	Relation relation = findMultisetRelation(elementType);
 	byte parameterIO[3];
 	CoreFormSetByteArray(
 		FORM_MULTISET_ELEMENT_MULTIPLE,

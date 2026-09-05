@@ -24,7 +24,7 @@ static void providerCreateOperatorCallback(
 {
 	RelationTable * table = data;
 	Operator * op = CreateMachineOperator(
-		table->relation->nColumns, table->indexColumns, operatorProvider, providerData,
+		table->nColumns, table->indexColumns, operatorProvider, providerData,
 		contextSize);
 	CreateService(
 		table->relation, ioSignature, op, SERVICE_PRIMITIVE);
@@ -32,38 +32,39 @@ static void providerCreateOperatorCallback(
 
 
 RelationTable * CreateRelationTable(
-	Relation const * relation, StorageProvider const * provider, index8 const indexColumns[])
+	Relation relation, StorageProvider const * provider, index8 const indexColumns[])
 {
 	// The relation must not already exist in the registry
 	ASSERT(!FindRelationTable(relation))
 	ASSERT(provider)
+	size8 nColumns = TypeSignatureNAtomTypes(relation.typeSignature);
 
 	// NOTE: pool allocation would be preferable
 	RelationTable * table = Allocate(sizeof(RelationTable));
 	table->relation = relation;
+	table->nColumns = nColumns;
 	AcquireRelation(relation);
 	table->provider = provider;
 	table->referenceCount = 1;		// the caller owns this reference
 
 	// setup index column array
-	SetMemory(&table->indexColumns, RELATION_MAX_ARITY, 0);
 	if(indexColumns)
-		CopyMemory(indexColumns, table->indexColumns, relation->nColumns);
+		CopyMemory(indexColumns, table->indexColumns, nColumns);
 	else {
 		// use the identity order
-		for(index8 i = 0; i < relation->nColumns; i++)
+		for(index8 i = 0; i < nColumns; i++)
 			table->indexColumns[i] = i;
 	}
 	// Call the storage provider to prepare storage for the table
 	table->storage = provider->createStorage(
-		table->indexColumns, relation->nColumns, table, providerCreateOperatorCallback);
+		table->indexColumns, nColumns, table, providerCreateOperatorCallback);
 	// Add the relation table to the registry
 	ASSERT(BTreeInsert(tableRegistry, &table) == BTREE_INSERTED)
 	return table;
 }
 
 
-RelationTable * FindOrCreateRelationTable(Relation const * relation, StorageProvider const * provider)
+RelationTable * FindOrCreateRelationTable(Relation relation, StorageProvider const * provider)
 {
 	RelationTable * table = FindRelationTable(relation);
 	if(table)
@@ -154,14 +155,13 @@ void CheckRelationTable(RelationTable * table)
 
 
 
-byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)
+byte RelationTableAddTuple(RelationTable * table, Atom const tuple[], uint8 idPosition)
 {
-	Relation const * relation = table->relation;
 	byte result = table->provider->addTuple(table->storage, tuple, idPosition);
 	if(result == TUPLE_ADDED) {
-		for(index8 i = 0; i < relation->nColumns; i++) {
+		for(index8 i = 0; i < table->nColumns; i++) {
 			if(i + 1 != idPosition)
-				AcquireAtom(tuple[i], relation->typeSignature.atomTypes[i]);
+				AcquireAtom(tuple[i], table->relation.typeSignature.atomTypes[i]);
 		}
 	}
 	return result;
@@ -174,34 +174,28 @@ size32 RelationTableNRows(RelationTable const * table)
 }
 
 
-byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition)
+byte RelationTableRemoveTuple(RelationTable * table, Atom const tuple[], uint8 idPosition)
 {
-	Relation const * relation = table->relation;
 	byte result = table->provider->removeTuple(table->storage, tuple, idPosition);
 	if(result == TUPLE_REMOVED) {
-		for(index32 i = 0; i < relation->nColumns; i++) {
+		for(index32 i = 0; i < table->nColumns; i++) {
 			if((i + 1) != idPosition)
-				ReleaseTypedAtom(CreateTypedAtom(relation->typeSignature.atomTypes[i], tuple[i]));
+				ReleaseTypedAtom(CreateTypedAtom(table->relation.typeSignature.atomTypes[i], tuple[i]));
 		}
 	}
-	CheckRelationTable((RelationTable *) table);
+	CheckRelationTable(table);
 	return result;
 }
 
 
 /**
- * This compares RelationTables by the Relation * pointers.
- * TODO: it seems better to use CompareRelations() ?
+ * This compares RelationTables by comparing the corresponding relations.
  */
 static int8 btreeCompareTables(void const * item, void const * itemOrKey, size32 itemSize)
 {
-	Relation const * relation = (*(RelationTable * const *) item)->relation;
-	Relation const * relationOrKey = (*(RelationTable * const *) itemOrKey)->relation;
-	if(relation < relationOrKey)
-		return -1;
-	if(relation > relationOrKey)
-		return 1;
-	return 0;
+	RelationTable * table = *((RelationTable * const *) item);
+	RelationTable * tableOrKey = *((RelationTable * const *) itemOrKey);
+	return CompareRelations(table->relation, tableOrKey->relation);
 }
 
 
@@ -217,7 +211,7 @@ void FreeRelationTableRegistry(void)
 }
 
 
-RelationTable * FindRelationTable(Relation const * relation)
+RelationTable * FindRelationTable(Relation relation)
 {
 	// the B-tree item is a RelationTable * pointer
 	RelationTable key = {.relation = relation};

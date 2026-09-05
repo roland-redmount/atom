@@ -3,13 +3,14 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/operator.h"
-#include "kernel/RelationRegistry.h"
+#include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
 #include "lang/formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
+#include "lang/TermForm.h"
 #include "library/list.h"
 #include "library/MachineService.h"
 #include "library/string.h"
@@ -28,9 +29,11 @@ static bool weigh(Atom arguments[], void * state, bool isFirstCall)
 }
 
 
-static index8 roleIndex(Atom predicateForm, char const * roleName)
+// NOTE: this should perhaps be provided by TermForom
+static index8 roleIndex(Atom termForm, char const * roleName)
 {
 	Atom role = CreateNameFromCString(roleName);
+	Atom predicateForm = TermFormGetPredicateForm(termForm);
 	index8 index = PredicateRoleIndex(predicateForm, role);
 	NameRelease(role);
 	return index;
@@ -47,10 +50,9 @@ static void testMachineServiceArgumentOrder(void)
 	Service service = RegisterMachineService(
 		"first @1<INT second @2<INT result @3>INT", &weigh, 0);
 
-	Atom predicateForm = service.relation->predicateForm;
-	index8 firstIndex = roleIndex(predicateForm, "first");
-	index8 secondIndex = roleIndex(predicateForm, "second");
-	index8 resultIndex = roleIndex(predicateForm, "result");
+	index8 firstIndex = roleIndex(service.relation.termForm, "first");
+	index8 secondIndex = roleIndex(service.relation.termForm, "second");
+	index8 resultIndex = roleIndex(service.relation.termForm, "result");
 
 	// The test only has teeth while the canonical order differs from the signature
 	// order. Should these roles ever hash into the signature order, pick other names.
@@ -134,10 +136,9 @@ static void testMachineServiceIterator(void)
 	Service service = RegisterMachineService(
 		"from @1<INT count @2>INT to @3<INT", &count, sizeof(CountState));
 
-	Atom predicateForm = service.relation->predicateForm;
-	index8 fromIndex = roleIndex(predicateForm, "from");
-	index8 countIndex = roleIndex(predicateForm, "count");
-	index8 toIndex = roleIndex(predicateForm, "to");
+	index8 fromIndex = roleIndex(service.relation.termForm, "from");
+	index8 countIndex = roleIndex(service.relation.termForm, "count");
+	index8 toIndex = roleIndex(service.relation.termForm, "to");
 
 	// A service that may yield several tuples declares the order it yields them in.
 	// Declaring none would claim at most one tuple; see the contract in operator.h
@@ -177,10 +178,9 @@ static void testMachineServiceIteratorState(void)
 	Service service = RegisterMachineService(
 		"from @1<INT count @2>INT to @3<INT", &count, sizeof(CountState));
 
-	Atom predicateForm = service.relation->predicateForm;
-	index8 fromIndex = roleIndex(predicateForm, "from");
-	index8 countIndex = roleIndex(predicateForm, "count");
-	index8 toIndex = roleIndex(predicateForm, "to");
+	index8 fromIndex = roleIndex(service.relation.termForm, "from");
+	index8 countIndex = roleIndex(service.relation.termForm, "count");
+	index8 toIndex = roleIndex(service.relation.termForm, "to");
 
 	Atom first[3];
 	first[fromIndex] = (Atom) {._int = 1};
@@ -245,7 +245,7 @@ static void testMachineServiceSharedRelation(void)
 		"term @1<INT term @2>INT total @3<INT", &difference, 0);
 	// the second service shares the relation of the first
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
-	ASSERT_PTR_EQUAL(subtracting.relation, adding.relation)
+	ASSERT_TRUE(SameRelations(subtracting.relation, adding.relation))
 	ASSERT_PTR_NOT_EQUAL(subtracting.op, adding.op)
 
 	// dispatch tells them apart by what the query binds

@@ -39,19 +39,19 @@ static bool queryVariableMap(TypedTuple const * queryActors, index8 equalityMap[
  * constants to the input parameters of the service; the service overwrites the arguments
  * taken by its output parameters.
  */
-static void openService(MixedTypeRelation * relation)
+static void openService(MixedTypeRelation * mixedRelation)
 {
-	size8 arity = relation->tuple->nAtoms;
-	relation->impl.concat.service = *DispatchIteratorPeekService(
-		&(relation->impl.concat.dispatchIterator));
+	size8 arity = mixedRelation->tuple->nAtoms;
+	mixedRelation->impl.concat.service = *DispatchIteratorPeekService(
+		&(mixedRelation->impl.concat.dispatchIterator));
 
 	for(index8 i = 0; i < arity; i++)
-		relation->impl.concat.arguments[i] = TypedTupleGetAtom(
-			relation->impl.concat.queryActors, relation->impl.concat.permutation[i]);
+		mixedRelation->impl.concat.arguments[i] = TypedTupleGetAtom(
+			mixedRelation->impl.concat.queryActors, mixedRelation->impl.concat.permutation[i]);
 
-	relation->impl.concat.context = OperatorCreateContext(
-		relation->impl.concat.service.op, relation->impl.concat.arguments);
-	relation->impl.concat.nServices++;
+	mixedRelation->impl.concat.context = OperatorCreateContext(
+		mixedRelation->impl.concat.service.op, mixedRelation->impl.concat.arguments);
+	mixedRelation->impl.concat.nServices++;
 }
 
 
@@ -59,14 +59,14 @@ static void openService(MixedTypeRelation * relation)
  * Copy the arguments of the current service into the tuple of the relation, which is in
  * query actor order and carries the column types of that service.
  */
-static void gatherTuple(MixedTypeRelation * relation)
+static void gatherTuple(MixedTypeRelation * mixedRelation)
 {
-	byte const * atomTypes = relation->impl.concat.service.relation->typeSignature.atomTypes;
-	for(index8 i = 0; i < relation->tuple->nAtoms; i++)
+	byte const * atomTypes = mixedRelation->impl.concat.service.relation.typeSignature.atomTypes;
+	for(index8 i = 0; i < mixedRelation->tuple->nAtoms; i++)
 		TypedTupleSetElement(
-			relation->tuple,
-			relation->impl.concat.permutation[i],
-			CreateTypedAtom(atomTypes[i], relation->impl.concat.arguments[i])
+			mixedRelation->tuple,
+			mixedRelation->impl.concat.permutation[i],
+			CreateTypedAtom(atomTypes[i], mixedRelation->impl.concat.arguments[i])
 		);
 }
 
@@ -75,18 +75,18 @@ static void gatherTuple(MixedTypeRelation * relation)
  * Test whether the current tuple of the relation satisfies the equality constraints
  * of the query, if any. Equality-constrained arguments must always have the same atom type.
  */
-static bool tupleSatisfiesConstraints(MixedTypeRelation const * relation)
+static bool tupleSatisfiesConstraints(MixedTypeRelation const * mixedRelation)
 {
-	index8 const * variableMap = relation->impl.concat.variableMap;
+	index8 const * variableMap = mixedRelation->impl.concat.variableMap;
 	if(!variableMap)
 		return true;	// no constraints to check
 
-	for(index8 i = 0; i < relation->tuple->nAtoms; i++) {
+	for(index8 i = 0; i < mixedRelation->tuple->nAtoms; i++) {
 		if(variableMap[i] == i)
 			continue;
 		if(!SameTypedAtoms(
-			TypedTupleGetElement(relation->tuple, i),
-			TypedTupleGetElement(relation->tuple, variableMap[i])))
+			TypedTupleGetElement(mixedRelation->tuple, i),
+			TypedTupleGetElement(mixedRelation->tuple, variableMap[i])))
 			return false;
 	}
 	return true;
@@ -95,26 +95,26 @@ static bool tupleSatisfiesConstraints(MixedTypeRelation const * relation)
 /**
  * Get the next tuple (if any) from a MIXED_TYPE_CONCAT relation 
  */
-static bool concatNext(MixedTypeRelation * relation)
+static bool concatNext(MixedTypeRelation * mixedRelation)
 {
-	while(!relation->impl.concat.isExhausted) {
-		if(!relation->impl.concat.context) {
-			if(!DispatchIteratorNext(&(relation->impl.concat.dispatchIterator))) {
-				relation->impl.concat.isExhausted = true;
+	while(!mixedRelation->impl.concat.isExhausted) {
+		if(!mixedRelation->impl.concat.context) {
+			if(!DispatchIteratorNext(&(mixedRelation->impl.concat.dispatchIterator))) {
+				mixedRelation->impl.concat.isExhausted = true;
 				break;
 			}
-			openService(relation);
+			openService(mixedRelation);
 		}
 
-		if(OperatorCall(relation->impl.concat.context)) {
-			gatherTuple(relation);
-			if(tupleSatisfiesConstraints(relation))
+		if(OperatorCall(mixedRelation->impl.concat.context)) {
+			gatherTuple(mixedRelation);
+			if(tupleSatisfiesConstraints(mixedRelation))
 				return true;
 		}
 		else {
 			// This service is exhausted, and its context must not be called again
-			OperatorFreeContext(relation->impl.concat.context);
-			relation->impl.concat.context = 0;
+			OperatorFreeContext(mixedRelation->impl.concat.context);
+			mixedRelation->impl.concat.context = 0;
 		}
 	}
 	return false;
@@ -126,45 +126,40 @@ MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * 
 	ASSERT(IsTermForm(queryTermForm))
 	size8 arity = queryActors->nAtoms;
 
-	MixedTypeRelation * relation = Allocate(sizeof(MixedTypeRelation));
-	relation->type = MIXED_TYPE_CONCAT;
-	relation->termForm = queryTermForm;
-	relation->tuple = CreateTypedTuple(arity);
-	relation->impl.concat.queryActors = queryActors;
-	relation->impl.concat.context = 0;
-	relation->impl.concat.isExhausted = false;
-	relation->impl.concat.nServices = 0;
+	MixedTypeRelation * mixedRelation = Allocate(sizeof(MixedTypeRelation));
+	mixedRelation->type = MIXED_TYPE_CONCAT;
+	mixedRelation->termForm = queryTermForm;
+	mixedRelation->tuple = CreateTypedTuple(arity);
+	mixedRelation->impl.concat.queryActors = queryActors;
 
 	// The arguments, query parameters and permutation arrays share one allocation, the
 	// atoms first so that they keep the alignment of an Atom
-	relation->impl.concat.arguments = Allocate(
+	mixedRelation->impl.concat.arguments = Allocate(
 		arity * (2 * sizeof(Atom) + sizeof(index8)));
-	relation->impl.concat.queryParameters = relation->impl.concat.arguments + arity;
-	relation->impl.concat.permutation =
-		(index8 *) (relation->impl.concat.queryParameters + arity);
+	mixedRelation->impl.concat.queryParameters = mixedRelation->impl.concat.arguments + arity;
+	mixedRelation->impl.concat.permutation =
+		(index8 *) (mixedRelation->impl.concat.queryParameters + arity);
 
 	// Create the variable map only if there are repeated variables
 	index8 variableMap[arity];
 	if(queryVariableMap(queryActors, variableMap)) {
-		relation->impl.concat.variableMap = Allocate(arity * sizeof(index8));
-		CopyMemory(variableMap, relation->impl.concat.variableMap, arity * sizeof(index8));
+		mixedRelation->impl.concat.variableMap = Allocate(arity * sizeof(index8));
+		CopyMemory(variableMap, mixedRelation->impl.concat.variableMap, arity * sizeof(index8));
 	}
-	else
-		relation->impl.concat.variableMap = 0;
 
-	ActorsToParameters(queryActors, relation->impl.concat.queryParameters);
+	ActorsToParameters(queryActors, mixedRelation->impl.concat.queryParameters);
 	DispatchIterate(
-		queryTermForm, relation->impl.concat.queryParameters, arity, DISPATCH_MATCH_EXACT,
-		relation->impl.concat.permutation, &(relation->impl.concat.dispatchIterator));
-	return relation;
+		queryTermForm, mixedRelation->impl.concat.queryParameters, arity, DISPATCH_MATCH_EXACT,
+		mixedRelation->impl.concat.permutation, &(mixedRelation->impl.concat.dispatchIterator));
+	return mixedRelation;
 }
 
 
-bool MixedTypeRelationNext(MixedTypeRelation * relation)
+bool MixedTypeRelationNext(MixedTypeRelation * mixedRelation)
 {
-	switch(relation->type) {
+	switch(mixedRelation->type) {
 	case MIXED_TYPE_CONCAT:
-		return concatNext(relation);
+		return concatNext(mixedRelation);
 
 	default:
 		// MIXED_TYPE_FORMULA is not implemented
@@ -174,35 +169,35 @@ bool MixedTypeRelationNext(MixedTypeRelation * relation)
 }
 
 
-size32 MixedTypeRelationNServices(MixedTypeRelation const * relation)
+size32 MixedTypeRelationNServices(MixedTypeRelation const * mixedRelation)
 {
-	ASSERT(relation->type == MIXED_TYPE_CONCAT)
-	return relation->impl.concat.nServices;
+	ASSERT(mixedRelation->type == MIXED_TYPE_CONCAT)
+	return mixedRelation->impl.concat.nServices;
 }
 
 
-TypedTuple const * MixedTypeRelationPeekTuple(MixedTypeRelation const * relation)
+TypedTuple const * MixedTypeRelationPeekTuple(MixedTypeRelation const * mixedRelation)
 {
-	return relation->tuple;
+	return mixedRelation->tuple;
 }
 
 
-void FreeMixedTypeRelation(MixedTypeRelation * relation)
+void FreeMixedTypeRelation(MixedTypeRelation * mixedRelation)
 {
-	switch(relation->type) {
+	switch(mixedRelation->type) {
 	case MIXED_TYPE_CONCAT:
-		if(relation->impl.concat.context)
-			OperatorFreeContext(relation->impl.concat.context);
-		DispatchIteratorEnd(&(relation->impl.concat.dispatchIterator));
-		Free(relation->impl.concat.arguments);
-		if(relation->impl.concat.variableMap)
-			Free(relation->impl.concat.variableMap);
+		if(mixedRelation->impl.concat.context)
+			OperatorFreeContext(mixedRelation->impl.concat.context);
+		DispatchIteratorEnd(&(mixedRelation->impl.concat.dispatchIterator));
+		Free(mixedRelation->impl.concat.arguments);
+		if(mixedRelation->impl.concat.variableMap)
+			Free(mixedRelation->impl.concat.variableMap);
 		break;
 
 	default:
 		ASSERT(false)
 		break;
 	}
-	FreeTypedTuple(relation->tuple);
-	Free(relation);
+	FreeTypedTuple(mixedRelation->tuple);
+	Free(mixedRelation);
 }

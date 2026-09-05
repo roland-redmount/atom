@@ -12,7 +12,7 @@
 #define DISPATCH_H
 
 #include "kernel/Parameter.h"
-#include "kernel/RelationRegistry.h"
+#include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/formula.h"
 

@@ -155,7 +155,7 @@ index8 const * GetListLengthRoleIndex(void);
  * The (list position element) relation storing elements of the given type,
  * which is AT_ID or AT_LETTER.
  */
-Relation const * GetListRelation(byte elementType);
+Relation GetListRelation(byte elementType);
 
 RelationTable * GetListRelationTable(byte elementType);
 
@@ -165,7 +165,7 @@ RelationTable * GetListRelationTable(byte elementType);
  */
 Operator * GetListOperator(byte elementType);
 
-Relation const * GetListLengthRelation(void);
+Relation GetListLengthRelation(void);
 
 RelationTable * GetListLengthRelationTable(void);
 

@@ -28,13 +28,9 @@ static Operator * createOperator(enum OperatorType type, size8 nArguments, size3
 	// its arity is that of a predicate form, which has at least one role
 	ASSERT(nArguments > 0)
 	Operator * op = Allocate(sizeof(Operator));
-	SetMemory(op, sizeof(Operator), 0);
 	op->type = type;
 	op->nArguments = nArguments;
-	op->relation = 0;	// set by CreateService()
-	op->nParents = 0;
 	op->contextSize = contextSize;
-	op->indexOrder = 0;
 	return op;
 }
 
@@ -258,10 +254,6 @@ Operator * CreatePermuteOperator(
 		op->impl.permute.constantTypes = Allocate(nConstants);
 		CopyMemory(constantTypes, op->impl.permute.constantTypes, nConstants);
 		TupleAcquire(constantTypes, constants, nConstants);
-	}
-	else {
-		op->impl.permute.constants = 0;
-		op->impl.permute.constantTypes = 0;
 	}
 
 #ifdef DEBUG
@@ -959,7 +951,7 @@ Operator * CreateProjectOperator(
 
 int8 btreeCompareTuples(void const * item1, void const * item2, size32 itemSize)
 {
-	return TupleCompare((Atom *) item1, (Atom *) item2, itemSize / sizeof(Atom));
+	return TupleCompare(item1, item2, itemSize / sizeof(Atom));
 }
 
 
@@ -975,7 +967,6 @@ static void projectSetupContext(OperatorContext * context)
 	// The child arguments tuple takes the caller's input arguments in the kept positions;
 	// the dropped arguments are left unbound so the child enumerates them.
 	Atom * childArguments = Allocate(nChildArguments * sizeof(Atom));
-	SetMemory(childArguments, nChildArguments * sizeof(Atom), 0);
 	for(index8 i = 0; i < nArguments; i++)
 		childArguments[op->impl.project.argumentMap[i]] = context->arguments[i];
 
@@ -1572,17 +1563,17 @@ static void teardownOperator(Operator * op)
 }
 
 
-void AttachOperator(Operator * op, Relation const * relation)
+void AttachOperator(Operator * op, Relation relation)
 {
-	ASSERT(!op->relation)
+	ASSERT(IsNullRelation(op->relation))
 	op->relation = relation;
 }
 
 
 void DetachOperator(Operator * op)
 {
-	ASSERT(op->relation)
-	op->relation = 0;
+	ASSERT(!IsNullRelation(op->relation))
+	op->relation = (Relation) {0};
 	CheckOperator(op);
 }
 
@@ -1590,7 +1581,7 @@ void DetachOperator(Operator * op)
 void CheckOperator(Operator * op)
 {
 	if(op->nParents == 0) {
-		if(!op->relation)
+		if(IsNullRelation(op->relation))
 			teardownOperator(op);
 		else {
 			// A MACHINE operator may be attached to a PRIMITIVE Service for
@@ -1610,7 +1601,6 @@ static OperatorContext * createChildContext(
 {
 	size32 contextSize = sizeof(OperatorContext) + op->contextSize;
 	OperatorContext * context = Allocate(contextSize);
-	SetMemory(context, contextSize, 0);
 	context->op = op;
 	context->arguments = arguments;
 	context->parent = parent;

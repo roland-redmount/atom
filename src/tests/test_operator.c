@@ -7,7 +7,7 @@
 #include "library/list.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
-#include "kernel/RelationRegistry.h"
+#include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
 #include "library/string.h"
 #include "kernel/tuple.h"

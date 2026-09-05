@@ -135,20 +135,40 @@ void InitializePaging(void)
 }
 
 
+/**
+ * Return a pointer to a page
+ */
 static void * pageToAddress(index32 page)
 {
 	return (void *) (BASE_ADDRESS + page * MEMORY_PAGE_SIZE);
 }
 
-static index32 pointerToPage(void * ptr)
+/**
+ * Return the page index that the given pointer points into.
+ * The pointer may point anywhere within the page.
+ */
+static index32 pointerToPage(void const * ptr)
 {
 	addr64 address = (addr64) ptr;
-	// verify address is on an even page boundary
-	ASSERT((address & (MEMORY_PAGE_SIZE - 1)) == 0);
 	// verify address is in range
 	ASSERT((address > BASE_ADDRESS) & (address < BASE_ADDRESS + MEMORY_SIZE));
-
+	// this division truncates to the page, as BASE_ADDRESS is on a page boundary
 	return (address - BASE_ADDRESS) / MEMORY_PAGE_SIZE;
+}
+
+/**
+ * Return the page index corresponding to a page-aligned pointer
+ */
+static index32 pageAlignedPointerToPage(void const * ptr)
+{
+	// verify address is on an even page boundary
+	ASSERT((((addr64) ptr) & (MEMORY_PAGE_SIZE - 1)) == 0);
+	return pointerToPage(ptr);
+}
+
+void * GetPageOfAddress(void const * address)
+{
+	return pageToAddress(pointerToPage(address));
 }
 
 
@@ -168,9 +188,9 @@ void * AllocatePage(void)
 }
 
 
-void FreePage(void * pageAddress)
+void FreePage(void const * pageAddress)
 {
-	index32 page = pointerToPage(pageAddress);
+	index32 page = pageAlignedPointerToPage(pageAddress);
 	clearPageBit(page);
 	if(page < paging.firstFreePage)
 		paging.firstFreePage = page;
@@ -196,9 +216,9 @@ void * AllocatePages(size32 nPages)
 }
 
 
-void FreePages(void * firstPageAddress, size32 nPages)
+void FreePages(void const * firstPageAddress, size32 nPages)
 {
-	index32 firstPage = pointerToPage(firstPageAddress);
+	index32 firstPage = pageAlignedPointerToPage(firstPageAddress);
 	for(index32 page = firstPage; page < firstPage + nPages; page++)
 		clearPageBit(page);
 	if(firstPage < paging.firstFreePage)

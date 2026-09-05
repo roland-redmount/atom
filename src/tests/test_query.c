@@ -1,7 +1,7 @@
 
 #include "kernel/dictionary.h"
 #include "kernel/kernel.h"
-#include "kernel/RelationRegistry.h"
+#include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/formula.h"
 #include "storage/RelationBTree.h"
@@ -217,8 +217,8 @@ void testInvalidateServiceByNewRelation(void)
 	// since we now may have additional facts.
 	// NOTE: this is overly conservative: the compiled service actually does not depend
 	// on this new relation, since its type signature differs from the service found during compilation.
-	Relation const * intRelation = CreateRelation(
-		precSuccFixture.termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
+	Relation intRelation = CreateRelation(
+		precSuccFixture.termForm, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
 	RelationTable * intTable = CreateRelationTable(
 		intRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(intRelation);

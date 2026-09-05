@@ -24,8 +24,8 @@ static void initTestItem(TestItem * item, int key)
 // Compare two test item structures by key
 static int8 compareTestItems(void const * item1, void const * item2, size32 itemSize)
 {
-    int key1 = ((TestItem *) item1)->key;
-	int key2 = ((TestItem *) item2)->key;
+    int key1 = ((TestItem const *) item1)->key;
+	int key2 = ((TestItem const *) item2)->key;
 	if(key1 < key2)
 		return -1;
 	else if(key1 > key2)

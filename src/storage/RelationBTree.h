@@ -46,7 +46,7 @@ typedef struct s_RelationBTree {
  */
 RelationBTree * CreateRelationBTree(size8 nColumns, index8 const indexColumns[]);
 
-void FreeRelationBTree(RelationBTree * relation);
+void FreeRelationBTree(RelationBTree const * relation);
 
 /**
  * Return number of tuples in a B-tree relation.

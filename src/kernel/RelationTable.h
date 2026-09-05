@@ -29,9 +29,7 @@
 
 
 typedef struct s_RelationTable {
-	// NOTE: the Relation points here is merely used to find the RelationTable.
-	Relation const * relation;
-
+	Relation relation;
 	/*
 	 * The order of index columns. The stored tuples will be ordered  lexicographically by
 	 * indexColumns[0], ..., indexColumns[nColumns-1]. Hence, lookup should be fast when
@@ -42,6 +40,8 @@ typedef struct s_RelationTable {
 	 * queries (@list _ _) and (@list @position _) should be fast, but (_ _ @element) may be slow.
 	 */
 	index8 indexColumns[RELATION_MAX_ARITY];
+	// The arity of the relation, determined from the relation type signature
+	size8 nColumns;
 
 	StorageProvider const * provider;
 	void * storage;			// implementation-dependent data, allocated by the StorageProvider
@@ -61,16 +61,20 @@ typedef struct s_RelationTable {
  *
  * The indexColumns array indicates the desired order of the index columns; see
  * RelationTable.indexColumns. Passing 0 gives the identity order.
+ *
+ * The number of columns of the relation table is determied from its type
+ * signature; see TypeSignatureNColumns().
  */
 RelationTable * CreateRelationTable(
-	Relation const * relation, StorageProvider const * provider, index8 const indexColumns[]);
+	Relation relation, StorageProvider const * provider, index8 const indexColumns[]);
 
 /**
  * Find a relation table, or create one with the given storage provider if it does not exist.
  * If created, the table's indexColumns will be set to 0 (identity order).
  * The caller obtains a reference to the table in either case.
  */
-RelationTable * FindOrCreateRelationTable(Relation const * relation, StorageProvider const * provider);
+RelationTable * FindOrCreateRelationTable(
+	Relation relation, StorageProvider const * provider);
 
 /**
  * Acquire a reference to a relation table.
@@ -106,15 +110,18 @@ size32 RelationTableNRows(RelationTable const * table);
  * Acquires a reference to each atom in the tuple, except an identified atom.
  * Does not add lookup entries; see AssertFact()
  */
-byte RelationTableAddTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
+byte RelationTableAddTuple(RelationTable * table, Atom const tuple[], uint8 idPosition);
 
 /**
  * Remove the given tuple from the relation table.
  * If the tuple contains an identified atom, its position must match the given idPosition
  * to remove the tuple.
  * Does not remove lookup entries; see RetractFact()
+ *
+ * CLAUDE: removing the last tuple can leave the table stale, in which case
+ * CheckRelationTable() removes it and the table pointer becomes invalid.
  */
-byte RelationTableRemoveTuple(RelationTable const * table, Atom const tuple[], uint8 idPosition);
+byte RelationTableRemoveTuple(RelationTable * table, Atom const tuple[], uint8 idPosition);
 
 /**
  * Setup an empty relation table registry. Called during kernel bootstrapping only.
@@ -124,7 +131,7 @@ void SetupRelationTableRegistry(void);
 /**
  * The table storing the tuples of the given relation, or 0 if the relation is computed.
  */
-RelationTable * FindRelationTable(Relation const * relation);
+RelationTable * FindRelationTable(Relation relation);
 
 /**
  * Deallocate the registry. Before calling this function, all tables must have been dropped.

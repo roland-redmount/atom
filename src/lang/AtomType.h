@@ -9,10 +9,9 @@
 
 
 /**
- * Atom type IDs. Zero is invalid / none
+ * Atom type IDs. Zero (null) indicates a missing value.
  */
 
-#define AT_NONE					0
 #define AT_NAME					1		// a name (symbol) identified by a hash
 #define AT_ID					2		// atom identified by an ifact
 #define AT_INT					3		// signed integer

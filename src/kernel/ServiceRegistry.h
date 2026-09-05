@@ -22,6 +22,9 @@
  */
 
  enum ServiceKind {
+	// TODO: can we replace these with a function IsPrimitive() testing
+	// service.op.kind == OPERATOR_MACHINE ?
+
 	// A primitive service is registed by a storage provider, and evaluated by a
 	// machine operator (OPERATOR_MACHINE). It does not depend on any rules or facts
 	// in the knowledgebase, and is removed only when the storage is removed.
@@ -33,7 +36,7 @@
 };
 
 typedef struct s_Service {
-	Relation const * relation;
+	Relation relation;
 	IOSignature ioSignature;
 	// Pointer to the root of the operator sub-tree defining this service.
 	Operator * op;
@@ -67,7 +70,7 @@ void SetupServiceRegistry(void);
  * created by CreateRelationTable. We could perhaps remove the kind argument.
  */
 Service CreateService(
-	Relation const * relation, IOSignature ioSignature, Operator * op,
+	Relation relation, IOSignature ioSignature, Operator * op,
 	enum ServiceKind kind);
 
 /**
@@ -80,12 +83,12 @@ bool ServiceHasDependents(Service const * service);
  * This removes the services' operator, and recursively removes all operators
  * and services that depend on it.
  */
-void RemoveService(Relation const * relation, Operator * op);
+void RemoveService(Relation relation, Operator * op);
 
 /**
  * Remove all services for the given relation.
  */
-void ServiceRegistryRemoveAll(Relation const * relation);
+void ServiceRegistryRemoveAll(Relation relation);
 
 /**
  * Deallocate the service registry. Before calling this function,
@@ -129,14 +132,14 @@ void RemoveAllCompiledServices(void);
  * Iterating over services
  */
 typedef struct {
-	Relation const * relation;
+	Relation relation;
 	BTreeIterator btreeIterator;
 } ServiceIterator;
 
 /**
  * Create iterator over all services for a given relation
  */
-void ServiceRegistryIterate(Relation const * relation, ServiceIterator * iterator);
+void ServiceRegistryIterate(Relation relation, ServiceIterator * iterator);
 
 bool ServiceIteratorNext(ServiceIterator * iterator);
 
@@ -149,7 +152,7 @@ void ServiceIteratorEnd(ServiceIterator * iterator);
  * must be filled to the relation arity.
  * If a matching service does not exist, returns 0
  */
-Operator * FindService(Relation const * relation, IOSignature ioSignature);
+Operator * FindService(Relation relation, IOSignature ioSignature);
 
 /**
  * CLAUDE: Copy some registered service evaluated by a machine operator of the given provider to
@@ -171,7 +174,7 @@ void PrintService(Service const * service);
  * Dump all tuples of the given relation.
  * Requires an associated service for enumerating all tuples.
  */
-void RelationDump(Relation const * relation);
+void RelationDump(Relation relation);
 
 /**
  * Print a list of all registered services

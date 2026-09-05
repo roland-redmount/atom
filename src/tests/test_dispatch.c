@@ -1,7 +1,7 @@
 
 #include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
-#include "kernel/RelationRegistry.h"
+#include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/TermForm.h"
 #include "kernel/kernel.h"
@@ -121,34 +121,32 @@ void testDispatchNegatedTerm(void)
 	Atom predicateForm = TermFormGetPredicateForm(termForm);
 	Atom negatedTermForm = CreateTermForm(predicateForm, false);
 
-	// The two signs give two distinct relation tables
+	// Create the (even odd) relation
 	TypeSignature typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2);
-	Relation const * relation = CreateRelation(termForm, 2, typeSignature);
+	Relation relation = CreateRelation(termForm, typeSignature);
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(relation);
-	Relation const * negatedRelation = CreateRelation(negatedTermForm, 2, typeSignature);
+	// Create the (! even odd) relation
+	Relation negatedRelation = CreateRelation(negatedTermForm, typeSignature);
 	RelationTable * negatedTable = CreateRelationTable(
 		negatedRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(negatedRelation);
 	ASSERT_PTR_NOT_EQUAL(table, negatedTable)
-	ASSERT_PTR_EQUAL(RelationRegistryFind(termForm, 2, typeSignature), table->relation)
-	ASSERT_PTR_EQUAL(RelationRegistryFind(negatedTermForm, 2, typeSignature), negatedTable->relation)
-	// both tables report the predicate form the two term forms share
-	ASSERT_DATA64_EQUAL(table->relation->predicateForm.hash, predicateForm.hash)
-	ASSERT_DATA64_EQUAL(negatedTable->relation->predicateForm.hash, predicateForm.hash)
+	ASSERT_TRUE(SameRelations(relation, table->relation))
+	ASSERT_TRUE(SameRelations(negatedRelation, negatedTable->relation))
 
-	// A negated query dispatches, and reaches the negated relation rather than the other
+	// Test that dispatches reaches the correct relation
 	Service service;
 	index8 permutation[2];
 	Atom query = CStringToTerm("! even x odd y");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	ASSERT_PTR_EQUAL(service.relation, negatedTable->relation)
+	ASSERT_TRUE(SameRelations(service.relation, negatedTable->relation))
 	ReleaseFormula(query);
 
 	query = CStringToTerm("even x odd y");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	ASSERT_PTR_EQUAL(service.relation, table->relation)
+	ASSERT_TRUE(SameRelations(service.relation, table->relation))
 	ReleaseFormula(query);
 
 	ReleaseRelationTable(negatedTable);
@@ -207,13 +205,13 @@ void testDispatchIterator(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	Relation const * idRelation = CreateRelation(
-		termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2));
+	Relation idRelation = CreateRelation(
+		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2));
 	RelationTable * idTable = CreateRelationTable(
 		idRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(idRelation);
-	Relation const * intRelation = CreateRelation(
-		termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
+	Relation intRelation = CreateRelation(
+		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
 	RelationTable * intTable = CreateRelationTable(
 		intRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(intRelation);
@@ -244,13 +242,13 @@ void testDispatchIterator(void)
 		ASSERT_TRUE(DispatchParameterizedQuery(
 			FormulaGetForm(query), parameters, 2, DISPATCH_MATCH_EXACT, &excludeService,
 			excludePermutation, excludedTypes, nMatches, &hasNextMatch))
-		ASSERT_PTR_EQUAL(service->relation, excludeService.relation)
+		ASSERT_TRUE(SameRelations(service->relation, excludeService.relation))
 		ASSERT_PTR_EQUAL(service->op, excludeService.op)
 		for(index8 i = 0; i < 2; i++)
 			ASSERT_UINT32_EQUAL(permutation[i], excludePermutation[i])
 
 		// add the found service to the exclusion list for the next iteration
-		excludedTypes[nMatches] = excludeService.relation->typeSignature;
+		excludedTypes[nMatches] = excludeService.relation.typeSignature;
 		ASSERT_UINT32_EQUAL(excludedTypes[nMatches].atomTypes[0], AT_ID)
 		if(excludedTypes[nMatches].atomTypes[1] == AT_ID)
 			foundIdRelation = true;

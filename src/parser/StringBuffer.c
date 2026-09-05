@@ -10,7 +10,6 @@ void StringBufferInit(StringBuffer * buffer)
 {
 	buffer->buffer = Allocate(INITIAL_CAPACITY);
 	buffer->bufferSize = INITIAL_CAPACITY;
-	SetMemory(buffer->buffer, buffer->bufferSize, 0);
 	buffer->stringLength = 0;
 }
 

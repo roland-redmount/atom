@@ -6,7 +6,7 @@
 #include "kernel/ifact.h"
 #include "kernel/letter.h"
 #include "library/list.h"
-#include "kernel/RelationRegistry.h"
+#include "kernel/Relation.h"
 #include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
 #include "library/string.h"
@@ -120,7 +120,7 @@ void testCompileProject(void)
 	);
 	int k = 0;
 	for(index8 i = 0; i < nServices; i++) {
-		ASSERT_NOT_NULL(services[i].relation)
+		ASSERT_FALSE(IsNullRelation(services[i].relation))
 		ASSERT_NOT_NULL(services[i].op)
 
 		Atom arguments[2];
@@ -349,9 +349,11 @@ void testCompileRecursiveJoin1(void)
 		"number n faculty f | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
 	// Create terminating fact, provide by a B-tree service
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
-	Relation const * relation = CreateRelation(
-		FormulaGetForm(terminatingFact), 2,
-		CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(terminatingFact)), 2));
+	Relation relation = CreateRelation(
+		FormulaGetForm(terminatingFact),
+		CreateTypeSignature(
+			TypedTuplePeekAtomTypes(FormulaGetActors(terminatingFact)), 2)
+	);
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(relation);
@@ -622,8 +624,8 @@ void testCompileRecursiveVariants(void)
 
 	// Add a second (prec succ) relation with types {AT_INT, AT_INT},
 	// defining a separate graph.
-	Relation const * precSuccIntRelation = CreateRelation(
-		precSuccFixture.termForm, 2, CreateTypeSignature((byte[]) {AT_INT, AT_INT}, 2));
+	Relation precSuccIntRelation = CreateRelation(
+		precSuccFixture.termForm, CreateTypeSignature((byte[]) {AT_INT, AT_INT}, 2));
 	RelationTable * precSuccIntTable = CreateRelationTable(
 		precSuccIntRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(precSuccIntRelation);
@@ -652,7 +654,7 @@ void testCompileRecursiveVariants(void)
 	size32 nIntTuples = 0;
 	size32 nIdTuples = 0;
 	for(index8 i = 0; i < nCompiledServices; i++) {
-		bool intService = (compiledServices[i].relation->typeSignature.atomTypes[0] == AT_INT);
+		bool intService = (compiledServices[i].relation.typeSignature.atomTypes[0] == AT_INT);
 		Atom arguments[2];
 		TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
 		void * context = OperatorCreateContext(compiledServices[i].op, arguments);
@@ -704,8 +706,8 @@ void testCompileNegatedTerm(void)
 {
 	// Setup the fact (odd 3)
 	Atom odd3term = CStringToTerm("odd 3");
-	Relation const * evenRelation = CreateRelation(
-		FormulaGetForm(odd3term), 1, CreateTypeSignature((byte[]) {AT_INT}, 1));
+	Relation evenRelation = CreateRelation(
+		FormulaGetForm(odd3term), CreateTypeSignature((byte[]) {AT_INT}, 1));
 	RelationTable * evenTable = CreateRelationTable(
 		evenRelation, &btreeStorageProvider, (index8[]) {0});
 	ReleaseRelation(evenRelation);
@@ -755,8 +757,8 @@ void testCompiledServiceReadsFactsLive(void)
 {
 	// (odd 3), and the rule making (! even x) follow from (odd x)
 	Atom odd3term = CStringToTerm("odd 3");
-	Relation const * oddRelation = CreateRelation(
-		FormulaGetForm(odd3term), 1, CreateTypeSignature((byte[]) {AT_INT}, 1));
+	Relation oddRelation = CreateRelation(
+		FormulaGetForm(odd3term), CreateTypeSignature((byte[]) {AT_INT}, 1));
 	RelationTable * oddTable = CreateRelationTable(
 		oddRelation, &btreeStorageProvider, (index8[]) {0});
 	ReleaseRelation(oddRelation);

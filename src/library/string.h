@@ -27,7 +27,7 @@ Atom GetStringRoleName(void);
 Atom GetStringPredicateForm(void);
 Atom GetStringTermForm(void);
 
-Relation const * GetStringRelation(void);
+Relation GetStringRelation(void);
 
 RelationTable * GetStringRelationTable(void);
 

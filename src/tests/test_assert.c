@@ -6,7 +6,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
-#include "kernel/RelationRegistry.h"
+#include "kernel/Relation.h"
 #include "kernel/RelationTable.h"
 #include "lang/formula.h"
 #include "library/list.h"
@@ -33,13 +33,12 @@ void testAssertRetract(void)
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(FormulaGetActors(fact1)), nColumns);
 
+	Relation relation = {.termForm = FormulaGetForm(fact1), .typeSignature = typeSignature};
 	// The relation does not exist until the first fact is asserted
-	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(fact1), nColumns, typeSignature))
-
+	ASSERT_FALSE(RelationExists(relation))
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact1), 0), ASSERT_OK)
-
-	Relation const * relation = RelationRegistryFind(FormulaGetForm(fact1), nColumns, typeSignature);
-	ASSERT_NOT_NULL(relation)
+	ASSERT_TRUE(RelationExists(relation))
+	
 	RelationTable const * table = FindRelationTable(relation);
 	ASSERT_NOT_NULL(table)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
@@ -57,7 +56,7 @@ void testAssertRetract(void)
 
 	// Retracting the last fact drops the table, and the relation with it
 	RetractFact(FormulaGetView(fact1));
-	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(fact1), nColumns, typeSignature))
+	ASSERT_FALSE(RelationExists(relation))
 
 	ReleaseFormula(fact2);
 	ReleaseFormula(fact1);
@@ -82,8 +81,9 @@ void testAssertContradictsStoredFact(void)
 	// (! prec "a" succ "b") is refused, contradicting the fact just asserted
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(negatedFact), 0), ASSERT_FAIL)
 	// and the refused assert leaves no relation behind
-	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(negatedFact), nColumns, typeSignature))
-
+	Relation relation = {.termForm = FormulaGetForm(negatedFact), .typeSignature = typeSignature};
+	ASSERT_FALSE(RelationExists(relation))
+	
 	// Retracting the fact it contradicts makes the same assert succeed
 	RetractFact(FormulaGetView(fact));
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(negatedFact), 0), ASSERT_OK)
@@ -98,9 +98,9 @@ void testAssertContradictsStoredFact(void)
 
 
 /**
- * A fact also contradicts the knowledge base when its negation is not stored, but
- * can be derived from a rule. Finding the contradiction then compiles the query for the
- * negated term; see checkContradiction() in assert.c.
+ * A fact also contradicts the knowledge base when its negation can be derived from a rule.
+ * Finding the contradiction then compiles the query for the negated term;
+ * see checkContradiction() in assert.c.
  */
 void testAssertContradictsDerivedFact(void)
 {
@@ -114,11 +114,15 @@ void testAssertContradictsDerivedFact(void)
 
 	// (even 3) is refused: no relation holds (! even 3), but the rule derives it
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even3), 0), ASSERT_FAIL)
-	ASSERT_NULL(RelationRegistryFind(
-		FormulaGetForm(even3), FormulaGetActors(even3)->nAtoms,
-		CreateTypeSignature(
+	// no relation was created
+	Relation relation = {
+		.termForm = FormulaGetForm(even3),
+		.typeSignature = CreateTypeSignature(
 			TypedTuplePeekAtomTypes(FormulaGetActors(even3)),
-			FormulaGetActors(even3)->nAtoms)))
+			FormulaGetActors(even3)->nAtoms
+		)
+	};
+	ASSERT_FALSE(RelationExists(relation))
 
 	// (even 4) is accepted, as the rule derives (! even 4) only from (odd 4),
 	// which is not a fact
@@ -271,9 +275,9 @@ void testCreateIFactNewRelations(void)
 
 
 /**
- * Two terms of one relation, each with the generator (*) in a different role.
- * The two defining facts are stored in the same table, but identify the atom by
- * different columns, so each becomes a conjunction of its own.
+ * Test creating two ifacts where the defining fact containg a conjunction
+ * of terms of the same form, but with the generator (*) in different roles.
+ * The two terms are stored in the same table, but belong to different IFactConjunctions.
  */
 void testCreateIFactTwoIdColumns(void)
 {
@@ -282,7 +286,9 @@ void testCreateIFactTwoIdColumns(void)
 	Atom sameFormTerm = CStringToTerm("pair \"a\" other \"b\"");
 	byte atomTypes[2] = {AT_ID, AT_ID};
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, 2);
-	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(sameFormTerm), 2, typeSignature))
+	
+	Relation relation = {.termForm = FormulaGetForm(sameFormTerm), .typeSignature = typeSignature};
+	ASSERT_FALSE(RelationExists(relation))
 
 	Atom formula = CStringToConjunction("pair * other \"a\" & pair \"a\" other *");
 	Atom ifact = CreateIFact(FormulaGetView(formula));
@@ -290,8 +296,7 @@ void testCreateIFactTwoIdColumns(void)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
 
 	// Both defining facts are stored in the one relation the two terms share
-	Relation const * relation = RelationRegistryFind(FormulaGetForm(sameFormTerm), 2, typeSignature);
-	ASSERT_NOT_NULL(relation)
+	ASSERT_TRUE(RelationExists(relation))
 	RelationTable const * table = FindRelationTable(relation);
 	ASSERT_NOT_NULL(table)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 2)
@@ -301,8 +306,8 @@ void testCreateIFactTwoIdColumns(void)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 0)
 	// Cleanup any generated services
 	RemoveAllCompiledServices();
-	// The (pair other)
-	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(sameFormTerm), 2, typeSignature))
+	// The (pair other) relation is now dropped
+	ASSERT_FALSE(RelationExists(relation))
 
 	ReleaseFormula(formula);
 	ReleaseFormula(sameFormTerm);
@@ -380,9 +385,9 @@ void testCreateIFactDefiningFactsProtected(void)
 
 
 /**
- * A term of one generator (*) defines an atom, without a clause or conjunction
- * around it. The relation holding the defining fact is created to hold it,
- * and dropped again once the atom is released.
+ * Test create an ifact with a single term containing one generator (*).
+ * The corresponding relation is created to hold the fact, and dropped again
+ * once the AT_ID atom is released.
  */
 void testCreateIFactTerm(void)
 {
@@ -397,15 +402,15 @@ void testCreateIFactTerm(void)
 		atomTypes[i] = SameTypedAtoms(actor, generatorAtom) ? AT_ID : actor.type;
 	}
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, nColumns);
-	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(term), nColumns, typeSignature))
+	Relation relation = {.termForm = FormulaGetForm(term), .typeSignature = typeSignature};
+	ASSERT_FALSE(RelationExists(relation))
 
 	Atom ifact = CreateIFact(FormulaGetView(term));
 	ASSERT_TRUE(ifact.hash != 0)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
 
 	// The defining fact is the only row in the corresponding RelationTable
-	Relation const * relation = RelationRegistryFind(FormulaGetForm(term), nColumns, typeSignature);
-	ASSERT_NOT_NULL(relation)
+	ASSERT_TRUE(RelationExists(relation))
 	RelationTable const * table = FindRelationTable(relation);
 	ASSERT_NOT_NULL(table)
 	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
@@ -413,7 +418,7 @@ void testCreateIFactTerm(void)
 	// Releasing the atom retracts the defining fact, which drops the table
 	// and the relation with it
 	IFactRelease(ifact);
-	ASSERT_NULL(RelationRegistryFind(FormulaGetForm(term), nColumns, typeSignature))
+	ASSERT_FALSE(RelationExists(relation))
 
 	ReleaseFormula(term);
 }

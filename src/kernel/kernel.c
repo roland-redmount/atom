@@ -8,8 +8,8 @@
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
+#include "kernel/Relation.h"
 #include "kernel/RelationTable.h"
-#include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "storage/RelationBTree.h"
 #include "memory/allocator.h"
@@ -125,6 +125,7 @@ static const index32 coreServiceRelationId[N_CORE_SERVICES + 1] = {
 
 /**
  * Parameter IO for core services, arguments in "kernel order"
+ * TODO: we could make this an array of IOSignature structs, would avoid some marshalling code
  */
 static const byte coreServiceParameterIO[N_CORE_SERVICES + 1][CORE_FORMS_MAX_ARITY] = {
 	{0},
@@ -296,13 +297,8 @@ static RelationTable * createCoreRelationTable(uint32 relationId)
 	CoreFormSetByteArray(formId, coreRelationAtomTypes[relationId], atomTypes);
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, corePredicateArity[formId]);
 
-	// The bootstrap constructor is used to specify the predicate form explicitly
-	Relation const * relation = CreateRelationBootstrap(
-		kernel.coreTermForms[formId],
-		kernel.corePredicateForms[formId],
-		corePredicateArity[formId],
-		typeSignature
-	);
+	Relation relation = CreateRelationBootstrap(
+		kernel.coreTermForms[formId], kernel.corePredicateForms[formId], typeSignature);
 	// Create the relation storage and associated primitive services
 	RelationTable * table = CreateRelationTable(
 		relation, &btreeStorageProvider, kernel.corePredicateRoleIndex[formId]);
@@ -312,17 +308,13 @@ static RelationTable * createCoreRelationTable(uint32 relationId)
 }
 
 
-Relation const * GetCoreRelation(index32 relationId)
+Relation GetCoreRelation(index32 relationId)
 {
 	index32 formId = coreRelationFormId[relationId];
 	byte atomTypes[CORE_FORMS_MAX_ARITY];
 	CoreFormSetByteArray(formId, coreRelationAtomTypes[relationId], atomTypes);
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, corePredicateArity[formId]);
-	return RelationRegistryFind(
-		kernel.coreTermForms[formId],
-		corePredicateArity[formId],
-		typeSignature
-	);
+	return (Relation) {.termForm = kernel.coreTermForms[formId], .typeSignature = typeSignature};
 }
 
 
@@ -569,10 +561,9 @@ static void setupCoreServices(void)
 	Atom roles[CORE_FORMS_MAX_ARITY];
 
 	/*
-	 * Create @term-form = (term-form predicate-form sign) and its relation table,
-	 * which is what CreateTermForm() writes into. This form is created the ordinary way,
-	 * since the two tables holding its defining facts now exist. Only its own term form
-	 * is circular, and that one is built by hand just below.
+	 * Create the predicate form @term-form = (term-form predicate-form sign).
+	 * For this we can use CreatePredicateForm() since the two tables holding its defining facts
+	 * now exist.
 	 */
 	for(index8 j = 0; j < corePredicateArity[FORM_TERM_FORM]; j++)
 		roles[j] = kernel.coreRoleNames[coreFormRoleIds[FORM_TERM_FORM][j]];
@@ -581,11 +572,12 @@ static void setupCoreServices(void)
 	for(index8 j = 0; j < corePredicateArity[FORM_TERM_FORM]; j++)
 		kernel.corePredicateRoleIndex[FORM_TERM_FORM][j] =
 			PredicateRoleIndex(kernel.corePredicateForms[FORM_TERM_FORM], roles[j]);
-
+	// Create the corresponding relation table, which CreateTermForm() writes into
 	kernel.coreRelations[RELATION_TERM_FORM] = createCoreRelationTable(RELATION_TERM_FORM);
 
 	/*
-	 * Build the three reserved term forms, now that there is a table to hold their
+	 * Build the three reserved term forms (multiset element multiple), (predicate)
+	 * and (term-form predicate-form sign), now that there is a table to hold their
 	 * defining facts. Each gives 1 reference to its term form atom.
 	 */
 	bootstrapTermForm(multisetTermForm, multisetForm);
@@ -628,10 +620,10 @@ static void setupCoreServices(void)
 			coreServiceParameterIO[i],
 			parameterIO
 		);
-		Relation const * relation = kernel.coreRelations[relationId]->relation;
+		Relation relation = kernel.coreRelations[relationId]->relation;
 		kernel.coreOperators[i] = FindService(
 			relation,
-			CreateIOSignature(parameterIO, relation->nColumns)
+			CreateIOSignature(parameterIO, corePredicateArity[coreRelationFormId[relationId]])
 		);
 		ASSERT(kernel.coreOperators[i])
 	}
@@ -743,9 +735,9 @@ void KernelShutdown(void)
 	 * retract their own term form from. Once all three are detached, the tables are empty
 	 * and can be torn down in the usual way.
 	 */
-	RelationReleaseForm(kernel.coreRelations[RELATION_TERM_FORM]->relation);
-	RelationReleaseForm(kernel.coreRelations[RELATION_MULTISET_NAME]->relation);
-	RelationReleaseForm(kernel.coreRelations[RELATION_PREDICATE_FORM]->relation);
+	RelationReleaseTermForm(kernel.coreRelations[RELATION_TERM_FORM]->relation);
+	RelationReleaseTermForm(kernel.coreRelations[RELATION_MULTISET_NAME]->relation);
+	RelationReleaseTermForm(kernel.coreRelations[RELATION_PREDICATE_FORM]->relation);
 
 	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_TERM_FORM]) == 0)
 	ASSERT(RelationTableNRows(kernel.coreRelations[RELATION_PREDICATE_FORM]) == 0)

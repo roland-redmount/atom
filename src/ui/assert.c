@@ -5,7 +5,6 @@
 #include "kernel/lookup.h"
 #include "kernel/multiset.h"
 #include "kernel/Relation.h"
-#include "kernel/RelationRegistry.h"
 #include "kernel/RelationTable.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"
@@ -57,11 +56,12 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 	// find existing relation table, or create new
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	Relation const * relation = FindOrCreateRelation(fact.form, fact.actors->nAtoms, typeSignature);
+	Relation relation = CreateRelation(fact.form, typeSignature);
 	RelationTable * table = FindRelationTable(relation);
 	bool tableWasCreated = false;
 	if(!table) {
-		table = CreateRelationTable(relation, provider ? provider : &btreeStorageProvider, 0);
+		table = CreateRelationTable(
+			relation, provider ? provider : &btreeStorageProvider, 0);
 		tableWasCreated = true;
 	}
 	ReleaseRelation(relation);
@@ -133,9 +133,7 @@ void RetractFact(FormulaView fact)
 {
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	Relation const * relation = RelationRegistryFind(fact.form, fact.actors->nAtoms, typeSignature);
-	if(!relation)
-		return;
+	Relation relation = {.termForm = fact.form, .typeSignature = typeSignature};
 	RelationTable * table = FindRelationTable(relation);
 	if(!table)
 		return;
@@ -155,12 +153,17 @@ void RetractFact(FormulaView fact)
  * Structure for temporary storage of tuples for IFactCreate()
  */
 typedef struct s_IFactTuple {
-	Relation const * relation;
+	Relation relation;
 	index8 idColumn;
 	Atom tuple[RELATION_MAX_ARITY];
 } IFactTuple;
 
 
+/**
+ * Comparison function ordering tuples by relation, then by idColumn.
+ * This is not a total order on IFactTuples; it serves to sort tuples into blocks
+ * corresponding to IFactConjunctions.
+ */
 static int8 compareIFactTuples(void const * item1, void const * item2, size32 itemSize)
 {
 	IFactTuple const * tuple1 = item1;
@@ -180,7 +183,7 @@ static int8 compareIFactTuples(void const * item1, void const * item2, size32 it
 
 
 /**
- * Gather ifact tuples from a term. Returns true iff the termis valid.
+ * Gather ifact tuples from a term. Returns true iff the term is valid.
  * Set *termActorIndex to the index of the first actor in the clause, or 0
  * if the entire tuple is a clause. If nonzero, *termActorIndex is incremented
  * with the term arity.
@@ -192,9 +195,8 @@ static bool collectTermIFactTuples(
 	ASSERT(termArity <= RELATION_MAX_ARITY)
 
 	// Each term must contain exactly one generator, marking the identified atom.
-	IFactTuple ifactTuple;
-	TypeSignature termSignature;
-
+	IFactTuple ifactTuple = {0};
+	TypeSignature termSignature = {0};
 	bool hasGenerator = false;
 	index8 i0 = termActorIndex ? * termActorIndex : 0;
 	for(index8 i = 0; i < termArity; i++) {
@@ -218,7 +220,7 @@ static bool collectTermIFactTuples(
 	if(!hasGenerator)
 		return false;
 
-	ifactTuple.relation = FindOrCreateRelation(termForm, termArity, termSignature);
+	ifactTuple.relation = CreateRelation(termForm, termSignature);
 	ResizingArrayAppend(ifactTupleArray, &ifactTuple);
 
 	if(termActorIndex)
@@ -313,7 +315,8 @@ Atom CreateIFact(FormulaView formula)
 			// Begin new conjunction, from a new RelationTable
 			if(i > 0)
 				IFactEndConjunction(&draft);
-			RelationTable * table = FindOrCreateRelationTable(ifactTuples[i].relation, &btreeStorageProvider);
+			RelationTable * table = FindOrCreateRelationTable(
+				ifactTuples[i].relation, &btreeStorageProvider);
 			IFactBeginConjunction(&draft, table, ifactTuples[i].idColumn);
 			ReleaseRelationTable(table);	// the draft ifact now holds its own reference
 		}
