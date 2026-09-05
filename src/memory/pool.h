@@ -30,7 +30,7 @@ void * PoolAllocate(void * pool);
 /**
  * Free one allocated item
  */
-void PoolFreeItem(void * pool, void * item);
+void PoolFreeItem(void * pool, void const * item);
 
 /**
  * The number of items currently in the pool.
