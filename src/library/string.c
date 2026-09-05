@@ -14,7 +14,7 @@
 static Atom stringRoleName;
 static Atom stringPredicateForm;
 static Atom stringTermForm;
-static Relation const * stringRelation;
+static Relation stringRelation;
 static RelationTable * stringRelationTable;
 static Operator * stringOperator;
 
@@ -37,7 +37,7 @@ Atom GetStringTermForm(void)
 }
 
 
-Relation const * GetStringRelation(void)
+Relation GetStringRelation(void)
 {
 	return stringRelation;
 }
@@ -128,10 +128,10 @@ void StringSetup(void)
 	TypeSignature typeSignature = {
 		.atomTypes = {AT_ID}
 	};
-	stringRelation = CreateRelation(stringTermForm, 1, typeSignature);
+	stringRelation = CreateRelation(stringTermForm, typeSignature);
 	IFactRelease(stringTermForm);
 
-	stringRelationTable = CreateRelationTable(stringRelation, &btreeStorageProvider, 0);
+	stringRelationTable = CreateRelationTable(stringRelation, &btreeStorageProvider, 0, 1);
 	ReleaseRelation(stringRelation);
 
 	// Store a pointer to the (string<ID) service, created by the B-tree provider.

@@ -29,9 +29,7 @@
 
 
 typedef struct s_RelationTable {
-	// NOTE: the Relation points here is merely used to find the RelationTable.
-	Relation const * relation;
-
+	Relation relation;
 	/*
 	 * The order of index columns. The stored tuples will be ordered  lexicographically by
 	 * indexColumns[0], ..., indexColumns[nColumns-1]. Hence, lookup should be fast when
@@ -42,6 +40,7 @@ typedef struct s_RelationTable {
 	 * queries (@list _ _) and (@list @position _) should be fast, but (_ _ @element) may be slow.
 	 */
 	index8 indexColumns[RELATION_MAX_ARITY];
+	size8 nColumns;
 
 	StorageProvider const * provider;
 	void * storage;			// implementation-dependent data, allocated by the StorageProvider
@@ -63,14 +62,15 @@ typedef struct s_RelationTable {
  * RelationTable.indexColumns. Passing 0 gives the identity order.
  */
 RelationTable * CreateRelationTable(
-	Relation const * relation, StorageProvider const * provider, index8 const indexColumns[]);
+	Relation relation, StorageProvider const * provider, index8 const indexColumns[], size8 nColumns);
 
 /**
  * Find a relation table, or create one with the given storage provider if it does not exist.
  * If created, the table's indexColumns will be set to 0 (identity order).
  * The caller obtains a reference to the table in either case.
  */
-RelationTable * FindOrCreateRelationTable(Relation const * relation, StorageProvider const * provider);
+RelationTable * FindOrCreateRelationTable(
+	Relation relation, StorageProvider const * provider, size8 nColumns);
 
 /**
  * Acquire a reference to a relation table.
@@ -124,7 +124,7 @@ void SetupRelationTableRegistry(void);
 /**
  * The table storing the tuples of the given relation, or 0 if the relation is computed.
  */
-RelationTable * FindRelationTable(Relation const * relation);
+RelationTable * FindRelationTable(Relation relation);
 
 /**
  * Deallocate the registry. Before calling this function, all tables must have been dropped.

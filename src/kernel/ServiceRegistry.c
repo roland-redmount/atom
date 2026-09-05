@@ -2,7 +2,6 @@
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
 #include "kernel/Relation.h"
-#include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "lang/TypedAtom.h"
@@ -29,17 +28,17 @@ static size32 nCompiledServices;
 static int8 compareServices(Service const * service, Service const * serviceOrKey)
 {
 	// First compare relations
-	if(service->relation < serviceOrKey->relation)
-		return -1;
-	else if(service->relation > serviceOrKey->relation)
-		return 1;
+	int8 relationOrder = CompareRelations(service->relation, serviceOrKey->relation);
+	if(relationOrder != 0)
+		return relationOrder;
 	else {
 		// then compare IO signatures; a zeroed signature for the key matches any IO
 		if(!serviceOrKey->ioSignature.parameterIO[0])
 			return 0;
 		return CompareMemory(
 			service->ioSignature.parameterIO, serviceOrKey->ioSignature.parameterIO,
-			service->relation->nColumns);
+			RELATION_MAX_ARITY
+		);
 	}
 }
 
@@ -114,7 +113,7 @@ void FreeServiceRegistry(void)
  * Copy the service of the given relation evaluated by the given operator to *service.
  * Returns false if the registry holds no such service.
  */
-static bool findService(Relation const * relation, Operator const * op, Service * service)
+static bool findService(Relation relation, Operator const * op, Service * service)
 {
 	// Iterate over all services for the given relation
 	Service key = {.relation = relation};
@@ -152,7 +151,7 @@ static void findOperatorDescendants(Operator * op, ResizingArray * serviceArray)
 	size8 nChildren = OperatorNChildren(op);
 	for(index8 i = 0; i < nChildren; i++) {
 		Operator * child = OperatorGetChild(op, i);
-		if(child->relation) {
+		if(!IsNullRelation(child->relation)) {
 			// add the service to array, provided it doesn't already exist
 			if(!ResizingArrayContainsElement(serviceArray, &child))
 				ResizingArrayAppend(serviceArray, &child);
@@ -199,11 +198,8 @@ static void removeService(Service service)
 }
 
 
-Service CreateService(
-	Relation const * relation, IOSignature ioSignature, Operator * op,
-	enum ServiceKind kind)
+Service CreateService(Relation relation, IOSignature ioSignature, Operator * op, enum ServiceKind kind)
 {
-	ASSERT(relation->nColumns <= RELATION_MAX_ARITY)
 	Service service = {
 		.relation = relation,
 		.kind = kind,
@@ -243,7 +239,7 @@ Service CreateService(
 		// whatever was compiled for it is incomplete.
 		// QUESTION: the invalidation scope seems to broad: wouldn't it be enough to invalidate
 		// services from the same relation (so that type signature must agree) ?
-		InvalidateServicesByTermForm(relation->termForm);
+		InvalidateServicesByTermForm(relation.termForm);
 		break;
 	}
 	return service;
@@ -259,7 +255,7 @@ bool ServiceHasDependents(Service const * service)
 }
 
 
-void RemoveService(Relation const * relation, Operator * op)
+void RemoveService(Relation relation, Operator * op)
 {
 	Service service;
 	bool found = findService(relation, op, &service);
@@ -268,7 +264,7 @@ void RemoveService(Relation const * relation, Operator * op)
 }
 
 
-void ServiceRegistryRemoveAll(Relation const * relation)
+void ServiceRegistryRemoveAll(Relation relation)
 {
 	// Add all services for the given relation to 
 	Service key = {.relation = relation };
@@ -317,7 +313,7 @@ void InvalidateServicesByTermForm(Atom termForm)
 	RelationIterator relationIterator;
 	RelationRegistryIterate(termForm, &relationIterator);
 	while(RelationIteratorNext(&relationIterator)) {
-		Relation const * relation = RelationIteratorGet(&relationIterator);
+		Relation relation = RelationIteratorGet(&relationIterator);
 		// Find each compiled service for this relation
 		ServiceIterator serviceIterator;
 		ServiceRegistryIterate(relation, &serviceIterator);
@@ -368,7 +364,7 @@ void RemoveAllCompiledServices(void)
 			}
 		}
 		BTreeIteratorEnd(&iterator);
-		ASSERT(service.relation)
+		ASSERT(!IsNullRelation(service.relation))
 		removeService(service);
 		// restart from the beginning, cannot iterate while modifying
 	}
@@ -387,7 +383,7 @@ size32 NumberOfCompiledServices(void)
 }
 
 
-void ServiceRegistryIterate(Relation const * relation, ServiceIterator * iterator)
+void ServiceRegistryIterate(Relation relation, ServiceIterator * iterator)
 {
 	iterator->relation = relation;
 	BTreeIterate(&(iterator->btreeIterator), services);
@@ -429,7 +425,7 @@ void ServiceIteratorEnd(ServiceIterator * iterator)
 }
 
 
-Operator * FindService(Relation const * relation, IOSignature ioSignature)
+Operator * FindService(Relation relation, IOSignature ioSignature)
 {
 	Service key = {.relation = relation, .ioSignature = ioSignature};
 	// QUESTION: Why use an iterator here to seek to a single item?
@@ -445,8 +441,7 @@ Operator * FindService(Relation const * relation, IOSignature ioSignature)
 }
 
 
-bool FindServiceByMachineProvider(
-	MachineOperatorProvider const * provider, Service * service)
+bool FindServiceByMachineProvider(MachineOperatorProvider const * provider, Service * service)
 {
 	bool found = false;
 	// NOTE: this is a full table scan
@@ -474,14 +469,14 @@ void PrintService(Service const * service)
 			(Atom) {
 				.parameter = {
 					.number = i + 1,
-					.atomType =	service->relation->typeSignature.atomTypes[i],
+					.atomType =	service->relation.typeSignature.atomTypes[i],
 					.io = service->ioSignature.parameterIO[i]
 				}
 			}
 		);
 		TypedTupleSetElement(parameters, i, parameter);
 	}
-	PrintFormActorsAsFormula(service->relation->termForm, parameters);
+	PrintFormActorsAsFormula(service->relation.termForm, parameters);
 	FreeTypedTuple(parameters);
 	PrintCString(" => ");
 	PrintOperator(service->op);
@@ -495,25 +490,46 @@ static void btreePrintCallback(void const * item)
 }
 
 
-void RelationDump(Relation const * relation)
+static bool signatureHasInputParameter(IOSignature ioSignature, size8 nParameters)
 {
-	// find a service for enumerating all tuples
-	byte parameterIO[relation->nColumns];
-	for(index8 i = 0; i < relation->nColumns; i++)
-		parameterIO[i] = PARAMETER_OUT;
-	Operator const * op = FindService(
-		relation, CreateIOSignature(parameterIO, relation->nColumns));
-	ASSERT(op);
+	bool hasInput = false;
+	for(index8 i = 0; i < nParameters; i++) {
+		if(ioSignature.parameterIO[i] == PARAMETER_IN) {
+			hasInput = true;
+			break;
+		}
+	}
+	return hasInput;
+}
 
-	PrintF("Relation %u columns\n", relation->nColumns);
+void RelationDump(Relation relation)
+{
+	// Find a service for enumerating all tuples from the relation
+	Service service = {0};
+	ServiceIterator iterator;
+	ServiceRegistryIterate(relation, &iterator);
+	while(ServiceIteratorNext(&iterator)) {
+		Service const * candidate = ServiceIteratorPeekService(&iterator);
+		if(!signatureHasInputParameter(candidate->ioSignature, candidate->op->nArguments)) {
+			service = *candidate;
+			break;
+		}
+	}
+	if(!service.op) {
+		PrintCString("Relation cannot be enumerated\n");
+		return;
+	}
 
-	Atom arguments[relation->nColumns];
-	OperatorContext * context = OperatorCreateContext(op, arguments);
+	size8 nArguments = service.op->nArguments;
+	PrintF("Relation %u columns\n", nArguments);
+
+	Atom arguments[nArguments];
+	OperatorContext * context = OperatorCreateContext(service.op, arguments);
 	size32 nTuples = 0;
 	while(OperatorCall(context)) {
 		// TODO: we should probably not print the full representaiton
 		// of identified atoms, as it triggers repeated queries
-		PrintTuple(relation->typeSignature.atomTypes, arguments, relation->nColumns);
+		PrintTuple(relation.typeSignature.atomTypes, arguments, nArguments);
 		PrintChar('\n');
 		nTuples++;
 	}

@@ -1563,17 +1563,17 @@ static void teardownOperator(Operator * op)
 }
 
 
-void AttachOperator(Operator * op, Relation const * relation)
+void AttachOperator(Operator * op, Relation relation)
 {
-	ASSERT(!op->relation)
+	ASSERT(IsNullRelation(op->relation))
 	op->relation = relation;
 }
 
 
 void DetachOperator(Operator * op)
 {
-	ASSERT(op->relation)
-	op->relation = 0;
+	ASSERT(!IsNullRelation(op->relation))
+	op->relation = (Relation) {0};
 	CheckOperator(op);
 }
 
@@ -1581,7 +1581,7 @@ void DetachOperator(Operator * op)
 void CheckOperator(Operator * op)
 {
 	if(op->nParents == 0) {
-		if(!op->relation)
+		if(IsNullRelation(op->relation))
 			teardownOperator(op);
 		else {
 			// A MACHINE operator may be attached to a PRIMITIVE Service for

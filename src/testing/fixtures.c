@@ -1,7 +1,7 @@
 
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/RelationRegistry.h"
+#include "kernel/Relation.h"
 #include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
 #include "library/string.h"
@@ -46,10 +46,10 @@ void SetupRelationFixture(
 		fixture->roleIndex[i] = RelationFixtureRoleIndex(fixture, roleNames[i]);
 		atomTypes[i] = AT_ID;
 	}
-	Relation const * relation = CreateRelation(
-		fixture->termForm, nColumns, CreateTypeSignature(atomTypes, nColumns));
+	Relation relation = CreateRelation(
+		fixture->termForm, CreateTypeSignature(atomTypes, nColumns));
 	fixture->table = CreateRelationTable(
-		relation, &btreeStorageProvider, fixture->roleIndex);
+		relation, &btreeStorageProvider, fixture->roleIndex, nColumns);
 	// the table holds its own reference to the relation
 	ReleaseRelation(relation);
 }

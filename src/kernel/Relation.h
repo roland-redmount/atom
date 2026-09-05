@@ -1,28 +1,19 @@
 /**
- * A relation is the identity of a set of tuples: a term form together with a column
- * type per argument. It is interned in the relation registry, so that one signature is
- * one Relation record and pointer equality is signature equality.
- *
+ * A Relation is a term form together with a column type per argument. It is the identifier
+ * for a RelationTable. A Relation plus an IOSignature identifies a Service.
  * Using a term form (signed predicate) as key allows registering a negated predicate
  * like (! odd x) as a relation distinct from the non-negated (odd x).
  *
- * A relation names a signature and nothing else. Both the ability to read a relation and
- * the storage holding its tuples are registered against it, and neither is reachable from
- * the relation itself:
- *
- *   RelationRegistry       relations by (term form, column types); see RelationRegistry.h
- *   ServiceRegistry        how a relation can be read; see ServiceRegistry.h
- *   RelationTable          where its tuples are stored; see RelationTable.h
- *
- * A relation with no table registered is a computed relation: it has services, but no
- * tuples to mutate. This is the case of a machine service such as those in library/math.c,
- * and of a service the compiler produces.
+ * A Relation for which no RelationTable exists is a computed relation: it has services,
+ * but no mutable facts. Examples are machine service such as those in library/math.c,
+ * and services produced by the compiler.
  */
 
 #ifndef RELATION_H
 #define RELATION_H
 
 #include "lang/Atom.h"
+#include "btree/btree.h"
 
 
 // We limit the number of arguments a relation might have,
@@ -48,72 +39,63 @@ TypeSignature CreateTypeSignature(byte const atomTypes[], size8 nColumns);
 bool SameTypeSignatures(TypeSignature signature1, TypeSignature signature2);
 
 
-typedef struct s_Relation Relation;
-
-struct s_Relation {
-	// term form; the key this relation is registered under. See RelationRegistry.h
+typedef struct s_Relation {
 	Atom termForm;
-	/**
-	 * The predicate form of the term form, cached here because the roles of a
-	 * relation are read on every tuple added or removed; see LookupAddPredicateRoles().
-	 * Reading it off the term form instead would mean a relation query each time.
-	 */
-	Atom predicateForm;
-	// whether this relation holds a reference to its forms; see RelationReleaseForm()
-	bool ownsForm;
-	size8 nColumns;
 	TypeSignature typeSignature;
-	/**
-	 * One reference per Service and per RelationTable naming this relation, plus the
-	 * creation reference held by whoever created it. The relation removes itself from the
-	 * registry when the last reference is released; see ReleaseRelation().
-	 *
-	 * NOTE: mutable through a const pointer, as a reference count is not part of the
-	 * value a relation denotes. Nearly everything holds a Relation const *.
-	 */
-	size32 referenceCount;
-};
-
+} Relation;
 
 /**
- * Create a relation for the given signature and add it to the relation registry.
- * The relation must not already exist, or an ASSERT will occur.
- * The caller holds one reference to the relation.
+ * Create a Relation. The caller holds one reference to the relation,
+ * which must be released when no longer needed.
+ * 
+ * NOTE: an alternative is void AddRelation(Relation relation) where
+ * the caller creates the struct (Relation) {termForm, typeSignature}.
+ * Perhaps more transparent -- this function doesn't create a Relation
+ * so much as add it to the registry
  */
-Relation const * CreateRelation(Atom termForm, size8 nColumns, TypeSignature typeSignature);
+Relation CreateRelation(Atom termForm, TypeSignature typeSignature);
 
 /**
  * Create a relation with the predicate form given explicitly, rather than computed from
  * TermFormGetPredicateForm(termForm). This function is only for bootstrapping, where
  * TermFormGetPredicateForm() is not yet available. See setupCoreServices() in kernel.c
  */
-Relation const * CreateRelationBootstrap(
-	Atom termForm, Atom predicateForm, size8 nColumns, TypeSignature typeSignature);
+Relation CreateRelationBootstrap(Atom termForm, Atom predicateForm, TypeSignature typeSignature);
 
 /**
- * The registered relation of the given signature, creating and registering one if there
- * is none. Unlike CreateRelation(), an existing relation is not an error.
- * The caller holds one reference to the relation either way.
+ * Return the predicate form corresponding to the Relation's term form.
+ * This is used to avoid calling TermFormGetPredicateForm() form LookupAddPredicateRoles(),
+ * which is critical during bootstrap; see CreateRelationBootstrap()
  */
-Relation const * FindOrCreateRelation(Atom termForm, size8 nColumns, TypeSignature typeSignature);
+Atom RelationGetPredicateForm(Relation relation);
+
+
+bool RelationExists(Relation relation);
 
 /**
  * Ordering of two relations
  */
-int8 CompareRelations(Relation const * relation, Relation const * relationOrKey);
+int8 CompareRelations(Relation relation, Relation relationOrKey);
+
+bool SameRelations(Relation relation1, Relation relation2);
 
 /**
  * Acquire a reference to a relation.
  */
-void AcquireRelation(Relation const * relation);
+void AcquireRelation(Relation relation);
 
 /**
  * Remove one reference to the given relation.
  */
-void ReleaseRelation(Relation const * relation);
+void ReleaseRelation(Relation relation);
 
 /**
- * Release the references this relation holds to its term form and predicate form,
+ * Test for a null relation, marking an absent value (no relation)
+ */
+bool IsNullRelation(Relation relation);
+
+/**
+ * CLAUDE: Release the references this relation holds to its term form and predicate form,
  * without releasing the relation.
  *
  * This is only for shutting down the self-referential core relations, whose own defining
@@ -130,8 +112,61 @@ void ReleaseRelation(Relation const * relation);
  * still have its services, which are used to locate the tuples to retract. It should be
  * released immediately afterwards.
  */
-void RelationReleaseForm(Relation const * relation);
+void RelationReleaseForms(Relation relation);
 
-data64 RelationHash(Relation const * relation, data64 initialHash);
+/**
+ * Compute the hash of a relation, on top of an initialHash
+ */
+data64 RelationHash(Relation relation, data64 initialHash);
+
+/**
+ * Setup an empty relation registry. Called during bootstrapping only.
+ */
+void SetupRelationRegistry(void);
+
+/**
+ * Deallocate the registry. Before calling this function,
+ * all relations must have been released.
+ * TODO: rename SetupRelations() ?
+ */
+void FreeRelationRegistry(void);
+
+/**
+ * Number of registered relations.
+ */
+size32 RelationRegistryNRelations(void);
+
+
+/**
+ * Iterating over the relations of a given term form.
+ * A single term form may have several relations, one per combination of column types.
+ */
+typedef struct {
+	Atom form;
+	BTreeIterator btreeIterator;
+} RelationIterator;
+
+/**
+ * Create an iterator over all relations registered for the given term form.
+ * The iterator is positioned before the first matching relation, so
+ * RelationIteratorNext() must be called before RelationIteratorGet().
+ */
+void RelationRegistryIterate(Atom form, RelationIterator * iterator);
+
+/**
+ * Advance to the next relation of the term form, if one exists.
+ */
+bool RelationIteratorNext(RelationIterator * iterator);
+
+/**
+ * The relation at the current iterator position.
+ * Only valid after RelationIteratorNext() has returned true,
+ * and until RelationIteratorEnd() is called.
+ */
+Relation RelationIteratorGet(RelationIterator const * iterator);
+
+
+void RelationIteratorEnd(RelationIterator * iterator);
+
 
 #endif	// RELATION_H

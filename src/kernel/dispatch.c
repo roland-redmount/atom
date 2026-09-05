@@ -4,7 +4,7 @@
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
-#include "kernel/RelationRegistry.h"
+#include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/ClauseForm.h"
 #include "lang/FormPermutation.h"
@@ -62,15 +62,15 @@ static bool signatureQueryTupleMatch(
 
 
 /**
- * Enumerate all possible argument permutations for the given form
+ * Enumerate all possible argument permutations for the given term form
  * and test each for a match against parametersList.
- * Returns true if a match is found.
  */
 static bool permutationMatch(
-	Atom predicateForm, TypeSignature typeSignature, IOSignature ioSignature,
+	Atom termForm, TypeSignature typeSignature, IOSignature ioSignature,
 	Atom const queryParameters[], size8 nParameters, int matchMode, index8 permutation[])
 {
 	// iterate over all permutations of the form
+	Atom predicateForm = TermFormGetPredicateForm(termForm);
 	FormIterator * iter = CreateFormIterator(predicateForm);
 	bool match = false;
 	do {
@@ -116,11 +116,11 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 		}
 
 		// Iterate over candidate services for the current relation
-		Relation const * relation = RelationIteratorGet(&(iterator->relationIterator));
+		Relation relation = RelationIteratorGet(&(iterator->relationIterator));
 		while(ServiceIteratorNext(&(iterator->serviceIterator))) {
 			Service const * currentService = ServiceIteratorPeekService(&(iterator->serviceIterator));
 			if(permutationMatch(
-				relation->predicateForm, relation->typeSignature, currentService->ioSignature,
+				relation.termForm, relation.typeSignature, currentService->ioSignature,
 				iterator->queryParameters, iterator->nParameters, iterator->matchMode,
 				iterator->permutation))
 			{
@@ -189,7 +189,7 @@ bool DispatchParameterizedQuery(
 
 	while(DispatchIteratorNext(&iterator)) {
 		Service const * candidate = DispatchIteratorPeekService(&iterator);
-		if(isExcludedCandidate(candidate->relation->typeSignature, excludedSignatures, nExcluded))
+		if(isExcludedCandidate(candidate->relation.typeSignature, excludedSignatures, nExcluded))
 			continue;
 		if(match) {
 			// There are additional matches beyond the one we return

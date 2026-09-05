@@ -2,7 +2,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/MixedTypeRelation.h"
-#include "kernel/RelationRegistry.h"
+#include "kernel/Relation.h"
 #include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
 #include "library/string.h"
@@ -146,15 +146,15 @@ void testConcatAcrossRelations(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	Relation const * idRelation = CreateRelation(
-		termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2));
+	Relation idRelation = CreateRelation(
+		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2));
 	RelationTable * idTable = CreateRelationTable(
-		idRelation, &btreeStorageProvider, (index8[]) {0, 1});
+		idRelation, &btreeStorageProvider, (index8[]) {0, 1}, 2);
 	ReleaseRelation(idRelation);
-	Relation const * intRelation = CreateRelation(
-		termForm, 2, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
+	Relation intRelation = CreateRelation(
+		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
 	RelationTable * intTable = CreateRelationTable(
-		intRelation, &btreeStorageProvider, (index8[]) {0, 1});
+		intRelation, &btreeStorageProvider, (index8[]) {0, 1}, 2);
 	ReleaseRelation(intRelation);
 
 	TypedAtom idActors[2] = {

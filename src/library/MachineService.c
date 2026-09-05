@@ -147,7 +147,7 @@ Service RegisterMachineService(
 	// A machine service is computed, and so has no tuple storage: the relation exists
 	// only to name the signature the service is registered under, and is removed with the
 	// last service naming it; see ReleaseRelation()
-	Relation const * relation = FindOrCreateRelation(termView.form, arity, typeSignature);
+	Relation relation = CreateRelation(termView.form, typeSignature);
 
 	// A function with no state yields at most one tuple, and so declares no index order.
 	// A function with a state declares the order its signature writes its arguments in;

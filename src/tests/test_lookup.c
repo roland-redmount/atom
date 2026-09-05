@@ -14,12 +14,12 @@
 void testLookup(void)
 {
 	Atom string = CreateStringFromCString("foo");
-	Relation const * stringRelation = GetStringRelation();
+	Relation stringRelation = GetStringRelation();
 	Atom stringRole = GetStringRoleName();
 
 	ASSERT_TRUE(AtomHasRole(string, stringRelation, stringRole))
 	ASSERT_TRUE(AtomHasRole(string, stringRelation, (Atom) {0}))
-	ASSERT_TRUE(AtomHasRole(string, 0, (Atom) {0}))
+	ASSERT_TRUE(AtomHasRole(string, (Relation) {0}, (Atom) {0}))
 
 	// add 1 occurence of role
 	AtomAddRole(string, stringRelation, stringRole);
@@ -69,7 +69,7 @@ void testLookupPredicateRoles(void)
 	atomTypes[weightIndex] = AT_INT;
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, 2);
 	// a computed relation, as we only need it to describe the columns
-	Relation const * relation = CreateRelation(form, 2, typeSignature);
+	Relation relation = CreateRelation(form, typeSignature);
 
 	Atom node = CreateStringFromCString("foo");
 	Atom actors[2];

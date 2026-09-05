@@ -1,7 +1,7 @@
 
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/RelationRegistry.h"
+#include "kernel/Relation.h"
 #include "lang/formula.h"
 #include "library/list.h"
 #include "library/string.h"
@@ -45,15 +45,9 @@ void testAddRemoveRelation(void)
 	setupFixture();
 	size32 nRelationsInitial = RelationRegistryNRelations();
 
-	Relation const * relation = CreateRelation(
-		fixture.form, EXAMPLE_FORM_ARITY, fixture.typeSignature);
-	ASSERT_UINT32_EQUAL(relation->nColumns, EXAMPLE_FORM_ARITY)
+	Relation relation = CreateRelation(fixture.form, fixture.typeSignature);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
-
-	ASSERT_PTR_EQUAL(
-		RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, fixture.typeSignature),
-		relation
-	)
+	ASSERT_TRUE(RelationExists(relation))
 
 	// A second reference keeps the relation registered
 	AcquireRelation(relation);
@@ -63,8 +57,7 @@ void testAddRemoveRelation(void)
 	// Releasing the creation reference removes it
 	ReleaseRelation(relation);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial)
-
-	ASSERT_NULL(RelationRegistryFind(fixture.form, EXAMPLE_FORM_ARITY, fixture.typeSignature));
+	ASSERT_FALSE(RelationExists(relation))
 
 	teardownFixture();
 }
@@ -78,8 +71,8 @@ void testAddRemoveRelation(void)
 void testIterateRelations(void)
 {
 	Atom form = GetCoreTermForm(FORM_MULTISET_ELEMENT_MULTIPLE);
-	Relation const * multisetName = GetCoreRelation(RELATION_MULTISET_NAME);
-	Relation const * multisetId = GetCoreRelation(RELATION_MULTISET_ID);
+	Relation multisetName = GetCoreRelation(RELATION_MULTISET_NAME);
+	Relation multisetId = GetCoreRelation(RELATION_MULTISET_ID);
 
 	bool foundName = false;
 	bool foundId = false;
@@ -88,12 +81,12 @@ void testIterateRelations(void)
 	RelationIterator iterator;
 	RelationRegistryIterate(form, &iterator);
 	while(RelationIteratorNext(&iterator)) {
-		Relation const * relation = RelationIteratorGet(&iterator);
+		Relation relation = RelationIteratorGet(&iterator);
 		// every relation yielded must belong to the form we asked for
-		ASSERT_DATA64_EQUAL(relation->termForm.hash, form.hash)
-		if(relation == multisetName)
+		ASSERT_TRUE(SameAtoms(relation.termForm, form))
+		if(SameRelations(relation, multisetName))
 			foundName = true;
-		if(relation == multisetId)
+		if(SameRelations(relation, multisetId))
 			foundId = true;
 		nRelations++;
 	}
@@ -108,7 +101,7 @@ void testIterateRelations(void)
 	nRelations = 0;
 	RelationRegistryIterate(form, &iterator);
 	while(RelationIteratorNext(&iterator)) {
-		ASSERT_PTR_EQUAL(RelationIteratorGet(&iterator), GetListLengthRelation())
+		ASSERT_TRUE(SameRelations(RelationIteratorGet(&iterator), GetListLengthRelation()))
 		nRelations++;
 	}
 	RelationIteratorEnd(&iterator);

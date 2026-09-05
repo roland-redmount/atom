@@ -5,8 +5,8 @@
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
+#include "kernel/Relation.h"
 #include "kernel/RelationTable.h"
-#include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
@@ -29,15 +29,15 @@ static Atom listLengthPredicateForm;
 static Atom listLengthTermForm;
 static index8 listLengthRoleIndex[2];
 
-static Relation const * listIDRelation;
+static Relation listIDRelation;
 static RelationTable * listIDRelationTable;
 static Operator * listIDOperator;
 
-static Relation const * listLetterRelation;
+static Relation listLetterRelation;
 static RelationTable * listLetterRelationTable;
 static Operator * listLetterOperator;
 
-static Relation const * listLengthRelation;
+static Relation listLengthRelation;
 static RelationTable * listLengthRelationTable;
 static Operator * listLengthOperator;
 
@@ -96,7 +96,7 @@ index8 const * GetListLengthRoleIndex(void)
 }
 
 
-Relation const * GetListRelation(byte elementType)
+Relation GetListRelation(byte elementType)
 {
 	switch(elementType) {
 	case AT_ID:
@@ -107,7 +107,7 @@ Relation const * GetListRelation(byte elementType)
 
 	default:
 		ASSERT(false)
-		return 0;
+		return (Relation) {0};
 	}
 }
 
@@ -144,7 +144,7 @@ Operator * GetListOperator(byte elementType)
 }
 
 
-Relation const * GetListLengthRelation(void)
+Relation GetListLengthRelation(void)
 {
 	return listLengthRelation;
 }
@@ -279,17 +279,17 @@ size32 ListLength(Atom list)
  * TODO: this is not well-defined in general, there may be > 1 relation for lists
  * containing mixed types, although CreateList() does not yields such lists.
  */
-static Relation const * lookupListElementRelation(Atom list)
+static Relation lookupListElementRelation(Atom list)
 {
-	return LookupFindRelation(list, listPredicateForm, listRoleName);
+	return LookupFindRelation(list, listTermForm, listRoleName);
 }
 
 
 Atom ListGetElement(Atom list, index32 position)
 {
 	ASSERT(ListLength(list) > 0)
-	Relation const * relation = lookupListElementRelation(list);
-	ASSERT(relation)
+	Relation relation = lookupListElementRelation(list);
+	ASSERT(!IsNullRelation(relation))
 
 	byte parameterIO[3];
 	CopyBytesPermuted(
@@ -308,8 +308,8 @@ Atom ListGetElement(Atom list, index32 position)
 index32 ListGetPosition(Atom list, Atom element)
 {
 	ASSERT(IsList(list))
-	Relation const * relation = lookupListElementRelation(list);
-	ASSERT(relation)
+	Relation relation = lookupListElementRelation(list);
+	ASSERT(!IsNullRelation(relation))
 
 	// TODO: this service is not one the B-tree provider registers, as its inputs are not
 	// a prefix of the index column order; see RelationTableProvider.registerServices().
@@ -372,8 +372,8 @@ int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(Atom, Atom))
 void CopyListToTuple(Atom list, TypedTuple * tuple)
 {
 	ASSERT(ListLength(list) == tuple->nAtoms)
-	Relation const * relation = lookupListElementRelation(list);
-	byte elementType = relation->typeSignature.atomTypes[listRoleIndex[2]];
+	Relation relation = lookupListElementRelation(list);
+	byte elementType = relation.typeSignature.atomTypes[listRoleIndex[2]];
 	ListIterator iterator;
 	ListIterate(list, &iterator);
 	index8 i = 0;
@@ -391,8 +391,8 @@ void ListIterate(Atom list, ListIterator * iterator)
 	iterator->queryTuple[listRoleIndex[0]] = list;
 
 	if(ListLength(list) > 0) {
-		Relation const * relation = lookupListElementRelation(list);
-		ASSERT(relation)
+		Relation relation = lookupListElementRelation(list);
+		ASSERT(!IsNullRelation(relation))
 		
 		byte parameterIO[3];
 		CopyBytesPermuted(
@@ -432,9 +432,9 @@ void ListIteratorEnd(ListIterator * iterator)
 void PrintList(Atom list)
 {
 	PrintCString("LIST{");
-	Relation const * relation = lookupListElementRelation(list);
-	ASSERT(relation)
-	byte elementType = relation->typeSignature.atomTypes[listRoleIndex[2]];
+	Relation relation = lookupListElementRelation(list);
+	ASSERT(!IsNullRelation(relation))
+	byte elementType = relation.typeSignature.atomTypes[listRoleIndex[2]];
 
 	ListIterator iterator;
 	ListIterate(list, &iterator);
@@ -483,16 +483,16 @@ void ListSetup(void)
 	// (list:ID position:INT element:ID)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_ID}, typeSignature.atomTypes, listRoleIndex, 3);
-	listIDRelation = CreateRelation(listTermForm, 3, typeSignature);
+	listIDRelation = CreateRelation(listTermForm, typeSignature);
 	// (list:ID position:INT element:LETTER)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_LETTER}, typeSignature.atomTypes, listRoleIndex, 3);
-	listLetterRelation = CreateRelation(listTermForm, 3, typeSignature);
+	listLetterRelation = CreateRelation(listTermForm, typeSignature);
 	// (list:ID length:INT)
 	typeSignature = (TypeSignature) {0};
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT}, typeSignature.atomTypes, listLengthRoleIndex, 2);
-	listLengthRelation = CreateRelation(listLengthTermForm, 2, typeSignature);
+	listLengthRelation = CreateRelation(listLengthTermForm, typeSignature);
 
 	IFactRelease(listLengthTermForm);
 	IFactRelease(listLengthPredicateForm);
@@ -501,12 +501,12 @@ void ListSetup(void)
 
 	// Create relation tables
 	// (list:ID position:INT element:ID)
-	listIDRelationTable = CreateRelationTable(listIDRelation, &btreeStorageProvider, listRoleIndex);
+	listIDRelationTable = CreateRelationTable(listIDRelation, &btreeStorageProvider, listRoleIndex, 3);
 	// (list:ID position:INT element:LETTER)
-	listLetterRelationTable = CreateRelationTable(listLetterRelation, &btreeStorageProvider, listRoleIndex);
+	listLetterRelationTable = CreateRelationTable(listLetterRelation, &btreeStorageProvider, listRoleIndex, 3);
 	// (list:ID length:INT)
 	listLengthRelationTable = CreateRelationTable(
-		listLengthRelation, &btreeStorageProvider, listLengthRoleIndex);
+		listLengthRelation, &btreeStorageProvider, listLengthRoleIndex, 2);
 
 	ReleaseRelation(listLengthRelation);
 	ReleaseRelation(listLetterRelation);

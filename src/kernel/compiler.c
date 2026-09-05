@@ -6,7 +6,6 @@
 #include "kernel/operator.h"
 #include "kernel/Parameter.h"
 #include "kernel/Relation.h"
-#include "kernel/RelationRegistry.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/ClauseForm.h"
 #include "lang/formula.h"
@@ -256,7 +255,7 @@ static bool dispatchOrCompileAtNewChoicePoint(
 		return false;
 
 	// Add the found relation's signature to the choices for the new choice point
-	choicePoint->choiceSignatures[choicePoint->nChoices] = service->relation->typeSignature;
+	choicePoint->choiceSignatures[choicePoint->nChoices] = service->relation.typeSignature;
 	choicePoint->nChoices++;
 	return true;
 }
@@ -414,7 +413,7 @@ static Operator * compileTerm(
 		return 0;
 
 	return createTermOperator(
-		termService.relation->typeSignature, termService.ioSignature, termService.op,
+		termService.relation.typeSignature, termService.ioSignature, termService.op,
 		term.actors, permutation, serviceParameters, clauseMap);
 }
 
@@ -984,7 +983,7 @@ typedef struct s_CompiledVariant {
 	Operator * op;
 	// The relation this variant compiles to, and a reference to it. Created before the
 	// recursive clauses compile, as their recursive term reads it.
-	Relation const * relation;
+	Relation relation;
 	// whether this variant was derived from a recursive clause (and contains a FIXPOINT operator)
 	bool isRecursive;
 } CompiledVariant;
@@ -1126,16 +1125,15 @@ static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
 
 
 /**
- * Set the relation (signature) for a CompiledVariant for the given query term form,
- * creating one if needed. Does nothing if the variant relation already is set.
+ * Set the relation (signature) for a CompiledVariant for the given query term form.
  */
-static void setupVariantRelation(
-	CompiledVariant * variant, Atom queryTermForm, size8 arity)
+static void setupVariantRelation(CompiledVariant * variant, Atom queryTermForm)
 {
-	if(variant->relation)
+	// Check if relation is already set, so that we don't acquire double references
+	// QUESTION: what could cause this field to be set twice?
+	if(!IsNullRelation(variant->relation))
 		return;
-	variant->relation = FindOrCreateRelation(
-		queryTermForm, arity, getVariantTypeSignature(variant));
+	variant->relation = CreateRelation(queryTermForm, getVariantTypeSignature(variant));
 }
 
 
@@ -1309,8 +1307,6 @@ static size8 compileClauseFormRules(
 static size8 compileQueryClauses(
 	CompilationState * state, FormulaView query, CompiledVariant variants[])
 {
-	size8 queryTermArity = TermFormArity(query.form);
-
 	/**
 	 * To find rules (clauses) c that contains a matching term form,
 	 * we query (multiset c element @term-form multiple m),
@@ -1339,7 +1335,7 @@ static size8 compileQueryClauses(
 	// We try all possible such type such type signatures for each recursive clause.
 	size8 nNonRecursiveVariants = nVariants;
 	for(index8 v = 0; v < nNonRecursiveVariants; v++) {
-		setupVariantRelation(&variants[v], query.form, queryTermArity);
+		setupVariantRelation(&variants[v], query.form);
 		FormulaView variantQuery = {.form = query.form, .actors = variants[v].parameters};
 		for(index32 i = 0; i < nMatchedClauseForms; i++) {
 			QueryClauseMatch const * clause = ResizingArrayGetElement(&matchedClauseForms, i);
@@ -1433,7 +1429,7 @@ static size8 compileFilterVariants(
 					(Atom) {
 						.parameter = {
 							.number = permutation[i] + 1,
-							.atomType = childService->relation->typeSignature.atomTypes[i],
+							.atomType = childService->relation.typeSignature.atomTypes[i],
 							.io = queryParameters[permutation[i]].parameter.io
 						}
 					}
@@ -1475,7 +1471,7 @@ static size8 compileQueryVariants(CompilationState * state, FormulaView query, C
 	// A service is registered against a relation, so every variant needs one. The variants
 	// a recursive clause compiles against have theirs already; here we cover the rest.
 	for(index8 i = 0; i < nVariants; i++)
-		setupVariantRelation(&variants[i], query.form, queryTermArity);
+		setupVariantRelation(&variants[i], query.form);
 	return nVariants;
 }
 
@@ -1533,7 +1529,7 @@ static size8 compileParameterizedQuery(
 		// NOTE: this is the only case where an identity PERMUTE is needed, unlike
 		// permuteToClauseArguments() where we avoid emitting one.
 		// NOTE: alternatively, we could introduce an IDENTITY operator that does nothing.
-		if(variants[i].op->relation) {
+		if(!IsNullRelation(variants[i].op->relation)) {
 			size8 nArguments = variants[i].op->nArguments;
 			index8 identityMap[RELATION_MAX_ARITY];
 			for(index8 j = 0; j < nArguments; j++)

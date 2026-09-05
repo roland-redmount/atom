@@ -5,7 +5,7 @@
 #include "kernel/kernel.h"
 #include "kernel/lookup.h"
 #include "kernel/multiset.h"
-#include "kernel/RelationRegistry.h"
+#include "kernel/Relation.h"
 
 
 Atom CreateClauseForm(Atom const termForms[], size8 nTermForms)
