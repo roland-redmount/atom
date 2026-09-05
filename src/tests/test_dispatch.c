@@ -125,12 +125,12 @@ void testDispatchNegatedTerm(void)
 	TypeSignature typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2);
 	Relation relation = CreateRelation(termForm, typeSignature);
 	RelationTable * table = CreateRelationTable(
-		relation, &btreeStorageProvider, (index8[]) {0, 1}, 2);
+		relation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(relation);
 	// Create the (! even odd) relation
 	Relation negatedRelation = CreateRelation(negatedTermForm, typeSignature);
 	RelationTable * negatedTable = CreateRelationTable(
-		negatedRelation, &btreeStorageProvider, (index8[]) {0, 1}, 2);
+		negatedRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(negatedRelation);
 	ASSERT_PTR_NOT_EQUAL(table, negatedTable)
 	ASSERT_TRUE(SameRelations(relation, table->relation))
@@ -208,12 +208,12 @@ void testDispatchIterator(void)
 	Relation idRelation = CreateRelation(
 		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2));
 	RelationTable * idTable = CreateRelationTable(
-		idRelation, &btreeStorageProvider, (index8[]) {0, 1}, 2);
+		idRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(idRelation);
 	Relation intRelation = CreateRelation(
 		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
 	RelationTable * intTable = CreateRelationTable(
-		intRelation, &btreeStorageProvider, (index8[]) {0, 1}, 2);
+		intRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(intRelation);
 
 	// Only the service with two output parameters matches, so each table contributes

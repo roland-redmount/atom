@@ -149,12 +149,12 @@ void testConcatAcrossRelations(void)
 	Relation idRelation = CreateRelation(
 		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2));
 	RelationTable * idTable = CreateRelationTable(
-		idRelation, &btreeStorageProvider, (index8[]) {0, 1}, 2);
+		idRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(idRelation);
 	Relation intRelation = CreateRelation(
 		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
 	RelationTable * intTable = CreateRelationTable(
-		intRelation, &btreeStorageProvider, (index8[]) {0, 1}, 2);
+		intRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(intRelation);
 
 	TypedAtom idActors[2] = {

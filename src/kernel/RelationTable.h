@@ -40,6 +40,7 @@ typedef struct s_RelationTable {
 	 * queries (@list _ _) and (@list @position _) should be fast, but (_ _ @element) may be slow.
 	 */
 	index8 indexColumns[RELATION_MAX_ARITY];
+	// The arity of the relation, determined from the relation type signature
 	size8 nColumns;
 
 	StorageProvider const * provider;
@@ -60,9 +61,12 @@ typedef struct s_RelationTable {
  *
  * The indexColumns array indicates the desired order of the index columns; see
  * RelationTable.indexColumns. Passing 0 gives the identity order.
+ *
+ * The number of columns of the relation table is determied from its type
+ * signature; see TypeSignatureNColumns().
  */
 RelationTable * CreateRelationTable(
-	Relation relation, StorageProvider const * provider, index8 const indexColumns[], size8 nColumns);
+	Relation relation, StorageProvider const * provider, index8 const indexColumns[]);
 
 /**
  * Find a relation table, or create one with the given storage provider if it does not exist.
@@ -70,7 +74,7 @@ RelationTable * CreateRelationTable(
  * The caller obtains a reference to the table in either case.
  */
 RelationTable * FindOrCreateRelationTable(
-	Relation relation, StorageProvider const * provider, size8 nColumns);
+	Relation relation, StorageProvider const * provider);
 
 /**
  * Acquire a reference to a relation table.

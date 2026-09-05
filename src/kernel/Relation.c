@@ -21,6 +21,15 @@ bool SameTypeSignatures(TypeSignature signature1, TypeSignature signature2)
 }
 
 
+size8 TypeSignatureNAtomTypes(TypeSignature typeSignature)
+{
+	size8 nColumns = 0;
+	while(nColumns < RELATION_MAX_ARITY && typeSignature.atomTypes[nColumns])
+		nColumns++;
+	return nColumns;
+}
+
+
 typedef struct s_RelationRecord {
 	Relation relation;
 	// The predicate form of relation.termForm. Kept here because during bootstrap,

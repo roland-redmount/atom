@@ -38,6 +38,12 @@ TypeSignature CreateTypeSignature(byte const atomTypes[], size8 nColumns);
 
 bool SameTypeSignatures(TypeSignature signature1, TypeSignature signature2);
 
+/**
+ * Return the number of (nonzero) atom types in the given TypeSignature.
+ * This is the same as the arity of a relation with this signature.
+ */
+size8 TypeSignatureNAtomTypes(TypeSignature typeSignature);
+
 
 typedef struct s_Relation {
 	Atom termForm;

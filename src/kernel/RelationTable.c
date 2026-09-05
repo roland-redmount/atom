@@ -32,11 +32,12 @@ static void providerCreateOperatorCallback(
 
 
 RelationTable * CreateRelationTable(
-	Relation relation, StorageProvider const * provider, index8 const indexColumns[], size8 nColumns)
+	Relation relation, StorageProvider const * provider, index8 const indexColumns[])
 {
 	// The relation must not already exist in the registry
 	ASSERT(!FindRelationTable(relation))
 	ASSERT(provider)
+	size8 nColumns = TypeSignatureNAtomTypes(relation.typeSignature);
 
 	// NOTE: pool allocation would be preferable
 	RelationTable * table = Allocate(sizeof(RelationTable));
@@ -63,13 +64,13 @@ RelationTable * CreateRelationTable(
 }
 
 
-RelationTable * FindOrCreateRelationTable(Relation relation, StorageProvider const * provider, size8 nColumns)
+RelationTable * FindOrCreateRelationTable(Relation relation, StorageProvider const * provider)
 {
 	RelationTable * table = FindRelationTable(relation);
 	if(table)
 		AcquireRelationTable(table);
 	else
-		table = CreateRelationTable(relation, provider, 0, nColumns);
+		table = CreateRelationTable(relation, provider, 0);
 	return table;		
 }
 

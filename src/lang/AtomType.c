@@ -4,7 +4,7 @@
 
 // this array specifies a printable name string for each of the N_DATUMTYPES
 char const * atomTypeNames[N_ATOMTYPES + 1] = {
-	"NONE",
+	"",			// padding; 0 is not a valid atom type
 	"NAME",
 	"ID",
 	"INT",
@@ -33,9 +33,8 @@ static bool equalStringToCString(char const * string, size32 length, char const 
 byte AtomTypeFromString(char const * string, size32 length)
 {
 	ASSERT(length != 0);
-	// check known type strings. The atom types run from AT_NONE to N_ATOMTYPES,
-	// so the last name is at index N_ATOMTYPES.
-	for(index8 i = 0; i <= N_ATOMTYPES; i++) {
+	// check known type strings.
+	for(index8 i = 1; i <= N_ATOMTYPES; i++) {
 		if(equalStringToCString(string, length, atomTypeNames[i]))
 			return i;
 	}

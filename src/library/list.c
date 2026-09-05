@@ -501,12 +501,12 @@ void ListSetup(void)
 
 	// Create relation tables
 	// (list:ID position:INT element:ID)
-	listIDRelationTable = CreateRelationTable(listIDRelation, &btreeStorageProvider, listRoleIndex, 3);
+	listIDRelationTable = CreateRelationTable(listIDRelation, &btreeStorageProvider, listRoleIndex);
 	// (list:ID position:INT element:LETTER)
-	listLetterRelationTable = CreateRelationTable(listLetterRelation, &btreeStorageProvider, listRoleIndex, 3);
+	listLetterRelationTable = CreateRelationTable(listLetterRelation, &btreeStorageProvider, listRoleIndex);
 	// (list:ID length:INT)
 	listLengthRelationTable = CreateRelationTable(
-		listLengthRelation, &btreeStorageProvider, listLengthRoleIndex, 2);
+		listLengthRelation, &btreeStorageProvider, listLengthRoleIndex);
 
 	ReleaseRelation(listLengthRelation);
 	ReleaseRelation(listLetterRelation);

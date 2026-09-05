@@ -301,7 +301,7 @@ static RelationTable * createCoreRelationTable(uint32 relationId)
 		kernel.coreTermForms[formId], kernel.corePredicateForms[formId], typeSignature);
 	// Create the relation storage and associated primitive services
 	RelationTable * table = CreateRelationTable(
-		relation, &btreeStorageProvider, kernel.corePredicateRoleIndex[formId], corePredicateArity[formId]);
+		relation, &btreeStorageProvider, kernel.corePredicateRoleIndex[formId]);
 	// the table now holds its own reference to the relation
 	ReleaseRelation(relation);
 	return table;

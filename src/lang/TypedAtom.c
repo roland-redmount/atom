@@ -118,12 +118,8 @@ size8 ReduceTypedAtomsArray(TypedAtom typedAtoms[], uint32 multiplicities[], siz
  */
 void PrintTypedAtom(TypedAtom typedAtom)
 {
-	// PrintChar('[');
+	ASSERT(typedAtom.type)
 	switch(typedAtom.type) {
-	case AT_NONE:
-		PrintCString("NONE");
-		break;
-
 	case AT_INT:
 		PrintInt(typedAtom.atom);
 		break;

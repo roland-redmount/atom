@@ -170,7 +170,7 @@ void testInvalidateOnPrimitiveService(void)
 		(byte[]) {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation storedRelation = CreateRelation(fixture.relation.termForm, storedTypes);
 	RelationTable * storedTable = CreateRelationTable(
-		storedRelation, &btreeStorageProvider, (index8[]) {0, 1, 2, 3}, EXAMPLE_FORM_ARITY);
+		storedRelation, &btreeStorageProvider, (index8[]) {0, 1, 2, 3});
 	ReleaseRelation(storedRelation);
 	// The compiled Service should now be invalidated, and the Relation dropped
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)

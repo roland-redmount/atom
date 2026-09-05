@@ -49,7 +49,7 @@ void SetupRelationFixture(
 	Relation relation = CreateRelation(
 		fixture->termForm, CreateTypeSignature(atomTypes, nColumns));
 	fixture->table = CreateRelationTable(
-		relation, &btreeStorageProvider, fixture->roleIndex, nColumns);
+		relation, &btreeStorageProvider, fixture->roleIndex);
 	// the table holds its own reference to the relation
 	ReleaseRelation(relation);
 }

@@ -61,7 +61,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 	bool tableWasCreated = false;
 	if(!table) {
 		table = CreateRelationTable(
-			relation, provider ? provider : &btreeStorageProvider, 0, fact.actors->nAtoms);
+			relation, provider ? provider : &btreeStorageProvider, 0);
 		tableWasCreated = true;
 	}
 	ReleaseRelation(relation);
@@ -154,7 +154,6 @@ void RetractFact(FormulaView fact)
  */
 typedef struct s_IFactTuple {
 	Relation relation;
-	size8 nArguments;
 	index8 idColumn;
 	Atom tuple[RELATION_MAX_ARITY];
 } IFactTuple;
@@ -196,7 +195,7 @@ static bool collectTermIFactTuples(
 	ASSERT(termArity <= RELATION_MAX_ARITY)
 
 	// Each term must contain exactly one generator, marking the identified atom.
-	IFactTuple ifactTuple = {.nArguments = actors->nAtoms};
+	IFactTuple ifactTuple = {0};
 	TypeSignature termSignature = {0};
 	bool hasGenerator = false;
 	index8 i0 = termActorIndex ? * termActorIndex : 0;
@@ -317,7 +316,7 @@ Atom CreateIFact(FormulaView formula)
 			if(i > 0)
 				IFactEndConjunction(&draft);
 			RelationTable * table = FindOrCreateRelationTable(
-				ifactTuples[i].relation, &btreeStorageProvider, ifactTuples[i].nArguments);
+				ifactTuples[i].relation, &btreeStorageProvider);
 			IFactBeginConjunction(&draft, table, ifactTuples[i].idColumn);
 			ReleaseRelationTable(table);	// the draft ifact now holds its own reference
 		}

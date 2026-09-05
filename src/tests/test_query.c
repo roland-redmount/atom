@@ -220,7 +220,7 @@ void testInvalidateServiceByNewRelation(void)
 	Relation intRelation = CreateRelation(
 		precSuccFixture.termForm, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
 	RelationTable * intTable = CreateRelationTable(
-		intRelation, &btreeStorageProvider, (index8[]) {0, 1}, 2);
+		intRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(intRelation);
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)
 

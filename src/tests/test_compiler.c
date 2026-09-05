@@ -355,7 +355,7 @@ void testCompileRecursiveJoin1(void)
 			TypedTuplePeekAtomTypes(FormulaGetActors(terminatingFact)), 2)
 	);
 	RelationTable * table = CreateRelationTable(
-		relation, &btreeStorageProvider, (index8[]) {0, 1}, 2);
+		relation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(relation);
 	RelationTableAddTuple(table, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	// Compile the query
@@ -627,7 +627,7 @@ void testCompileRecursiveVariants(void)
 	Relation precSuccIntRelation = CreateRelation(
 		precSuccFixture.termForm, CreateTypeSignature((byte[]) {AT_INT, AT_INT}, 2));
 	RelationTable * precSuccIntTable = CreateRelationTable(
-		precSuccIntRelation, &btreeStorageProvider, (index8[]) {0, 1}, 2);
+		precSuccIntRelation, &btreeStorageProvider, (index8[]) {0, 1});
 	ReleaseRelation(precSuccIntRelation);
 	// Add the facts (prec 1 succ 2), (prec 2 succ 3)
 	index8 precRoleIndex = RelationFixtureRoleIndex(&precSuccFixture, "prec");
@@ -709,7 +709,7 @@ void testCompileNegatedTerm(void)
 	Relation evenRelation = CreateRelation(
 		FormulaGetForm(odd3term), CreateTypeSignature((byte[]) {AT_INT}, 1));
 	RelationTable * evenTable = CreateRelationTable(
-		evenRelation, &btreeStorageProvider, (index8[]) {0}, 1);
+		evenRelation, &btreeStorageProvider, (index8[]) {0});
 	ReleaseRelation(evenRelation);
 	RelationTableAddTuple(evenTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	// setup the rule
@@ -760,7 +760,7 @@ void testCompiledServiceReadsFactsLive(void)
 	Relation oddRelation = CreateRelation(
 		FormulaGetForm(odd3term), CreateTypeSignature((byte[]) {AT_INT}, 1));
 	RelationTable * oddTable = CreateRelationTable(
-		oddRelation, &btreeStorageProvider, (index8[]) {0}, 1);
+		oddRelation, &btreeStorageProvider, (index8[]) {0});
 	ReleaseRelation(oddRelation);
 	RelationTableAddTuple(oddTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
