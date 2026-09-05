@@ -151,10 +151,12 @@ Heap allocation with `Allocate()` always returns cleared (zeroed) memory; so do 
 
 ## Use of const
 
-Generally, all functions and structures that do not modify the contents of a pointer parameter should declare it `const`, as in `void WontTouchIt(Thing const * thing)` or `struct container {Thing const * thing}`.
+Generally, all functions and structures that do not modify the contents of a pointer parameter should declare it `const`, as in `void WontTouchIt(Thing const * thing)` or `struct container {Thing const * thing}`. Functions that deallocate their argument are a special case: they should be const as well, as they do not _modify_ the data. For example, `void Free(void const * memory)`.
 
 The `const` keyword should always go to the right side of the constant thing: use `char const *` not `const char *`.  C allows const on either left or right side, but only for the first const in a declaration, so this style (known as "East const") is more consistent and easier to read.
-C 
+
+Do not cast away const, as in `Thing const * thing1; thing 2 = (Thing *) thing1`. This may lead to undefined behavior.
+
 
 ## Passing arrays to function
 
@@ -183,7 +185,7 @@ Standard C library functions like `printf` should not be used directly, but enca
 
 ### `malloc` and `free`
 
-We use our own allocator functions `Allocate` and `Free` for heap allocation instead of `malloc` and `free`. Heap allocation should be used sparingly; most data is stored in relations, which use special-purpose storage like `RelationBTree`, which in turn use page allocation only. 
+We use our own allocator functions `Allocate` and `Free` for heap allocation instead of `malloc` and `free`. Heap allocation should be used sparingly; most data is stored in relations, which use special-purpose storage like `RelationBTree`, which in turn use page allocation only. For arrays constant-size structures, `PoolAllocate()` is preferable to `Allocate()`. 
 
 
 ## Documentation
