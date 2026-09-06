@@ -1,27 +1,3 @@
-/**
- * The tokenizer converts a stream of characters into stream of tokens,
- * which are then parsed by the builder methods. Typical usage:
- * 
- * while(...) {
- *   TokenizerPush(tokenizer, c);
- *   if(TokenizerComplete(tokenizer)) {
- *     // new token becomes available when whitespace is pushed
- *     TokenizerGetToken(tokenizer)
- *     // do something with token ...
- * 	   TokenizerReset()
- *   }
- * }
- * 
- * The tokenizer understands one thing about syntax: whether it is reading a role name or
- * an actor, which its mode says; see enum TokenizerMode. Within a mode it will produce any
- * sequence of tokens that mode allows, e.g. foo & & | ! ! in role mode.
- * 
- * We could generate a tokenizer with a standard lexical analysis tool
- * such as lex, but it may be difficult to customize for interactive settings.
- * E.g. for input methods that allow editing (e.g. backspace) we need a
- * tokenizer with a "take back" functionality.
- */
-
 #include "kernel/float.h"
 #include "kernel/Int.h"
 #include "kernel/letter.h"
@@ -33,17 +9,26 @@
 #include "parser/Tokenizer.h"
 
 
-void TokenizerInit(Tokenizer * tokenizer)
+void TokenizerInit(Tokenizer * tokenizer, enum TokenizerInputMode inputMode)
 {
 	SetMemory(tokenizer, sizeof(Tokenizer), 0);
 	StringBufferInit(&(tokenizer->buffer));
-	tokenizer->mode = TOKENIZER_ROLE_MODE;
+	tokenizer->state = TOKENIZER_ROLE_STATE;
+	tokenizer->inputMode = inputMode;
 }
 
 
-void TokenizerSetMode(Tokenizer * tokenizer, enum TokenizerMode mode)
+/**
+ * Set the tokenizer to full, and handle the needsSeparator flag.
+ * A variable and a letter need a separator in string input mode,
+ * since a name character pushed next would continue the variable or the letter
+ * instead of beginning a token of its own; see enum TokenizerInputMode.
+ */
+static void tokenizerSetFull(Tokenizer * tokenizer)
 {
-	tokenizer->mode = mode;
+	tokenizer->isFull = true;
+	tokenizer->needsSeparator =
+		(tokenizer->type == TOKEN_VARIABLE) || (tokenizer->type == TOKEN_LETTER);
 }
 
 
@@ -67,7 +52,7 @@ static bool finishParameter(Tokenizer * tokenizer)
 	else
 		tokenizer->data.parameter.atomType = 0;
 
-	tokenizer->isFull = true;
+	tokenizerSetFull(tokenizer);
 	return true;
 }
 
@@ -75,20 +60,20 @@ static bool finishParameter(Tokenizer * tokenizer)
 /**
  * Mark the current token complete (valid, full) and set its type.
  */
-static bool beginSingleCharacterToken(Tokenizer * tokenizer, enum TokenType type)
+static enum TokenizerResult beginSingleCharacterToken(
+	Tokenizer * tokenizer, enum TokenType type)
 {
 	tokenizer->type = type;
 	tokenizer->isValid = true;
-	tokenizer->isFull = true;
-	return true;
+	tokenizerSetFull(tokenizer);
+	return TOKENIZER_ACCEPTED;
 }
 
 
 /**
- * Begin the token a character starts in TOKENIZER_ROLE_MODE, which is a role name or one
- * of the operators standing between one part of a formula and the next.
+ * Process the character c in TOKENIZER_ROLE_STATE to begin a new token
  */
-static bool beginRoleToken(Tokenizer * tokenizer, char c)
+static enum TokenizerResult roleStateBeginToken(Tokenizer * tokenizer, char c)
 {
 	switch(c) {
 	case '&':
@@ -109,46 +94,49 @@ static bool beginRoleToken(Tokenizer * tokenizer, char c)
 			tokenizer->type = TOKEN_NAME;
 			StringBufferPush(&(tokenizer->buffer), c);
 			tokenizer->isValid = true;
-			return true;
+			return TOKENIZER_ACCEPTED;
 		}
-		if(IsWhiteSpace(c) || (c == 0)) {
-			// leading whitespace does nothing
-			return true;
-		}
-		return false;
+		return TOKENIZER_REJECTED;
 	}
 }
 
 
 /**
- * Begin the token a character starts in TOKENIZER_ACTOR_MODE, which is an actor: a number,
- * a string, a letter, a variable, a parameter, or the reflection holding a formula as an
- * actor.
+ * Process the character c in TOKENIZER_ACTOR_STATE to begin a new token
  */
-static bool beginActorToken(Tokenizer * tokenizer, char c)
+static enum TokenizerResult actorStateBeginToken(Tokenizer * tokenizer, char c)
 {
 	switch(c) {
 	case '"':
 		tokenizer->type = TOKEN_STRING;
 		tokenizer->isValid = false;
-		return true;
+		return TOKENIZER_ACCEPTED;
 
 	case '\'':
 		// a letter is written 'A, and needs no closing quote since it is one character
 		tokenizer->type = TOKEN_LETTER;
 		tokenizer->isValid = false;
-		return true;
+		return TOKENIZER_ACCEPTED;
 
 	case '_':
 		// the anonymous variable, which is complete unless a name character follows
 		tokenizer->type = TOKEN_VARIABLE;
+		tokenizer->data.variable.isQuoted = false;
 		tokenizer->isValid = true;
-		return true;
+		tokenizerSetFull(tokenizer);
+		return TOKENIZER_ACCEPTED;
+
+	case '^':
+		// being a quoted variable
+		tokenizer->type = TOKEN_VARIABLE;
+		tokenizer->data.variable.isQuoted = true;
+		tokenizer->isValid = false;
+		return TOKENIZER_ACCEPTED;
 
 	case '@':
 		tokenizer->type = TOKEN_PARAMETER;
 		tokenizer->isValid = true;
-		return true;
+		return TOKENIZER_ACCEPTED;
 
 	case '*':
 		return beginSingleCharacterToken(tokenizer, TOKEN_GENERATOR);
@@ -161,153 +149,140 @@ static bool beginActorToken(Tokenizer * tokenizer, char c)
 			tokenizer->type = TOKEN_NUMBER;
 			StringBufferPush(&(tokenizer->buffer), c);
 			tokenizer->isValid = true;
-			return true;
+			return TOKENIZER_ACCEPTED;
 		}
-		// A variable is named by a single letter, so only a letter begins one. A role
-		// name may hold characters that are not letters, such as the + of (+ 2 + 3 = 5),
-		// and none of those names an actor; see CreateVariable().
+		// A variable is named by a single letter.
 		if(IsAlpha(c)) {
 			tokenizer->type = TOKEN_VARIABLE;
+			tokenizer->data.variable.isQuoted = false;
 			StringBufferPush(&(tokenizer->buffer), c);
 			tokenizer->isValid = true;
-			return true;
+			tokenizerSetFull(tokenizer);
+			return TOKENIZER_ACCEPTED;
 		}
-		if(IsWhiteSpace(c) || (c == 0)) {
-			// leading whitespace does nothing
-			return true;
-		}
-		return false;
+		return TOKENIZER_REJECTED;
 	}
 }
 
 
-// return true if character was accepted
-bool TokenizerPush(Tokenizer * tokenizer, char c)
+enum TokenizerResult TokenizerPush(Tokenizer * tokenizer, char c)
 {
 	if(tokenizer->isFull) {
 		if(IsWhiteSpace(c) || (c == 0)) {
 			// trailing whitespace or termination char
-			return true;
+			tokenizer->needsSeparator = false;
+			return TOKENIZER_ACCEPTED;
 		}
-		// caller must pop the completed token first
-		return false;
+		// A name character is rejected in string input mode if a separator is needed.
+		if((tokenizer->inputMode == TOKENIZER_STRING_INPUT)	&& tokenizer->needsSeparator && IsNameChar(c))
+			return TOKENIZER_REJECTED;
+		// Any other character is valid syntax, but caller must pop the completed token first
+		return TOKENIZER_ENDED;
 	}
 
 	switch(tokenizer->type) {
-	case TOKEN_INVALID:
-		// the mode decides which tokens may begin here
-		if(tokenizer->mode == TOKENIZER_ACTOR_MODE)
-			return beginActorToken(tokenizer, c);
+	case TOKEN_NONE:
+		if(IsWhiteSpace(c) || (c == 0)) {
+			// leading whitespace separates the token just popped from the next
+			tokenizer->needsSeparator = false;
+			return TOKENIZER_ACCEPTED;
+		}
+		// A name character is rejected in string input mode if a separator is needed.
+		if((tokenizer->inputMode == TOKENIZER_STRING_INPUT)	&& tokenizer->needsSeparator && IsNameChar(c))
+			return TOKENIZER_REJECTED;
+		// the state decides which tokens may begin here
+		if(tokenizer->state == TOKENIZER_ACTOR_STATE)
+			return actorStateBeginToken(tokenizer, c);
 		else
-			return beginRoleToken(tokenizer, c);
+			return roleStateBeginToken(tokenizer, c);
 
 	case TOKEN_NAME:
 		if(IsNameChar(c)) {
 			StringBufferPush(&(tokenizer->buffer), c);
-			return true;
+			return TOKENIZER_ACCEPTED;
 		}
 		if(IsWhiteSpace(c) || (c == 0)) {
 			// whitespace terminates name
-			tokenizer->isFull = true;
-			return true;
+			tokenizerSetFull(tokenizer);
+			return TOKENIZER_ACCEPTED;
 		}
 		if(IsSeparatorChar(c)) {
-			// a separator terminates the name and begins a token of its own
-			tokenizer->isFull = true;
-			return false;
+			// a separator terminates the name
+			tokenizerSetFull(tokenizer);
+			return TOKENIZER_ENDED;
 		}
-		return false;
+		return TOKENIZER_REJECTED;
 
 	case TOKEN_NUMBER:
 		// TODO: handle minus sign
 		// NOTE: do the number conversion here?
 		if(IsDigitChar(c)) {
 			StringBufferPush(&(tokenizer->buffer), c);
-			return true;
+			return TOKENIZER_ACCEPTED;
 		}
 		if(c == '.') {
 			// decimal point may occur only once
 			if(StringContainsChar(
 					tokenizer->buffer.buffer, tokenizer->buffer.stringLength, '.'))
-				return false;
+				return TOKENIZER_REJECTED;
 			else {
 				StringBufferPush(&(tokenizer->buffer), c);
-				return true;
+				return TOKENIZER_ACCEPTED;
 			}
 		}
 		if(IsWhiteSpace(c) || (c == 0)) {
 			// whitespace terminates number
-			tokenizer->isFull = true;
-			return true;
+			tokenizerSetFull(tokenizer);
+			return TOKENIZER_ACCEPTED;
 		}
 		if(IsSeparatorChar(c)) {
 			// a separator terminates the number and begins a token of its own
-			tokenizer->isFull = true;
-			return false;
+			tokenizerSetFull(tokenizer);
+			return TOKENIZER_ENDED;
 		}
-		return false;
+		return TOKENIZER_REJECTED;
 
 	case TOKEN_STRING:
 		// string token is incomplete until closing "
 		if(c == '"') {
 			tokenizer->isValid = true;
-			tokenizer->isFull = true;
-			return true;
+			tokenizerSetFull(tokenizer);
+			return TOKENIZER_ACCEPTED;
 		}
 		// valid string characters
 		if(IsPrintableChar(c)) {
 			StringBufferPush(&(tokenizer->buffer), c);
-			return true;
+			return TOKENIZER_ACCEPTED;
 		}
-		return false;
+		return TOKENIZER_REJECTED;
 
 	case TOKEN_LETTER:
-		// the letter itself, which the opening quote is still waiting for
-		if(tokenizer->buffer.stringLength == 0) {
-			if(!IsAlpha(c))
-				return false;
-			StringBufferPush(&(tokenizer->buffer), c);
-			tokenizer->isValid = true;
-			return true;
-		}
-		// A letter is one character, so a further name character is an error rather than
-		// the start of the next token, as with a variable.
-		if(IsNameChar(c))
-			return false;
-		if(IsWhiteSpace(c) || (c == 0)) {
-			tokenizer->isFull = true;
-			return true;
-		}
-		if(IsSeparatorChar(c)) {
-			// a separator ends the letter and begins a token of its own
-			tokenizer->isFull = true;
-			return false;
-		}
-		return false;
+		// CLAUDE: the letter itself, which the opening quote is still waiting for. A letter
+		// is one character, so the token is full once the letter has been read.
+		if(!IsAlpha(c))
+			return TOKENIZER_REJECTED;
+		StringBufferPush(&(tokenizer->buffer), c);
+		tokenizer->isValid = true;
+		tokenizerSetFull(tokenizer);
+		return TOKENIZER_ACCEPTED;
 
 	case TOKEN_VARIABLE:
-		// The letter naming the variable, or the '_' naming none, has been read already.
-		// A further name character is an error rather than the start of the next token,
-		// so that a word too long to be a variable is reported where it goes wrong.
-		if(IsNameChar(c))
-			return false;
-		if(IsWhiteSpace(c) || (c == 0)) {
-			tokenizer->isFull = true;
-			return true;
-		}
-		if(IsSeparatorChar(c)) {
-			// a separator ends the variable and begins a token of its own
-			tokenizer->isFull = true;
-			return false;
-		}
-		return false;
+		// CLAUDE: A variable named by a letter alone is full at that letter, so the quote
+		// character (^) waiting for its variable name is the only state left here.
+		ASSERT(tokenizer->data.variable.isQuoted)
+		if(!IsAlpha(c))
+			return TOKENIZER_REJECTED;
+		StringBufferPush(&(tokenizer->buffer), c);
+		tokenizer->isValid = true;
+		tokenizerSetFull(tokenizer);
+		return TOKENIZER_ACCEPTED;
 
 	case TOKEN_PARAMETER:
 		if(!tokenizer->data.parameter.number) {
 			// parse parameter number (positive integer)
 			if(IsDigitChar(c)) {
 				StringBufferPush(&(tokenizer->buffer), c);
-				return true;
+				return TOKENIZER_ACCEPTED;
 			}
 			else {
 				tokenizer->data.parameter.number = StringToInt64(
@@ -318,7 +293,7 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 				// A parameter number is 1-based, so zero means the number is absent.
 				// Rejecting zero also rejects an empty number, which yields zero.
 				if(!tokenizer->data.parameter.number)
-					return false;
+					return TOKENIZER_REJECTED;
 				// continue with current character
 			}
 		}
@@ -326,69 +301,87 @@ bool TokenizerPush(Tokenizer * tokenizer, char c)
 			// parse io type
 			if(c == '<') {
 				tokenizer->data.parameter.io = PARAMETER_IN;
-				return true;
+				return TOKENIZER_ACCEPTED;
 			}
 			else if(c == '>') {
 				tokenizer->data.parameter.io = PARAMETER_OUT;
-				return true;
+				return TOKENIZER_ACCEPTED;
 			}
 			else
-				return false;
+				return TOKENIZER_REJECTED;
 		}
 		// parse atom type name
 		// TODO: here we must ensure that the string
 		// is always a prefix of valid type name.
 		if(IsNameChar(c)) {
 			StringBufferPush(&(tokenizer->buffer), c);
-			return true;
+			return TOKENIZER_ACCEPTED;
 		}
 		if(IsWhiteSpace(c) || (c == 0)) {
 			// whitespace completes parameter
-			return finishParameter(tokenizer);
+			return finishParameter(tokenizer) ? TOKENIZER_ACCEPTED : TOKENIZER_REJECTED;
 		}
 		if(IsSeparatorChar(c)) {
 			// a separator completes the parameter but begins a token of its own,
-			// so reject the token (to be pushed again)
-			finishParameter(tokenizer);
-			return false;
+			// so the character is left for the caller to push again
+			return finishParameter(tokenizer) ? TOKENIZER_ENDED : TOKENIZER_REJECTED;
 		}
-		return false;
+		return TOKENIZER_REJECTED;
 
 	default:
 		// should never occur
 		ASSERT(false);
-		return false;	
+		return TOKENIZER_REJECTED;
 	}
 }
 
 
-bool TokenizerComplete(Tokenizer const * tokenizer)
+bool TokenizerIsFull(Tokenizer const * tokenizer)
 {
 	return tokenizer->isFull;
 }
 
 
 /**
- * The mode the token after the given one is read in. A role name is followed by its actor,
- * and everything else by a role name: an actor completes a part, and each of the operators
- * stands before one. A reflection is an actor, and both of its brackets are followed by a
- * role name, the first by the name beginning the reflected formula and the second by the
- * name continuing the predicate the reflection is an actor of.
+ * Set the tokenizer state for the next token. A role name is followed by an actor,
+ * and everything else by a role name.
  */
-static enum TokenizerMode nextMode(enum TokenType type)
+static enum TokenizerState nextState(enum TokenType type)
 {
-	return (type == TOKEN_NAME) ? TOKENIZER_ACTOR_MODE : TOKENIZER_ROLE_MODE;
+	return (type == TOKEN_NAME) ? TOKENIZER_ACTOR_STATE : TOKENIZER_ROLE_STATE;
+}
+
+
+/**
+ * Clear the tokenizer and set the state, leaving the tokenizer ready to read a new token.
+ * The needsSeparator flag is not altered, as it affects the tokenizer behavior on
+ * reading the next token.
+ */
+static void clearToken(Tokenizer * tokenizer, enum TokenizerState state)
+{
+	tokenizer->state = state;
+	tokenizer->isValid = false;
+	tokenizer->isFull = false;
+	tokenizer->type = TOKEN_NONE;
+	tokenizer->data.value = 0;
+
+	StringBufferReset(&(tokenizer->buffer));
 }
 
 
 void TokenizerReset(Tokenizer * tokenizer)
 {
-	StringBuffer buffer = tokenizer->buffer;
-	enum TokenizerMode mode = nextMode(tokenizer->type);
-	SetMemory(tokenizer, sizeof(Tokenizer), 0);
-	tokenizer->buffer = buffer;
-	tokenizer->mode = mode;
-	StringBufferReset(&(tokenizer->buffer));
+	// CLAUDE: a reset follows the syntax, which only a completed token says anything about
+	ASSERT(tokenizer->isFull)
+	clearToken(tokenizer, nextState(tokenizer->type));
+}
+
+
+void TokenizerRestart(Tokenizer * tokenizer, enum TokenizerState state)
+{
+	// CLAUDE: nothing read before this point bears on the token read next
+	tokenizer->needsSeparator = false;
+	clearToken(tokenizer, state);
 }
 
 
@@ -474,14 +467,14 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 }
 
 
-Token CreateTokenFromCString(char const * cString, enum TokenizerMode mode)
+Token CreateTokenFromCString(char const * cString, enum TokenizerState state)
 {
 	Tokenizer tokenizer;
-	TokenizerInit(&tokenizer);
-	TokenizerSetMode(&tokenizer, mode);
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
+	TokenizerRestart(&tokenizer, state);
 	char const * p = cString;
 	while(*p) {
-		ASSERT(TokenizerPush(&tokenizer, *p++));
+		ASSERT(TokenizerPush(&tokenizer, *p++) == TOKENIZER_ACCEPTED);
 		if(tokenizer.isFull)
 			break;	// token complete before string ends
 	}
@@ -489,8 +482,8 @@ Token CreateTokenFromCString(char const * cString, enum TokenizerMode mode)
 	// whitespace completes a token followed by another. A token ending in a character
 	// of its own, such as a quoted string, is already complete.
 	if(!tokenizer.isFull)
-		ASSERT(TokenizerPush(&tokenizer, 0));
-	ASSERT(TokenizerComplete(&tokenizer));
+		ASSERT(TokenizerPush(&tokenizer, 0) == TOKENIZER_ACCEPTED);
+	ASSERT(TokenizerIsFull(&tokenizer));
 	Token token = TokenizerGetToken(&tokenizer);
 	TokenizerCleanup(&tokenizer);
 	return token;
@@ -512,17 +505,18 @@ void TokenizeCString(char const * cString, TokenHandler handler, void * context)
 {
 	size32 length = CStringLength(cString);
 	Tokenizer tokenizer;
-	TokenizerInit(&tokenizer);
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
 	// NOTE: including the 0 terminator, which completes the last token
 	for(index32 i = 0; i <= length; i++) {
-		if(!TokenizerPush(&tokenizer, cString[i])) {
+		enum TokenizerResult result = TokenizerPush(&tokenizer, cString[i]);
+		ASSERT(result != TOKENIZER_REJECTED)
+		if(result == TOKENIZER_ENDED) {
 			// the character ended the token before it without being part of it,
 			// and has to be pushed again once that token has been taken
-			ASSERT(TokenizerComplete(&tokenizer))
 			handleToken(&tokenizer, handler, context);
-			ASSERT(TokenizerPush(&tokenizer, cString[i]))
+			ASSERT(TokenizerPush(&tokenizer, cString[i]) == TOKENIZER_ACCEPTED)
 		}
-		if(TokenizerComplete(&tokenizer))
+		if(TokenizerIsFull(&tokenizer))
 			handleToken(&tokenizer, handler, context);
 	}
 	TokenizerCleanup(&tokenizer);

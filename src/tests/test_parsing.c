@@ -558,7 +558,7 @@ static void testParseFormula(void)
 	ASSERT_UINT32_EQUAL(errorPosition, 6)
 
 	// a variable is named by a single letter, so a word too long to be one is reported
-	// at the letter that makes it too long; see enum TokenizerMode
+	// at the letter that makes it too long; see enum TokenizerState
 	ASSERT_UINT64_EQUAL(ParseFormula("foo xy bar 1", &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 5)
 

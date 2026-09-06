@@ -73,9 +73,8 @@ static void testSameQuotedVariable(void)
 	Atom x = CreateVariable('x');
 	Atom quotedX = QuoteVariable(x);
 
-	ASSERT_TRUE(SameVariable(quotedX, QuoteVariable(x)))
 	ASSERT_FALSE(SameVariable(quotedX, x))
-	ASSERT_FALSE(SameVariable(quotedX, QuoteVariable(quotedX)))
+	ASSERT_TRUE(SameVariable(quotedX, QuoteVariable(x)))
 	ASSERT_TRUE(SameVariable(UnquoteVariable(quotedX), x))
 }
 

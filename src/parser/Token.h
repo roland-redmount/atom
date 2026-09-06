@@ -10,7 +10,7 @@
 
 
 enum TokenType {
-	TOKEN_INVALID = 0,
+	TOKEN_NONE = 0,			// As usual, a zero represents a null (missing) value
 	TOKEN_NAME,
 	TOKEN_NUMBER,			// TODO: should we differentiate between INT and FLOAT ?
 	TOKEN_STRING,
@@ -22,7 +22,7 @@ enum TokenType {
 	TOKEN_NOT,				// logical negation
 	TOKEN_BEGIN_REFLECT,	// begin a reflection block
 	TOKEN_END_REFLECT,		// end a reflection block
-	TOKEN_GENERATOR			// the * generator character
+	TOKEN_GENERATOR,		// the * generator character
 };
 
 typedef struct s_Token {

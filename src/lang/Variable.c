@@ -37,18 +37,18 @@ bool SameVariable(Atom variable1, Atom variable2)
 
 bool VariableIsQuoted(Atom variable)
 {
-	return variable.variable.quoteCount > 0;	
+	return variable.variable.quoted;
 }
 
 
 Atom QuoteVariable(Atom variable)
 {
-	// guard against uint8 wraparound
-	ASSERT(variable.variable.quoteCount < 255);
+	// A variable cannot be quoted twice
+	ASSERT(!variable.variable.quoted);
 	return (Atom) {
 		.variable = {
 			.name = variable.variable.name,
-			.quoteCount = variable.variable.quoteCount + 1
+			.quoted = true
 		}
 	};
 }
@@ -56,11 +56,11 @@ Atom QuoteVariable(Atom variable)
 
 Atom UnquoteVariable(Atom variable)
 {
-	ASSERT(variable.variable.quoteCount > 0);
+	ASSERT(variable.variable.quoted);
 	return (Atom) {
 		.variable = {
 			.name = variable.variable.name,
-			.quoteCount = variable.variable.quoteCount - 1
+			.quoted = false
 		}
 	};
 }
@@ -79,8 +79,8 @@ Atom UnquoteVariable(Atom variable)
 
 void PrintVariable(Atom variable)
 {
-	for(uint8 i = 0; i < variable.variable.quoteCount; i++)
-		PrintChar('\'');
+	if(variable.variable.quoted)
+		PrintChar('^');
 	if(variable.variable.name)
 		PrintChar(variable.variable.name);
 	else

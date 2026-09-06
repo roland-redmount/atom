@@ -1,8 +1,6 @@
 /**
  * Variables are used in queries to indicate "any" atom.
  * They are identified by a single letter, case-insensitive.
- * A variable is written as that bare letter, which the tokenizer
- * tells from a role name by where it stands; see enum TokenizerMode.
  * When a variable occurs only once in a formula so that its
  * identity is irrelevant, an "anonymous" variable _ can be used.
  */

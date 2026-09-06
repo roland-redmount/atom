@@ -102,7 +102,7 @@ static bool tokenizeToFormulaBuilder(
 	char const * cString, FormulaBuilder * builder, index32 * errorPosition)
 {
 	Tokenizer tokenizer;
-	TokenizerInit(&tokenizer);
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
 	size32 length = CStringLength(cString);
 	index32 tokenPosition = 0;
 	bool isAccepted = true;
@@ -110,16 +110,17 @@ static bool tokenizeToFormulaBuilder(
 	// NOTE: including the 0 terminator, which completes the last token
 	for(index32 i = 0; i <= length; i++) {
 		// a tokenizer that has not begun a token starts one at the character pushed next
-		if(tokenizer.type == TOKEN_INVALID)
+		if(!tokenizer.type)
 			tokenPosition = i;
 
-		if(!TokenizerPush(&tokenizer, cString[i])) {
-			if(!TokenizerComplete(&tokenizer)) {
-				// the character belongs to no token the tokenizer can read
-				*errorPosition = i;
-				isAccepted = false;
-				break;
-			}
+		enum TokenizerResult result = TokenizerPush(&tokenizer, cString[i]);
+		if(result == TOKENIZER_REJECTED) {
+			// the character belongs to no token the tokenizer can read
+			*errorPosition = i;
+			isAccepted = false;
+			break;
+		}
+		if(result == TOKENIZER_ENDED) {
 			// the character ended the token before it without being part of it,
 			// and has to be pushed again once that token has been taken
 			if(!pushToken(&tokenizer, builder)) {
@@ -128,13 +129,13 @@ static bool tokenizeToFormulaBuilder(
 				break;
 			}
 			tokenPosition = i;
-			if(!TokenizerPush(&tokenizer, cString[i])) {
+			if(TokenizerPush(&tokenizer, cString[i]) != TOKENIZER_ACCEPTED) {
 				*errorPosition = i;
 				isAccepted = false;
 				break;
 			}
 		}
-		if(TokenizerComplete(&tokenizer) && !pushToken(&tokenizer, builder)) {
+		if(TokenizerIsFull(&tokenizer) && !pushToken(&tokenizer, builder)) {
 			*errorPosition = tokenPosition;
 			isAccepted = false;
 			break;

@@ -11,38 +11,32 @@
 #include "testing/testing.h"
 
 
-static void testPushString(Tokenizer * tokenizer, char const * string, size32 length)
-{
-	for(index32 i = 0; i < length; i++) {
-		ASSERT_TRUE(TokenizerPush(tokenizer, string[i]))
-		ASSERT_FALSE(TokenizerComplete(tokenizer))
-	}
-}
-
 // push each character of a C string, excluding zero terminator
 static void pushCString(Tokenizer * tokenizer, char const * string)
 {
-	testPushString(tokenizer, string, CStringLength(string));
+	size32 length = CStringLength(string);
+	for(index32 i = 0; i < length; i++)
+		ASSERT_UINT32_EQUAL(TokenizerPush(tokenizer, string[i]), TOKENIZER_ACCEPTED)
 }
 
 
-static Token tokenizeCString(Tokenizer * tokenizer, char const * string, enum TokenizerMode mode)
+static Token tokenizeCString(Tokenizer * tokenizer, char const * string, enum TokenizerState mode)
 {
-	TokenizerSetMode(tokenizer, mode);
+	TokenizerRestart(tokenizer, mode);
 	pushCString(tokenizer, string);
-	ASSERT_TRUE(TokenizerPush(tokenizer, 0))
-	ASSERT_TRUE(TokenizerComplete(tokenizer))
+	ASSERT_UINT32_EQUAL(TokenizerPush(tokenizer, 0), TOKENIZER_ACCEPTED)
+	ASSERT_TRUE(TokenizerIsFull(tokenizer))
 	Token token = TokenizerGetToken(tokenizer);
 	TokenizerReset(tokenizer);
 	return token;
 }
 
 
-static Token testTokenizeCharacter(Tokenizer * tokenizer, char c, enum TokenizerMode mode)
+static Token testTokenizeCharacter(Tokenizer * tokenizer, char c, enum TokenizerState mode)
 {
-	TokenizerSetMode(tokenizer, mode);
-	ASSERT_TRUE(TokenizerPush(tokenizer, c))
-	ASSERT_TRUE(TokenizerComplete(tokenizer))
+	TokenizerRestart(tokenizer, mode);
+	ASSERT_UINT32_EQUAL(TokenizerPush(tokenizer, c), TOKENIZER_ACCEPTED)
+	ASSERT_TRUE(TokenizerIsFull(tokenizer))
 	Token token = TokenizerGetToken(tokenizer);
 	TokenizerReset(tokenizer);
 	return token;
@@ -68,32 +62,32 @@ static void testStringBuffer(void)
 static void testTokenizer(void)
 {
 	Tokenizer tokenizer;
-	TokenizerInit(&tokenizer);
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
 	Token token;
 
 	// single-character tokens, all of them standing where a role name may
-	token = testTokenizeCharacter(&tokenizer, '&', TOKENIZER_ROLE_MODE);
+	token = testTokenizeCharacter(&tokenizer, '&', TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(TOKEN_AND, token.type)
 
-	token = testTokenizeCharacter(&tokenizer, '|', TOKENIZER_ROLE_MODE);
+	token = testTokenizeCharacter(&tokenizer, '|', TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_OR)
 
-	token = testTokenizeCharacter(&tokenizer, '!', TOKENIZER_ROLE_MODE);
+	token = testTokenizeCharacter(&tokenizer, '!', TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NOT)
 
 	// a name token
 	char const * nameString = "foobar";
-	token = tokenizeCString(&tokenizer, nameString, TOKENIZER_ROLE_MODE);
+	token = tokenizeCString(&tokenizer, nameString, TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NAME)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_NAME)
 	ReleaseToken(token);
 
 	// test string "foobar" enclosed in ""
-	TokenizerSetMode(&tokenizer, TOKENIZER_ACTOR_MODE);
-	ASSERT_TRUE(TokenizerPush(&tokenizer, '"'))
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '"'), TOKENIZER_ACCEPTED)
 	pushCString(&tokenizer, nameString);
-	ASSERT_TRUE(TokenizerPush(&tokenizer, '"'))
-	ASSERT_TRUE(TokenizerComplete(&tokenizer))
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '"'), TOKENIZER_ACCEPTED)
+	ASSERT_TRUE(TokenizerIsFull(&tokenizer))
 	token = TokenizerGetToken(&tokenizer);
 	TokenizerReset(&tokenizer);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_STRING)
@@ -107,39 +101,38 @@ static void testTokenizer(void)
 	ReleaseToken(token);
 
 	char const * integerString = "12345";
-	token = tokenizeCString(&tokenizer, integerString, TOKENIZER_ACTOR_MODE);
+	token = tokenizeCString(&tokenizer, integerString, TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_INT)
 	ASSERT_INT64_EQUAL(token.typedAtom.atom._int, 12345);
 
 	integerString = "0";
-	token = tokenizeCString(&tokenizer, integerString, TOKENIZER_ACTOR_MODE);
+	token = tokenizeCString(&tokenizer, integerString, TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_INT)
 	ASSERT_INT64_EQUAL(token.typedAtom.atom._int, 0);
 
 	char const * decimalString = "123.45";
-	token = tokenizeCString(&tokenizer, decimalString, TOKENIZER_ACTOR_MODE);
+	token = tokenizeCString(&tokenizer, decimalString, TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_FLOAT)
 	ASSERT_FLOAT_EQUAL(token.typedAtom.atom._float, 123.45)
 
 	// the string "123.45." is not a legal number. The tokenizer stays incomplete,
 	// which is what tells a syntax error from a token ended by a separator.
-	TokenizerSetMode(&tokenizer, TOKENIZER_ACTOR_MODE);
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
 	pushCString(&tokenizer, decimalString);
-	ASSERT_FALSE(TokenizerPush(&tokenizer, '.'))
-	ASSERT_FALSE(TokenizerComplete(&tokenizer))
-	TokenizerReset(&tokenizer);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '.'), TOKENIZER_REJECTED)
+	ASSERT_FALSE(TokenizerIsFull(&tokenizer))
 
 	// a variable, which is a bare letter where an actor stands
-	token = tokenizeCString(&tokenizer, "v", TOKENIZER_ACTOR_MODE);
+	token = tokenizeCString(&tokenizer, "v", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_VARIABLE)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_VARIABLE)
 	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom.atom), 'v');
 
 	// the anonymous variable, which names no variable at all
-	token = tokenizeCString(&tokenizer, "_", TOKENIZER_ACTOR_MODE);
+	token = tokenizeCString(&tokenizer, "_", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_VARIABLE)
 	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom.atom), '_');
 
@@ -154,86 +147,74 @@ static void testTokenizer(void)
 static void testTokenizeLetter(void)
 {
 	Tokenizer tokenizer;
-	TokenizerInit(&tokenizer);
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
 
-	Token token = tokenizeCString(&tokenizer, "'A", TOKENIZER_ACTOR_MODE);
+	Token token = tokenizeCString(&tokenizer, "'A", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_LETTER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_LETTER)
 	ASSERT_CHAR_EQUAL(LetterToChar(token.typedAtom.atom, LETTER_UPPERCASE), 'A')
 
 	// a letter is case-insensitive, so 'a is the same atom as 'A
-	Token lowerToken = tokenizeCString(&tokenizer, "'a", TOKENIZER_ACTOR_MODE);
+	Token lowerToken = tokenizeCString(&tokenizer, "'a", TOKENIZER_ACTOR_STATE);
 	ASSERT_TRUE(SameTypedAtoms(lowerToken.typedAtom, token.typedAtom))
 
 	// A letter is one character, so a second one is an error rather than the start of
 	// the next token; see TOKEN_VARIABLE for the same rule on a variable name.
-	TokenizerSetMode(&tokenizer, TOKENIZER_ACTOR_MODE);
-	ASSERT_TRUE(TokenizerPush(&tokenizer, '\''))
-	ASSERT_TRUE(TokenizerPush(&tokenizer, 'A'))
-	ASSERT_FALSE(TokenizerPush(&tokenizer, 'B'))
-	ASSERT_FALSE(TokenizerComplete(&tokenizer))
-	TokenizerReset(&tokenizer);
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '\''), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'A'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'B'), TOKENIZER_REJECTED)
 
 	// only a letter of the alphabet follows the quote
-	TokenizerSetMode(&tokenizer, TOKENIZER_ACTOR_MODE);
-	ASSERT_TRUE(TokenizerPush(&tokenizer, '\''))
-	ASSERT_FALSE(TokenizerPush(&tokenizer, '4'))
-	TokenizerReset(&tokenizer);
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '\''), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '4'), TOKENIZER_REJECTED)
 
 	// and a letter stands nowhere a role name does
-	TokenizerSetMode(&tokenizer, TOKENIZER_ROLE_MODE);
-	ASSERT_FALSE(TokenizerPush(&tokenizer, '\''))
-	TokenizerReset(&tokenizer);
+	TokenizerRestart(&tokenizer, TOKENIZER_ROLE_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '\''), TOKENIZER_REJECTED)
 
 	TokenizerCleanup(&tokenizer);
 }
 
 
 /**
- * The mode decides what a character may begin, which is what lets a bare word be a role
- * name in one place and a variable in the other; see enum TokenizerMode.
+ * The tokenizer state decides what tokens are legal. See enum TokenizerState.
  */
-static void testTokenizerMode(void)
+static void testTokenizerState(void)
 {
 	Tokenizer tokenizer;
-	TokenizerInit(&tokenizer);
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
 
-	// the same word is a name where a role stands and a variable where an actor does
-	Token token = tokenizeCString(&tokenizer, "x", TOKENIZER_ROLE_MODE);
+	// "x" represents a name in TOKENIZER_ROLE_STATE, but and a variable in TOKENIZER_ACTOR_STATE
+	Token token = tokenizeCString(&tokenizer, "x", TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NAME)
 	ReleaseToken(token);
-	token = tokenizeCString(&tokenizer, "x", TOKENIZER_ACTOR_MODE);
+	token = tokenizeCString(&tokenizer, "x", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_VARIABLE)
 
-	// A variable is named by a single letter, so a second one is an error rather than
-	// the start of the next token. The tokenizer stays incomplete, which is what tells
-	// the two apart; see TokenizerPush().
-	TokenizerSetMode(&tokenizer, TOKENIZER_ACTOR_MODE);
-	ASSERT_TRUE(TokenizerPush(&tokenizer, 'x'))
-	ASSERT_FALSE(TokenizerPush(&tokenizer, 'y'))
-	ASSERT_FALSE(TokenizerComplete(&tokenizer))
-	TokenizerReset(&tokenizer);
+	// A variable is named by a single letter, so pushing a second character
+	// is an error rather than the start of the next token; see enum TokenizerInputMode.
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'x'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'y'), TOKENIZER_REJECTED)
 
 	// a name may hold characters that name no variable, and none of them begins an actor
-	token = tokenizeCString(&tokenizer, "+", TOKENIZER_ROLE_MODE);
+	token = tokenizeCString(&tokenizer, "+", TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NAME)
 	ReleaseToken(token);
-	TokenizerSetMode(&tokenizer, TOKENIZER_ACTOR_MODE);
-	ASSERT_FALSE(TokenizerPush(&tokenizer, '+'))
-	TokenizerReset(&tokenizer);
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '+'), TOKENIZER_REJECTED)
 
 	// a number is an actor, and stands nowhere a role name does
-	TokenizerSetMode(&tokenizer, TOKENIZER_ROLE_MODE);
-	ASSERT_FALSE(TokenizerPush(&tokenizer, '4'))
-	TokenizerReset(&tokenizer);
+	TokenizerRestart(&tokenizer, TOKENIZER_ROLE_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '4'), TOKENIZER_REJECTED)
 
 	// a reflection opens where an actor stands and closes where a role name does
-	TokenizerSetMode(&tokenizer, TOKENIZER_ROLE_MODE);
-	ASSERT_FALSE(TokenizerPush(&tokenizer, '['))
-	TokenizerReset(&tokenizer);
-	TokenizerSetMode(&tokenizer, TOKENIZER_ACTOR_MODE);
-	ASSERT_FALSE(TokenizerPush(&tokenizer, ']'))
-	TokenizerReset(&tokenizer);
+	TokenizerRestart(&tokenizer, TOKENIZER_ROLE_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '['), TOKENIZER_REJECTED)
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, ']'), TOKENIZER_REJECTED)
 
 	TokenizerCleanup(&tokenizer);
 }
@@ -246,23 +227,23 @@ static void testTokenizerMode(void)
 static void testModeFollowsToken(void)
 {
 	Tokenizer tokenizer;
-	TokenizerInit(&tokenizer);
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
 
 	// a formula begins with a role name
-	Token token = tokenizeCString(&tokenizer, "foo", TOKENIZER_ROLE_MODE);
+	Token token = tokenizeCString(&tokenizer, "foo", TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NAME)
 	ReleaseToken(token);
 
 	// the name put the tokenizer where its actor is read
 	pushCString(&tokenizer, "y");
-	ASSERT_TRUE(TokenizerPush(&tokenizer, 0))
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 0), TOKENIZER_ACCEPTED)
 	token = TokenizerGetToken(&tokenizer);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_VARIABLE)
 	TokenizerReset(&tokenizer);
 
 	// and the actor put it back where the next role name is read
 	pushCString(&tokenizer, "bar");
-	ASSERT_TRUE(TokenizerPush(&tokenizer, 0))
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 0), TOKENIZER_ACCEPTED)
 	token = TokenizerGetToken(&tokenizer);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NAME)
 	ReleaseToken(token);
@@ -280,37 +261,35 @@ static void testModeFollowsToken(void)
 static void testTokenizeParameter(void)
 {
 	Tokenizer tokenizer;
-	TokenizerInit(&tokenizer);
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
 
-	Token token = tokenizeCString(&tokenizer, "@1<INT", TOKENIZER_ACTOR_MODE);
+	Token token = tokenizeCString(&tokenizer, "@1<INT", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_PARAMETER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_PARAMETER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.number, 1)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.io, PARAMETER_IN)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.atomType, AT_INT)
 
-	token = tokenizeCString(&tokenizer, "@2>ID", TOKENIZER_ACTOR_MODE);
+	token = tokenizeCString(&tokenizer, "@2>ID", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_PARAMETER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.number, 2)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.io, PARAMETER_OUT)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.atomType, AT_ID)
 
 	// a parameter number of more than one digit
-	token = tokenizeCString(&tokenizer, "@12<NAME", TOKENIZER_ACTOR_MODE);
+	token = tokenizeCString(&tokenizer, "@12<NAME", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.number, 12)
 
 	// A parameter number is 1-based, so @0 is not a parameter
-	TokenizerSetMode(&tokenizer, TOKENIZER_ACTOR_MODE);
-	ASSERT_TRUE(TokenizerPush(&tokenizer, '@'))
-	ASSERT_TRUE(TokenizerPush(&tokenizer, '0'))
-	ASSERT_FALSE(TokenizerPush(&tokenizer, '<'))
-	TokenizerReset(&tokenizer);
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '@'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '0'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '<'), TOKENIZER_REJECTED)
 
 	// neither is a parameter without a number
-	TokenizerSetMode(&tokenizer, TOKENIZER_ACTOR_MODE);
-	ASSERT_TRUE(TokenizerPush(&tokenizer, '@'))
-	ASSERT_FALSE(TokenizerPush(&tokenizer, '<'))
-	TokenizerReset(&tokenizer);
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '@'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '<'), TOKENIZER_REJECTED)
 
 	TokenizerCleanup(&tokenizer);
 }
@@ -318,27 +297,27 @@ static void testTokenizeParameter(void)
 
 static void testCreateTokenFromCString(void)
 {
-	Token token = CreateTokenFromCString("x", TOKENIZER_ACTOR_MODE);
+	Token token = CreateTokenFromCString("x", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_VARIABLE)
 	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom.atom), 'x');
 	ReleaseToken(token);
 
 	// A token running to the end of the string is completed by the terminator.
 	// The atom type of a parameter comes last, so it is what a missing one loses.
-	token = CreateTokenFromCString("@1<INT", TOKENIZER_ACTOR_MODE);
+	token = CreateTokenFromCString("@1<INT", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_PARAMETER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.number, 1)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.io, PARAMETER_IN)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.atomType, AT_INT)
 	ReleaseToken(token);
 
-	token = CreateTokenFromCString("foobar", TOKENIZER_ROLE_MODE);
+	token = CreateTokenFromCString("foobar", TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NAME)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_NAME)
 	ReleaseToken(token);
 
 	// a token ending in a character of its own completes without the terminator
-	token = CreateTokenFromCString("&", TOKENIZER_ROLE_MODE);
+	token = CreateTokenFromCString("&", TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_AND)
 	ReleaseToken(token);
 }
@@ -350,12 +329,12 @@ static void testCreateTokenFromCString(void)
  * for the caller to push again. See TokenizerPush().
  */
 static Token takeTerminatedToken(
-	Tokenizer * tokenizer, char const * string, char separator, enum TokenizerMode mode)
+	Tokenizer * tokenizer, char const * string, char separator, enum TokenizerState mode)
 {
-	TokenizerSetMode(tokenizer, mode);
+	TokenizerRestart(tokenizer, mode);
 	pushCString(tokenizer, string);
-	ASSERT_FALSE(TokenizerPush(tokenizer, separator))
-	ASSERT_TRUE(TokenizerComplete(tokenizer))
+	ASSERT_UINT32_EQUAL(TokenizerPush(tokenizer, separator), TOKENIZER_ENDED)
+	ASSERT_TRUE(TokenizerIsFull(tokenizer))
 	Token token = TokenizerGetToken(tokenizer);
 	TokenizerReset(tokenizer);
 	return token;
@@ -365,33 +344,72 @@ static Token takeTerminatedToken(
 static void testSeparatorTerminatesToken(void)
 {
 	Tokenizer tokenizer;
-	TokenizerInit(&tokenizer);
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
 
 	// a name followed by a disjunction, as in [foo 1 | bar 2]
-	Token token = takeTerminatedToken(&tokenizer, "bar", '|', TOKENIZER_ROLE_MODE);
+	Token token = takeTerminatedToken(&tokenizer, "bar", '|', TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NAME)
 	ReleaseToken(token);
-	token = testTokenizeCharacter(&tokenizer, '|', TOKENIZER_ROLE_MODE);
+	token = testTokenizeCharacter(&tokenizer, '|', TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_OR)
 	ReleaseToken(token);
 
 	// a variable closing a reflection, as in [foo x]
-	token = takeTerminatedToken(&tokenizer, "x", ']', TOKENIZER_ACTOR_MODE);
+	token = takeTerminatedToken(&tokenizer, "x", ']', TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_VARIABLE)
 	ReleaseToken(token);
-	token = testTokenizeCharacter(&tokenizer, ']', TOKENIZER_ROLE_MODE);
+	token = testTokenizeCharacter(&tokenizer, ']', TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_END_REFLECT)
 	ReleaseToken(token);
 
 	// a number followed by a conjunction
-	token = takeTerminatedToken(&tokenizer, "12", '&', TOKENIZER_ACTOR_MODE);
+	token = takeTerminatedToken(&tokenizer, "12", '&', TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
 	ASSERT_INT64_EQUAL(token.typedAtom.atom._int, 12);
 	ReleaseToken(token);
-	token = testTokenizeCharacter(&tokenizer, '&', TOKENIZER_ROLE_MODE);
+	token = testTokenizeCharacter(&tokenizer, '&', TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_AND)
 	ReleaseToken(token);
 
+	TokenizerCleanup(&tokenizer);
+}
+
+
+/**
+ * CLAUDE: A variable ends in a name character, so whether a further name character may
+ * follow it depends on where the characters come from; see enum TokenizerInputMode.
+ */
+static void testTokenizerInput(void)
+{
+	Tokenizer tokenizer;
+
+	// A string is read whole, so a word too long to name a variable is rejected at the
+	// letter that makes it too long.
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'x'), TOKENIZER_ACCEPTED)
+	ASSERT_TRUE(TokenizerIsFull(&tokenizer))
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'y'), TOKENIZER_REJECTED)
+	TokenizerCleanup(&tokenizer);
+
+	// Interactive input takes the same letter as the start of the next token, so that
+	// "foo x y" can be typed as "foo xy".
+	TokenizerInit(&tokenizer, TOKENIZER_INTERACTIVE_INPUT);
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'x'), TOKENIZER_ACCEPTED)
+	ASSERT_TRUE(TokenizerIsFull(&tokenizer))
+	Token token = TokenizerGetToken(&tokenizer);
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_VARIABLE)
+	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom.atom), 'x')
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'y'), TOKENIZER_ENDED)
+
+	// the variable puts the tokenizer where a role name is read, so the letter begins one
+	TokenizerReset(&tokenizer);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'y'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 0), TOKENIZER_ACCEPTED)
+	token = TokenizerGetToken(&tokenizer);
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_NAME)
+	ReleaseToken(token);
 	TokenizerCleanup(&tokenizer);
 }
 
@@ -405,7 +423,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testStringBuffer);
 	ExecuteTest(testTokenizer);
 	ExecuteTest(testTokenizeLetter);
-	ExecuteTest(testTokenizerMode);
+	ExecuteTest(testTokenizerState);
+	ExecuteTest(testTokenizerInput);
 	ExecuteTest(testModeFollowsToken);
 	ExecuteTest(testTokenizeParameter);
 	ExecuteTest(testCreateTokenFromCString);
