@@ -7,13 +7,5 @@
 
 void ReleaseToken(Token token)
 {
-	if(token.type == TOKEN_NAME) {
-		ASSERT(token.typedAtom.type == AT_NAME)
-		NameRelease(token.typedAtom.atom);
-	}
-	if(token.type == TOKEN_STRING) {
-		ASSERT(token.typedAtom.type == AT_ID)
-		IFactRelease(token.typedAtom.atom);
-	}
-	// other token types have nothing to release
+	ReleaseTypedAtom(token.typedAtom);
 }

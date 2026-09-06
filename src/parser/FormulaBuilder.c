@@ -78,7 +78,7 @@ void CleanupFormulaBuilder(FormulaBuilder * builder)
  * Offer the token the tokenizer holds to the builder, and reset the tokenizer so that it
  * can read the next one. Returns false if the builder rejects the token.
  */
-static bool pushToken(Tokenizer * tokenizer, FormulaBuilder * builder)
+static bool pushTokenToBuilder(Tokenizer * tokenizer, FormulaBuilder * builder)
 {
 	Token token = TokenizerGetToken(tokenizer);
 	bool isAccepted = FormulaBuilderPush(builder, token);
@@ -123,7 +123,7 @@ static bool tokenizeToFormulaBuilder(
 		if(result == TOKENIZER_ENDED) {
 			// the character ended the token before it without being part of it,
 			// and has to be pushed again once that token has been taken
-			if(!pushToken(&tokenizer, builder)) {
+			if(!pushTokenToBuilder(&tokenizer, builder)) {
 				*errorPosition = tokenPosition;
 				isAccepted = false;
 				break;
@@ -135,13 +135,13 @@ static bool tokenizeToFormulaBuilder(
 				break;
 			}
 		}
-		if(TokenizerIsFull(&tokenizer) && !pushToken(&tokenizer, builder)) {
+		if(TokenizerIsFull(&tokenizer) && !pushTokenToBuilder(&tokenizer, builder)) {
 			*errorPosition = tokenPosition;
 			isAccepted = false;
 			break;
 		}
 	}
-	TokenizerCleanup(&tokenizer);
+	TokenizerFree(&tokenizer);
 	return isAccepted;
 }
 

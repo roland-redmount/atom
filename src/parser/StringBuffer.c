@@ -17,6 +17,7 @@ void StringBufferInit(StringBuffer * buffer)
 void StringBufferPush(StringBuffer * buffer, char c)
 {
 	if(buffer->stringLength == buffer->bufferSize - 1) {
+		// we need a larger buffer
 		buffer->bufferSize = buffer->bufferSize * 2;
 		buffer->buffer = Reallocate(buffer->buffer, buffer->bufferSize);
 	}
@@ -31,7 +32,8 @@ void StringBufferReset(StringBuffer * buffer)
 }
 
 
-void StringBufferCleanup(StringBuffer * buffer)
+void StringBufferFree(StringBuffer * buffer)
 {
 	Free(buffer->buffer);
+	SetMemory(buffer, sizeof(StringBuffer), 0);
 }

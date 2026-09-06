@@ -149,7 +149,10 @@ void TokenizerReset(Tokenizer * tokenizer);
  */
 Token TokenizerGetToken(Tokenizer const * tokenizer);
 
-void TokenizerCleanup(Tokenizer * tokenizer);
+/**
+ * Deallocate tokenizer storage.
+ */
+void TokenizerFree(Tokenizer * tokenizer);
 
 /**
  * Read a single token from a C string, in the given tokenizer state. The string must a

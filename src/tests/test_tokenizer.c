@@ -55,7 +55,7 @@ static void testStringBuffer(void)
 		StringBufferPush(&buffer, exampleString[i]);
 
 	ASSERT_MEMORY_EQUAL(buffer.buffer, exampleString, buffer.stringLength)
-	StringBufferCleanup(&buffer);
+	StringBufferFree(&buffer);
 }
 
 
@@ -136,7 +136,7 @@ static void testTokenizer(void)
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_VARIABLE)
 	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom.atom), '_');
 
-	TokenizerCleanup(&tokenizer);
+	TokenizerFree(&tokenizer);
 }
 
 
@@ -174,7 +174,7 @@ static void testTokenizeLetter(void)
 	TokenizerRestart(&tokenizer, TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '\''), TOKENIZER_REJECTED)
 
-	TokenizerCleanup(&tokenizer);
+	TokenizerFree(&tokenizer);
 }
 
 
@@ -216,7 +216,7 @@ static void testTokenizerState(void)
 	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, ']'), TOKENIZER_REJECTED)
 
-	TokenizerCleanup(&tokenizer);
+	TokenizerFree(&tokenizer);
 }
 
 
@@ -249,7 +249,7 @@ static void testModeFollowsToken(void)
 	ReleaseToken(token);
 	TokenizerReset(&tokenizer);
 
-	TokenizerCleanup(&tokenizer);
+	TokenizerFree(&tokenizer);
 }
 
 
@@ -291,7 +291,7 @@ static void testTokenizeParameter(void)
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '@'), TOKENIZER_ACCEPTED)
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '<'), TOKENIZER_REJECTED)
 
-	TokenizerCleanup(&tokenizer);
+	TokenizerFree(&tokenizer);
 }
 
 
@@ -371,7 +371,7 @@ static void testSeparatorTerminatesToken(void)
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_AND)
 	ReleaseToken(token);
 
-	TokenizerCleanup(&tokenizer);
+	TokenizerFree(&tokenizer);
 }
 
 
@@ -390,7 +390,7 @@ static void testTokenizerInput(void)
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'x'), TOKENIZER_ACCEPTED)
 	ASSERT_TRUE(TokenizerIsFull(&tokenizer))
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'y'), TOKENIZER_REJECTED)
-	TokenizerCleanup(&tokenizer);
+	TokenizerFree(&tokenizer);
 
 	// Interactive input takes the same letter as the start of the next token, so that
 	// "foo x y" can be typed as "foo xy".
@@ -410,7 +410,7 @@ static void testTokenizerInput(void)
 	token = TokenizerGetToken(&tokenizer);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NAME)
 	ReleaseToken(token);
-	TokenizerCleanup(&tokenizer);
+	TokenizerFree(&tokenizer);
 }
 
 

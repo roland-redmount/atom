@@ -385,9 +385,10 @@ void TokenizerRestart(Tokenizer * tokenizer, enum TokenizerState state)
 }
 
 
-void TokenizerCleanup(Tokenizer * tokenizer)
+void TokenizerFree(Tokenizer * tokenizer)
 {
-	StringBufferCleanup(&(tokenizer->buffer));
+	StringBufferFree(&(tokenizer->buffer));
+	SetMemory(tokenizer, sizeof(Tokenizer), 0);
 }
 
 
@@ -485,7 +486,7 @@ Token CreateTokenFromCString(char const * cString, enum TokenizerState state)
 		ASSERT(TokenizerPush(&tokenizer, 0) == TOKENIZER_ACCEPTED);
 	ASSERT(TokenizerIsFull(&tokenizer));
 	Token token = TokenizerGetToken(&tokenizer);
-	TokenizerCleanup(&tokenizer);
+	TokenizerFree(&tokenizer);
 	return token;
 }
 
@@ -519,5 +520,5 @@ void TokenizeCString(char const * cString, TokenHandler handler, void * context)
 		if(TokenizerIsFull(&tokenizer))
 			handleToken(&tokenizer, handler, context);
 	}
-	TokenizerCleanup(&tokenizer);
+	TokenizerFree(&tokenizer);
 }
