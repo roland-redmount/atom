@@ -11,6 +11,17 @@ struct s_FormulaBuilder;
 
 
 /**
+ * Whether the formula parsed by a builder is inside a reflection [ ... ].
+ * A quote ^ escapes a variable from a reflection, so a quoted variable ^x
+ * can only occur inside a reflection. See also QuoteVariable().
+ */
+enum FormulaScope {
+	FORMULA_TOP_SCOPE = 1,
+	FORMULA_REFLECTED_SCOPE = 2,
+};
+
+
+/**
  * A part is a role name followed by an actor. The actor may be written as a
  * reflection [ ... ], in which case the part builder collects the tokens of
  * the reflection in a nested formula builder while in STATE_REFLECTION, and
@@ -26,12 +37,14 @@ typedef struct s_PartBuilder {
 	} state;
 	Atom role;
 	TypedAtom actor;
+	// whether this part is inside a reflected formula
+	enum FormulaScope scope;
 	// Keep a pointer to the nested builder, allocated only in STATE_REFLECTION.
 	struct s_FormulaBuilder * formulaBuilder;
 } PartBuilder;
 
 
-void InitializePartBuilder(PartBuilder * builder);
+void InitializePartBuilder(PartBuilder * builder, enum FormulaScope scope);
 
 bool PartBuilderPush(PartBuilder * builder, Token token);
 

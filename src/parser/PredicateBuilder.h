@@ -19,7 +19,7 @@ typedef struct s_PredicateBuilder {
 	ResizingArray actors;		// array of atoms
 } PredicateBuilder;
 
-void InitializePredicateBuilder(PredicateBuilder * builder);
+void InitializePredicateBuilder(PredicateBuilder * builder, enum FormulaScope scope);
 
 bool PredicateBuilderPush(PredicateBuilder * builder, Token token);
 

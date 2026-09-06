@@ -10,9 +10,9 @@
 #define INITIAL_N_TERMS 3
 
 
-void InitializeConjunctionBuilder(ConjunctionBuilder * builder)
+void InitializeConjunctionBuilder(ConjunctionBuilder * builder, enum FormulaScope scope)
 {
-	InitializeClauseBuilder(&(builder->clauseBuilder));
+	InitializeClauseBuilder(&(builder->clauseBuilder), scope);
 	CreateResizingArray(&(builder->clauses), sizeof(Atom), INITIAL_N_TERMS);
 	builder->arity = 0;
 	builder->isValid = false;
@@ -143,7 +143,7 @@ static bool pushToConjunctionBuilder(void * context, Token token)
 Atom CStringToConjunction(char const * cString)
 {
 	ConjunctionBuilder builder;
-	InitializeConjunctionBuilder(&builder);
+	InitializeConjunctionBuilder(&builder, FORMULA_TOP_SCOPE);
 	TokenizeCString(cString, pushToConjunctionBuilder, &builder);
 
 	ASSERT(ConjunctionBuilderIsValid(&builder))

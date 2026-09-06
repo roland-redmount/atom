@@ -7,9 +7,9 @@
 #include "parser/Tokenizer.h"
 
 
-void InitializeFormulaBuilder(FormulaBuilder * builder)
+void InitializeFormulaBuilder(FormulaBuilder * builder, enum FormulaScope scope)
 {
-	InitializeConjunctionBuilder(&(builder->conjunctionBuilder));
+	InitializeConjunctionBuilder(&(builder->conjunctionBuilder), scope);
 }
 
 
@@ -149,7 +149,7 @@ static bool tokenizeToFormulaBuilder(
 Atom ParseFormula(char const * cString, index32 * errorPosition)
 {
 	FormulaBuilder builder;
-	InitializeFormulaBuilder(&builder);
+	InitializeFormulaBuilder(&builder, FORMULA_TOP_SCOPE);
 
 	Atom formula = (Atom) {0};
 	if(tokenizeToFormulaBuilder(cString, &builder, errorPosition)) {

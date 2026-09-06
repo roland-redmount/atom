@@ -7,9 +7,9 @@
 #include "parser/Tokenizer.h"
 
 
-void InitializeTermBuilder(TermBuilder * builder)
+void InitializeTermBuilder(TermBuilder * builder, enum FormulaScope scope)
 {
-	InitializePredicateBuilder(&(builder->predicateBuilder));
+	InitializePredicateBuilder(&(builder->predicateBuilder), scope);
 	builder->isEmpty = true;
 	builder->isValid = false;
 	// isNegated is unknown
@@ -86,7 +86,7 @@ bool TermBuilderTokenHandler(void * context, Token token)
 Atom CStringToTerm(char const * cString)
 {
 	TermBuilder builder;
-	InitializeTermBuilder(&builder);
+	InitializeTermBuilder(&builder, FORMULA_TOP_SCOPE);
 	TokenizeCString(cString, TermBuilderTokenHandler, &builder);
 
 	ASSERT(TermBuilderIsValid(&builder))

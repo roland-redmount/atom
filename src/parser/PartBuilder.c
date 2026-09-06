@@ -1,17 +1,28 @@
 
 #include "kernel/ifact.h"
 #include "lang/name.h"
+#include "lang/Variable.h"
 #include "memory/allocator.h"
 #include "parser/FormulaBuilder.h"
 #include "parser/PartBuilder.h"
 #include "parser/Tokenizer.h"
 
 
-void InitializePartBuilder(PartBuilder * builder)
+void InitializePartBuilder(PartBuilder * builder, enum FormulaScope scope)
 {
 	builder->state = STATE_EMPTY;
+	builder->scope = scope;
 	builder->formulaBuilder = 0;
 	// role and actor are undefined
+}
+
+
+/**
+ * Whether the actor is a variable written with a quote, as ^x.
+ */
+static bool isQuotedVariable(TypedAtom actor)
+{
+	return (actor.type == AT_VARIABLE) && VariableIsQuoted(actor.atom);
 }
 
 static void releaseFormulaBuilder(PartBuilder * builder)
@@ -37,10 +48,14 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 	case STATE_HAS_NAME:
 		if(token.type == TOKEN_BEGIN_REFLECT) {
 			builder->formulaBuilder = Allocate(sizeof(FormulaBuilder));
-			InitializeFormulaBuilder(builder->formulaBuilder);
+			// a reflection within a reflection is still a reflection
+			InitializeFormulaBuilder(builder->formulaBuilder, FORMULA_REFLECTED_SCOPE);
 			builder->state = STATE_REFLECTION;
 			return true;
 		}
+		// A quoted variable cannot occur outside a reflection; see enum FormulaScope.
+		if((builder->scope == FORMULA_TOP_SCOPE) && isQuotedVariable(token.typedAtom))
+			return false;
 		// the tokenizer reads an actor after a role name, so this token is one
 		builder->actor = token.typedAtom;
 		AcquireTypedAtom(builder->actor);

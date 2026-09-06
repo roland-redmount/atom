@@ -18,7 +18,7 @@ typedef struct s_FormulaBuilder {
 } FormulaBuilder;
 
 
-void InitializeFormulaBuilder(FormulaBuilder * builder);
+void InitializeFormulaBuilder(FormulaBuilder * builder, enum FormulaScope scope);
 
 bool FormulaBuilderPush(FormulaBuilder * builder, Token token);
 

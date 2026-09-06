@@ -84,7 +84,7 @@ static void testPartBuilder(void)
 	setupTokensFixture(&fixture);
 
 	PartBuilder builder;
-	InitializePartBuilder(&builder);
+	InitializePartBuilder(&builder, FORMULA_TOP_SCOPE);
 	ASSERT_FALSE(PartBuilderComplete(&builder))
 	for(index8 i = 0; i < EXAMPLE_N_PARTS; i++) {
 		ASSERT_TRUE(PartBuilderPush(&builder, fixture.nameTokens[i]))
@@ -140,7 +140,7 @@ static void testPredicateBuilder(void)
 	TokensFixture * tokensFixture = &(fixture.tokensFixture);
 
 	PredicateBuilder builder;
-	InitializePredicateBuilder(&builder);
+	InitializePredicateBuilder(&builder, FORMULA_TOP_SCOPE);
 	ASSERT_FALSE(PredicateBuilderIsValid(&builder));
 
 	for(index8 i = 0; i < EXAMPLE_PREDICATE_ARITY; i++) {
@@ -189,7 +189,7 @@ static void testTermBuilder(void)
 	TokensFixture * tokensFixture = &(fixture.predicateFixture.tokensFixture);
 
 	TermBuilder builder;
-	InitializeTermBuilder(&builder);
+	InitializeTermBuilder(&builder, FORMULA_TOP_SCOPE);
 	// test with and without negation
 	for(index8 k = 0; k <= 1; k++) {
 		ASSERT_FALSE(TermBuilderIsValid(&builder))
@@ -254,7 +254,7 @@ static void testClauseBuilder(void)
 		&(fixture.termFixture.predicateFixture.tokensFixture);
 
 	ClauseBuilder builder;
-	InitializeClauseBuilder(&builder);
+	InitializeClauseBuilder(&builder, FORMULA_TOP_SCOPE);
 	ASSERT_FALSE(ClauseBuilderIsValid(&builder))
 	ASSERT_TRUE(ClauseBuilderIsEmpty(&builder))
 
@@ -461,6 +461,16 @@ static Atom createTermWithReflection(
 
 
 /**
+ * A TokenHandler function using a FormulaBuilder, for use with TokenizeCString();
+ * see TermBuilderTokenHandler() for the same over a TermBuilder.
+ */
+static bool formulaBuilderTokenHandler(void * context, Token token)
+{
+	return FormulaBuilderPush((FormulaBuilder *) context, token);
+}
+
+
+/**
  * Parse the string "term [<formulaString>] arity 2" where the given
  * formulaString is inserted, and compare it against the term
  * (term <reflectedFormula>) arity 2) constructed independently.
@@ -468,13 +478,19 @@ static Atom createTermWithReflection(
  */
 static void testReflection(char const * formulaString)
 {
-	// Create the expected formula
-	Atom reflectedFormula = CStringToFormula(formulaString);
+	// Create the expected formula, parsing only the formula inside the reflection.
+	// This avoids running the same code path being tested.
+	FormulaBuilder formulaBuilder;
+	InitializeFormulaBuilder(&formulaBuilder, FORMULA_REFLECTED_SCOPE);
+	TokenizeCString(formulaString, formulaBuilderTokenHandler, &formulaBuilder);
+	ASSERT(FormulaBuilderFinish(&formulaBuilder))
+	Atom reflectedFormula = FormulaBuilderCreateFormula(&formulaBuilder);
+	CleanupFormulaBuilder(&formulaBuilder);
 	Atom expectedTerm = createTermWithReflection("term", reflectedFormula, "arity", 2);
 
 	// Parse the corresponding syntax string
 	TermBuilder builder;
-	InitializeTermBuilder(&builder);
+	InitializeTermBuilder(&builder, FORMULA_TOP_SCOPE);
 	TokenizeCString("term [", TermBuilderTokenHandler, &builder);
 	TokenizeCString(formulaString, TermBuilderTokenHandler, &builder);
 	TokenizeCString("] arity 2", TermBuilderTokenHandler, &builder);
@@ -705,7 +721,7 @@ static void testReflectionRejected(void)
 	Token endToken = (Token) {TOKEN_END_REFLECT, invalidAtom};
 
 	PartBuilder builder;
-	InitializePartBuilder(&builder);
+	InitializePartBuilder(&builder, FORMULA_TOP_SCOPE);
 
 	// a reflection cannot stand where a role name is expected
 	ASSERT_FALSE(PartBuilderPush(&builder, beginToken))

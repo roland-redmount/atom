@@ -12,9 +12,9 @@
 #define INITIAL_N_TERMS 3
 
 
-void InitializeClauseBuilder(ClauseBuilder * builder)
+void InitializeClauseBuilder(ClauseBuilder * builder, enum FormulaScope scope)
 {
-	InitializeTermBuilder(&(builder->termBuilder));
+	InitializeTermBuilder(&(builder->termBuilder), scope);
 	CreateResizingArray(&(builder->terms), sizeof(Atom), INITIAL_N_TERMS);
 	builder->arity = 0;
 	builder->isEmpty = true;
@@ -150,7 +150,7 @@ static bool pushToClauseBuilder(void * context, Token token)
 Atom CStringToClause(char const * cString)
 {
 	ClauseBuilder builder;
-	InitializeClauseBuilder(&builder);
+	InitializeClauseBuilder(&builder, FORMULA_TOP_SCOPE);
 	TokenizeCString(cString, pushToClauseBuilder, &builder);
 
 	ASSERT(ClauseBuilderIsValid(&builder))

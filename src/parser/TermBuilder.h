@@ -14,7 +14,7 @@ typedef struct s_TermBuilder {
 } TermBuilder;
 
 
-void InitializeTermBuilder(TermBuilder *);
+void InitializeTermBuilder(TermBuilder * builder, enum FormulaScope scope);
 
 bool TermBuilderPush(TermBuilder * builder, Token token);
 
