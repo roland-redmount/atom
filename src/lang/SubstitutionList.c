@@ -83,6 +83,9 @@ void substituteTuple(
 	for(index8 i = 0; i < source->nAtoms; i++) {
 		TypedAtom sourceValue = TypedTupleGetElement(source, i);
 		TypedAtom substValue = invalidAtom;
+		// A generated reflection is the one value this function holds a reference to.
+		// Every other value is read from the source tuple or the substitution list.
+		bool substValueIsOwned = false;
 		if(sourceValue.type == AT_FORMULA && mode == SUBSTITUTE_NORMAL) {
 			FormulaView reflectedFormula = FormulaGetView(sourceValue.atom);
 			// We substitute inside reflections only one level deep, since
@@ -94,6 +97,7 @@ void substituteTuple(
 			substValue = CreateTypedAtom(
 				AT_FORMULA, CreateFormula(reflectedFormula.form, substReflectionTuple));
 			FreeTypedTuple(substReflectionTuple);
+			substValueIsOwned = true;
 		}
 		else if(sourceValue.type == AT_VARIABLE)
 			substValue = findValue(subst, sourceValue, mode);
@@ -101,7 +105,11 @@ void substituteTuple(
 		if(!substValue.type)
 			substValue = sourceValue;
 
+		// The destination tuple takes a reference of its own, so hand over
+		// the reference to a generated reflection rather than keeping it
 		TypedTupleSetElement(destination, i, substValue);
+		if(substValueIsOwned)
+			ReleaseTypedAtom(substValue);
 	}
 }
 

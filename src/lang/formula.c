@@ -144,7 +144,6 @@ static Atom internFormula(Atom form, TypedTuple * actors)
 		record.form = form;
 		record.actors = actors;
 		IFactAcquire(form);
-		TypedTupleAcquireElements(actors);
 		ASSERT(BTreeInsert(formulaStorage.tree, &record) == BTREE_INSERTED)
 	}
 	formulaStorage.nReferencesTotal++;
@@ -191,7 +190,6 @@ void ReleaseFormula(Atom formula)
 		FormulaRecord recordCopy = *record;
 		ASSERT(BTreeDelete(formulaStorage.tree, &recordCopy, 0) == BTREE_DELETED)
 		IFactRelease(recordCopy.form);
-		TypedTupleReleaseElements(recordCopy.actors);
 		FreeTypedTuple(recordCopy.actors);
 	}
 }

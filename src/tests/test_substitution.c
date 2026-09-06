@@ -2,6 +2,7 @@
 #include "kernel/typedtuple.h"
 #include "lang/Variable.h"
 #include "lang/SubstitutionList.h"
+#include "library/library.h"
 #include "parser/TermBuilder.h"
 #include "parser/Tokenizer.h"
 #include "testing/testing.h"
@@ -93,10 +94,12 @@ void testSubstituteReflection(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	LoadLibraries();
 
 	ExecuteTest(testSubstitution);
 	ExecuteTest(testSubstituteReflection);
 
+	UnloadLibraries();
 	KernelShutdown();
 	TestSummary();
 }

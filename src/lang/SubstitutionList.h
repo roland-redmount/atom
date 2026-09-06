@@ -38,7 +38,8 @@ void SubstitutionSetValue(Substitution * subst, TypedAtom variable, TypedAtom va
  * tuple that do not occur in the substitution will be copied unchanged
  * to the destination. The source and destination tuples must have the same length.
  * Quoted variables in reflected formula will also be substituted, resulting in
- * a new reflected formula atom in the destination tuple.
+ * a new reflected formula atom in the destination tuple. The destination tuple owns
+ * that formula, as it owns every element, so freeing the destination releases it.
  * The source and destination may be the same to substitute in-place.
  */
 void SubstituteTuple(Substitution const * subst, TypedTuple const * source, TypedTuple * destination);

@@ -4,11 +4,11 @@
 #include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/formula.h"
+#include "library/library.h"
 #include "storage/RelationBTree.h"
 #include "library/MachineService.h"
 #include "parser/TermBuilder.h"
 #include "testing/fixtures.h"
-#include "library/list.h"
 #include "library/string.h"
 #include "testing/testing.h"
 #include "ui/query.h"
@@ -276,8 +276,7 @@ void testQueryInvalidatedByRule(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
+	LoadLibraries();
 
 	ExecuteTest(testQueryStoredFacts);
 	ExecuteTest(testQueryIntegerLiteral);
@@ -289,9 +288,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testInvalidateServiceByNewRelation);
 	ExecuteTest(testQueryInvalidatedByRule);
 
-	FreeMachineServices();
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 	TestSummary();
 }

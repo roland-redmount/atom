@@ -6,7 +6,7 @@
 #include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/formula.h"
-#include "library/list.h"
+#include "library/library.h"
 #include "library/string.h"
 #include "parser/TermBuilder.h"
 #include "storage/RelationBTree.h"
@@ -185,16 +185,14 @@ void testInvalidateOnPrimitiveService(void)
 int main(void)
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
+	LoadLibraries();
 	initialNServices = NumberOfServices();
 
 	ExecuteTest(testAddRemoveService);
 	ExecuteTest(testInvalidateDependentServices);
 	ExecuteTest(testInvalidateOnPrimitiveService);
 
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 
 	TestSummary();

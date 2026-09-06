@@ -109,6 +109,7 @@ add_library(atom SHARED
 
     src/storage/RelationBTree.c
 
+	src/library/library.c
     src/library/MachineService.c
     src/library/string.c
     src/library/list.c

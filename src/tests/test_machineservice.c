@@ -11,7 +11,7 @@
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
-#include "library/list.h"
+#include "library/library.h"
 #include "library/MachineService.h"
 #include "library/string.h"
 #include "parser/TermBuilder.h"
@@ -272,8 +272,6 @@ static void testMachineServiceSharedRelation(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
 
 	ExecuteTest(testMachineServiceArgumentOrder);
 	ExecuteTest(testMachineServiceTestPredicate);
@@ -281,8 +279,6 @@ int main(int argc, char * argv[])
 	ExecuteTest(testMachineServiceIteratorState);
 	ExecuteTest(testMachineServiceSharedRelation);
 
-	StringShutdown();
-	ListShutdown();
 	KernelShutdown();
 
 	TestSummary();

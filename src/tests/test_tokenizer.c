@@ -4,6 +4,7 @@
 #include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
+#include "library/library.h"
 #include "library/list.h"
 #include "library/string.h"
 #include "kernel/Parameter.h"
@@ -428,8 +429,7 @@ static void testTokenizerInput(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
+	LoadLibraries();
 
 	ExecuteTest(testStringBuffer);
 	ExecuteTest(testTokenizer);
@@ -441,8 +441,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCreateTokenFromCString);
 	ExecuteTest(testSeparatorTerminatesToken);
 
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 
 	TestSummary();

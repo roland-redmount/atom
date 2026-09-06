@@ -2,6 +2,7 @@
 #include "kernel/typedtuple.h"
 #include "lang/Variable.h"
 #include "lang/unification.h"
+#include "library/library.h"
 #include "testing/testing.h"
 
 
@@ -43,9 +44,11 @@ void testUnification(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
+	LoadLibraries();
 
 	ExecuteTest(testUnification);
 
+	UnloadLibraries();
 	KernelShutdown();
 	TestSummary();
 }

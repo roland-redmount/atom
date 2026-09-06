@@ -76,10 +76,26 @@ size8 TypedTupleNAtoms(size32 tupleNBytes)
 }
 
 
+// Acquire one reference to each of the nAtoms elements from the given index.
+static void acquireElementRange(TypedTuple const * tuple, index8 index, size8 nAtoms)
+{
+	for(index8 i = 0; i < nAtoms; i++)
+		AcquireTypedAtom(TypedTupleGetElement(tuple, index + i));
+}
+
+
+static void releaseElements(TypedTuple const * tuple)
+{
+	for(index8 i = 0; i < tuple->nAtoms; i++)
+		ReleaseTypedAtom(TypedTupleGetElement(tuple, i));
+}
+
+
 TypedTuple * CreateTypedTuple(size8 nAtoms)
 {
+	// Allocate returns cleared memory, so every atom has type 0.
 	TypedTuple * tuple = Allocate(TypedTupleNBytes(nAtoms));
-	SetupTypedTuple(tuple, nAtoms);
+	tuple->nAtoms = nAtoms;
 	return tuple;
 }
 
@@ -101,22 +117,10 @@ TypedTuple * CreateTupleFromTuple(TypedTuple const * otherTuple)
 }
 
 
-void SetupTypedTuple(TypedTuple * tuple, size8 nAtoms)
-{
-	SetMemory(tuple, TypedTupleNBytes(nAtoms), 0);
-	tuple->nAtoms = nAtoms;
-}
-
-
 void FreeTypedTuple(TypedTuple const * tuple)
 {
+	releaseElements(tuple);
 	Free(tuple);
-}
-
-
-void TypedTupleClear(TypedTuple * tuple)
-{
-	SetMemory(tupleAtomArray(tuple), tuple->nAtoms * sizeof(Atom), 0);
 }
 
 
@@ -135,6 +139,10 @@ Atom TypedTupleGetAtom(TypedTuple const * tuple, index8 index)
 
 void TypedTupleSetElement(TypedTuple * tuple, index8 index, TypedAtom element)
 {
+	// The incoming element is acquired before the outgoing one is released, so that
+	// writing an element over itself cannot drop its last reference
+	AcquireTypedAtom(element);
+	ReleaseTypedAtom(TypedTupleGetElement(tuple, index));
 	tupleTypeArray(tuple)[index] = element.type;
 	tupleAtomArray(tuple)[index] = element.atom;
 }
@@ -142,6 +150,10 @@ void TypedTupleSetElement(TypedTuple * tuple, index8 index, TypedAtom element)
 
 void TypedTupleSetAtom(TypedTuple * tuple, index8 index, Atom atom)
 {
+	// The element keeps its type, so both atoms are referenced under that type
+	byte type = TypedTuplePeekAtomTypes(tuple)[index];
+	AcquireAtom(atom, type);
+	ReleaseAtom(TypedTuplePeekAtoms(tuple)[index], type);
 	tupleAtomArray(tuple)[index] = atom;
 }
 
@@ -177,34 +189,19 @@ bool TypedTupleEqual(TypedTuple const * tuple1, TypedTuple const * tuple2)
 void TypedTupleCopy(TypedTuple const * source, TypedTuple * destination)
 {
 	ASSERT(source->nAtoms == destination->nAtoms)
+	// As in TypedTupleSetElement(), the incoming elements are acquired first, so that
+	// copying a tuple onto itself cannot drop the last reference to an element
+	acquireElementRange(source, 0, source->nAtoms);
+	releaseElements(destination);
 	CopyMemory(source, destination, TypedTupleNBytes(source->nAtoms));
-}
-
-
-void TypedTupleCopyReorder(TypedTuple const * source, TypedTuple * destination, index8 const order[])
-{
-	ASSERT(source->nAtoms == destination->nAtoms)
-	for(index8 i = 0; i < source->nAtoms; i++) {
-		ASSERT(order[i] < destination->nAtoms);
-		TypedTupleSetElement(destination, order[i], TypedTupleGetElement(source, i));
-	}
-}
-
-
-void TypedTupleSwap(TypedTuple * tuple1, TypedTuple * tuple2)
-{
-	ASSERT(tuple1->nAtoms == tuple2->nAtoms)
-	size32 nBytes = TypedTupleNBytes(tuple1->nAtoms);
-	byte buffer[nBytes];
-	CopyMemory(tuple1, buffer, nBytes);
-	CopyMemory(tuple2, tuple1, nBytes);
-	CopyMemory(buffer, tuple2, nBytes);
 }
 
 
 void TypedTupleCopyAt(TypedTuple const * source, index8 sourceOffset, TypedTuple * destination)
 {
 	ASSERT(source->nAtoms >= sourceOffset + destination->nAtoms)
+	acquireElementRange(source, sourceOffset, destination->nAtoms);
+	releaseElements(destination);
 	CopyMemory(
 		TypedTuplePeekAtomTypes(source) + sourceOffset,
 		tupleTypeArray(destination),
@@ -215,20 +212,6 @@ void TypedTupleCopyAt(TypedTuple const * source, index8 sourceOffset, TypedTuple
 		tupleAtomArray(destination),
 		destination->nAtoms * sizeof(Atom)
 	);
-}
-
-
-void TypedTupleAcquireElements(TypedTuple const * tuple)
-{
-	for(index8 i = 0; i < tuple->nAtoms; i++)
-		AcquireTypedAtom(TypedTupleGetElement(tuple, i));
-}
-
-
-void TypedTupleReleaseElements(TypedTuple const * tuple)
-{
-	for(index8 i = 0; i < tuple->nAtoms; i++)
-		ReleaseTypedAtom(TypedTupleGetElement(tuple, i));
 }
 
 

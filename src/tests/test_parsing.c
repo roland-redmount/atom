@@ -1,5 +1,6 @@
 
 #include "kernel/float.h"
+#include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
 #include "kernel/Parameter.h"
@@ -10,7 +11,7 @@
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
 #include "lang/Variable.h"
-#include "library/list.h"
+#include "library/library.h"
 #include "library/string.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/ConjunctionBuilder.h"
@@ -743,8 +744,7 @@ static void testReflectionRejected(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
+	LoadLibraries();
 
 	ExecuteTest(testPartBuilder);
 	ExecuteTest(testPredicateBuilder);
@@ -767,8 +767,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testNestedReflection);
 	ExecuteTest(testReflectionRejected);
 
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 
 	TestSummary();
