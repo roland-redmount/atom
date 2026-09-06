@@ -163,8 +163,8 @@ void TokenizerFree(Tokenizer * tokenizer);
 Token CreateTokenFromCString(char const * cString, enum TokenizerState state);
 
 /**
- * A function receiving the tokens read by TokenizeCString(), returning false
- * if it cannot accept a token.
+ * A TokenHandler is a function receiving a tokens read by TokenizeCString(), 
+ * such as a formula builder. The function must return false if the token is rejected.
  */
 typedef bool (*TokenHandler)(void * context, Token token);
 

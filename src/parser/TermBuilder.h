@@ -39,5 +39,11 @@ void CleanupTermBuilder(TermBuilder * builder);
  */
 Atom CStringToTerm(char const * cString);
 
+/**
+ * A TokenHandler function using a TermBuilder, for use with TokenizeCString().
+ * The context argument must be a TermBuilder * pointer.
+ */
+bool TermBuilderTokenHandler(void * context, Token token);
+
 
 #endif	// TERMBUILDER_H

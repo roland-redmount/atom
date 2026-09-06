@@ -77,7 +77,7 @@ void CleanupTermBuilder(TermBuilder * builder)
 }
 
 
-static bool pushToTermBuilder(void * context, Token token)
+bool TermBuilderTokenHandler(void * context, Token token)
 {
 	return TermBuilderPush((TermBuilder *) context, token);
 }
@@ -87,7 +87,7 @@ Atom CStringToTerm(char const * cString)
 {
 	TermBuilder builder;
 	InitializeTermBuilder(&builder);
-	TokenizeCString(cString, pushToTermBuilder, &builder);
+	TokenizeCString(cString, TermBuilderTokenHandler, &builder);
 
 	ASSERT(TermBuilderIsValid(&builder))
 	Atom term = TermBuilderCreateFormula(&builder);
