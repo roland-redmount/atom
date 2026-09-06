@@ -439,7 +439,7 @@ static void testCStringToFormula(void)
  * with the given formula as the actor of the reflection role.
  */
 static Atom createTermWithReflection(
-	char const * reflectionRole, Atom formula,
+	char const * reflectionRole, Atom reflectedFormula,
 	char const * numberRole, int64 number)
 {
 	Atom roles[2] = {
@@ -447,7 +447,7 @@ static Atom createTermWithReflection(
 		CreateNameFromCString(numberRole)
 	};
 	TypedAtom actors[2] = {
-		CreateTypedAtom(AT_FORMULA, formula),
+		CreateTypedAtom(AT_FORMULA, reflectedFormula),
 		CreateTypedAtom(AT_INT, (Atom) {._int = number})
 	};
 	Atom predicate = CreatePredicate(roles, actors, 2);
@@ -461,27 +461,33 @@ static Atom createTermWithReflection(
 
 
 /**
- * Parse a term holding a reflection, and compare it against the same term built
- * from a formula parsed on its own. The term is parsed both ways, since only
- * CStringToFormula() puts a clause and conjunction builder above the reflection,
- * and an operator token inside the reflection has to reach it past both of them.
+ * Parse the string "term [<formulaString>] arity 2" where the given
+ * formulaString is inserted, and compare it against the term
+ * (term <reflectedFormula>) arity 2) constructed independently.
+ * This tests whether the reflection [] syntax is working correctly.
  */
-static void testReflection(char const * reflected, char const * termString)
+static void testReflection(char const * formulaString)
 {
-	Atom formula = CStringToFormula(reflected);
-	Atom expected = createTermWithReflection("term", formula, "arity", 2);
+	// Create the expected formula
+	Atom reflectedFormula = CStringToFormula(formulaString);
+	Atom expectedTerm = createTermWithReflection("term", reflectedFormula, "arity", 2);
 
-	Atom parsedTerm = CStringToTerm(termString);
+	// Parse the corresponding syntax string
+	TermBuilder builder;
+	InitializeTermBuilder(&builder);
+	TokenizeCString("term [", TermBuilderTokenHandler, &builder);
+	TokenizeCString(formulaString, TermBuilderTokenHandler, &builder);
+	TokenizeCString("] arity 2", TermBuilderTokenHandler, &builder);
+	ASSERT(TermBuilderIsValid(&builder))
+	Atom parsedTerm = TermBuilderCreateFormula(&builder);
+	CleanupTermBuilder(&builder);
+
 	ASSERT_TRUE(FormulaIsTerm(parsedTerm))
-	ASSERT_TRUE(SameAtoms(parsedTerm, expected))
+	ASSERT_TRUE(SameAtoms(parsedTerm, expectedTerm))
 
-	Atom parsedFormula = CStringToFormula(termString);
-	ASSERT_TRUE(SameAtoms(parsedFormula, expected))
-
-	ReleaseFormula(parsedFormula);
 	ReleaseFormula(parsedTerm);
-	ReleaseFormula(expected);
-	ReleaseFormula(formula);
+	ReleaseFormula(expectedTerm);
+	ReleaseFormula(reflectedFormula);
 }
 
 
@@ -513,7 +519,7 @@ static void testLetterActor(void)
 
 
 /**
- * Test parsing a term containinga generator (*) actor
+ * Test parsing a term containing a generator (*) actor
  */
 static void testGeneratorActor(void)
 {
@@ -558,7 +564,7 @@ static void testParseFormula(void)
 	ASSERT_UINT32_EQUAL(errorPosition, 6)
 
 	// a variable is named by a single letter, so a word too long to be one is reported
-	// at the letter that makes it too long; see enum TokenizerMode
+	// at the letter that makes it too long; see enum TokenizerState
 	ASSERT_UINT64_EQUAL(ParseFormula("foo xy bar 1", &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 5)
 
@@ -581,6 +587,10 @@ static void testParseFormula(void)
 	// a string holding no formula at all
 	ASSERT_UINT64_EQUAL(ParseFormula("", &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 0)
+
+	// A quoted variable is rejected outside of a reflections
+	ASSERT_UINT64_EQUAL(ParseFormula("foo ^x bar 42", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 4)
 }
 
 
@@ -629,43 +639,57 @@ static void testRepeatedTermRejected(void)
 }
 
 
+/**
+ * Test parsing a term containing a reflection [foo "a" bar b]
+ */
 static void testReflectedTerm(void)
 {
-	testReflection("foo \"a\" bar b", "term [foo \"a\" bar b] arity 2");
+	testReflection("foo \"a\" bar b");
 }
 
 
 static void testReflectedNegatedTerm(void)
 {
-	testReflection("! foo 42", "term [! foo 42] arity 2");
+	testReflection("! foo 42");
+}
+
+/**
+ * Test parsing a term containing a reflection with a quoted variable ^b
+ */
+static void testReflectedTermWithQuote(void)
+{
+	testReflection("foo \"a\" bar ^b");
 }
 
 
 static void testReflectedClause(void)
 {
-	testReflection("foo 1 | bar 2", "term [foo 1 | bar 2] arity 2");
+	testReflection("foo 1 | bar 2");
 }
 
 
 static void testReflectedConjunction(void)
 {
-	testReflection("foo 1 & bar 2", "term [foo 1 & bar 2] arity 2");
+	testReflection("foo 1 & bar 2");
 }
 
-
+/**
+ * Test parting a formula with nested reflections
+ * term [foo [bar 1] baz 2] arity 3
+ */
 static void testNestedReflection(void)
 {
-	// the expectation is built from the inside out, so that it does not
+	// the expected term is built from the inside out, so that it does not
 	// depend on the reflection parsing being tested
 	Atom innermost = CStringToTerm("bar 1");
 	Atom inner = createTermWithReflection("foo", innermost, "baz", 2);
-	Atom expected = createTermWithReflection("term", inner, "arity", 3);
+	Atom expectedTerm = createTermWithReflection("term", inner, "arity", 3);
 
 	Atom parsed = CStringToTerm("term [foo [bar 1] baz 2] arity 3");
-	ASSERT_TRUE(SameAtoms(parsed, expected))
+	ASSERT_TRUE(SameAtoms(parsed, expectedTerm))
 
 	ReleaseFormula(parsed);
-	ReleaseFormula(expected);
+	ReleaseFormula(expectedTerm);
 	ReleaseFormula(inner);
 	ReleaseFormula(innermost);
 }
@@ -721,6 +745,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testRepeatedTermRejected);
 	ExecuteTest(testReflectedTerm);
 	ExecuteTest(testReflectedNegatedTerm);
+	ExecuteTest(testReflectedTermWithQuote);
 	ExecuteTest(testReflectedClause);
 	ExecuteTest(testReflectedConjunction);
 	ExecuteTest(testNestedReflection);

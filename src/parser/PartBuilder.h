@@ -17,7 +17,7 @@ struct s_FormulaBuilder;
  * the formula atom it yields becomes the actor.
  *
  * A part builder holds the same alternation as the tokenizer, which reads an actor after
- * a role name; see enum TokenizerMode. It therefore takes the token following a role name
+ * a role name; see enum TokenizerState. It therefore takes the token following a role name
  * to be the actor, without testing what kind of token it is.
  */
 typedef struct s_PartBuilder {

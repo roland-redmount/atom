@@ -31,6 +31,8 @@ static void checkTypeSizes(void)
 	ASSERT(sizeof(int32) == 4)
 	ASSERT(sizeof(int64) == 8)
 
+	ASSERT(sizeof(bool) == 1)
+
 	ASSERT(sizeof(void *) == 8)
 
 	ASSERT(sizeof(Atom) == 8)
