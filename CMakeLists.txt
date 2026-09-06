@@ -182,7 +182,6 @@ set(ATOM_TESTS_TIER0        # fundamentals
 )
 
 set(ATOM_TESTS_TIER1        # core data structures, language elements
-    test_assert
     test_atomtypes
     test_language
     test_list
@@ -194,18 +193,20 @@ set(ATOM_TESTS_TIER1        # core data structures, language elements
     test_operator
     test_service_registry
     test_string
+	test_substitution
     test_tokenizer
     test_tuple
+    test_unification
     test_variable
 )
 
 set(ATOM_TESTS_TIER2        # higher level kernel procedures
-    test_dictionary
+    test_assert
     test_compiler
+    test_dictionary
     test_dispatch
     test_mixed_type_relation
     test_query
-    test_unification
     test_machineservice
     test_math
 )

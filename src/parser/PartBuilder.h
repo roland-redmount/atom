@@ -1,8 +1,5 @@
-
-
 #ifndef PARTBUILDER_H
 #define PARTBUILDER_H
-
 
 #include "parser/Token.h"
 

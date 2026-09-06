@@ -32,7 +32,7 @@ Atom TermBuilderCreateFormula(TermBuilder const * builder);
 
 void TermBuilderReset(TermBuilder * builder);
 
-void CleanupTermBuilder(TermBuilder * builder);
+void TermBuilderFree(TermBuilder * builder);
 
 /**
  * Parse a C string to a term

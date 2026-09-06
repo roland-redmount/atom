@@ -71,7 +71,7 @@ void TermBuilderReset(TermBuilder * builder)
 }
 
 
-void CleanupTermBuilder(TermBuilder * builder)
+void TermBuilderFree(TermBuilder * builder)
 {
 	CleanupPredicateBuilder(&(builder->predicateBuilder));
 }
@@ -91,6 +91,6 @@ Atom CStringToTerm(char const * cString)
 
 	ASSERT(TermBuilderIsValid(&builder))
 	Atom term = TermBuilderCreateFormula(&builder);
-	CleanupTermBuilder(&builder);
+	TermBuilderFree(&builder);
 	return term;
 }

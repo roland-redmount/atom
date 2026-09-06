@@ -213,7 +213,7 @@ static void testTermBuilder(void)
 		ReleaseFormula(term);
 		TermBuilderReset(&builder);
 	}
-	CleanupTermBuilder(&builder);
+	TermBuilderFree(&builder);
 
 	teardownTermFixture(&fixture);
 }
@@ -496,7 +496,7 @@ static void testReflection(char const * formulaString)
 	TokenizeCString("] arity 2", TermBuilderTokenHandler, &builder);
 	ASSERT(TermBuilderIsValid(&builder))
 	Atom parsedTerm = TermBuilderCreateFormula(&builder);
-	CleanupTermBuilder(&builder);
+	TermBuilderFree(&builder);
 
 	ASSERT_TRUE(FormulaIsTerm(parsedTerm))
 	ASSERT_TRUE(SameAtoms(parsedTerm, expectedTerm))

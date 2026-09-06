@@ -136,7 +136,7 @@ void ClauseBuilderReset(ClauseBuilder * builder)
 void CleanupClauseBuilder(ClauseBuilder * builder)
 {
 	ClauseBuilderReset(builder);
-	CleanupTermBuilder(&(builder->termBuilder));
+	TermBuilderFree(&(builder->termBuilder));
 	FreeResizingArray(&(builder->terms));
 }
 

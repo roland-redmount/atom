@@ -2,10 +2,6 @@
 #include "kernel/typedtuple.h"
 #include "lang/Variable.h"
 #include "lang/unification.h"
-#include "parser/ClauseBuilder.h"
-#include "parser/TermBuilder.h"
-#include "library/list.h"
-#include "library/string.h"
 #include "testing/testing.h"
 
 
@@ -47,13 +43,9 @@ void testUnification(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
 
 	ExecuteTest(testUnification);
 
-	StringShutdown();
-	ListShutdown();
 	KernelShutdown();
 	TestSummary();
 }
