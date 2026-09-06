@@ -127,7 +127,7 @@ static enum TokenizerResult actorStateBeginToken(Tokenizer * tokenizer, char c)
 		return TOKENIZER_ACCEPTED;
 
 	case '^':
-		// being a quoted variable
+		// begin a quoted variable
 		tokenizer->type = TOKEN_VARIABLE;
 		tokenizer->data.variable.isQuoted = true;
 		tokenizer->isValid = false;
@@ -431,11 +431,14 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 		break;
 
 	case TOKEN_VARIABLE:
-		// NOTE: variable names must now be a single char
 		if(stringLength == 0)
 			token.typedAtom = anonymousVariable;
-		else
-			token.typedAtom = CreateTypedAtom(AT_VARIABLE, CreateVariable(string[0]));
+		else {
+			Atom variable = CreateVariable(string[0]);
+			if(tokenizer->data.variable.isQuoted)
+				variable = QuoteVariable(variable);
+			token.typedAtom = CreateTypedAtom(AT_VARIABLE, variable);
+		}
 		break;
 
 	case TOKEN_PARAMETER:

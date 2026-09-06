@@ -125,16 +125,25 @@ static void testTokenizer(void)
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '.'), TOKENIZER_REJECTED)
 	ASSERT_FALSE(TokenizerIsFull(&tokenizer))
 
-	// a variable, which is a bare letter where an actor stands
+	// a variable, which is a single letter
 	token = tokenizeCString(&tokenizer, "v", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_VARIABLE)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_VARIABLE)
 	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom.atom), 'v');
+	ASSERT_FALSE(token.typedAtom.atom.variable.quoted)
 
 	// the anonymous variable, which names no variable at all
 	token = tokenizeCString(&tokenizer, "_", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_VARIABLE)
 	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom.atom), '_');
+	ASSERT_FALSE(token.typedAtom.atom.variable.quoted)
+
+	// a quoted variable
+	token = tokenizeCString(&tokenizer, "^v", TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_VARIABLE)
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_VARIABLE)
+	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom.atom), 'v');
+	ASSERT_TRUE(token.typedAtom.atom.variable.quoted)
 
 	TokenizerFree(&tokenizer);
 }
@@ -383,27 +392,29 @@ static void testTokenizerInput(void)
 {
 	Tokenizer tokenizer;
 
-	// A string is read whole, so a word too long to name a variable is rejected at the
-	// letter that makes it too long.
+	// In string input mode, an additional character after a variable name is rejected
 	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
 	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'x'), TOKENIZER_ACCEPTED)
 	ASSERT_TRUE(TokenizerIsFull(&tokenizer))
+	// A second character 'y' is illegal
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'y'), TOKENIZER_REJECTED)
 	TokenizerFree(&tokenizer);
 
-	// Interactive input takes the same letter as the start of the next token, so that
-	// "foo x y" can be typed as "foo xy".
+	// In interactive input mode,  an additional character after a variable name is
+	// part of the next token, so that "foo x y" can be typed as "foo xy".
 	TokenizerInit(&tokenizer, TOKENIZER_INTERACTIVE_INPUT);
 	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	// A first character 'x' becomes a variable
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'x'), TOKENIZER_ACCEPTED)
 	ASSERT_TRUE(TokenizerIsFull(&tokenizer))
 	Token token = TokenizerGetToken(&tokenizer);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_VARIABLE)
 	ASSERT_CHAR_EQUAL(GetVariableName(token.typedAtom.atom), 'x')
+	// A second character 'y' is legal, but not used by the tokenizer
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'y'), TOKENIZER_ENDED)
 
-	// the variable puts the tokenizer where a role name is read, so the letter begins one
+	// The tokenizer is now in the name state, so pushing 'y' again begins a role name
 	TokenizerReset(&tokenizer);
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'y'), TOKENIZER_ACCEPTED)
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 0), TOKENIZER_ACCEPTED)
