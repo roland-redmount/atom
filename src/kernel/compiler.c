@@ -1053,13 +1053,10 @@ static CompiledVariant * findVariant(
 
 /**
  * Test whether two compiled operators have the same index order (order of tuple atoms).
- * This is required to apply the UNION to the two operators. An operator with indexOrder == 0
- * must yield at most one tuple, so that ordering is irrelevant.
+ * This is required to apply the UNION to the two operators.
  */
 static bool sameIndexOrder(Operator const * first, Operator const * second)
 {
-	if(!first->indexOrder || !second->indexOrder)
-		return true;
 	return CompareMemory(first->indexOrder, second->indexOrder, first->nArguments) == 0;
 }
 
@@ -1072,8 +1069,6 @@ static bool sameIndexOrder(Operator const * first, Operator const * second)
  */
 static Operator * sortOperatorToIndexOrder(Operator * op)
 {
-	if(!op->indexOrder)
-		return op;
 	bool ordered = true;
 	for(index8 i = 0; i < op->nArguments; i++)
 		ordered = ordered && (op->indexOrder[i] == i);

@@ -140,9 +140,11 @@ static void testMachineServiceIterator(void)
 	index8 countIndex = roleIndex(service.relation.termForm, "count");
 	index8 toIndex = roleIndex(service.relation.termForm, "to");
 
-	// A service that may yield several tuples declares the order it yields them in.
-	// Declaring none would claim at most one tuple; see the contract in operator.h
-	ASSERT_NOT_NULL(service.op->indexOrder)
+	// A service declares the order its signature writes its arguments in;
+	// see the contract in operator.h
+	ASSERT_UINT32_EQUAL(service.op->indexOrder[0], fromIndex)
+	ASSERT_UINT32_EQUAL(service.op->indexOrder[1], countIndex)
+	ASSERT_UINT32_EQUAL(service.op->indexOrder[2], toIndex)
 
 	Atom arguments[3];
 	arguments[fromIndex] = (Atom) {._int = 1};

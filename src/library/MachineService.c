@@ -24,11 +24,10 @@ typedef struct s_MachineServiceData {
 	 * The relation column of each argument of the signature: argumentIndex[i] is the
 	 * column of the argument the signature numbered i + 1. The columns are in canonical
 	 * role order, unrelated to the order the signature writes its arguments in.
-	 * A service with a state also declares this array as its index order;
+	 * A service also declares this array as its index order;
 	 * see RegisterMachineService()
 	 * 
-	 * NOTE: Operator has this as well -- the only difference seems to be that
-	 * Operator.indexOrder is nullable, and this is not.
+	 * NOTE: Operator has this as well.
 	 */
 	index8 argumentIndex[RELATION_MAX_ARITY];
 } MachineServiceData;
@@ -162,12 +161,10 @@ Service RegisterMachineService(
 	// primitive service registers by RelationTable.
 	Relation relation = CreateRelation(termView.form, typeSignature);
 
-	// A function with no state yields at most one tuple, and so declares no index order.
-	// A function with a state declares the order its signature writes its arguments in;
+	// A function yields its tuples in the order its signature writes its arguments in;
 	// see the ordering contract in operator.h
-	index8 const * indexOrder = stateSize ? data->argumentIndex : 0;
 	Operator * op = CreateMachineOperator(
-		arity, indexOrder, &machineServiceProvider, data,
+		arity, data->argumentIndex, &machineServiceProvider, data,
 		sizeof(MachineServiceContext) + stateSize);
 	Service service = CreateService(relation, ioSignature, op);
 	ReleaseRelation(relation);

@@ -68,15 +68,6 @@ typedef struct s_MachineOperatorProvider {
  * implements the machine provider to produce correctly ordered relations. In DEBUG
  * builds, OperatorCall() verifies the ascent of every operator, which catches a
  * violation at the operator that committed it.
- *
- * An operator yielding at most one tuple satisfies the contract under every index
- * order, and so has no order worth declaring: in this case indexOrder should be set to 0
- * rather than picking an arbitrary order. This matters because an arbitrary choice would
- * propagate through the operators above and be mistaken for a real constraint, so that two
- * relations orderable alike could appear not to be. An operator deriving its order
- * from a child with indexOrder == 0 uses the natural ordering, unless it too yields at
- * most one tuple. DEBUG builds verify the indexOrder == 0 claim by asserting that at most
- * one tuple is produced.
  */
 
 /**
@@ -319,7 +310,6 @@ Operator * CreatePermuteOperator(
 /**
  * Create a machine code operator. The indexOrder array has length nArguments and gives
  * the order in which the provider yields its tuples; see the ordering contract above.
- * A provider yielding at most one tuple declares no order and passes 0.
  * The context size is the size of the context data allocated by OperatorCreateContext().
  * The returned operator has zero references.
  */
