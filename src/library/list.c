@@ -369,23 +369,6 @@ int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(Atom, Atom))
 }
 
 
-void CopyListToTuple(Atom list, TypedTuple * tuple)
-{
-	ASSERT(ListLength(list) == tuple->nAtoms)
-	Relation relation = lookupListElementRelation(list);
-	byte elementType = relation.typeSignature.atomTypes[listRoleIndex[2]];
-	ListIterator iterator;
-	ListIterate(list, &iterator);
-	index8 i = 0;
-	while(ListIteratorNext(&iterator)) {
-		Atom element = ListIteratorGetElement(&iterator);
-		TypedTupleSetElement(tuple, i, CreateTypedAtom(elementType, element));
-		i++;
-	}
-	ListIteratorEnd(&iterator);
-}
-
-
 void ListIterate(Atom list, ListIterator * iterator)
 {
 	iterator->queryTuple[listRoleIndex[0]] = list;

@@ -1,6 +1,9 @@
 /**
  * A TypedTuple is an array of typed atoms, corresponding to actors in a formula.
- * It does not keep references to the atoms they contain.
+ * A tuple keeps one reference to each atom it contains: creating a tuple acquires
+ * its elements, writing an element releases the atom it replaces and acquires the
+ * atom written, and FreeTypedTuple() releases every element. Only atom types
+ * identifying a shared object are reference counted; see AcquireAtom().
  * This structure is intended for transient storage of tuples in the kernel.
   */
 
@@ -49,20 +52,9 @@ TypedTuple * CreateTypedTupleFromArray(TypedAtom const typedAtoms[], size8 nAtom
 TypedTuple * CreateTupleFromTuple(TypedTuple const * otherTuple);
 
 /**
- * Initialize a given memory block as a tuple.
- * NOTE: this is only used by IFactAddTuple(), can we remove?
- */
-void SetupTypedTuple(TypedTuple * tuple, size8 nAtoms);
-
-/**
- * Deallocate a types tuple.
+ * Deallocate a typed tuple, releasing every element.
  */
 void FreeTypedTuple(TypedTuple const * tuple);
-
-/**
- * Set all atoms to zero
- */
-void TypedTupleClear(TypedTuple * tuple);
 
 /**
  * Get the TypedAtom at the given index, 0-based
@@ -104,32 +96,11 @@ byte const * TypedTuplePeekAtomTypes(TypedTuple const * tuple);
 void TypedTupleCopy(TypedTuple const * source, TypedTuple * destination);
 
 /**
- * Copy each element i from the source tuple to element order[i] of the destination tuple.
- * The order array must have at least as many elements as the source and destination tuples.
- */
-void TypedTupleCopyReorder(TypedTuple const * source, TypedTuple * destination, index8 const order[]);
-
-/**
  * Copy destination->nAtoms from the source tuple into the destination,
  * starting at the given offset (0-based index to first element).
  */
 
 void TypedTupleCopyAt(TypedTuple const * source, index8 sourceOffset, TypedTuple * destination);
-
-/**
- * Swap the contents of two tuples.
- */
-void TypedTupleSwap(TypedTuple * tuple1, TypedTuple * tuple2);
-
-/**
- * Acquire all elements of the given tuple.
- */
-void TypedTupleAcquireElements(TypedTuple const * tuple);
-
-/**
- * Release all elements of the given tuple.
- */
-void TypedTupleReleaseElements(TypedTuple const * tuple);
 
 /**
  * Compare two tuples for equality.

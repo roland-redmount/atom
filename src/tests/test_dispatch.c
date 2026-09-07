@@ -8,7 +8,7 @@
 #include "kernel/ifact.h"
 #include "lang/formula.h"
 #include "library/MachineService.h"
-#include "library/math.h"
+#include "library/library.h"
 #include "parser/TermBuilder.h"
 #include "testing/fixtures.h"
 #include "kernel/Parameter.h"
@@ -299,9 +299,7 @@ void testDispatchIterator(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
-	MathSetup();
+	LoadLibraries();
 
 	ExecuteTest(testDispatchToService);
 	ExecuteTest(testDispatchRepeatedVariable);
@@ -310,9 +308,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testDispatchIterator);
 	ExecuteTest(testDispatchFilterable);
 
-	FreeMachineServices();
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 	TestSummary();
 }

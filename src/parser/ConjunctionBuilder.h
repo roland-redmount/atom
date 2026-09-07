@@ -15,7 +15,7 @@ typedef struct s_ConjunctionBuilder {
 	bool isValid;
 } ConjunctionBuilder;
 
-void InitializeConjunctionBuilder(ConjunctionBuilder * builder);
+void InitializeConjunctionBuilder(ConjunctionBuilder * builder, enum FormulaScope scope);
 
 bool ConjunctionBuilderPush(ConjunctionBuilder * builder, Token token);
 

@@ -5,13 +5,13 @@
 #include "kernel/Relation.h"
 #include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
+#include "library/library.h"
 #include "library/string.h"
 #include "lang/formula.h"
 #include "storage/RelationBTree.h"
 #include "library/MachineService.h"
 #include "parser/TermBuilder.h"
 #include "testing/fixtures.h"
-#include "library/list.h"
 #include "testing/testing.h"
 
 
@@ -278,8 +278,7 @@ void testConcatAbandonedIteration(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
+	LoadLibraries();
 
 	ExecuteTest(testConcatEveryTuple);
 	ExecuteTest(testConcatRepeatedVariable);
@@ -290,9 +289,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testConcatWithoutMatch);
 	ExecuteTest(testConcatAbandonedIteration);
 
-	FreeMachineServices();
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 	TestSummary();
 }

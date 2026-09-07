@@ -5,7 +5,7 @@
 #include "kernel/kernel.h"
 #include "kernel/ifact.h"
 #include "kernel/letter.h"
-#include "library/list.h"
+#include "library/library.h"
 #include "kernel/Relation.h"
 #include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
@@ -17,7 +17,6 @@
 #include "lang/TermForm.h"
 #include "storage/RelationBTree.h"
 #include "library/MachineService.h"
-#include "library/math.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/TermBuilder.h"
 #include "testing/fixtures.h"
@@ -1118,9 +1117,7 @@ void testFilterServiceInvalidatedByRule(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
-	MathSetup();
+	LoadLibraries();
 
 	ExecuteTest(testCompilePermute1);
 	ExecuteTest(testCompilePermute2);
@@ -1156,8 +1153,6 @@ int main(int argc, char * argv[])
 	// recursive clause; see the notes on termination in compiler.md.
 	// ExecuteTest(testCompileRecursiveJoin1);
 
-	FreeMachineServices();
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	TestSummary();
 }

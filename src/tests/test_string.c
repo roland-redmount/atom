@@ -1,6 +1,7 @@
 
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
+#include "library/library.h"
 #include "library/list.h"
 #include "library/string.h"
 
@@ -63,14 +64,12 @@ void fuzzTestString(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
+	LoadLibraries();
 
 	ExecuteTest(testString);
 	ExecuteTest(fuzzTestString);
 	
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 
 	TestSummary();

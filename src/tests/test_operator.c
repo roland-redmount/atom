@@ -4,6 +4,7 @@
 #include "kernel/letter.h"
 #include "kernel/operator.h"
 #include "kernel/kernel.h"
+#include "library/library.h"
 #include "library/list.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
@@ -682,8 +683,7 @@ void testFixpointCallBinding(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
+	LoadLibraries();
 
 	ExecuteTest(testMachineOperator);
 	ExecuteTest(testPermuteOperator);
@@ -698,8 +698,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testFixpointOperator);
 	ExecuteTest(testFixpointCallBinding);
 
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 
 	TestSummary();

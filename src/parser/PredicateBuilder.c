@@ -13,9 +13,9 @@
 
 #define INITIAL_N_ACTORS	5
 
-void InitializePredicateBuilder(PredicateBuilder * builder)
+void InitializePredicateBuilder(PredicateBuilder * builder, enum FormulaScope scope)
 {
-	InitializePartBuilder(&(builder->partBuilder));
+	InitializePartBuilder(&(builder->partBuilder), scope);
 	CreateResizingArray(&(builder->roles), sizeof(Atom), INITIAL_N_ACTORS);
 	CreateResizingArray(&(builder->actors), sizeof(TypedAtom), INITIAL_N_ACTORS);
 	builder->isValid = false;
@@ -135,7 +135,7 @@ static bool pushToPredicateBuilder(void * context, Token token)
 Atom CStringToPredicate(char const * cString)
 {
 	PredicateBuilder builder;
-	InitializePredicateBuilder(&builder);
+	InitializePredicateBuilder(&builder, FORMULA_TOP_SCOPE);
 	TokenizeCString(cString, pushToPredicateBuilder, &builder);
 
 	ASSERT(PredicateBuilderIsValid(&builder))

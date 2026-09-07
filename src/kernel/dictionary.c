@@ -42,8 +42,6 @@ static void btreeFreeItem(void const * item, size32 itemSize)
 {
 	DictionaryEntry const * entry = item;
 	IFactRelease(entry->clauseForm);
-	for(index8 i = 0; i < entry->tuple->nAtoms; i++)
-		ReleaseTypedAtom(TypedTupleGetElement(entry->tuple, i));
 	FreeTypedTuple(entry->tuple);
 }
 
@@ -67,8 +65,6 @@ static void setupEntry(DictionaryEntry * entry, Atom clauseForm, TypedTuple cons
 	TypedTuple * tuple = CreateTypedTuple(actors->nAtoms);
 	TypedTupleCopy(actors, tuple);
 	entry->tuple = tuple;
-	for(index8 i = 0; i < actors->nAtoms; i++) 
-		AcquireTypedAtom(TypedTupleGetElement(actors, i));
 }
 
 

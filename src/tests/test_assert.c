@@ -9,6 +9,7 @@
 #include "kernel/Relation.h"
 #include "kernel/RelationTable.h"
 #include "lang/formula.h"
+#include "library/library.h"
 #include "library/list.h"
 #include "library/string.h"
 #include "parser/ClauseBuilder.h"
@@ -527,8 +528,7 @@ void testCreateIFactRejects(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
+	LoadLibraries();
 
 	ExecuteTest(testAssertRetract);
 	ExecuteTest(testAssertContradictsStoredFact);
@@ -546,8 +546,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCreateIFactDefiningFactsProtected);
 	ExecuteTest(testCreateIFactRejects);
 
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 
 	TestSummary();

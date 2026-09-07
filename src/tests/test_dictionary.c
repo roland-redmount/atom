@@ -4,7 +4,7 @@
 #include "kernel/kernel.h"
 #include "lang/ClauseForm.h"
 #include "lang/formula.h"
-#include "library/list.h"
+#include "library/library.h"
 #include "library/string.h"
 #include "parser/ClauseBuilder.h"
 #include "testing/testing.h"
@@ -72,14 +72,12 @@ void testDictionaryAddTwice(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
+	LoadLibraries();
 
 	ExecuteTest(testDictionary);
 	ExecuteTest(testDictionaryAddTwice);
 
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 
 	TestSummary();

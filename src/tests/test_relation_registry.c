@@ -3,6 +3,7 @@
 #include "kernel/kernel.h"
 #include "kernel/Relation.h"
 #include "lang/formula.h"
+#include "library/library.h"
 #include "library/list.h"
 #include "library/string.h"
 #include "parser/TermBuilder.h"
@@ -119,14 +120,12 @@ void testIterateRelations(void)
 int main(void)
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
+	LoadLibraries();
 
 	ExecuteTest(testAddRemoveRelation);
 	ExecuteTest(testIterateRelations);
 
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 
 	TestSummary();

@@ -1,7 +1,6 @@
 #include "kernel/Int.h"
 #include "kernel/kernel.h"
-#include "library/list.h"
-#include "library/string.h"
+#include "library/library.h"
 #include "kernel/multiset.h"
 #include "lang/ClauseForm.h"
 #include "lang/formula.h"
@@ -306,8 +305,7 @@ static void testPredicatePermutation(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
+	LoadLibraries();
 
 	ExecuteTestSetupTearDown(testPredicateForm, setup, teardown);
 	ExecuteTestSetupTearDown(testTermForm, setup, teardown);
@@ -316,8 +314,7 @@ int main(int argc, char * argv[])
 	ExecuteTestSetupTearDown(testFormulaIsUnique, setup, teardown);
 	ExecuteTestSetupTearDown(testPredicatePermutation, setup, teardown);
 
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 
 	TestSummary();

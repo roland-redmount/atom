@@ -6,6 +6,7 @@
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
+#include "library/library.h"
 #include "library/list.h"
 #include "library/string.h"
 #include "testing/testing.h"
@@ -190,16 +191,14 @@ void testLookupIterator(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
+	LoadLibraries();
 
 	ExecuteTest(testLookup);
 	ExecuteTest(testLookupPredicateRoles);
 	ExecuteTest(testLookupIterator);
 	// ExecuteTest(testRemoveAllPredicateRoles);
 
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 
 	TestSummary();

@@ -16,7 +16,7 @@ typedef struct s_ClauseBuilder {
 	bool isValid;
 } ClauseBuilder;
 
-void InitializeClauseBuilder(ClauseBuilder * builder);
+void InitializeClauseBuilder(ClauseBuilder * builder, enum FormulaScope scope);
 
 bool ClauseBuilderPush(ClauseBuilder * builder, Token token);
 

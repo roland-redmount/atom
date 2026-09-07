@@ -1,8 +1,8 @@
 
 #include "lang/Variable.h"
 #include "kernel/kernel.h"
+#include "library/library.h"
 #include "library/list.h"
-#include "library/string.h"
 #include "kernel/letter.h"
 #include "kernel/lookup.h"
 
@@ -110,15 +110,13 @@ static void testCreateEmptyList(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
+	LoadLibraries();
 
 	ExecuteTest(testCreateList);
 	ExecuteTest(testNestedList);
 	ExecuteTest(testCreateEmptyList);
 
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 
 	TestSummary();

@@ -14,7 +14,7 @@ typedef struct s_TermBuilder {
 } TermBuilder;
 
 
-void InitializeTermBuilder(TermBuilder *);
+void InitializeTermBuilder(TermBuilder * builder, enum FormulaScope scope);
 
 bool TermBuilderPush(TermBuilder * builder, Token token);
 
@@ -32,7 +32,7 @@ Atom TermBuilderCreateFormula(TermBuilder const * builder);
 
 void TermBuilderReset(TermBuilder * builder);
 
-void CleanupTermBuilder(TermBuilder * builder);
+void TermBuilderFree(TermBuilder * builder);
 
 /**
  * Parse a C string to a term

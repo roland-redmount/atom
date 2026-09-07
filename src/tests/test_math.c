@@ -2,7 +2,7 @@
 #include "kernel/operator.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "library/list.h"
+#include "library/library.h"
 #include "library/string.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
@@ -12,7 +12,6 @@
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
 #include "library/MachineService.h"
-#include "library/math.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
 
@@ -114,17 +113,13 @@ void testRange(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize();
-	ListSetup();
-	StringSetup();
-	MathSetup();
+	LoadLibraries();
 
 	ExecuteTest(testAdd1);
 	ExecuteTest(testAdd2);
 	ExecuteTest(testRange);
 
-	FreeMachineServices();
-	StringShutdown();
-	ListShutdown();
+	UnloadLibraries();
 	KernelShutdown();
 
 	TestSummary();

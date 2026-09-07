@@ -9,7 +9,11 @@ The Atom system is written in C99. All sources are under src/, divided into subd
 
 ## Code conventions
 
-We have a few code conventions, some of which are a bit non-standard: see code-conventions.md. 
+We have a few code conventions, some of which are a bit non-standard: see code-conventions.md. DO NOT MODIFY THIS FILE.
+
+## Other documentaion
+
+The compiler (`kernel/compiler.c`) is quite complex and has dedicated documentation in `compiler.md`. DO NOT MODIFY THIS FILE.
 
 ## Writing comments
 
@@ -26,8 +30,6 @@ When you must write a comment, follow these guidelines:
 * Use nouns to name functions, parameters, object, concepts explicitly. Avoid noun references ("it", "those", "them", "that", "which") as far as possible, as they introduce ambiguity and makes text hard to read. It is fine to have somewhat repetitive text using the same noun many times -- this is technical documentation, not literature. If noun references must be used, make sure that they are not ambiguous. Consider the sentence _"A projection keeping every argument drops nothing and materializes its child, which is what sorts it."_ (This sentence was previously found in a doc string in `compiler.c`.) Here the first noun reference _"its"_ is okay, as it is clear that it refers to the noun _"projection"_, but the last noun reference _"it"_ is ambiguous: it could refer to either _"projection"_ or to "_its child_". Also, its unclear what _"which"_ refers to: the fact that a projection _"drops nothing"_, or that it _"materializes its child"_, or perhaps both. The noun _"projection"_ is also a vague reference to the `PROJECT` operator in `operator.c`. This makes it very hard to understand what is meant. A better sentence for this doc string is _"The PROJECT operator with no arguments removed will sort the tuples of its child relation."_ 
 * Avoid long sentences with many phrases. Break long sentences with period. It is easier to comprehend several clear, short sentences than one long meandering sentence with complex punctuation. Long sentences risk ending up with multiple noun references which again is problematic.
 * Prefer describing objects in singular rather than plural, since reasoning about multiple objects is more difficult and can lead to confusion. For example, in the sentence _"Recursive clauses are only compiled in the second pass, once there are services for their recursive terms to dispatch to"_, it is not clear whether each clause has exactly one service and one term, or whether clauses, services and terms are related in more complex ways. Using the singular form makes the 1:1:1 correspondence clear : _"A recursive clause is only compiled in the second pass, once there is a service for its recursive term to dispatch to"_.
-
-
 
 ## Git usage
 
