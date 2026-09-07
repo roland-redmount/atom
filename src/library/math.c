@@ -67,6 +67,10 @@ static bool range(Atom arguments[], void * state, bool isFirstCall)
 
 void MathSetup(void)
 {
+	// NOTE: these services are removed all in one go by FreeMachineServices().
+	// If we are to be able to remove these particular services, we would need
+	// some kind of ID for the math "library", that we can query the service registry on.
+
 	RegisterMachineService("+ @1<INT + @2<INT = @3>INT", &add1, 0);
 	RegisterMachineService("+ @1<INT + @2>INT = @3<INT", &add2, 0);
 

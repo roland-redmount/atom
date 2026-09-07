@@ -41,12 +41,6 @@
 
 
 /**
- * Most arguments a machine service may have; see MachineServiceContext
- */
-#define MACHINE_SERVICE_MAX_ARITY	(RELATION_MAX_ARITY)
-
-
-/**
  * A machine function computes one tuple of a relation from the arguments the
  * caller has bound. It returns true if it produced a tuple.
  *
@@ -74,23 +68,19 @@ typedef bool (*MachineFunction)(Atom arguments[], void * state, bool isFirstCall
  *
  *   "+ @1<INT + @2<INT = @3>INT"
  *
- * and the one that subtracts, by solving the same equation for the other unknown, is
+ * A signature must number its arguments 1 ... arity, in the order the MachineFunction
+ * expects its parameters.
  *
- *   "+ @1<INT + @2>INT = @3<INT"
- *
- * Both name the same relation (+ + =), so the second call finds the relation the first
- * created. A signature must number its arguments 1 ... arity, consecutively.
- *
- * A state area of size = stateSize will be allocated for stateful service; for a
- * function computing a single tuple (stateless), set stateSize = 0. A stateful service
- * may yield several tuples, and its index order must match the numbering of output parameters.
- * Since inputs are constant over one evaluation, their order does not matter.
- * For example, the range iterator
+ * A state area of size = stateSize will be allocated for stateful service.
+ * If stateSize == 0, the function is stateless and is assumed to compute at most one tuple.
+ * A stateful service may yield several tuples, and its index order must match the 
+ * output parameter numbers. Since inputs are constant over one evaluation, their order
+ * does not matter. For example, the range iterator
  *
  *   "lower @1<INT number @2>INT upper @3<INT"
  *
- * yields tuples differing only in @2, which ascends, so the inputs @1 and @3 can be in
- * any order. See the ordering contract in kernel/operator.h.
+ * yields tuples that differ only in the output @2, which must be ascending.
+ * See the ordering contract in kernel/operator.h.
  *
  * Returns the registered service; see ServiceRegistryAdd()
  */
