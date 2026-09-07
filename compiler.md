@@ -1,40 +1,22 @@
 # The atom compiler
 
-This document describes how atom compiles a query into a service. The implementation is
-in `src/kernel/compiler.c`, whose entry point is `CompileQuery()`.
+This document describes how atom compiles a query into a service. The implementation is in `src/kernel/compiler.c`, whose entry point is `CompileQuery()`.
 
-These notes began as a design sketch and now describe what is built. Where something is
-not implemented, or is implemented in a way that is known to be incomplete, it says so.
+These notes began as a design sketch and now describe what is built. Where something is not implemented, or is implemented in a way that is known to be incomplete, it says so.
 
-## Services, dispatch and operators
+## Preliminaries
 
-A **relation** is a set of tuples over a fixed list of roles, with a fixed atom type per
-column. A **service** is a relation together with a **parameter IO**, which says of each
-argument whether the caller supplies it or the service produces it, and an operator that
-evaluates it. So one relation may have several services, differing in what the caller has
-to know in order to ask.
+Here we provide some background knowledge of components of the atom system that the compiler relies on.
 
-A relation is identity and nothing else — a term form and a column type per argument
-(`src/kernel/Relation.h`). Both the ways of reading it and the storage holding its tuples
-are registered *against* it, and neither is reachable from the relation:
+### Relations and relation tables
 
-- the **service registry** records how a relation can be read (`ServiceRegistry.h`),
-- the **relation table registry** records where its tuples are stored (`RelationTable.h`).
+A *relation* is a set of tuples associated with a specific form, with a fixed atom type per column. A relation is identified by the struct `Relation` (`Relation.h`) consisting of a form `Atom` and a `TypeSignature`.
 
-A relation with no table registered is a **computed** relation: it has services but no
-tuples of its own, which is what a machine service such as `library/math.c` is, and what
-the compiler produces. A relation with a table is a **stored** relation, whose services
-its storage provider registered. Which services a provider registers *is* its statement of
-what it can do: `RelationBTree` registers one per prefix of its index column order, so a
-signature binding a column out of that order simply has no service.
+The Relation structure only provides the relation's identity. Storing the actual tuples is handled by a `RelationTable` (`RelationTable.h`), where the actual storage is implemented by a `StorageProvider`. This separation lets us access various implementations of tuple storage (B-trees, arrays, &c) through a single interface. While services allow reading tuples, the `RelationTable` provides methods for writing tuples. The available `RelationTable`s are managed in a registry. A `Relation` might not have a `RelationTable`, in which case its tuples are computed, not stored.
 
-Keeping the three apart is what lets one operator serve two relations, which is the case
-the next section ends on. A relation is reference counted and disappears when nothing
-names it any longer; a relation table is reference counted too, and its storage outlives
-the table's registration for as long as an operator is still reading it.
+### Services and operators
 
-Parameters are written by number, direction and type: `1<INT` is argument 1, an input of
-type `INT`, and `3>INT` is argument 3, an output. A service over the addition relation
+A *service* is a routine that returns tuples belonging to a relation. A `Service` (`ServiceRegistry.h`) is identified by a `Relation` plus a `ParameterIO` that designates each parameter as an input (supplied by the caller) or output (produced by the service). Service parameters (`Parameter.h`) are written by number, direction and type: for example, `1<INT` means argument 1, input, atom type `INT`; and `3>ID` is argument 3, output, atom type `ID`. A service over the addition relation
 that computes a sum has the signature
 
     + 1<INT + 2<INT = 3>INT
@@ -43,46 +25,44 @@ and the service that subtracts, by solving the same equation for the other unkno
 
     + 1<INT + 2>INT = 3<INT
 
-**Dispatch** (`src/kernel/dispatch.c`) matches a query against the registered services: a
-query atom that is a constant needs an input parameter of its own type, and a query
-variable needs an output. When no service matches, the query has to be compiled from the
-rules in the dictionary, which is what this document is about.
+A `Service` also has an `Operator` which implements the service routing (evaluates the service). The pair (`Relation`, `Operator`) also uniquely identifies a `Service`, since an `Operator` has exactly one `IOSignature`, although this is not explicit in the `Operator` struct. One `Relation` may have several services, with different IO signatures. For example, a relation backed by a `RelationBTree` registers one `Service` per prefix of its index column order, for a total of $n+1$ services in a table with $n$ columns.
 
-Dispatch itself only ever looks a service up. Compiling one when the lookup fails is
-`FindOrCompileService()` in `compiler.h`, the two steps together, and that is what both a
-user query and a term of a rule body go through. It is not folded into dispatch because
-dispatch has to stay a pure lookup: a `MixedTypeRelation` reads its answer through an open
-`DispatchIterator`, which write-locks the registries against modification, and compiling
-underneath one would modify them.
+There are two kinds of services, *primitive* or *compiled* (see `Service.kind`). A *primitive* service always has a "machine" `Operator` (see `Operator.type`), which calls a machine code function (compiled C code) to compute the tuple. This can be a purely computed function that does not read from storage at all, such as arithmetic operations (`library/math.c`), but also a function that reach from storage, implemented by the storage provider such as `storage/RelationBTree.c`.
 
-A service is evaluated by a tree of **operators** (`src/kernel/operator.h`). The leaves
-are machine operators, which provide the stored and computed relations; the internal nodes
-are the operators of relational algebra — `PERMUTE`, `CONSTRAIN`, `FILTER`, `JOIN`,
-`PROJECT`, `UNION` — together with `FIXPOINT` and `RECURSE`, which are what recursion adds. Every
-operator yields distinct tuples in a declared order; that contract is documented in
-`operator.h` and matters here in two places, noted below.
+A *compiled* service is generated by the compiler, and is associated with a non-machine operator, that in turns calls other operators, ending with a machine operator. This results in a directed acyclic graph (DAG) of operators; the operator graph is not a tree in general, since more than one operator may have the same parent, but it is free of cycles. The "leaves" of the DAG are then `MACHINE` operators. The internal nodes of the graph are the operators of relational algebra — `PERMUTE`, `CONSTRAIN`, `FILTER`, `JOIN`, `PROJECT`, `UNION` — together with `FIXPOINT` and `RECURSE`, which handle recursion. Every operator yields distinct tuples, sorted in a specific order; that contract is documented in `operator.h` and matters here in two places, noted below.
+
+### Rules and the dictionary
+
+The atom system describes data and computation by logic rules. A rule is a clause in first-order predicate logic. Rules are stored in the *dictionary* (`kernel/dictionary.h`).
+
+The job of the compiler is to generate the DAG of operators that evaluate a given query, based on the available rules.
+
+
+## Dispatch
+
+*Dispatch* (`src/kernel/dispatch.c`) searches for a registered `Service` that can resepond to a given query. A query matches a service if every query variable (atom type `AT_VARIABLE`) matches an output parameter, and every query atom that is not a variable matches an input parameter of the same type as the query atom.
+
 
 ## Compiling a query
 
+We now describe the compiler algorithm.
+
 ### Parameterizing the query
 
-The query is first **parameterized**: every non-variable actor becomes a typed input
-parameter and every variable becomes an output parameter of unknown type, numbered by
-position.
+The query is first *parameterized*: every non-variable actor becomes a typed input parameter, and every variable becomes an output parameter of unknown type; each parameter is numbered by position.
 So the query
 
     + 7 - 4 = d
 
-becomes
+is parameterized to
 
-    + 1<INT - 2<INT = d
+    + 1<INT - 2<INT = 3>
 
-The output types are not known yet. They are discovered as the terms of a rule compile,
-and the finished signature is what the new service is registered under.
+The output types are not known yet; they are discovered as the terms of a rule compile, and the finished signature is what the new service is registered under.
 
 ### Finding the rules
 
-Rules are stored as clauses in conjunctive normal form, so
+Rules are stored by the dictionary as clauses in conjunctive normal form. For example, the implication
 
     number x plusone y plustwo z <- + x + 1 = y & + y + 1 = z
 
@@ -90,30 +70,19 @@ is stored as
 
     ! + x + 1 = y | ! + y + 1 = z | number x plusone y plustwo z
 
-A clause form is a multiset of term forms, so the clauses that could answer a query are
-those whose form contains the query's term form. The compiler finds them by enumerating
-the `(multiset element multiple)` relation and keeping the clause forms that contain it.
+A clause form is a multiset of term forms, since a term form may occur more than once: above, the term form `(+ + =)` occurs twice, with different actors. The clauses that could possibly answer a query are those whose form contains the query's term form. The compiler finds them by enumerating the `(multiset element multiple)` relation and keeping the clause forms that contain it.
 
-For each such clause, the query is unified with the matching term. That term is then
-dropped, and the rest of the clause is negated, which turns the disjunction of negated
-terms back into a conjunction of positive ones — the body of the rule. Compiling that
-conjunction is the work.
+For each such clause, the query is unified with the matching term (`unification.h`). That term is then dropped, and the rest of the clause is negated, which turns the disjunction of negated terms back into a conjunction of positive ones — the *body* of the rule. Compiling that conjunction into an operator DAG is the main work of the compiler.
 
-A term form carries a sign, so the term the query matches has the query's own sign. That
-is what resolution asks for: a clause is a disjunction, and dropping one of its terms
-leaves an implication whose conclusion is that same term. A negated query resolves by the
-same rule as a positive one. Given the clause
+A term form carries a sign that indicates logical negation, and terms match only if the sign matches. A negated query resolves by the same rule as a positive one: for example, given the clause
 
     ! even x | ! odd x
 
-the query `(! even x)` matches the term `! even x` and compiles to the body `odd x`, so
-`(! even 3)` is answered by the fact `(odd 3)`; see `testCompileNegatedTerm`. Note that
-this is classical negation, not negation as failure: `(! even 3)` follows from a rule or a
-fact establishing it, never from the absence of `(even 3)`.
+the query `(! even x)` matches the term `! even x` and with the body `odd x`, so `(! even 3)` is answered by the fact `(odd 3)`; see `testCompileNegatedTerm`. This is classical negation, not negation as failure: `(! even 3)` follows from a rule or a fact establishing it, never from the absence of `(even 3)`.
 
 ### One term: PERMUTE
 
-Take the rule
+Considred the rule
 
     ! + x + y = z | + z - x = y
 
@@ -174,7 +143,7 @@ filter keeps those equal to `'A`. See `testCompileNewIOPattern`.
 
 Choosing the child is a search over the services of the relation. A service can be read this
 way when it produces every column the signature binds, which is to say its pattern is
-**componentwise greater or equal**: an output wherever the signature has an output, and
+*componentwise greater or equal*: an output wherever the signature has an output, and
 either direction elsewhere. A service with an input where the signature has an output is no
 use, as no operator can invent a value the caller did not supply.
 
@@ -208,7 +177,7 @@ tuple has bound. The two terms are dispatched separately.
 
 Order matters, because a term can only be dispatched once the arguments it takes as inputs
 are available. Starting with `+ 1<INT + 1 = a`, dispatch matches the summing service and
-resolves `a` to an `INT` output. That output then becomes an **input** of every term not
+resolves `a` to an `INT` output. That output then becomes an *input* of every term not
 yet compiled, so the second term is now `+ 2<INT + 1 = b`, which dispatch matches in turn:
 
     JOIN(+ 1<INT + 1 = 2>INT, + 2<INT + 1 = 3>INT)
@@ -334,7 +303,7 @@ again. The classic example over a stored relation is the transitive closure
 The second clause needs `(before after)` — the very relation being compiled — so at the
 point where the compiler wants to dispatch that term, the service it needs does not exist.
 
-Note that what marks the recursion is the **opposite sign**, not a negative one. In atom a
+Note that what marks the recursion is the *opposite sign*, not a negative one. In atom a
 fact may be a negated term, and so may a query, so a rule `(odd x | even x)` can be read as
 the implication `(odd x -> ! even x)` just as well as `(even x -> ! odd x)`, and the query
 `(! even x)` recurses through the positive `(even x)` term of that rule.
@@ -450,7 +419,7 @@ that entry point, one layer above the compiler and dispatch.
 It compiles a query the first time that query is asked, and is answered by the compiled
 services from then on. That is `FindOrCompileService()`, and whether a query has been asked
 before is decided by dispatching it. Both dispatch and the compiler work by the
-**parameterized query**: the query put into parameters by `GetQueryParameters()`, which is
+*parameterized query*: the query put into parameters by `GetQueryParameters()`, which is
 the term form together with the direction and input type of each parameter. Two queries
 that parameterize alike compile to the same services, so a match means the compilation has
 happened, whether by an earlier query, by the kernel or by a stored relation registering
@@ -513,14 +482,14 @@ order things are dropped in. See `testDropTableWithSharedOperator` in
 
 Three events drive it:
 
-- **A primitive service is registered.** A query of its term form now has one more
+- *A primitive service is registered.* A query of its term form now has one more
   relation to match, so the compiled services of that form are incomplete. Hooking service
   registration rather than relation registration is what keeps the compiler out of it: the
   compiler creates relations of its own while compiling, and invalidating there could
   remove a service the compilation in flight is building on.
-- **A service is removed**, which is what retracting the last fact of a relation and
+- *A service is removed*, which is what retracting the last fact of a relation and
   dropping its table comes to. Everything built on it goes.
-- **A rule is added or removed.** A clause form is the multiset of the term forms of its
+- *A rule is added or removed.* A clause form is the multiset of the term forms of its
   terms, and the compiler resolves a query against the clauses whose form contains the
   query term form, so those term forms name every service the rule could have reached.
   No per-rule bookkeeping is needed, and a rule added before anything was compiled costs
@@ -533,23 +502,23 @@ or `MixedTypeRelation` write-locks against modification.
 
 ## Known gaps
 
-- **Preconditions**, needed to guard a recursive clause over an infinite domain, do not
+- *Preconditions*, needed to guard a recursive clause over an infinite domain, do not
   exist. This is the only thing standing between the compiler and the factorial rule.
-- **Mutual recursion** between two relations is not handled. A rule whose body reaches a
+- *Mutual recursion* between two relations is not handled. A rule whose body reaches a
   parameterized query already being compiled fails to compile, as the compiler has no base
   case to offer it; see the section on a term the rules answer. Making it work needs the
   recursive pass and the fixpoint that same-form recursion already uses, keyed on something
   other than the query's own form.
-- **A relation with both stored facts and rules** is not handled. Compiling a query that a
+- *A relation with both stored facts and rules* is not handled. Compiling a query that a
   stored service already answers registers a second service of the same signature, which
   `ServiceRegistryAdd()` asserts against. The generated service should replace the existing
   one and take it as a branch of its union.
-- **A filtered service is compiled for one relation only.** A query can match one relation
+- *A filtered service is compiled for one relation only.* A query can match one relation
   exactly and another only by filtering, which two list relations differing in element type
   do. `FindOrCompileService()` returns on the first match dispatch finds, so nothing is
   compiled and the second relation contributes no tuples. Fixing this means changing when
   compilation is triggered, not what it produces.
-- **Evaluation is naive**, not semi-naive: every round re-expands every call binding,
+- *Evaluation is naive*, not semi-naive: every round re-expands every call binding,
   rather than only the tuples the previous round derived.
-- **Duplicate work across queries.** A fixpoint derives its relation afresh for every
+- *Duplicate work across queries.* A fixpoint derives its relation afresh for every
   context, and nothing is memoized between queries.
