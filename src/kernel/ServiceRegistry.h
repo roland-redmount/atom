@@ -147,17 +147,6 @@ void ServiceIteratorEnd(ServiceIterator * iterator);
 Operator * FindService(Relation relation, IOSignature ioSignature);
 
 /**
- * CLAUDE: Copy some registered service evaluated by a machine operator of the given provider to
- * *service, and return true; return false if the registry holds no such service.
- *
- * This is only used by MachineService.c to finds the services it registered, without keeping a
- * record of them: removing services until this returns false unregisters the provider.
- * See FreeMachineServices() in library/MachineService.c
- */
-bool FindServiceByMachineProvider(
-	MachineOperatorProvider const * provider, Service * service);
-
-/**
  * For debugging
  */
 void PrintService(Service const * service);

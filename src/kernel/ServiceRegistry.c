@@ -437,25 +437,6 @@ Operator * FindService(Relation relation, IOSignature ioSignature)
 }
 
 
-bool FindServiceByMachineProvider(MachineOperatorProvider const * provider, Service * service)
-{
-	bool found = false;
-	// NOTE: this is a full table scan
-	BTreeIterator iterator;
-	BTreeIterate(&iterator, services);
-	while(!found && BTreeIteratorNext(&iterator)) {
-		Service const * candidate = BTreeIteratorPeekItem(&iterator);
-		if((candidate->op->type == OPERATOR_MACHINE)
-			&& (candidate->op->impl.machine.provider == provider)) {
-			*service = *candidate;
-			found = true;
-		}
-	}
-	BTreeIteratorEnd(&iterator);
-	return found;
-}
-
-
 void PrintService(Service const * service)
 {
 	TypedTuple * parameters = CreateTypedTuple(service->op->nArguments);

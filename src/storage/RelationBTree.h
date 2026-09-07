@@ -32,9 +32,7 @@ extern StorageProvider btreeStorageProvider;
 // backed by a B-tree ... rename to BTreeRelation ?
 typedef struct s_RelationBTree {
 	BTree * btree;
-	index8 * indexColumns;
 	size8 nColumns;
-	// byte * atomTypes;
 } RelationBTree;
 
 /**
@@ -44,7 +42,7 @@ typedef struct s_RelationBTree {
  * The arity and index column order are copied here rather than read off the RelationTable
  * on every call, so that a RelationBTree stays usable as a data structure on its own.
  */
-RelationBTree * CreateRelationBTree(size8 nColumns, index8 const indexColumns[]);
+RelationBTree * CreateRelationBTree(size8 nColumns);
 
 void FreeRelationBTree(RelationBTree const * relation);
 
@@ -57,9 +55,6 @@ size32 RelationBTreeNRows(RelationBTree const * relation);
  * Add a tuple to a B-tree relation.
  */
 byte RelationBTreeAddTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition);
-
-// TODO: this should be registered with a relation table provider registry
-
 
 // B-tree iterator structure.
 // The service signature determines the input arguments. The first n arguments

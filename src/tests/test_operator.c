@@ -4,12 +4,13 @@
 #include "kernel/letter.h"
 #include "kernel/operator.h"
 #include "kernel/kernel.h"
-#include "library/library.h"
-#include "library/list.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
 #include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
+#include "library/library.h"
+#include "library/list.h"
+#include "library/MachineService.h"
 #include "library/string.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
@@ -18,6 +19,9 @@
 #include "parser/PredicateBuilder.h"
 #include "testing/fixtures.h"
 #include "testing/testing.h"
+
+
+static uint32 providerID;		// for creating machine operators 
 
 
 void testMachineOperator(void)
@@ -482,14 +486,15 @@ void testIndexOrder(void)
 		ASSERT_UINT32_EQUAL(joinOperator->indexOrder[i], expectedJoinOrder[i])
 
 	// A MACHINE operator declares the order its provider yields tuples in
-	MachineOperatorProvider machineProvider = {
-		.setupContext = 0,
+	MachineOperatorSpec machineProvider = {
+		.setupState = 0,
 		.call = 0,
 		.finalizeContext = 0,
 		.finalizeOperator = 0
 	};
 	Operator * machineOperator = CreateMachineOperator(
-		2, (index8[]) {1, 0}, &machineProvider, 0, 0);
+		providerID,
+		2, (index8[]) {1, 0}, machineProvider, 0, 0);
 	ASSERT_UINT32_EQUAL(machineOperator->indexOrder[0], 1)
 	ASSERT_UINT32_EQUAL(machineOperator->indexOrder[1], 0)
 
@@ -686,6 +691,8 @@ int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
 	LoadLibraries();
+
+	providerID = RequestProviderID();
 
 	ExecuteTest(testMachineOperator);
 	ExecuteTest(testPermuteOperator);

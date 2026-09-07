@@ -6,9 +6,9 @@
 /**
  * The operator (+ x<INT + y<INT = z>INT)
  */
-static bool add1(Atom arguments[], void * state, bool isFirstCall)
+static bool add1Call(MachineOperatorContext * context)
 {
-	arguments[2]._int = arguments[0]._int + arguments[1]._int;
+	context->arguments[2]._int = context->arguments[0]._int + context->arguments[1]._int;
 	return true;
 }
 
@@ -18,9 +18,9 @@ static bool add1(Atom arguments[], void * state, bool isFirstCall)
  * This implements subtraction by solving the equation
  * z = x + y  <->  y = z - x
  */
-static bool add2(Atom arguments[], void * state, bool isFirstCall)
+static bool add2Call(MachineOperatorContext * context)
 {
-	arguments[1]._int = arguments[2]._int - arguments[0]._int;
+	context->arguments[1]._int = context->arguments[2]._int - context->arguments[0]._int;
 	return true;
 }
 
@@ -28,9 +28,9 @@ static bool add2(Atom arguments[], void * state, bool isFirstCall)
 /**
  * The operator (* x<INT * y<INT = z>INT)
  */
-static bool mul1(Atom arguments[], void * state, bool isFirstCall)
+static bool mul1Call(MachineOperatorContext * context)
 {
-	arguments[2]._int = arguments[0]._int * arguments[1]._int;
+	context->arguments[2]._int = context->arguments[0]._int * context->arguments[1]._int;
 	return true;
 }
 
@@ -43,39 +43,60 @@ static bool mul1(Atom arguments[], void * state, bool isFirstCall)
  *
  * Successive tuples differ only in @2, which ascends, so the tuples are ordered
  * as RegisterMachineService() requires.
+ * 
  */
 typedef struct {
 	Atom number;
 } RangeState;
 
-
-static bool range(Atom arguments[], void * state, bool isFirstCall)
+// initialize state to the lower value
+static void rangeSetup(MachineOperatorContext * context, void * operatorData)
 {
-	RangeState * rangeState = state;
-	if(isFirstCall)
-		// begin iterating at the lower bound
-		rangeState->number = arguments[0];
-	else
-		rangeState->number._int++;
+	RangeState * rangeState = (RangeState *) context->state;
+	rangeState->number = context->arguments[0];
+}
 
-	if(rangeState->number._int > arguments[2]._int)
+
+static bool rangeCall(MachineOperatorContext * context)
+{
+	RangeState * rangeState = (RangeState *) context->state;
+	if(rangeState->number._int > context->arguments[2]._int)
 		return false;
-	arguments[1] = rangeState->number;
+	context->arguments[1] = rangeState->number;
+	rangeState->number._int++;
 	return true;
 }
 
 
+static uint32 providerID;
+
 void MathSetup(void)
 {
-	// NOTE: these services are removed all in one go by FreeMachineServices().
-	// If we are to be able to remove these particular services, we would need
-	// some kind of ID for the math "library", that we can query the service registry on.
-
-	RegisterMachineService("+ @1<INT + @2<INT = @3>INT", &add1, 0);
-	RegisterMachineService("+ @1<INT + @2>INT = @3<INT", &add2, 0);
-
-	RegisterMachineService("* @1<INT * @2<INT = @3>INT", &mul1, 0);
+	providerID = RequestProviderID();
 
 	RegisterMachineService(
-		"lower @1<INT number @2>INT upper @3<INT", &range, sizeof(RangeState));
+		providerID, "+ @1<INT + @2<INT = @3>INT",
+		(MachineOperatorSpec) {.call = add1Call}, 0, 0);
+		
+
+	RegisterMachineService(
+		providerID, "+ @1<INT + @2>INT = @3<INT", 
+		(MachineOperatorSpec) {.call = add2Call}, 0, 0);
+
+	RegisterMachineService(
+		providerID, "* @1<INT * @2<INT = @3>INT",
+		(MachineOperatorSpec) {.call = mul1Call}, 0, 0);
+
+	RegisterMachineService(
+		providerID, "lower @1<INT number @2>INT upper @3<INT",
+		(MachineOperatorSpec) {.setupState = rangeSetup, .call = rangeCall},
+		0,
+		sizeof(RangeState)
+	);
+}
+
+
+void MathShutdown(void)
+{
+	FreeMachineServices(providerID);
 }

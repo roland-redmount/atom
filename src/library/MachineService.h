@@ -1,11 +1,10 @@
 /**
- * Registering a machine service, which is a relation computed by a C function
- * rather than stored in a table. This is how a library provides a primitive
- * such as addition; see library/math.c
+ * A simple framework for service providers to regiser a machine service.
+ * See for example library/math.c
  *
  * A service is registered from its signature, written in the notation a service
  * prints in, so that the relation, its column types and the parameter IO of the
- * service are all read off one string. See RegisterMachineService()
+ * service are all read off one string. Argument indexing is handled automatically.
  * 
  * NOTE: Some limitations of this framework:
  *
@@ -39,60 +38,33 @@
 
 #include "kernel/ServiceRegistry.h"
 
-
 /**
- * A machine function computes one tuple of a relation from the arguments the
- * caller has bound. It returns true if it produced a tuple.
- *
- * The arguments are in the order the signature numbers them, so the argument written
- * @1 is arguments[0]. RegisterMachineService() permutes between that order and the
- * column order of the relation.
- *
- * A function returns false when it computes no tuple for its arguments. A partial
- * function, such as a division rejecting a zero divisor, and a test, such as (even 4),
- * are written this way.
- *
- * A function yielding several tuples is called repeatedly until it returns false. The
- * function keeps its state in a block whose size is specified by RegisterMachineService().
- * The state is zeroed before the first call. isFirstCall is true on the first call.
- * A function registered with no state can yield at most one tuple, and is
- * given a null state pointer.
+ * Allows a machine service provider to request an ID. This ID will be associated
+ * with services registered by RegisterMachineService(), so that they can later 
+ * be found and removed by FreeMachineServices().
  */
-typedef bool (*MachineFunction)(Atom arguments[], void * state, bool isFirstCall);
-
+uint32 RequestProviderID(void);
 
 /**
- * Register a machine service evaluated by the given function, and create its relation
- * if this is the first service registered for it. The signature is a term whose actors
+ * Create a machine Operator based on the given operatorSpec, and register a Service
+ * based on the signature syntax string. The signature is a term whose actors
  * are all parameters. For example, the service that adds two integers has signature
  *
  *   "+ @1<INT + @2<INT = @3>INT"
  *
  * A signature must number its arguments 1 ... arity, in the order the MachineFunction
- * expects its parameters.
- *
- * A state area of size = stateSize will be allocated for stateful service.
- * If stateSize == 0, the function is stateless and is assumed to compute at most one tuple.
- * A stateful service may yield several tuples, and its index order must match the 
- * output parameter numbers. Since inputs are constant over one evaluation, their order
- * does not matter. For example, the range iterator
- *
- *   "lower @1<INT number @2>INT upper @3<INT"
- *
- * yields tuples that differ only in the output @2, which must be ascending.
- * See the ordering contract in kernel/operator.h.
- *
- * Returns the registered service; see ServiceRegistryAdd()
+ * expects its arguments in the arguments[] array.
+ * Returns the registered service.
  */
-Service RegisterMachineService(
-	char const * signature, MachineFunction function, size32 stateSize);
 
+Service RegisterMachineService(
+	uint32 providerID, char const * signature,
+	MachineOperatorSpec operatorSpec, void * providerData, size32 stateSize);
 
 /**
- * Remove every service registered by RegisterMachineService(), and the relations
- * created for them. Called when tearing down the libraries, before KernelShutdown()
+ * Remove all services registered by RegisterMachineService() for a given providerID.
  */
-void FreeMachineServices(void);
+void FreeMachineServices(uint32 providerID);
 
 
 #endif	// MACHINE_SERVICE_H

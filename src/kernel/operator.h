@@ -7,41 +7,49 @@
 typedef struct s_Operator Operator;
 typedef struct s_OperatorContext OperatorContext;
 
+typedef struct s_MachineOperatorContext {
+	bool isExhausted;						// required for stateless services
+	Atom arguments[RELATION_MAX_ARITY];		// in the provider order	
+	byte state[];							// state size specified with CreateMachineOperator()
+} MachineOperatorContext;
+
 /**
- * A MachineOperatorProvider is an implementation of a particular type of machine
- * operator, such as B-Tree relations or arithmetic functions.
- * One MachineOperatorProvider can provide the machine operators of several relations.
+ * This struct specifies the functions needed to specify a machine operator
  */
-typedef struct s_MachineOperatorProvider {
+typedef struct s_MachineOperatorSpec {
 	/**
-	 * Initialize the context data, such as an iterator structure.
-	 * This pointer may be 0 if the zeroed context data needs no initialization.
+	 * Initialize the machine operator's state data, such as an iterator structure.
+	 * This pointer may be 0 if the state needs no initialization.
+	 * The state data is always cleared before calling this function.
+	 * The operatorData pointer is the one given to CreateMachineOperator().
 	 */
-	void (*setupContext)(OperatorContext * context);
+	void (*setupState)(MachineOperatorContext * context, void * operatorData);
 
 	/**
 	 * Call (resume) an executing operator, return true if a tuple was produced,
 	 * false if evaluation terminated. The call() function must write to the 
 	 * arguments tuple, so the context must keep a pointer to this tuple.
-	 * If the various operators provided need different entry points, this function
-	 * is responsible for calling the relevant one.
 	 */
-	bool (*call)(OperatorContext * context);
+	/*
+	 * CLAUDE: a provider registered with no state computes at most one tuple, and so
+	 * call() is invoked once. A provider with state is called until it returns false.
+	 */
+	bool (*call)(MachineOperatorContext * context);
 
 	/**
-	 * Finalize an operator context after termination.
+	 * Finalize the machine operator's state data.
 	 * This pointer may be 0 if no finalization is required.
 	 */
-	void (*finalizeContext)(OperatorContext * context);
+	void (*finalizeContext)(MachineOperatorContext * context);
 
 	/**
 	 * Finalize the machine operator (deallocate data structures, &c), called once when
 	 * the last reference to the operator is released.
 	 * This pointer may be 0 if no finalization is required.
 	 */
-	void (*finalizeOperator)(Operator * op);
+	void (*finalizeOperator)(void * operatorData);
 
-} MachineOperatorProvider;
+} MachineOperatorSpec;
 
 
 /**
@@ -279,8 +287,10 @@ struct s_Operator {
 		} filter;
 		// for OPERATOR_MACHINE
 		struct {
-			MachineOperatorProvider * provider;
+			MachineOperatorSpec provider;
 			void * providerData;
+			size32 stateSize;
+			uint32 providerID;
 		} machine;
 	} impl;
 };
@@ -310,12 +320,14 @@ Operator * CreatePermuteOperator(
 /**
  * Create a machine code operator. The indexOrder array has length nArguments and gives
  * the order in which the provider yields its tuples; see the ordering contract above.
- * The context size is the size of the context data allocated by OperatorCreateContext().
+ * stateSize is the size in bytes of the state data provided to MachineOperatorProvider.call().
+ * An operator with stateSize == 0 is assumed to be stateless, and will be called only
+ * once.
  * The returned operator has zero references.
  */
 Operator * CreateMachineOperator(
-	size8 nArguments, index8 const indexOrder[], MachineOperatorProvider * provider,
-	void * providerData, size32 contextSize);
+	uint32 providerID, size8 nArguments, index8 const indexOrder[], MachineOperatorSpec provider,
+	void * operatorData, size32 stateSize);
 
 /**
  * Setup a JOIN operator with the specified number of arguments, from two existing
@@ -493,6 +505,7 @@ struct s_OperatorContext {
 	// ordering contract; see OperatorCall(). Null until the first tuple is yielded.
 	Atom * previousTuple;
 #endif
+	// operator type-specific data
 	byte data[];
 };
 

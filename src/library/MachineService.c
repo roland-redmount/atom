@@ -1,4 +1,5 @@
 
+#include "btree/btree.h"
 #include "kernel/ifact.h"
 #include "kernel/operator.h"
 #include "kernel/Parameter.h"
@@ -9,106 +10,83 @@
 #include "memory/allocator.h"
 #include "parser/TermBuilder.h"
 
+// A simple provider ID mechanism. We simply hand out increasing numbers
+// as provider IDs.
 
-/**
- * A MachineServiceData holds the data one registered machine service needs to evaluate itself.
- * It is stored in the Operator.impl.machine.providerData slot.
- * TODO: can we just move this stuff to Operator then?
- */
-typedef struct s_MachineServiceData {
-	MachineFunction function;
-	size8 nArguments;
-	// size of the function state, zero for a function computing a single tuple
-	size32 stateSize;
-	/**
-	 * The relation column of each argument of the signature: argumentIndex[i] is the
-	 * column of the argument the signature numbered i + 1. The columns are in canonical
-	 * role order, unrelated to the order the signature writes its arguments in.
-	 * A service also declares this array as its index order;
-	 * see RegisterMachineService()
-	 * 
-	 * NOTE: Operator has this as well.
-	 */
-	index8 argumentIndex[RELATION_MAX_ARITY];
-} MachineServiceData;
+static uint32 nextProviderID = 1;
 
-
-/**
- * The context of one evaluation of a machine service. The arguments[] array holds a copy
- * of the operator arguments in the signature ("user") order for the duration of a call;
- * see MachineFunction.
- */
-typedef struct s_MachineServiceContext {
-	bool hasBeenCalled;
-	// set once the function has reported no more tuples, and is not to be called again
-	bool isExhausted;
-	Atom arguments[RELATION_MAX_ARITY];
-	// the function state, sizes determined by the RegisterMachineService() stateSize argument
-	byte state[];
-} MachineServiceContext;
-
-
-
-static bool machineServiceCall(OperatorContext * context)
+uint32 RequestProviderID(void)
 {
-	MachineServiceContext * serviceContext = (MachineServiceContext *) context->data;
-	MachineServiceData const * data = context->op->impl.machine.providerData;
-
-	// A function reporting no more tuples is not called again, and a function with
-	// no state computes a single tuple and so is called once
-	if(serviceContext->isExhausted || (!data->stateSize && serviceContext->hasBeenCalled))
-		return false;
-	bool isFirstCall = !serviceContext->hasBeenCalled;
-	serviceContext->hasBeenCalled = true;
-
-	// permute the caller's arguments into the signature order the function is written in
-	for(index8 i = 0; i < data->nArguments; i++)
-		serviceContext->arguments[i] = context->arguments[data->argumentIndex[i]];
-
-	if(!data->function(
-		serviceContext->arguments, data->stateSize ? serviceContext->state : 0, isFirstCall)) {
-		serviceContext->isExhausted = true;
-		return false;
-	}
-
-	// permute back, so that the computed arguments reach the caller in column order
-	for(index8 i = 0; i < data->nArguments; i++)
-		context->arguments[data->argumentIndex[i]] = serviceContext->arguments[i];
-	return true;
-}
-
-
-static void machineServiceFinalizeOperator(Operator * op)
-{
-	Free(op->impl.machine.providerData);
+	return nextProviderID++;
 }
 
 
 /**
- * One provider serves every machine service. The function to call for a specific
- * service is stored in the impl.machine.providerData field of each operator.
- * 
- * TODO: what if functions need access to some form of storage, for example
- * precomputed math tables, constants &c ? Such data does not belong in the
- * function's state; it needs a storage pointer in MachineServiceData, similar
- * to RelationBTreeOperatorData.
+ * CLAUDE: A second index over the service registry, holding one ProviderService
+ * for each service RegisterMachineService() has created. This gives the services
+ * of one provider ID without scanning the service registry; see FreeMachineServices().
+ *
+ * The index is created when the first service is registered, and freed once the
+ * last one is removed, so that MachineService.c needs no setup or shutdown call.
  */
-static MachineOperatorProvider machineServiceProvider = {
-	// nothing to set up: the zeroed context is the state before the first call
-	.setupContext = 0,
-	.call = &machineServiceCall,
-	// nothing to finalize: the context holds no allocation of its own
-	.finalizeContext = 0,
-	.finalizeOperator = &machineServiceFinalizeOperator
-};
+typedef struct s_ProviderService {
+	uint32 providerID;
+	Service service;
+} ProviderService;
+
+static BTree * providerServices;
 
 
 /**
- * Read the given parameters into the parameter IO of the service and into the argument
- * index of the function, returning the column types. The parameters are in canonical order.
+ * CLAUDE: Order ProviderService records by provider ID, then by operator.
+ * A key with a null operator is a prefix key matching every service of the provider.
+ */
+static int8 compareProviderServices(
+	ProviderService const * entry, ProviderService const * entryOrKey)
+{
+	if(entry->providerID < entryOrKey->providerID)
+		return -1;
+	if(entry->providerID > entryOrKey->providerID)
+		return 1;
+	if(!entryOrKey->service.op)
+		return 0;
+	if(entry->service.op < entryOrKey->service.op)
+		return -1;
+	if(entry->service.op > entryOrKey->service.op)
+		return 1;
+	return 0;
+}
+
+
+static int8 btreeCompareProviderServices(void const * item, void const * itemOrKey, size32 itemSize)
+{
+	return compareProviderServices(
+		(ProviderService const *) item, (ProviderService const *) itemOrKey);
+}
+
+
+/**
+ * CLAUDE: Record a registered service under the ID of the provider registering it.
+ */
+static void addProviderService(uint32 providerID, Service service)
+{
+	if(!providerServices)
+		providerServices = BTreeCreate(
+			sizeof(ProviderService),
+			btreeCompareProviderServices,
+			0	// nothing to deallocate
+		);
+	ProviderService entry = {.providerID = providerID, .service = service};
+	ASSERT(BTreeInsert(providerServices, &entry) == BTREE_INSERTED)
+}
+
+/**
+ * Read the given parameters (in canonical order), and write the corresponding
+ * IOSignature and the indexOrder that orders parameters as 1, 2, ... arity.
+ * Returns the corresponding TypeSignature.
  */
 static TypeSignature readSignatureParameters(
-	TypedTuple const * parameters, index8 argumentIndex[], IOSignature * ioSignature)
+	TypedTuple const * parameters, index8 indexOrder[], IOSignature * ioSignature)
 {
 	bool numberSeen[RELATION_MAX_ARITY] = {0};
 	byte atomTypes[RELATION_MAX_ARITY];
@@ -128,7 +106,7 @@ static TypeSignature readSignatureParameters(
 		ASSERT((number >= 1) && (number <= parameters->nAtoms))
 		ASSERT(!numberSeen[index])
 		numberSeen[index] = true;
-		argumentIndex[index] = i;
+		indexOrder[index] = i;
 	}
 	*ioSignature = CreateIOSignature(parameterIO, parameters->nAtoms);
 	return CreateTypeSignature(atomTypes, parameters->nAtoms);
@@ -136,7 +114,8 @@ static TypeSignature readSignatureParameters(
 
 
 Service RegisterMachineService(
-	char const * signature, MachineFunction function, size32 stateSize)
+	uint32 providerID, char const * signature,
+	MachineOperatorSpec operatorSpec, void * providerData, size32 stateSize)
 {
 	// Parse the signature
 	Atom term = CStringToTerm(signature);
@@ -144,40 +123,48 @@ Service RegisterMachineService(
 	size8 arity = termView.actors->nAtoms;
 	ASSERT(arity <= RELATION_MAX_ARITY)
 
-	// NOTE: this could be pool allocated
-	MachineServiceData * data = Allocate(sizeof(MachineServiceData));
-	data->function = function;
-	data->nArguments = arity;
-	data->stateSize = stateSize;
-
+	// Determined the indexOrder from the parameter numbers
 	IOSignature ioSignature;
+	index8 indexOrder[RELATION_MAX_ARITY];
 	TypeSignature typeSignature = readSignatureParameters(
-		termView.actors, data->argumentIndex, &ioSignature);
+		termView.actors, indexOrder, &ioSignature);
 
-	// A machine service is computed, and so has no tuple storage: the relation exists
-	// only to name the signature the service is registered under, and is removed with the
-	// last service naming it; see ReleaseRelation()
-	// NOTE: I think the state here plays the same role as the storage pointer for a
-	// primitive service registers by RelationTable.
-	Relation relation = CreateRelation(termView.form, typeSignature);
-
-	// A function yields its tuples in the order its signature writes its arguments in;
-	// see the ordering contract in operator.h
+	// Create the machine operator
 	Operator * op = CreateMachineOperator(
-		arity, data->argumentIndex, &machineServiceProvider, data,
-		sizeof(MachineServiceContext) + stateSize);
+		providerID, arity, indexOrder, operatorSpec, providerData, stateSize);
+
+	// Register the service
+	Relation relation = CreateRelation(termView.form, typeSignature);
 	Service service = CreateService(relation, ioSignature, op);
 	ReleaseRelation(relation);
 	ReleaseFormula(term);
+
+	addProviderService(providerID, service);
 	return service;
 }
 
 
-void FreeMachineServices(void)
+void FreeMachineServices(uint32 providerID)
 {
-	// Remove all services registered by machineServiceProvider.
-	// NOTE: this is highly inefficient, but typically only called prior to kernel shutdown.
-	Service service;
-	while(FindServiceByMachineProvider(&machineServiceProvider, &service))
-		RemoveService(service.relation, service.op);
+	if(!providerServices)
+		return;
+
+	/*
+	 * CLAUDE: The key matches every service of the provider, so each lookup gives one
+	 * of them. The entry read back is an exact key, which is what BTreeDelete() requires.
+	 * An entry is removed from the index before its service is removed from the
+	 * service registry, since RemoveService() frees the operator the entry is keyed by.
+	 */
+	ProviderService key = {.providerID = providerID};
+	ProviderService entry;
+	while(BTreeGetItem(providerServices, &key, &entry)) {
+		ASSERT(BTreeDelete(providerServices, &entry, 0) == BTREE_DELETED)
+		RemoveService(entry.service.relation, entry.service.op);
+	}
+
+	// CLAUDE: the index is created on demand, so free it once no service is registered
+	if(!BTreeNItems(providerServices)) {
+		BTreeFree(providerServices);
+		providerServices = 0;
+	}
 }

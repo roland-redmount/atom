@@ -12,5 +12,7 @@
  */
 void MathSetup(void);
 
+void MathShutdown(void);
+
 
 #endif	// MATH_H

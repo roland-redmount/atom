@@ -18,11 +18,8 @@ void LoadLibraries(void)
 
 void UnloadLibraries(void)
 {
-	/* CLAUDE: the math services are machine services, removed by FreeMachineServices().
-	   The remaining libraries are shut down in reverse load order, since the string
-	   relations are built on the list relations; see StringSetup(). */
-	FreeMachineServices();
 	StringShutdown();
 	PairShutdown();
+	MathShutdown();
 	ListShutdown();
 }

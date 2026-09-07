@@ -7,6 +7,7 @@
 #include "kernel/ServiceRegistry.h"
 #include "lang/formula.h"
 #include "library/library.h"
+#include "library/MachineService.h"
 #include "library/string.h"
 #include "parser/TermBuilder.h"
 #include "storage/RelationBTree.h"
@@ -42,13 +43,8 @@ static void setupFixture(void)
 }
 
 
-// A machine operator has to be given a provider, though nothing here evaluates one
-static MachineOperatorProvider dummyProvider = {
-	.setupContext = 0,
-	.call = 0,
-	.finalizeContext = 0,
-	.finalizeOperator = 0
-};
+static uint32 providerID;		// for creating machine operators 
+
 
 /**
  * Create a dummy MACHINE operator of arity EXAMPLE_FORM_ARITY.
@@ -57,7 +53,8 @@ static MachineOperatorProvider dummyProvider = {
 static Operator * createDummyMachineOperator(void)
 {
 	return CreateMachineOperator(
-		EXAMPLE_FORM_ARITY, (index8[]) {0, 1, 2, 3}, &dummyProvider, 0, 0);
+		providerID, EXAMPLE_FORM_ARITY, (index8[]) {0, 1, 2, 3},
+		(MachineOperatorSpec) {0}, 0, 0);
 }
 
 
@@ -187,6 +184,8 @@ int main(void)
 	KernelInitialize(PERSISTENT_MEMORY);
 	LoadLibraries();
 	initialNServices = NumberOfServices();
+
+	providerID = RequestProviderID();
 
 	ExecuteTest(testAddRemoveService);
 	ExecuteTest(testInvalidateDependentServices);
