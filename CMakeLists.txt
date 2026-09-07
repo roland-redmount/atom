@@ -226,11 +226,12 @@ set(ATOM_TESTS_TIER1        # core data structures, language elements
     test_variable
 )
 
-set(ATOM_TESTS_TIER2        # higher level kernel procedures
+set(ATOM_TESTS_TIER2        # higher level procedures
     test_assert
     test_compiler
     test_dictionary
     test_dispatch
+	test_ifact
     test_mixed_type_relation
     test_query
     test_machineservice
