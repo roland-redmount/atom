@@ -17,7 +17,7 @@
  */
 static BTree * services;
 
-// Number of registered services compiled from the rules
+// Number of registered compiled (non-primitive) services
 static size32 nCompiledServices;
 
 
@@ -166,43 +166,42 @@ static void findOperatorDescendants(Operator * op, ResizingArray * serviceArray)
  * Remove a service from the registry, and remove all OperatorAncestor records
  * where this service is the ancestor.
  */
-static void removeService(Service service)
+static void removeService(Service const * service)
 {
-	if(service.kind == SERVICE_COMPILED)
+	if(!ServiceIsPrimitive(service))
 		nCompiledServices--;
 
 	// Find all ancestor services of the given service and remove them recursively
-	OperatorAncestor key = {.op = service.op};
+	OperatorAncestor key = {.op = service->op};
 	OperatorAncestor pair;
 	while(BTreeGetItem(operatorAncestors, &key, &pair))
 		RemoveService(pair.ancestor->relation, pair.ancestor);
 
-	if(OperatorNChildren(service.op) > 0) {
+	if(OperatorNChildren(service->op) > 0) {
 		// Remove any records where this service is the ancestor.
 		// This is most efficiently done by following the operator child pointers,
 		// as in CreateService(). The descendants themselves are not removed.
 		ResizingArray descendantsArray;
 		CreateResizingArray(&descendantsArray, sizeof(Operator *), 10);
-		findOperatorDescendants(service.op, &descendantsArray);
+		findOperatorDescendants(service->op, &descendantsArray);
 		Operator ** descendants = ResizingArrayGetMemory(&descendantsArray);
 		for(index32 i = 0; i < descendantsArray.nElements; i++) {
-			OperatorAncestor pair = {.op = descendants[i], .ancestor = service.op};
+			OperatorAncestor pair = {.op = descendants[i], .ancestor = service->op};
 			ASSERT(BTreeDelete(operatorAncestors, &pair, 0) == BTREE_DELETED)
 		}
 		FreeResizingArray(&descendantsArray);
 	}
-	DetachOperator(service.op);
-	ReleaseRelation(service.relation);
-	BTreeDeleteResult result = BTreeDelete(services, &service, 0);
+	DetachOperator(service->op);
+	ReleaseRelation(service->relation);
+	BTreeDeleteResult result = BTreeDelete(services, service, 0);
 	ASSERT(result == BTREE_DELETED)
 }
 
 
-Service CreateService(Relation relation, IOSignature ioSignature, Operator * op, enum ServiceKind kind)
+Service CreateService(Relation relation, IOSignature ioSignature, Operator * op)
 {
 	Service service = {
 		.relation = relation,
-		.kind = kind,
 		.ioSignature = ioSignature,
 		.op = op
 	};
@@ -227,22 +226,22 @@ Service CreateService(Relation relation, IOSignature ioSignature, Operator * op,
 	// add to the service registry
 	ASSERT(BTreeInsert(services, &service) == BTREE_INSERTED)
 
-	switch(kind) {
-	case SERVICE_COMPILED:
-		ASSERT(op->type != OPERATOR_MACHINE)
-		nCompiledServices++;
-		break;
-
-	case SERVICE_PRIMITIVE:
-		ASSERT(op->type == OPERATOR_MACHINE)
-		// A query of this term form may now have one more relation to match, so
-		// whatever was compiled for it is incomplete.
+	if(ServiceIsPrimitive(&service)) {
+		// Any query of this term form could match this service, so
+		// whatever was compiled for such a query it is incomplete.
 		// QUESTION: the invalidation scope seems to broad: wouldn't it be enough to invalidate
 		// services from the same relation (so that type signature must agree) ?
 		InvalidateServicesByTermForm(relation.termForm);
-		break;
 	}
+	else
+		nCompiledServices++;
 	return service;
+}
+
+
+bool ServiceIsPrimitive(Service const * service)
+{
+	return service->op->type == OPERATOR_MACHINE;
 }
 
 
@@ -260,7 +259,7 @@ void RemoveService(Relation relation, Operator * op)
 	Service service;
 	bool found = findService(relation, op, &service);
 	ASSERT(found)
-	removeService(service);
+	removeService(&service);
 }
 
 
@@ -270,7 +269,7 @@ void ServiceRegistryRemoveAll(Relation relation)
 	Service key = {.relation = relation };
 	Service service;
 	while(BTreeGetItem(services, &key, &service)) {
-		removeService(service);
+		removeService(&service);
 	}
 	// service is shallow-copied by BTreeGetItem() and does not need deallocation
 }
@@ -293,7 +292,7 @@ static void collectParentServices(Service const * service, ResizingArray * ances
 			bool found = findService(
 				pair->ancestor->relation, pair->ancestor, &ancestorService);
 			ASSERT(found)
-			ASSERT(ancestorService.kind == SERVICE_COMPILED)
+			ASSERT(!ServiceIsPrimitive(&ancestorService))
 			ResizingArrayAppend(ancestorServices, &ancestorService);
 		} while(BTreeIteratorNext(&iterator));
 	}
@@ -319,19 +318,16 @@ void InvalidateServicesByTermForm(Atom termForm)
 		ServiceRegistryIterate(relation, &serviceIterator);
 		while(ServiceIteratorNext(&serviceIterator)) {
 			Service const * service = ServiceIteratorPeekService(&serviceIterator);
-			switch(service->kind) {
-			case SERVICE_COMPILED:
-				// For terms invalidated by changes to a rule,
-				// A compiled service with the same term form is stale
-				ResizingArrayAppend(&staleServices, service);
-				break;
-
-			case SERVICE_PRIMITIVE:
-				// A PRIMITIVE service is never stale, but introduction
+			if(ServiceIsPrimitive(service)) {
+				// A primitive service is never stale, but introduction
 				// of another service with the same form renders its parents stale,
 				// so add them to the list
 				collectParentServices(service, &staleServices);
-				break;
+			}
+			else {
+				// For terms invalidated by changes to a rule,
+				// A compiled service with the same term form is stale
+				ResizingArrayAppend(&staleServices, service);
 			}
 		}
 		ServiceIteratorEnd(&serviceIterator);
@@ -343,7 +339,7 @@ void InvalidateServicesByTermForm(Atom termForm)
 		Service service = * ((Service *) ResizingArrayGetElement(&staleServices, i));
 		if(!BTreeContainsItem(services, &service))
 			continue;	// service already removed in a previous removeService() call
-		removeService(service);
+		removeService(&service);
 	}
 	FreeResizingArray(&staleServices);
 }
@@ -358,14 +354,14 @@ void RemoveAllCompiledServices(void)
 		Service service = {0};
 		while(BTreeIteratorNext(&iterator)) {
 			Service * candidate = BTreeIteratorPeekItem(&iterator);
-			if(candidate->kind == SERVICE_COMPILED) {
+			if(!ServiceIsPrimitive(candidate)) {
 				service = *candidate;
 				break;
 			}
 		}
 		BTreeIteratorEnd(&iterator);
 		ASSERT(!IsNullRelation(service.relation))
-		removeService(service);
+		removeService(&service);
 		// restart from the beginning, cannot iterate while modifying
 	}
 }

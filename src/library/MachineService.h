@@ -43,7 +43,7 @@
 /**
  * Most arguments a machine service may have; see MachineServiceContext
  */
-#define MACHINE_SERVICE_MAX_ARITY	8
+#define MACHINE_SERVICE_MAX_ARITY	(RELATION_MAX_ARITY)
 
 
 /**

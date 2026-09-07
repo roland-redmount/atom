@@ -1542,8 +1542,7 @@ static size8 compileParameterizedQuery(
 		Service service = CreateService(
 			variants[i].relation,
 			getVariantIOSignature(variants[i].parameters),
-			variants[i].op,
-			SERVICE_COMPILED
+			variants[i].op
 		);
 		
 #ifdef DEBUG_COMPILER

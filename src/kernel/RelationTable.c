@@ -16,7 +16,8 @@
 static BTree * tableRegistry;
 
 /**
- * Callback used by StorageProvider.createStorage()
+ * Callback used by StorageProvider.createStorage().
+ * Creates a machine operator and registers a primitive Service for it.
  */
 static void providerCreateOperatorCallback(
 	void * data, MachineOperatorProvider * operatorProvider, void * providerData, size32 contextSize,
@@ -26,8 +27,7 @@ static void providerCreateOperatorCallback(
 	Operator * op = CreateMachineOperator(
 		table->nColumns, table->indexColumns, operatorProvider, providerData,
 		contextSize);
-	CreateService(
-		table->relation, ioSignature, op, SERVICE_PRIMITIVE);
+	CreateService(table->relation, ioSignature, op);
 }
 
 
@@ -83,6 +83,11 @@ void AcquireRelationTable(RelationTable * table)
 
 /**
  * Remove the primitive services of this table.
+ * 
+ * TODO: this is not entirely sound: there may be primitive services associated
+ * with the relation that are not using storage (computed services).
+ * Here we should only remove the services that were added by the service provider
+ * via providerCreateOperatorCallback().
  */
 static void removePrimitiveServices(RelationTable * table)
 {
@@ -93,7 +98,7 @@ static void removePrimitiveServices(RelationTable * table)
 		service = 0;
 		while(ServiceIteratorNext(&iterator)) {
 			Service const * candidate = ServiceIteratorPeekService(&iterator);
-			if(candidate->kind == SERVICE_PRIMITIVE) {
+			if(ServiceIsPrimitive(candidate)) {
 				service = candidate;
 				break;
 			}
@@ -119,7 +124,7 @@ static bool tableIsStale(RelationTable const * table)
 	ServiceRegistryIterate(table->relation, &serviceIterator);
 	while(ServiceIteratorNext(&serviceIterator)) {
 		Service const * service = ServiceIteratorPeekService(&serviceIterator);
-		if(service->kind == SERVICE_PRIMITIVE && ServiceHasDependents(service)) {
+		if(ServiceIsPrimitive(service) && ServiceHasDependents(service)) {
 			hasDependentOperator = true;
 			break;
 		}

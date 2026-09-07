@@ -69,7 +69,7 @@ static Service createPermuteService(Relation relation, Operator * childOperator)
 {
 	Operator * op = CreatePermuteOperator(
 		EXAMPLE_FORM_ARITY, 0, 0, 0, (index8[]) {0, 1, 2, 3}, childOperator);
-	return CreateService(relation, exampleIOSignature, op, SERVICE_COMPILED);
+	return CreateService(relation, exampleIOSignature, op);
 }
 
 
@@ -85,7 +85,7 @@ void testAddRemoveService(void)
 
 	// Add a dummy service to the relation
 	Operator * op = createDummyMachineOperator();
-	CreateService(fixture.relation, exampleIOSignature, op, SERVICE_PRIMITIVE);
+	CreateService(fixture.relation, exampleIOSignature, op);
 	ASSERT_TRUE(SameRelations(op->relation, fixture.relation))
 
 	ASSERT_PTR_EQUAL(
@@ -109,7 +109,7 @@ void testInvalidateDependentServices(void)
 
 	// Create dummy machine service
 	Operator * machineOperator = createDummyMachineOperator();
-	CreateService(fixture.relation, exampleIOSignature, machineOperator, SERVICE_PRIMITIVE);
+	CreateService(fixture.relation, exampleIOSignature, machineOperator);
 
 	// Hand-build a "compiled" service that depends on the machine service
 	TypeSignature typeSignature1 = CreateTypeSignature(
@@ -154,7 +154,7 @@ void testInvalidateOnPrimitiveService(void)
 
 	// Register a dummy machine service
 	Operator * machineOperator = createDummyMachineOperator();
-	CreateService(fixture.relation, exampleIOSignature, machineOperator, SERVICE_PRIMITIVE);
+	CreateService(fixture.relation, exampleIOSignature, machineOperator);
 
 	// Create a "compiled" Service depending on the machine service
 	TypeSignature compiledTypes = CreateTypeSignature(

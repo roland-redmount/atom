@@ -236,7 +236,7 @@ static Operator * createIdColumnService(Relation relation, index8 idColumn, IOSi
 	// Create the FILTER operator
 	Operator * op = CreateFilterOperator(childOperator, &idColumn, 1);
 	// Register the new service
-	CreateService(relation, ioSignature, op, SERVICE_COMPILED);
+	CreateService(relation, ioSignature, op);
 	return op;
 }
 

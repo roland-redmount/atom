@@ -156,7 +156,7 @@ Service RegisterMachineService(
 	Operator * op = CreateMachineOperator(
 		arity, indexOrder, &machineServiceProvider, data,
 		sizeof(MachineServiceContext) + stateSize);
-	Service service = CreateService(relation, ioSignature, op, SERVICE_PRIMITIVE);
+	Service service = CreateService(relation, ioSignature, op);
 	ReleaseRelation(relation);
 	ReleaseFormula(term);
 	return service;
