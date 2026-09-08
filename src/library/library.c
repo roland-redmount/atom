@@ -1,4 +1,5 @@
 
+#include "library/ifactservice.h"
 #include "library/library.h"
 #include "library/list.h"
 #include "library/math.h"
@@ -9,6 +10,7 @@
 
 void LoadLibraries(void)
 {
+	IFactServiceSetup();
 	ListSetup();
 	MathSetup();
 	PairSetup();
@@ -22,4 +24,5 @@ void UnloadLibraries(void)
 	PairShutdown();
 	MathShutdown();
 	ListShutdown();
+	IFactServiceShutdown();
 }

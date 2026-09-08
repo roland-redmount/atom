@@ -109,7 +109,6 @@ void InitializeIFacts(void)
 	    btreeCompareHeaders,
 	    0
 	);
-
 	ifactStorage.totalReferenceCount = 0;
 	ifactStorage.flagCreatedIFacts = false;
 }

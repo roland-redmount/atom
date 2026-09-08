@@ -129,6 +129,7 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
 
     src/storage/RelationBTree.c
 
+	src/library/ifactservice.c
 	src/library/library.c
     src/library/MachineService.c
     src/library/string.c
@@ -231,7 +232,7 @@ set(ATOM_TESTS_TIER2        # higher level procedures
     test_compiler
     test_dictionary
     test_dispatch
-#	test_ifact
+	test_ifact
     test_mixed_type_relation
     test_query
     test_machineservice

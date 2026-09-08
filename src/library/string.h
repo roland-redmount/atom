@@ -1,6 +1,9 @@
 /**
- * Convenience functions for creating a list (AT_ID) of letters (AT_LETTER), case-insensitive.
+ * Convenience functions for creating a string, which is a list (AT_ID)
+ * of letters (AT_LETTER), case-insensitive.
  * This is different from AT_NAME which has separate string storage.
+ * 
+ * NOTE: this is required to pasrse the string literal ("abc") syntax.
  */
 
 #ifndef STRING_H
