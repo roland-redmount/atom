@@ -39,6 +39,11 @@ if(EMSCRIPTEN)
     add_compile_options(-ferror-limit=5)
     add_compile_definitions(_POSIX_C_SOURCE=200809L)
     set(PLATFORM_SOURCE src/platform_posix.c)
+    # A page downloads this build, so it is compiled for size rather than with
+    # debugging information, which is most of what a debug build weighs. The
+    # DEBUG definition stays, as a Debug build is what keeps ASSERT() live, and
+    # a violated one has to stop the session rather than be undefined behaviour.
+    set(CMAKE_C_FLAGS_DEBUG "-Os")
 elseif(APPLE)
     add_compile_options(-ferror-limit=5)
     add_compile_definitions(_POSIX_C_SOURCE=200809L _DARWIN_C_SOURCE)
