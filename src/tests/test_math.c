@@ -112,7 +112,7 @@ void testRange(void)
 
 int main(int argc, char * argv[])
 {
-	KernelInitialize();
+	KernelInitialize(PERSISTENT_MEMORY);
 	LoadLibraries();
 
 	ExecuteTest(testAdd1);

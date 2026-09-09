@@ -184,7 +184,7 @@ void testInvalidateOnPrimitiveService(void)
 
 int main(void)
 {
-	KernelInitialize();
+	KernelInitialize(PERSISTENT_MEMORY);
 	LoadLibraries();
 	initialNServices = NumberOfServices();
 

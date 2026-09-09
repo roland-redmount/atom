@@ -33,10 +33,9 @@ static void checkTypeSizes(void)
 
 	ASSERT(sizeof(bool) == 1)
 
-	/* CLAUDE: pointer size is deliberately not checked. An atom is 64 bits
-	   whatever the pointer size is, and the paging area is located at runtime,
-	   so a 32-bit target such as WebAssembly is fine. See InitializePaging(). */
-
+	// NOTE: pointer size is not checked. On WASM builds, pointers are 32-bit.
+	// If we end up storing pointers in Atom values, we must ensure to zero
+	// out the unused bits properly when type converting.
 	ASSERT(sizeof(Atom) == 8)
 	ASSERT(sizeof(TypedAtom) == 12)
 }
@@ -213,10 +212,10 @@ index8 CorePredicateRoleIndex(index32 formId, index32 roleId)
 #define ALLOCATOR_N_PAGES			(ALLOCATOR_AREA_SIZE / MEMORY_PAGE_SIZE)
 
 
-void SetupMemory(void)
+void SetupMemory(uint32 memoryPersistence)
 {
 	checkTypeSizes();
-	InitializePaging();
+	InitializePaging(memoryPersistence);
 
 	// setup allocator
 	// running out of pages is not a bug on our part, so we cannot assume it away
@@ -634,9 +633,9 @@ static void setupCoreServices(void)
 }
 
 
-void KernelInitialize(void)
+void KernelInitialize(uint32 memoryPersistence)
 {
-	SetupMemory();
+	SetupMemory(memoryPersistence);
 	SetupRelationRegistry();
 	SetupRelationTableRegistry();
 	SetupServiceRegistry();

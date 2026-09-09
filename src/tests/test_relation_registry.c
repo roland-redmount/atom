@@ -119,7 +119,7 @@ void testIterateRelations(void)
 
 int main(void)
 {
-	KernelInitialize();
+	KernelInitialize(PERSISTENT_MEMORY);
 	LoadLibraries();
 
 	ExecuteTest(testAddRemoveRelation);

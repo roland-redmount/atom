@@ -27,10 +27,19 @@ add_compile_options(
     # Flag any cast that drops const, such as freeing a const pointer with the
     # C library free(). Our own Free() takes a const pointer; see allocator.h.
     -Wcast-qual
-    -m64
 )
 
-if(APPLE)
+# WebAssembly is a 32-bit target, so -m64 applies to the native
+# builds only. See memory/paging.h for what that means for the paging area.
+if(NOT EMSCRIPTEN)
+    add_compile_options(-m64)
+endif()
+
+if(EMSCRIPTEN)
+    add_compile_options(-ferror-limit=5)
+    add_compile_definitions(_POSIX_C_SOURCE=200809L)
+    set(PLATFORM_SOURCE src/platform_posix.c)
+elseif(APPLE)
     add_compile_options(-ferror-limit=5)
     add_compile_definitions(_POSIX_C_SOURCE=200809L _DARWIN_C_SOURCE)
     set(PLATFORM_SOURCE src/platform_posix.c)
@@ -63,7 +72,13 @@ endif()
 # Shared library: atom
 # ---------------------------------------------------------------------------
 
-add_library(atom SHARED
+if(EMSCRIPTEN)
+    set(ATOM_LIBRARY_TYPE STATIC)
+else()
+    set(ATOM_LIBRARY_TYPE SHARED)
+endif()
+
+add_library(atom ${ATOM_LIBRARY_TYPE}
     src/btree/btree.c
 
     src/util/LinkedList.c
@@ -166,6 +181,10 @@ endif()
 # Test executables
 # ---------------------------------------------------------------------------
 
+# The test programs are run by CTest as native executables, and each
+# needs its own data directory, so they are left out of a WebAssembly build.
+if(NOT EMSCRIPTEN)
+
 enable_testing()
 
 # Tests are grouped into tiers of increasing dependency. Each tier is a CTest
@@ -251,12 +270,24 @@ set_tests_properties(${ATOM_TESTS_TIER1} PROPERTIES
 set_tests_properties(${ATOM_TESTS_TIER2} PROPERTIES
     FIXTURES_REQUIRED "TIER0;TIER1")
 
+endif()  # NOT EMSCRIPTEN
+
 # ---------------------------------------------------------------------------
 # User interface executables
 # ---------------------------------------------------------------------------
 
 add_executable(repl src/ui/repl.c)
 target_link_libraries(repl PRIVATE atom)
+
+if(EMSCRIPTEN)
+    set_target_properties(repl PROPERTIES SUFFIX ".js")
+    target_link_options(repl PRIVATE
+        -sALLOW_MEMORY_GROWTH=1
+        -sINITIAL_MEMORY=67108864
+        -sEXIT_RUNTIME=1
+        -sENVIRONMENT=node,web
+    )
+endif()
 
 # ---------------------------------------------------------------------------
 # Optional graphics target

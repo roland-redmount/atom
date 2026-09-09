@@ -274,9 +274,24 @@ static int executeLine(char const * line)
 }
 
 
+/*
+ * Read the command line for --transient, which keeps the session's memory to
+ * itself rather than mirroring it to a paging file. That is what a WebAssembly
+ * build needs, having no disk to mirror to, and it also leaves a command line
+ * session with nothing to clean up afterwards.
+ */
+static uint32 getMemoryPersistence(int argc, char * argv[])
+{
+	for(int i = 1; i < argc; i++)
+		if(CStringCompare(argv[i], "--transient") == 0)
+			return TRANSIENT_MEMORY;
+	return PERSISTENT_MEMORY;
+}
+
+
 int main(int argc, char * argv[])
 {
-	KernelInitialize();
+	KernelInitialize(getMemoryPersistence(argc, argv));
 	LoadLibraries();
 	printBanner();
 

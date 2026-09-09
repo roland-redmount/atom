@@ -2,6 +2,7 @@
  * Allocation of pages from a persistent memory area,
  * mirrored to disk by mmap.
  */
+
 #ifndef PAGING_H
 #define PAGING_H
 
@@ -9,6 +10,7 @@
 
 
 #define MEMORY_PAGE_SIZE	0x1000					// 4096 bytes
+
 
 /* CLAUDE: where the paging area is asked for. A 64-bit build asks for a fixed
    address so that the mapping lands in the same place every run; a 32-bit
@@ -32,9 +34,14 @@ extern byte * pageTable;
 #define PAGING_FILE_NAME   "atom_page_file"
 
 /**
- * Initialize new, blank paging memory
+ * Initialize new, blank paging memory. The paging area is mirrored to a file
+ * in the data directory for PERSISTENT_MEMORY, and is memory alone for
+ * TRANSIENT_MEMORY.
  */
-void InitializePaging(void);
+#define TRANSIENT_MEMORY	1
+#define PERSISTENT_MEMORY	2
+
+ void InitializePaging(uint32 memoryPersistence);
 
 
 /**

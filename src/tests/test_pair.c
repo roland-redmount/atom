@@ -45,7 +45,7 @@ static void testPair(void)
 
 int main(int argc, char * argv[])
 {
-	KernelInitialize();
+	KernelInitialize(PERSISTENT_MEMORY);
 	PairSetup();
 
 	ExecuteTest(testPair);

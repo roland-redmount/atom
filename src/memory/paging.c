@@ -10,7 +10,7 @@
 byte * pageTable = 0;
 
 static struct {
-	FileMapping globalFileMap;
+	MemoryDescriptor globalFileMap;
 	uint32 firstFreePage;
 } paging;
 
@@ -107,22 +107,28 @@ static bool getPageFilePath(char * buffer, size32 bufferSize)
 	return GetDataFilePath(PAGING_FILE_NAME, buffer, bufferSize);
 }
 
-void InitializePaging(void)
+void InitializePaging(uint32 memoryPersistence)
 {
+	ASSERT((memoryPersistence == TRANSIENT_MEMORY)
+		| (memoryPersistence == PERSISTENT_MEMORY));
 	// verify we defined constants correctly
 	ASSERT(MEMORY_SIZE == MEMORY_N_PAGES * MEMORY_PAGE_SIZE);
 	// number of pages must be divisible by 8 for the bit field to use even number of bytes
 	ASSERT((MEMORY_N_PAGES & 7) == 0);
 	
 	// create memory mapping
-	// NOTE: ASSERT() does evaluate its argument in release builds, but keeping
-	// these calls outside it makes us independent of that
-	char pageFilePath[maxPathLength + 1];
-	bool pathFound = getPageFilePath(pageFilePath, maxPathLength + 1);
-	ASSERT(pathFound);
-	bool mappingSuccess = CreateOrRestoreMappedMemory(
-		PAGING_ADDRESS_HINT, MEMORY_SIZE, pageFilePath, &(paging.globalFileMap));
-	ASSERT(mappingSuccess);
+	bool mappingSuccess;
+	if(memoryPersistence == TRANSIENT_MEMORY)
+		mappingSuccess = CreateTransientMemory(MEMORY_SIZE, &(paging.globalFileMap));
+	else {
+		char pageFilePath[maxPathLength + 1];
+		bool pathFound = getPageFilePath(pageFilePath, maxPathLength + 1);
+		ASSERT(pathFound);
+		mappingSuccess = CreateOrRestoreMappedMemory(
+			PAGING_ADDRESS_HINT, MEMORY_SIZE, pageFilePath, &(paging.globalFileMap));
+	}
+	if(!mappingSuccess)
+		Panic("InitializePaging() failed");
 	pageTable = paging.globalFileMap.address;
 
 	// allocate bit field on first page(s)
