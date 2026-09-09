@@ -24,6 +24,9 @@
 #include <linux/limits.h>
 #elif defined(__APPLE__)
 #include <limits.h>
+#else
+// CLAUDE: PATH_MAX comes from <limits.h> on any other POSIX target
+#include <limits.h>
 #endif
 
 #include "platform.h"
@@ -574,80 +577,124 @@ bool GetUserDataDirectory(char * buffer, size32 bufferSize)
 
 //---------------------- memory mapping ---------------------------
 
-static void mapFileToMemory(void * address, size_t size, int fileDescriptor)
+// the file descriptor to reserve memory that no file backs
+#define NO_MAPPING_FILE		(-1)
+
+/**
+ * Reserve a memory block from the host system, backed by the file at
+ * fileDescriptor, or backed by no file for NO_MAPPING_FILE. If address is 0,
+ * the host system chooses the address to use.
+ * Returns the address of the block, or 0 if it could not be reserved.
+ */
+static void * reserveMemory(void * address, size_t size, int fileDescriptor)
 {
-	// NOTE: we are currently using a fixed memory address.
-	// I HOPE this is safe on linux, but the mmap documentation is a bit murky
+	int flags = (fileDescriptor == NO_MAPPING_FILE)
+		? (MAP_PRIVATE | MAP_ANONYMOUS)
+		: MAP_SHARED;
+	// MAP_FIXED is used only when address is specified
+	// NOTE: a fixed memory address should be safe on posix systems,
+	// but the mmap documentation is a bit murky; 
 	// see https://man7.org/linux/man-pages/man2/mmap.2.html
+	if(address)
+		flags |= MAP_FIXED;
+
 	void * actual_address = mmap(
 		address,
 		size,
 		PROT_READ | PROT_WRITE,
-		MAP_SHARED | MAP_FIXED,
+		flags,
 		fileDescriptor,
 		0						// offset
 	);
 	if(actual_address == MAP_FAILED)
-		Panic("mapping failed, errno = %d\n", errno);
-	if(actual_address != address)
+		return 0;
+	if(address && (actual_address != address))
 		Panic(
 			"mapping failed, expected address %lx, got %lx\n",
 			(addr64) address, (addr64) actual_address
 		);
+	return actual_address;
 }
 
 
-bool RestoreMappedMemory(void * address, char const * fileName, FileMapping * fileMapping)
+/**
+ * Zero a memory descriptor, so that a caller given one for a block that was
+ * never reserved can still pass it to ReleaseMemory().
+ */
+static bool reserveFailed(MemoryDescriptor * memory)
+{
+	memory->size = 0;
+	memory->address = 0;
+	return false;
+}
+
+
+bool RestoreMappedMemory(void * address, char const * fileName, MemoryDescriptor * memory)
 {
 	int fileDescriptor;
-	if(!openFile(fileName, &fileDescriptor)) {
-		fileMapping->size = 0;
-		fileMapping->address = 0;
-		return false;
-	}
+	if(!openFile(fileName, &fileDescriptor))
+		return reserveFailed(memory);
 
-	fileMapping->size = getFileSize(fileDescriptor);
-	fileMapping->address = address;
-
-	mapFileToMemory(fileMapping->address, fileMapping->size, fileDescriptor);
+	size64 size = getFileSize(fileDescriptor);
+	void * reservedAddress = reserveMemory(address, size, fileDescriptor);
 	close(fileDescriptor);
+	if(reservedAddress == 0)
+		return reserveFailed(memory);
+
+	memory->size = size;
+	memory->address = reservedAddress;
 	return true;
 }
 
 
-bool CreateMappedMemory(void * address, size64 size, char const * fileName, FileMapping * fileMapping)
+bool CreateMappedMemory(void * address, size64 size, char const * fileName, MemoryDescriptor * memory)
 {
 	int fileDescriptor;
-	if(!createFile(fileName, &fileDescriptor)) {
-		fileMapping->size = 0;
-		fileMapping->address = 0;
-		return false;
-	}
+	if(!createFile(fileName, &fileDescriptor))
+		return reserveFailed(memory);
 	
 	resizeFile(fileDescriptor, size);
-	fileMapping->size = size;
-	fileMapping->address = address;
-
-	mapFileToMemory(fileMapping->address, fileMapping->size, fileDescriptor);
+	void * reservedAddress = reserveMemory(address, size, fileDescriptor);
 	close(fileDescriptor);
+	if(reservedAddress == 0)
+		return reserveFailed(memory);
+
+	memory->size = size;
+	memory->address = reservedAddress;
 	return true;
 }
 
 
-bool CreateOrRestoreMappedMemory(void * address, size64 size, char const * filePath, FileMapping * fileMapping)
+bool CreateOrRestoreMappedMemory(void * address, size64 size, char const * filePath, MemoryDescriptor * memory)
 {
 	if(FileExists(filePath))
-		return RestoreMappedMemory(address, filePath, fileMapping);
+		return RestoreMappedMemory(address, filePath, memory);
 	else
-		return CreateMappedMemory(address, size, filePath, fileMapping);
+		return CreateMappedMemory(address, size, filePath, memory);
 }
 
 
-void ReleaseFileMapping(FileMapping * fileMapping)
+bool CreateTransientMemory(size64 size, MemoryDescriptor * memory)
 {
-	if(fileMapping->address == 0)
+	void * reservedAddress = reserveMemory(
+		0,						// no address preference
+		size,
+		NO_MAPPING_FILE
+	);
+	if(reservedAddress == 0)
+		return reserveFailed(memory);
+
+	memory->size = size;
+	memory->address = reservedAddress;
+	return true;
+}
+
+
+void ReleaseMemory(MemoryDescriptor * memory)
+{
+	if(memory->address == 0)
 		return;
-	munmap(fileMapping->address, fileMapping->size);
+	munmap(memory->address, memory->size);
 }
 
 

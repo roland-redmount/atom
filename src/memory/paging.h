@@ -2,6 +2,7 @@
  * Allocation of pages from a persistent memory area,
  * mirrored to disk by mmap.
  */
+
 #ifndef PAGING_H
 #define PAGING_H
 
@@ -10,9 +11,13 @@
 
 #define MEMORY_PAGE_SIZE	0x1000					// 4096 bytes
 
-// location of paging area
-#define BASE_ADDRESS		(1 * TB)                // 1024^4 = 0x400^4 = (0x10000)^2 = 0x10_000_000_000
-extern byte * const pageTable;
+/* The address to use for the paging area for PERSISTENT_MEMORY.
+   CLAUDE: an address space too small to hold the address is left with 0, which
+   is the "no address preference" that CreateMappedMemory() takes. Such a build
+   has nowhere to keep a paging file anyway, so it never asks for one. */
+#define FIXED_PAGING_ADDRESS	((void *) (uintptr_t) (1 * TB))	// 1024^4 = 0x400^4 = (0x10000)^2 = 0x10_000_000_000
+
+extern byte * pageTable;
 
 // TODO: for now we have a fixed memory size, as I'm not sure how to
 // maintain a filemapping when expanding the virtual memory area
@@ -22,9 +27,14 @@ extern byte * const pageTable;
 #define PAGING_FILE_NAME   "atom_page_file"
 
 /**
- * Initialize new, blank paging memory
+ * Initialize new, blank paging memory. The paging area is mirrored to a file
+ * in the data directory for PERSISTENT_MEMORY, and is memory alone for
+ * TRANSIENT_MEMORY.
  */
-void InitializePaging(void);
+#define TRANSIENT_MEMORY	1
+#define PERSISTENT_MEMORY	2
+
+ void InitializePaging(uint32 memoryPersistence);
 
 
 /**

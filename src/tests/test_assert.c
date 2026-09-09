@@ -527,7 +527,7 @@ void testCreateIFactRejects(void)
 
 int main(int argc, char * argv[])
 {
-	KernelInitialize();
+	KernelInitialize(PERSISTENT_MEMORY);
 	LoadLibraries();
 
 	ExecuteTest(testAssertRetract);

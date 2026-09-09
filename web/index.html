@@ -1,0 +1,47 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>atom snippets</title>
+<style>
+    body {
+        max-width: 46em;
+        margin: 3em auto;
+        padding: 0 1.2em;
+        font: 16px/1.6 system-ui, sans-serif;
+        color: #24211c;
+        background: #fbfaf8;
+    }
+    @media (prefers-color-scheme: dark) {
+        body { color: #e6e2da; background: #161513; }
+    }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    h1 { font-size: 1.5em; }
+</style>
+
+<h1>atom snippets</h1>
+
+<p>
+    A page for checking the snippet element. Every snippet here shares one session,
+    so what one snippet states, a later one can ask about.
+</p>
+
+<p>Ask what two and three make. <code>s</code> is a variable, so it is filled in:</p>
+<atom-snippet>+ 2 + 3 = s</atom-snippet>
+
+<p>A variable can stand anywhere in the term, so the same table answers backwards:</p>
+<atom-snippet>+ 2 + x = 9</atom-snippet>
+
+<p>State a fact:</p>
+<atom-snippet>:assert foo 42 bar "baz"</atom-snippet>
+
+<p>And ask about it here, in a snippet that never stated it:</p>
+<atom-snippet>foo 42 bar b</atom-snippet>
+
+<p>A syntax error points at the character it could not read:</p>
+<atom-snippet>bogus ]] syntax</atom-snippet>
+
+<p>Several lines are answered in turn, as if each had been typed:</p>
+<atom-snippet>:help
++ 7 + 5 = s</atom-snippet>
+
+<script type="module" src="./atom-snippet.js"></script>

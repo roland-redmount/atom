@@ -65,7 +65,9 @@ typedef uint64_t addr64;
  * Memory size unites
  * NOTE: on x64 (amd64) linux the user address space is 48 bits, up to 200 Tb
  */
-#define KB   0x400L				// 1024
+// CLAUDE: the units are long long, as TB does not fit a narrower type on a
+// target where long is 32 bits, such as WebAssembly
+#define KB   0x400LL				// 1024
 #define MB   (KB * KB)
 #define GB   (MB * KB)
 #define TB   (MB * MB)
@@ -318,26 +320,53 @@ bool GetUserDataDirectory(char * buffer, size32 bufferSize);
  * Virtual memory
  */
 
-typedef struct s_FileMapping {
+/**
+ * Description of a memory block allocated from the host operating system.
+ */
+typedef struct s_MemoryDescriptor {
 	void * address;
 	size64 size;
-} FileMapping;
+} MemoryDescriptor;
 
 /**
- * Map a file into memory at the given address.
- * A missing or unreadable file is a normal outcome, not a program error:
- * these return false, and in that case the file mapping is zeroed, so that
- * the caller can safely pass it to ReleaseFileMapping().
+ * Map the file at filePath into memory at the given address.
+ * Writes the obtained address and size to the 
+ * Returns true if successful, or false if the file at filePath is missing or
+ * unreadable, or if the memory could not be reserved;
+ * in the latter case the MemoryDescriptor is zeroed, so that
+ * the caller can safely pass it to ReleaseMemory().
  */
-bool RestoreMappedMemory(void * address, char const * filePath, FileMapping * fileMapping);
-bool CreateMappedMemory(void * address, size64 size, char const * filePath, FileMapping * fileMapping);
-bool CreateOrRestoreMappedMemory(void * address, size64 size, char const * filePath, FileMapping * fileMapping);
+bool RestoreMappedMemory(void * address, char const * filePath, MemoryDescriptor * memory);
 
 /**
- * Release a file mapping, writing any changes to disk.
- * Releasing a zeroed (failed) mapping does nothing.
+ * Create a new mapping file stored at filePath.
+ * Returns true if successful, or false if the mapping file could not be
+ * created, or if the memory could not be reserved;
+ * in the latter case the MemoryDescriptor is zeroed.
  */
-void ReleaseFileMapping(FileMapping * fileMapping);
+bool CreateMappedMemory(void * address, size64 size, char const * filePath, MemoryDescriptor * memory);
+
+/**
+ * Convenience wrapper around CreateMappedMemory / RestoreMappedMemory.
+ * Restores the mapping file at filePath if it exists,
+ * otherwise creates a new mapping file at filePath.
+ */
+bool CreateOrRestoreMappedMemory(void * address, size64 size, char const * filePath, MemoryDescriptor * memory);
+
+/**
+ * Reserve memory that is not backed by a mapping file. Nothing written to
+ * this memory area outlives the process. Returns false if the memory could not
+ * be reserved, in which case the MemoryDescriptor is zeroed.
+ * The obtained memory is released with ReleaseMemory().
+ */
+bool CreateTransientMemory(size64 size, MemoryDescriptor * memory);
+
+/**
+ * Release a reserved memory block. If the memory is backed by a mapping file,
+ * any changes to the memory are will be written to disk.
+ * If memory.address = 0, this does nothing.
+ */
+void ReleaseMemory(MemoryDescriptor * memory);
 
 /**
  * Other

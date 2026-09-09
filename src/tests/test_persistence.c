@@ -9,8 +9,8 @@ void testRestoreMapping(void)
 {
 	char mapFilePath[maxPathLength + 1];
 	ASSERT_TRUE(GetFixtureFilePath("testmapping.txt", mapFilePath, maxPathLength + 1))
-	FileMapping fileMapping;
-	bool mappingSuccess = RestoreMappedMemory(pageTable, mapFilePath, &fileMapping);
+	MemoryDescriptor fileMapping;
+	bool mappingSuccess = RestoreMappedMemory(FIXED_PAGING_ADDRESS, mapFilePath, &fileMapping);
 	ASSERT_TRUE(mappingSuccess)
 	// assertions only log, so we must return explicitly before using the mapping
 	if(!mappingSuccess)
@@ -19,7 +19,7 @@ void testRestoreMapping(void)
 
 	char* fileContents = (char *) fileMapping.address;
 	ASSERT_MEMORY_EQUAL(fileContents, "abcdefghij", 10)
-	ReleaseFileMapping(&fileMapping);	
+	ReleaseMemory(&fileMapping);	
 }
 
 
@@ -28,9 +28,9 @@ void testCreateMapping(void)
 	char mapFilePath[maxPathLength + 1];
 	ASSERT_TRUE(GetDataFilePath("tmp_mapping.txt", mapFilePath, maxPathLength + 1))
 	uint32 memorySize = 1 << 20;	// 1 Mb
-	FileMapping fileMapping;
+	MemoryDescriptor fileMapping;
 
-	bool mappingSuccess = CreateMappedMemory(pageTable, memorySize, mapFilePath, &fileMapping);
+	bool mappingSuccess = CreateMappedMemory(FIXED_PAGING_ADDRESS, memorySize, mapFilePath, &fileMapping);
 	ASSERT_TRUE(mappingSuccess)
 	if(!mappingSuccess)
 		return;
@@ -41,7 +41,7 @@ void testCreateMapping(void)
 	CopyMemory("abcdefghij", memory, 10);
 
 	// release file, writing any changes to disk
-	ReleaseFileMapping(&fileMapping);
+	ReleaseMemory(&fileMapping);
 
 	// TODO: check file contents is correct
 

@@ -20,7 +20,7 @@ static size32 memoryAreaNPages;
 
 static void setupMemoryAllocator(void)
 {
-	InitializePaging();
+	InitializePaging(PERSISTENT_MEMORY);
 	memoryAreaNPages = PagesToFit(TEST_AREA_SIZE);
 	memoryArea = AllocatePages(memoryAreaNPages);
 	ASSERT(memoryArea);

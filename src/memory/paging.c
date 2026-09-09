@@ -7,10 +7,10 @@
 #define BITFIELD_SIZE_BYTES		(MEMORY_N_PAGES / 8)
 #define	BITFIELD_N_PAGES		(BITFIELD_SIZE_BYTES / MEMORY_PAGE_SIZE + 1)
 
-byte * const pageTable = (byte *) BASE_ADDRESS;
+byte * pageTable = 0;
 
 static struct {
-	FileMapping globalFileMap;
+	MemoryDescriptor globalFileMap;
 	uint32 firstFreePage;
 } paging;
 
@@ -98,6 +98,7 @@ static index32 findFirstFreePages(index32 startPage, size32 nPages)
 	return firstFreePage;
 }
 
+
 /**
  * The paging file lives in the data directory, which each test process
  * overrides so that tests do not share one paging file. See util/resources.h.
@@ -107,24 +108,29 @@ static bool getPageFilePath(char * buffer, size32 bufferSize)
 	return GetDataFilePath(PAGING_FILE_NAME, buffer, bufferSize);
 }
 
-void InitializePaging(void)
+void InitializePaging(uint32 memoryPersistence)
 {
-	// verify we are using a 64-bit compiler
-	ASSERT(sizeof(void *) == 8);
+	ASSERT((memoryPersistence == TRANSIENT_MEMORY)
+		| (memoryPersistence == PERSISTENT_MEMORY));
 	// verify we defined constants correctly
 	ASSERT(MEMORY_SIZE == MEMORY_N_PAGES * MEMORY_PAGE_SIZE);
 	// number of pages must be divisible by 8 for the bit field to use even number of bytes
 	ASSERT((MEMORY_N_PAGES & 7) == 0);
 	
 	// create memory mapping
-	// NOTE: ASSERT() does evaluate its argument in release builds, but keeping
-	// these calls outside it makes us independent of that
-	char pageFilePath[maxPathLength + 1];
-	bool pathFound = getPageFilePath(pageFilePath, maxPathLength + 1);
-	ASSERT(pathFound);
-	bool mappingSuccess = CreateOrRestoreMappedMemory(
-		(void *) BASE_ADDRESS, MEMORY_SIZE, pageFilePath, &(paging.globalFileMap));
-	ASSERT(mappingSuccess);
+	bool mappingSuccess;
+	if(memoryPersistence == TRANSIENT_MEMORY)
+		mappingSuccess = CreateTransientMemory(MEMORY_SIZE, &(paging.globalFileMap));
+	else {
+		char pageFilePath[maxPathLength + 1];
+		bool pathFound = getPageFilePath(pageFilePath, maxPathLength + 1);
+		ASSERT(pathFound);
+		mappingSuccess = CreateOrRestoreMappedMemory(
+			FIXED_PAGING_ADDRESS, MEMORY_SIZE, pageFilePath, &(paging.globalFileMap));
+	}
+	if(!mappingSuccess)
+		Panic("InitializePaging() failed");
+	pageTable = paging.globalFileMap.address;
 
 	// allocate bit field on first page(s)
 	SetMemory(pageTable, BITFIELD_SIZE_BYTES, 0);
@@ -140,7 +146,7 @@ void InitializePaging(void)
  */
 static void * pageToAddress(index32 page)
 {
-	return (void *) (BASE_ADDRESS + page * MEMORY_PAGE_SIZE);
+	return pageTable + page * MEMORY_PAGE_SIZE;
 }
 
 /**
@@ -150,10 +156,11 @@ static void * pageToAddress(index32 page)
 static index32 pointerToPage(void const * ptr)
 {
 	addr64 address = (addr64) ptr;
+	addr64 baseAddress = (addr64) pageTable;
 	// verify address is in range
-	ASSERT((address > BASE_ADDRESS) & (address < BASE_ADDRESS + MEMORY_SIZE));
-	// this division truncates to the page, as BASE_ADDRESS is on a page boundary
-	return (address - BASE_ADDRESS) / MEMORY_PAGE_SIZE;
+	ASSERT((address > baseAddress) & (address < baseAddress + MEMORY_SIZE));
+	// this division truncates to the page, as the arena starts on a page boundary
+	return (address - baseAddress) / MEMORY_PAGE_SIZE;
 }
 
 /**

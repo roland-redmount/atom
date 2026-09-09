@@ -304,7 +304,7 @@ static void testPredicatePermutation(void)
 
 int main(int argc, char * argv[])
 {
-	KernelInitialize();
+	KernelInitialize(PERSISTENT_MEMORY);
 	LoadLibraries();
 
 	ExecuteTestSetupTearDown(testPredicateForm, setup, teardown);

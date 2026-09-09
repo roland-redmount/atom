@@ -166,7 +166,7 @@ void LookupRemoveAllRoles(Atom atom)
 {
 	LookupRecord key = {
 		.atom = atom,
-		.relation = 0,
+		.relation = {0},
 		.role = (Atom) {0}
 	};
 	LookupRecord record;
@@ -242,7 +242,7 @@ void LookupIterate(Atom atom, LookupIterator * iterator)
 {
 	iterator->query = (LookupRecord) {
 		.atom = atom,
-		.relation = 0,
+		.relation = {0},
 		.role = (Atom) {0}
 	};
 	BTreeIterate(&(iterator->treeIterator), lookup.btree);

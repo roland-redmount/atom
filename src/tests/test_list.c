@@ -109,7 +109,7 @@ static void testCreateEmptyList(void)
 
 int main(int argc, char * argv[])
 {
-	KernelInitialize();
+	KernelInitialize(PERSISTENT_MEMORY);
 	LoadLibraries();
 
 	ExecuteTest(testCreateList);

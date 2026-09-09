@@ -27,10 +27,24 @@ add_compile_options(
     # Flag any cast that drops const, such as freeing a const pointer with the
     # C library free(). Our own Free() takes a const pointer; see allocator.h.
     -Wcast-qual
-    -m64
 )
 
-if(APPLE)
+# WebAssembly is a 32-bit target, so -m64 applies to the native
+# builds only. See memory/paging.h for what that means for the paging area.
+if(NOT EMSCRIPTEN)
+    add_compile_options(-m64)
+endif()
+
+if(EMSCRIPTEN)
+    add_compile_options(-ferror-limit=5)
+    add_compile_definitions(_POSIX_C_SOURCE=200809L)
+    set(PLATFORM_SOURCE src/platform_posix.c)
+    # A page downloads this build, so it is compiled for size rather than with
+    # debugging information, which is most of what a debug build weighs. The
+    # DEBUG definition stays, as a Debug build is what keeps ASSERT() live, and
+    # a violated one has to stop the session rather than be undefined behaviour.
+    set(CMAKE_C_FLAGS_DEBUG "-Os")
+elseif(APPLE)
     add_compile_options(-ferror-limit=5)
     add_compile_definitions(_POSIX_C_SOURCE=200809L _DARWIN_C_SOURCE)
     set(PLATFORM_SOURCE src/platform_posix.c)
@@ -63,7 +77,13 @@ endif()
 # Shared library: atom
 # ---------------------------------------------------------------------------
 
-add_library(atom SHARED
+if(EMSCRIPTEN)
+    set(ATOM_LIBRARY_TYPE STATIC)
+else()
+    set(ATOM_LIBRARY_TYPE SHARED)
+endif()
+
+add_library(atom ${ATOM_LIBRARY_TYPE}
     src/btree/btree.c
 
     src/util/LinkedList.c
@@ -136,6 +156,7 @@ add_library(atom SHARED
 
     src/ui/assert.c
     src/ui/query.c
+    src/ui/session.c
 
     src/testing/fixtures.c
     src/testing/testing.c
@@ -165,6 +186,10 @@ endif()
 # ---------------------------------------------------------------------------
 # Test executables
 # ---------------------------------------------------------------------------
+
+# The test programs are run by CTest as native executables, and each
+# needs its own data directory, so they are left out of a WebAssembly build.
+if(NOT EMSCRIPTEN)
 
 enable_testing()
 
@@ -251,12 +276,60 @@ set_tests_properties(${ATOM_TESTS_TIER1} PROPERTIES
 set_tests_properties(${ATOM_TESTS_TIER2} PROPERTIES
     FIXTURES_REQUIRED "TIER0;TIER1")
 
+endif()  # NOT EMSCRIPTEN
+
 # ---------------------------------------------------------------------------
 # User interface executables
 # ---------------------------------------------------------------------------
 
 add_executable(repl src/ui/repl.c)
 target_link_libraries(repl PRIVATE atom)
+
+# CLAUDE: the WebAssembly front end, which a web page loads and calls. It has no
+# main(), being a module rather than a program, so --no-entry says so.
+if(EMSCRIPTEN)
+    add_executable(atomweb src/ui/web.c)
+    target_link_libraries(atomweb PRIVATE atom)
+    set_target_properties(atomweb PROPERTIES SUFFIX ".mjs")
+    target_link_options(atomweb PRIVATE
+        --no-entry
+        -sMODULARIZE=1
+        -sEXPORT_ES6=1
+        -sENVIRONMENT=web,worker,node
+        -sEXPORTED_FUNCTIONS=_WebInitialize,_WebExecuteLine
+        -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
+        -sALLOW_MEMORY_GROWTH=1
+        -sINITIAL_MEMORY=33554432
+    )
+
+    # Gather what a web server needs to serve, so that the page, the worker and
+    # the module it loads all sit in one directory.
+    #
+    # This is a target of its own rather than something the atomweb target does
+    # once it is built, so that editing a page or a script is enough to have the
+    # edit collected. Copying only what differs keeps that cheap.
+    set(ATOM_WEB_DIRECTORY ${CMAKE_BINARY_DIR}/web)
+    add_custom_target(atomweb-files ALL
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ATOM_WEB_DIRECTORY}
+        COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
+                ${CMAKE_CURRENT_SOURCE_DIR}/web ${ATOM_WEB_DIRECTORY}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:atomweb> ${ATOM_WEB_DIRECTORY}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE_DIR:atomweb>/atomweb.wasm ${ATOM_WEB_DIRECTORY}
+        DEPENDS atomweb
+        COMMENT "Collecting the web front end in ${ATOM_WEB_DIRECTORY}")
+endif()
+
+if(EMSCRIPTEN)
+    set_target_properties(repl PROPERTIES SUFFIX ".js")
+    target_link_options(repl PRIVATE
+        -sALLOW_MEMORY_GROWTH=1
+        -sINITIAL_MEMORY=67108864
+        -sEXIT_RUNTIME=1
+        -sENVIRONMENT=node,web
+    )
+endif()
 
 # ---------------------------------------------------------------------------
 # Optional graphics target

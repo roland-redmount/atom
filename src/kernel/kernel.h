@@ -5,23 +5,27 @@
 #include "kernel/Relation.h"
 #include "kernel/RelationTable.h"
 #include "kernel/operator.h"
+// for TRANSIENT_MEMORY and PERSISTENT_MEMORY
+#include "memory/paging.h"
 #include "platform.h"
 
 
 /**
  * Set up a default memory layout, enable paging and allocation.
+ * The memory persistence is passed on to InitializePaging().
  */
-void SetupMemory(void);
+void SetupMemory(uint32 memoryPersistence);
 
 void CleanupMemory(void);
 
 /**
  * Initialize a new kernel, creating a blank "world"
  * with only the core predicates defined.
+ * The memory persistence is passed on to SetupMemory().
  * 
  * TODO: we also need methods to load a previously persisted state.
  */
-void KernelInitialize(void);
+void KernelInitialize(uint32 memoryPersistence);
 
 /**
  * Shut down a kernel, removing all facts.
