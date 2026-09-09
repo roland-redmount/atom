@@ -151,6 +151,7 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
 
     src/ui/assert.c
     src/ui/query.c
+    src/ui/session.c
 
     src/testing/fixtures.c
     src/testing/testing.c
