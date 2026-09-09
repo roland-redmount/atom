@@ -33,7 +33,9 @@ static void checkTypeSizes(void)
 
 	ASSERT(sizeof(bool) == 1)
 
-	ASSERT(sizeof(void *) == 8)
+	/* CLAUDE: pointer size is deliberately not checked. An atom is 64 bits
+	   whatever the pointer size is, and the paging area is located at runtime,
+	   so a 32-bit target such as WebAssembly is fine. See InitializePaging(). */
 
 	ASSERT(sizeof(Atom) == 8)
 	ASSERT(sizeof(TypedAtom) == 12)

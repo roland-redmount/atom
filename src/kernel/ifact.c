@@ -98,9 +98,11 @@ static int8 btreeCompareHeaders(void const * item1, void const * item2, size32 i
 
 void InitializeIFacts(void)
 {
-	// check packed data structures
-	ASSERT(sizeof(IFactConjunction) == 12);
-	ASSERT(sizeof(IFactHeader) == 24);
+	/* CLAUDE: check that packing left no padding. Both structures hold a
+	   pointer, so their sizes are given in terms of the pointer size rather
+	   than as a literal, which would only hold on a 64-bit target. */
+	ASSERT(sizeof(IFactConjunction) == sizeof(RelationTable *) + 4);
+	ASSERT(sizeof(IFactHeader) == 16 + sizeof(IFactConjunction *));
 
 	SetMemory(&ifactStorage, sizeof ifactStorage, 0);
 

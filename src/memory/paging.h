@@ -10,9 +10,19 @@
 
 #define MEMORY_PAGE_SIZE	0x1000					// 4096 bytes
 
-// location of paging area
+/* CLAUDE: where the paging area is asked for. A 64-bit build asks for a fixed
+   address so that the mapping lands in the same place every run; a 32-bit
+   build, such as WebAssembly, has no room for one and takes what it is given.
+   Either way the arena actually starts at pageTable, which InitializePaging()
+   sets from the mapping that was made. */
+#if defined(__wasm__) || (UINTPTR_MAX <= 0xFFFFFFFFu)
+#define PAGING_ADDRESS_HINT	0
+#else
 #define BASE_ADDRESS		(1 * TB)                // 1024^4 = 0x400^4 = (0x10000)^2 = 0x10_000_000_000
-extern byte * const pageTable;
+#define PAGING_ADDRESS_HINT	((void *) BASE_ADDRESS)
+#endif
+
+extern byte * pageTable;
 
 // TODO: for now we have a fixed memory size, as I'm not sure how to
 // maintain a filemapping when expanding the virtual memory area

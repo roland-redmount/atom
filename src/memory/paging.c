@@ -7,7 +7,7 @@
 #define BITFIELD_SIZE_BYTES		(MEMORY_N_PAGES / 8)
 #define	BITFIELD_N_PAGES		(BITFIELD_SIZE_BYTES / MEMORY_PAGE_SIZE + 1)
 
-byte * const pageTable = (byte *) BASE_ADDRESS;
+byte * pageTable = 0;
 
 static struct {
 	FileMapping globalFileMap;
@@ -109,8 +109,6 @@ static bool getPageFilePath(char * buffer, size32 bufferSize)
 
 void InitializePaging(void)
 {
-	// verify we are using a 64-bit compiler
-	ASSERT(sizeof(void *) == 8);
 	// verify we defined constants correctly
 	ASSERT(MEMORY_SIZE == MEMORY_N_PAGES * MEMORY_PAGE_SIZE);
 	// number of pages must be divisible by 8 for the bit field to use even number of bytes
@@ -123,8 +121,9 @@ void InitializePaging(void)
 	bool pathFound = getPageFilePath(pageFilePath, maxPathLength + 1);
 	ASSERT(pathFound);
 	bool mappingSuccess = CreateOrRestoreMappedMemory(
-		(void *) BASE_ADDRESS, MEMORY_SIZE, pageFilePath, &(paging.globalFileMap));
+		PAGING_ADDRESS_HINT, MEMORY_SIZE, pageFilePath, &(paging.globalFileMap));
 	ASSERT(mappingSuccess);
+	pageTable = paging.globalFileMap.address;
 
 	// allocate bit field on first page(s)
 	SetMemory(pageTable, BITFIELD_SIZE_BYTES, 0);
@@ -140,7 +139,7 @@ void InitializePaging(void)
  */
 static void * pageToAddress(index32 page)
 {
-	return (void *) (BASE_ADDRESS + page * MEMORY_PAGE_SIZE);
+	return pageTable + page * MEMORY_PAGE_SIZE;
 }
 
 /**
@@ -150,10 +149,11 @@ static void * pageToAddress(index32 page)
 static index32 pointerToPage(void const * ptr)
 {
 	addr64 address = (addr64) ptr;
+	addr64 baseAddress = (addr64) pageTable;
 	// verify address is in range
-	ASSERT((address > BASE_ADDRESS) & (address < BASE_ADDRESS + MEMORY_SIZE));
-	// this division truncates to the page, as BASE_ADDRESS is on a page boundary
-	return (address - BASE_ADDRESS) / MEMORY_PAGE_SIZE;
+	ASSERT((address > baseAddress) & (address < baseAddress + MEMORY_SIZE));
+	// this division truncates to the page, as the arena starts on a page boundary
+	return (address - baseAddress) / MEMORY_PAGE_SIZE;
 }
 
 /**

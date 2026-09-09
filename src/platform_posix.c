@@ -24,6 +24,9 @@
 #include <linux/limits.h>
 #elif defined(__APPLE__)
 #include <limits.h>
+#else
+// CLAUDE: PATH_MAX comes from <limits.h> on any other POSIX target
+#include <limits.h>
 #endif
 
 #include "platform.h"
@@ -574,26 +577,31 @@ bool GetUserDataDirectory(char * buffer, size32 bufferSize)
 
 //---------------------- memory mapping ---------------------------
 
-static void mapFileToMemory(void * address, size_t size, int fileDescriptor)
+static void * mapFileToMemory(void * address, size_t size, int fileDescriptor)
 {
 	// NOTE: we are currently using a fixed memory address.
 	// I HOPE this is safe on linux, but the mmap documentation is a bit murky
 	// see https://man7.org/linux/man-pages/man2/mmap.2.html
+	/* CLAUDE: a null address is a caller with no preference, which is the only
+	   option where the address space is too small to hold a fixed one. MAP_FIXED
+	   would mean "map at address 0" rather than "anywhere", so it is left out,
+	   and then the address that comes back is the one to use. */
 	void * actual_address = mmap(
 		address,
 		size,
 		PROT_READ | PROT_WRITE,
-		MAP_SHARED | MAP_FIXED,
+		address ? (MAP_SHARED | MAP_FIXED) : MAP_SHARED,
 		fileDescriptor,
 		0						// offset
 	);
 	if(actual_address == MAP_FAILED)
 		Panic("mapping failed, errno = %d\n", errno);
-	if(actual_address != address)
+	if(address && (actual_address != address))
 		Panic(
 			"mapping failed, expected address %lx, got %lx\n",
 			(addr64) address, (addr64) actual_address
 		);
+	return actual_address;
 }
 
 
@@ -607,9 +615,8 @@ bool RestoreMappedMemory(void * address, char const * fileName, FileMapping * fi
 	}
 
 	fileMapping->size = getFileSize(fileDescriptor);
-	fileMapping->address = address;
-
-	mapFileToMemory(fileMapping->address, fileMapping->size, fileDescriptor);
+	fileMapping->address =
+		mapFileToMemory(address, fileMapping->size, fileDescriptor);
 	close(fileDescriptor);
 	return true;
 }
@@ -626,9 +633,8 @@ bool CreateMappedMemory(void * address, size64 size, char const * fileName, File
 	
 	resizeFile(fileDescriptor, size);
 	fileMapping->size = size;
-	fileMapping->address = address;
-
-	mapFileToMemory(fileMapping->address, fileMapping->size, fileDescriptor);
+	fileMapping->address =
+		mapFileToMemory(address, fileMapping->size, fileDescriptor);
 	close(fileDescriptor);
 	return true;
 }

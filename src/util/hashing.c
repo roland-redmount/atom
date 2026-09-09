@@ -26,7 +26,7 @@ static data32 djb2HashReverse(byte const * data, size32 nBytes, data32 initHash)
 
 // For our "double hashing" method we initialize with
 // 0x1505 (= 5381 decimal) in both upper and lower 32-bit words
-data64 const djb2InitialHash = ((0x1505L << 32) | 0x1505);
+data64 const djb2InitialHash = (((data64) 0x1505 << 32) | 0x1505);
 
 /*
 data64 DJB2DoubleHash(void const * data, size32 nBytes)
