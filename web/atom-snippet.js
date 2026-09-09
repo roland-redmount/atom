@@ -12,85 +12,98 @@
 import { runSnippet, resetSession, onSessionReset } from "./atom-session.js";
 
 const STYLE = `
+/*
+ * The page decides how this looks. Colours and fonts are inherited, and what
+ * cannot be inherited is mixed from the inherited text colour, so that the
+ * element sits in a page of any theme without being told about it.
+ *
+ * A page that wants the element to match its own code blocks maps its settings
+ * onto these:
+ *
+ *   --atom-surface     what the frame is filled with
+ *   --atom-button      what a button is filled with
+ *   --atom-border      the lines within the frame
+ *   --atom-muted       secondary text, such as the reset button
+ *   --atom-code-font   the font a snippet and its output are set in
+ *   --atom-code-size   the size they are set at
+ *   --atom-radius      how rounded the frame is
+ */
 :host {
-    --atom-edge: #d9d5cd;
-    --atom-ground: #fbfaf8;
-    --atom-ink: #24211c;
-    --atom-quiet: #6d675d;
-    --atom-output: #f4f2ee;
     display: block;
     margin: 1.5em 0;
-    color: var(--atom-ink);
-    font-size: 14px;
-}
-@media (prefers-color-scheme: dark) {
-    :host {
-        --atom-edge: #3a3833;
-        --atom-ground: #1c1b18;
-        --atom-ink: #e6e2da;
-        --atom-quiet: #9a948a;
-        --atom-output: #232220;
-    }
+    --surface: var(--atom-surface, color-mix(in srgb, currentColor 6%, transparent));
+    --edge: var(--atom-border, color-mix(in srgb, currentColor 18%, transparent));
+    --muted: var(--atom-muted, color-mix(in srgb, currentColor 65%, transparent));
+    --button: var(--atom-button, color-mix(in srgb, currentColor 14%, transparent));
 }
 .frame {
-    border: 1px solid var(--atom-edge);
-    border-radius: 6px;
+    background: var(--surface);
+    border-radius: var(--atom-radius, 6px);
     overflow: hidden;
-    background: var(--atom-ground);
+}
+.entry {
+    display: flex;
+    align-items: flex-start;
+}
+.entry textarea { flex: 1; min-width: 0; }
+textarea, pre {
+    font-family: var(--atom-code-font, monospace);
+    font-size: var(--atom-code-size, 0.9em);
+    line-height: 1.5;
 }
 textarea {
     display: block;
     width: 100%;
     box-sizing: border-box;
     border: 0;
-    padding: 12px 14px;
+    padding: 1rem;
     resize: none;
     background: transparent;
     color: inherit;
-    font: inherit;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    line-height: 1.5;
 }
-textarea:focus { outline: 2px solid #7a9cc6; outline-offset: -2px; }
-.entry {
-    display: flex;
-    align-items: flex-start;
+textarea:focus {
+    outline: 2px solid color-mix(in srgb, currentColor 40%, transparent);
+    outline-offset: -2px;
 }
-.entry textarea { flex: 1; min-width: 0; }
 .controls {
     display: flex;
     gap: 6px;
-    padding: 10px 10px 10px 0;
+    padding: 0.75rem 0.75rem 0 0;
 }
-.controls button { white-space: nowrap; }
 button {
     font: inherit;
-    padding: 4px 12px;
-    border: 1px solid var(--atom-edge);
-    border-radius: 4px;
-    background: var(--atom-ground);
+    font-size: 0.85em;
     color: inherit;
+    background: var(--button);
+    padding: 4px 12px;
+    border: 1px solid var(--edge);
+    border-radius: 4px;
     cursor: pointer;
+    white-space: nowrap;
 }
-button:hover:not(:disabled) { border-color: var(--atom-quiet); }
+/* The tint is laid over whatever the button is filled with, so that hovering
+   shows however a page has coloured its buttons. */
+button:hover:not(:disabled) {
+    border-color: currentColor;
+    box-shadow: inset 0 0 0 999px color-mix(in srgb, currentColor 10%, transparent);
+}
 button:disabled { opacity: 0.5; cursor: default; }
-.quiet { color: var(--atom-quiet); font-size: 13px; }
-.status {
-    padding: 8px 14px;
-    border-top: 1px solid var(--atom-edge);
-}
-.status:empty { display: none; }
+.quiet { color: var(--muted); }
 pre {
     margin: 0;
-    padding: 12px 14px;
-    border-top: 1px solid var(--atom-edge);
-    background: var(--atom-output);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    line-height: 1.5;
+    padding: 1rem;
+    border-top: 1px solid var(--edge);
+    background: transparent;
     white-space: pre;
     overflow-x: auto;
 }
 pre:empty { display: none; }
+.status {
+    padding: 0.6rem 1rem;
+    border-top: 1px solid var(--edge);
+    font-size: 0.85em;
+}
+.status:empty { display: none; }
 `;
 
 class AtomSnippet extends HTMLElement
