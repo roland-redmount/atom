@@ -10,7 +10,7 @@ void testRestoreMapping(void)
 	char mapFilePath[maxPathLength + 1];
 	ASSERT_TRUE(GetFixtureFilePath("testmapping.txt", mapFilePath, maxPathLength + 1))
 	MemoryDescriptor fileMapping;
-	bool mappingSuccess = RestoreMappedMemory(PAGING_ADDRESS_HINT, mapFilePath, &fileMapping);
+	bool mappingSuccess = RestoreMappedMemory(FIXED_PAGING_ADDRESS, mapFilePath, &fileMapping);
 	ASSERT_TRUE(mappingSuccess)
 	// assertions only log, so we must return explicitly before using the mapping
 	if(!mappingSuccess)
@@ -30,7 +30,7 @@ void testCreateMapping(void)
 	uint32 memorySize = 1 << 20;	// 1 Mb
 	MemoryDescriptor fileMapping;
 
-	bool mappingSuccess = CreateMappedMemory(PAGING_ADDRESS_HINT, memorySize, mapFilePath, &fileMapping);
+	bool mappingSuccess = CreateMappedMemory(FIXED_PAGING_ADDRESS, memorySize, mapFilePath, &fileMapping);
 	ASSERT_TRUE(mappingSuccess)
 	if(!mappingSuccess)
 		return;

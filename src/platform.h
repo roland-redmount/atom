@@ -65,7 +65,9 @@ typedef uint64_t addr64;
  * Memory size unites
  * NOTE: on x64 (amd64) linux the user address space is 48 bits, up to 200 Tb
  */
-#define KB   0x400L				// 1024
+// CLAUDE: the units are long long, as TB does not fit a narrower type on a
+// target where long is 32 bits, such as WebAssembly
+#define KB   0x400LL				// 1024
 #define MB   (KB * KB)
 #define GB   (MB * KB)
 #define TB   (MB * MB)

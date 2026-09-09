@@ -29,3 +29,24 @@ Linux (Ubuntu): sudo apt install libglew2.2 libglew-dev glew-utils
 Linux (Ubuntu): sudo apt install libfreetype-dev
 
 To get the required include file paths, do: pkg-config --cflags freetype2
+
+*
+* WebAssembly
+*
+
+The web front end (src/ui/web.c) is built with emscripten, installed with the
+emsdk from https://github.com/emscripten-core/emsdk. Put it on the path, then:
+
+  source <emsdk>/emsdk_env.sh
+  emcmake cmake -B build/wasm -DCMAKE_BUILD_TYPE=Debug
+  cmake --build build/wasm
+
+emcmake names the emscripten toolchain file for cmake, which is how the build
+knows it is building for the web; there is nothing else to pass. A Debug build
+is what defines DEBUG and so keeps ASSERT() live, and a violated one has to
+stop the session rather than be undefined behaviour. Such a build is compiled
+for size rather than for debugging, since a page downloads it.
+
+The result is collected in build/wasm/web, which is a directory a web server
+can serve as it stands: open index.html to try the snippet element out. To put
+the front end in a site that serves it, see web/publish.sh.

@@ -98,6 +98,7 @@ static index32 findFirstFreePages(index32 startPage, size32 nPages)
 	return firstFreePage;
 }
 
+
 /**
  * The paging file lives in the data directory, which each test process
  * overrides so that tests do not share one paging file. See util/resources.h.
@@ -125,7 +126,7 @@ void InitializePaging(uint32 memoryPersistence)
 		bool pathFound = getPageFilePath(pageFilePath, maxPathLength + 1);
 		ASSERT(pathFound);
 		mappingSuccess = CreateOrRestoreMappedMemory(
-			PAGING_ADDRESS_HINT, MEMORY_SIZE, pageFilePath, &(paging.globalFileMap));
+			FIXED_PAGING_ADDRESS, MEMORY_SIZE, pageFilePath, &(paging.globalFileMap));
 	}
 	if(!mappingSuccess)
 		Panic("InitializePaging() failed");
