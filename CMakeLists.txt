@@ -280,6 +280,42 @@ endif()  # NOT EMSCRIPTEN
 add_executable(repl src/ui/repl.c)
 target_link_libraries(repl PRIVATE atom)
 
+# CLAUDE: the WebAssembly front end, which a web page loads and calls. It has no
+# main(), being a module rather than a program, so --no-entry says so.
+if(EMSCRIPTEN)
+    add_executable(atomweb src/ui/web.c)
+    target_link_libraries(atomweb PRIVATE atom)
+    set_target_properties(atomweb PROPERTIES SUFFIX ".mjs")
+    target_link_options(atomweb PRIVATE
+        --no-entry
+        -sMODULARIZE=1
+        -sEXPORT_ES6=1
+        -sENVIRONMENT=web,worker,node
+        -sEXPORTED_FUNCTIONS=_WebInitialize,_WebExecuteLine
+        -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
+        -sALLOW_MEMORY_GROWTH=1
+        -sINITIAL_MEMORY=33554432
+    )
+
+    # Gather what a web server needs to serve, so that the page, the worker and
+    # the module it loads all sit in one directory.
+    #
+    # This is a target of its own rather than something the atomweb target does
+    # once it is built, so that editing a page or a script is enough to have the
+    # edit collected. Copying only what differs keeps that cheap.
+    set(ATOM_WEB_DIRECTORY ${CMAKE_BINARY_DIR}/web)
+    add_custom_target(atomweb-files ALL
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ATOM_WEB_DIRECTORY}
+        COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
+                ${CMAKE_CURRENT_SOURCE_DIR}/web ${ATOM_WEB_DIRECTORY}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:atomweb> ${ATOM_WEB_DIRECTORY}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE_DIR:atomweb>/atomweb.wasm ${ATOM_WEB_DIRECTORY}
+        DEPENDS atomweb
+        COMMENT "Collecting the web front end in ${ATOM_WEB_DIRECTORY}")
+endif()
+
 if(EMSCRIPTEN)
     set_target_properties(repl PROPERTIES SUFFIX ".js")
     target_link_options(repl PRIVATE
