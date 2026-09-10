@@ -25,9 +25,9 @@ static uint32 providerID;		// for creating machine operators
  * combining the two inputs with distinct weights, so that reading an argument from the
  * wrong column gives a different result rather than a coincidentally equal one.
  */
-static bool weigh(MachineOperatorContext * context)
+static bool weighCall(void * state, Atom arguments[], void * operatorDatat)
 {
-	context->arguments[2]._int = 100 * context->arguments[0]._int + 10 * context->arguments[1]._int;
+	arguments[2]._int = 100 * arguments[0]._int + 10 * arguments[1]._int;
 	return true;
 }
 
@@ -52,7 +52,7 @@ static void testMachineServiceArgumentOrder(void)
 {
 	Service service = RegisterMachineService(
 		providerID, "first @1<INT second @2<INT result @3>INT",
-		(MachineOperatorSpec) {.call = weigh}, 0, 0);
+		(MachineOperatorSpec) {.call = weighCall}, 0, 0);
 
 	index8 firstIndex = roleIndex(service.relation.termForm, "first");
 	index8 secondIndex = roleIndex(service.relation.termForm, "second");
@@ -88,9 +88,9 @@ static void testMachineServiceArgumentOrder(void)
  * A function (even <INT) returning false if the argument it odd (yields no tuple).
  * This one has no output argument at all.
  */
-static bool even(MachineOperatorContext * context)
+static bool evenCall(void * state, Atom arguments[], void * operatorData)
 {
-	return (context->arguments[0]._int % 2) == 0;
+	return (arguments[0]._int % 2) == 0;
 }
 
 
@@ -98,7 +98,7 @@ static void testMachineServiceTestPredicate(void)
 {
 	Service service = RegisterMachineService(
 		providerID, "even @1<INT",
-		(MachineOperatorSpec) {.call = even}, 0, 0);
+		(MachineOperatorSpec) {.call = evenCall}, 0, 0);
 
 	Atom arguments[1] = {(Atom) {._int = 4}};
 	OperatorContext * context = OperatorCreateContext(service.op, arguments);
@@ -123,19 +123,19 @@ typedef struct {
 	int64 next;
 } CountState;
 
-static void countSetup(MachineOperatorContext * context, void * operatorData)
+static void countSetup(void * state, Atom arguments[], void * operatorData)
 {
-	CountState * countState = (CountState *) context->state;
-	countState->next = context->arguments[0]._int;
+	CountState * countState = state;
+	countState->next = arguments[0]._int;
 }
 
 
-static bool countCall(MachineOperatorContext * context)
+static bool countCall(void * state, Atom arguments[], void * operatorData)
 {
-	CountState * countState = (CountState *) context->state;
-	if(countState->next > context->arguments[2]._int)
+	CountState * countState = state;
+	if(countState->next > arguments[2]._int)
 		return false;
-	context->arguments[1]._int = countState->next++;
+	arguments[1]._int = countState->next++;
 	return true;
 }
 
@@ -226,15 +226,15 @@ static void testMachineServiceIteratorState(void)
  * Two services of the same relation differ only in their parameter IO, so registering
  * the second finds the relation the first created rather than creating another.
  */
-static bool sum(MachineOperatorContext * context)
+static bool sumCall(void * state, Atom arguments[], void * operatorData)
 {
-	context->arguments[2]._int = context->arguments[0]._int + context->arguments[1]._int;
+	arguments[2]._int = arguments[0]._int + arguments[1]._int;
 	return true;
 }
 
-static bool difference(MachineOperatorContext * context)
+static bool differenceCall(void * state, Atom arguments[], void * operatorData)
 {
-	context->arguments[1]._int = context->arguments[2]._int - context->arguments[0]._int;
+	arguments[1]._int = arguments[2]._int - arguments[0]._int;
 	return true;
 }
 
@@ -251,7 +251,7 @@ static void testMachineServiceSharedRelation(void)
 
 	Service adding = RegisterMachineService(
 		providerID, "term @1<INT term @2<INT total @3>INT",
-		(MachineOperatorSpec) {.call = sum}, 0, 0);
+		(MachineOperatorSpec) {.call = sumCall}, 0, 0);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 	// a computed service has no storage to register
 	ASSERT_UINT32_EQUAL(NumberOfRelationTables(), nTablesInitial)
@@ -259,7 +259,7 @@ static void testMachineServiceSharedRelation(void)
 
 	Service subtracting = RegisterMachineService(
 		providerID, "term @1<INT term @2>INT total @3<INT",
-		(MachineOperatorSpec) {.call = difference}, 0, 0);
+		(MachineOperatorSpec) {.call = differenceCall}, 0, 0);
 	// the second service shares the relation of the first
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 	ASSERT_TRUE(SameRelations(subtracting.relation, adding.relation))

@@ -22,25 +22,24 @@ typedef struct s_MachineOperatorSpec {
 	 * This pointer may be 0 if the state needs no initialization.
 	 * The state data is always cleared before calling this function.
 	 * The operatorData pointer is the one given to CreateMachineOperator().
+	 * The arguments are given in provider order.
 	 */
-	void (*setupState)(MachineOperatorContext * context, void * operatorData);
+	void (*setupState)(void * state, Atom arguments[], void * operatorData);
 
 	/**
 	 * Call (resume) an executing operator, return true if a tuple was produced,
-	 * false if evaluation terminated. The call() function must write to the 
-	 * arguments tuple, so the context must keep a pointer to this tuple.
+	 * false if evaluation terminated. The call() function must write its results
+	 * to the arguments tuple. The arguments are given in provider order.
+	 * For an operator with no state, call() is only invoked once
+	 * An operator with state is can be called repeatedly, until it returns false.
 	 */
-	/*
-	 * CLAUDE: a provider registered with no state computes at most one tuple, and so
-	 * call() is invoked once. A provider with state is called until it returns false.
-	 */
-	bool (*call)(MachineOperatorContext * context);
+	bool (*call)(void * state, Atom arguments[], void * operatorData);
 
 	/**
 	 * Finalize the machine operator's state data.
 	 * This pointer may be 0 if no finalization is required.
 	 */
-	void (*finalizeContext)(MachineOperatorContext * context);
+	void (*finalizeState)(void * state, void * operatorData);
 
 	/**
 	 * Finalize the machine operator (deallocate data structures, &c), called once when
@@ -288,7 +287,7 @@ struct s_Operator {
 		// for OPERATOR_MACHINE
 		struct {
 			MachineOperatorSpec provider;
-			void * providerData;
+			void * operatorData;
 			size32 stateSize;
 			uint32 providerID;
 		} machine;

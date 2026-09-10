@@ -489,7 +489,7 @@ void testIndexOrder(void)
 	MachineOperatorSpec machineProvider = {
 		.setupState = 0,
 		.call = 0,
-		.finalizeContext = 0,
+		.finalizeState = 0,
 		.finalizeOperator = 0
 	};
 	Operator * machineOperator = CreateMachineOperator(

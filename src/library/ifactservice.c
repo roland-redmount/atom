@@ -7,9 +7,9 @@
  * The operator (id x>ID ifact y<FORMULA)
  * If the formula does not represent a valid ifact, this returns false
  */
-static bool idIFactCall(MachineOperatorContext * context)
+static bool idIFactCall(void * state, Atom arguments[], void * operatorData)
 {
-	FormulaView formulaView = FormulaGetView(context->arguments[1]);
+	FormulaView formulaView = FormulaGetView(arguments[1]);
 	Atom id = {0};
 
 	/* TODO: this does not work, since CreateIFact() asserts facts,
@@ -23,7 +23,7 @@ static bool idIFactCall(MachineOperatorContext * context)
 	if(!id.hash)
 		return false;		// not a valid ifact
 	else {
-		context->arguments[0] = id;
+		arguments[0] = id;
 		return true;
 	}
 }

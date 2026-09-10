@@ -6,9 +6,9 @@
 /**
  * The operator (+ x<INT + y<INT = z>INT)
  */
-static bool add1Call(MachineOperatorContext * context)
+static bool add1Call(void * state, Atom arguments[], void * operatorData)
 {
-	context->arguments[2]._int = context->arguments[0]._int + context->arguments[1]._int;
+	arguments[2]._int = arguments[0]._int + arguments[1]._int;
 	return true;
 }
 
@@ -18,9 +18,9 @@ static bool add1Call(MachineOperatorContext * context)
  * This implements subtraction by solving the equation
  * z = x + y  <->  y = z - x
  */
-static bool add2Call(MachineOperatorContext * context)
+static bool add2Call(void * state, Atom arguments[], void * operatorData)
 {
-	context->arguments[1]._int = context->arguments[2]._int - context->arguments[0]._int;
+	arguments[1]._int = arguments[2]._int - arguments[0]._int;
 	return true;
 }
 
@@ -28,9 +28,9 @@ static bool add2Call(MachineOperatorContext * context)
 /**
  * The operator (* x<INT * y<INT = z>INT)
  */
-static bool mul1Call(MachineOperatorContext * context)
+static bool mul1Call(void * state, Atom arguments[], void * operatorData)
 {
-	context->arguments[2]._int = context->arguments[0]._int * context->arguments[1]._int;
+	arguments[2]._int = arguments[0]._int * arguments[1]._int;
 	return true;
 }
 
@@ -50,19 +50,19 @@ typedef struct {
 } RangeState;
 
 // initialize state to the lower value
-static void rangeSetup(MachineOperatorContext * context, void * operatorData)
+static void rangeSetup(void * state, Atom arguments[], void * operatorData)
 {
-	RangeState * rangeState = (RangeState *) context->state;
-	rangeState->number = context->arguments[0];
+	RangeState * rangeState = state;
+	rangeState->number = arguments[0];
 }
 
 
-static bool rangeCall(MachineOperatorContext * context)
+static bool rangeCall(void * state, Atom arguments[], void * operatorData)
 {
-	RangeState * rangeState = (RangeState *) context->state;
-	if(rangeState->number._int > context->arguments[2]._int)
+	RangeState * rangeState = state;
+	if(rangeState->number._int > arguments[2]._int)
 		return false;
-	context->arguments[1] = rangeState->number;
+	arguments[1] = rangeState->number;
 	rangeState->number._int++;
 	return true;
 }

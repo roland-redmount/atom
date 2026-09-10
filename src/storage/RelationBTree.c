@@ -214,29 +214,29 @@ typedef struct s_RelationBTreeOperatorData {
 } RelationBTreeOperatorData;
 
 
-static void btreeSetupContext(MachineOperatorContext * context, void * operatorData)
+static void btreeSetupState(void * state, Atom arguments[], void * operatorData)
 {
 	RelationBTreeOperatorData * bTreeOperatorData = operatorData;
 	// Initialize the RelationBTreeIterator, allocated by OperatorCreateContext()
-	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->state;
+	RelationBTreeIterator * iterator = state;
 	RelationBTreeIterate(
-		bTreeOperatorData->storage, context->arguments, bTreeOperatorData->nInputs, iterator);
+		bTreeOperatorData->storage, arguments, bTreeOperatorData->nInputs, iterator);
 }
 
 
-static bool btreeCall(MachineOperatorContext * context)
+static bool btreeCall(void * state, Atom arguments[], void * operatorData)
 {
-	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->state;
+	RelationBTreeIterator * iterator = state;
 	bool hasTuple = RelationBTreeIteratorNext(iterator);
 	if(hasTuple)
-		RelationBTreeIteratorGetTuple(iterator, context->arguments);
+		RelationBTreeIteratorGetTuple(iterator, arguments);
 	return hasTuple;
 }
 
 
-static void btreeFinalizeContext(MachineOperatorContext * context)
+static void btreeFinalizeState(void * state, void * operatorData)
 {
-	RelationBTreeIterator * iterator = (RelationBTreeIterator *) context->state;
+	RelationBTreeIterator * iterator = state;
 	RelationBTreeIteratorEnd(iterator);
 }
 
@@ -247,10 +247,10 @@ static void finalizeBTreeOperator(void * operatorData)
 }
 
 
-MachineOperatorSpec bTreeOperatorProvider = {
-	.setupState = &btreeSetupContext,
+static MachineOperatorSpec bTreeOperatorSpec = {
+	.setupState = &btreeSetupState,
 	.call = &btreeCall,
-	.finalizeContext = &btreeFinalizeContext,
+	.finalizeState = &btreeFinalizeState,
 	.finalizeOperator = &finalizeBTreeOperator
 };
 
@@ -277,7 +277,7 @@ static void * btreeCreateStorage(size8 nColumns, void * table, CreateServiceCall
 		// Let RelationTable create the operator and register the service.
 		// The operator context data holds a RelationBTreeIterator.
 		callback(
-			table, bTreeOperatorProvider, operatorData,
+			table, bTreeOperatorSpec, operatorData,
 			sizeof(RelationBTreeIterator), CreateIOSignature(parameterIO, nColumns)
 		);
 	}

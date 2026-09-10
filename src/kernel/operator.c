@@ -1383,8 +1383,13 @@ static void machineSetupContext(OperatorContext * context)
 	MachineOperatorSpec provider = context->op->impl.machine.provider;
 	// setupState() reads the input arguments, so permute them first
 	machineReadArguments(context, machineContext);
-	if(provider.setupState)
-		provider.setupState(machineContext, context->op->impl.machine.providerData);
+	if(provider.setupState) {
+		provider.setupState(
+			machineContext->state,
+			machineContext->arguments,
+			context->op->impl.machine.operatorData
+		);
+	}
 }
 
 
@@ -1396,7 +1401,12 @@ static bool machineCall(OperatorContext * context)
 		return false;
 
 	machineReadArguments(context, machineContext);
-	if(op->impl.machine.provider.call(machineContext)) {
+	bool result = op->impl.machine.provider.call(
+		machineContext->state,
+		machineContext->arguments,
+		context->op->impl.machine.operatorData
+	);
+	if(result) {
 		machineWriteArguments(context, machineContext);
 		if(op->impl.machine.stateSize == 0) {
 			// operator is stateless, so we can have at most one tuple
@@ -1415,8 +1425,12 @@ static void machineFinalizeContext(OperatorContext * context)
 {
 	MachineOperatorContext * machineContext = (MachineOperatorContext *) &context->data;
 	MachineOperatorSpec provider = context->op->impl.machine.provider;
-	if(provider.finalizeContext)
-		provider.finalizeContext(machineContext);
+	if(provider.finalizeState) {
+		provider.finalizeState(
+			machineContext->state,
+			context->op->impl.machine.operatorData
+		);
+	}
 }
 
 
@@ -1428,7 +1442,7 @@ Operator * CreateMachineOperator(
 	Operator * op = createOperator(
 		OPERATOR_MACHINE, nArguments, sizeof(MachineOperatorContext) + stateSize);
 	op->impl.machine.provider = provider;
-	op->impl.machine.providerData = operatorData;
+	op->impl.machine.operatorData = operatorData;
 	op->impl.machine.stateSize = stateSize;
 	op->impl.machine.providerID = providerID;
 	allocateIndexOrder(op);
@@ -1444,7 +1458,7 @@ static void teardownMachineOperator(Operator * op)
 {
 	MachineOperatorSpec provider = op->impl.machine.provider;
 	if(provider.finalizeOperator)
-		provider.finalizeOperator(op->impl.machine.providerData);
+		provider.finalizeOperator(op->impl.machine.operatorData);
 }
 
 
