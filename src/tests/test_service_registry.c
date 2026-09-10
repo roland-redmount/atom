@@ -53,8 +53,9 @@ static uint32 providerID;		// for creating machine operators
 static Operator * createDummyMachineOperator(void)
 {
 	return CreateMachineOperator(
-		providerID, EXAMPLE_FORM_ARITY, (index8[]) {0, 1, 2, 3},
-		(MachineOperatorSpec) {0}, 0, 0);
+		EXAMPLE_FORM_ARITY, (index8[]) {0, 1, 2, 3},
+		(MachineOperatorSpec) {.providerID = providerID}
+	);
 }
 
 

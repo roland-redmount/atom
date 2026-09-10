@@ -75,23 +75,25 @@ void MathSetup(void)
 	providerID = RequestProviderID();
 
 	RegisterMachineService(
-		providerID, "+ @1<INT + @2<INT = @3>INT",
-		(MachineOperatorSpec) {.call = add1Call}, 0, 0);
-		
+		"+ @1<INT + @2<INT = @3>INT",
+		(MachineOperatorSpec) {.providerID = providerID, .call = add1Call});
 
 	RegisterMachineService(
-		providerID, "+ @1<INT + @2>INT = @3<INT", 
-		(MachineOperatorSpec) {.call = add2Call}, 0, 0);
+		"+ @1<INT + @2>INT = @3<INT", 
+		(MachineOperatorSpec) {.providerID = providerID, .call = add2Call});
 
 	RegisterMachineService(
-		providerID, "* @1<INT * @2<INT = @3>INT",
-		(MachineOperatorSpec) {.call = mul1Call}, 0, 0);
+		"* @1<INT * @2<INT = @3>INT",
+		(MachineOperatorSpec) {.providerID = providerID, .call = mul1Call});
 
 	RegisterMachineService(
-		providerID, "lower @1<INT number @2>INT upper @3<INT",
-		(MachineOperatorSpec) {.setupState = rangeSetup, .call = rangeCall},
-		0,
-		sizeof(RangeState)
+		"lower @1<INT number @2>INT upper @3<INT",
+		(MachineOperatorSpec) {
+			.providerID = providerID,
+			.stateSize = sizeof(RangeState),
+			.setupState = rangeSetup,
+			.call = rangeCall
+		}
 	);
 }
 

@@ -5,6 +5,7 @@
 #include "btree/btree.h"
 #include "kernel/operator.h"
 #include "kernel/Parameter.h"
+#include "library/MachineService.h"
 #include "storage/StorageProvider.h"
 #include "storage/RelationBTree.h"
 #include "memory/allocator.h"
@@ -207,7 +208,6 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator)
 //--------------------------- MachineOperatorProvider interface ---------------------------------
 
 
-// Could not fit this in the 8-byte Operator.impl.machine.providerData field :-/
 typedef struct s_RelationBTreeOperatorData {
 	void * storage;
 	index8 nInputs;
@@ -247,22 +247,22 @@ static void finalizeBTreeOperator(void * operatorData)
 }
 
 
-static MachineOperatorSpec bTreeOperatorSpec = {
-	.setupState = &btreeSetupState,
-	.call = &btreeCall,
-	.finalizeState = &btreeFinalizeState,
-	.finalizeOperator = &finalizeBTreeOperator
-};
-
-
 //--------------------------------------- StorageProvider interface ---------------------------------
+
+
+static uint32 btreeProviderID = 0;
 
 
 static void * btreeCreateStorage(size8 nColumns, void * table, CreateServiceCallback callback)
 {
+	// Request a provider ID on first call
+	if(!btreeProviderID)
+		btreeProviderID = RequestProviderID();
+	
 	// the storage is a RelationBTree struct
 	RelationBTree * relationBTree = CreateRelationBTree(nColumns);
-	// We will have one operator for each prefix key
+
+	// We will create one operator for each prefix key
 	for(index8 nInputs = 0; nInputs <= nColumns; nInputs++) {
 		byte parameterIO[nColumns];
 		for(index8 i = 0; i < nColumns; i++) {
@@ -274,12 +274,19 @@ static void * btreeCreateStorage(size8 nColumns, void * table, CreateServiceCall
 		RelationBTreeOperatorData * operatorData = Allocate(sizeof(RelationBTreeOperatorData));
 		operatorData->storage = relationBTree;
 		operatorData->nInputs = nInputs;
+
+		MachineOperatorSpec bTreeOperatorSpec = {
+			.providerID = btreeProviderID,
+			.stateSize = sizeof(RelationBTreeIterator),
+			.operatorData = operatorData,
+			.setupState = &btreeSetupState,
+			.call = &btreeCall,
+			.finalizeState = &btreeFinalizeState,
+			.finalizeOperator = &finalizeBTreeOperator
+		};
 		// Let RelationTable create the operator and register the service.
 		// The operator context data holds a RelationBTreeIterator.
-		callback(
-			table, bTreeOperatorSpec, operatorData,
-			sizeof(RelationBTreeIterator), CreateIOSignature(parameterIO, nColumns)
-		);
+		callback(table, bTreeOperatorSpec, CreateIOSignature(parameterIO, nColumns));
 	}
 	return relationBTree;
 }

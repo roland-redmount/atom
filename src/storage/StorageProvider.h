@@ -18,10 +18,8 @@
  * The IOSignature is w.r.t. the storage provider's columns order;
  * the callback will permute it to match the Service's canonical order.
  */
-typedef void (*CreateServiceCallback)(
-	void * table, MachineOperatorSpec operatorProvider,
-	void * providerData, size32 contextSize, IOSignature ioSignature
-);
+typedef void (*CreateServiceCallback)(void * data, MachineOperatorSpec operatorSpec, IOSignature ioSignature);
+
 
 typedef struct s_StorageProvider {
 

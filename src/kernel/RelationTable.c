@@ -15,19 +15,16 @@
  * NOTE: an alternative would be to return a RelationTable copy.
  */
 static BTree * tableRegistry;
-static uint32 providerID;
 
 /**
  * Callback used by StorageProvider.createStorage().
  * Creates a machine operator and registers a primitive Service for it.
  */
 static void providerCreateOperatorCallback(
-	void * data, MachineOperatorSpec operatorProvider, void * providerData, size32 contextSize,
-	IOSignature ioSignature)
+	void * data, MachineOperatorSpec operatorSpec, IOSignature ioSignature)
 {
 	RelationTable * table = data;
-	Operator * op = CreateMachineOperator(
-		providerID, table->nColumns, table->indexColumns, operatorProvider, providerData, contextSize);
+	Operator * op = CreateMachineOperator(table->nColumns, table->indexColumns, operatorSpec);
 
 	// We must permute the IOSignature to match the Service order
 	IOSignature serviceIOSignature = {.parameterIO = {0}};
@@ -228,7 +225,6 @@ static int8 btreeCompareTables(void const * item, void const * itemOrKey, size32
 
 void SetupRelationTableRegistry(void)
 {
-	providerID = RequestProviderID();
 	tableRegistry = BTreeCreate(sizeof(RelationTable *), btreeCompareTables, 0);
 }
 

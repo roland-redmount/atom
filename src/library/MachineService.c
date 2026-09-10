@@ -113,9 +113,7 @@ static TypeSignature readSignatureParameters(
 }
 
 
-Service RegisterMachineService(
-	uint32 providerID, char const * signature,
-	MachineOperatorSpec operatorSpec, void * providerData, size32 stateSize)
+Service RegisterMachineService(char const * signature, MachineOperatorSpec operatorSpec)
 {
 	// Parse the signature
 	Atom term = CStringToTerm(signature);
@@ -130,8 +128,7 @@ Service RegisterMachineService(
 		termView.actors, indexOrder, &ioSignature);
 
 	// Create the machine operator
-	Operator * op = CreateMachineOperator(
-		providerID, arity, indexOrder, operatorSpec, providerData, stateSize);
+	Operator * op = CreateMachineOperator(arity, indexOrder, operatorSpec);
 
 	// Register the service
 	Relation relation = CreateRelation(termView.form, typeSignature);
@@ -139,7 +136,7 @@ Service RegisterMachineService(
 	ReleaseRelation(relation);
 	ReleaseFormula(term);
 
-	addProviderService(providerID, service);
+	addProviderService(operatorSpec.providerID, service);
 	return service;
 }
 

@@ -1380,14 +1380,14 @@ static void machineWriteArguments(
 static void machineSetupContext(OperatorContext * context)
 {
 	MachineOperatorContext * machineContext = (MachineOperatorContext *) &context->data;
-	MachineOperatorSpec provider = context->op->impl.machine.provider;
+	MachineOperatorSpec provider = context->op->impl.machine.spec;
 	// setupState() reads the input arguments, so permute them first
 	machineReadArguments(context, machineContext);
 	if(provider.setupState) {
 		provider.setupState(
 			machineContext->state,
 			machineContext->arguments,
-			context->op->impl.machine.operatorData
+			context->op->impl.machine.spec.operatorData
 		);
 	}
 }
@@ -1401,14 +1401,14 @@ static bool machineCall(OperatorContext * context)
 		return false;
 
 	machineReadArguments(context, machineContext);
-	bool result = op->impl.machine.provider.call(
+	bool result = op->impl.machine.spec.call(
 		machineContext->state,
 		machineContext->arguments,
-		context->op->impl.machine.operatorData
+		context->op->impl.machine.spec.operatorData
 	);
 	if(result) {
 		machineWriteArguments(context, machineContext);
-		if(op->impl.machine.stateSize == 0) {
+		if(op->impl.machine.spec.stateSize == 0) {
 			// operator is stateless, so we can have at most one tuple
 			machineContext->isExhausted = true;
 		}
@@ -1424,27 +1424,22 @@ static bool machineCall(OperatorContext * context)
 static void machineFinalizeContext(OperatorContext * context)
 {
 	MachineOperatorContext * machineContext = (MachineOperatorContext *) &context->data;
-	MachineOperatorSpec provider = context->op->impl.machine.provider;
+	MachineOperatorSpec provider = context->op->impl.machine.spec;
 	if(provider.finalizeState) {
 		provider.finalizeState(
 			machineContext->state,
-			context->op->impl.machine.operatorData
+			context->op->impl.machine.spec.operatorData
 		);
 	}
 }
 
 
-Operator * CreateMachineOperator(
-	uint32 providerID, size8 nArguments, index8 const indexOrder[], MachineOperatorSpec provider,
-	void * operatorData, size32 stateSize)
+Operator * CreateMachineOperator(size8 nArguments, index8 const indexOrder[], MachineOperatorSpec spec)
 {
 	ASSERT(nArguments <= RELATION_MAX_ARITY)
 	Operator * op = createOperator(
-		OPERATOR_MACHINE, nArguments, sizeof(MachineOperatorContext) + stateSize);
-	op->impl.machine.provider = provider;
-	op->impl.machine.operatorData = operatorData;
-	op->impl.machine.stateSize = stateSize;
-	op->impl.machine.providerID = providerID;
+		OPERATOR_MACHINE, nArguments, sizeof(MachineOperatorContext) + spec.stateSize);
+	op->impl.machine.spec = spec;
 	allocateIndexOrder(op);
 	CopyMemory(indexOrder, op->indexOrder, nArguments);
 #ifdef DEBUG
@@ -1456,9 +1451,9 @@ Operator * CreateMachineOperator(
 
 static void teardownMachineOperator(Operator * op)
 {
-	MachineOperatorSpec provider = op->impl.machine.provider;
+	MachineOperatorSpec provider = op->impl.machine.spec;
 	if(provider.finalizeOperator)
-		provider.finalizeOperator(op->impl.machine.operatorData);
+		provider.finalizeOperator(op->impl.machine.spec.operatorData);
 }
 
 

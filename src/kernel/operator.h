@@ -14,9 +14,14 @@ typedef struct s_MachineOperatorContext {
 } MachineOperatorContext;
 
 /**
- * This struct specifies the functions needed to specify a machine operator
+ * This struct contains the data and functions needed to specify a machine operator.
  */
-typedef struct s_MachineOperatorSpec {
+typedef struct s_MachineOperatorSpec
+{
+	uint32 providerID;
+	void * operatorData;
+	size32 stateSize;
+
 	/**
 	 * Initialize the machine operator's state data, such as an iterator structure.
 	 * This pointer may be 0 if the state needs no initialization.
@@ -210,8 +215,7 @@ struct s_Operator {
 	// Number of arguments for this operator
 	size8 nArguments;
 	// Permutation of the argument indices giving the order in which this operator
-	// yields its tuples; see the ordering contract above. Length nArguments,
-	// or null if this operator yields at most one tuple and so declares no order.
+	// yields its tuples; see the ordering contract above.
 	index8 * indexOrder;
 	// Context size, in addition to sizeof(Context)
 	size32 contextSize;
@@ -286,10 +290,7 @@ struct s_Operator {
 		} filter;
 		// for OPERATOR_MACHINE
 		struct {
-			MachineOperatorSpec provider;
-			void * operatorData;
-			size32 stateSize;
-			uint32 providerID;
+			MachineOperatorSpec spec;
 		} machine;
 	} impl;
 };
@@ -324,9 +325,7 @@ Operator * CreatePermuteOperator(
  * once.
  * The returned operator has zero references.
  */
-Operator * CreateMachineOperator(
-	uint32 providerID, size8 nArguments, index8 const indexOrder[], MachineOperatorSpec provider,
-	void * operatorData, size32 stateSize);
+Operator * CreateMachineOperator(size8 nArguments, index8 const indexOrder[], MachineOperatorSpec spec);
 
 /**
  * Setup a JOIN operator with the specified number of arguments, from two existing

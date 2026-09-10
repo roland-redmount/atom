@@ -486,15 +486,10 @@ void testIndexOrder(void)
 		ASSERT_UINT32_EQUAL(joinOperator->indexOrder[i], expectedJoinOrder[i])
 
 	// A MACHINE operator declares the order its provider yields tuples in
-	MachineOperatorSpec machineProvider = {
-		.setupState = 0,
-		.call = 0,
-		.finalizeState = 0,
-		.finalizeOperator = 0
-	};
 	Operator * machineOperator = CreateMachineOperator(
-		providerID,
-		2, (index8[]) {1, 0}, machineProvider, 0, 0);
+		2, (index8[]) {1, 0},
+		(MachineOperatorSpec) { .providerID = providerID }
+	);
 	ASSERT_UINT32_EQUAL(machineOperator->indexOrder[0], 1)
 	ASSERT_UINT32_EQUAL(machineOperator->indexOrder[1], 0)
 

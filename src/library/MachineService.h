@@ -41,7 +41,7 @@
 /**
  * Allows a machine service provider to request an ID. This ID will be associated
  * with services registered by RegisterMachineService(), so that they can later 
- * be found and removed by FreeMachineServices().
+ * be found and removed by FreeMachineServices(). The retunrs ID is always nonzero.
  */
 uint32 RequestProviderID(void);
 
@@ -57,9 +57,7 @@ uint32 RequestProviderID(void);
  * Returns the registered service.
  */
 
-Service RegisterMachineService(
-	uint32 providerID, char const * signature,
-	MachineOperatorSpec operatorSpec, void * providerData, size32 stateSize);
+Service RegisterMachineService(char const * signature, MachineOperatorSpec operatorSpec);
 
 /**
  * Remove all services registered by RegisterMachineService() for a given providerID.

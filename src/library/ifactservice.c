@@ -37,8 +37,9 @@ void IFactServiceSetup(void)
 	providerID = RequestProviderID();
 
 	RegisterMachineService(
-		providerID, "id @1>ID ifact @2<FORMULA",
-		(MachineOperatorSpec) {.call = idIFactCall}, 0, 0);
+		"id @1>ID ifact @2<FORMULA",
+		(MachineOperatorSpec) {.providerID = providerID, .call = idIFactCall}
+	);
 		
 }
 

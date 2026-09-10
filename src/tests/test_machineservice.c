@@ -51,8 +51,8 @@ static index8 roleIndex(Atom termForm, char const * roleName)
 static void testMachineServiceArgumentOrder(void)
 {
 	Service service = RegisterMachineService(
-		providerID, "first @1<INT second @2<INT result @3>INT",
-		(MachineOperatorSpec) {.call = weighCall}, 0, 0);
+		"first @1<INT second @2<INT result @3>INT",
+		(MachineOperatorSpec) {.providerID = providerID, .call = weighCall});
 
 	index8 firstIndex = roleIndex(service.relation.termForm, "first");
 	index8 secondIndex = roleIndex(service.relation.termForm, "second");
@@ -97,8 +97,8 @@ static bool evenCall(void * state, Atom arguments[], void * operatorData)
 static void testMachineServiceTestPredicate(void)
 {
 	Service service = RegisterMachineService(
-		providerID, "even @1<INT",
-		(MachineOperatorSpec) {.call = evenCall}, 0, 0);
+		"even @1<INT",
+		(MachineOperatorSpec) {.providerID = providerID, .call = evenCall});
 
 	Atom arguments[1] = {(Atom) {._int = 4}};
 	OperatorContext * context = OperatorCreateContext(service.op, arguments);
@@ -143,9 +143,14 @@ static bool countCall(void * state, Atom arguments[], void * operatorData)
 static void testMachineServiceIterator(void)
 {
 	Service service = RegisterMachineService(
-		providerID, "from @1<INT count @2>INT to @3<INT",
-		(MachineOperatorSpec) {.setupState = countSetup, .call = countCall},
-		0, sizeof(CountState));
+		"from @1<INT count @2>INT to @3<INT",
+		(MachineOperatorSpec) {
+			.providerID = providerID,
+			.stateSize = sizeof(CountState),
+			.setupState = countSetup,
+			.call = countCall
+		}
+	);
 
 	index8 fromIndex = roleIndex(service.relation.termForm, "from");
 	index8 countIndex = roleIndex(service.relation.termForm, "count");
@@ -189,9 +194,14 @@ static void testMachineServiceIterator(void)
 static void testMachineServiceIteratorState(void)
 {
 	Service service = RegisterMachineService(
-		providerID, "from @1<INT count @2>INT to @3<INT",
-		(MachineOperatorSpec) {.setupState = countSetup, .call = countCall},
-		0, sizeof(CountState));
+		"from @1<INT count @2>INT to @3<INT",
+		(MachineOperatorSpec) {
+			.providerID = providerID,
+			.stateSize = sizeof(CountState),
+			.setupState = countSetup,
+			.call = countCall
+		}
+	);
 
 	index8 fromIndex = roleIndex(service.relation.termForm, "from");
 	index8 countIndex = roleIndex(service.relation.termForm, "count");
@@ -250,16 +260,16 @@ static void testMachineServiceSharedRelation(void)
 	size32 nTablesInitial = NumberOfRelationTables();
 
 	Service adding = RegisterMachineService(
-		providerID, "term @1<INT term @2<INT total @3>INT",
-		(MachineOperatorSpec) {.call = sumCall}, 0, 0);
+		"term @1<INT term @2<INT total @3>INT",
+		(MachineOperatorSpec) {.providerID = providerID, .call = sumCall});
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 	// a computed service has no storage to register
 	ASSERT_UINT32_EQUAL(NumberOfRelationTables(), nTablesInitial)
 	ASSERT_NULL(FindRelationTable(adding.relation))
 
 	Service subtracting = RegisterMachineService(
-		providerID, "term @1<INT term @2>INT total @3<INT",
-		(MachineOperatorSpec) {.call = differenceCall}, 0, 0);
+		"term @1<INT term @2>INT total @3<INT",
+		(MachineOperatorSpec) {.providerID = providerID, .call = differenceCall});
 	// the second service shares the relation of the first
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 	ASSERT_TRUE(SameRelations(subtracting.relation, adding.relation))
