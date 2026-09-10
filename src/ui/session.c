@@ -2,6 +2,9 @@
  * A session answering the lines a front end reads. See ui/session.h.
  */
 
+#include "kernel/dispatch.h"
+#include "kernel/Parameter.h"
+#include "kernel/ServiceRegistry.h"
 #include "lang/formula.h"
 #include "ui/assert.h"
 #include "lang/TermForm.h"
@@ -52,6 +55,8 @@ static void printHelp(void)
 	printLine("  :assert <term>      Assert a fact. The term must not contain variables.");
 	printLine("  :assert <clause>    Assert a rule. The clause must have at least two terms");
 	printLine("                      and contain at least one variable.");
+	printLine("  :inspect <term>     Print the services the term dispatches to, without");
+	printLine("                      asking it.");
 	printLine("  :help               Print this text.");
 	printLine("  :quit, ctrl-D       End the session.");
 	PrintChar('\n');
@@ -80,6 +85,20 @@ static void printQueryResultSummary(MixedTypeRelation const * mixedTypeRelation,
 	size32 nServices = MixedTypeRelationNServices(mixedTypeRelation);
 	SessionPrintMargin();
 	PrintF("%d facts from %d matching services\n", nTuples, nServices);
+}
+
+
+/*
+ * CLAUDE: Print a summary of the services a query dispatches to
+ */
+static void printInspectSummary(size32 nServices)
+{
+	if(nServices == 0) {
+		printLine("No matching service. A query compiles one when it is asked.");
+		return;
+	}
+	SessionPrintMargin();
+	PrintF("%d matching services\n", nServices);
 }
 
 
@@ -184,6 +203,57 @@ static void executeAssert(char const * formulaText, index32 linePosition)
 
 
 /*
+ * CLAUDE: Print the services one query dispatches to, which is the text following the :inspect
+ * command. The query is not asked, and no service is compiled for it, so a query no
+ * service answers yet lists nothing. See dispatch.h.
+ */
+static void executeInspect(char const * queryText, index32 linePosition)
+{
+	if(!*queryText) {
+		printLine(":inspect requires a term.");
+		return;
+	}
+
+	index32 errorPosition;
+	Atom query = ParseFormula(queryText, &errorPosition);
+	if(!query.hash) {
+		printParseError(linePosition + errorPosition);
+		return;
+	}
+	FormulaView queryView = FormulaGetView(query);
+	if(!IsTermForm(queryView.form)) {
+		printLine("A query must be a single term.");
+		ReleaseFormula(query);
+		return;
+	}
+
+	// CLAUDE: The query is parameterized as it is for an ordinary query, so that the services
+	// listed here are the ones asking the query would read; see CreateConcatRelation()
+	size8 arity = queryView.actors->nAtoms;
+	Atom queryParameters[arity];
+	index8 permutation[arity];
+	ActorsToParameters(queryView.actors, queryParameters);
+
+	DispatchIterator iterator;
+	DispatchIterate(
+		queryView.form, queryParameters, arity, DISPATCH_MATCH_EXACT,
+		permutation, &iterator);
+
+	size32 nServices = 0;
+	while(DispatchIteratorNext(&iterator)) {
+		SessionPrintMargin();
+		PrintService(DispatchIteratorPeekService(&iterator));
+		PrintChar('\n');
+		nServices++;
+	}
+	DispatchIteratorEnd(&iterator);
+
+	printInspectSummary(nServices);
+	ReleaseFormula(query);
+}
+
+
+/*
  * Match the command a line begins with. Returns the command's argument, which is whatever
  * follows the command word with the space between them dropped, or 0 if the line begins
  * with some other command. A command taking no argument is matched with an empty argument.
@@ -224,6 +294,12 @@ static int executeCommand(char const * line, char const * commandText)
 	char const * formulaText = matchCommand(commandText, ":assert");
 	if(formulaText) {
 		executeAssert(formulaText, formulaText - line);
+		return SESSION_CONTINUE;
+	}
+
+	char const * queryText = matchCommand(commandText, ":inspect");
+	if(queryText) {
+		executeInspect(queryText, queryText - line);
 		return SESSION_CONTINUE;
 	}
 
