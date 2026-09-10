@@ -18,11 +18,14 @@
 #include "testing/testing.h"
 
 
+static uint32 providerID;		// for creating machine operators 
+
 /**
- * Combine the two inputs with distinct weights, so that reading an argument from the
+ * A service (first @1<INT second @2<INT result @3>INT)
+ * combining the two inputs with distinct weights, so that reading an argument from the
  * wrong column gives a different result rather than a coincidentally equal one.
  */
-static bool weigh(Atom arguments[], void * state, bool isFirstCall)
+static bool weighCall(void * state, Atom arguments[], void * operatorDatat)
 {
 	arguments[2]._int = 100 * arguments[0]._int + 10 * arguments[1]._int;
 	return true;
@@ -48,7 +51,8 @@ static index8 roleIndex(Atom termForm, char const * roleName)
 static void testMachineServiceArgumentOrder(void)
 {
 	Service service = RegisterMachineService(
-		"first @1<INT second @2<INT result @3>INT", &weigh, 0);
+		"first @1<INT second @2<INT result @3>INT",
+		(MachineOperatorSpec) {.providerID = providerID, .call = weighCall});
 
 	index8 firstIndex = roleIndex(service.relation.termForm, "first");
 	index8 secondIndex = roleIndex(service.relation.termForm, "second");
@@ -76,15 +80,15 @@ static void testMachineServiceArgumentOrder(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	FreeMachineServices();
+	FreeMachineServices(providerID);
 }
 
 
 /**
- * A function returning false yields no tuple, which is how a test is written as a
- * machine service. This one has no output argument at all.
+ * A function (even <INT) returning false if the argument it odd (yields no tuple).
+ * This one has no output argument at all.
  */
-static bool even(Atom arguments[], void * state, bool isFirstCall)
+static bool evenCall(void * state, Atom arguments[], void * operatorData)
 {
 	return (arguments[0]._int % 2) == 0;
 }
@@ -92,7 +96,9 @@ static bool even(Atom arguments[], void * state, bool isFirstCall)
 
 static void testMachineServiceTestPredicate(void)
 {
-	Service service = RegisterMachineService("even @1<INT", &even, 0);
+	Service service = RegisterMachineService(
+		"even @1<INT",
+		(MachineOperatorSpec) {.providerID = providerID, .call = evenCall});
 
 	Atom arguments[1] = {(Atom) {._int = 4}};
 	OperatorContext * context = OperatorCreateContext(service.op, arguments);
@@ -105,25 +111,28 @@ static void testMachineServiceTestPredicate(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	FreeMachineServices();
+	FreeMachineServices(providerID);
 }
 
 
 /**
- * A function with a state is called until it reports no more tuples, so that a service
- * can compute a relation of several tuples. This function counts from @1 to @3.
- * The count ascends, so the tuples are ordered as the signature says.
+ * An stateful operator (from @1<INT count @2>INT to @3<INT)
+ * This counts from @1 to @3 ascending, so the tuples are ordered as the signature says.
  */
 typedef struct {
 	int64 next;
 } CountState;
 
-
-static bool count(Atom arguments[], void * state, bool isFirstCall)
+static void countSetup(void * state, Atom arguments[], void * operatorData)
 {
 	CountState * countState = state;
-	if(isFirstCall)
-		countState->next = arguments[0]._int;
+	countState->next = arguments[0]._int;
+}
+
+
+static bool countCall(void * state, Atom arguments[], void * operatorData)
+{
+	CountState * countState = state;
 	if(countState->next > arguments[2]._int)
 		return false;
 	arguments[1]._int = countState->next++;
@@ -134,15 +143,24 @@ static bool count(Atom arguments[], void * state, bool isFirstCall)
 static void testMachineServiceIterator(void)
 {
 	Service service = RegisterMachineService(
-		"from @1<INT count @2>INT to @3<INT", &count, sizeof(CountState));
+		"from @1<INT count @2>INT to @3<INT",
+		(MachineOperatorSpec) {
+			.providerID = providerID,
+			.stateSize = sizeof(CountState),
+			.setupState = countSetup,
+			.call = countCall
+		}
+	);
 
 	index8 fromIndex = roleIndex(service.relation.termForm, "from");
 	index8 countIndex = roleIndex(service.relation.termForm, "count");
 	index8 toIndex = roleIndex(service.relation.termForm, "to");
 
-	// A service that may yield several tuples declares the order it yields them in.
-	// Declaring none would claim at most one tuple; see the contract in operator.h
-	ASSERT_NOT_NULL(service.op->indexOrder)
+	// A service declares the order its signature writes its arguments in;
+	// see the contract in operator.h
+	ASSERT_UINT32_EQUAL(service.op->indexOrder[0], fromIndex)
+	ASSERT_UINT32_EQUAL(service.op->indexOrder[1], countIndex)
+	ASSERT_UINT32_EQUAL(service.op->indexOrder[2], toIndex)
 
 	Atom arguments[3];
 	arguments[fromIndex] = (Atom) {._int = 1};
@@ -164,7 +182,7 @@ static void testMachineServiceIterator(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	FreeMachineServices();
+	FreeMachineServices(providerID);
 }
 
 
@@ -176,7 +194,14 @@ static void testMachineServiceIterator(void)
 static void testMachineServiceIteratorState(void)
 {
 	Service service = RegisterMachineService(
-		"from @1<INT count @2>INT to @3<INT", &count, sizeof(CountState));
+		"from @1<INT count @2>INT to @3<INT",
+		(MachineOperatorSpec) {
+			.providerID = providerID,
+			.stateSize = sizeof(CountState),
+			.setupState = countSetup,
+			.call = countCall
+		}
+	);
 
 	index8 fromIndex = roleIndex(service.relation.termForm, "from");
 	index8 countIndex = roleIndex(service.relation.termForm, "count");
@@ -203,7 +228,7 @@ static void testMachineServiceIteratorState(void)
 
 	OperatorFreeContext(secondContext);
 	OperatorFreeContext(firstContext);
-	FreeMachineServices();
+	FreeMachineServices(providerID);
 }
 
 
@@ -211,13 +236,13 @@ static void testMachineServiceIteratorState(void)
  * Two services of the same relation differ only in their parameter IO, so registering
  * the second finds the relation the first created rather than creating another.
  */
-static bool sum(Atom arguments[], void * state, bool isFirstCall)
+static bool sumCall(void * state, Atom arguments[], void * operatorData)
 {
 	arguments[2]._int = arguments[0]._int + arguments[1]._int;
 	return true;
 }
 
-static bool difference(Atom arguments[], void * state, bool isFirstCall)
+static bool differenceCall(void * state, Atom arguments[], void * operatorData)
 {
 	arguments[1]._int = arguments[2]._int - arguments[0]._int;
 	return true;
@@ -235,14 +260,16 @@ static void testMachineServiceSharedRelation(void)
 	size32 nTablesInitial = NumberOfRelationTables();
 
 	Service adding = RegisterMachineService(
-		"term @1<INT term @2<INT total @3>INT", &sum, 0);
+		"term @1<INT term @2<INT total @3>INT",
+		(MachineOperatorSpec) {.providerID = providerID, .call = sumCall});
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 	// a computed service has no storage to register
 	ASSERT_UINT32_EQUAL(NumberOfRelationTables(), nTablesInitial)
 	ASSERT_NULL(FindRelationTable(adding.relation))
 
 	Service subtracting = RegisterMachineService(
-		"term @1<INT term @2>INT total @3<INT", &difference, 0);
+		"term @1<INT term @2>INT total @3<INT",
+		(MachineOperatorSpec) {.providerID = providerID, .call = differenceCall});
 	// the second service shares the relation of the first
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 	ASSERT_TRUE(SameRelations(subtracting.relation, adding.relation))
@@ -263,7 +290,7 @@ static void testMachineServiceSharedRelation(void)
 
 	// Removing the services removes the relation with them, which is what lets
 	// FreeMachineServices() keep no record of what it registered
-	FreeMachineServices();
+	FreeMachineServices(providerID);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial)
 	ASSERT_UINT32_EQUAL(NumberOfRelationTables(), nTablesInitial)
 }
@@ -272,6 +299,8 @@ static void testMachineServiceSharedRelation(void)
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
+
+	providerID = RequestProviderID();
 
 	ExecuteTest(testMachineServiceArgumentOrder);
 	ExecuteTest(testMachineServiceTestPredicate);

@@ -13,11 +13,13 @@
 #include "kernel/Parameter.h"
 #include "kernel/operator.h"
 
+/**
+ * Callback for StorageProvider.createStorage() to create services.
+ * The IOSignature is w.r.t. the storage provider's columns order;
+ * the callback will permute it to match the Service's canonical order.
+ */
+typedef void (*CreateServiceCallback)(void * data, MachineOperatorSpec operatorSpec, IOSignature ioSignature);
 
-typedef void (*CreateServiceCallback)(
-	void * table, MachineOperatorProvider * operatorProvider,
-	void * providerData, size32 contextSize, IOSignature ioSignature
-);
 
 typedef struct s_StorageProvider {
 
@@ -31,8 +33,7 @@ typedef struct s_StorageProvider {
 	 *
 	 * The returned storage data pointer is assigned to the RelationTable.storage field.
 	 */
-	void * (*createStorage)(
-		index8 const * indexColumns, size8 nColumns, void * table, CreateServiceCallback callback);
+	void * (*createStorage)(size8 nColumns, void * table, CreateServiceCallback callback);
 
 	/**
 	 * Add a tuple to storage.

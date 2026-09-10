@@ -3,6 +3,7 @@
 #include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/TypedAtom.h"
+#include "library/MachineService.h"
 #include "memory/allocator.h"
 #include "util/ResizingArray.h"
 
@@ -16,18 +17,21 @@
 static BTree * tableRegistry;
 
 /**
- * Callback used by StorageProvider.createStorage()
+ * Callback used by StorageProvider.createStorage().
+ * Creates a machine operator and registers a primitive Service for it.
  */
 static void providerCreateOperatorCallback(
-	void * data, MachineOperatorProvider * operatorProvider, void * providerData, size32 contextSize,
-	IOSignature ioSignature)
+	void * data, MachineOperatorSpec operatorSpec, IOSignature ioSignature)
 {
 	RelationTable * table = data;
-	Operator * op = CreateMachineOperator(
-		table->nColumns, table->indexColumns, operatorProvider, providerData,
-		contextSize);
-	CreateService(
-		table->relation, ioSignature, op, SERVICE_PRIMITIVE);
+	Operator * op = CreateMachineOperator(table->nColumns, table->indexColumns, operatorSpec);
+
+	// We must permute the IOSignature to match the Service order
+	IOSignature serviceIOSignature = {.parameterIO = {0}};
+	for(index8 i = 0; i < table->nColumns; i++)
+		serviceIOSignature.parameterIO[table->indexColumns[i]] = ioSignature.parameterIO[i];
+	
+	CreateService(table->relation, serviceIOSignature, op);
 }
 
 
@@ -56,8 +60,7 @@ RelationTable * CreateRelationTable(
 			table->indexColumns[i] = i;
 	}
 	// Call the storage provider to prepare storage for the table
-	table->storage = provider->createStorage(
-		table->indexColumns, nColumns, table, providerCreateOperatorCallback);
+	table->storage = provider->createStorage(nColumns, table, providerCreateOperatorCallback);
 	// Add the relation table to the registry
 	ASSERT(BTreeInsert(tableRegistry, &table) == BTREE_INSERTED)
 	return table;
@@ -83,6 +86,11 @@ void AcquireRelationTable(RelationTable * table)
 
 /**
  * Remove the primitive services of this table.
+ * 
+ * TODO: this is not entirely sound: there may be primitive services associated
+ * with the relation that are not using the table storage (computed services).
+ * Here we should only remove the services that were added by the service provider
+ * via providerCreateOperatorCallback(). See also FreeMachineServices()
  */
 static void removePrimitiveServices(RelationTable * table)
 {
@@ -93,7 +101,7 @@ static void removePrimitiveServices(RelationTable * table)
 		service = 0;
 		while(ServiceIteratorNext(&iterator)) {
 			Service const * candidate = ServiceIteratorPeekService(&iterator);
-			if(candidate->kind == SERVICE_PRIMITIVE) {
+			if(ServiceIsPrimitive(candidate)) {
 				service = candidate;
 				break;
 			}
@@ -119,7 +127,7 @@ static bool tableIsStale(RelationTable const * table)
 	ServiceRegistryIterate(table->relation, &serviceIterator);
 	while(ServiceIteratorNext(&serviceIterator)) {
 		Service const * service = ServiceIteratorPeekService(&serviceIterator);
-		if(service->kind == SERVICE_PRIMITIVE && ServiceHasDependents(service)) {
+		if(ServiceIsPrimitive(service) && ServiceHasDependents(service)) {
 			hasDependentOperator = true;
 			break;
 		}
@@ -157,7 +165,15 @@ void CheckRelationTable(RelationTable * table)
 
 byte RelationTableAddTuple(RelationTable * table, Atom const tuple[], uint8 idPosition)
 {
-	byte result = table->provider->addTuple(table->storage, tuple, idPosition);
+	// Permute tuple to the provider's order
+	Atom providerTuple[table->nColumns];
+	for(index8 i = 0; i < table->nColumns; i++)
+		providerTuple[i] = tuple[table->indexColumns[i]];
+	index8 providerIdPositon = idPosition ? table->indexColumns[idPosition - 1] + 1 : 0;
+
+	byte result = table->provider->addTuple(table->storage, providerTuple, providerIdPositon);
+
+	// Acquire atoms
 	if(result == TUPLE_ADDED) {
 		for(index8 i = 0; i < table->nColumns; i++) {
 			if(i + 1 != idPosition)
@@ -176,7 +192,15 @@ size32 RelationTableNRows(RelationTable const * table)
 
 byte RelationTableRemoveTuple(RelationTable * table, Atom const tuple[], uint8 idPosition)
 {
-	byte result = table->provider->removeTuple(table->storage, tuple, idPosition);
+	// Permute tuple to the provider's order
+	Atom providerTuple[table->nColumns];
+	for(index8 i = 0; i < table->nColumns; i++)
+		providerTuple[i] = tuple[table->indexColumns[i]];
+	index8 providerIdPositon = idPosition ? table->indexColumns[idPosition - 1] + 1 : 0;
+
+	byte result = table->provider->removeTuple(table->storage, providerTuple, providerIdPositon);
+
+	// Release atoms
 	if(result == TUPLE_REMOVED) {
 		for(index32 i = 0; i < table->nColumns; i++) {
 			if((i + 1) != idPosition)

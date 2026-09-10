@@ -5,6 +5,7 @@
 #include "btree/btree.h"
 #include "kernel/operator.h"
 #include "kernel/Parameter.h"
+#include "library/MachineService.h"
 #include "storage/StorageProvider.h"
 #include "storage/RelationBTree.h"
 #include "memory/allocator.h"
@@ -34,15 +35,13 @@ static size32 btreeTupleNBytes(size8 nAtoms)
 
 
 static BTreeTuple * createBTreeTuple(
-	size8 nColumns, uint8 idPosition, index8 nAtomsPresent, Atom const atoms[], index8 const indexColumns[])
+	size8 nColumns, uint8 idPosition, index8 nAtomsPresent, Atom const atoms[])
 {
 	BTreeTuple * btreeTuple = Allocate(btreeTupleNBytes(nColumns));
 	btreeTuple->nAtoms = nColumns;
 	btreeTuple->idPosition = idPosition;
 	btreeTuple->nAtomsPresent = nAtomsPresent;
-	// Store atoms in index column order
-	for(index8 i = 0; i < nColumns; i++)
-		btreeTuple->atoms[i] = atoms[indexColumns[i]];
+	TupleCopy(atoms, btreeTuple->atoms, nColumns);
 	return btreeTuple;
 }
 
@@ -72,12 +71,10 @@ static int8 btreeCompareItems(void const * item, void const * itemOrKey, size32 
 }
 
 
-RelationBTree * CreateRelationBTree(size8 nColumns, index8 const indexColumns[])
+RelationBTree * CreateRelationBTree(size8 nColumns)
 {
 	RelationBTree * relation = Allocate(sizeof(RelationBTree));
 	relation->nColumns = nColumns;
-	relation->indexColumns = Allocate(nColumns);
-	CopyMemory(indexColumns, relation->indexColumns, nColumns);
 	relation->btree = BTreeCreate(btreeTupleNBytes(nColumns), btreeCompareItems, 0);
 	return relation;
 }
@@ -91,7 +88,6 @@ size32 RelationBTreeNRows(RelationBTree const * relation)
 
 void FreeRelationBTree(RelationBTree const * relation)
 {
-	Free(relation->indexColumns);
 	BTreeFree(relation->btree);
 	Free(relation);
 }
@@ -102,7 +98,7 @@ byte RelationBTreeAddTuple(RelationBTree * relation, Atom const tuple[], uint8 i
 	// NOTE: if we are to query for tuples based on idPosition, it must be the leading column
 	
 	BTreeTuple * btreeTuple = createBTreeTuple(
-		relation->nColumns, idPosition, relation->nColumns, tuple, relation->indexColumns);
+		relation->nColumns, idPosition, relation->nColumns, tuple);
 	byte result = BTreeInsert(relation->btree, btreeTuple);
 	Free(btreeTuple);
 	return result;
@@ -118,7 +114,7 @@ byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint
 
 	// retrieve the stored tuple to inspect its idPosition
 	BTreeTuple * queryTuple = createBTreeTuple(
-		relation->nColumns, 0, relation->nColumns, tuple, relation->indexColumns);
+		relation->nColumns, 0, relation->nColumns, tuple);
 	BTreeTuple * btreeTuple = BTreePeekItem(relation->btree, queryTuple);
 	Free(queryTuple);
 	if(!btreeTuple)
@@ -157,8 +153,7 @@ void RelationBTreeIterate(
 {
 	iterator->relation = relation;
 	if(queryTuple) {
-		iterator->queryTuple = createBTreeTuple(
-			relation->nColumns, 0, nInputs, queryTuple, relation->indexColumns);
+		iterator->queryTuple = createBTreeTuple(relation->nColumns, 0, nInputs, queryTuple);
 	}
 	else
 		iterator->queryTuple = 0;
@@ -197,8 +192,7 @@ Atom RelationBTreeIteratorGetAtom(RelationBTreeIterator const * iterator, index8
 void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, Atom tuple[])
 {
 	BTreeTuple const * btreeTuple = BTreeIteratorPeekItem(&(iterator->treeIterator));
-	for(index8 i = 0; i < iterator->relation->nColumns; i++)
-		tuple[iterator->relation->indexColumns[i]] = btreeTuple->atoms[i];
+	TupleCopy(btreeTuple->atoms, tuple, iterator->relation->nColumns);
 }
 
 
@@ -214,81 +208,85 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator)
 //--------------------------- MachineOperatorProvider interface ---------------------------------
 
 
-// Could not fit this in the 8-byte Operator.impl.machine.providerData field :-/
 typedef struct s_RelationBTreeOperatorData {
 	void * storage;
 	index8 nInputs;
 } RelationBTreeOperatorData;
 
 
-static void btreeSetupContext(OperatorContext * context)
+static void btreeSetupState(void * state, Atom arguments[], void * operatorData)
 {
-	RelationBTreeOperatorData * operatorData = context->op->impl.machine.providerData;
+	RelationBTreeOperatorData * bTreeOperatorData = operatorData;
 	// Initialize the RelationBTreeIterator, allocated by OperatorCreateContext()
-	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
+	RelationBTreeIterator * iterator = state;
 	RelationBTreeIterate(
-		operatorData->storage, context->arguments, operatorData->nInputs, iterator);
+		bTreeOperatorData->storage, arguments, bTreeOperatorData->nInputs, iterator);
 }
 
 
-static bool btreeCall(OperatorContext * context)
+static bool btreeCall(void * state, Atom arguments[], void * operatorData)
 {
-	RelationBTreeIterator * iterator = (RelationBTreeIterator *) &context->data;
+	RelationBTreeIterator * iterator = state;
 	bool hasTuple = RelationBTreeIteratorNext(iterator);
 	if(hasTuple)
-		RelationBTreeIteratorGetTuple(iterator, context->arguments);
+		RelationBTreeIteratorGetTuple(iterator, arguments);
 	return hasTuple;
 }
 
 
-static void btreeFinalizeContext(OperatorContext * context)
+static void btreeFinalizeState(void * state, void * operatorData)
 {
-	RelationBTreeIterator * iterator = (RelationBTreeIterator *) context->data;
+	RelationBTreeIterator * iterator = state;
 	RelationBTreeIteratorEnd(iterator);
 }
 
 
-static void finalizeBTreeOperator(Operator * op)
+static void finalizeBTreeOperator(void * operatorData)
 {
-	RelationBTreeOperatorData * operatorData = op->impl.machine.providerData;
 	Free(operatorData);
 }
-
-
-MachineOperatorProvider bTreeOperatorProvider = {
-	.setupContext = &btreeSetupContext,
-	.call = &btreeCall,
-	.finalizeContext = &btreeFinalizeContext,
-	.finalizeOperator = &finalizeBTreeOperator
-};
 
 
 //--------------------------------------- StorageProvider interface ---------------------------------
 
 
-static void * btreeCreateStorage(
-	index8 const * indexColumns, size8 nColumns, void * table, CreateServiceCallback callback)
+static uint32 btreeProviderID = 0;
+
+
+static void * btreeCreateStorage(size8 nColumns, void * table, CreateServiceCallback callback)
 {
+	// Request a provider ID on first call
+	if(!btreeProviderID)
+		btreeProviderID = RequestProviderID();
+	
 	// the storage is a RelationBTree struct
-	RelationBTree * relationBTree = CreateRelationBTree(nColumns, indexColumns);
-	// We will have one operator for each prefix key
+	RelationBTree * relationBTree = CreateRelationBTree(nColumns);
+
+	// We will create one operator for each prefix key
 	for(index8 nInputs = 0; nInputs <= nColumns; nInputs++) {
 		byte parameterIO[nColumns];
 		for(index8 i = 0; i < nColumns; i++) {
 			if(i < nInputs)
-				parameterIO[relationBTree->indexColumns[i]] = PARAMETER_IN;
+				parameterIO[i] = PARAMETER_IN;
 			else
-				parameterIO[relationBTree->indexColumns[i]] = PARAMETER_OUT;
+				parameterIO[i] = PARAMETER_OUT;
 		}
 		RelationBTreeOperatorData * operatorData = Allocate(sizeof(RelationBTreeOperatorData));
 		operatorData->storage = relationBTree;
 		operatorData->nInputs = nInputs;
+
+		MachineOperatorSpec bTreeOperatorSpec = {
+			.providerID = btreeProviderID,
+			.stateSize = sizeof(RelationBTreeIterator),
+			.operatorData = operatorData,
+			.setupState = &btreeSetupState,
+			.call = &btreeCall,
+			.finalizeState = &btreeFinalizeState,
+			.finalizeOperator = &finalizeBTreeOperator
+		};
 		// Let RelationTable create the operator and register the service.
 		// The operator context data holds a RelationBTreeIterator.
-		callback(
-			table, &bTreeOperatorProvider, operatorData,
-			sizeof(RelationBTreeIterator), CreateIOSignature(parameterIO, nColumns)
-		);
+		callback(table, bTreeOperatorSpec, CreateIOSignature(parameterIO, nColumns));
 	}
 	return relationBTree;
 }

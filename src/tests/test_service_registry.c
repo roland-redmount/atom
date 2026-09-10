@@ -7,6 +7,7 @@
 #include "kernel/ServiceRegistry.h"
 #include "lang/formula.h"
 #include "library/library.h"
+#include "library/MachineService.h"
 #include "library/string.h"
 #include "parser/TermBuilder.h"
 #include "storage/RelationBTree.h"
@@ -42,13 +43,8 @@ static void setupFixture(void)
 }
 
 
-// A machine operator has to be given a provider, though nothing here evaluates one
-static MachineOperatorProvider dummyProvider = {
-	.setupContext = 0,
-	.call = 0,
-	.finalizeContext = 0,
-	.finalizeOperator = 0
-};
+static uint32 providerID;		// for creating machine operators 
+
 
 /**
  * Create a dummy MACHINE operator of arity EXAMPLE_FORM_ARITY.
@@ -57,7 +53,9 @@ static MachineOperatorProvider dummyProvider = {
 static Operator * createDummyMachineOperator(void)
 {
 	return CreateMachineOperator(
-		EXAMPLE_FORM_ARITY, (index8[]) {0, 1, 2, 3}, &dummyProvider, 0, 0);
+		EXAMPLE_FORM_ARITY, (index8[]) {0, 1, 2, 3},
+		(MachineOperatorSpec) {.providerID = providerID}
+	);
 }
 
 
@@ -69,7 +67,7 @@ static Service createPermuteService(Relation relation, Operator * childOperator)
 {
 	Operator * op = CreatePermuteOperator(
 		EXAMPLE_FORM_ARITY, 0, 0, 0, (index8[]) {0, 1, 2, 3}, childOperator);
-	return CreateService(relation, exampleIOSignature, op, SERVICE_COMPILED);
+	return CreateService(relation, exampleIOSignature, op);
 }
 
 
@@ -85,7 +83,7 @@ void testAddRemoveService(void)
 
 	// Add a dummy service to the relation
 	Operator * op = createDummyMachineOperator();
-	CreateService(fixture.relation, exampleIOSignature, op, SERVICE_PRIMITIVE);
+	CreateService(fixture.relation, exampleIOSignature, op);
 	ASSERT_TRUE(SameRelations(op->relation, fixture.relation))
 
 	ASSERT_PTR_EQUAL(
@@ -109,7 +107,7 @@ void testInvalidateDependentServices(void)
 
 	// Create dummy machine service
 	Operator * machineOperator = createDummyMachineOperator();
-	CreateService(fixture.relation, exampleIOSignature, machineOperator, SERVICE_PRIMITIVE);
+	CreateService(fixture.relation, exampleIOSignature, machineOperator);
 
 	// Hand-build a "compiled" service that depends on the machine service
 	TypeSignature typeSignature1 = CreateTypeSignature(
@@ -154,7 +152,7 @@ void testInvalidateOnPrimitiveService(void)
 
 	// Register a dummy machine service
 	Operator * machineOperator = createDummyMachineOperator();
-	CreateService(fixture.relation, exampleIOSignature, machineOperator, SERVICE_PRIMITIVE);
+	CreateService(fixture.relation, exampleIOSignature, machineOperator);
 
 	// Create a "compiled" Service depending on the machine service
 	TypeSignature compiledTypes = CreateTypeSignature(
@@ -187,6 +185,8 @@ int main(void)
 	KernelInitialize(PERSISTENT_MEMORY);
 	LoadLibraries();
 	initialNServices = NumberOfServices();
+
+	providerID = RequestProviderID();
 
 	ExecuteTest(testAddRemoveService);
 	ExecuteTest(testInvalidateDependentServices);

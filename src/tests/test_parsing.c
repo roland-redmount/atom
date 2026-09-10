@@ -351,7 +351,7 @@ static void testCStringToPredicate(void)
 static void testCStringToClause(void)
 {
 	// NOTE: this string must be in canonical order
-	Atom clause = CStringToClause("aarf \"foobar\" | foo x bar 123.45");
+	Atom clause = CStringToClause("foo x bar 123.45 | aarf \"foobar\" ");
 	// PrintFormula(clause);
 	// PrintChar('\n');
 
@@ -361,28 +361,25 @@ static void testCStringToClause(void)
 	Atom string = CreateStringFromCString("foobar");
 	ASSERT_TRUE(
 		SameTypedAtoms(
-			TypedTupleGetElement(FormulaGetActors(clause), 0),
+			TypedTupleGetElement(FormulaGetActors(clause), 2),
 			CreateTypedAtom(AT_ID, string)
 		)
 	)
 	IFactRelease(string);
 	ASSERT_TRUE(
 		SameTypedAtoms(
-			TypedTupleGetElement(FormulaGetActors(clause), 1),
+			TypedTupleGetElement(FormulaGetActors(clause), 0),
 			CreateTypedAtom(AT_VARIABLE, CreateVariable('x'))
 		)
 	)
 	ASSERT_TRUE(
 		SameTypedAtoms(
-			TypedTupleGetElement(FormulaGetActors(clause), 2),
+			TypedTupleGetElement(FormulaGetActors(clause), 1),
 			CreateTypedAtom(AT_FLOAT, (Atom) {._float = 123.45})
 		)
 	)
 
 	ReleaseFormula(clause);
-
-	// TODO: more complex test cases, and conjunctions, e.g.
-	// foo 42 bar 3.4 | !string "baaz" & + 2 + 2 = 4 & foobar _x | foobar _y & + 3 + 4 = 8
 }
 
 

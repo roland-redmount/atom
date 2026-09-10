@@ -7,41 +7,53 @@
 typedef struct s_Operator Operator;
 typedef struct s_OperatorContext OperatorContext;
 
+typedef struct s_MachineOperatorContext {
+	bool isExhausted;						// required for stateless services
+	Atom arguments[RELATION_MAX_ARITY];		// in the provider order	
+	byte state[];							// state size specified with CreateMachineOperator()
+} MachineOperatorContext;
+
 /**
- * A MachineOperatorProvider is an implementation of a particular type of machine
- * operator, such as B-Tree relations or arithmetic functions.
- * One MachineOperatorProvider can provide the machine operators of several relations.
+ * This struct contains the data and functions needed to specify a machine operator.
  */
-typedef struct s_MachineOperatorProvider {
+typedef struct s_MachineOperatorSpec
+{
+	uint32 providerID;
+	void * operatorData;
+	size32 stateSize;
+
 	/**
-	 * Initialize the context data, such as an iterator structure.
-	 * This pointer may be 0 if the zeroed context data needs no initialization.
+	 * Initialize the machine operator's state data, such as an iterator structure.
+	 * This pointer may be 0 if the state needs no initialization.
+	 * The state data is always cleared before calling this function.
+	 * The operatorData pointer is the one given to CreateMachineOperator().
+	 * The arguments are given in provider order.
 	 */
-	void (*setupContext)(OperatorContext * context);
+	void (*setupState)(void * state, Atom arguments[], void * operatorData);
 
 	/**
 	 * Call (resume) an executing operator, return true if a tuple was produced,
-	 * false if evaluation terminated. The call() function must write to the 
-	 * arguments tuple, so the context must keep a pointer to this tuple.
-	 * If the various operators provided need different entry points, this function
-	 * is responsible for calling the relevant one.
+	 * false if evaluation terminated. The call() function must write its results
+	 * to the arguments tuple. The arguments are given in provider order.
+	 * For an operator with no state, call() is only invoked once
+	 * An operator with state is can be called repeatedly, until it returns false.
 	 */
-	bool (*call)(OperatorContext * context);
+	bool (*call)(void * state, Atom arguments[], void * operatorData);
 
 	/**
-	 * Finalize an operator context after termination.
+	 * Finalize the machine operator's state data.
 	 * This pointer may be 0 if no finalization is required.
 	 */
-	void (*finalizeContext)(OperatorContext * context);
+	void (*finalizeState)(void * state, void * operatorData);
 
 	/**
 	 * Finalize the machine operator (deallocate data structures, &c), called once when
 	 * the last reference to the operator is released.
 	 * This pointer may be 0 if no finalization is required.
 	 */
-	void (*finalizeOperator)(Operator * op);
+	void (*finalizeOperator)(void * operatorData);
 
-} MachineOperatorProvider;
+} MachineOperatorSpec;
 
 
 /**
@@ -68,15 +80,6 @@ typedef struct s_MachineOperatorProvider {
  * implements the machine provider to produce correctly ordered relations. In DEBUG
  * builds, OperatorCall() verifies the ascent of every operator, which catches a
  * violation at the operator that committed it.
- *
- * An operator yielding at most one tuple satisfies the contract under every index
- * order, and so has no order worth declaring: in this case indexOrder should be set to 0
- * rather than picking an arbitrary order. This matters because an arbitrary choice would
- * propagate through the operators above and be mistaken for a real constraint, so that two
- * relations orderable alike could appear not to be. An operator deriving its order
- * from a child with indexOrder == 0 uses the natural ordering, unless it too yields at
- * most one tuple. DEBUG builds verify the indexOrder == 0 claim by asserting that at most
- * one tuple is produced.
  */
 
 /**
@@ -212,8 +215,7 @@ struct s_Operator {
 	// Number of arguments for this operator
 	size8 nArguments;
 	// Permutation of the argument indices giving the order in which this operator
-	// yields its tuples; see the ordering contract above. Length nArguments,
-	// or null if this operator yields at most one tuple and so declares no order.
+	// yields its tuples; see the ordering contract above.
 	index8 * indexOrder;
 	// Context size, in addition to sizeof(Context)
 	size32 contextSize;
@@ -288,8 +290,7 @@ struct s_Operator {
 		} filter;
 		// for OPERATOR_MACHINE
 		struct {
-			MachineOperatorProvider * provider;
-			void * providerData;
+			MachineOperatorSpec spec;
 		} machine;
 	} impl;
 };
@@ -319,13 +320,12 @@ Operator * CreatePermuteOperator(
 /**
  * Create a machine code operator. The indexOrder array has length nArguments and gives
  * the order in which the provider yields its tuples; see the ordering contract above.
- * A provider yielding at most one tuple declares no order and passes 0.
- * The context size is the size of the context data allocated by OperatorCreateContext().
+ * stateSize is the size in bytes of the state data provided to MachineOperatorProvider.call().
+ * An operator with stateSize == 0 is assumed to be stateless, and will be called only
+ * once.
  * The returned operator has zero references.
  */
-Operator * CreateMachineOperator(
-	size8 nArguments, index8 const indexOrder[], MachineOperatorProvider * provider,
-	void * providerData, size32 contextSize);
+Operator * CreateMachineOperator(size8 nArguments, index8 const indexOrder[], MachineOperatorSpec spec);
 
 /**
  * Setup a JOIN operator with the specified number of arguments, from two existing
@@ -503,6 +503,7 @@ struct s_OperatorContext {
 	// ordering contract; see OperatorCall(). Null until the first tuple is yielded.
 	Atom * previousTuple;
 #endif
+	// operator type-specific data
 	byte data[];
 };
 

@@ -123,8 +123,8 @@ typedef enum e_BTreeDeleteResult {
 
 /**
  * Delete an item that compares equal to the given key by compareItems(),
- * if any. The deleted item is copied to *item if item is not 0.
- * If the key matches multiple items, one arbitrary matching item is deleted.
+ * if any. The key must match at most one item.
+ * The deleted item is copied to *item if item is not 0.
  * Is is assumed the key is valid during the deletion process, so it must not
  * be a pointer to an item in the B-tree itself.
  */

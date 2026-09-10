@@ -7,10 +7,11 @@
 
 
 /**
- * Register the math services. FreeMachineServices() removes them;
- * see library/MachineService.h
+ * Register the math services.
  */
 void MathSetup(void);
+
+void MathShutdown(void);
 
 
 #endif	// MATH_H

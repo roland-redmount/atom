@@ -29,8 +29,7 @@ struct {
 
 static void setupFixture(void)
 {
-	index8 indexColumns[TEST_N_COLUMNS] = {0, 1, 2};
-	fixture.relation = CreateRelationBTree(TEST_N_COLUMNS, indexColumns);
+	fixture.relation = CreateRelationBTree(TEST_N_COLUMNS);
 
 	// C99 does not allow assigning array values
 	CopyMemory(

@@ -62,7 +62,6 @@ int main(int argc, char * argv[])
 		}
 	}
 
-	FreeMachineServices();
 	// The world a session built is not emptied again, and KernelShutdown() is not called:
 	// it requires every fact and rule above the core set to have been removed first, which
 	// is a thing to do for a test rather than for a session. Nothing here outlives the

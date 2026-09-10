@@ -44,7 +44,11 @@ typedef struct s_RelationTable {
 	size8 nColumns;
 
 	StorageProvider const * provider;
-	void * storage;			// implementation-dependent data, allocated by the StorageProvider
+
+	// Implementation-dependent data, allocated by the StorageProvider.
+	// NOTE: RelationTable knows nothing about this storage, just passes the pointer back
+	// when calling the storage provider's functions. But we must have one storage per relation table.
+	void * storage;
 
 	size32 referenceCount;
 } RelationTable;

@@ -4,12 +4,13 @@
 #include "kernel/letter.h"
 #include "kernel/operator.h"
 #include "kernel/kernel.h"
-#include "library/library.h"
-#include "library/list.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
 #include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
+#include "library/library.h"
+#include "library/list.h"
+#include "library/MachineService.h"
 #include "library/string.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
@@ -18,6 +19,9 @@
 #include "parser/PredicateBuilder.h"
 #include "testing/fixtures.h"
 #include "testing/testing.h"
+
+
+static uint32 providerID;		// for creating machine operators 
 
 
 void testMachineOperator(void)
@@ -481,28 +485,26 @@ void testIndexOrder(void)
 	for(index8 i = 0; i < 5; i++)
 		ASSERT_UINT32_EQUAL(joinOperator->indexOrder[i], expectedJoinOrder[i])
 
-	// An operator yielding at most one tuple has no index order
-	MachineOperatorProvider singleTupleProvider = {
-		.setupContext = 0,
-		.call = 0,
-		.finalizeContext = 0,
-		.finalizeOperator = 0
-	};
-	Operator * singleTupleOperator = CreateMachineOperator(2, 0, &singleTupleProvider, 0, 0);
-	ASSERT_NULL(singleTupleOperator->indexOrder)
+	// A MACHINE operator declares the order its provider yields tuples in
+	Operator * machineOperator = CreateMachineOperator(
+		2, (index8[]) {1, 0},
+		(MachineOperatorSpec) { .providerID = providerID }
+	);
+	ASSERT_UINT32_EQUAL(machineOperator->indexOrder[0], 1)
+	ASSERT_UINT32_EQUAL(machineOperator->indexOrder[1], 0)
 
-	// A PERMUTE of an operator with no index order does not have an index order either
-	Operator * singleTuplePermute = CreatePermuteOperator(
-		2, 0, 0, 0, (index8[]) {1, 0}, singleTupleOperator);
-	ASSERT_NULL(singleTuplePermute->indexOrder)
+	// A PERMUTE swapping the two arguments relabels that order to the identity order
+	Operator * swappedOperator = CreatePermuteOperator(
+		2, 0, 0, 0, (index8[]) {1, 0}, machineOperator);
+	ASSERT_UINT32_EQUAL(swappedOperator->indexOrder[0], 0)
+	ASSERT_UINT32_EQUAL(swappedOperator->indexOrder[1], 1)
 
-	// Such an operator is ordered alike with any other, so a union takes the order
-	// of its sibling whichever side it is on
-	Operator * unionOperator = CreateUnionOperator(projectOperator, singleTuplePermute);
+	// A UNION merges two relations ordered alike, and yields tuples in that same order
+	Operator * unionOperator = CreateUnionOperator(projectOperator, swappedOperator);
 	ASSERT_UINT32_EQUAL(unionOperator->indexOrder[0], 0)
 	ASSERT_UINT32_EQUAL(unionOperator->indexOrder[1], 1)
 
-	Operator * reversedUnionOperator = CreateUnionOperator(singleTuplePermute, projectOperator);
+	Operator * reversedUnionOperator = CreateUnionOperator(swappedOperator, projectOperator);
 	ASSERT_UINT32_EQUAL(reversedUnionOperator->indexOrder[0], 0)
 	ASSERT_UINT32_EQUAL(reversedUnionOperator->indexOrder[1], 1)
 
@@ -684,6 +686,8 @@ int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
 	LoadLibraries();
+
+	providerID = RequestProviderID();
 
 	ExecuteTest(testMachineOperator);
 	ExecuteTest(testPermuteOperator);
