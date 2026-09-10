@@ -15,30 +15,38 @@
 #include "util/ResizingArray.h"
 
 /**
- * Test whether the given term interpreted as a fact contradicts the current knowledgebase,
- * that is, whether the negation of the term is entailed by the knowledgebase.
- * The actors tuple cannot contain a variable. Returns true if there is a contradiction.
+ * Test whether the given fact is entailed by the knowledgebase.
+ * The actors tuple cannot contain a variable.
  */
-static bool checkContradiction(FormulaView fact)
+static bool factExists(FormulaView fact)
 {
-	// Run a query for the negated term.
-	Atom negatedTermForm = CreateTermForm(
-		TermFormGetPredicateForm(fact.form), !TermFormGetSign(fact.form));
-	Atom negatedTerm = CreateFormula(negatedTermForm, fact.actors);
-
-	MixedTypeRelation * negatedRelation = UserQuery(negatedTerm);
+	MixedTypeRelation * negatedRelation = UserQuery(fact);
 	bool foundTuple = MixedTypeRelationNext(negatedRelation);
 #ifdef DEBUG
 	if(foundTuple) {
 		// There was a matching tuple.  Since no actor is a variable,
-		// there can be at most one maching tuple, which is the negated term itself.
+		// there can be at most one maching tuple, which is the term itself.
 		TypedTuple const * negatedTuple = MixedTypeRelationPeekTuple(negatedRelation);
 		ASSERT(TypedTupleEqual(negatedTuple, fact.actors))
 		ASSERT(!MixedTypeRelationNext(negatedRelation))
 	}
 #endif
 	FreeMixedTypeRelation(negatedRelation);
-	ReleaseFormula(negatedTerm);
+	return foundTuple;
+}
+
+
+/**
+ * Test whether the negation of the given fact is entailed by the knowledgebase.
+ * If so, introducing the fact would cause a contradiction.
+ * The actors tuple cannot contain a variable.
+ */
+static bool negatedFactExists(FormulaView fact)
+{
+	// Run a query for the negated term.
+	Atom negatedTermForm = CreateTermForm(
+		TermFormGetPredicateForm(fact.form), !TermFormGetSign(fact.form));
+	bool foundTuple = factExists((FormulaView) {.form = negatedTermForm, .actors = fact.actors});
 	IFactRelease(negatedTermForm);
 	return foundTuple;
 }
@@ -50,31 +58,22 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 	ASSERT(!TypedTupleContainsVariable(fact.actors));
 	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
 
-	if(checkContradiction(fact))
+	if(factExists(fact))
+		return ASSERT_EXISTED;
+	if(negatedFactExists(fact))
 		return ASSERT_FAIL;
 
 	// find existing relation table, or create new
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
 	Relation relation = CreateRelation(fact.form, typeSignature);
-	RelationTable * table = FindRelationTable(relation);
-	bool tableWasCreated = false;
-	if(!table) {
-		table = CreateRelationTable(
-			relation, provider ? provider : &btreeStorageProvider, 0);
-		tableWasCreated = true;
-	}
+	RelationTable * table = FindOrCreateRelationTable(relation, &btreeStorageProvider);
 	ReleaseRelation(relation);
-	// Attempt to add the tuple
-	if(RelationTableAddTuple(table, actorsArray, 0) == TUPLE_EXISTS) {
-		return ASSERT_EXISTED;
-	}
-	// Else a new tuple was added.
+	// Add the tuple
+	ASSERT(RelationTableAddTuple(table, actorsArray, 0) == TUPLE_ADDED)
 	LookupAddPredicateRoles(relation, actorsArray);
-	// If we created the table above, we drop our reference to it,
-	// so that it is deallocated when all tuples are removed.
-	if(tableWasCreated)
-		ReleaseRelationTable(table);
+
+	ReleaseRelationTable(table);
 	return ASSERT_OK;
 }
 
@@ -131,6 +130,12 @@ int AssertFormula(Atom formula)
 
 void RetractFact(FormulaView fact)
 {
+	// If the fact does not exist, there is nothing to do.
+	// TODO: if the fact is produced by a compiled service and the relation
+	// also has a RelationTable that does not contain the fact, this won't work.
+	if(!factExists(fact))
+		return;
+
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
 	Relation relation = {.termForm = fact.form, .typeSignature = typeSignature};

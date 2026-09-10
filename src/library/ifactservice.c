@@ -9,7 +9,7 @@
  */
 static bool idIFactCall(void * state, Atom arguments[], void * operatorData)
 {
-	FormulaView formulaView = FormulaGetView(arguments[1]);
+	// FormulaView formulaView = FormulaGetView(arguments[1]);
 	Atom id = {0};
 
 	/* TODO: this does not work, since CreateIFact() asserts facts,

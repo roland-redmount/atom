@@ -65,6 +65,21 @@ void testAssertRetract(void)
 
 
 /**
+ * Test asserting a fact that is already produced by a service
+ */
+void testAssertOverlapsService(void)
+{
+	// This fact is already provided by the (+ + =) service
+	Atom knownFact = CStringToTerm("+ 1 + 1 = 2");
+
+	// Asserting the fact does nothing.
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(knownFact), 0), ASSERT_EXISTED)
+	
+	ReleaseFormula(knownFact);
+}
+
+
+/**
  * A fact contradicts the knowledge base when its negation is a tuple of a stored
  * relation, and is refused. Asserting the negation of a stored fact is symmetric,
  * so it does not matter which of the two is asserted first.
@@ -531,6 +546,7 @@ int main(int argc, char * argv[])
 	LoadLibraries();
 
 	ExecuteTest(testAssertRetract);
+	ExecuteTest(testAssertOverlapsService);
 	ExecuteTest(testAssertContradictsStoredFact);
 	ExecuteTest(testAssertContradictsDerivedFact);
 	ExecuteTest(testAssertFormulaFact);

@@ -4,9 +4,8 @@
 #include "ui/query.h"
 
 
-MixedTypeRelation * UserQuery(Atom queryTerm)
+MixedTypeRelation * UserQuery(FormulaView query)
 {
-	FormulaView query = FormulaGetView(queryTerm);
 	ASSERT(IsTermForm(query.form))
 
 	// Compile the query unless a service answers it already; see FindOrCompileService()

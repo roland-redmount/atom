@@ -28,7 +28,7 @@
  * a change to the facts or the rules could alter what it yields, so that the next query
  * parameterizing the same way compiles it anew; see ServiceRegistryInvalidateTermForm().
  */
-MixedTypeRelation * UserQuery(Atom queryTerm);
+MixedTypeRelation * UserQuery(FormulaView query);
 
 
 #endif	// QUERY_H
