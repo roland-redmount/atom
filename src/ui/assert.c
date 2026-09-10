@@ -130,6 +130,12 @@ int AssertFormula(Atom formula)
 
 void RetractFact(FormulaView fact)
 {
+	// If the fact does not exist, there is nothing to do.
+	// TODO: if the fact is produced by a compiled service and the relation
+	// also has a RelationTable that does not contain the fact, this won't work.
+	if(!factExists(fact))
+		return;
+
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
 	Relation relation = {.termForm = fact.form, .typeSignature = typeSignature};

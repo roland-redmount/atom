@@ -57,6 +57,7 @@ static void printHelp(void)
 	printLine("                      and contain at least one variable.");
 	printLine("  :inspect <term>     Print the services the term dispatches to, without");
 	printLine("                      asking it.");
+	printLine("  :retract <term>     Retract a fact. The term must not contain variables.");
 	printLine("  :help               Print this text.");
 	printLine("  :quit, ctrl-D       End the session.");
 	PrintChar('\n');
@@ -203,6 +204,37 @@ static void executeAssert(char const * formulaText, index32 linePosition)
 
 
 /*
+ * CLAUDE: Retract one fact, which is the text following the :retract command. Only a term
+ * with no variable is a fact; see RetractFact().
+ */
+static void executeRetract(char const * factText, index32 linePosition)
+{
+	if(!*factText) {
+		printLine(":retract requires a term.");
+		return;
+	}
+
+	index32 errorPosition;
+	Atom fact = ParseFormula(factText, &errorPosition);
+	if(!fact.hash) {
+		printParseError(linePosition + errorPosition);
+		return;
+	}
+
+	FormulaView factView = FormulaGetView(fact);
+	if(!IsTermForm(factView.form))
+		printLine("Only a fact can be retracted.");
+	else if(TypedTupleContainsVariable(factView.actors))
+		printLine("A fact may not contain a variable.");
+	else {
+		RetractFact(factView);
+		printLine("Ok.");
+	}
+	ReleaseFormula(fact);
+}
+
+
+/*
  * CLAUDE: Print the services one query dispatches to, which is the text following the :inspect
  * command. The query is not asked, and no service is compiled for it, so a query no
  * service answers yet lists nothing. See dispatch.h.
@@ -300,6 +332,12 @@ static int executeCommand(char const * line, char const * commandText)
 	char const * queryText = matchCommand(commandText, ":inspect");
 	if(queryText) {
 		executeInspect(queryText, queryText - line);
+		return SESSION_CONTINUE;
+	}
+
+	char const * retractText = matchCommand(commandText, ":retract");
+	if(retractText) {
+		executeRetract(retractText, retractText - line);
 		return SESSION_CONTINUE;
 	}
 
