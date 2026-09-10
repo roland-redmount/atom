@@ -9,7 +9,7 @@
 void testCallIFactService(void)
 {
 	Atom query = CStringToTerm("id x ifact [named * name \"foo\"]");
-	MixedTypeRelation * relation = UserQuery(query);
+	MixedTypeRelation * relation = UserQuery(FormulaGetView(query));
 	size32 nTuples = 0;
 	while(MixedTypeRelationNext(relation))
 		nTuples++;

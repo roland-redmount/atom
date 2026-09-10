@@ -24,7 +24,7 @@ static RelationFixture precSuccFixture;
 static size32 runQueryAndCountTuples(char const * queryString)
 {
 	Atom query = CStringToTerm(queryString);
-	MixedTypeRelation * relation = UserQuery(query);
+	MixedTypeRelation * relation = UserQuery(FormulaGetView(query));
 	size32 nTuples = 0;
 	while(MixedTypeRelationNext(relation))
 		nTuples++;

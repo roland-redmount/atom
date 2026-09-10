@@ -95,19 +95,18 @@ static void executeQuery(char const * line)
 		printParseError(errorPosition);
 		return;
 	}
-
-	Atom form = FormulaGetForm(query);
-	if(!IsTermForm(form)) {
+	FormulaView queryView = FormulaGetView(query);
+	if(!IsTermForm(queryView.form)) {
 		printLine("A query must be a single term.");
 		ReleaseFormula(query);
 		return;
 	}
 
-	MixedTypeRelation * resultRelations = UserQuery(query);
+	MixedTypeRelation * resultRelations = UserQuery(queryView);
 	size32 nTuples = 0;
 	while(MixedTypeRelationNext(resultRelations)) {
 		SessionPrintMargin();
-		PrintFormActorsAsFormula(form, MixedTypeRelationPeekTuple(resultRelations));
+		PrintFormActorsAsFormula(queryView.form, MixedTypeRelationPeekTuple(resultRelations));
 		PrintChar('\n');
 		nTuples++;
 	}
