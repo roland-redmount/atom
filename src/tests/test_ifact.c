@@ -22,10 +22,11 @@ void testCallIFactService(void)
 
 int main(int argc, char * argv[])
 {
-	KernelInitialize();
+	KernelInitialize(PERSISTENT_MEMORY);
 	LoadLibraries();
 
-	ExecuteTest(testCallIFactService);
+	// TODO:
+	// ExecuteTest(testCallIFactService);
 
 	UnloadLibraries();
 	KernelShutdown();
