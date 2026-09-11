@@ -42,6 +42,34 @@ void ActorsToParameters(TypedTuple const * actors, Atom parameters[])
 }
 
 
+bool SameParameterSignature(TypedTuple const * first, TypedTuple const * second)
+{
+	ASSERT(first->nAtoms == second->nAtoms)
+	for(index8 i = 0; i < first->nAtoms; i++) {
+		TypedAtom a = TypedTupleGetElement(first, i);
+		TypedAtom b = TypedTupleGetElement(second, i);
+		ASSERT((a.type == AT_PARAMETER) && (b.type == AT_PARAMETER))
+		if(a.atom.parameter.atomType != b.atom.parameter.atomType)
+			return false;
+		if(a.atom.parameter.io != b.atom.parameter.io)
+			return false;
+	}
+	return true;
+}
+
+
+size8 FindInputArguments(IOSignature ioSignature, size8 arity, index8 inputArguments[])
+{
+	ASSERT(arity <= RELATION_MAX_ARITY)
+	size8 nInputs = 0;
+	for(index8 i = 0; i < arity; i++) {
+		if(ioSignature.parameterIO[i] == PARAMETER_IN)
+			inputArguments[nInputs++] = i;
+	}
+	return nInputs;
+}
+
+
 void PrintParameter(Atom atom)
 {
 	PrintF("@%u", atom.parameter.number);

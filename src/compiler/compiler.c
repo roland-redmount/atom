@@ -12,7 +12,6 @@
 #include "compiler/compiledvariant.h"
 #include "compiler/compiler.h"
 #include "compiler/compilestack.h"
-#include "compiler/compileutil.h"
 #include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
 #include "kernel/kernel.h"
@@ -31,9 +30,10 @@
 
 
 /**
- * Prototypes for forward-referenced static function
+ * Prototype for a forward-referenced static function
  */
-static size8 compileParameterizedQuery(CompileStack * stack, FormulaView query, Service services[]);
+static size8 compileParameterizedQuery(
+	CompileStack * compileStack, FormulaView query, Service services[]);
 
 
 
@@ -453,22 +453,6 @@ static void propagateTermParameterTypes(
 
 
 /**
- * Find the indices of the input parameters in the IO signature
- * and write into the inputArguments array. Returns the number of inputs found.
- */
-static size8 findInputArguments(
-	IOSignature ioSignature, size8 arity, index8 inputArguments[])
-{
-	size8 nInputs = 0;
-	for(index8 i = 0; i < arity; i++) {
-		if(ioSignature.parameterIO[i] == PARAMETER_IN)
-			inputArguments[nInputs++] = i;
-	}
-	return nInputs;
-}
-
-
-/**
  * Compile a recursive term to a RECURSE operator.
  * The operator enumerates the tuples derived so far by the FIXPOINT
  * operator that completeRecursiveVariant() puts above the clause.
@@ -515,8 +499,8 @@ static Operator * compileRecursiveTerm(
 	}
 
 	IOSignature ioSignature = CreateIOSignature(parameterIO, termArity);
-	index8 inputArguments[termArity];
-	size8 nInputs = findInputArguments(ioSignature, termArity, inputArguments);
+	index8 inputArguments[RELATION_MAX_ARITY];
+	size8 nInputs = FindInputArguments(ioSignature, termArity, inputArguments);
 	Operator * recurseOperator = CreateRecurseOperator(termArity, inputArguments, nInputs);
 
 	// The term reads the derived relation directly, so its arguments are the relation
@@ -947,6 +931,9 @@ typedef struct QueryClauseMatch {
 /**
  * Collect every clause form that the given query term form occurs in, appending one
  * QueryClauseMatch for each matched clause to the given array.
+ *
+ * To find rules (clauses) c that contains a matching term form,
+ * we query (multiset c element @term-form multiple m),
  */
 static void findMatchingClauseForms(Atom queryTermForm, ResizingArray * queryClauseMatches)
 {
@@ -1101,9 +1088,6 @@ static size8 compileQueryClauses(
 	CompileStack * compileStack, FormulaView query, CompiledVariant variants[])
 {
 	/**
-	 * To find rules (clauses) c that contains a matching term form,
-	 * we query (multiset c element @term-form multiple m),
-	 *
  	 * TODO: it might happen that a generated UNION service has the same
 	 * signature as an existing service, which becomes part of the UNION.
 	 * In this case, the newly generated service should replace the existing one.
@@ -1158,8 +1142,8 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
 	if(!variant->isRecursive)
 		return;
 
-	index8 inputArguments[arity];
-	size8 nInputs = findInputArguments(
+	index8 inputArguments[RELATION_MAX_ARITY];
+	size8 nInputs = FindInputArguments(
 		CompiledVariantGetIOSignature(variant), arity, inputArguments);
 
 	Operator * fixpointOperator = CreateFixpointOperator(
@@ -1244,7 +1228,8 @@ static size8 compileFilterVariants(
  * Attempt to compile a query into one or more services (variants).
  * Returns the number of variants written to the variants array.
  */
-static size8 compileQueryVariants(CompileStack * compileStack, FormulaView query, CompiledVariant variants[])
+static size8 compileQueryVariants(
+	CompileStack * compileStack, FormulaView query, CompiledVariant variants[])
 {
 	size8 queryTermArity = TermFormArity(query.form);
 	// Every matching clause compiles here, the recursive ones into the variants the
@@ -1276,7 +1261,8 @@ static size8 compileQueryVariants(CompileStack * compileStack, FormulaView query
  * Returns the number of services registered. If the is already being compiled,
  * this function does nothing and returns 0.
  */
-static size8 compileParameterizedQuery(CompileStack * compileStack, FormulaView query, Service services[])
+static size8 compileParameterizedQuery(
+	CompileStack * compileStack, FormulaView query, Service services[])
 {
 	ASSERT(IsTermForm(query.form))
 	// test if the query is on the compilation stack
@@ -1331,7 +1317,7 @@ static size8 compileParameterizedQuery(CompileStack * compileStack, FormulaView 
 		FreeTypedTuple(variants[i].parameters);
 	}
 	// pop the query from the compilation stack
-	compileStack->compileStackDepth--;
+	CompileStackRemove(compileStack);
 	return nVariants;
 }
 

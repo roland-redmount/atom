@@ -1,6 +1,5 @@
 
 #include "compiler/compiledvariant.h"
-#include "compiler/compileutil.h"
 
 
 TypeSignature CompiledVariantGetTypeSignature(CompiledVariant const * variant)
@@ -36,9 +35,6 @@ CompiledVariant * FindCompiledVariant(
 }
 
 
-/**
- * Set the relation (signature) for a CompiledVariant for the given query term form.
- */
 void CompiledVariantSetRelation(CompiledVariant * variant, Atom queryTermForm)
 {
 	// Check if relation is already set, so that we don't acquire double references

@@ -130,7 +130,6 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
 	src/compiler/compiledvariant.c
     src/compiler/compiler.c
 	src/compiler/compilestack.c
-	src/compiler/compileutil.c
 
     src/storage/RelationBTree.c
 

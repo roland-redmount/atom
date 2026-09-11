@@ -62,6 +62,19 @@ IOSignature CreateIOSignature(byte const parameterIO[], size8 nColumns);
  */
 void ActorsToParameters(TypedTuple const * actors, Atom parameters[]);
 
+/**
+ * Two parameter tuples denote the same service signature if they agree on
+ * the type and direction of every parameter; parameter numbers are ignored here.
+ */
+bool SameParameterSignature(TypedTuple const * first, TypedTuple const * second);
+
+/**
+ * Find the indices of the input parameters in the IO signature
+ * and write into the inputArguments array, which must hold RELATION_MAX_ARITY indices.
+ * Returns the number of inputs found.
+ */
+size8 FindInputArguments(IOSignature ioSignature, size8 arity, index8 inputArguments[]);
+
 void PrintParameter(Atom parameter);
 
 

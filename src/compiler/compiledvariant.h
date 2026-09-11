@@ -3,7 +3,7 @@
 
 #include "kernel/operator.h"
 #include "kernel/typedtuple.h"
-#include "kernel/ServiceRegistry.h"		// for IOSignature
+#include "kernel/Parameter.h"
 
 /**
  * A CompiledVariant is a compiled operator with its resolved query parameters (signature).
@@ -29,7 +29,7 @@ typedef struct s_CompiledVariant {
 TypeSignature CompiledVariantGetTypeSignature(CompiledVariant const * variant);
 
 /**
- * Extractthe IO signature of a compiled variant, from the resolved parameters.
+ * Extract the IO signature of a compiled variant, from the resolved parameters.
  */
 IOSignature CompiledVariantGetIOSignature(CompiledVariant const * variant);
 

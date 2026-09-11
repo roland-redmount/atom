@@ -1,20 +1,27 @@
 
 #include "compiler/compilestack.h"
-#include "compiler/compileutil.h"
+#include "kernel/Parameter.h"
 
 
 void CompileStackAdd(CompileStack * stack, FormulaView term)
 {
-	ASSERT(stack->compileStackDepth < MAX_COMPILE_STACK_DEPTH)
-	stack->compilationStack[stack->compileStackDepth++] = term;
+	ASSERT(stack->depth < MAX_COMPILE_STACK_DEPTH)
+	stack->terms[stack->depth++] = term;
+}
+
+
+void CompileStackRemove(CompileStack * stack)
+{
+	ASSERT(stack->depth > 0)
+	stack->depth--;
 }
 
 
 bool CompileStackContainsTerm(CompileStack const * stack, FormulaView term)
 {
-	for(index8 i = 0; i < stack->compileStackDepth; i++) {
-		if(SameAtoms(stack->compilationStack[i].form, term.form)
-			&& SameParameterSignature(stack->compilationStack[i].actors, term.actors))
+	for(index8 i = 0; i < stack->depth; i++) {
+		if(SameAtoms(stack->terms[i].form, term.form)
+			&& SameParameterSignature(stack->terms[i].actors, term.actors))
 			return true;
 	}
 	return false;
