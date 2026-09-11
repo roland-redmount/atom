@@ -9,6 +9,7 @@
  */
 
 #include "compiler/choicepoints.h"
+#include "compiler/compiledvariant.h"
 #include "compiler/compiler.h"
 #include "compiler/compilestack.h"
 #include "compiler/compileutil.h"
@@ -72,21 +73,6 @@ static void getTermParameters(TypedTuple const * termActors, Atom parameters[])
 
 
 /**
- * Copy the term parameters to queryParameters and renumber them 1, 2, ..., termArity
- */
-static void setupParameterizedQuery(
-	Atom const termParameters[], size8 termArity, TypedTuple * queryParameters)
-{
-	for(index8 i = 0; i < termArity; i++) {
-		Atom parameter = termParameters[i];
-		parameter.parameter.number = i + 1;
-		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameter));
-	}
-}
-
-
-
-/**
  * Find a service for the given term (termForm, termParameters), either by dispatch,
  * or if mode = TERM_DISPATCH_OR_COMPILE, by compiling the term.
  * The exclusion list, the resolved types and hasNextMatch are as for
@@ -111,7 +97,14 @@ static bool dispatchOrCompileTerm(
 	// Else attempt to compile new services for the term
 	ASSERT(mode == TERM_DISPATCH_OR_COMPILE)
 	TypedTuple * queryParameters = CreateTypedTuple(termArity);
-	setupParameterizedQuery(termParameters, termArity, queryParameters);
+	
+	// Copy the term parameters to queryParameters and renumber them 1, 2, ..., termArity
+	for(index8 i = 0; i < termArity; i++) {
+		Atom parameter = termParameters[i];
+		parameter.parameter.number = i + 1;
+		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameter));
+	}
+
 	size8 nServices = compileParameterizedQuery(
 		compileStack, (FormulaView) {.form = termForm, .actors = queryParameters},	0);
 	FreeTypedTuple(queryParameters);
@@ -870,67 +863,6 @@ static Operator * compileConjunction(
 
 
 /**
- * A compiled operator together with its resolved query parameters (signature).
- * One variant is emitted per distinct parameter signature; clauses that
- * resolve to the same signature are combined with a UNION operator.
- * 
- * NOTE: this could re-use the Service structure + the isRecursive flag?
- */
-typedef struct s_CompiledVariant {
-	// resolved query parameters, owned by the variant
-	TypedTuple * parameters;
-	Operator * op;
-	// The relation this variant compiles to, and a reference to it. Created before the
-	// recursive clauses compile, as their recursive term reads it.
-	Relation relation;
-	// whether this variant was derived from a recursive clause (and contains a FIXPOINT operator)
-	bool isRecursive;
-} CompiledVariant;
-
-
-/**
- * The type signature of a compiled variant, from the parameters resolved for it.
- */
-static TypeSignature getVariantTypeSignature(CompiledVariant const * variant)
-{
-	size8 arity = variant->parameters->nAtoms;
-	byte atomTypes[arity];
-	Atom const * parameters = TypedTuplePeekAtoms(variant->parameters);
-	for(index8 i = 0; i < arity; i++)
-		atomTypes[i] = parameters[i].parameter.atomType;
-	return CreateTypeSignature(atomTypes, arity);
-}
-
-
-/**
- * The IO signature of a parameter tuple, from the direction of each parameter.
- */
-static IOSignature getVariantIOSignature(TypedTuple const * parameters)
-{
-	size8 arity = parameters->nAtoms;
-	byte parameterIO[arity];
-	Atom const * parametersArray = TypedTuplePeekAtoms(parameters);
-	for(index8 i = 0; i < arity; i++)
-		parameterIO[i] = parametersArray[i].parameter.io;
-	return CreateIOSignature(parameterIO, arity);
-}
-
-
-/**
- * Find a compiled variant whose signature matches the given parameters.
- */
-static CompiledVariant * findVariant(
-	CompiledVariant variants[], size8 nVariants, TypedTuple const * parameters)
-{
-	for(index8 i = 0; i < nVariants; i++) {
-		if(SameParameterSignature(variants[i].parameters, parameters))
-			return &(variants[i]);
-	}
-	return 0;
-}
-
-
-/**
  * Test whether two compiled operators have the same index order (order of tuple atoms).
  * This is required to apply the UNION to the two operators.
  */
@@ -995,19 +927,6 @@ static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
 	bool recursive = MultisetGetElementMultiple(clauseForm, recursiveTermForm) > 0;
 	IFactRelease(recursiveTermForm);
 	return recursive;
-}
-
-
-/**
- * Set the relation (signature) for a CompiledVariant for the given query term form.
- */
-static void setupVariantRelation(CompiledVariant * variant, Atom queryTermForm)
-{
-	// Check if relation is already set, so that we don't acquire double references
-	// QUESTION: what could cause this field to be set twice?
-	if(!IsNullRelation(variant->relation))
-		return;
-	variant->relation = CreateRelation(queryTermForm, getVariantTypeSignature(variant));
 }
 
 
@@ -1138,7 +1057,7 @@ static size8 compileClauseFormRules(
 					// Recover the unified parameters from the clause actors
 					TypedTupleCopyAt(substClauseActors, matchedTermActorsIndex, resolvedParameters);
 					// Check for previously compiled service with the same signature
-					CompiledVariant * variant = findVariant(variants, nVariants, resolvedParameters);
+					CompiledVariant * variant = FindCompiledVariant(variants, nVariants, resolvedParameters);
 					if(variant) {
 						// Another clause yielded the same signature: union them
 						variant->op = unionOperators(variant->op, newService);
@@ -1209,7 +1128,7 @@ static size8 compileQueryClauses(
 	// We try all possible such type such type signatures for each recursive clause.
 	size8 nNonRecursiveVariants = nVariants;
 	for(index8 v = 0; v < nNonRecursiveVariants; v++) {
-		setupVariantRelation(&variants[v], query.form);
+		CompiledVariantSetRelation(&variants[v], query.form);
 		FormulaView variantQuery = {.form = query.form, .actors = variants[v].parameters};
 		for(index32 i = 0; i < nMatchedClauseForms; i++) {
 			QueryClauseMatch const * clause = ResizingArrayGetElement(&matchedClauseForms, i);
@@ -1241,7 +1160,7 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
 
 	index8 inputArguments[arity];
 	size8 nInputs = findInputArguments(
-		getVariantIOSignature(variant->parameters), arity, inputArguments);
+		CompiledVariantGetIOSignature(variant), arity, inputArguments);
 
 	Operator * fixpointOperator = CreateFixpointOperator(
 		variant->op, inputArguments, nInputs);
@@ -1345,7 +1264,7 @@ static size8 compileQueryVariants(CompileStack * compileStack, FormulaView query
 	// A service is registered against a relation, so every variant needs one. The variants
 	// a recursive clause compiles against have theirs already; here we cover the rest.
 	for(index8 i = 0; i < nVariants; i++)
-		setupVariantRelation(&variants[i], query.form);
+		CompiledVariantSetRelation(&variants[i], query.form);
 	return nVariants;
 }
 
@@ -1398,7 +1317,7 @@ static size8 compileParameterizedQuery(CompileStack * compileStack, FormulaView 
 		// Parameter types and the relation were resolved by compileQueryVariants()
 		Service service = CreateService(
 			variants[i].relation,
-			getVariantIOSignature(variants[i].parameters),
+			CompiledVariantGetIOSignature(&variants[i]),
 			variants[i].op
 		);
 		
@@ -1420,7 +1339,7 @@ static size8 compileParameterizedQuery(CompileStack * compileStack, FormulaView 
 /**
  * Parameterize a query. The caller must free the returned TypedTuple.
  */
-static TypedTuple * parameterizeQuery(TypedTuple const * queryActors)
+static TypedTuple * actorsToParametersTuple(TypedTuple const * queryActors)
 {
 	size8 arity = queryActors->nAtoms;
 	Atom parameters[arity];
@@ -1440,15 +1359,12 @@ bool DispatchOrCompileQuery(FormulaView query, Service * service, index8 permuta
 	if(DispatchQuery(query, service, permutation))
 		return true;
 	// Else attempt to compile a service
-	TypedTuple * queryParameters = parameterizeQuery(query.actors);
-	CompileStack compileStack = {0};
-	size8 nServices = compileParameterizedQuery(
-		&compileStack, (FormulaView) {.form = query.form, .actors = queryParameters}, 0);
-	FreeTypedTuple(queryParameters);
-	if(!nServices)
+	if(CompileQuery(query, 0) > 0) {
+		// Attempt to dispatch again to the newly compiled services
+		return DispatchQuery(query, service, permutation);
+	}
+	else
 		return false;
-
-	return DispatchQuery(query, service, permutation);
 }
 
 
@@ -1456,7 +1372,7 @@ size8 CompileQuery(FormulaView query, Service services[])
 {
 	ASSERT(IsTermForm(query.form))
 
-	TypedTuple * queryParameters = parameterizeQuery(query.actors);
+	TypedTuple * queryParameters = actorsToParametersTuple(query.actors);
 	CompileStack compileStack = {0};
 	size8 nVariants = compileParameterizedQuery(
 		&compileStack, (FormulaView) {.form = query.form, .actors = queryParameters}, services);

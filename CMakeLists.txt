@@ -127,6 +127,7 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
     src/kernel/typedtuple.c
 
 	src/compiler/choicepoints.c
+	src/compiler/compiledvariant.c
     src/compiler/compiler.c
 	src/compiler/compilestack.c
 	src/compiler/compileutil.c

@@ -30,7 +30,7 @@ size8 CompileQuery(FormulaView query, Service services[]);
 
 /**
  * Find the service answering a query, or compile a service if none is registered yet.
- * Copies the resulting Service to *service. Returns true if a service was found.
+ * Copies the resulting Service to * service. Returns true if a service was found.
  * The permutation array receives the argument permutation of the match, as for DispatchQuery().
  *
  * NOTE: a query may compile to several services, of which this returns one.
