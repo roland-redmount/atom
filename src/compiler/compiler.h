@@ -26,7 +26,7 @@
  * about the graph structure may not hold. Therefore, operator trees must not be
  * modified while the compiler is running.
  */
-size8 CompileQuery(Atom queryTerm, Service services[]);
+size8 CompileQuery(FormulaView query, Service services[]);
 
 /**
  * Find the service answering a query, or compile a service if none is registered yet.
@@ -36,6 +36,6 @@ size8 CompileQuery(Atom queryTerm, Service services[]);
  * NOTE: a query may compile to several services, of which this returns one.
  * To obtain all services, see UserQuery().
  */
-bool FindOrCompileService(FormulaView query, Service * service, index8 permutation[]);
+bool DispatchOrCompileQuery(FormulaView query, Service * service, index8 permutation[]);
 
 #endif	// COMPILER_H

@@ -108,7 +108,6 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
     src/lang/unification.c
     src/lang/Variable.c
 
-    src/kernel/compiler.c
     src/kernel/dictionary.c
     src/kernel/dispatch.c
     src/kernel/ifact.c
@@ -126,6 +125,11 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
     src/kernel/ServiceRegistry.c
     src/kernel/tuple.c
     src/kernel/typedtuple.c
+
+	src/compiler/choicepoints.c
+    src/compiler/compiler.c
+	src/compiler/compilestack.c
+	src/compiler/compileutil.c
 
     src/storage/RelationBTree.c
 
