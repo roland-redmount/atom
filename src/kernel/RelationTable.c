@@ -24,6 +24,8 @@ static void providerCreateOperatorCallback(
 	void * data, MachineOperatorSpec operatorSpec, IOSignature ioSignature)
 {
 	RelationTable * table = data;
+	// The operator has a pointer to this table to notify on removal
+	operatorSpec.relationTable = table;
 	Operator * op = CreateMachineOperator(table->nColumns, table->indexColumns, operatorSpec);
 
 	// We must permute the IOSignature to match the Service order
@@ -83,14 +85,16 @@ void AcquireRelationTable(RelationTable * table)
 	table->referenceCount++;
 }
 
+/**
+ * Check whether the given operator refers to the table.
+ */
+static bool isTableOperator(RelationTable const * table, Operator const * op)
+{
+	return (op->type == OPERATOR_MACHINE) && (op->impl.machine.spec.relationTable == table);
+}
 
 /**
  * Remove the primitive services of this table.
- * 
- * TODO: this is not entirely sound: there may be primitive services associated
- * with the relation that are not using the table storage (computed services).
- * Here we should only remove the services that were added by the service provider
- * via providerCreateOperatorCallback(). See also FreeMachineServices()
  */
 static void removePrimitiveServices(RelationTable * table)
 {
@@ -101,33 +105,40 @@ static void removePrimitiveServices(RelationTable * table)
 		service = 0;
 		while(ServiceIteratorNext(&iterator)) {
 			Service const * candidate = ServiceIteratorPeekService(&iterator);
-			if(ServiceIsPrimitive(candidate)) {
+			if(isTableOperator(table, candidate->op)) {
 				service = candidate;
 				break;
 			}
 		}
 		// Close the iterator, since RemoveService() alters the service registry B-tree
 		ServiceIteratorEnd(&iterator);
-		if(service)
+		if(service) {
+			service->op->impl.machine.spec.relationTable = 0;
 			RemoveService(service->relation, service->op);
+		}
 	} while(service);
 }
 
 /**
  * A RelationTable is "stale" (can be deallocated) when (1) it has zero references,
- * (2) it contains zero rows, and (3) no service depends on any of its primitive services
+ * (2) it contains zero rows, and (3) no service referencing this table has dependents.
+ * 
+ * NOTE: actually I think (1) and (3) are sufficient; such as table is unreachable for
+ * either reading or writing, and could be removed (and tuples deallocated).
  */
 static bool tableIsStale(RelationTable const * table)
 {
 	if(table->referenceCount > 0 || RelationTableNRows(table) > 0)
 		return false;
-		
+	
 	bool hasDependentOperator = false;
 	ServiceIterator serviceIterator;
 	ServiceRegistryIterate(table->relation, &serviceIterator);
 	while(ServiceIteratorNext(&serviceIterator)) {
 		Service const * service = ServiceIteratorPeekService(&serviceIterator);
-		if(ServiceIsPrimitive(service) && ServiceHasDependents(service)) {
+		// An operator with parents must have dependents, since the root operator
+		// of every operator graph must be associated with a Service.
+		if(isTableOperator(table, service->op) && service->op->nParents > 0) {
 			hasDependentOperator = true;
 			break;
 		}

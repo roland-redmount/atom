@@ -1586,12 +1586,11 @@ void CheckOperator(Operator * op)
 		if(IsNullRelation(op->relation))
 			teardownOperator(op);
 		else {
-			// A MACHINE operator may be attached to a PRIMITIVE Service for
-			// a RelationTable, which could now become stale.
+			// A MACHINE operator acting on storage must notify
+			// its RelationTable, which could now become stale.
 			if(op->type == OPERATOR_MACHINE) {
-				RelationTable * table = FindRelationTable(op->relation);
-				if(table)
-					CheckRelationTable(table);
+				if(op->impl.machine.spec.relationTable)
+					CheckRelationTable(op->impl.machine.spec.relationTable);
 			}
 		}
 	}

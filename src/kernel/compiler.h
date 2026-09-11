@@ -21,6 +21,10 @@
  * the query (list <my_list> position p element e)
  * compiles to one service per element type. Callers enumerating
  * results must therefore iterate over all returned services.
+ * 
+ * NOTE: the compiler builds Operator graphs bottom-up, during which time assumption
+ * about the graph structure may not hold. Therefore, operator trees must not be
+ * modified while the compiler is running.
  */
 size8 CompileQuery(Atom queryTerm, Service services[]);
 

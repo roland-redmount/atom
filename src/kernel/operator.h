@@ -6,6 +6,8 @@
 
 typedef struct s_Operator Operator;
 typedef struct s_OperatorContext OperatorContext;
+struct s_RelationTable;
+
 
 typedef struct s_MachineOperatorContext {
 	bool isExhausted;						// required for stateless services
@@ -21,6 +23,7 @@ typedef struct s_MachineOperatorSpec
 	uint32 providerID;
 	void * operatorData;
 	size32 stateSize;
+	struct s_RelationTable * relationTable;		// for operators touching storage; else 0
 
 	/**
 	 * Initialize the machine operator's state data, such as an iterator structure.

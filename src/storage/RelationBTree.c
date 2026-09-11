@@ -243,6 +243,7 @@ static void btreeFinalizeState(void * state, void * operatorData)
 
 static void finalizeBTreeOperator(void * operatorData)
 {
+	// NOTE: here we could decrement an operator count for the storage provider
 	Free(operatorData);
 }
 

@@ -57,8 +57,8 @@ static int8 btreeCompareServices(void const * item, void const * itemOrKey, size
 static BTree * operatorAncestors;
 
 typedef struct {
-	Operator * op;
-	Operator * ancestor;
+	Operator const * op;
+	Operator const * ancestor;
 } OperatorAncestor;
 
 
@@ -245,16 +245,7 @@ bool ServiceIsPrimitive(Service const * service)
 }
 
 
-bool ServiceHasDependents(Service const * service)
-{
-	// A service is a dependent if its operator is an ancestor
-	// of the given service's operator.
-	OperatorAncestor key = {.op = service->op};
-	return BTreeContainsItem(operatorAncestors, &key);
-}
-
-
-void RemoveService(Relation relation, Operator * op)
+void RemoveService(Relation relation, Operator const * op)
 {
 	Service service;
 	bool found = findService(relation, op, &service);
