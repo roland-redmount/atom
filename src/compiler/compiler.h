@@ -14,7 +14,8 @@
  * If the services[] array is not 0, a copy of each compiled service is written to it;
  * at most MAX_COMPILED_SERVICES are written.
  * Returns the number of services generated.
- * The service(s) to be compiled must not already exist before this call.
+ * A stored service of the same signature is taken over by the compiled service, which
+ * replaces it in the registry and reads it as one branch of its union.
  *
  * A query compiles to multiple services if at any point during the compilation
  * several services with same form but distinct types are matched. For example,

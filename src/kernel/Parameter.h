@@ -69,7 +69,7 @@ void ActorsToParameters(TypedTuple const * actors, Atom parameters[]);
 bool SameParameterSignature(TypedTuple const * first, TypedTuple const * second);
 
 /**
- * Find the indices of the input parameters in the IO signature
+ * Find the indices of the input (PARAMETER_IN) parameters in the IO signature
  * and write into the inputArguments array, which must hold RELATION_MAX_ARITY indices.
  * Returns the number of inputs found.
  */

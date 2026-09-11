@@ -3,6 +3,7 @@
 #include "kernel/operator.h"
 #include "kernel/RelationTable.h"
 #include "kernel/tuple.h"
+#include "lang/TermForm.h"			// for PrintTermForm()
 #include "memory/allocator.h"
 #include "util/ResizingArray.h"
 #include "util/utilities.h"
@@ -1828,8 +1829,13 @@ static void printInputArguments(index8 const inputArguments[], size8 nInputs)
 }
 
 
-void PrintOperator(Operator const * op)
+static void printOperatorRecursive(Operator const * op, uint32 depth)
 {
+	// Indent on new line by depth
+	PrintChar('\n');
+	for(index8 i = 0; i < 3 * depth; i++)
+		PrintChar(' ');
+
 	switch(op->type) {
 	case OPERATOR_PERMUTE:
 		printOperatorHead(op, "PERMUTE");
@@ -1843,7 +1849,7 @@ void PrintOperator(Operator const * op)
 			op->impl.permute.nConstants
 		);
 		PrintCString("} ");
-		PrintOperator(op->impl.permute.childOperator);
+		printOperatorRecursive(op->impl.permute.childOperator, depth + 1);
 		PrintChar(')');
 		break;
 
@@ -1852,18 +1858,18 @@ void PrintOperator(Operator const * op)
 		PrintChar('(');
 		for(index8 i = 0; i < op->impl.join.left->nArguments; i++)
 			PrintF("%u ", op->impl.join.leftMap[i]);
-		PrintOperator(op->impl.join.left);
+		printOperatorRecursive(op->impl.join.left, depth + 1);
 		for(index8 i = 0; i < op->impl.join.right->nArguments; i++)
 			PrintF("%u ", op->impl.join.rightMap[i]);
-		PrintOperator(op->impl.join.right);
+		printOperatorRecursive(op->impl.join.right, depth + 1);
 		PrintChar(')');
 		break;
 
 	case OPERATOR_UNION:
 		printOperatorHead(op, "UNION");
 		PrintChar('(');
-		PrintOperator(op->impl._union.first);
-		PrintOperator(op->impl._union.second);
+		printOperatorRecursive(op->impl._union.first, depth + 1);
+		printOperatorRecursive(op->impl._union.second, depth + 1);
 		PrintChar(')');
 		break;
 
@@ -1872,7 +1878,7 @@ void PrintOperator(Operator const * op)
 		PrintChar('(');
 		for(index8 i = 0; i < op->nArguments; i++)
 			PrintF("%u ", op->impl.project.argumentMap[i]);
-		PrintOperator(op->impl.project.childOperator);
+		printOperatorRecursive(op->impl.project.childOperator, depth + 1);
 		PrintChar(')');
 		break;
 
@@ -1881,7 +1887,7 @@ void PrintOperator(Operator const * op)
 		PrintChar('(');
 		for(index8 i = 0; i < op->impl.constrain.childOperator->nArguments; i++)
 			PrintF("%u ", op->impl.constrain.argumentMap[i]);
-		PrintOperator(op->impl.constrain.childOperator);
+		printOperatorRecursive(op->impl.constrain.childOperator, depth + 1);
 		PrintChar(')');
 		break;
 
@@ -1889,7 +1895,7 @@ void PrintOperator(Operator const * op)
 		printOperatorHead(op, "FILTER");
 		printInputArguments(op->impl.filter.inputArguments, op->impl.filter.nInputs);
 		PrintChar('(');
-		PrintOperator(op->impl.filter.childOperator);
+		printOperatorRecursive(op->impl.filter.childOperator, depth + 1);
 		PrintChar(')');
 		break;
 
@@ -1898,7 +1904,7 @@ void PrintOperator(Operator const * op)
 		printInputArguments(
 			op->impl.fixpoint.inputArguments, op->impl.fixpoint.nInputs);
 		PrintChar('(');
-		PrintOperator(op->impl.fixpoint.childOperator);
+		printOperatorRecursive(op->impl.fixpoint.childOperator, depth + 1);
 		PrintChar(')');
 		break;
 
@@ -1910,10 +1916,21 @@ void PrintOperator(Operator const * op)
 
 	case OPERATOR_MACHINE:
 		printOperatorHead(op, "MACHINE");
+		if(op->impl.machine.spec.relationTable)
+			PrintTermForm(op->impl.machine.spec.relationTable->relation.termForm);
+		else if(!IsNullRelation(op->relation))
+			PrintTermForm(op->relation.termForm);
 		break;
 
 	default:
 		ASSERT(false);
 		break;
 	}
+}
+
+
+void PrintOperator(Operator const * op)
+{
+	printOperatorRecursive(op, 0);
+	PrintChar('\n');
 }

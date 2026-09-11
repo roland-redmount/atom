@@ -887,6 +887,7 @@ static Operator * sortOperatorToIndexOrder(Operator * op)
  */
 static Operator * unionOperators(Operator * first, Operator * second)
 {
+	ASSERT(first != second)
 	if(!sameIndexOrder(first, second)) {
 		first = sortOperatorToIndexOrder(first);
 		second = sortOperatorToIndexOrder(second);
@@ -1076,6 +1077,62 @@ static size8 compileClauseFormRules(
 	return nVariants;
 }
 
+
+/**
+ * Seed a compiled variant with existing services obtained from dispatching the query.
+ *
+ * Seeding happens before any clause compiles, so that a clause of the query signature
+ * unions into the seeded variant rather than adding a variant of its own, and so that a
+ * recursive clause has a variant to compile against, the stored facts being its base
+ * case. That is what lets a recursive rule stand on stored facts alone, with no
+ * non-recursive clause of its own. A seed no clause compiled into is dropped again; see
+ * DiscardUnusedSeedVariants().
+ *
+ * Only a stored (primitive) service is taken over. A compiled service of the query
+ * signature is what an earlier compilation of the same query left behind, and unioning
+ * that into a new one would compound it every time the query compiles.
+ *
+ * A form whose roles repeat can match under a permutation, which would order the
+ * compiled operator differently from the relation it is registered against. Such a match
+ * is left alone.
+ *
+ * Returns the new number of variants.
+ */
+static size8 seedVariantsFromServices(
+	FormulaView query, CompiledVariant variants[], size8 nVariants)
+{
+	size8 arity = query.actors->nAtoms;
+	Atom const * queryParameters = TypedTuplePeekAtoms(query.actors);
+
+	index8 permutation[arity];
+	DispatchIterator iterator;
+	DispatchIterate(
+		query.form, queryParameters, arity, DISPATCH_MATCH_EXACT, permutation, &iterator);
+
+	while((nVariants < MAX_COMPILED_SERVICES) && DispatchIteratorNext(&iterator)) {
+		Service const * service = DispatchIteratorPeekService(&iterator);
+		if(!ServiceIsPrimitive(service))
+			continue;
+		bool identityOrder = true;
+		for(index8 i = 0; i < arity; i++)
+			identityOrder = identityOrder && (permutation[i] == i);
+		if(!identityOrder)
+			continue;
+
+		CompiledVariant * variant = &(variants[nVariants++]);
+		SetMemory(variant, sizeof(CompiledVariant), 0);
+		CompiledVariantSeedFromService(variant, service, query.actors);
+#ifdef DEBUG_COMPILER
+		PrintCString("Seeded variant from service: ");
+		PrintService(service);
+		PrintChar('\n');
+#endif
+	}
+	DispatchIteratorEnd(&iterator);
+	return nVariants;
+}
+
+
 /**
  * Find all rules (clauses) matching the given query and compile them to variants.
  * 
@@ -1087,18 +1144,22 @@ static size8 compileClauseFormRules(
 static size8 compileQueryClauses(
 	CompileStack * compileStack, FormulaView query, CompiledVariant variants[])
 {
-	/**
- 	 * TODO: it might happen that a generated UNION service has the same
-	 * signature as an existing service, which becomes part of the UNION.
-	 * In this case, the newly generated service should replace the existing one.
-	 */
-
 	// Collect all clauses matching the query term
 	ResizingArray matchedClauseForms;
 	CreateResizingArray(&matchedClauseForms, sizeof(QueryClauseMatch), 8);
 	findMatchingClauseForms(query.form, &matchedClauseForms);
 	size32 nMatchedClauseForms = ResizingArrayNElements(&matchedClauseForms);
 	size8 nVariants = 0;
+
+	/* First "seed" known services for the query as variants.
+	   The services compiled later will UNION with these and register the result
+	   under the same signature.
+	   Seeding for the outermost query only: a term compiled
+	   deeper is one dispatch did not answer, possibly because a choice point excluded the
+	   very service we would take over, and taking one over removes it, which the
+	   compilation in flight is building on. */
+	if(nMatchedClauseForms && (compileStack->depth == 1))
+		nVariants = seedVariantsFromServices(query, variants, nVariants);
 
 	// The non-recursive clauses compile first, settling the query parameters of each variant
 	for(index32 i = 0; i < nMatchedClauseForms; i++) {
@@ -1125,6 +1186,10 @@ static size8 compileQueryClauses(
 	// If compilaton succeeds, a recursive clause yields a UNION with the non-recursive variant,
 	// so no new variants are added
 	ASSERT(nVariants == nNonRecursiveVariants)
+
+	// CLAUDE: a seeded variant no clause compiled into is the existing service itself,
+	// and is dropped rather than registered again
+	nVariants = DiscardUnusedSeedVariants(variants, nVariants);
 
 	FreeResizingArray(&matchedClauseForms);
 	return nVariants;
@@ -1186,9 +1251,9 @@ static size8 compileFilterVariants(
 		}
 		// If there are no argument to filter, the child service is an exact match.
 		if(nFiltered == 0) {
-			// NOTE: This case doesn't seem to occur in any test case, putting an ASSERT
-			// here to catch it, should it ever happen
-			ASSERT(false)
+			// NOTE: This case happens when seedVariantsFromServices() finds a service
+			// but no compiled rule is generated; the variant is the discarded and we 
+			// lands here with nothing left to compile.
 			continue;
 		}
 
@@ -1286,6 +1351,18 @@ static size8 compileParameterizedQuery(
 #endif
 
 	for(index8 i = 0; i < nVariants; i++) {
+		/* CLAUDE: A variant seeded from an existing service replaces it, so that service
+		   has to go before the new one can take its (Relation, IOSignature) key. The order
+		   is what makes this safe: the compiled operator holds the old service's operator
+		   as a branch of its union already, so DetachOperator() leaves the operator
+		   standing, and the variant's own reference keeps the Relation alive across the
+		   exchange. See seedVariantsFromServices(). */
+		if(variants[i].replacedOperator) {
+			ASSERT(variants[i].op != variants[i].replacedOperator)
+			ASSERT(variants[i].replacedOperator->nParents > 0)
+			RemoveService(variants[i].relation, variants[i].replacedOperator);
+		}
+
 		// If a variant re-uses operator of an existing service, wrap it in an identity PERMUTE operator
 		//  so that we can attach a service (an operator can only attacht to one Service).
 		// NOTE: this is the only case where an identity PERMUTE is needed, unlike

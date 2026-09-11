@@ -4,6 +4,7 @@
 #include "kernel/operator.h"
 #include "kernel/typedtuple.h"
 #include "kernel/Parameter.h"
+#include "kernel/ServiceRegistry.h"
 
 /**
  * A CompiledVariant is a compiled operator with its resolved query parameters (signature).
@@ -20,6 +21,11 @@ typedef struct s_CompiledVariant {
 	Relation relation;
 	// whether this variant was derived from a recursive clause (and contains a FIXPOINT operator)
 	bool isRecursive;
+
+	// CLAUDE: The operator of the service this variant was seeded from, if any; else 0.
+	// A seeded variant replaces that service in the registry, holding its operator as a
+	// branch of the union it compiles into; see CompiledVariantSeedFromService().
+	Operator * replacedOperator;
 } CompiledVariant;
 
 
@@ -45,5 +51,29 @@ CompiledVariant * FindCompiledVariant(
  */
 void CompiledVariantSetRelation(CompiledVariant * variant, Atom queryTermForm);
 
+/**
+ * CLAUDE: Seed a compiled variant from an existing service answering the query, so that
+ * the clauses compiling for the query union into that service rather than register a
+ * second service of its signature. The variant takes the signature of the service: the
+ * types of the service's relation, and the IO direction of the query parameters.
+ *
+ * The variant is registered against the service's own relation, whose columns are in
+ * relation order, which is what lets the compiled service take over the service's
+ * registry key; see seedVariantsFromServices() in compiler.c. The queryParameters tuple
+ * must therefore be in that same order.
+ *
+ * The variant borrows the service's operator without taking a reference. The union the
+ * clauses compile into is what takes one; a variant nothing compiled into owes nothing
+ * and is dropped by DiscardUnusedSeedVariants().
+ */
+void CompiledVariantSeedFromService(
+	CompiledVariant * variant, Service const * service, TypedTuple const * queryParameters);
+
+/**
+ * CLAUDE: Drop the seeded variants that no clause compiled into, and return the new
+ * number of variants. Such a variant is nothing but the service it was seeded from,
+ * which answers the query as it stands.
+ */
+size8 DiscardUnusedSeedVariants(CompiledVariant variants[], size8 nVariants);
 
 #endif 	// COMPILED_VARIANT_H

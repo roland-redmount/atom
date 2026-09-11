@@ -43,3 +43,55 @@ void CompiledVariantSetRelation(CompiledVariant * variant, Atom queryTermForm)
 	variant->relation = CreateRelation(queryTermForm, CompiledVariantGetTypeSignature(variant));
 }
 
+
+void CompiledVariantSeedFromService(
+	CompiledVariant * variant, Service const * service, TypedTuple const * queryParameters)
+{
+	size8 arity = queryParameters->nAtoms;
+	Atom const * parameters = TypedTuplePeekAtoms(queryParameters);
+	variant->parameters = CreateTypedTuple(arity);
+	for(index8 i = 0; i < arity; i++) {
+		TypedTupleSetElement(variant->parameters, i,
+			CreateTypedAtom(
+				AT_PARAMETER,
+				(Atom) {
+					.parameter = {
+						.number = i + 1,
+						.atomType = service->relation.typeSignature.atomTypes[i],
+						.io = parameters[i].parameter.io
+					}
+				}
+			)
+		);
+	}
+	ASSERT(SameTypeSignatures(
+		CompiledVariantGetTypeSignature(variant), service->relation.typeSignature))
+
+	variant->relation = service->relation;
+	AcquireRelation(variant->relation);
+	variant->op = service->op;
+	variant->replacedOperator = service->op;
+}
+
+
+size8 DiscardUnusedSeedVariants(CompiledVariant variants[], size8 nVariants)
+{
+	// Walk downwards, so that compacting the array cannot move a variant past the
+	// position being examined
+	for(index8 v = nVariants; v > 0; v--) {
+		CompiledVariant * variant = &(variants[v - 1]);
+		// A clause compiling into the variant always replaces the operator, since
+		// unionOperators() allocates a new one
+		if(!variant->replacedOperator || (variant->op != variant->replacedOperator))
+			continue;
+		ASSERT(!variant->isRecursive)
+		// The variant owns its parameters and a reference to the relation. Its operator
+		// still belongs to the service it was seeded from, so there is nothing to release.
+		FreeTypedTuple(variant->parameters);
+		ReleaseRelation(variant->relation);
+		for(index8 i = v; i < nVariants; i++)
+			variants[i - 1] = variants[i];
+		nVariants--;
+	}
+	return nVariants;
+}
