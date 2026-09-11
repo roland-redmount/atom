@@ -1126,8 +1126,7 @@ static size32 mergeBTrees(BTree * source, BTree * destination)
 static size32 mergePendingTuples(ResizingArray * pendingTuples, BTree * tuples)
 {
 	size32 nNewTuples = 0;
-	size32 nPendingTuples = ResizingArrayNElements(pendingTuples);
-	for(index32 i = 0; i < nPendingTuples; i++) {
+	for(index32 i = 0; i <  pendingTuples->nElements; i++) {
 		if(BTreeInsert(tuples, ResizingArrayGetElement(pendingTuples, i)) == BTREE_INSERTED)
 			nNewTuples++;
 	}

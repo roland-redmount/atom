@@ -27,7 +27,7 @@ void InitializeClauseBuilder(ClauseBuilder * builder, enum FormulaScope scope)
  */
 static bool clauseHasTerm(ClauseBuilder const * builder, Atom term)
 {
-	size8 nTerms = ResizingArrayNElements(&(builder->terms));
+	size8 nTerms = builder->terms.nElements;
 	for(index8 i = 0; i < nTerms; i++) {
 		if(SameAtoms(term, *((Atom *) ResizingArrayGetElement(&(builder->terms), i))))
 			return true;
@@ -92,7 +92,7 @@ bool ClauseBuilderIsValid(ClauseBuilder const * builder)
 bool ClauseBuilderIsSingleTerm(ClauseBuilder const * builder)
 {
 	// a term is only appended to the terms array when a TOKEN_OR is accepted
-	return ResizingArrayNElements(&(builder->terms)) == 0;
+	return builder->terms.nElements == 0;
 }
 
 
@@ -115,7 +115,7 @@ Atom ClauseBuilderCreateFormula(ClauseBuilder * builder)
 {
 	ASSERT(builder->isValid);
 
-	size8 nTerms = ResizingArrayNElements(&(builder->terms));
+	size8 nTerms = builder->terms.nElements;
 	Atom const * terms = ResizingArrayGetMemory(&(builder->terms));
 	return CreateClause(terms, nTerms);
 }
@@ -124,7 +124,7 @@ Atom ClauseBuilderCreateFormula(ClauseBuilder * builder)
 void ClauseBuilderReset(ClauseBuilder * builder)
 {
 	TermBuilderReset(&(builder->termBuilder));
-	size8 nTerms = ResizingArrayNElements(&(builder->terms));
+	size8 nTerms = builder->terms.nElements;
 	for(index8 i = 0; i < nTerms; i++) {
 		Atom term = *((Atom *) ResizingArrayGetElement(&(builder->terms), i));
 		ReleaseFormula(term);

@@ -22,7 +22,7 @@ typedef struct s_CompiledVariant {
 	// whether this variant was derived from a recursive clause (and contains a FIXPOINT operator)
 	bool isRecursive;
 
-	// CLAUDE: The operator of the service this variant was seeded from, if any; else 0.
+	// The operator of the service this variant will replace, if any; else 0.
 	// A seeded variant replaces that service in the registry, holding its operator as a
 	// branch of the union it compiles into; see CompiledVariantSeedFromService().
 	Operator * replacedOperator;

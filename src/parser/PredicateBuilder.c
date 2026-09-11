@@ -50,7 +50,7 @@ bool PredicateBuilderPush(PredicateBuilder * builder, Token token)
 static size8 predicateArity(PredicateBuilder const * builder)
 {
 	ASSERT(builder->isValid);
-	size32 size = ResizingArrayNElements(&(builder->actors));
+	size32 size = builder->actors.nElements;
 	ASSERT(size <= 255);
 	return size;
 }
@@ -100,7 +100,7 @@ Atom PredicateBuilderCreateFormula(PredicateBuilder const * builder)
 void PredicateBuilderReset(PredicateBuilder * builder)
 {
 	PartBuilderReset(&(builder->partBuilder));
-	size32 nElements = ResizingArrayNElements(&(builder->roles));
+	size32 nElements = builder->roles.nElements;
 
 	for(index8 i = 0; i < nElements; i++) {
 		Atom role = *((Atom *) ResizingArrayGetElement(&(builder->roles), i));

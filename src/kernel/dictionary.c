@@ -92,7 +92,7 @@ static void invalidateClauseServices(Atom clauseForm)
 	MultisetIteratorEnd(&iterator);
 
 	// Invalidate all term forms
-	for(index32 i = 0; i < ResizingArrayNElements(&termForms); i++)
+	for(index32 i = 0; i < termForms.nElements; i++)
 		InvalidateServicesByTermForm(*(Atom *) ResizingArrayGetElement(&termForms, i));
 	FreeResizingArray(&termForms);
 }

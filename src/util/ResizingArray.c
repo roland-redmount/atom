@@ -40,12 +40,6 @@ bool ResizingArrayContainsElement(ResizingArray const * array, const void * elem
 }
 
 
-size32 ResizingArrayNElements(const ResizingArray * array)
-{
-	return array->nElements;
-}
-
-
 void ResizingArrayAppend(ResizingArray * array, const void * element)
 {
 	AppendToBuffer(&(array->buffer), element, array->elementSize);

@@ -1023,7 +1023,7 @@ static size8 compileClauseFormRules(
 			foundTerm = UnifyTuples(query.actors, matchedTermActors, &querySubst, &matchedTermSubst);
 			if(foundTerm) {
 				index8 matchedTermIndex = ClauseGetTermIndex(clauseForm, query.form, m);
-				// Compile once per combination of choices. A term that leaves
+				// Compile the conjunction once per combination of choices. A term that leaves
 				// an output parameter untyped may match several services, each
 				// yielding a differently typed variant of the query service.
 				ChoiceTree choiceTree;
@@ -1059,8 +1059,7 @@ static size8 compileClauseFormRules(
 						TypedTupleCopy(resolvedParameters, variant->parameters);
 						variant->op = newService;
 					}
-					// A variant a recursive clause compiled into needs a fixpoint
-					// operator to derive it
+					// Mark recursive variants; FIXPOINT operator is added by completeRecursiveVariant()
 					variant->isRecursive = variant->isRecursive || queryClauseMatch->recursive;
 				} while(ChoiceTreeNextBranch(&choiceTree));
 			}
@@ -1079,7 +1078,7 @@ static size8 compileClauseFormRules(
 
 
 /**
- * Seed a compiled variant with existing services obtained from dispatching the query.
+ * Seed compiled variants with existing services obtained from dispatching the query.
  *
  * Seeding happens before any clause compiles, so that a clause of the query signature
  * unions into the seeded variant rather than adding a variant of its own, and so that a
@@ -1087,14 +1086,6 @@ static size8 compileClauseFormRules(
  * case. That is what lets a recursive rule stand on stored facts alone, with no
  * non-recursive clause of its own. A seed no clause compiled into is dropped again; see
  * DiscardUnusedSeedVariants().
- *
- * Only a stored (primitive) service is taken over. A compiled service of the query
- * signature is what an earlier compilation of the same query left behind, and unioning
- * that into a new one would compound it every time the query compiles.
- *
- * A form whose roles repeat can match under a permutation, which would order the
- * compiled operator differently from the relation it is registered against. Such a match
- * is left alone.
  *
  * Returns the new number of variants.
  */
@@ -1109,19 +1100,28 @@ static size8 seedVariantsFromServices(
 	DispatchIterate(
 		query.form, queryParameters, arity, DISPATCH_MATCH_EXACT, permutation, &iterator);
 
-	while((nVariants < MAX_COMPILED_SERVICES) && DispatchIteratorNext(&iterator)) {
+	while(DispatchIteratorNext(&iterator)) {
+		ASSERT(nVariants < MAX_COMPILED_SERVICES)
 		Service const * service = DispatchIteratorPeekService(&iterator);
+
+		/* CLAUDE: Only a stored (primitive) service is taken over. A compiled service of the query
+		   signature is what an earlier compilation of the same query left behind, and unioning
+		   that into a new one would compound it every time the query compiles. */
+		// NOTE: this should never happen; compilation should not be triggered if a
+		// compiled service already exists.
 		if(!ServiceIsPrimitive(service))
 			continue;
-		bool identityOrder = true;
-		for(index8 i = 0; i < arity; i++)
-			identityOrder = identityOrder && (permutation[i] == i);
-		if(!identityOrder)
+
+		/* A form whose roles repeat can match under a permutation, which would order the
+		   compiled operator differently from the relation it is registered against. Such a match
+		   is left alone.*/
+		if(!IsIdentityPermutation(permutation, arity))
 			continue;
 
 		CompiledVariant * variant = &(variants[nVariants++]);
 		SetMemory(variant, sizeof(CompiledVariant), 0);
 		CompiledVariantSeedFromService(variant, service, query.actors);
+
 #ifdef DEBUG_COMPILER
 		PrintCString("Seeded variant from service: ");
 		PrintService(service);
@@ -1148,13 +1148,18 @@ static size8 compileQueryClauses(
 	ResizingArray matchedClauseForms;
 	CreateResizingArray(&matchedClauseForms, sizeof(QueryClauseMatch), 8);
 	findMatchingClauseForms(query.form, &matchedClauseForms);
-	size32 nMatchedClauseForms = ResizingArrayNElements(&matchedClauseForms);
+	size32 nMatchedClauseForms = matchedClauseForms.nElements;
+	if(nMatchedClauseForms == 0) {
+		FreeResizingArray(&matchedClauseForms);
+		return 0;
+	}
+	
 	size8 nVariants = 0;
 
 	/* First "seed" known services for the query as variants.
 	   The services compiled later will UNION with these and register the result
 	   under the same signature.
-	   Seeding for the outermost query only: a term compiled
+	   CLAUDE: Seeding for the outermost query only: a term compiled
 	   deeper is one dispatch did not answer, possibly because a choice point excluded the
 	   very service we would take over, and taking one over removes it, which the
 	   compilation in flight is building on. */
@@ -1163,9 +1168,9 @@ static size8 compileQueryClauses(
 
 	// The non-recursive clauses compile first, settling the query parameters of each variant
 	for(index32 i = 0; i < nMatchedClauseForms; i++) {
-		QueryClauseMatch const * clause = ResizingArrayGetElement(&matchedClauseForms, i);
-		if(!clause->recursive)
-			nVariants = compileClauseFormRules(compileStack, query, clause, variants, nVariants);
+		QueryClauseMatch const * clauseMatch = ResizingArrayGetElement(&matchedClauseForms, i);
+		if(!clauseMatch->recursive)
+			nVariants = compileClauseFormRules(compileStack, query, clauseMatch, variants, nVariants);
 	}
 
 	// A recursive clause requires the query type signature to be fully determined.
@@ -1200,13 +1205,11 @@ static size8 compileQueryClauses(
  * Wrap a FIXPOINT operator around a compiled recursive variant.
  * The FIXPOINT operator becomes the root of the operators tree, and its descendant
  * RECURSE operator reads the tuples generated by FIXPOINT to continue the recursion.
- * Does nothing to a non-recursive variant.
  */
 static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
 {
-	if(!variant->isRecursive)
-		return;
-
+	ASSERT(variant->isRecursive)
+	
 	index8 inputArguments[RELATION_MAX_ARITY];
 	size8 nInputs = FindInputArguments(
 		CompiledVariantGetIOSignature(variant), arity, inputArguments);
@@ -1237,7 +1240,8 @@ static size8 compileFilterVariants(
 	DispatchIterate(
 		query.form, queryParameters, arity, DISPATCH_MATCH_RELAXED, permutation, &iterator);
 
-	while((nVariants < MAX_COMPILED_SERVICES) && DispatchIteratorNext(&iterator)) {
+	while(DispatchIteratorNext(&iterator)) {
+		ASSERT(nVariants < MAX_COMPILED_SERVICES)
 		Service const * childService = DispatchIteratorPeekService(&iterator);
 
 		// The queyy arguments to filter are the ones that correspond to query inputs
@@ -1301,9 +1305,11 @@ static size8 compileQueryVariants(
 	// non-recursive ones settled
 	size8 nVariants = compileQueryClauses(compileStack, query, variants);
 
-	// A variant a recursive clause compiled into is derived by a fixpoint operator
-	for(index8 i = 0; i < nVariants; i++)
-		completeRecursiveVariant(&variants[i], queryTermArity);
+	// Any recursive variant must be completed by wrapping with a FIXPOINT operator
+	for(index8 i = 0; i < nVariants; i++) {
+		if(variants[i].isRecursive)
+			completeRecursiveVariant(&variants[i], queryTermArity);
+	}
 
 	// A query the rules do not answer may still be answered by filtering a service that
 	// produces what the query binds; see compileFilterVariants(). The rules are tried
@@ -1313,6 +1319,7 @@ static size8 compileQueryVariants(
 
 	// A service is registered against a relation, so every variant needs one. The variants
 	// a recursive clause compiles against have theirs already; here we cover the rest.
+	// NOTE: can't this be done by compileQueryClauses() ?
 	for(index8 i = 0; i < nVariants; i++)
 		CompiledVariantSetRelation(&variants[i], query.form);
 	return nVariants;
@@ -1342,7 +1349,6 @@ static size8 compileParameterizedQuery(
 	PrintChar('\n');
 #endif
 	// Compile all variants for the query
-	// NOTE: the variants array could go to the CompilerState struct ?
 	CompiledVariant variants[MAX_COMPILED_SERVICES];
 	size8 nVariants = compileQueryVariants(compileStack, query, variants);
 

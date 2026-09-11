@@ -326,7 +326,7 @@ void InvalidateServicesByTermForm(Atom termForm)
 	RelationIteratorEnd(&relationIterator);
 
 	// remove all stale services
-	for(index32 i = 0; i < ResizingArrayNElements(&staleServices); i++) {
+	for(index32 i = 0; i < staleServices.nElements; i++) {
 		Service service = * ((Service *) ResizingArrayGetElement(&staleServices, i));
 		if(!BTreeContainsItem(services, &service))
 			continue;	// service already removed in a previous removeService() call
