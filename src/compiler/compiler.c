@@ -348,7 +348,6 @@ static size8 setupJoinArgumentMaps(
 	return nArguments;
 }
 
-
 /**
  * The state of compiling one clause into a conjunction of operators, shared by the
  * recursion over its terms. The clause actors and the termExcluded flags are updated as terms
@@ -384,8 +383,8 @@ typedef struct s_ClauseCompileState {
 
 
 /**
- * Write the parameter types that were resolved by compiling term back into the clause.
- * Dispatching a term gives its untyped output parameters the types of the service that matched,
+ * Write the parameter types that were resolved by compiling a term back into the clause.
+ * Dispatching a term resolves its the types of its output parameters,
  * and the terms sharing those parameters need to know them:
  *
  *  - in the query-matched term the parameter stays an output, and so gives the service
@@ -592,7 +591,7 @@ static Operator * compileConjunctionRecursive(
 				// adding a choice point.
 				if(isRecursiveTerm) {
 					op = compileRecursiveTerm(
-						clauseState->queryParameters, termActors, serviceParameters,	termClauseMap);
+						clauseState->queryParameters, termActors, serviceParameters, termClauseMap);
 				}
 				else {
 					op = compileTerm(
@@ -666,15 +665,16 @@ static Operator * compileConjunctionRecursive(
 
 
 /**
- * Create parameters for every "local" variable occurring in the clause but not in the
- * query-matched term. The new parameters are numbered consecutively after the query parameters.
- * Local variables are shared between the terms of the conjunction, and so must have a column in the
- * arguments tuple so that the JOIN operator can constrain terms against each other.
- * After compiling the JOIN, a PROJECT operator is used to drop these trailing columns.
- * Returns the number of local variables found.
+ * Clause-local variables are variables (AT_VARIABLE atoms) in the clause actors
+ * that are not present in the query-matched term. These become additional parameters,
+ * and the conjunction is compiled with this extended arguments tuple.
  *
- * NOTE: each occurence of the anonymous variable _ is a variable of its own,
- * and so obtains a parameter of its own. SameVariable() gives us this for free.
+ * This creates parameters for every local variable, numbered consecutively
+ * after the query parameters. Local variables may be shared between the terms of the
+ * conjunction, and are constrained to be equal by the JOIN operator.
+ * After compiling the JOIN, a PROJECT operator is used to drop the corresponding columns.
+ * 
+ * Returns the number of unique local variables found.
  */
 static size8 parameterizeLocalVariables(
 	TypedTuple * clauseActors, index8 matchedTermIndex, index8 const termActorsIndices[],
@@ -685,11 +685,14 @@ static size8 parameterizeLocalVariables(
 	size8 nLocalVariables = 0;
 
 	for(index8 i = 0; i < clauseActors->nAtoms; i++) {
+		// Skip the actors of the matched term
 		if((i >= matchedTermBegin) && (i < matchedTermEnd))
 			continue;
 		TypedAtom actor = TypedTupleGetElement(clauseActors, i);
-		if(actor.type != AT_VARIABLE)
+		if(actor.type != AT_VARIABLE) {
+			// actor is a constant
 			continue;
+		}
 		// The parameter type is unknown here, and is resolved by
 		// compileConjunctionRecursive() once a term producing it has compiled.
 		TypedAtom parameter = CreateTypedAtom(
@@ -702,7 +705,7 @@ static size8 parameterizeLocalVariables(
 				}
 			}
 		);
-		// Replace this occurence of the variable, and any remaining ones
+		// Replace this occurence and of the variable, and any followiing ones
 		TypedTupleSetElement(clauseActors, i, parameter);
 		for(index8 j = i + 1; j < clauseActors->nAtoms; j++) {
 			if((j >= matchedTermBegin) && (j < matchedTermEnd))
@@ -807,6 +810,8 @@ static Operator * compileConjunction(
 		queryParameters = 0;
 	}
 	// Setup the initial clause state
+	// TODO: this has to be modeled better, way too many fields. What is a "state" ?
+	// Description of the conjunction to be compiled? What are the state changes?
 	ClauseCompileState clauseState = {
 		.clauseForm = clauseForm,
 		.clauseActors = clauseActors,
@@ -974,7 +979,7 @@ static void findMatchingClauseForms(Atom queryTermForm, ResizingArray * queryCla
 
 
 /**
- * Compile every rule (clause) of the given clause form that unifies with the query.
+ * Compile every rule (clause) of the matched clause form that unifies with the query.
  * 
  * The query.actors tuple must be a series of AT_PARAMETER atoms numbered 1, 2, ...
  * and is not modified; each compiled variant carries its own resolved parameters.
@@ -989,7 +994,7 @@ static void findMatchingClauseForms(Atom queryTermForm, ResizingArray * queryCla
  * Appends the new compiled variants to the variants array and returns the new
  * number of variants in the array.
  */
-static size8 compileClauseFormRules(
+static size8 compileClauses(
 	CompileStack * compileStack, FormulaView query, QueryClauseMatch const * queryClauseMatch,
 	CompiledVariant variants[], size8 nVariants)
 {
@@ -1134,14 +1139,14 @@ static size8 seedVariantsFromServices(
 
 
 /**
- * Find all rules (clauses) matching the given query and compile them to variants.
+ * Find all clause forms matching the given query and compile each to variants.
  * 
  * Matched rules are processed in two passes. Non-recursive clauses compile first, and determine
  * the possible query type signatures. for each compiled variant. The recursive clauses then
  * compile against these type signatures. A recursive clause therefore cannot occur without
  * at least one non-recursive clause of the same signature.
  */
-static size8 compileQueryClauses(
+static size8 compileQueryClauseForms(
 	CompileStack * compileStack, FormulaView query, CompiledVariant variants[])
 {
 	// Collect all clauses matching the query term
@@ -1170,7 +1175,7 @@ static size8 compileQueryClauses(
 	for(index32 i = 0; i < nMatchedClauseForms; i++) {
 		QueryClauseMatch const * clauseMatch = ResizingArrayGetElement(&matchedClauseForms, i);
 		if(!clauseMatch->recursive)
-			nVariants = compileClauseFormRules(compileStack, query, clauseMatch, variants, nVariants);
+			nVariants = compileClauses(compileStack, query, clauseMatch, variants, nVariants);
 	}
 
 	// A recursive clause requires the query type signature to be fully determined.
@@ -1183,7 +1188,7 @@ static size8 compileQueryClauses(
 		for(index32 i = 0; i < nMatchedClauseForms; i++) {
 			QueryClauseMatch const * clause = ResizingArrayGetElement(&matchedClauseForms, i);
 			if(clause->recursive) {
-				nVariants = compileClauseFormRules(
+				nVariants = compileClauses(
 					compileStack, variantQuery, clause, variants, nVariants);
 			}
 		}
@@ -1303,7 +1308,7 @@ static size8 compileQueryVariants(
 	size8 queryTermArity = TermFormArity(query.form);
 	// Every matching clause compiles here, the recursive ones into the variants the
 	// non-recursive ones settled
-	size8 nVariants = compileQueryClauses(compileStack, query, variants);
+	size8 nVariants = compileQueryClauseForms(compileStack, query, variants);
 
 	// Any recursive variant must be completed by wrapping with a FIXPOINT operator
 	for(index8 i = 0; i < nVariants; i++) {
