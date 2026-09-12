@@ -49,7 +49,8 @@ typedef struct s_RelationTable {
 
 	// Implementation-dependent data for this table, allocated by the StorageProvider.
 	// NOTE: RelationTable knows nothing about this storage, just passes the pointer back
-	// when calling the storage provider's functions. But we must have one storage per relation table.
+	// when calling the storage provider's functions. This field is here only becuase we must
+	// have one storage per relation table, while StorageProvider is shared across tables.
 	void * storage;
 
 	// NOTE: here we could keep track of the operators associated with the storage??

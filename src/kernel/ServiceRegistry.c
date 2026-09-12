@@ -171,7 +171,8 @@ static void removeService(Service const * service)
 	if(!ServiceIsPrimitive(service))
 		nCompiledServices--;
 
-	// Find all ancestor services of the given service and remove them recursively
+	// Find all ancestor services of the given service (dependents)
+	// and remove them recursively
 	OperatorAncestor key = {.op = service->op};
 	OperatorAncestor pair;
 	while(BTreeGetItem(operatorAncestors, &key, &pair))
@@ -191,6 +192,8 @@ static void removeService(Service const * service)
 		}
 		FreeResizingArray(&descendantsArray);
 	}
+	// Detach the root operator from the service.
+	// This may cause the operator to be deleted, and possibly its descendants.
 	DetachOperator(service->op);
 	ReleaseRelation(service->relation);
 	BTreeDeleteResult result = BTreeDelete(services, service, 0);

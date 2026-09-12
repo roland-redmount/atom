@@ -1583,14 +1583,19 @@ void DetachOperator(Operator * op)
 void CheckOperator(Operator * op)
 {
 	if(op->nParents == 0) {
-		if(IsNullRelation(op->relation))
+		if(IsNullRelation(op->relation)) {
+			// TODO: a MACHINE operator that has been subsume into a UNION
+			// would get deallocated here if the UNION is invalidated,
+			// since it no longer is a root operator, and op->relation == 0.
 			teardownOperator(op);
+		}
 		else {
-			// A MACHINE operator acting on storage must notify
-			// its RelationTable, which could now become stale.
 			if(op->type == OPERATOR_MACHINE) {
-				if(op->impl.machine.spec.relationTable)
+				if(op->impl.machine.spec.relationTable) {
+					// A MACHINE operator acting on storage must notify
+					// its RelationTable, which could now become stale.
 					CheckRelationTable(op->impl.machine.spec.relationTable);
+				}
 			}
 		}
 	}
@@ -1915,10 +1920,14 @@ static void printOperatorRecursive(Operator const * op, uint32 depth)
 
 	case OPERATOR_MACHINE:
 		printOperatorHead(op, "MACHINE");
-		if(op->impl.machine.spec.relationTable)
+		if(op->impl.machine.spec.relationTable) {
+			// A operator on table storage, print the storage relation (??)
 			PrintTermForm(op->impl.machine.spec.relationTable->relation.termForm);
-		else if(!IsNullRelation(op->relation))
+		}
+		else if(!IsNullRelation(op->relation)) {
+			// An operator without storage  
 			PrintTermForm(op->relation.termForm);
+		}
 		break;
 
 	default:

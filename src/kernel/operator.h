@@ -223,8 +223,9 @@ struct s_Operator {
 	// Context size, in addition to sizeof(Context)
 	size32 contextSize;
 	size32 nParents;		// number of parent operators
-	// This pointer is nonzero only for a service's root operator,
-	// and is used only to locate that service.
+	// This relation pointer is nonzero iff the operator is a root operator for a service,
+	// and can be used to locate that service. If relation == 0 for a MACHINE operator,
+	// the operator has been subsumed into a UNION operator.
 	Relation relation;
 	union {
 		// for OPERATOR_PERMUTE

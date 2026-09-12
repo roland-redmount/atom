@@ -1,10 +1,12 @@
 /**
  * Interface for a relation storage provider, such as RelationBTree.
  * One provider may provide the storage of many relations, sharing the same callbacks.
- * Providers live under src/storage/, 
+ * Providers live under src/storage/
  *
  * This interface is designed to have minimal interactions with the kernel structures,
  * so that storage implementations don't have to make assumptions about kernel functions.
+ *
+ * This is analogous to MachineOperatorSpec for operators.
  */
 
 #ifndef STORAGEPROVIDER_H
@@ -34,6 +36,8 @@ typedef struct s_StorageProvider {
 	 * The returned storage data pointer is assigned to the RelationTable.storage field.
 	 */
 	void * (*createStorage)(size8 nColumns, void * table, CreateServiceCallback callback);
+
+	// NOTE: the below are specific to 1 relation table
 
 	/**
 	 * Add a tuple to storage.

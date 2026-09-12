@@ -131,6 +131,7 @@ static bool tableIsStale(RelationTable const * table)
 	if(table->referenceCount > 0 || RelationTableNRows(table) > 0)
 		return false;
 	
+	// Search for operators that refer to this this table and have dependents
 	bool hasDependentOperator = false;
 	ServiceIterator serviceIterator;
 	ServiceRegistryIterate(table->relation, &serviceIterator);
