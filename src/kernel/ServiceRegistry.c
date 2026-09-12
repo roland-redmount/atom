@@ -57,8 +57,8 @@ static int8 btreeCompareServices(void const * item, void const * itemOrKey, size
 static BTree * operatorAncestors;
 
 typedef struct {
-	Operator * op;
-	Operator * ancestor;
+	Operator const * op;
+	Operator const * ancestor;
 } OperatorAncestor;
 
 
@@ -171,7 +171,8 @@ static void removeService(Service const * service)
 	if(!ServiceIsPrimitive(service))
 		nCompiledServices--;
 
-	// Find all ancestor services of the given service and remove them recursively
+	// Find all ancestor services of the given service (dependents)
+	// and remove them recursively
 	OperatorAncestor key = {.op = service->op};
 	OperatorAncestor pair;
 	while(BTreeGetItem(operatorAncestors, &key, &pair))
@@ -191,6 +192,8 @@ static void removeService(Service const * service)
 		}
 		FreeResizingArray(&descendantsArray);
 	}
+	// Detach the root operator from the service.
+	// This may cause the operator to be deleted, and possibly its descendants.
 	DetachOperator(service->op);
 	ReleaseRelation(service->relation);
 	BTreeDeleteResult result = BTreeDelete(services, service, 0);
@@ -245,16 +248,7 @@ bool ServiceIsPrimitive(Service const * service)
 }
 
 
-bool ServiceHasDependents(Service const * service)
-{
-	// A service is a dependent if its operator is an ancestor
-	// of the given service's operator.
-	OperatorAncestor key = {.op = service->op};
-	return BTreeContainsItem(operatorAncestors, &key);
-}
-
-
-void RemoveService(Relation relation, Operator * op)
+void RemoveService(Relation relation, Operator const * op)
 {
 	Service service;
 	bool found = findService(relation, op, &service);
@@ -335,7 +329,7 @@ void InvalidateServicesByTermForm(Atom termForm)
 	RelationIteratorEnd(&relationIterator);
 
 	// remove all stale services
-	for(index32 i = 0; i < ResizingArrayNElements(&staleServices); i++) {
+	for(index32 i = 0; i < staleServices.nElements; i++) {
 		Service service = * ((Service *) ResizingArrayGetElement(&staleServices, i));
 		if(!BTreeContainsItem(services, &service))
 			continue;	// service already removed in a previous removeService() call

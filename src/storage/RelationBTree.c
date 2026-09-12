@@ -209,7 +209,7 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator)
 
 
 typedef struct s_RelationBTreeOperatorData {
-	void * storage;
+	RelationBTree * relationBTree;
 	index8 nInputs;
 } RelationBTreeOperatorData;
 
@@ -220,7 +220,7 @@ static void btreeSetupState(void * state, Atom arguments[], void * operatorData)
 	// Initialize the RelationBTreeIterator, allocated by OperatorCreateContext()
 	RelationBTreeIterator * iterator = state;
 	RelationBTreeIterate(
-		bTreeOperatorData->storage, arguments, bTreeOperatorData->nInputs, iterator);
+		bTreeOperatorData->relationBTree, arguments, bTreeOperatorData->nInputs, iterator);
 }
 
 
@@ -243,6 +243,7 @@ static void btreeFinalizeState(void * state, void * operatorData)
 
 static void finalizeBTreeOperator(void * operatorData)
 {
+	// NOTE: here we could decrement an operator count for the storage provider
 	Free(operatorData);
 }
 
@@ -272,7 +273,7 @@ static void * btreeCreateStorage(size8 nColumns, void * table, CreateServiceCall
 				parameterIO[i] = PARAMETER_OUT;
 		}
 		RelationBTreeOperatorData * operatorData = Allocate(sizeof(RelationBTreeOperatorData));
-		operatorData->storage = relationBTree;
+		operatorData->relationBTree = relationBTree;
 		operatorData->nInputs = nInputs;
 
 		MachineOperatorSpec bTreeOperatorSpec = {

@@ -42,13 +42,6 @@ bool ResizingArrayContainsElement(ResizingArray const * array, const void * elem
  */
 void * ResizingArrayGetElement(ResizingArray const * array, index32 index);
 
-
-/**
- * Current number of elements stored in the array.
- */
-size32 ResizingArrayNElements(const ResizingArray * array);
-
-
 /**
  * Append an element to array
  */

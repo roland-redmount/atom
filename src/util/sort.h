@@ -85,6 +85,11 @@ void ReorderByteArray(byte const array[], index8 const index[], size8 n, byte re
 void InvertPermutation(const index8 permutation[], index8 inverted[], size8 n);
 
 /**
+ * Return true if the given permutation is the identify permutation 0, 1, ..., n-1
+ */
+bool IsIdentityPermutation(const index8 permutation[], size8 n);
+
+/**
  * Perform a random permutation of the given items array using the
  * Fisher-Yates shuffle method. This yields a sample
  * from a uniform distribution over all possible permutations.

@@ -1,6 +1,7 @@
 /**
- * A RelationTable represents the tuple storage of one Relation, implemented by a StorageProvider,
- * and provides the interface for mutating (writing to) the relation.
+ * A RelationTable is an interface to the tuple storage of a Relation,
+ * providing the interface for mutating (writing to) the relation.
+ * The actual storage mechanism is implemented by a StorageProvider.
  * Reading from a relation is done by services; see ServiceRegistry.h.
  * Computed relations do not have a RelationTable.
  *
@@ -43,12 +44,16 @@ typedef struct s_RelationTable {
 	// The arity of the relation, determined from the relation type signature
 	size8 nColumns;
 
+	// The storage provider. May be shared with other RelationTables.
 	StorageProvider const * provider;
 
-	// Implementation-dependent data, allocated by the StorageProvider.
+	// Implementation-dependent data for this table, allocated by the StorageProvider.
 	// NOTE: RelationTable knows nothing about this storage, just passes the pointer back
-	// when calling the storage provider's functions. But we must have one storage per relation table.
+	// when calling the storage provider's functions. This field is here only becuase we must
+	// have one storage per relation table, while StorageProvider is shared across tables.
 	void * storage;
+
+	// NOTE: here we could keep track of the operators associated with the storage??
 
 	size32 referenceCount;
 } RelationTable;
@@ -98,7 +103,7 @@ void ReleaseRelationTable(RelationTable * table);
  * A relation table is stale if
  *   (1) it has zero references,
  *   (2) it contains zero rows, and
- *   (3) no service depends on any of its primitive services.
+ *   (3) no service referencing this table has dependents.
  * Only certain kernel functions need to call this function.
  */
 void CheckRelationTable(RelationTable * table);

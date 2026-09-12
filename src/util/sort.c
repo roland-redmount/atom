@@ -265,6 +265,16 @@ void InvertPermutation(const index8 permutation[], index8 inverted[], size8 n)
 }
 
 
+bool IsIdentityPermutation(const index8 permutation[], size8 n)
+{
+	for(index8 i = 0; i < n; i++) {
+		if(permutation[i] != i)
+			return false;
+	}
+	return true;
+}
+
+
 void * ArrayGetItem(void const * items, index32 index, size32 itemSize)
 {
 	return (void *) (((addr64) items) + index * itemSize);

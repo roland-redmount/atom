@@ -448,56 +448,15 @@ working once a rule answering it is asserted.
 
 ### Invalidating a compiled service
 
-A compiled service answers as the facts and the rules stood when it was compiled, so it is
-a cache, and a change to either has to remove the services it could affect. The next query
-that parameterizes alike then compiles them again. Removing too much costs a compilation; removing too
-little gives a wrong answer, so invalidation is deliberately coarse.
+A compiled service depends on the set of facts and rules used to compile it. If any of these facts or rules are altered, the service must be invalidated, and re-compiled upon the next query. Invalidation may have false positives: if we invalidate too many services, that costs a re-compilation; but if we fail to invalidate, the system would be corrupted.
 
-Only structural change matters. A fact asserted into a relation that exists needs nothing:
-the compiled service reads that relation live through its MACHINE operator. What does
-matter is a relation appearing, a service appearing or disappearing, and a rule being
-added or removed.
+A service is invalidated if:
 
-The service registry records, for each compiled service, the services its operator tree is
-built on. The walk recording them stops at every service it meets, so a tree contributes a
-handful of entries and a service further down is reached through the one above it. Removing
-a service therefore removes the compiled services built on it, and then the ones built on
-those; see `ServiceRegistryInvalidateTermForm()`.
+- *A new primitive service is registered.* A query of its term form now has one more relation to match, so the compiled services of that form are incomplete.
+- *A service is removed*, in which case any service that depends on it become invalid.
+- *A rule is added or removed.* The compiler resolves a query against the clauses whose form contains the query term form, so any new clause containing the query term form invalidates the compiled service.
 
-A dependency is between two operators, and the services are the ones those operators
-evaluate. Services sharing an operator are one for this purpose, and go stale together,
-which is what a term compiling to the service it matched gives: the compiled service is
-then nothing but that service's operator. A rule that merely renames roles, such as
-`(person p dependent d) <- (parent p child d)`, produces exactly that: the compiled
-service is registered against the `(person dependent)` relation and evaluated by the
-machine operator of `(parent child)`, a relation it holds no pointer to.
-
-This is a rule about the knowledge base, not about memory. Dropping the `(parent child)`
-table removes the compiled service because the relation it read has left the knowledge
-base, and the next query compiles it again — correctly finding nothing. It is not what
-keeps the storage alive: the machine operator holds a counted reference to the table it
-reads, so the storage is deallocated when the last operator reading it is gone, whatever
-order things are dropped in. See `testDropTableWithSharedOperator` in
-`test_service_registry.c`, which drops the table while the shared operator is still held.
-
-Three events drive it:
-
-- *A primitive service is registered.* A query of its term form now has one more
-  relation to match, so the compiled services of that form are incomplete. Hooking service
-  registration rather than relation registration is what keeps the compiler out of it: the
-  compiler creates relations of its own while compiling, and invalidating there could
-  remove a service the compilation in flight is building on.
-- *A service is removed*, which is what retracting the last fact of a relation and
-  dropping its table comes to. Everything built on it goes.
-- *A rule is added or removed.* A clause form is the multiset of the term forms of its
-  terms, and the compiler resolves a query against the clauses whose form contains the
-  query term form, so those term forms name every service the rule could have reached.
-  No per-rule bookkeeping is needed, and a rule added before anything was compiled costs
-  nothing.
-
-A compiled service removed by invalidation takes its relation with it when no service and
-no table names that relation any longer. Invalidation modifies
-the registries, so it cannot run while a query is being read: an open `DispatchIterator`
+An invalidated compiled service is removed. This modifies the registries, so it cannot run while a query is being read: an open `DispatchIterator`
 or `MixedTypeRelation` write-locks against modification.
 
 ## Known gaps

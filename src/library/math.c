@@ -4,7 +4,9 @@
 
 
 /**
- * The operator (+ x<INT + y<INT = z>INT)
+ * (+ x<INT + y<INT = z>INT)
+ * 
+ * Addition x + y
  */
 static bool add1Call(void * state, Atom arguments[], void * operatorData)
 {
@@ -14,8 +16,10 @@ static bool add1Call(void * state, Atom arguments[], void * operatorData)
 
 
 /**
- * The operator (+ x<INT + y>INT = z<INT)
- * This implements subtraction by solving the equation
+ * (+ x<INT + y>INT = z<INT)
+ * 
+ * Solving the additive equation x + y = z for z
+ * This cane be use to implement subtraction via the rule
  * z = x + y  <->  y = z - x
  */
 static bool add2Call(void * state, Atom arguments[], void * operatorData)
@@ -26,12 +30,35 @@ static bool add2Call(void * state, Atom arguments[], void * operatorData)
 
 
 /**
- * The operator (* x<INT * y<INT = z>INT)
+ * (* x<INT * y<INT = z>INT)
+ * 
+ * Multiplication x * y
  */
 static bool mul1Call(void * state, Atom arguments[], void * operatorData)
 {
 	arguments[2]._int = arguments[0]._int * arguments[1]._int;
 	return true;
+}
+
+/**
+ * (< x<INT > y>INT)
+ * 
+ * Strict inequality test x > y
+ */
+static bool strictInequalityCall(void * state, Atom arguments[], void * operatorData)
+{
+	return arguments[0]._int > arguments[1]._int;
+}
+
+
+/**
+ * (=< x<INT >= y>INT)
+ * 
+ * Non-strict inequality test x >= y
+ */
+static bool nonStrictInequalityCall(void * state, Atom arguments[], void * operatorData)
+{
+	return arguments[0]._int >= arguments[1]._int;
 }
 
 
@@ -95,6 +122,14 @@ void MathSetup(void)
 			.call = rangeCall
 		}
 	);
+
+	RegisterMachineService(
+		"< @1<INT > @2<INT",
+		(MachineOperatorSpec) {.providerID = providerID, .call = strictInequalityCall});
+
+	RegisterMachineService(
+		"=< @1<INT >= @2<INT",
+		(MachineOperatorSpec) {.providerID = providerID, .call = nonStrictInequalityCall});
 }
 
 

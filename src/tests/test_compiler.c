@@ -1,5 +1,5 @@
 
-#include "kernel/compiler.h"
+#include "compiler/compiler.h"
 #include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
 #include "kernel/kernel.h"
@@ -23,6 +23,41 @@
 #include "testing/testing.h"
 
 
+/**
+ * CLAUDE: Index columns placing the named role of a binary relation first, so that a
+ * query binding that role dispatches to a stored service: a B-tree provides one service
+ * per prefix of its index columns. The roles of a form are not in the order they were
+ * written, so the column has to be looked up. See RelationTable.indexColumns.
+ */
+static void indexBinaryRelationByRole(
+	Atom termForm, char const * roleName, index8 indexColumns[])
+{
+	Atom role = CreateNameFromCString(roleName);
+	index8 column = PredicateRoleIndex(TermFormGetPredicateForm(termForm), role);
+	NameRelease(role);
+	indexColumns[0] = column;
+	indexColumns[1] = column ? 0 : 1;
+}
+
+
+/**
+ * CLAUDE: The IO signature a query dispatches with: an input where the query binds an
+ * actor, an output where it holds a variable. See ActorsToParameters().
+ */
+static IOSignature queryIOSignature(Atom queryTerm)
+{
+	TypedTuple const * actors = FormulaGetActors(queryTerm);
+	size8 arity = actors->nAtoms;
+	Atom parameters[arity];
+	ActorsToParameters(actors, parameters);
+	byte parameterIO[arity];
+	for(index8 i = 0; i < arity; i++)
+		parameterIO[i] = parameters[i].parameter.io;
+	return CreateIOSignature(parameterIO, arity);
+}
+
+
+
 void testCompilePermute1(void)
 {
 	// This rule compiles to a PERMUTE service with no constants
@@ -32,7 +67,7 @@ void testCompilePermute1(void)
 
 	// This will yield a new service from the existing (+ + =) service
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -66,7 +101,7 @@ void testCompilePermute2(void)
 	Atom queryTerm = CStringToTerm("number 3 addtwo z");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -108,7 +143,7 @@ void testCompileProject(void)
 	// Only the LETTER-element service yields tuples, as "alibaba" is a string;
 	// the ID-element service is registered but matches nothing.
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 2)
 
 	// The unique letters of "alibaba"
@@ -156,7 +191,7 @@ void testCompileUnconstrainedHeadVariable(void)
 	Atom queryTerm = CStringToTerm("set \"ab\" element e size z");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 0)
 
 	for(index8 i = 0; i < nServices; i++) {
@@ -176,7 +211,7 @@ void testCompileJoin1(void)
 	Atom queryTerm = CStringToTerm("first 3 second s third t");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -214,7 +249,7 @@ void testCompileJoin2(void)
 	Atom queryTerm = CStringToTerm("first 3 third t");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -248,7 +283,7 @@ void testCompileUnion(void)
 	Atom queryTerm = CStringToTerm("number 5 neighbor y");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -300,7 +335,7 @@ void testCompileConstrain(void)
 	Atom queryTerm = CStringToTerm("self y");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
 	// Only a and b have a self edge. The tuples are sorted by atom, so we do not
@@ -336,16 +371,20 @@ void testCompileConstrain(void)
 /**
  * Compile the query term (number 4 faculty f) under the recursive rule
  * 
- *  number n faculty f <- + m + 1 = n & number m faculty e & * e * n = f
+ *  number n faculty f <- < n > 0 & + m + 1 = n & number m faculty e & * e * n = f
  * 
  * with the fact (number 0 faculty 1) terminating the recursion.
  * This query is typical of recursive logical resolution a'la Prolog.
+ * 
+ * NOTE: recursive rules on "infinite" relations like (+ + =) cannot be
+ * guaranteed to terminate in general. Here the (< n > 0) term is required
+ * to ensure termination.
  */
 void testCompileRecursiveJoin1(void)
 {
 	// The recursive rule
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"number n faculty f | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
+		"number n faculty f | ! < n > 0 | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
 	// Create terminating fact, provide by a B-tree service
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
 	Relation relation = CreateRelation(
@@ -359,10 +398,26 @@ void testCompileRecursiveJoin1(void)
 	RelationTableAddTuple(table, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	// Compile the query
 	Atom queryTerm = CStringToTerm("number 4 faculty f");
+
+	// CLAUDE: the stored service the compiled service takes over
+	IOSignature ioSignature = queryIOSignature(queryTerm);
+	Operator * storedOperator = FindService(relation, ioSignature);
+	ASSERT_NOT_NULL(storedOperator)
+	size32 nServicesBefore = NumberOfServices();
+	size32 nCompiledBefore = NumberOfCompiledServices();
+
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	PrintService(&service);
+
+	// CLAUDE: one service was taken over and one registered in its place,
+	// so the compiled service now answers what the stored service answered
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore + 1)
+	ASSERT_PTR_NOT_EQUAL(service.op, storedOperator)
+	ASSERT_PTR_EQUAL(FindService(relation, ioSignature), service.op)
 
 	// Call the service
 	Atom arguments[3];
@@ -377,10 +432,159 @@ void testCompileRecursiveJoin1(void)
 	OperatorFreeContext(context);
 
 	RemoveService(service.relation, service.op);
+	// CLAUDE: the taken-over operator goes with the union that held it, so the stored
+	// service is not restored. The storage provider creates its operators once, when the
+	// table is created, and nothing re-registers one.
+	ASSERT_NULL(FindService(relation, ioSignature))
+
 	ReleaseFormula(queryTerm);
 	RelationTableRemoveTuple(table, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	ReleaseRelationTable(table);
 	ReleaseFormula(terminatingFact);
+	DictionaryRemoveClause(&entry);
+}
+
+
+
+/**
+ * CLAUDE: A relation with both stored facts and a rule. The compiled service takes over
+ * the stored service and reads it as one branch of its union, so that a query is answered
+ * by the stored facts and the rule together.
+ */
+void testCompileStoredFactsAndRule(void)
+{
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"base n squared s | ! * n * n = s");
+
+	// A stored fact the rule does not derive
+	Atom storedFact = CStringToTerm("base 5 squared 99");
+	Relation relation = CreateRelation(
+		FormulaGetForm(storedFact),
+		CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
+	);
+	index8 indexColumns[2];
+	indexBinaryRelationByRole(FormulaGetForm(storedFact), "base", indexColumns);
+	RelationTable * table = CreateRelationTable(relation, &btreeStorageProvider, indexColumns);
+	ReleaseRelation(relation);
+	RelationTableAddTuple(table, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+
+	Atom queryTerm = CStringToTerm("base 5 squared s");
+	IOSignature ioSignature = queryIOSignature(queryTerm);
+	size32 nServicesBefore = NumberOfServices();
+
+	Service services[MAX_COMPILED_SERVICES];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Service service = services[0];
+
+	// The stored service was taken over, so no service was added
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)
+	ASSERT_PTR_EQUAL(FindService(relation, ioSignature), service.op)
+
+	// The stored base yields both the derived square and the stored fact
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
+	void * context = OperatorCreateContext(service.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	ASSERT_INT64_EQUAL(
+		TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "squared", 1)._int, 25)
+	ASSERT_TRUE(OperatorCall(context))
+	ASSERT_INT64_EQUAL(
+		TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "squared", 1)._int, 99)
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	// A base with no stored fact yields the derived square alone
+	Atom otherQuery = CStringToTerm("base 3 squared s");
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(otherQuery)), arguments, 2);
+	context = OperatorCreateContext(service.op, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	ASSERT_INT64_EQUAL(
+		TermGetRoleActor(FormulaGetForm(otherQuery), arguments, "squared", 1)._int, 9)
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+	ReleaseFormula(otherQuery);
+
+	RemoveService(service.relation, service.op);
+	ReleaseFormula(queryTerm);
+	RelationTableRemoveTuple(table, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+	ReleaseRelationTable(table);
+	ReleaseFormula(storedFact);
+	DictionaryRemoveClause(&entry);
+}
+
+
+/**
+ * CLAUDE: A stored relation with no rule of its form. The query is answered as it stands,
+ * so compiling it registers nothing and leaves the stored service in place.
+ */
+void testCompileStoredServiceAnswersQuery(void)
+{
+	Atom storedFact = CStringToTerm("shade 3 value 7");
+	Relation relation = CreateRelation(
+		FormulaGetForm(storedFact),
+		CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
+	);
+	index8 indexColumns[2];
+	indexBinaryRelationByRole(FormulaGetForm(storedFact), "shade", indexColumns);
+	RelationTable * table = CreateRelationTable(relation, &btreeStorageProvider, indexColumns);
+	ReleaseRelation(relation);
+	RelationTableAddTuple(table, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+
+	Atom queryTerm = CStringToTerm("shade 3 value v");
+	IOSignature ioSignature = queryIOSignature(queryTerm);
+	Operator * storedOperator = FindService(relation, ioSignature);
+	ASSERT_NOT_NULL(storedOperator)
+	size32 nServicesBefore = NumberOfServices();
+
+	Service services[MAX_COMPILED_SERVICES];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 0)
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)
+	ASSERT_PTR_EQUAL(FindService(relation, ioSignature), storedOperator)
+
+	ReleaseFormula(queryTerm);
+	RelationTableRemoveTuple(table, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+	ReleaseRelationTable(table);
+	ReleaseFormula(storedFact);
+}
+
+
+/**
+ * CLAUDE: A stored relation with a rule of its form that does not compile, its body term
+ * having no service. The variant seeded from the stored service has nothing to union with
+ * and is dropped again, leaving the stored service as it was.
+ */
+void testCompileStoredServiceWithUncompilableRule(void)
+{
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"tone n level v | ! nosuch n thing v");
+
+	Atom storedFact = CStringToTerm("tone 3 level 7");
+	Relation relation = CreateRelation(
+		FormulaGetForm(storedFact),
+		CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
+	);
+	index8 indexColumns[2];
+	indexBinaryRelationByRole(FormulaGetForm(storedFact), "tone", indexColumns);
+	RelationTable * table = CreateRelationTable(relation, &btreeStorageProvider, indexColumns);
+	ReleaseRelation(relation);
+	RelationTableAddTuple(table, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+
+	Atom queryTerm = CStringToTerm("tone 3 level v");
+	IOSignature ioSignature = queryIOSignature(queryTerm);
+	Operator * storedOperator = FindService(relation, ioSignature);
+	ASSERT_NOT_NULL(storedOperator)
+	size32 nServicesBefore = NumberOfServices();
+
+	Service services[MAX_COMPILED_SERVICES];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 0)
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)
+	ASSERT_PTR_EQUAL(FindService(relation, ioSignature), storedOperator)
+
+	ReleaseFormula(queryTerm);
+	RelationTableRemoveTuple(table, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+	ReleaseRelationTable(table);
+	ReleaseFormula(storedFact);
 	DictionaryRemoveClause(&entry);
 }
 
@@ -411,7 +615,7 @@ void testCompileRecursiveJoin2(void)
 
 	Atom queryTerm = CStringToTerm("before \"a\" after \"d\"");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -456,7 +660,7 @@ void testCompileRecursiveReachable(void)
 
 	Atom queryTerm = CStringToTerm("before \"a\" after y");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -518,7 +722,7 @@ void testCompileRecursiveTermUnboundInput(void)
 
 	Atom queryTerm = CStringToTerm("reach \"a\" hop y");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
 	// Only the successors of a, which is b alone, and not the closure b, c, d
@@ -564,7 +768,7 @@ void testCompileRecursiveClosure(void)
 
 	Atom queryTerm = CStringToTerm("before x after y");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -642,7 +846,7 @@ void testCompileRecursiveVariants(void)
 	// (before x after y <- prec x succ y)
 	Atom queryTerm = CStringToTerm("before x after y");
 	Service compiledServices[MAX_COMPILED_SERVICES];
-	size8 nCompiledServices = CompileQuery(queryTerm, compiledServices);
+	size8 nCompiledServices = CompileQuery(FormulaGetView(queryTerm), compiledServices);
 	ASSERT_UINT32_EQUAL(nCompiledServices, 2)
 
 	// Expected values for the transitive closure of the AT_INT relation
@@ -717,7 +921,7 @@ void testCompileNegatedTerm(void)
 
 	// compile the query
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -766,7 +970,7 @@ void testCompiledServiceReadsFactsLive(void)
 
 	Atom queryTerm = CStringToTerm("! even 3");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 	size32 nCompiled = NumberOfCompiledServices();
@@ -818,7 +1022,7 @@ void testCompileSquares(void)
 	Atom queryTerm = CStringToTerm("number n square s");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -870,7 +1074,7 @@ void testCompileChainedRules(void)
 	size32 nCompiledBefore = NumberOfCompiledServices();
 	Atom queryTerm = CStringToTerm("grandparent x grandchild z");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
 	// The query service, and one (parent offspring) service per IO pattern its two terms
@@ -934,7 +1138,7 @@ void testCompileChainedRuleOrder(void)
 
 	Atom queryTerm = CStringToTerm("pick \"sa\" give g");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
 	Atom labelA = CreateStringFromCString("la");
@@ -980,7 +1184,7 @@ void testCompileMutualRecursion(void)
 
 	Atom queryTerm = CStringToTerm("p n");
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 0)
 
 	ReleaseFormula(queryTerm);
@@ -1000,7 +1204,7 @@ void testCompileNewIOPattern(void)
 	Atom queryTerm = CStringToTerm("list \"AB\" position _ element 'A");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -1028,7 +1232,7 @@ void testCompileNewIOPatternRepeated(void)
 	Atom queryTerm = CStringToTerm("list \"alibaba\" position _ element 'a");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -1064,7 +1268,7 @@ void testCompileFilterInRuleBody(void)
 	Atom queryTerm = CStringToTerm("at \"abracadabra\" position q letter 'a");
 
 	Service services[MAX_COMPILED_SERVICES];
-	size8 nServices = CompileQuery(queryTerm, services);
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 
@@ -1101,7 +1305,7 @@ void testFilterServiceInvalidatedByRule(void)
 	size32 nCompiledBefore = NumberOfCompiledServices();
 	Atom queryTerm = CStringToTerm("list \"AB\" position _ element 'A");
 	Service services[MAX_COMPILED_SERVICES];
-	ASSERT_UINT32_EQUAL(CompileQuery(queryTerm, services), 1)
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 1)
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore + 1)
 
 	// A rule of the query's term form invalidates what was compiled for that form
@@ -1147,11 +1351,10 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileFilterInRuleBody);
 	ExecuteTest(testFilterServiceInvalidatedByRule);
 
-	// TODO: compiling a recursive rule over an infinite domain. The relation has no
-	// finite fixpoint and the call bindings n = 4, 3, 2, 1, 0, -1, -2, ... do not
-	// terminate either, so this needs the precondition ? < n > 0: to guard the
-	// recursive clause; see the notes on termination in compiler.md.
-	// ExecuteTest(testCompileRecursiveJoin1);
+	ExecuteTest(testCompileRecursiveJoin1);
+	ExecuteTest(testCompileStoredFactsAndRule);
+	ExecuteTest(testCompileStoredServiceAnswersQuery);
+	ExecuteTest(testCompileStoredServiceWithUncompilableRule);
 
 	UnloadLibraries();
 	TestSummary();

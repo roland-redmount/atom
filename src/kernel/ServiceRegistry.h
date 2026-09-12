@@ -66,16 +66,11 @@ Service CreateService(Relation relation, IOSignature ioSignature, Operator * op)
 bool ServiceIsPrimitive(Service const * service);
 
 /**
- * Returns true if another service depends on the given service.
- */
-bool ServiceHasDependents(Service const * service);
-
-/**
  * Remove the service identified by the given operator and relation.
  * This removes the services' operator, and recursively removes all operators
  * and services that depend on it.
  */
-void RemoveService(Relation relation, Operator * op);
+void RemoveService(Relation relation, Operator const * op);
 
 /**
  * Remove all services for the given relation.

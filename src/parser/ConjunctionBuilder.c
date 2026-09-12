@@ -24,7 +24,7 @@ void InitializeConjunctionBuilder(ConjunctionBuilder * builder, enum FormulaScop
  */
 static bool conjunctionHasClause(ConjunctionBuilder const * builder, Atom clause)
 {
-	size8 nClauses = ResizingArrayNElements(&(builder->clauses));
+	size8 nClauses = builder->clauses.nElements;
 	for(index8 i = 0; i < nClauses; i++) {
 		if(SameAtoms(clause, *((Atom *) ResizingArrayGetElement(&(builder->clauses), i))))
 			return true;
@@ -85,7 +85,7 @@ bool ConjunctionBuilderIsSingleClause(ConjunctionBuilder const * builder)
 {
 	// A clause is only appended to the clauses array when a TOKEN_AND is accepted,
 	// so a count of zero elements means we at most one clause.
-	return ResizingArrayNElements(&(builder->clauses)) == 0;
+	return builder->clauses.nElements == 0;
 }
 
 
@@ -108,7 +108,7 @@ Atom ConjunctionBuilderCreateFormula(ConjunctionBuilder * builder)
 {
 	ASSERT(builder->isValid);
 
-	size8 nClauses = ResizingArrayNElements(&(builder->clauses));
+	size8 nClauses = builder->clauses.nElements;
 	Atom const * clauses = ResizingArrayGetMemory(&(builder->clauses));
 	return CreateConjunction(clauses, nClauses);
 }
@@ -117,7 +117,7 @@ Atom ConjunctionBuilderCreateFormula(ConjunctionBuilder * builder)
 void ConjunctionBuilderReset(ConjunctionBuilder * builder)
 {
 	ClauseBuilderReset(&(builder->clauseBuilder));
-	size8 nClauses = ResizingArrayNElements(&(builder->clauses));
+	size8 nClauses = builder->clauses.nElements;
 	for(index8 i = 0; i < nClauses; i++) {
 		Atom clause = *((Atom *) ResizingArrayGetElement(&(builder->clauses), i));
 		ReleaseFormula(clause);

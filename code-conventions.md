@@ -115,6 +115,18 @@ There are of course situations where a function will not be able to do what the 
 
 The third category of errors are irrecoverable failures, such as the OS failing to provide resources that are absolutely necessary (like memory pages). These are not programmer errors, and should not be handled with the `Panic()` function, not `ASSERT`.
 
+## Accessor functions
+
+Avoid introducing functions merely for accessing struct fields. Whenever a struct is exposed in a header file, its fields should be accessed directly. For example, given
+```
+typedef struct {
+	 int part;
+} Thing;
+
+Thing myThing;
+```
+we would use `myThing.part` directly rather than call an accessor function `MyThingGetPart(myThing)`. Because we typically stack-allocate data structure (see below), they are often declared in a header file.
+
 
 ## Memory allocation conventions
 

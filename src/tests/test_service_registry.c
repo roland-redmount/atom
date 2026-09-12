@@ -115,7 +115,7 @@ void testInvalidateDependentServices(void)
 	Relation relation1 = CreateRelation(fixture.relation.termForm, typeSignature1);
 	Service service1 = createPermuteService(relation1, machineOperator);
 	ReleaseRelation(relation1);
-	ASSERT_FALSE(ServiceHasDependents(&service1))
+	ASSERT_INT32_EQUAL(service1.op->nParents, 0)
 
 	// A second "compiled" service that depends on the first one
 	TypeSignature typeSignature2 = CreateTypeSignature(
@@ -123,9 +123,9 @@ void testInvalidateDependentServices(void)
 	Relation relation2 = CreateRelation(fixture.relation.termForm, typeSignature2);
 	Service service2 = createPermuteService(relation2, service1.op);
 	ReleaseRelation(relation2);
-	ASSERT_TRUE(ServiceHasDependents(&service1))
+	ASSERT_FALSE(service1.op->nParents == 0)
 	// Nothing depends on the compiled service
-	ASSERT_FALSE(ServiceHasDependents(&service2))
+	ASSERT_INT32_EQUAL(service2.op->nParents, 0)
 
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 2)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices + 3)
@@ -180,6 +180,92 @@ void testInvalidateOnPrimitiveService(void)
 }
 
 
+/*
+ * CLAUDE: A signature no B-tree storage service provides, so that a computed service
+ * can share the fixture relation with a RelationTable. A B-tree registers one service
+ * per prefix key, which for arity 4 gives IIII, IIIO, IIOO, IOOO and OOOO.
+ * The fixture form repeats the role "bar", and this signature is unchanged by the
+ * permutation swapping the two occurrences; see the note on CreateService().
+ */
+static IOSignature const computedIOSignature = {.parameterIO = {
+	PARAMETER_OUT, PARAMETER_IN, PARAMETER_IN, PARAMETER_IN}};
+
+
+/**
+ * CLAUDE: A computed service reads no tuple storage, so removing the RelationTable
+ * of its relation leaves the computed service in place.
+ */
+void testComputedServiceOutlivesTable(void)
+{
+	setupFixture();
+	size32 nTablesInitial = NumberOfRelationTables();
+
+	RelationTable * table = CreateRelationTable(
+		fixture.relation, &btreeStorageProvider, (index8[]) {0, 1, 2, 3});
+	ASSERT_UINT32_EQUAL(NumberOfRelationTables(), nTablesInitial + 1)
+
+	// A computed service of the relation the table stores
+	Operator * computedOperator = createDummyMachineOperator();
+	CreateService(fixture.relation, computedIOSignature, computedOperator);
+
+	// The empty table is stale once the last reference to it goes
+	ReleaseRelationTable(table);
+	ASSERT_UINT32_EQUAL(NumberOfRelationTables(), nTablesInitial)
+	ASSERT_NULL(FindRelationTable(fixture.relation))
+
+	// Only the storage services went with the table
+	ASSERT_PTR_EQUAL(FindService(fixture.relation, computedIOSignature), computedOperator)
+	ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices + 1)
+
+	RemoveService(fixture.relation, computedOperator);
+	ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices)
+	teardownFixture();
+}
+
+
+/**
+ * A service depending on a computed service does not read from storage,
+ * and so does not keep the RelationTable of the associated relation alive.
+ */
+void testComputedServiceDependentLeavesTableStale(void)
+{
+	setupFixture();
+	size32 nTablesInitial = NumberOfRelationTables();
+	// A relation table for the fixture relation
+	RelationTable * table = CreateRelationTable(
+		fixture.relation, &btreeStorageProvider, (index8[]) {0, 1, 2, 3});
+	ASSERT_UINT32_EQUAL(NumberOfRelationTables(), nTablesInitial + 1)
+
+	// A computed service of the same relation
+	Operator * computedOperator = createDummyMachineOperator();
+	CreateService(fixture.relation, computedIOSignature, computedOperator);
+
+	// A "compiled" service depending on the computed service
+	TypeSignature compiledTypes = CreateTypeSignature(
+		(byte[]) {AT_INT, AT_INT, AT_INT, AT_LETTER}, EXAMPLE_FORM_ARITY);
+	Relation compiledRelation = CreateRelation(fixture.relation.termForm, compiledTypes);
+	Service compiled = createPermuteService(compiledRelation, computedOperator);
+	ReleaseRelation(compiledRelation);
+	ASSERT_TRUE(computedOperator->nParents > 0)
+
+	// The dependent reaches no storage service, so the empty table is still stale
+	ReleaseRelationTable(table);
+	// Check that the table was released
+	ASSERT_UINT32_EQUAL(NumberOfRelationTables(), nTablesInitial)
+	ASSERT_NULL(FindRelationTable(fixture.relation))
+
+	// Both the computed service and its dependent are still registered
+	ASSERT_PTR_EQUAL(FindService(fixture.relation, computedIOSignature), computedOperator)
+	ASSERT_PTR_EQUAL(FindService(compiledRelation, exampleIOSignature), compiled.op)
+
+	// Removing the computed service removes its dependent as well
+	RemoveService(fixture.relation, computedOperator);
+	ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices)
+	ASSERT_FALSE(RelationExists(compiledRelation))
+	teardownFixture();
+}
+
+
 int main(void)
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -191,6 +277,8 @@ int main(void)
 	ExecuteTest(testAddRemoveService);
 	ExecuteTest(testInvalidateDependentServices);
 	ExecuteTest(testInvalidateOnPrimitiveService);
+	ExecuteTest(testComputedServiceOutlivesTable);
+	ExecuteTest(testComputedServiceDependentLeavesTableStale);
 
 	UnloadLibraries();
 	KernelShutdown();

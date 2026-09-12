@@ -24,11 +24,11 @@ void testResizingArray(void)
 	const size32 initialCapacity = 2;
 	ResizingArray array;
 	CreateResizingArray(&array, stringLength, initialCapacity);
-	ASSERT_UINT32_EQUAL(ResizingArrayNElements(&array), 0)
+	ASSERT_UINT32_EQUAL(array.nElements, 0)
 
 	for(index32 i = 0; i < nStrings; i++) {
 		ResizingArrayAppend(&array, strings[i]);
-		ASSERT_UINT32_EQUAL(ResizingArrayNElements(&array), i + 1)
+		ASSERT_UINT32_EQUAL(array.nElements, i + 1)
 		char const * arrayElement = ResizingArrayGetElement(&array, i);
 		ASSERT_MEMORY_EQUAL(arrayElement, strings[i], stringLength)
 	}

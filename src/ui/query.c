@@ -1,5 +1,5 @@
 
-#include "kernel/compiler.h"
+#include "compiler/compiler.h"
 #include "lang/TermForm.h"
 #include "ui/query.h"
 
@@ -11,7 +11,7 @@ MixedTypeRelation * UserQuery(FormulaView query)
 	// Compile the query unless a service answers it already; see FindOrCompileService()
 	Service service;
 	index8 permutation[query.actors->nAtoms];
-	FindOrCompileService(query, &service, permutation);
+	DispatchOrCompileQuery(query, &service, permutation);
 
 	return CreateConcatRelation(query.form, query.actors);
 }
