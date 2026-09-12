@@ -107,13 +107,20 @@ typedef struct s_MachineOperatorSpec
  * without regard for how that one was composed.
  */
  enum OperatorType {
+
+	/**
+	 * IDENTITY returns its child operator arguments unaltered.
+	 * This is mainly used to connect MACHINE operators to Services.
+	 */
+	OPERATOR_IDENTITY = 1,
+
 	/**
 	 * PERMUTE calls a child operator with its arguments reordered, and may bind
 	 * constants to child arguments. Every child argument is either taken from a parent
 	 * argument or a constant, so PERMUTE never drops a child argument and hence never
 	 * introduces duplicate tuples.
 	 */
-	OPERATOR_PERMUTE = 1,
+	OPERATOR_PERMUTE = 2,
 	
 	/**
 	 * JOIN is the inner join of the relations of two child operators, with equality
@@ -122,7 +129,7 @@ typedef struct s_MachineOperatorSpec
 	 * argument, whose value the left child determines and the right child is then
 	 * constrained by.
 	 */
-	OPERATOR_JOIN = 2,
+	OPERATOR_JOIN = 3,
 
 	/**
 	 * UNION gives the set union of the tuple sets from two child operators.
@@ -131,7 +138,7 @@ typedef struct s_MachineOperatorSpec
 	 * NOTE: if operators are required to be distinct (using preconditions)
 	 * then we should never have duplicate tuples in a UNION.
 	 */
-	OPERATOR_UNION = 3,
+	OPERATOR_UNION = 4,
 
 	/**
 	 * PROJECT is the projection onto the child arguments named by its argument map:
@@ -140,7 +147,7 @@ typedef struct s_MachineOperatorSpec
 	 * PROJECT merely sorts the child tuples according to the new index order;
 	 * see CreateProjectOperator().
 	 */
-	OPERATOR_PROJECT = 4,
+	OPERATOR_PROJECT = 5,
 
 	/**
 	 * CONSTRAIN is a restriction on an equality between arguments: it yields those
@@ -148,11 +155,8 @@ typedef struct s_MachineOperatorSpec
 	 * argument of this operator are equal. This expresses the equality constraint of
 	 * a variable occurring more than once in a query, such as (edge e from x to x)
 	 * asking for the self edges of a graph.
-	 *
-	 * NOTE: this is the only operator whose call may consume several child tuples,
-	 * as it can only test the constraint once the child operator has produced a tuple.
 	 */
-	OPERATOR_CONSTRAIN = 5,
+	OPERATOR_CONSTRAIN = 6,
 
 	/**
 	 * FIXPOINT evaluates a recursive clause. Its child operator must contains a RECURSE
@@ -180,7 +184,7 @@ typedef struct s_MachineOperatorSpec
 	 * would improve upon this. See for example
 	 * https://stackoverflow.com/questions/47043937/what-is-the-difference-between-naive-and-semi-naive-evaluation
 	 */
-	OPERATOR_FIXPOINT = 6,
+	OPERATOR_FIXPOINT = 7,
 
 	/**
 	 * RECURSE is the recursive occurrence of the relation that an enclosing FIXPOINT
@@ -188,7 +192,7 @@ typedef struct s_MachineOperatorSpec
 	 * It is always a leaf. The enclosing FIXPOINT operator is found via the
 	 * chain of parent pointers in the operator context when the recursion is evaluated.
 	 */
-	OPERATOR_RECURSE = 7,
+	OPERATOR_RECURSE = 8,
 
 	/**
 	 * FILTER yields those tuples of its child operator that agree with the arguments the
@@ -200,17 +204,14 @@ typedef struct s_MachineOperatorSpec
 	 * read by the services its storage registered, and a B-tree registers one per prefix
 	 * of its index column order, so a pattern binding a column out of that order has no
 	 * service; see compileFilterVariants() in compiler.c.
-	 *
-	 * NOTE: filtering reads every tuple the child yields, so it is a scan over whatever
-	 * the child does bind. The child binding the most is therefore the one to read; see
-	 * DispatchFilterableQuery().
 	 */
-	OPERATOR_FILTER = 8,
+	OPERATOR_FILTER = 9,
 
 	/**
-	 * Call a machine code function. Leaf of the operator tree
+	 * Call a machine code function. Leaf of the operator tree.
+	 * Cannot be the root operator of a Service.
 	 */
-	OPERATOR_MACHINE = 9,
+	OPERATOR_MACHINE = 10,
 };
 
 struct s_Operator {
@@ -224,10 +225,13 @@ struct s_Operator {
 	size32 contextSize;
 	size32 nParents;		// number of parent operators
 	// This relation pointer is nonzero iff the operator is a root operator for a service,
-	// and can be used to locate that service. If relation == 0 for a MACHINE operator,
-	// the operator has been subsumed into a UNION operator.
+	// and can be used to locate that service. For a MACHINE operator, this must be 0.
 	Relation relation;
 	union {
+		// for OPERATOR_IDENTIFY
+		struct {
+			Operator * childOperator;
+		} identity;
 		// for OPERATOR_PERMUTE
 		struct {
 			Operator * childOperator;
@@ -300,7 +304,12 @@ struct s_Operator {
 };
 
 /**
- * Create a permute operator with the specified number of arguments.
+ * Create an IDENTIFY operator
+ */
+Operator * CreateIdentityOperator(Operator * childOperator);
+
+/**
+ * Create a PERMUTE operator with the specified number of arguments.
  * The argumentMap array has length equal to childOperator->nArguments and gives the
  * source of each child argument: an index below nArguments is the index of a parent
  * argument, an index of nArguments or above refers to constants[index - nArguments].
@@ -359,7 +368,7 @@ Operator * CreateJoinOperator(
 	Operator * rightChild, index8 const rightMap[]);
 
 /**
- * Setup a UNION operator, returning the union of two relations.
+ * Create a UNION operator, returning the union of two relations.
  * Merging two ordered relations requires that they are ordered alike, so the two child
  * operators must have the same index order, which this operator adopts. A child
  * declaring no order is ordered alike with any other, and takes the order of its sibling.

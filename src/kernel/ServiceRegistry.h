@@ -34,8 +34,9 @@ void SetupServiceRegistry(void);
 
 /**
  * Create a new service with the given signature and Operator, adding it to
- * the service registry. Acquires a reference to the Relation and attaches the new Service
- * to the operator. Returns a copy of the created service.
+ * the service registry. The operator cannot be a MACHINE operator.
+ * Acquires a reference to the Relation and attaches the new Service to the operator.
+ * Returns a copy of the created service.
  * 
  * NOTE: For services whose form contain repeated roles, such as `(a b b)`,
  * the signature must be unique under form permutation: for example, the two services

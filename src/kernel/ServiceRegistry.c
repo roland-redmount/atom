@@ -203,6 +203,7 @@ static void removeService(Service const * service)
 
 Service CreateService(Relation relation, IOSignature ioSignature, Operator * op)
 {
+	// ASSERT(op->type != OPERATOR_MACHINE)
 	Service service = {
 		.relation = relation,
 		.ioSignature = ioSignature,
