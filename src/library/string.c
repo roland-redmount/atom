@@ -14,8 +14,7 @@
 static Atom stringRoleName;
 static Atom stringPredicateForm;
 static Atom stringTermForm;
-static Relation stringRelation;
-static RelationTable * stringRelationTable;
+static RelationSignature stringRelation;
 static Operator * stringOperator;
 
 
@@ -37,15 +36,9 @@ Atom GetStringTermForm(void)
 }
 
 
-Relation GetStringRelation(void)
+RelationSignature GetStringRelation(void)
 {
 	return stringRelation;
-}
-
-
-RelationTable * GetStringRelationTable(void)
-{
-	return stringRelationTable;
 }
 
 
@@ -64,7 +57,7 @@ Atom CreateString(char const * chars, size32 length)
 	AddListToIFact(&draft, stringElementGenerator, chars, AT_LETTER, length);
 
 	// add (string @string) to ifact
-	IFactBeginConjunction(&draft, stringRelationTable,0);
+	IFactBeginConjunction(&draft, stringRelation, 0);
 	Atom tuple[1] = {(Atom) {0}};
 	IFactAddTuple(&draft, tuple);
 	IFactEndConjunction(&draft);
@@ -128,21 +121,18 @@ void StringSetup(void)
 	TypeSignature typeSignature = {
 		.atomTypes = {AT_ID}
 	};
-	stringRelation = CreateRelation(stringTermForm, typeSignature);
+	stringRelation = CreateRelation(stringTermForm, typeSignature, &btreeStorageProvider, 0);
 	IFactRelease(stringTermForm);
-
-	stringRelationTable = CreateRelationTable(stringRelation, &btreeStorageProvider, 0);
-	ReleaseRelation(stringRelation);
 
 	// Store a pointer to the (string<ID) service, created by the B-tree provider.
 	IOSignature ioSignature = {0};
 	ioSignature.parameterIO[0] = PARAMETER_IN;
-	stringOperator = FindService(stringRelation, ioSignature);
+	stringOperator = FindServiceOperator(stringRelation, ioSignature);
 	ASSERT(stringOperator);
 }
 
 
 void StringShutdown(void)
 {
-	ReleaseRelationTable(stringRelationTable);
+	DropRelation(stringRelation);
 }

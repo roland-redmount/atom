@@ -7,7 +7,7 @@
  * The operator (id x>ID ifact y<FORMULA)
  * If the formula does not represent a valid ifact, this returns false
  */
-static bool idIFactCall(void * state, Atom arguments[], void * operatorData)
+static bool idIFactCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	// FormulaView formulaView = FormulaGetView(arguments[1]);
 	Atom id = {0};
@@ -29,22 +29,18 @@ static bool idIFactCall(void * state, Atom arguments[], void * operatorData)
 }
 
 
-static uint32 providerID;
+static uint32 moduleID;
 
 
 void IFactServiceSetup(void)
 {
-	providerID = RequestProviderID();
+	moduleID = RequestModuleID();
 
-	RegisterMachineService(
-		"id @1>ID ifact @2<FORMULA",
-		(MachineOperatorSpec) {.providerID = providerID, .call = idIFactCall}
-	);
-		
+	RegisterMachineService(moduleID, "id @1>ID ifact @2<FORMULA", idIFactCall);
 }
 
 
 void IFactServiceShutdown(void)
 {
-	FreeMachineServices(providerID);
+	FreeModuleRelations(moduleID);
 }

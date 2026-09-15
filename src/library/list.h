@@ -15,7 +15,6 @@
 #include "kernel/ifact.h"
 #include "kernel/operator.h"
 #include "kernel/Relation.h"
-#include "kernel/RelationTable.h"
 
 
 /**
@@ -155,9 +154,9 @@ index8 const * GetListLengthRoleIndex(void);
  * The (list position element) relation storing elements of the given type,
  * which is AT_ID or AT_LETTER.
  */
-Relation GetListRelation(byte elementType);
+RelationSignature GetListRelation(byte elementType);
 
-RelationTable * GetListRelationTable(byte elementType);
+// RelationWriter * GetListRelationTable(byte elementType);
 
 /**
  * The service (list <ID position >INT element >elementType) of the relation
@@ -165,9 +164,9 @@ RelationTable * GetListRelationTable(byte elementType);
  */
 Operator * GetListOperator(byte elementType);
 
-Relation GetListLengthRelation(void);
+RelationSignature GetListLengthRelation(void);
 
-RelationTable * GetListLengthRelationTable(void);
+// RelationWriter * GetListLengthRelationTable(void);
 
 /**
  * The service (list <ID length >INT)

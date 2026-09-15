@@ -18,14 +18,14 @@
 #include "testing/testing.h"
 
 
-static uint32 providerID;		// for creating machine operators 
+static uint32 moduleID;		// for creating machine operators 
 
 /**
  * A service (first @1<INT second @2<INT result @3>INT)
  * combining the two inputs with distinct weights, so that reading an argument from the
  * wrong column gives a different result rather than a coincidentally equal one.
  */
-static bool weighCall(void * state, Atom arguments[], void * operatorDatat)
+static bool weighCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	arguments[2]._int = 100 * arguments[0]._int + 10 * arguments[1]._int;
 	return true;
@@ -51,8 +51,7 @@ static index8 roleIndex(Atom termForm, char const * roleName)
 static void testMachineServiceArgumentOrder(void)
 {
 	Service service = RegisterMachineService(
-		"first @1<INT second @2<INT result @3>INT",
-		(MachineOperatorSpec) {.providerID = providerID, .call = weighCall});
+		moduleID, "first @1<INT second @2<INT result @3>INT", weighCall);
 
 	index8 firstIndex = roleIndex(service.relation.termForm, "first");
 	index8 secondIndex = roleIndex(service.relation.termForm, "second");
@@ -80,7 +79,7 @@ static void testMachineServiceArgumentOrder(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	FreeMachineServices(providerID);
+	FreeModuleRelations(moduleID);
 }
 
 
@@ -88,7 +87,7 @@ static void testMachineServiceArgumentOrder(void)
  * A function (even <INT) returning false if the argument it odd (yields no tuple).
  * This one has no output argument at all.
  */
-static bool evenCall(void * state, Atom arguments[], void * operatorData)
+static bool evenCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	return (arguments[0]._int % 2) == 0;
 }
@@ -97,8 +96,7 @@ static bool evenCall(void * state, Atom arguments[], void * operatorData)
 static void testMachineServiceTestPredicate(void)
 {
 	Service service = RegisterMachineService(
-		"even @1<INT",
-		(MachineOperatorSpec) {.providerID = providerID, .call = evenCall});
+		moduleID, "even @1<INT", evenCall);
 
 	Atom arguments[1] = {(Atom) {._int = 4}};
 	OperatorContext * context = OperatorCreateContext(service.op, arguments);
@@ -111,7 +109,7 @@ static void testMachineServiceTestPredicate(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	FreeMachineServices(providerID);
+	FreeModuleRelations(moduleID);
 }
 
 
@@ -123,14 +121,14 @@ typedef struct {
 	int64 next;
 } CountState;
 
-static void countSetup(void * state, Atom arguments[], void * operatorData)
+static void countSetup(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	CountState * countState = state;
 	countState->next = arguments[0]._int;
 }
 
 
-static bool countCall(void * state, Atom arguments[], void * operatorData)
+static bool countCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	CountState * countState = state;
 	if(countState->next > arguments[2]._int)
@@ -142,15 +140,9 @@ static bool countCall(void * state, Atom arguments[], void * operatorData)
 
 static void testMachineServiceIterator(void)
 {
-	Service service = RegisterMachineService(
-		"from @1<INT count @2>INT to @3<INT",
-		(MachineOperatorSpec) {
-			.providerID = providerID,
-			.stateSize = sizeof(CountState),
-			.setupState = countSetup,
-			.call = countCall
-		}
-	);
+	Service service = RegisterMachineServiceWithState(
+		moduleID, "from @1<INT count @2>INT to @3<INT",
+		sizeof(CountState), countSetup, countCall, 0);
 
 	index8 fromIndex = roleIndex(service.relation.termForm, "from");
 	index8 countIndex = roleIndex(service.relation.termForm, "count");
@@ -182,7 +174,7 @@ static void testMachineServiceIterator(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	FreeMachineServices(providerID);
+	FreeModuleRelations(moduleID);
 }
 
 
@@ -193,15 +185,9 @@ static void testMachineServiceIterator(void)
  */
 static void testMachineServiceIteratorState(void)
 {
-	Service service = RegisterMachineService(
-		"from @1<INT count @2>INT to @3<INT",
-		(MachineOperatorSpec) {
-			.providerID = providerID,
-			.stateSize = sizeof(CountState),
-			.setupState = countSetup,
-			.call = countCall
-		}
-	);
+	Service service = RegisterMachineServiceWithState(
+		moduleID, "from @1<INT count @2>INT to @3<INT",
+		sizeof(CountState), countSetup, countCall, 0);
 
 	index8 fromIndex = roleIndex(service.relation.termForm, "from");
 	index8 countIndex = roleIndex(service.relation.termForm, "count");
@@ -228,7 +214,7 @@ static void testMachineServiceIteratorState(void)
 
 	OperatorFreeContext(secondContext);
 	OperatorFreeContext(firstContext);
-	FreeMachineServices(providerID);
+	FreeModuleRelations(moduleID);
 }
 
 
@@ -236,13 +222,13 @@ static void testMachineServiceIteratorState(void)
  * Two services of the same relation differ only in their parameter IO, so registering
  * the second finds the relation the first created rather than creating another.
  */
-static bool sumCall(void * state, Atom arguments[], void * operatorData)
+static bool sumCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	arguments[2]._int = arguments[0]._int + arguments[1]._int;
 	return true;
 }
 
-static bool differenceCall(void * state, Atom arguments[], void * operatorData)
+static bool subtractCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	arguments[1]._int = arguments[2]._int - arguments[0]._int;
 	return true;
@@ -257,42 +243,34 @@ static bool differenceCall(void * state, Atom arguments[], void * operatorData)
 static void testMachineServiceSharedRelation(void)
 {
 	size32 nRelationsInitial = RelationRegistryNRelations();
-	size32 nTablesInitial = NumberOfRelationTables();
 
-	Service adding = RegisterMachineService(
-		"term @1<INT term @2<INT total @3>INT",
-		(MachineOperatorSpec) {.providerID = providerID, .call = sumCall});
+	// Registering the first service for a new relation creates the relation
+	Service sumService = RegisterMachineService(
+		moduleID, "term @1<INT term @2<INT sum @3>INT", sumCall);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
-	// a computed service has no storage to register
-	ASSERT_UINT32_EQUAL(NumberOfRelationTables(), nTablesInitial)
-	ASSERT_NULL(FindRelationTable(adding.relation))
 
-	Service subtracting = RegisterMachineService(
-		"term @1<INT term @2>INT total @3<INT",
-		(MachineOperatorSpec) {.providerID = providerID, .call = differenceCall});
+	Service subtractService = RegisterMachineService(
+		moduleID, "term @1<INT term @2>INT sum @3<INT", subtractCall);
 	// the second service shares the relation of the first
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
-	ASSERT_TRUE(SameRelations(subtracting.relation, adding.relation))
-	ASSERT_PTR_NOT_EQUAL(subtracting.op, adding.op)
+	ASSERT_TRUE(SameRelations(subtractService.relation, sumService.relation))
+	ASSERT_PTR_NOT_EQUAL(subtractService.op, sumService.op)
 
-	// dispatch tells them apart by what the query binds
-	Atom query = CStringToTerm("term 3 term 4 total t");
+	// dispatch tells the services apart by query argument types
+	Atom query = CStringToTerm("term 3 term 4 sum t");
 	Service dispatched;
 	index8 permutation[3];
 	ASSERT_TRUE(DispatchQueryFormula(query, &dispatched, permutation))
-	ASSERT_PTR_EQUAL(dispatched.op, adding.op)
+	ASSERT_PTR_EQUAL(dispatched.op, sumService.op)
 	ReleaseFormula(query);
 
-	query = CStringToTerm("term 3 term u total 10");
+	query = CStringToTerm("term 3 term u sum 10");
 	ASSERT_TRUE(DispatchQueryFormula(query, &dispatched, permutation))
-	ASSERT_PTR_EQUAL(dispatched.op, subtracting.op)
+	ASSERT_PTR_EQUAL(dispatched.op, subtractService.op)
 	ReleaseFormula(query);
 
-	// Removing the services removes the relation with them, which is what lets
-	// FreeMachineServices() keep no record of what it registered
-	FreeMachineServices(providerID);
+	FreeModuleRelations(moduleID);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial)
-	ASSERT_UINT32_EQUAL(NumberOfRelationTables(), nTablesInitial)
 }
 
 
@@ -300,7 +278,7 @@ int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
 
-	providerID = RequestProviderID();
+	moduleID = RequestModuleID();
 
 	ExecuteTest(testMachineServiceArgumentOrder);
 	ExecuteTest(testMachineServiceTestPredicate);

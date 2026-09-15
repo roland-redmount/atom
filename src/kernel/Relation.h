@@ -1,104 +1,95 @@
 /**
- * A Relation is a term form together with a column type per argument. It is the identifier
- * for a RelationTable. A Relation plus an IOSignature identifies a Service.
- * Using a term form (signed predicate) as key allows registering a negated predicate
- * like (! odd x) as a relation distinct from the non-negated (odd x).
- *
- * A Relation for which no RelationTable exists is a computed relation: it has services,
- * but no mutable facts. Examples are machine service such as those in library/math.c,
- * and services produced by the compiler.
+ * A Relation encapsulates a relation (a set of tuples), and is identified by
+ * a RelationSignature. A Relaton may have one RelationWriter, and one or more Services.
+ * 
+ * A Relation for which no RelationWriter exists is read-only. Examples arithmetic relations,
+ * and relations (and their services) produced by the compiler.
+ * 
+ * A Relation with a RelationWriter but no services write-only, a kind of data sink.
+ * Output devices such as a screen canvas can be modelled as write-only relations.
  */
 
 #ifndef RELATION_H
 #define RELATION_H
 
-#include "lang/Atom.h"
+#include "kernel/RelationSignature.h"
+#include "kernel/ServiceRegistry.h"
+#include "storage/StorageProvider.h"
 #include "btree/btree.h"
 
 
-// We limit the number of arguments a relation might have,
-// so that we can use fixed-size arrays in some places and avoid heap allocation.
-// In practice, services should rarely have arity higher than 3.
-#define RELATION_MAX_ARITY	8
-
-
 /**
- * The column types of a relation. This exists to simplify array handling.
- */
-typedef struct s_TypeSignature {
-	byte atomTypes[RELATION_MAX_ARITY];
-} TypeSignature;
-
-/**
- * The type signature of the given atom types, zero filled beyond nColumns. For a signature
- * built from an array at hand, such as the atom types of a TypedTuple.
- */
-TypeSignature CreateTypeSignature(byte const atomTypes[], size8 nColumns);
-
-
-bool SameTypeSignatures(TypeSignature signature1, TypeSignature signature2);
-
-/**
- * Return the number of (nonzero) atom types in the given TypeSignature.
- * This is the same as the arity of a relation with this signature.
- */
-size8 TypeSignatureNAtomTypes(TypeSignature typeSignature);
-
-
-typedef struct s_Relation {
-	Atom termForm;
-	TypeSignature typeSignature;
-} Relation;
-
-/**
- * Create a Relation. The caller holds one reference to the relation,
- * which must be released when no longer needed.
+ * Create a Relation using the given provider. Creates storage and/or services
+ * as specified by the provider. The relation must not already exist.
+ * For relations that do not store data, set provider to 0 to obtain the default provider.
  * 
- * NOTE: an alternative is void AddRelation(Relation relation) where
- * the caller creates the struct (Relation) {termForm, typeSignature}.
- * Perhaps more transparent -- this function doesn't create a Relation
- * so much as add it to the registry
+ * TODO: this should take a RelationSignature instead of (termForm, typeSignature)
  */
-Relation CreateRelation(Atom termForm, TypeSignature typeSignature);
+RelationSignature CreateRelation(
+	Atom termForm, TypeSignature typeSignature, StorageProvider const * provider, index8 const indexColumns[]);
 
 /**
  * Create a relation with the predicate form given explicitly, rather than computed from
  * TermFormGetPredicateForm(termForm). This function is only for bootstrapping, where
  * TermFormGetPredicateForm() is not yet available. See setupCoreServices() in kernel.c
  */
-Relation CreateRelationBootstrap(Atom termForm, Atom predicateForm, TypeSignature typeSignature);
+RelationSignature CreateRelationBootstrap(
+	Atom termForm, Atom predicateForm, TypeSignature typeSignature,
+	StorageProvider const * provider, index8 const indexColumns[]);
+
+/**
+ * Create a relation from a term, whose actors must be parameters, e.g.
+ * for example (+ @1<INT + @2<INT = @3>INT)
+ * The IO direction of each parameter is ignored.
+ */
+RelationSignature CreateRelationFromTerm(Atom term, StorageProvider const * provider);
+
+/**
+ * Add a primitive service to the relation, specified by a RelationReader.
+ * This is a low-level method, should only be called by the storage provider.
+ */
+Service RelationAddPrimitiveService(RelationSignature relation, RelationReader * reader);
 
 /**
  * Return the predicate form corresponding to the Relation's term form.
  * This is used to avoid calling TermFormGetPredicateForm() form LookupAddPredicateRoles(),
  * which is critical during bootstrap; see CreateRelationBootstrap()
  */
-Atom RelationGetPredicateForm(Relation relation);
+Atom RelationGetPredicateForm(RelationSignature relation);
 
 
-bool RelationExists(Relation relation);
-
-/**
- * Ordering of two relations
- */
-int8 CompareRelations(Relation relation, Relation relationOrKey);
-
-bool SameRelations(Relation relation1, Relation relation2);
+bool RelationExists(RelationSignature signature);
 
 /**
- * Acquire a reference to a relation.
+ * Return the number of columns in a relation.
  */
-void AcquireRelation(Relation relation);
+size32 RelationNColumns(RelationSignature signature);
 
 /**
- * Remove one reference to the given relation.
+ * Return the number of rows in a relation.
  */
-void ReleaseRelation(Relation relation);
+size32 RelationNRows(RelationSignature signature);
 
 /**
- * Test for a null relation, marking an absent value (no relation)
+ * Add a single tuple to the relation, acquiring each atom in the tuple.
+ * If idPosition is > 0 it indicates the 1-based position of an identified atom.
+ * Acquires a reference to each atom in the tuple, except an identified atom.
+ * Does not add lookup entries; see AssertFact()
  */
-bool IsNullRelation(Relation relation);
+byte RelationAddTuple(RelationSignature signature, Atom const tuple[], uint8 idPosition);
+
+/**
+ * Remove the given tuple from the relation.
+ * If the tuple contains an identified atom, its position must match the given idPosition
+ * to remove the tuple.
+ * Does not remove the associated lookup entries; see RetractFact()
+ */
+byte RelationRemoveTuple(RelationSignature signature, Atom const tuple[], uint8 idPosition);
+
+/**
+ * Drop the relation, its storage, readers and writers.
+ */
+void DropRelation(RelationSignature signature);
 
 /**
  * Release the references this relation holds to its term form, without releasing the relation.
@@ -114,12 +105,7 @@ bool IsNullRelation(Relation relation);
  * still have its services, which are used to locate the tuples to retract. It should be
  * released immediately afterwards.
  */
-void RelationReleaseTermForm(Relation relation);
-
-/**
- * Compute the hash of a relation, on top of an initialHash
- */
-data64 RelationHash(Relation relation, data64 initialHash);
+void RelationReleaseTermForm(RelationSignature signature);
 
 /**
  * Setup an empty relation registry. Called during bootstrapping only.
@@ -165,7 +151,7 @@ bool RelationIteratorNext(RelationIterator * iterator);
  * Only valid after RelationIteratorNext() has returned true,
  * and until RelationIteratorEnd() is called.
  */
-Relation RelationIteratorGet(RelationIterator const * iterator);
+RelationSignature RelationIteratorGet(RelationIterator const * iterator);
 
 
 void RelationIteratorEnd(RelationIterator * iterator);

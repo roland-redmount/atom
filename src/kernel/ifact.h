@@ -13,8 +13,8 @@
 #ifndef IFACT_H
 #define IFACT_H
 
-#include "kernel/RelationTable.h"
-#include "kernel/ServiceRegistry.h"
+#include "kernel/RelationSignature.h"
+// #include "kernel/ServiceRegistry.h"
 #include "kernel/typedtuple.h"
 
 
@@ -29,10 +29,9 @@ struct s_Service;
  * The entire IFact is a conjuction ...
  */
 typedef struct s_IFactConjunction {
-	// relation table storing tuples for this conjunction
-	RelationTable * table;
+	RelationSignature signature;
+	size8 nColumns;
 	index8 idColumn;		// position of the identified atom in the tuple
-	byte pad;
 	size16 nRows;			// number of tuples in this conjunction
 } __attribute__((packed)) IFactConjunction;
 
@@ -91,9 +90,9 @@ void IFactBegin(IFactDraft * draft);
 /**
  * Begin a new conjunction for the IFactDraft, storing tuples in the given table.
  * The idColumn indicates the actor that is being defined by the IFact.
- * The new conjunction acquires a reference to the given RelationTable.
+ * The new conjunction acquires a reference to the given RelationWriter.
  */
-void IFactBeginConjunction(IFactDraft * draft, RelationTable * table, index8 idColumn);
+void IFactBeginConjunction(IFactDraft * draft, RelationSignature signature, index8 idColumn);
 
 /**
  * Add one tuple, defining one predicate of the current conjunction (predicate form).

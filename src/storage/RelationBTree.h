@@ -8,19 +8,19 @@
  * caller's business, and is done the same way whatever the provider.
  *
  *   Relation const * relation = CreateRelation(termForm, nColumns, atomTypes);
- *   RelationTable * table = CreateRelationTable(
+ *   RelationWriter * table = CreateRelationWriter(
  *       relation, &btreeTableProvider, indexColumns);
  *   ReleaseRelation(relation);
  *
  * NOTE: in the future this should be a "plugin" module, loaded into a running atom
- * process rather than linked in; see the note on hot-loading in RelationTable.h.
+ * process rather than linked in; see the note on hot-loading in RelationWriter.h.
  */
 
 #ifndef RELATION_B_TREE_H
 #define RELATION_B_TREE_H
 
 #include "btree/btree.h"
-#include "kernel/RelationTable.h"
+#include "kernel/Relation.h"
 #include "kernel/tuple.h"
 #include "kernel/operator.h"
 
@@ -39,7 +39,7 @@ typedef struct s_RelationBTree {
  * Create the B-tree storage of a relation table. This function is called by
  * btreeTableProvider.createStorage().
  *
- * The arity and index column order are copied here rather than read off the RelationTable
+ * The arity and index column order are copied here rather than read off the RelationWriter
  * on every call, so that a RelationBTree stays usable as a data structure on its own.
  */
 RelationBTree * CreateRelationBTree(size8 nColumns);
@@ -102,7 +102,7 @@ void RelationBTreeIteratorGetTuple(RelationBTreeIterator const * iterator, Atom 
 void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator);
 
 /**
- * Remove a tuple from the BTree matching the query. See RelationTableRemoveTuple()
+ * Remove a tuple from the BTree matching the query. See RelationRemoveTuple()
  */
 byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition);
 

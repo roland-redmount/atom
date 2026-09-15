@@ -10,75 +10,69 @@
 #include "memory/allocator.h"
 #include "parser/TermBuilder.h"
 
-// A simple provider ID mechanism. We simply hand out increasing numbers
-// as provider IDs.
 
-static uint32 nextProviderID = 1;
+static uint32 nextModuleID = 1;
 
-uint32 RequestProviderID(void)
+uint32 RequestModuleID(void)
 {
-	return nextProviderID++;
+	return nextModuleID++;
 }
 
 
 /**
- * CLAUDE: A second index over the service registry, holding one ProviderService
- * for each service RegisterMachineService() has created. This gives the services
- * of one provider ID without scanning the service registry; see FreeMachineServices().
- *
- * The index is created when the first service is registered, and freed once the
- * last one is removed, so that MachineService.c needs no setup or shutdown call.
+ * An index associating modules with their registered relations.
  */
-typedef struct s_ProviderService {
-	uint32 providerID;
-	Service service;
-} ProviderService;
+typedef struct s_ModuleRelation {
+	uint32 moduleID;
+	RelationSignature relation;
+} ModuleRelation;
 
-static BTree * providerServices;
+static BTree * moduleRelations;
 
 
 /**
- * CLAUDE: Order ProviderService records by provider ID, then by operator.
- * A key with a null operator is a prefix key matching every service of the provider.
+ * Order ModuleRelation records by module ID, then by relation.
+ * A key with a null relation is a prefix key matching every relation of the module.
  */
-static int8 compareProviderServices(
-	ProviderService const * entry, ProviderService const * entryOrKey)
+static int8 compareModuleRelations(
+	ModuleRelation const * entry, ModuleRelation const * entryOrKey)
 {
-	if(entry->providerID < entryOrKey->providerID)
+	if(entry->moduleID < entryOrKey->moduleID)
 		return -1;
-	if(entry->providerID > entryOrKey->providerID)
+	if(entry->moduleID > entryOrKey->moduleID)
 		return 1;
-	if(!entryOrKey->service.op)
+	if(IsNullRelation(entryOrKey->relation))
 		return 0;
-	if(entry->service.op < entryOrKey->service.op)
-		return -1;
-	if(entry->service.op > entryOrKey->service.op)
-		return 1;
-	return 0;
+	else
+		return CompareRelations(entry->relation, entryOrKey->relation);
 }
 
 
-static int8 btreeCompareProviderServices(void const * item, void const * itemOrKey, size32 itemSize)
+static int8 btreeCompareModuleRelations(void const * item, void const * itemOrKey, size32 itemSize)
 {
-	return compareProviderServices(
-		(ProviderService const *) item, (ProviderService const *) itemOrKey);
+	return compareModuleRelations(
+		(ModuleRelation const *) item, (ModuleRelation const *) itemOrKey);
 }
 
 
 /**
- * CLAUDE: Record a registered service under the ID of the provider registering it.
+ * Associate a registered relation with a module ID
  */
-static void addProviderService(uint32 providerID, Service service)
+static void addModuleRelation(uint32 moduleID, RelationSignature relation)
 {
-	if(!providerServices)
-		providerServices = BTreeCreate(
-			sizeof(ProviderService),
-			btreeCompareProviderServices,
+	// Create B-tree on first call
+	if(!moduleRelations) {
+		moduleRelations = BTreeCreate(
+			sizeof(ModuleRelation),
+			btreeCompareModuleRelations,
 			0	// nothing to deallocate
 		);
-	ProviderService entry = {.providerID = providerID, .service = service};
-	ASSERT(BTreeInsert(providerServices, &entry) == BTREE_INSERTED)
+	}
+	// Add the module-relation pair
+	ModuleRelation entry = {.moduleID = moduleID, .relation = relation};
+	ASSERT(BTreeInsert(moduleRelations, &entry) == BTREE_INSERTED)
 }
+
 
 /**
  * Read the given parameters (in canonical order), and write the corresponding
@@ -113,7 +107,19 @@ static TypeSignature readSignatureParameters(
 }
 
 
-Service RegisterMachineService(char const * signature, MachineOperatorSpec operatorSpec)
+Service RegisterMachineService(
+	uint32 moduleID, char const * signature,
+	bool (*call)(void *, Atom [], void *, void *))
+{
+	return RegisterMachineServiceWithState(moduleID, signature, 0, 0, call, 0);
+}
+
+
+Service RegisterMachineServiceWithState(
+	uint32 moduleID, char const * signature, size32 stateSize,
+	void (*setupState)(void *, Atom[], void *, void *),
+	bool (*call)(void *, Atom[], void *, void *),
+	void (*finalizeState)(void *, void *, void *))
 {
 	// Parse the signature
 	Atom term = CStringToTerm(signature);
@@ -121,47 +127,52 @@ Service RegisterMachineService(char const * signature, MachineOperatorSpec opera
 	size8 arity = termView.actors->nAtoms;
 	ASSERT(arity <= RELATION_MAX_ARITY)
 
-	// Determined the indexOrder from the parameter numbers
+	// Determine the indexOrder, type signature and IO signature from the parameter numbers
 	IOSignature ioSignature;
 	index8 indexOrder[RELATION_MAX_ARITY];
 	TypeSignature typeSignature = readSignatureParameters(
 		termView.actors, indexOrder, &ioSignature);
-
-	// Create the machine operator
-	Operator * op = CreateMachineOperator(arity, indexOrder, operatorSpec);
-
-	// Register the service
-	Relation relation = CreateRelation(termView.form, typeSignature);
-	Service service = CreateService(relation, ioSignature, op);
-	ReleaseRelation(relation);
+	
+	// Create the relation, unless it already exists
+	RelationSignature relation = {.termForm = termView.form, .typeSignature = typeSignature};
+	if(RelationExists(relation)) {
+		// TODO: verify that the relation's provider matches ours,
+		// and the index order matches
+	}
+	else {
+		relation = CreateRelation(termView.form, typeSignature, 0, indexOrder);
+	}
 	ReleaseFormula(term);
 
-	addProviderService(operatorSpec.providerID, service);
-	return service;
+	addModuleRelation(moduleID, relation);
+	
+	// Add the new reader to the relation
+	RelationReader * reader = AllocateRelationReader();
+	reader->spec.stateSize = stateSize;
+	reader->spec.setupState = setupState;
+	reader->spec.call = call;
+	reader->spec.finalizeState = finalizeState;
+	reader->spec.ioSignature = ioSignature;
+	
+	return RelationAddPrimitiveService(relation, reader);
 }
 
 
-void FreeMachineServices(uint32 providerID)
+void FreeModuleRelations(uint32 moduleID)
 {
-	if(!providerServices)
+	if(!moduleRelations)
 		return;
 
-	/*
-	 * CLAUDE: The key matches every service of the provider, so each lookup gives one
-	 * of them. The entry read back is an exact key, which is what BTreeDelete() requires.
-	 * An entry is removed from the index before its service is removed from the
-	 * service registry, since RemoveService() frees the operator the entry is keyed by.
-	 */
-	ProviderService key = {.providerID = providerID};
-	ProviderService entry;
-	while(BTreeGetItem(providerServices, &key, &entry)) {
-		ASSERT(BTreeDelete(providerServices, &entry, 0) == BTREE_DELETED)
-		RemoveService(entry.service.relation, entry.service.op);
+	ModuleRelation key = {.moduleID = moduleID};
+	ModuleRelation entry;
+	while(BTreeGetItem(moduleRelations, &key, &entry)) {
+		ASSERT(BTreeDelete(moduleRelations, &entry, 0) == BTREE_DELETED)
+		DropRelation(entry.relation);
 	}
 
-	// CLAUDE: the index is created on demand, so free it once no service is registered
-	if(!BTreeNItems(providerServices)) {
-		BTreeFree(providerServices);
-		providerServices = 0;
+	// the index is created on demand, so free it when it becomes empty
+	if(BTreeNItems(moduleRelations) == 0) {
+		BTreeFree(moduleRelations);
+		moduleRelations = 0;
 	}
 }

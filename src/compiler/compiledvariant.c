@@ -40,7 +40,8 @@ void CompiledVariantSetRelation(CompiledVariant * variant, Atom queryTermForm)
 	// Check if relation is already set, so that we don't acquire double references
 	if(!IsNullRelation(variant->relation))
 		return;
-	variant->relation = CreateRelation(queryTermForm, CompiledVariantGetTypeSignature(variant));
+	variant->relation = (RelationSignature) {
+		.termForm = queryTermForm, .typeSignature = CompiledVariantGetTypeSignature(variant)};
 }
 
 
@@ -68,7 +69,7 @@ void CompiledVariantSeedFromService(
 		CompiledVariantGetTypeSignature(variant), service->relation.typeSignature))
 
 	variant->relation = service->relation;
-	AcquireRelation(variant->relation);
+	// AcquireRelation(variant->relation);
 	variant->op = service->op;
 	variant->replacedOperator = service->op;
 }
@@ -88,7 +89,7 @@ size8 DiscardUnusedSeedVariants(CompiledVariant variants[], size8 nVariants)
 		// The variant owns its parameters and a reference to the relation. Its operator
 		// still belongs to the service it was seeded from, so there is nothing to release.
 		FreeTypedTuple(variant->parameters);
-		ReleaseRelation(variant->relation);
+		// ReleaseRelation(variant->relation);
 		for(index8 i = v; i < nVariants; i++)
 			variants[i - 1] = variants[i];
 		nVariants--;

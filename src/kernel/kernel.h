@@ -3,7 +3,6 @@
  */
 
 #include "kernel/Relation.h"
-#include "kernel/RelationTable.h"
 #include "kernel/operator.h"
 // for TRANSIENT_MEMORY and PERSISTENT_MEMORY
 #include "memory/paging.h"
@@ -125,9 +124,9 @@ void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
  */
 Atom GetCoreRoleName(index32 roleId);
 
-Relation GetCoreRelation(index32 relationId);
+RelationSignature GetCoreRelation(index32 relationId);
 
-RelationTable * GetCoreRelationTable(index32 relationId);
+// RelationWriter * GetCoreRelationTable(index32 relationId);
 
 /**
  * Return the operator of a core service, given a SERVICE_* id.

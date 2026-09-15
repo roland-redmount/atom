@@ -123,34 +123,28 @@ void testDispatchNegatedTerm(void)
 
 	// Create the (even odd) relation
 	TypeSignature typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2);
-	Relation relation = CreateRelation(termForm, typeSignature);
-	RelationTable * table = CreateRelationTable(
-		relation, &btreeStorageProvider, (index8[]) {0, 1});
-	ReleaseRelation(relation);
+	RelationSignature relation = CreateRelation(
+		termForm, typeSignature, &btreeStorageProvider, 0);
 	// Create the (! even odd) relation
-	Relation negatedRelation = CreateRelation(negatedTermForm, typeSignature);
-	RelationTable * negatedTable = CreateRelationTable(
-		negatedRelation, &btreeStorageProvider, (index8[]) {0, 1});
-	ReleaseRelation(negatedRelation);
-	ASSERT_PTR_NOT_EQUAL(table, negatedTable)
-	ASSERT_TRUE(SameRelations(relation, table->relation))
-	ASSERT_TRUE(SameRelations(negatedRelation, negatedTable->relation))
+	RelationSignature negatedRelation = CreateRelation(
+		negatedTermForm, typeSignature, &btreeStorageProvider, 0);
+	ASSERT_FALSE(SameRelations(relation, negatedRelation))
 
 	// Test that dispatches reaches the correct relation
 	Service service;
 	index8 permutation[2];
 	Atom query = CStringToTerm("! even x odd y");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	ASSERT_TRUE(SameRelations(service.relation, negatedTable->relation))
+	ASSERT_TRUE(SameRelations(service.relation, negatedRelation))
 	ReleaseFormula(query);
 
 	query = CStringToTerm("even x odd y");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	ASSERT_TRUE(SameRelations(service.relation, table->relation))
+	ASSERT_TRUE(SameRelations(service.relation, relation))
 	ReleaseFormula(query);
 
-	ReleaseRelationTable(negatedTable);
-	ReleaseRelationTable(table);
+	DropRelation(negatedRelation);
+	DropRelation(relation);
 	IFactRelease(negatedTermForm);
 	IFactRelease(termForm);
 }
@@ -205,16 +199,12 @@ void testDispatchIterator(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	Relation idRelation = CreateRelation(
-		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2));
-	RelationTable * idTable = CreateRelationTable(
-		idRelation, &btreeStorageProvider, (index8[]) {0, 1});
-	ReleaseRelation(idRelation);
-	Relation intRelation = CreateRelation(
-		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
-	RelationTable * intTable = CreateRelationTable(
-		intRelation, &btreeStorageProvider, (index8[]) {0, 1});
-	ReleaseRelation(intRelation);
+	RelationSignature idRelation = CreateRelation(
+		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2),
+		&btreeStorageProvider, 0);
+	RelationSignature intRelation = CreateRelation(
+		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2),
+		&btreeStorageProvider, 0);
 
 	// Only the service with two output parameters matches, so each table contributes
 	// one match
@@ -290,8 +280,8 @@ void testDispatchIterator(void)
 	DispatchIteratorEnd(&iterator);
 	ReleaseFormula(unknownQuery);
 
-	ReleaseRelationTable(intTable);
-	ReleaseRelationTable(idTable);
+	DropRelation(intRelation);
+	DropRelation(idRelation);
 	IFactRelease(termForm);
 }
 

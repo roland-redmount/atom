@@ -6,7 +6,6 @@
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
 #include "kernel/Relation.h"
-#include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
@@ -29,16 +28,13 @@ static Atom listLengthPredicateForm;
 static Atom listLengthTermForm;
 static index8 listLengthRoleIndex[2];
 
-static Relation listIDRelation;
-static RelationTable * listIDRelationTable;
+static RelationSignature listIDRelation;
 static Operator * listIDOperator;
 
-static Relation listLetterRelation;
-static RelationTable * listLetterRelationTable;
+static RelationSignature listLetterRelation;
 static Operator * listLetterOperator;
 
-static Relation listLengthRelation;
-static RelationTable * listLengthRelationTable;
+static RelationSignature listLengthRelation;
 static Operator * listLengthOperator;
 
 
@@ -96,7 +92,7 @@ index8 const * GetListLengthRoleIndex(void)
 }
 
 
-Relation GetListRelation(byte elementType)
+RelationSignature GetListRelation(byte elementType)
 {
 	switch(elementType) {
 	case AT_ID:
@@ -107,23 +103,7 @@ Relation GetListRelation(byte elementType)
 
 	default:
 		ASSERT(false)
-		return (Relation) {0};
-	}
-}
-
-
-RelationTable * GetListRelationTable(byte elementType)
-{
-	switch(elementType) {
-	case AT_ID:
-		return listIDRelationTable;
-
-	case AT_LETTER:
-		return listLetterRelationTable;
-
-	default:
-		ASSERT(false)
-		return 0;
+		return (RelationSignature) {0};
 	}
 }
 
@@ -144,15 +124,9 @@ Operator * GetListOperator(byte elementType)
 }
 
 
-Relation GetListLengthRelation(void)
+RelationSignature GetListLengthRelation(void)
 {
 	return listLengthRelation;
-}
-
-
-RelationTable * GetListLengthRelationTable(void)
-{
-	return listLengthRelationTable;
 }
 
 
@@ -191,7 +165,7 @@ Atom CreateList(ListElementGenerator generator, void const * data, byte elementT
 // assert (list length) fact
 static void assertListLength(IFactDraft * draft, size32 nElements)
 {
-	IFactBeginConjunction(draft, listLengthRelationTable, listLengthRoleIndex[0]);
+	IFactBeginConjunction(draft, listLengthRelation, listLengthRoleIndex[0]);
 
 	Atom listLengthTuple[2];
 	listLengthTuple[listLengthRoleIndex[1]] = (Atom) {._int = nElements};
@@ -203,9 +177,9 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void const * data, byte elementType, size32 nElements)
 {
 	if(nElements > 0) {
-		RelationTable * table = GetListRelationTable(elementType);
+		RelationSignature relation = GetListRelation(elementType);
 		// assert (ĺist position elements) facts for each element
-		IFactBeginConjunction(draft, table, listRoleIndex[0]);
+		IFactBeginConjunction(draft, relation, listRoleIndex[0]);
 		Atom listElementTuple[3];
 		for(index32 i = 0; i < nElements; i++) {
 			TupleCopyPermuted(
@@ -279,7 +253,7 @@ size32 ListLength(Atom list)
  * TODO: this is not well-defined in general, there may be > 1 relation for lists
  * containing mixed types, although CreateList() does not yields such lists.
  */
-static Relation lookupListElementRelation(Atom list)
+static RelationSignature lookupListElementRelation(Atom list)
 {
 	return LookupFindRelation(list, listTermForm, listRoleName);
 }
@@ -288,13 +262,13 @@ static Relation lookupListElementRelation(Atom list)
 Atom ListGetElement(Atom list, index32 position)
 {
 	ASSERT(ListLength(list) > 0)
-	Relation relation = lookupListElementRelation(list);
+	RelationSignature relation = lookupListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 
 	byte parameterIO[3];
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT}, parameterIO, listRoleIndex, 3);
-	Operator const * op = FindService(
+	Operator const * op = FindServiceOperator(
 		relation, CreateIOSignature(parameterIO, 3));
 
 	Atom arguments[3];
@@ -308,7 +282,7 @@ Atom ListGetElement(Atom list, index32 position)
 index32 ListGetPosition(Atom list, Atom element)
 {
 	ASSERT(IsList(list))
-	Relation relation = lookupListElementRelation(list);
+	RelationSignature relation = lookupListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 
 	// TODO: this service is not one the B-tree provider registers, as its inputs are not
@@ -320,7 +294,7 @@ index32 ListGetPosition(Atom list, Atom element)
 	byte parameterIO[3];
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_IN}, parameterIO, listRoleIndex, 3);
-	Operator const * op = FindService(
+	Operator const * op = FindServiceOperator(
 		relation, CreateIOSignature(parameterIO, 3));
 
 	Atom arguments[3];
@@ -374,13 +348,13 @@ void ListIterate(Atom list, ListIterator * iterator)
 	iterator->queryTuple[listRoleIndex[0]] = list;
 
 	if(ListLength(list) > 0) {
-		Relation relation = lookupListElementRelation(list);
+		RelationSignature relation = lookupListElementRelation(list);
 		ASSERT(!IsNullRelation(relation))
 		
 		byte parameterIO[3];
 		CopyBytesPermuted(
 			(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT}, parameterIO, listRoleIndex, 3);
-		Operator const * op = FindService(
+		Operator const * op = FindServiceOperator(
 			relation, CreateIOSignature(parameterIO, 3));
 		iterator->context = OperatorCreateContext(op, iterator->queryTuple);
 	}
@@ -415,7 +389,7 @@ void ListIteratorEnd(ListIterator * iterator)
 void PrintList(Atom list)
 {
 	PrintCString("LIST{");
-	Relation relation = lookupListElementRelation(list);
+	RelationSignature relation = lookupListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 	byte elementType = relation.typeSignature.atomTypes[listRoleIndex[2]];
 
@@ -466,34 +440,21 @@ void ListSetup(void)
 	// (list:ID position:INT element:ID)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_ID}, typeSignature.atomTypes, listRoleIndex, 3);
-	listIDRelation = CreateRelation(listTermForm, typeSignature);
+	listIDRelation = CreateRelation(listTermForm, typeSignature, &btreeStorageProvider, listRoleIndex);
 	// (list:ID position:INT element:LETTER)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_LETTER}, typeSignature.atomTypes, listRoleIndex, 3);
-	listLetterRelation = CreateRelation(listTermForm, typeSignature);
+	listLetterRelation = CreateRelation(listTermForm, typeSignature, &btreeStorageProvider, listRoleIndex);
 	// (list:ID length:INT)
 	typeSignature = (TypeSignature) {0};
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT}, typeSignature.atomTypes, listLengthRoleIndex, 2);
-	listLengthRelation = CreateRelation(listLengthTermForm, typeSignature);
+	listLengthRelation = CreateRelation(listLengthTermForm, typeSignature, &btreeStorageProvider, listLengthRoleIndex);
 
 	IFactRelease(listLengthTermForm);
 	IFactRelease(listLengthPredicateForm);
 	IFactRelease(listTermForm);
 	IFactRelease(listPredicateForm);
-
-	// Create relation tables
-	// (list:ID position:INT element:ID)
-	listIDRelationTable = CreateRelationTable(listIDRelation, &btreeStorageProvider, listRoleIndex);
-	// (list:ID position:INT element:LETTER)
-	listLetterRelationTable = CreateRelationTable(listLetterRelation, &btreeStorageProvider, listRoleIndex);
-	// (list:ID length:INT)
-	listLengthRelationTable = CreateRelationTable(
-		listLengthRelation, &btreeStorageProvider, listLengthRoleIndex);
-
-	ReleaseRelation(listLengthRelation);
-	ReleaseRelation(listLetterRelation);
-	ReleaseRelation(listIDRelation);
 
 	// Get operators
 	// for (list <ID position >INT element >_)
@@ -501,23 +462,23 @@ void ListSetup(void)
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 		elementIOSignature.parameterIO, listRoleIndex, 3);
-	listIDOperator = FindService(listIDRelation, elementIOSignature);
+	listIDOperator = FindServiceOperator(listIDRelation, elementIOSignature);
 	ASSERT(listIDOperator)
-	listLetterOperator = FindService(listLetterRelation, elementIOSignature);
+	listLetterOperator = FindServiceOperator(listLetterRelation, elementIOSignature);
 	ASSERT(listLetterOperator)
 	// for (list <ID length >INT)
 	IOSignature lengthIOSignature = {0};
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT},
 		lengthIOSignature.parameterIO, listLengthRoleIndex, 2);
-	listLengthOperator = FindService(listLengthRelation, lengthIOSignature);
+	listLengthOperator = FindServiceOperator(listLengthRelation, lengthIOSignature);
 	ASSERT(listLengthOperator)
 }
 
 
 void ListShutdown(void)
 {
-	ReleaseRelationTable(listLengthRelationTable);
-	ReleaseRelationTable(listLetterRelationTable);
-	ReleaseRelationTable(listIDRelationTable);
+	DropRelation(listLengthRelation);
+	DropRelation(listLetterRelation);
+	DropRelation(listIDRelation);
 }

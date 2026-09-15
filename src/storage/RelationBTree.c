@@ -109,7 +109,7 @@ byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint
 {
 	ASSERT(!BTreeIsWriteLocked(relation->btree))
 
-	// NOTE: the below logic is common to all relation tables, could be moved to RelationTable?
+	// NOTE: the below logic is common to all relation tables, could be moved to RelationWriter?
 	// This would require a method to get the idPosition of a stored tuple from the RelationTableProvider.
 
 	// retrieve the stored tuple to inspect its idPosition
@@ -207,24 +207,25 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator)
 
 //--------------------------- MachineOperatorProvider interface ---------------------------------
 
-
-typedef struct s_RelationBTreeOperatorData {
-	RelationBTree * relationBTree;
+// A pointer-sized union, to store nInputs in the readerData pointer
+typedef union {
 	index8 nInputs;
+	void * ptr;
 } RelationBTreeOperatorData;
 
 
-static void btreeSetupState(void * state, Atom arguments[], void * operatorData)
+static void btreeSetupState(void * state, Atom arguments[], void * readerData, void * storage)
 {
-	RelationBTreeOperatorData * bTreeOperatorData = operatorData;
+	RelationBTreeOperatorData bTreeOperatorData;
+	bTreeOperatorData.ptr = readerData;
+	RelationBTree * relationBTree = storage;
 	// Initialize the RelationBTreeIterator, allocated by OperatorCreateContext()
 	RelationBTreeIterator * iterator = state;
-	RelationBTreeIterate(
-		bTreeOperatorData->relationBTree, arguments, bTreeOperatorData->nInputs, iterator);
+	RelationBTreeIterate(relationBTree, arguments, bTreeOperatorData.nInputs, iterator);
 }
 
 
-static bool btreeCall(void * state, Atom arguments[], void * operatorData)
+static bool btreeCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	RelationBTreeIterator * iterator = state;
 	bool hasTuple = RelationBTreeIteratorNext(iterator);
@@ -234,62 +235,53 @@ static bool btreeCall(void * state, Atom arguments[], void * operatorData)
 }
 
 
-static void btreeFinalizeState(void * state, void * operatorData)
+static void btreeFinalizeState(void * state, void * readerData, void * storage)
 {
 	RelationBTreeIterator * iterator = state;
 	RelationBTreeIteratorEnd(iterator);
 }
 
 
-static void finalizeBTreeOperator(void * operatorData)
-{
-	// NOTE: here we could decrement an operator count for the storage provider
-	Free(operatorData);
-}
-
-
 //--------------------------------------- StorageProvider interface ---------------------------------
 
 
-static uint32 btreeProviderID = 0;
-
-
-static void * btreeCreateStorage(size8 nColumns, void * table, CreateServiceCallback callback)
+/**
+ * Create implementation for a new relation
+ */
+static void * btreeSetupStorage(size8 nColumns, size32 * nReaders)
 {
-	// Request a provider ID on first call
-	if(!btreeProviderID)
-		btreeProviderID = RequestProviderID();
-	
-	// the storage is a RelationBTree struct
-	RelationBTree * relationBTree = CreateRelationBTree(nColumns);
+	// One reader per prefix key
+	*nReaders = nColumns + 1;
+	return CreateRelationBTree(nColumns);
+}
 
+
+/**
+ * Return a specific reader, from 0, ..., n.
+ * The reader is described by an IOSignature and function pointers to call;
+ * also need reader-specific data, here the number of leading columns (RelationBTreeOperatorData)
+ */
+static void setupReader(RelationReaderSpec * spec, index32 readerIndex, void * storage)
+{
 	// We will create one operator for each prefix key
-	for(index8 nInputs = 0; nInputs <= nColumns; nInputs++) {
-		byte parameterIO[nColumns];
-		for(index8 i = 0; i < nColumns; i++) {
-			if(i < nInputs)
-				parameterIO[i] = PARAMETER_IN;
-			else
-				parameterIO[i] = PARAMETER_OUT;
-		}
-		RelationBTreeOperatorData * operatorData = Allocate(sizeof(RelationBTreeOperatorData));
-		operatorData->relationBTree = relationBTree;
-		operatorData->nInputs = nInputs;
-
-		MachineOperatorSpec bTreeOperatorSpec = {
-			.providerID = btreeProviderID,
-			.stateSize = sizeof(RelationBTreeIterator),
-			.operatorData = operatorData,
-			.setupState = &btreeSetupState,
-			.call = &btreeCall,
-			.finalizeState = &btreeFinalizeState,
-			.finalizeOperator = &finalizeBTreeOperator
-		};
-		// Let RelationTable create the operator and register the service.
-		// The operator context data holds a RelationBTreeIterator.
-		callback(table, bTreeOperatorSpec, CreateIOSignature(parameterIO, nColumns));
+	size8 nInputs = readerIndex + 1;
+	RelationBTree * relationBTree = storage;
+	byte parameterIO[relationBTree->nColumns];
+	for(index8 i = 0; i < relationBTree->nColumns; i++) {
+		if(i < nInputs)
+			parameterIO[i] = PARAMETER_IN;
+		else
+			parameterIO[i] = PARAMETER_OUT;
 	}
-	return relationBTree;
+	RelationBTreeOperatorData readerData = {.nInputs = nInputs};
+
+	spec->ioSignature = CreateIOSignature(parameterIO, relationBTree->nColumns);
+	spec->stateSize = sizeof(RelationBTreeIterator);
+	spec->readerData = readerData.ptr;
+	spec->setupState = &btreeSetupState;
+	spec->call = &btreeCall;
+	spec->finalizeState = &btreeFinalizeState;
+	// no finalizeReader()
 }
 
 
@@ -311,16 +303,16 @@ static byte relationBTreeRemoveTuple(void * storage, Atom const tuple[], uint8 i
 }
 
 
-static void freeRelationBTree(void * storage)
+static void relationBTreeFree(void * storage)
 {
 	FreeRelationBTree((RelationBTree *) storage);
 }
 
 
 StorageProvider btreeStorageProvider = {
-	.createStorage = btreeCreateStorage,
+	.setupStorage = btreeSetupStorage,
 	.addTuple = relationBTreeAddTuple,
 	.removeTuple = relationBTreeRemoveTuple,
 	.numberOfTuples = relationBTreeNTuples,
-	.free = freeRelationBTree,
+	.free = relationBTreeFree,
 };

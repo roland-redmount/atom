@@ -15,12 +15,12 @@
 void testLookup(void)
 {
 	Atom string = CreateStringFromCString("foo");
-	Relation stringRelation = GetStringRelation();
+	RelationSignature stringRelation = GetStringRelation();
 	Atom stringRole = GetStringRoleName();
 
 	ASSERT_TRUE(AtomHasRole(string, stringRelation, stringRole))
 	ASSERT_TRUE(AtomHasRole(string, stringRelation, (Atom) {0}))
-	ASSERT_TRUE(AtomHasRole(string, (Relation) {0}, (Atom) {0}))
+	ASSERT_TRUE(AtomHasRole(string, (RelationSignature) {0}, (Atom) {0}))
 
 	// add 1 occurence of role
 	AtomAddRole(string, stringRelation, stringRole);
@@ -70,7 +70,7 @@ void testLookupPredicateRoles(void)
 	atomTypes[weightIndex] = AT_INT;
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, 2);
 	// a computed relation, as we only need it to describe the columns
-	Relation relation = CreateRelation(form, typeSignature);
+	RelationSignature relation = {.termForm = form, .typeSignature = typeSignature};
 
 	Atom node = CreateStringFromCString("foo");
 	Atom actors[2];
@@ -86,7 +86,6 @@ void testLookupPredicateRoles(void)
 	ASSERT_FALSE(AtomHasRole(node, relation, roles[0]))
 
 	IFactRelease(node);
-	ReleaseRelation(relation);
 	IFactRelease(form);
 	IFactRelease(predicateForm);
 	NameRelease(roles[0]);

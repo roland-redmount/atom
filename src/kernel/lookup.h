@@ -45,19 +45,19 @@ size32 LookupTotalCount(void);
  * If predicateForm == 0, the function returns true if the atom participates
  * in any role in any relation.
  */
-bool AtomHasRole(Atom atom, Relation relation, Atom role);
+bool AtomHasRole(Atom atom, RelationSignature relation, Atom role);
 
 /**
  * Add a lookup entry for an atom participating in a role.
  * This is called by AssertFact()
  */
-void AtomAddRole(Atom atom, Relation relation, Atom role);
+void AtomAddRole(Atom atom, RelationSignature relation, Atom role);
 
 /**
  * Remove a lookup entry for an atom participating in a role.
  * This is called by RetractFact()
  */
-void AtomRemoveRole(Atom atom, Relation relation, Atom role);
+void AtomRemoveRole(Atom atom, RelationSignature relation, Atom role);
 
 /**
  * Remove all roles for an AT_ID atom. This is used when removing a AT_ID atom.
@@ -68,13 +68,13 @@ void LookupRemoveAllRoles(Atom atom);
  * Add lookup entries for all actors in a predicate, defined by an actor list
  * for a given relation
  */
-void LookupAddPredicateRoles(Relation relation, Atom const actors[]);
+void LookupAddPredicateRoles(RelationSignature relation, Atom const actors[]);
 
 /**
  * Remove lookup entries for each actor in a predicate, defined by an actor list
  * for a given relation.
  */
-void LookupRemovePredicateRoles(Relation relation, Atom const actors[]);
+void LookupRemovePredicateRoles(RelationSignature relation, Atom const actors[]);
 
 /**
  * Lookup the relation with the given term form where atom partipates in role.
@@ -88,7 +88,7 @@ void LookupRemovePredicateRoles(Relation relation, Atom const actors[]);
  * TODO: this is not a good design. Figure out some better way to handle those
  * cases in list, multiset.
  */
-Relation LookupFindRelation(Atom atom, Atom termForm, Atom role);
+RelationSignature LookupFindRelation(Atom atom, Atom termForm, Atom role);
 
 /**
  * Remove lookup entries for all atoms acting in the given predicate form.
@@ -111,7 +111,7 @@ Relation LookupFindRelation(Atom atom, Atom termForm, Atom role);
  */
 typedef struct s_LookupRecord {
 	Atom atom;
-	Relation relation;
+	RelationSignature relation;
 	Atom role;
 	size32 nFacts;	// the number of facts that match this record
 } LookupRecord;
@@ -132,7 +132,7 @@ void LookupIterate(Atom atom, LookupIterator * iterator);
 
 bool LookupIteratorNext(LookupIterator * iterator);
 
-Relation LookupIteratorGetRelation(LookupIterator const * iterator);
+RelationSignature LookupIteratorGetRelation(LookupIterator const * iterator);
 
 Atom LookupIteratorGetRole(LookupIterator const * iterator);
 

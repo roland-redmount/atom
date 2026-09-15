@@ -4,7 +4,7 @@
 #include "lang/Variable.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
-#include "kernel/RelationTable.h"
+#include "kernel/Relation.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
 #include "storage/RelationBTree.h"

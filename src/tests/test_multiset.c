@@ -11,8 +11,8 @@
 
 static void testMultiset(void)
 {
-	RelationTable const * table = GetCoreRelationTable(RELATION_MULTISET_NAME);
-	uint32 initialNRows = RelationTableNRows(table);
+	RelationSignature relation = GetCoreRelation(RELATION_MULTISET_NAME);
+	uint32 initialNRows = RelationNRows(relation);
 
 	Atom one = CreateNameFromCString("one");
 	Atom two = CreateNameFromCString("two");
@@ -24,7 +24,7 @@ static void testMultiset(void)
 	Atom multiset = CreateMultisetFromArrays(elements, multiples, TEST_MULTISET_N_UNIQUE, AT_NAME);
 
 	// we should have 3 tuples added to the table
-	ASSERT_UINT32_EQUAL(RelationTableNRows(table), initialNRows + 3)
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), initialNRows + 3)
 
 	ASSERT_TRUE(IsMultiset(multiset))
 

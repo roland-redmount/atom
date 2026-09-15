@@ -18,7 +18,7 @@
 
 
  /**
- * An IFactConjunction stores a block of tuples in a RelationTable,
+ * An IFactConjunction stores a block of tuples in a RelationWriter,
  * representing a conjunction of facts. Each ifact consists of 1 or more
  * IFactConjunction, stored sequentially.
  * 
@@ -99,7 +99,7 @@ static int8 btreeCompareHeaders(void const * item1, void const * item2, size32 i
 void InitializeIFacts(void)
 {
 	// Verify that struct packing left no padding.
-	ASSERT(sizeof(IFactConjunction) == sizeof(RelationTable *) + 4);
+	ASSERT(sizeof(IFactConjunction) == sizeof(RelationSignature) + 4);
 	ASSERT(sizeof(IFactHeader) == 16 + sizeof(IFactConjunction *));
 
 	SetMemory(&ifactStorage, sizeof ifactStorage, 0);
@@ -210,7 +210,7 @@ void IFactReserve(data64 hash)
  * Creates a FILTER operator based on an existing service for the relation.
  * Returns 0 if the relation has no suitable service to filter.
  */
-static Operator * createIdColumnService(Relation relation, index8 idColumn, IOSignature ioSignature)
+static Operator * createIdColumnService(RelationSignature relation, index8 idColumn, IOSignature ioSignature)
 {
 	// Find a service yielding an output wherever this one does, and at the identified
 	// column, which is the one the filter tests.
@@ -254,21 +254,20 @@ static Operator * createIdColumnService(Relation relation, index8 idColumn, IOSi
  */
 static Operator const * conjunctionOperator(IFactConjunction const * conjunction)
 {
-	size8 nColumns = conjunction->table->nColumns;
-	byte parameterIO[nColumns];
-	for(index8 i = 0; i < nColumns; i++)
+	byte parameterIO[conjunction->nColumns];
+	for(index8 i = 0; i < conjunction->nColumns; i++)
 		parameterIO[i] = (i == conjunction->idColumn) ? PARAMETER_IN : PARAMETER_OUT;
-	IOSignature ioSignature = CreateIOSignature(parameterIO, nColumns);
-	Operator const * op = FindService(conjunction->table->relation, ioSignature);
+	IOSignature ioSignature = CreateIOSignature(parameterIO, conjunction->nColumns);
+	Operator const * op = FindServiceOperator(conjunction->signature, ioSignature);
 	// If the relation lacks the necessary service yet, build it
 	if(!op)
-		op = createIdColumnService(conjunction->table->relation, conjunction->idColumn, ioSignature);
+		op = createIdColumnService(conjunction->signature, conjunction->idColumn, ioSignature);
 	ASSERT(op)
 	return op;
 }
 
 
-void IFactBeginConjunction(IFactDraft * draft, RelationTable * table, index8 idColumn)
+void IFactBeginConjunction(IFactDraft * draft, RelationSignature signature, index8 idColumn)
 {
 	ASSERT(!draft->hasBegunConjunction);
 
@@ -279,11 +278,16 @@ void IFactBeginConjunction(IFactDraft * draft, RelationTable * table, index8 idC
 		draft->header.nConjunctions * sizeof(IFactConjunction)
 	);
 	IFactConjunction * conjunction = lastConjunction(&(draft->header));
-	conjunction->table = table;
-	AcquireRelationTable(table);		// ensure the table is valid until IFactEnd()
+	conjunction->signature = signature;
+	conjunction->nColumns = RelationNColumns(signature);
 	conjunction->idColumn = idColumn;
-	// Fail here rather than at the first read if the table cannot be queried on its
-	// identified column; see conjunctionOperator()
+
+	// TODO: in what scenarios could the relation be removed during IFact construction?
+	// Do we evrn need to know/access the relation before IFactEnd, when facts are created?
+	// AcquireRelationTable(table);		// ensure the table is valid until IFactEnd()
+
+	// Obtain the operator for reading from the relation, keyed on the idColumn.
+	// This operator must exist
 	ASSERT(conjunctionOperator(conjunction))
 
 	draft->hasBegunConjunction = true;
@@ -299,13 +303,13 @@ void IFactAddTuple(IFactDraft * draft, Atom const tuple[])
 	
 	// check for page overrun
 	size32 storageBytesUsed = ((addr64) draft->currentTuple) - ((addr64) draft->tupleStorage);
-	size32 tupleNBytes = conjunction->table->nColumns * sizeof(Atom);
+	size32 tupleNBytes = conjunction->nColumns * sizeof(Atom);
 	ASSERT(storageBytesUsed + tupleNBytes <= MEMORY_PAGE_SIZE);
 
 	CopyMemory(tuple, draft->currentTuple, tupleNBytes);
 	// ensure the identifying column is zero, to not affect hashCurrentIFact()
 	draft->currentTuple[conjunction->idColumn] = (Atom) {0};
-	draft->currentTuple += conjunction->table->nColumns;
+	draft->currentTuple += conjunction->nColumns;
 	conjunction->nRows++;
 }
 
@@ -336,9 +340,9 @@ static void sortIFactDraft(IFactDraft * draft)
 	Atom * tuples = draft->tupleStorage;
 	for(index8 i = 0; i < ifact->nConjunctions; i++) {
 		IFactConjunction * conjunction = &(ifact->conjunctions[i]);
-		tupleBlockSizes[i] = conjunction->nRows * conjunction->table->nColumns * sizeof(Atom);
-		QuickSort(tuples, conjunction->nRows, conjunction->table->nColumns * sizeof(Atom), CompareMemory);
-		tuples += conjunction->nRows * conjunction->table->nColumns;
+		tupleBlockSizes[i] = conjunction->nRows * conjunction->nColumns * sizeof(Atom);
+		QuickSort(tuples, conjunction->nRows, conjunction->nColumns * sizeof(Atom), CompareMemory);
+		tuples += conjunction->nRows * conjunction->nColumns;
 	}
 
 	// Then sort the conjunctions by form and parameters
@@ -369,12 +373,12 @@ static void createFacts(IFactDraft * draft, bool bootstrap)
 			// set the identified atom
 			tuple[conjunction->idColumn] = idAtom;
 			// store the tuple
-			ASSERT(RelationTableAddTuple(conjunction->table, tuple, conjunction->idColumn + 1) == TUPLE_ADDED)
+			ASSERT(RelationAddTuple(conjunction->signature, tuple, conjunction->idColumn + 1) == TUPLE_ADDED)
 			// add lookup
 			if(!bootstrap) {
-				LookupAddPredicateRoles(conjunction->table->relation, tuple);
+				LookupAddPredicateRoles(conjunction->signature, tuple);
 			}
-			tuple += conjunction->table->nColumns;
+			tuple += conjunction->nColumns;
 		}
 		conjunction++;
 	}
@@ -384,9 +388,9 @@ static void createFacts(IFactDraft * draft, bool bootstrap)
 static data64 hashConjunction(IFactConjunction const * conjunction, Atom const * tuples, data64 initialHash)
 {
 	data64 hash = initialHash;
-	hash = RelationHash(conjunction->table->relation, initialHash);
+	hash = RelationHash(conjunction->signature, initialHash);
 	// hash all tuples (sorted)
-	return DJB2DoubleHashAdd(tuples, conjunction->nRows * conjunction->table->nColumns * sizeof(Atom), hash);
+	return DJB2DoubleHashAdd(tuples, conjunction->nRows * conjunction->nColumns * sizeof(Atom), hash);
 }
 
 
@@ -401,7 +405,7 @@ static data64 hashIFact(IFactDraft * draft)
 	for(index32 i = 0; i < draft->header.nConjunctions; i++) {
 		IFactConjunction * conjunction = &(draft->header.conjunctions[i]);
 		hash = hashConjunction(conjunction, tuplePtr, hash);
-		tuplePtr += conjunction->nRows * conjunction->table->nColumns;
+		tuplePtr += conjunction->nRows * conjunction->nColumns;
 	}
 	return hash;
 }
@@ -424,7 +428,7 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 	for(index32 i = 0; i < existingIFact->nConjunctions; i++) {
 		IFactConjunction * conjunction = &(draft->header.conjunctions[i]);
 		size8 nRows = conjunction->nRows;
-		size8 nColumns = conjunction->table->nColumns;
+		size8 nColumns = conjunction->nColumns;
 		IFactConjunction * existingConjunction = &(existingIFact->conjunctions[i]);
 		// check conjunctions headers are identical
 		if(CompareMemory(conjunction, existingConjunction, sizeof(IFactConjunction)))
@@ -502,8 +506,9 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash) // , void (* assertFact)
 		keepConjunctions = true;
 	}
 	// Release acquired table references
-	for(index8 i = 0; i < draft->header.nConjunctions; i++)
-		ReleaseRelationTable(draft->header.conjunctions[i].table);
+	// for(index8 i = 0; i < draft->header.nConjunctions; i++)
+	// 	ReleaseRelationTable(draft->header.conjunctions[i].table);
+
 	if(!keepConjunctions)
 		Free(draft->header.conjunctions);
 	FreePage(draft->tupleStorage);
@@ -520,18 +525,15 @@ Atom IFactEnd(IFactDraft * draft)
 
 void removeIFactTuples(IFactConjunction * conjunction, Atom idAtom)
 {
-	RelationTable * table = conjunction->table;
-	size8 nColumns = table->nColumns;
-
 	// Retrieve all tuples having idAtom in the idColumn.
 	// NOTE: although it may be possible to have tuples where idAtom is
 	// present in idColumn _without_ being an identifying fact,
 	// such tuples cannot occur here because they would have to reference idAtom,
 	// and we already know that its reference count is zero.
 	ResizingArray tuplesArray;
-	CreateResizingArray(&tuplesArray, nColumns * sizeof(Atom), 10);
-	Atom arguments[nColumns];
-	setupQueryTuple(arguments, nColumns, idAtom, conjunction->idColumn);
+	CreateResizingArray(&tuplesArray, conjunction->nColumns * sizeof(Atom), 10);
+	Atom arguments[conjunction->nColumns];
+	setupQueryTuple(arguments, conjunction->nColumns, idAtom, conjunction->idColumn);
 	OperatorContext * context = OperatorCreateContext(conjunctionOperator(conjunction), arguments);
 	while(OperatorCall(context))
 		ResizingArrayAppend(&tuplesArray, arguments);
@@ -540,7 +542,7 @@ void removeIFactTuples(IFactConjunction * conjunction, Atom idAtom)
 	// Delete tuples
 	for(index32 i = 0; i < tuplesArray.nElements; i++) {
 		Atom * tuple = ResizingArrayGetElement(&tuplesArray, i);
-		ASSERT(RelationTableRemoveTuple(table, tuple, conjunction->idColumn + 1) == BTREE_DELETED);
+		ASSERT(RelationRemoveTuple(conjunction->signature, tuple, conjunction->idColumn + 1) == BTREE_DELETED);
 	}
 	FreeResizingArray(&tuplesArray);
 }

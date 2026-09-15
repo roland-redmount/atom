@@ -24,7 +24,7 @@ Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size3
  * Find the relation (multiset m element e multiple n) where
  * e has the given atom type. Currently we only support multisets of ID or NAME atoms.
  */
-Relation findMultisetRelation(byte elementType)
+RelationSignature findMultisetRelation(byte elementType)
 {
 	switch(elementType) {
 		case AT_ID:
@@ -35,7 +35,7 @@ Relation findMultisetRelation(byte elementType)
 
 		default:
 		ASSERT(false)
-		return (Relation) {0};
+		return (RelationSignature) {0};
 	}
 }
 
@@ -43,16 +43,16 @@ Relation findMultisetRelation(byte elementType)
 /**
  * Find the tuple storage of the multiset relation for the given element atom type.
  */
-static RelationTable * findMultisetTable(byte elementType)
-{
-	return FindRelationTable(findMultisetRelation(elementType));
-}
+// static RelationWriter * findMultisetTable(byte elementType)
+// {
+// 	return FindRelationTable(findMultisetRelation(elementType));
+// }
 
 
 /**
  * Find the relation associated with a multiset.
  */
-static Relation lookupMultisetRelation(Atom multiset)
+static RelationSignature lookupMultisetRelation(Atom multiset)
 {
 	return LookupFindRelation(
 		multiset,
@@ -67,7 +67,7 @@ static Relation lookupMultisetRelation(Atom multiset)
  */
 static byte findMultisetElementType(Atom multiset)
 {
-	Relation relation = lookupMultisetRelation(multiset);
+	RelationSignature relation = lookupMultisetRelation(multiset);
 	return relation.typeSignature.atomTypes[
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)
 	];
@@ -78,12 +78,12 @@ void AddMultisetToIFact(
 	IFactDraft * draft,
 	MultisetElementGenerator generator, void const * data, size32 nUniqueElements, byte elementType)
 {
-	RelationTable * table = findMultisetTable(elementType);
+	RelationSignature relation = findMultisetRelation(elementType);
 
 	// assert (multiset element multiple) facts
 	IFactBeginConjunction(
 		draft, 
-		table,
+		relation,
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 	);
 	Atom tuple[3];
@@ -177,14 +177,14 @@ size32 MultisetGetElementMultiple(Atom multiset, Atom element)
  */
 void MultisetIterate(Atom multiset, byte elementType, MultisetIterator * iterator)
 {
-	Relation relation = findMultisetRelation(elementType);
+	RelationSignature relation = findMultisetRelation(elementType);
 	byte parameterIO[3];
 	CoreFormSetByteArray(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 		parameterIO
 	);
-	Operator const * op = FindService(
+	Operator const * op = FindServiceOperator(
 		relation, CreateIOSignature(parameterIO, 3));
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,

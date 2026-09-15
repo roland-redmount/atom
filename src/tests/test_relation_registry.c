@@ -38,25 +38,19 @@ static void teardownFixture(void)
 
 
 /**
- * A relation registers itself when created and removes itself when its last reference
- * goes; see Relation.h
+ * Test create and remove a Relation
  */
 void testAddRemoveRelation(void)
 {
 	setupFixture();
 	size32 nRelationsInitial = RelationRegistryNRelations();
 
-	Relation relation = CreateRelation(fixture.form, fixture.typeSignature);
+	RelationSignature relation = CreateRelation(fixture.form, fixture.typeSignature, 0, 0);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 	ASSERT_TRUE(RelationExists(relation))
 
-	// A second reference keeps the relation registered
-	AcquireRelation(relation);
-	ReleaseRelation(relation);
-	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
-
 	// Releasing the creation reference removes it
-	ReleaseRelation(relation);
+	DropRelation(relation);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial)
 	ASSERT_FALSE(RelationExists(relation))
 
@@ -72,8 +66,8 @@ void testAddRemoveRelation(void)
 void testIterateRelations(void)
 {
 	Atom form = GetCoreTermForm(FORM_MULTISET_ELEMENT_MULTIPLE);
-	Relation multisetName = GetCoreRelation(RELATION_MULTISET_NAME);
-	Relation multisetId = GetCoreRelation(RELATION_MULTISET_ID);
+	RelationSignature multisetName = GetCoreRelation(RELATION_MULTISET_NAME);
+	RelationSignature multisetId = GetCoreRelation(RELATION_MULTISET_ID);
 
 	bool foundName = false;
 	bool foundId = false;
@@ -82,7 +76,7 @@ void testIterateRelations(void)
 	RelationIterator iterator;
 	RelationRegistryIterate(form, &iterator);
 	while(RelationIteratorNext(&iterator)) {
-		Relation relation = RelationIteratorGet(&iterator);
+		RelationSignature relation = RelationIteratorGet(&iterator);
 		// every relation yielded must belong to the form we asked for
 		ASSERT_TRUE(SameAtoms(relation.termForm, form))
 		if(SameRelations(relation, multisetName))

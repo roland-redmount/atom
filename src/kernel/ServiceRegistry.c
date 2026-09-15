@@ -113,7 +113,7 @@ void FreeServiceRegistry(void)
  * Copy the service of the given relation evaluated by the given operator to *service.
  * Returns false if the registry holds no such service.
  */
-static bool findService(Relation relation, Operator const * op, Service * service)
+static bool findService(RelationSignature relation, Operator const * op, Service * service)
 {
 	// Iterate over all services for the given relation
 	Service key = {.relation = relation};
@@ -195,21 +195,22 @@ static void removeService(Service const * service)
 	// Detach the root operator from the service.
 	// This may cause the operator to be deleted, and possibly its descendants.
 	DetachOperator(service->op);
-	ReleaseRelation(service->relation);
+	// ReleaseRelation(service->relation);
 	BTreeDeleteResult result = BTreeDelete(services, service, 0);
 	ASSERT(result == BTREE_DELETED)
 }
 
 
-Service CreateService(Relation relation, IOSignature ioSignature, Operator * op)
+Service CreateService(RelationSignature relation, IOSignature ioSignature, Operator * op)
 {
-	// ASSERT(op->type != OPERATOR_MACHINE)
+	ASSERT(op->type != OPERATOR_MACHINE)
+	ASSERT(RelationExists(relation))
 	Service service = {
 		.relation = relation,
 		.ioSignature = ioSignature,
 		.op = op
 	};
-	AcquireRelation(relation);
+	// AcquireRelation(relation);
 	AttachOperator(op, relation);
 
 	// Find descendants of the given operator with an attached service.
@@ -249,7 +250,7 @@ bool ServiceIsPrimitive(Service const * service)
 }
 
 
-void RemoveService(Relation relation, Operator const * op)
+void RemoveService(RelationSignature relation, Operator const * op)
 {
 	Service service;
 	bool found = findService(relation, op, &service);
@@ -258,7 +259,7 @@ void RemoveService(Relation relation, Operator const * op)
 }
 
 
-void ServiceRegistryRemoveAll(Relation relation)
+void ServiceRegistryRemoveAll(RelationSignature relation)
 {
 	// Add all services for the given relation to 
 	Service key = {.relation = relation };
@@ -307,7 +308,7 @@ void InvalidateServicesByTermForm(Atom termForm)
 	RelationIterator relationIterator;
 	RelationRegistryIterate(termForm, &relationIterator);
 	while(RelationIteratorNext(&relationIterator)) {
-		Relation relation = RelationIteratorGet(&relationIterator);
+		RelationSignature relation = RelationIteratorGet(&relationIterator);
 		// Find each compiled service for this relation
 		ServiceIterator serviceIterator;
 		ServiceRegistryIterate(relation, &serviceIterator);
@@ -374,7 +375,7 @@ size32 NumberOfCompiledServices(void)
 }
 
 
-void ServiceRegistryIterate(Relation relation, ServiceIterator * iterator)
+void ServiceRegistryIterate(RelationSignature relation, ServiceIterator * iterator)
 {
 	iterator->relation = relation;
 	BTreeIterate(&(iterator->btreeIterator), services);
@@ -416,7 +417,7 @@ void ServiceIteratorEnd(ServiceIterator * iterator)
 }
 
 
-Operator * FindService(Relation relation, IOSignature ioSignature)
+Operator * FindServiceOperator(RelationSignature relation, IOSignature ioSignature)
 {
 	Service key = {.relation = relation, .ioSignature = ioSignature};
 	// QUESTION: Why use an iterator here to seek to a single item?
@@ -474,7 +475,7 @@ static bool signatureHasInputParameter(IOSignature ioSignature, size8 nParameter
 	return hasInput;
 }
 
-void RelationDump(Relation relation)
+void RelationDump(RelationSignature relation)
 {
 	// Find a service for enumerating all tuples from the relation
 	Service service = {0};

@@ -1,5 +1,5 @@
 /**
- * A simple framework for service providers to regiser a machine service.
+ * A framework for A service provider to create a read-only RelatonImplementation.
  * See for example library/math.c
  *
  * A service is registered from its signature, written in the notation a service
@@ -8,7 +8,7 @@
  * 
  * NOTE: Some limitations of this framework:
  *
- * 1) Functions must be written referring to arguments by index, which is somewhat
+ * 1) Readers must be written referring to arguments by index, which is somewhat
  *    unintuitive.
  * 2) Each call to a machine service requires permuting the arguments from canonical
  *    to user order and back again, according to the stored argument index array,
@@ -39,30 +39,40 @@
 #include "kernel/ServiceRegistry.h"
 
 /**
- * Allows a machine service provider to request an ID. This ID will be associated
- * with services registered by RegisterMachineService(), so that they can later 
- * be found and removed by FreeMachineServices(). The retunrs ID is always nonzero.
+ * Request a module ID identifying a group of relations created by the same author.
+ * Modules are distinct from providers: a module can used multiple providers,
+ * and a provider can be shared over multiple modules.
+ * The returned ID is always nonzero.
  */
-uint32 RequestProviderID(void);
+uint32 RequestModuleID(void);
 
 /**
- * Create a machine Operator based on the given operatorSpec, and register a Service
+ * Create a stateless machine Operator with the given call function, and register a Service
  * based on the signature syntax string. The signature is a term whose actors
  * are all parameters. For example, the service that adds two integers has signature
  *
  *   "+ @1<INT + @2<INT = @3>INT"
  *
- * A signature must number its arguments 1 ... arity, in the order the MachineFunction
- * expects its arguments in the arguments[] array.
+ * The signature must number its parameter @1, ... , @n in the order the MachineFunction
+ * expects its arguments.
+ * If the corresponding Relation does not exist, it is created, with the default provider (no storage).
  * Returns the registered service.
  */
+Service RegisterMachineService(
+	uint32 moduleID, char const * signature,
+	bool (*call)(void * state, Atom arguments[], void * readerData, void * storage));
 
-Service RegisterMachineService(char const * signature, MachineOperatorSpec operatorSpec);
+
+Service RegisterMachineServiceWithState(
+	uint32 moduleID, char const * signature, size32 stateSize,
+	void (*setupState)(void * state, Atom arguments[], void * readerData, void * storage),
+	bool (*call)(void * state, Atom arguments[], void * readerData, void * storage),
+	void (*finalizeState)(void * state, void * readerData, void * storage));
 
 /**
- * Remove all services registered by RegisterMachineService() for a given providerID.
+ * Remove all relations registered by a specific module.
  */
-void FreeMachineServices(uint32 providerID);
+void FreeModuleRelations(uint32 moduleID);
 
 
 #endif	// MACHINE_SERVICE_H

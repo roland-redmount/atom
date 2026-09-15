@@ -18,8 +18,7 @@ static Atom pairRoleNames[3];
 // the canonical order indexes for roles (pair left right)
 static index8 pairTermRoleIndex[3];
 
-static Relation pairRelation;
-static RelationTable * pairRelationTable;
+static RelationSignature pairRelation;
 static Operator * pairOperator;
 
 
@@ -43,7 +42,7 @@ Atom CreatePair(Atom left, Atom right)
 void AddPairToIFact(IFactDraft * draft, Atom left, Atom right)
 {
 	// assert (pair left right)
-	IFactBeginConjunction(draft, pairRelationTable, pairTermRoleIndex[0]);
+	IFactBeginConjunction(draft, pairRelation, pairTermRoleIndex[0]);
 	
 	Atom tuple[3];
 	pairSetTuple(tuple, (Atom) {0}, left, right);
@@ -119,11 +118,8 @@ void PairSetup(void)
 	TypeSignature typeSignature = {0};
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_ID, AT_ID}, typeSignature.atomTypes, pairTermRoleIndex, 3);		
-	pairRelation = CreateRelation(pairTermForm, typeSignature);
+	pairRelation = CreateRelation(pairTermForm, typeSignature, &btreeStorageProvider, pairTermRoleIndex);
 	IFactRelease(pairTermForm);
-	
-	pairRelationTable = CreateRelationTable(pairRelation, &btreeStorageProvider, pairTermRoleIndex);
-	ReleaseRelation(pairRelation);
 
 	// Store a pointer to the (pair<ID left>ID right<ID) service,
 	// created by the B-tree provider.
@@ -131,12 +127,12 @@ void PairSetup(void)
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 		ioSignature.parameterIO, pairTermRoleIndex, 3);
-	pairOperator = FindService(pairRelation, ioSignature);
+	pairOperator = FindServiceOperator(pairRelation, ioSignature);
 	ASSERT(pairOperator);
 }
 
 
 void PairShutdown(void)
 {
-	ReleaseRelationTable(pairRelationTable);
+	DropRelation(pairRelation);
 }

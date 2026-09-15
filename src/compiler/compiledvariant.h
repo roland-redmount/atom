@@ -18,7 +18,7 @@ typedef struct s_CompiledVariant {
 	Operator * op;
 	// The relation this variant compiles to, and a reference to it. Created before the
 	// recursive clauses compile, as their recursive term reads it.
-	Relation relation;
+	RelationSignature relation;
 	// whether this variant was derived from a recursive clause (and contains a FIXPOINT operator)
 	bool isRecursive;
 

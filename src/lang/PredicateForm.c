@@ -25,8 +25,8 @@ Atom CreatePredicateForm(Atom const roles[], size8 nRoles)
 	AddMultisetToIFactFromArrays(&draft, uniqueRoles, multiplicities, nUniqueRoles, AT_NAME);
 
 	// add (predicate-form @predicate) to ifact
-	RelationTable * predicateFormTable = GetCoreRelationTable(RELATION_PREDICATE_FORM);
-	IFactBeginConjunction(&draft, predicateFormTable, 0);
+	RelationSignature predicateFormRelation = GetCoreRelation(RELATION_PREDICATE_FORM);
+	IFactBeginConjunction(&draft, predicateFormRelation, 0);
 	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
 	IFactEndConjunction(&draft);
 

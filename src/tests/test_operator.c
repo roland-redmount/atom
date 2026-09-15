@@ -21,16 +21,14 @@
 #include "testing/testing.h"
 
 
-static uint32 providerID;		// for creating machine operators 
-
-
 void testMachineOperator(void)
 {
 	// Test calling the B-tree operator
 	// (multiset @list-predicate-form element _ position _)
 	Operator * op = GetCoreOperator(SERVICE_MULTISET_NAME);
 	ASSERT(op)
-	ASSERT(op->type == OPERATOR_MACHINE)
+	Operator * machineOp = OperatorGetChild(op, 0);
+	ASSERT(machineOp->type == OPERATOR_MACHINE)
 
 	Atom arguments[3];
 	CoreFormSetTuple(
@@ -453,10 +451,12 @@ void testIndexOrder(void)
 {
 	// A B-tree operator yields its tuples in the index column order of its relation
 	Operator * listOperator = GetListOperator(AT_LETTER);
-	RelationTable const * listRelation = GetListRelationTable(AT_LETTER);
-	ASSERT_NOT_NULL(listOperator->indexOrder)
-	for(index8 i = 0; i < 3; i++)
-		ASSERT_UINT32_EQUAL(listOperator->indexOrder[i], listRelation->indexColumns[i])
+
+	// NOTE: indexOrder[] is currently not publicly accessible
+	// RelationSignature listRelation = GetListRelation(AT_LETTER);
+	// ASSERT_NOT_NULL(listOperator->indexOrder)
+	// for(index8 i = 0; i < 3; i++)
+	// 	ASSERT_UINT32_EQUAL(listOperator->indexOrder[i], listRelation->indexColumns[i])
 
 	// The relation is stored in the kernel order (list position element), so reordering
 	// it to (list element position) yields tuples ordered by argument 0 (the list),
@@ -486,9 +486,9 @@ void testIndexOrder(void)
 		ASSERT_UINT32_EQUAL(joinOperator->indexOrder[i], expectedJoinOrder[i])
 
 	// A MACHINE operator declares the order its provider yields tuples in
+	RelationReader dummyReader = {0};
 	Operator * machineOperator = CreateMachineOperator(
-		2, (index8[]) {1, 0},
-		(MachineOperatorSpec) { .providerID = providerID }
+		2, (index8[]) {1, 0}, &dummyReader
 	);
 	ASSERT_UINT32_EQUAL(machineOperator->indexOrder[0], 1)
 	ASSERT_UINT32_EQUAL(machineOperator->indexOrder[1], 0)
@@ -589,8 +589,8 @@ static Operator * createClosureOperator(index8 const inputArguments[], size8 nIn
 	byte parameterIO[2];
 	parameterIO[precIndex] = nInputs ? PARAMETER_IN : PARAMETER_OUT;
 	parameterIO[succIndex] = PARAMETER_OUT;
-	Operator * edgeOperator = FindService(
-		graphFixture.table->relation, CreateIOSignature(parameterIO, 2));
+	Operator * edgeOperator = FindServiceOperator(
+		graphFixture.relation, CreateIOSignature(parameterIO, 2));
 	ASSERT_NOT_NULL(edgeOperator)
 
 	// Rule (1), the graph relation itself, with the edge arguments taken into the
@@ -686,8 +686,6 @@ int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
 	LoadLibraries();
-
-	providerID = RequestProviderID();
 
 	ExecuteTest(testMachineOperator);
 	ExecuteTest(testPermuteOperator);

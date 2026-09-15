@@ -2,61 +2,18 @@
 #ifndef OPERATOR_H
 #define OPERATOR_H
 
-#include "kernel/Relation.h"
+#include "kernel/RelationSignature.h"
+
+struct s_RelationReader;
 
 typedef struct s_Operator Operator;
 typedef struct s_OperatorContext OperatorContext;
-struct s_RelationTable;
-
 
 typedef struct s_MachineOperatorContext {
 	bool isExhausted;						// required for stateless services
 	Atom arguments[RELATION_MAX_ARITY];		// in the provider order	
 	byte state[];							// state size specified with CreateMachineOperator()
 } MachineOperatorContext;
-
-/**
- * This struct contains the data and functions needed to specify a machine operator.
- */
-typedef struct s_MachineOperatorSpec
-{
-	uint32 providerID;
-	void * operatorData;
-	size32 stateSize;
-	struct s_RelationTable * relationTable;		// for operators touching storage; else 0
-
-	/**
-	 * Initialize the machine operator's state data, such as an iterator structure.
-	 * This pointer may be 0 if the state needs no initialization.
-	 * The state data is always cleared before calling this function.
-	 * The operatorData pointer is the one given to CreateMachineOperator().
-	 * The arguments are given in provider order.
-	 */
-	void (*setupState)(void * state, Atom arguments[], void * operatorData);
-
-	/**
-	 * Call (resume) an executing operator, return true if a tuple was produced,
-	 * false if evaluation terminated. The call() function must write its results
-	 * to the arguments tuple. The arguments are given in provider order.
-	 * For an operator with no state, call() is only invoked once
-	 * An operator with state is can be called repeatedly, until it returns false.
-	 */
-	bool (*call)(void * state, Atom arguments[], void * operatorData);
-
-	/**
-	 * Finalize the machine operator's state data.
-	 * This pointer may be 0 if no finalization is required.
-	 */
-	void (*finalizeState)(void * state, void * operatorData);
-
-	/**
-	 * Finalize the machine operator (deallocate data structures, &c), called once when
-	 * the last reference to the operator is released.
-	 * This pointer may be 0 if no finalization is required.
-	 */
-	void (*finalizeOperator)(void * operatorData);
-
-} MachineOperatorSpec;
 
 
 /**
@@ -210,6 +167,8 @@ typedef struct s_MachineOperatorSpec
 	/**
 	 * Call a machine code function. Leaf of the operator tree.
 	 * Cannot be the root operator of a Service.
+	 * 
+	 * TODO: rename -> OPERATOR_READER ?
 	 */
 	OPERATOR_MACHINE = 10,
 };
@@ -224,9 +183,9 @@ struct s_Operator {
 	// Context size, in addition to sizeof(Context)
 	size32 contextSize;
 	size32 nParents;		// number of parent operators
-	// This relation pointer is nonzero iff the operator is a root operator for a service,
+	// The relation is set iff the operator is a root operator for a service,
 	// and can be used to locate that service. For a MACHINE operator, this must be 0.
-	Relation relation;
+	RelationSignature relation;
 	union {
 		// for OPERATOR_IDENTIFY
 		struct {
@@ -298,7 +257,8 @@ struct s_Operator {
 		} filter;
 		// for OPERATOR_MACHINE
 		struct {
-			MachineOperatorSpec spec;
+			// NOTE: this is not const, since operator calls may modify reader.spec.readerData
+			struct s_RelationReader * reader;
 		} machine;
 	} impl;
 };
@@ -338,7 +298,8 @@ Operator * CreatePermuteOperator(
  * once.
  * The returned operator has zero references.
  */
-Operator * CreateMachineOperator(size8 nArguments, index8 const indexOrder[], MachineOperatorSpec spec);
+Operator * CreateMachineOperator(
+	size8 nArguments, index8 const indexOrder[], struct s_RelationReader * reader);
 
 /**
  * Setup a JOIN operator with the specified number of arguments, from two existing
@@ -484,7 +445,7 @@ Operator * OperatorGetChild(Operator const * op, index8 index);
 /**
  * Attach an operator to a service, specified by its Relation
  */
-void AttachOperator(Operator * op, Relation relation);
+void AttachOperator(Operator * op, RelationSignature relation);
 
 /**
  * Detach an operator from its a service. This may deallocate the operator.

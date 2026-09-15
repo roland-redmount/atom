@@ -8,7 +8,7 @@
 #define FIXTURES_H
 
 #include "kernel/dictionary.h"
-#include "kernel/RelationTable.h"
+#include "kernel/Relation.h"
 #include "kernel/typedtuple.h"
 
 
@@ -33,7 +33,7 @@
  */
 typedef struct {
 	Atom termForm;
-	RelationTable * table;
+	RelationSignature relation;
 	size8 nColumns;
 	// Column index of each role, in the order the role names were given
 	index8 roleIndex[FIXTURE_MAX_COLUMNS];

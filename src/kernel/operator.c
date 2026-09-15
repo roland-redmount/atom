@@ -1,7 +1,7 @@
 
 #include "btree/btree.h"
 #include "kernel/operator.h"
-#include "kernel/RelationTable.h"
+#include "kernel/Relation.h"
 #include "kernel/tuple.h"
 #include "lang/TermForm.h"			// for PrintTermForm()
 #include "memory/allocator.h"
@@ -1437,14 +1437,15 @@ static void machineWriteArguments(
 static void machineSetupContext(OperatorContext * context)
 {
 	MachineOperatorContext * machineContext = (MachineOperatorContext *) &context->data;
-	MachineOperatorSpec provider = context->op->impl.machine.spec;
+	RelationReader * reader = context->op->impl.machine.reader;
 	// setupState() reads the input arguments, so permute them first
 	machineReadArguments(context, machineContext);
-	if(provider.setupState) {
-		provider.setupState(
+	if(reader->spec.setupState) {
+		reader->spec.setupState(
 			machineContext->state,
 			machineContext->arguments,
-			context->op->impl.machine.spec.operatorData
+			&(reader->spec.readerData),
+			reader->impl->storage
 		);
 	}
 }
@@ -1458,14 +1459,16 @@ static bool machineCall(OperatorContext * context)
 		return false;
 
 	machineReadArguments(context, machineContext);
-	bool result = op->impl.machine.spec.call(
+	RelationReader * reader = op->impl.machine.reader;
+	bool result = reader->spec.call(
 		machineContext->state,
 		machineContext->arguments,
-		context->op->impl.machine.spec.operatorData
+		reader->spec.readerData,
+		reader->impl->storage
 	);
 	if(result) {
 		machineWriteArguments(context, machineContext);
-		if(op->impl.machine.spec.stateSize == 0) {
+		if(reader->spec.stateSize == 0) {
 			// operator is stateless, so we can have at most one tuple
 			machineContext->isExhausted = true;
 		}
@@ -1481,22 +1484,23 @@ static bool machineCall(OperatorContext * context)
 static void machineFinalizeContext(OperatorContext * context)
 {
 	MachineOperatorContext * machineContext = (MachineOperatorContext *) &context->data;
-	MachineOperatorSpec provider = context->op->impl.machine.spec;
-	if(provider.finalizeState) {
-		provider.finalizeState(
+	RelationReader const * reader = context->op->impl.machine.reader;
+	if(reader->spec.finalizeState) {
+		reader->spec.finalizeState(
 			machineContext->state,
-			context->op->impl.machine.spec.operatorData
+			reader->spec.readerData,
+			reader->impl->storage
 		);
 	}
 }
 
 
-Operator * CreateMachineOperator(size8 nArguments, index8 const indexOrder[], MachineOperatorSpec spec)
+Operator * CreateMachineOperator(size8 nArguments, index8 const indexOrder[], RelationReader * reader)
 {
 	ASSERT(nArguments <= RELATION_MAX_ARITY)
 	Operator * op = createOperator(
-		OPERATOR_MACHINE, nArguments, sizeof(MachineOperatorContext) + spec.stateSize);
-	op->impl.machine.spec = spec;
+		OPERATOR_MACHINE, nArguments, sizeof(MachineOperatorContext) + reader->spec.stateSize);
+	op->impl.machine.reader = reader;
 	allocateIndexOrder(op);
 	CopyMemory(indexOrder, op->indexOrder, nArguments);
 #ifdef DEBUG
@@ -1508,9 +1512,11 @@ Operator * CreateMachineOperator(size8 nArguments, index8 const indexOrder[], Ma
 
 static void teardownMachineOperator(Operator * op)
 {
-	MachineOperatorSpec provider = op->impl.machine.spec;
-	if(provider.finalizeOperator)
-		provider.finalizeOperator(op->impl.machine.spec.operatorData);
+	// Deallocation of readers is now handled by DropRelation()
+
+	// RelationReader const * reader = op->impl.machine.reader;
+	// if(reader->finalizeReader)
+	// 	reader->finalizeReader(reader->readerData);
 }
 
 
@@ -1554,10 +1560,10 @@ Operator * OperatorGetChild(Operator const * op, index8 index)
 		return op->impl.permute.childOperator;
 
 	case OPERATOR_JOIN:
-		return index ? op->impl.join.right : op->impl.join.left;
+		return index == 0 ? op->impl.join.right : op->impl.join.left;
 
 	case OPERATOR_UNION:
-		return index ? op->impl._union.second : op->impl._union.first;
+		return index == 0 ? op->impl._union.second : op->impl._union.first;
 
 	case OPERATOR_PROJECT:
 		return op->impl.project.childOperator;
@@ -1630,17 +1636,17 @@ static void teardownOperator(Operator * op)
 }
 
 
-void AttachOperator(Operator * op, Relation relation)
+void AttachOperator(Operator * op, RelationSignature signature)
 {
 	ASSERT(IsNullRelation(op->relation))
-	op->relation = relation;
+	op->relation = signature;
 }
 
 
 void DetachOperator(Operator * op)
 {
 	ASSERT(!IsNullRelation(op->relation))
-	op->relation = (Relation) {0};
+	op->relation = (RelationSignature) {0};
 	CheckOperator(op);
 }
 
@@ -1654,15 +1660,15 @@ void CheckOperator(Operator * op)
 			// since it no longer is a root operator, and op->relation == 0.
 			teardownOperator(op);
 		}
-		else {
-			if(op->type == OPERATOR_MACHINE) {
-				if(op->impl.machine.spec.relationTable) {
-					// A MACHINE operator acting on storage must notify
-					// its RelationTable, which could now become stale.
-					CheckRelationTable(op->impl.machine.spec.relationTable);
-				}
-			}
-		}
+		// else {
+		// 	if(op->type == OPERATOR_MACHINE) {
+		// 		if(op->impl.machine.spec.relationTable) {
+		// 			// A MACHINE operator acting on storage must notify
+		// 			// its RelationWriter, which could now become stale.
+		// 			CheckRelationTable(op->impl.machine.spec.relationTable);
+		// 		}
+		// 	}
+		// }
 	}
 }
 
@@ -2003,12 +2009,7 @@ static void printOperatorRecursive(Operator const * op, uint32 depth)
 
 	case OPERATOR_MACHINE:
 		printOperatorHead(op, "MACHINE");
-		if(op->impl.machine.spec.relationTable) {
-			// A operator on table storage, print the storage relation (??)
-			PrintTermForm(op->impl.machine.spec.relationTable->relation.termForm);
-		}
-		else if(!IsNullRelation(op->relation)) {
-			// An operator without storage  
+		if(!IsNullRelation(op->relation)) {
 			PrintTermForm(op->relation.termForm);
 		}
 		break;

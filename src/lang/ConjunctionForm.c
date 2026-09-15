@@ -24,8 +24,8 @@ Atom CreateConjunctionForm(Atom const clauseForms[], size8 nClauseForms)
 	AddMultisetToIFactFromArrays(&draft, uniqueClauseForms, multiplicities, nUniqueClauseForms, AT_ID);
 
 	// (conjunction-form @form)
-	RelationTable * conjunctionFormTable = GetCoreRelationTable(RELATION_CONJUNCTION_FORM);
-	IFactBeginConjunction(&draft, conjunctionFormTable, 0);
+	RelationSignature conjunctionFormRelation = GetCoreRelation(RELATION_CONJUNCTION_FORM);
+	IFactBeginConjunction(&draft, conjunctionFormRelation, 0);
 	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
 	IFactEndConjunction(&draft);	
 
