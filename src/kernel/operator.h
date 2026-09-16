@@ -258,6 +258,7 @@ struct s_Operator {
 		// for OPERATOR_MACHINE
 		struct {
 			// NOTE: this is not const, since operator calls may modify reader.spec.readerData
+			// It might be better not to have readerData in the spec?
 			struct s_RelationReader * reader;
 		} machine;
 	} impl;

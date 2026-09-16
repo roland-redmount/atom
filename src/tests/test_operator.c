@@ -25,9 +25,7 @@ void testMachineOperator(void)
 {
 	// Test calling the B-tree operator
 	// (multiset @list-predicate-form element _ position _)
-	Operator * op = GetCoreOperator(SERVICE_MULTISET_NAME);
-	ASSERT(op)
-	Operator * machineOp = OperatorGetChild(op, 0);
+	Operator * machineOp = GetCoreOperator(SERVICE_MULTISET_NAME);
 	ASSERT(machineOp->type == OPERATOR_MACHINE)
 
 	Atom arguments[3];
@@ -36,7 +34,7 @@ void testMachineOperator(void)
 		(Atom[]) {GetListPredicateForm(), (Atom) {0}, (Atom) {0}},
 		arguments
 	);
-	void * context = OperatorCreateContext(op, arguments);
+	void * context = OperatorCreateContext(machineOp, arguments);
 
 	// this should yield 3 elements corresponding to the 3 roles of (list position element)
 	size32 nElements = 0;

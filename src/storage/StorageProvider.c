@@ -33,12 +33,6 @@ RelationReader * AllocateRelationReader(void)
 	return PoolAllocate(readerPool);
 }
 
-void FreeRelationReader(RelationReader const * reader)
-{
-	PoolFreeItem(readerPool, reader);
-}
-
-
 /**
  * The default storage provider
  */
@@ -57,24 +51,34 @@ StorageProvider defaultProvider = {
 };
 
 
-void RelationImplAddReader(RelationImpl * impl, RelationReader * reader)
+RelationReader * RelationImplAddReader(RelationImpl * impl, RelationReaderSpec const * readerSpec)
 {
+	RelationReader * reader = AllocateRelationReader();
+	reader->impl = impl;
+	reader->spec = *readerSpec;		// store a copy
+
+	// Append to the list of readers
 	RelationReader ** readerSlot = &(impl->firstReader);
 	while(*readerSlot)
 		readerSlot = &((*readerSlot)->next);
 	*readerSlot = reader;
+
 	impl->nReaders++;
+	return reader;
 }
 
 
 RelationImpl * CreateRelationImpl(StorageProvider const * provider, size8 nColumns)
 {
+	ASSERT(provider)
 	RelationImpl * impl = AllocateRelationImpl();
+	impl->provider = provider;
 	impl->storage = provider->setupStorage(nColumns, &(impl->nReaders));
 	// Setup readers
 	RelationReader ** readerSlot = &(impl->firstReader);
 	for(index32 i = 0; i < impl->nReaders; i++) {
 		*readerSlot = AllocateRelationReader();
+		(*readerSlot)->impl = impl;
 		provider->setupReader(&((*readerSlot)->spec), i, impl->storage);
 		readerSlot = &((*readerSlot)->next);
 	}
@@ -82,8 +86,49 @@ RelationImpl * CreateRelationImpl(StorageProvider const * provider, size8 nColum
 }
 
 
+byte RelationImplAddTuple(RelationImpl * impl, Atom const tuple[], uint8 idPosition)
+{
+	return impl->provider->addTuple(impl->storage, tuple, idPosition);
+}
+
+
+byte RelationImplRemoveTuple(RelationImpl * impl, Atom const tuple[], uint8 idPosition)
+{
+	return impl->provider->removeTuple(impl->storage, tuple, idPosition);
+}
+
+
+bool RelationImplIsWritable(RelationImpl * impl)
+{
+	// The relation is writable if the addTuple() function is provided
+	return impl->provider->addTuple;
+}
+
+
+bool RelationImplIsEnumerable(RelationImpl * impl)
+{
+	// The relation is enumerable if the numberOfTuple() function is provided
+	return impl->provider->numberOfTuples;
+}
+
+
+size32 RelationImplNRows(RelationImpl * impl)
+{
+	return impl->provider->numberOfTuples(impl->storage);
+}
+
+
 void FreeRelationImpl(RelationImpl const * impl)
 {
+	// free readers
+	RelationReader * reader = impl->firstReader;
+	while(reader) {
+		if(reader->spec.finalizeReader)
+			reader->spec.finalizeReader(reader->spec.readerData, impl->storage);
+		RelationReader * tmp = reader;
+		reader = reader->next;
+		PoolFreeItem(readerPool, tmp);
+	}
 	impl->provider->free(impl->storage);
 	PoolFreeItem(relationImplPool, impl);
 }

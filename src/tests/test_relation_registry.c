@@ -45,7 +45,7 @@ void testAddRemoveRelation(void)
 	setupFixture();
 	size32 nRelationsInitial = RelationRegistryNRelations();
 
-	RelationSignature relation = CreateRelation(fixture.form, fixture.typeSignature, 0, 0);
+	RelationSignature relation = CreateRelation(fixture.form, fixture.typeSignature, &defaultProvider, 0);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 	ASSERT_TRUE(RelationExists(relation))
 

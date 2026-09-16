@@ -1444,7 +1444,7 @@ static void machineSetupContext(OperatorContext * context)
 		reader->spec.setupState(
 			machineContext->state,
 			machineContext->arguments,
-			&(reader->spec.readerData),
+			reader->spec.readerData,
 			reader->impl->storage
 		);
 	}
@@ -1495,9 +1495,11 @@ static void machineFinalizeContext(OperatorContext * context)
 }
 
 
-Operator * CreateMachineOperator(size8 nArguments, index8 const indexOrder[], RelationReader * reader)
+Operator * CreateMachineOperator(
+	size8 nArguments, index8 const indexOrder[], RelationReader * reader)
 {
 	ASSERT(nArguments <= RELATION_MAX_ARITY)
+	ASSERT(reader)
 	Operator * op = createOperator(
 		OPERATOR_MACHINE, nArguments, sizeof(MachineOperatorContext) + reader->spec.stateSize);
 	op->impl.machine.reader = reader;
@@ -1646,6 +1648,10 @@ void AttachOperator(Operator * op, RelationSignature signature)
 void DetachOperator(Operator * op)
 {
 	ASSERT(!IsNullRelation(op->relation))
+	// TODO: any descendant MACHINE operator that is detached
+	// has been subsumed into a UNION, and must be restored to
+	// the op->relation service
+
 	op->relation = (RelationSignature) {0};
 	CheckOperator(op);
 }
@@ -1655,9 +1661,6 @@ void CheckOperator(Operator * op)
 {
 	if(op->nParents == 0) {
 		if(IsNullRelation(op->relation)) {
-			// TODO: a MACHINE operator that has been subsume into a UNION
-			// would get deallocated here if the UNION is invalidated,
-			// since it no longer is a root operator, and op->relation == 0.
 			teardownOperator(op);
 		}
 		// else {

@@ -1,5 +1,6 @@
 
 #include "compiler/compiledvariant.h"
+#include "kernel/Relation.h"
 
 
 TypeSignature CompiledVariantGetTypeSignature(CompiledVariant const * variant)
@@ -37,11 +38,18 @@ CompiledVariant * FindCompiledVariant(
 
 void CompiledVariantSetRelation(CompiledVariant * variant, Atom queryTermForm)
 {
-	// Check if relation is already set, so that we don't acquire double references
+	// if relation is already set, we do nothing
 	if(!IsNullRelation(variant->relation))
 		return;
 	variant->relation = (RelationSignature) {
 		.termForm = queryTermForm, .typeSignature = CompiledVariantGetTypeSignature(variant)};
+	// If the relation does not exist, create with default provider
+	if(!RelationExists(variant->relation)) {
+		CreateRelation(
+			variant->relation.termForm, variant->relation.typeSignature,
+			&defaultProvider, 0
+		);			
+	}
 }
 
 

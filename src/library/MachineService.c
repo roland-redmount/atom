@@ -140,21 +140,20 @@ Service RegisterMachineServiceWithState(
 		// and the index order matches
 	}
 	else {
-		relation = CreateRelation(termView.form, typeSignature, 0, indexOrder);
+		relation = CreateRelation(termView.form, typeSignature, &defaultProvider, indexOrder);
+		addModuleRelation(moduleID, relation);
 	}
 	ReleaseFormula(term);
-
-	addModuleRelation(moduleID, relation);
 	
 	// Add the new reader to the relation
-	RelationReader * reader = AllocateRelationReader();
-	reader->spec.stateSize = stateSize;
-	reader->spec.setupState = setupState;
-	reader->spec.call = call;
-	reader->spec.finalizeState = finalizeState;
-	reader->spec.ioSignature = ioSignature;
-	
-	return RelationAddPrimitiveService(relation, reader);
+	RelationReaderSpec readerSpec = {
+		.stateSize = stateSize,
+		.setupState = setupState,
+		.call = call,
+		.finalizeState = finalizeState,
+		.ioSignature = ioSignature
+	};
+	return RelationAddPrimitiveService(relation, &readerSpec);
 }
 
 

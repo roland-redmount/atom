@@ -149,8 +149,8 @@ extern StorageProvider defaultProvider;
  * Every relation must specify this struct.
  */
 typedef struct s_RelationImpl {
-	StorageProvider * provider;
-	size8 nColumns;
+	StorageProvider const * provider;
+	// size8 nColumns;
 	size32 nReaders;
 	void * storage;
 	RelationReader * firstReader;		// linked list of readers
@@ -160,31 +160,40 @@ typedef struct s_RelationImpl {
  * Stable allocation of RelationImpl structs
  * TODO: make static ?
  */
-RelationImpl * AllocateRelationImpl(void);
+// RelationImpl * AllocateRelationImpl(void);
 
 /**
  * Stable allocation of RelationReader structs
  * TODO: make static ?
  */
-RelationReader * AllocateRelationReader(void);
+// RelationReader * AllocateRelationReader(void);
 
-void FreeRelationReader(RelationReader const * reader);
+// void FreeRelationReader(RelationReader const * reader);
 
 /**
  * Create a new relation implementation with the given storage provider.
  */
 RelationImpl * CreateRelationImpl(StorageProvider const * provider, size8 nColumns);
 
+/**
+ * Remove the relation implementation, and all associated readers.
+ */
 void FreeRelationImpl(RelationImpl const * impl);
 
-void RelationImplAddTuple(RelationImpl * impl, Atom const tuple[], uint8 idPosition);
+byte RelationImplAddTuple(RelationImpl * impl, Atom const tuple[], uint8 idPosition);
 
-void RelationImplRemoveTuple(RelationImpl * impl, Atom const tuple[], uint8 idPosition);
+byte RelationImplRemoveTuple(RelationImpl * impl, Atom const tuple[], uint8 idPosition);
+
+bool RelationImplIsWritable(RelationImpl * impl);
+
+bool RelationImplIsEnumerable(RelationImpl * impl);
+
+size32 RelationImplNRows(RelationImpl * impl);
 
 /**
- * Add a reader to the given implementation.
+ * Add a new reader to the given implementation.
  */
-void RelationImplAddReader(RelationImpl * impl, RelationReader * reader);
+RelationReader * RelationImplAddReader(RelationImpl * impl, RelationReaderSpec const * readerSpec);
 
 
 

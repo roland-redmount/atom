@@ -203,14 +203,12 @@ static void removeService(Service const * service)
 
 Service CreateService(RelationSignature relation, IOSignature ioSignature, Operator * op)
 {
-	ASSERT(op->type != OPERATOR_MACHINE)
 	ASSERT(RelationExists(relation))
 	Service service = {
 		.relation = relation,
 		.ioSignature = ioSignature,
 		.op = op
 	};
-	// AcquireRelation(relation);
 	AttachOperator(op, relation);
 
 	// Find descendants of the given operator with an attached service.

@@ -48,7 +48,7 @@ RelationSignature CreateRelationFromTerm(Atom term, StorageProvider const * prov
  * Add a primitive service to the relation, specified by a RelationReader.
  * This is a low-level method, should only be called by the storage provider.
  */
-Service RelationAddPrimitiveService(RelationSignature relation, RelationReader * reader);
+Service RelationAddPrimitiveService(RelationSignature relation, RelationReaderSpec const * readerSpec);
 
 /**
  * Return the predicate form corresponding to the Relation's term form.

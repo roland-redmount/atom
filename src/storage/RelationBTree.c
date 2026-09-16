@@ -248,7 +248,7 @@ static void btreeFinalizeState(void * state, void * readerData, void * storage)
 /**
  * Create implementation for a new relation
  */
-static void * btreeSetupStorage(size8 nColumns, size32 * nReaders)
+static void * relationBTreeSetupStorage(size8 nColumns, size32 * nReaders)
 {
 	// One reader per prefix key
 	*nReaders = nColumns + 1;
@@ -257,14 +257,14 @@ static void * btreeSetupStorage(size8 nColumns, size32 * nReaders)
 
 
 /**
- * Return a specific reader, from 0, ..., n.
+ * Return a specific reader, from 0, ..., nReaders-1.
  * The reader is described by an IOSignature and function pointers to call;
  * also need reader-specific data, here the number of leading columns (RelationBTreeOperatorData)
  */
-static void setupReader(RelationReaderSpec * spec, index32 readerIndex, void * storage)
+static void relationBTreeSetupReader(RelationReaderSpec * spec, index32 readerIndex, void * storage)
 {
 	// We will create one operator for each prefix key
-	size8 nInputs = readerIndex + 1;
+	size8 nInputs = readerIndex;
 	RelationBTree * relationBTree = storage;
 	byte parameterIO[relationBTree->nColumns];
 	for(index8 i = 0; i < relationBTree->nColumns; i++) {
@@ -310,7 +310,8 @@ static void relationBTreeFree(void * storage)
 
 
 StorageProvider btreeStorageProvider = {
-	.setupStorage = btreeSetupStorage,
+	.setupStorage = relationBTreeSetupStorage,
+	.setupReader = relationBTreeSetupReader,
 	.addTuple = relationBTreeAddTuple,
 	.removeTuple = relationBTreeRemoveTuple,
 	.numberOfTuples = relationBTreeNTuples,

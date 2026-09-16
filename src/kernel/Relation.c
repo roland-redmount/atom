@@ -51,9 +51,6 @@ typedef struct s_RelationRecord {
 	// The arity of the relation (NOTE: now also in impl.nColumns )
 	size8 nColumns;
 
-	// The storage provider. May be shared with other relations.
-	StorageProvider const * provider;
-
 	// Implementation-dependent data for this relation, allocated by the StorageProvider.
 	RelationImpl * impl; 
 
@@ -84,10 +81,9 @@ static RelationRecord * findRelationRecord(RelationSignature signature)
 }
 
 
-static Service createOperatorAndService(RelationRecord * record, RelationReader * reader)
+static Service createOperatorAndService(RelationRecord const * record, RelationReader * reader)
 {
 	Operator * op = CreateMachineOperator(record->nColumns, record->indexColumns, reader);
-	// Operator * op = CreateIdentityOperator(machineOp);
 
 	// We must permute the reader IOSignature to match the Service order
 	IOSignature serviceIOSignature = {.parameterIO = {0}};
@@ -110,7 +106,6 @@ RelationSignature CreateRelationBootstrap(
 		.signature = signature,
 		.predicateForm = predicateForm,
 		.nColumns = TypeSignatureNAtomTypes(typeSignature),
-		.provider = provider ? provider : &defaultProvider,		// Remove?
 		.ownsForm = true
 	};
 	IFactAcquire(termForm);
@@ -123,9 +118,10 @@ RelationSignature CreateRelationBootstrap(
 		for(index8 i = 0; i < record.nColumns; i++)
 			record.indexColumns[i] = i;
 	}
-
 	// Call the storage provider to setup the relation implementation and its readers
 	record.impl = CreateRelationImpl(provider, record.nColumns);
+	// Store a copy of the record in the B-tree
+	ASSERT(BTreeInsert(relationRegistry, &record) == BTREE_INSERTED)
 
 	// Create services for readers
 	RelationReader * reader = record.impl->firstReader;
@@ -136,8 +132,6 @@ RelationSignature CreateRelationBootstrap(
 	}
 	ASSERT(!reader)		// ensure nReaders == length of linked list
 
-	// Store a copy of the record in the B-tree
-	ASSERT(BTreeInsert(relationRegistry, &record) == BTREE_INSERTED)
 	return record.signature;
 }
 
@@ -149,12 +143,12 @@ RelationSignature CreateRelation(
 }
 
 
-Service RelationAddPrimitiveService(RelationSignature relation, RelationReader * reader)
+Service RelationAddPrimitiveService(RelationSignature relation, RelationReaderSpec const * readerSpec)
 {
 	RelationRecord * record = findRelationRecord(relation);
 
 	// add reader to the relation implementation
-	RelationImplAddReader(record->impl, reader);
+	RelationReader * reader = RelationImplAddReader(record->impl, readerSpec);
 
 	return createOperatorAndService(record, reader);
 }
@@ -163,14 +157,14 @@ Service RelationAddPrimitiveService(RelationSignature relation, RelationReader *
 byte RelationAddTuple(RelationSignature signature, Atom const tuple[], uint8 idPosition)
 {
 	RelationRecord * record = findRelationRecord(signature);
-	ASSERT(record->provider)
+	ASSERT(RelationImplIsWritable(record->impl))
 	// Permute tuple to the provider's order
 	Atom providerTuple[record->nColumns];
 	for(index8 i = 0; i < record->nColumns; i++)
 		providerTuple[i] = tuple[record->indexColumns[i]];
 	index8 providerIdPositon = idPosition ? record->indexColumns[idPosition - 1] + 1 : 0;
 	// Call the provider to store the tuple
-	byte result = record->provider->addTuple(record->impl, providerTuple, providerIdPositon);
+	byte result = RelationImplAddTuple(record->impl, providerTuple, providerIdPositon);
 	// Acquire atoms
 	if(result == TUPLE_ADDED) {
 		for(index8 i = 0; i < record->nColumns; i++) {
@@ -192,22 +186,22 @@ size32 RelationNColumns(RelationSignature signature)
 size32 RelationNRows(RelationSignature signature)
 {
 	RelationRecord * record = findRelationRecord(signature);
-	ASSERT(record->provider)
-	return record->provider->numberOfTuples(record->impl);
+	ASSERT(RelationImplIsWritable(record->impl))
+	return RelationImplNRows(record->impl);
 }
 
 
 byte RelationRemoveTuple(RelationSignature signature, Atom const tuple[], uint8 idPosition)
 {
 	RelationRecord * record = findRelationRecord(signature);
-	ASSERT(record->provider)
+	ASSERT(RelationImplIsWritable(record->impl))
 	// Permute tuple to the provider's order
 	Atom providerTuple[record->nColumns];
 	for(index8 i = 0; i < record->nColumns; i++)
 		providerTuple[i] = tuple[record->indexColumns[i]];
 	index8 providerIdPositon = idPosition ? record->indexColumns[idPosition - 1] + 1 : 0;
 	// Call the provider to remove th tuple
-	byte result = record->provider->removeTuple(record->impl, providerTuple, providerIdPositon);
+	byte result = RelationImplRemoveTuple(record->impl, providerTuple, providerIdPositon);
 
 	// Release atoms
 	if(result == TUPLE_REMOVED) {
@@ -232,17 +226,16 @@ void DropRelation(RelationSignature signature)
 {
 	RelationRecord * record = findRelationRecord(signature);
 	ASSERT(record)
-	// Relation table must be empty
-	ASSERT(RelationNRows(signature))
+	// If the relation table has storage, it must be empty
+	ASSERT(!RelationImplIsWritable(record->impl) || (RelationImplNRows(record->impl) == 0))
+
 
 	if(record->ownsForm) {
-		// for all relatons except a few "core" relations
+		// for all relations except a few "core" relations
 		IFactRelease(signature.termForm);
 	}
 
 	// Remove all services associated with the relation
-	// Search the service registry for all MACHINE services pointing to
-	// our readers
 	Service const * service;
 	do {
 		ServiceIterator iterator;
@@ -250,10 +243,8 @@ void DropRelation(RelationSignature signature)
 		service = 0;
 		while(ServiceIteratorNext(&iterator)) {
 			Service const * candidate = ServiceIteratorPeekService(&iterator);
-			if(isRelationOperator(record, candidate->op)) {
-				service = candidate;
-				break;
-			}
+			service = candidate;
+			break;
 		}
 		// Close the iterator, since RemoveService() alters the service registry B-tree
 		ServiceIteratorEnd(&iterator);
