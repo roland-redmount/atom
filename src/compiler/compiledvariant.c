@@ -41,15 +41,8 @@ void CompiledVariantSetRelation(CompiledVariant * variant, Atom queryTermForm)
 	// if relation is already set, we do nothing
 	if(!IsNullRelation(variant->relation))
 		return;
-	variant->relation = (RelationSignature) {
+	variant->relation = (Relation) {
 		.termForm = queryTermForm, .typeSignature = CompiledVariantGetTypeSignature(variant)};
-	// If the relation does not exist, create with default provider
-	if(!RelationExists(variant->relation)) {
-		CreateRelation(
-			variant->relation.termForm, variant->relation.typeSignature,
-			&defaultProvider, 0
-		);			
-	}
 }
 
 

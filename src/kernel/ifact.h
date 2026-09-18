@@ -13,8 +13,8 @@
 #ifndef IFACT_H
 #define IFACT_H
 
-#include "kernel/RelationSignature.h"
-// #include "kernel/ServiceRegistry.h"
+#include "kernel/Relation.h"
+#include "kernel/TupleStore.h"
 #include "kernel/typedtuple.h"
 
 
@@ -29,9 +29,9 @@ struct s_Service;
  * The entire IFact is a conjuction ...
  */
 typedef struct s_IFactConjunction {
-	RelationSignature signature;
-	size8 nColumns;
+	TupleStore * store;
 	index8 idColumn;		// position of the identified atom in the tuple
+	byte pad;
 	size16 nRows;			// number of tuples in this conjunction
 } __attribute__((packed)) IFactConjunction;
 
@@ -88,11 +88,11 @@ void FreeIFacts(void);
 void IFactBegin(IFactDraft * draft);
 
 /**
- * Begin a new conjunction for the IFactDraft, storing tuples in the given table.
+ * Begin a new conjunction for the IFactDraft, storing tuples in the given TupleStore.
  * The idColumn indicates the actor that is being defined by the IFact.
  * The new conjunction acquires a reference to the given RelationWriter.
  */
-void IFactBeginConjunction(IFactDraft * draft, RelationSignature signature, index8 idColumn);
+void IFactBeginConjunction(IFactDraft * draft, TupleStore * store, index8 idColumn);
 
 /**
  * Add one tuple, defining one predicate of the current conjunction (predicate form).
@@ -131,7 +131,7 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash);
  * Reserve an IFact header with a predefined hash, before its defining facts
  * exist. This is only used during bootstrapping, to break the circular
  * dependency between the core predicate forms and the relations that
- * store their defining facts: a relation created by CreateRelation()
+ * store their defining facts: a relation created by AcquireRelation()
  * acquires a reference to its form, but that form's IFact cannot be built
  * until the relation itself exists.
  *

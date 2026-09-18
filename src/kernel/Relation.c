@@ -1,6 +1,7 @@
 
 #include "kernel/ifact.h"
 #include "kernel/Relation.h"
+#include "kernel/TupleStore.h"
 #include "lang/TermForm.h"
 #include "memory/allocator.h"
 #include "util/hashing.h"
@@ -31,32 +32,16 @@ size8 TypeSignatureNAtomTypes(TypeSignature typeSignature)
 
 
 typedef struct s_RelationRecord {
-	RelationSignature signature;
+	Relation signature;
 	// The predicate form of relation.termForm. Kept here because during bootstrap,
 	// TermFormGetPredicateForm() is unreachable, and therefore LookupAddPredicateRoles()
 	// would fail when creating the predicate form FORM_TERM_FORM in setupCoreService().
 	Atom predicateForm;
-
-	/*
-	 * The order of index columns. The stored tuples will be ordered lexicographically by
-	 * indexColumns[0], ..., indexColumns[nColumns-1]. Hence, lookup should be fast when
-	 * leading columns are specified in this order, while out-of-order
-	 * columns may lead to table scanning.
-	 * For example, a relation with canonical order (element list position) and
-	 * indexColumns = {1, 2, 0} will be ordered first by list, then by position, then by element;
-	 * queries (@list _ _) and (@list @position _) should be fast, but (_ _ @element) may be slow.
-	 */
-	index8 indexColumns[RELATION_MAX_ARITY];
-
-	// The arity of the relation (NOTE: now also in impl.nColumns )
-	size8 nColumns;
-
-	// Implementation-dependent data for this relation, allocated by the StorageProvider.
-	RelationImpl * impl; 
-
 	// Whether this relation holds a reference to its forms; see RelationReleaseForm()
 	bool ownsForm;
 
+	TupleStore * tupleStore;	// may be 0
+	uint32 referenceCount;
 } RelationRecord;
 
 
@@ -74,172 +59,125 @@ static int8 btreeCompareRelationRecords(void const * item, void const * itemOrKe
 }
 
 
-static RelationRecord * findRelationRecord(RelationSignature signature)
+static RelationRecord * findRelationRecord(Relation signature)
 {
 	RelationRecord key = {.signature = signature};
 	return BTreePeekItem(relationRegistry, &key);
 }
 
 
-static Service createOperatorAndService(RelationRecord const * record, RelationReader * reader)
+void CreateRelationBootstrap(Relation relation, Atom predicateForm)
 {
-	Operator * op = CreateMachineOperator(record->nColumns, record->indexColumns, reader);
-
-	// We must permute the reader IOSignature to match the Service order
-	IOSignature serviceIOSignature = {.parameterIO = {0}};
-	for(index8 j = 0; j < record->nColumns; j++) {
-		serviceIOSignature.parameterIO[record->indexColumns[j]] = reader->spec.ioSignature.parameterIO[j];
-	}
-	return CreateService(record->signature, serviceIOSignature, op);
-}
-
-
-RelationSignature CreateRelationBootstrap(
-	Atom termForm, Atom predicateForm, TypeSignature typeSignature,
-	StorageProvider const * provider, index8 const indexColumns[])
-{
-	RelationSignature signature = {.termForm = termForm, .typeSignature = typeSignature};
-	// The relation must not already exist
-	ASSERT(!findRelationRecord(signature))
 	// Create a new record
 	RelationRecord record = {
-		.signature = signature,
+		.signature = relation,
 		.predicateForm = predicateForm,
-		.nColumns = TypeSignatureNAtomTypes(typeSignature),
 		.ownsForm = true
 	};
-	IFactAcquire(termForm);
-
-	// setup index column array
-	if(indexColumns)
-		CopyMemory(indexColumns, record.indexColumns, record.nColumns);
-	else {
-		// use the identity order
-		for(index8 i = 0; i < record.nColumns; i++)
-			record.indexColumns[i] = i;
-	}
-	// Call the storage provider to setup the relation implementation and its readers
-	record.impl = CreateRelationImpl(provider, record.nColumns);
+	IFactAcquire(relation.termForm);
 	// Store a copy of the record in the B-tree
 	ASSERT(BTreeInsert(relationRegistry, &record) == BTREE_INSERTED)
-
-	// Create services for readers
-	RelationReader * reader = record.impl->firstReader;
-	for(index32 i = 0 ; i < record.impl->nReaders; i++) {
-		ASSERT(reader)
-		createOperatorAndService(&record, reader);
-		reader = reader->next;
-	}
-	ASSERT(!reader)		// ensure nReaders == length of linked list
-
-	return record.signature;
 }
 
-RelationSignature CreateRelation(
-	Atom termForm, TypeSignature typeSignature, StorageProvider const * provider, index8 const indexColumns[])
+
+void AcquireRelation(Relation relation)
 {
-	return CreateRelationBootstrap(
-		termForm, TermFormGetPredicateForm(termForm), typeSignature, provider, indexColumns);
+	RelationRecord * existingRecord = findRelationRecord(relation);
+	if(existingRecord) {
+		existingRecord->referenceCount++;
+	}
+	else
+		CreateRelationBootstrap(relation, TermFormGetPredicateForm(relation.termForm));
 }
 
 
-Service RelationAddPrimitiveService(RelationSignature relation, RelationReaderSpec const * readerSpec)
+void ReleaseRelation(Relation relation)
 {
 	RelationRecord * record = findRelationRecord(relation);
+	ASSERT(record)
+	ASSERT(record->referenceCount > 0)
+	record->referenceCount--;
+	if(record->referenceCount == 0) {
+		// At this point, no services refer to the relation,
+		// and we must have no tuple store.
+		ASSERT(!record->tupleStore)
 
-	// add reader to the relation implementation
-	RelationReader * reader = RelationImplAddReader(record->impl, readerSpec);
-
-	return createOperatorAndService(record, reader);
-}
-
-
-byte RelationAddTuple(RelationSignature signature, Atom const tuple[], uint8 idPosition)
-{
-	RelationRecord * record = findRelationRecord(signature);
-	ASSERT(RelationImplIsWritable(record->impl))
-	// Permute tuple to the provider's order
-	Atom providerTuple[record->nColumns];
-	for(index8 i = 0; i < record->nColumns; i++)
-		providerTuple[i] = tuple[record->indexColumns[i]];
-	index8 providerIdPositon = idPosition ? record->indexColumns[idPosition - 1] + 1 : 0;
-	// Call the provider to store the tuple
-	byte result = RelationImplAddTuple(record->impl, providerTuple, providerIdPositon);
-	// Acquire atoms
-	if(result == TUPLE_ADDED) {
-		for(index8 i = 0; i < record->nColumns; i++) {
-			if(i + 1 != idPosition)
-				AcquireAtom(tuple[i], record->signature.typeSignature.atomTypes[i]);
+		if(record->ownsForm) {
+			// for all relations except a few "core" relations
+			IFactRelease(record->signature.termForm);
 		}
+		RelationRecord key = {.signature = record->signature};
+		BTreeDelete(relationRegistry, &key, 0);
 	}
-	return result;
 }
 
 
-size32 RelationNColumns(RelationSignature signature)
+void RelationSetTupleStore(Relation relation, TupleStore * store)
 {
-	RelationRecord * record = findRelationRecord(signature);
-	return record->nColumns;
-}
-
-
-size32 RelationNRows(RelationSignature signature)
-{
-	RelationRecord * record = findRelationRecord(signature);
-	ASSERT(RelationImplIsWritable(record->impl))
-	return RelationImplNRows(record->impl);
-}
-
-
-byte RelationRemoveTuple(RelationSignature signature, Atom const tuple[], uint8 idPosition)
-{
-	RelationRecord * record = findRelationRecord(signature);
-	ASSERT(RelationImplIsWritable(record->impl))
-	// Permute tuple to the provider's order
-	Atom providerTuple[record->nColumns];
-	for(index8 i = 0; i < record->nColumns; i++)
-		providerTuple[i] = tuple[record->indexColumns[i]];
-	index8 providerIdPositon = idPosition ? record->indexColumns[idPosition - 1] + 1 : 0;
-	// Call the provider to remove th tuple
-	byte result = RelationImplRemoveTuple(record->impl, providerTuple, providerIdPositon);
-
-	// Release atoms
-	if(result == TUPLE_REMOVED) {
-		for(index32 i = 0; i < record->nColumns; i++) {
-			if((i + 1) != idPosition)
-				ReleaseTypedAtom(CreateTypedAtom(record->signature.typeSignature.atomTypes[i], tuple[i]));
-		}
-	}
-	return result;
+	RelationRecord * record = findRelationRecord(relation);
+	ASSERT(record)
+	ASSERT(!record->tupleStore)
+	record->tupleStore = store;	
 }
 
 /**
- * Check whether the given operator refers to the table.
+ * Return the TupleStore associated with this Relation, or 0 if none exists.
  */
-static bool isRelationOperator(RelationRecord * record, Operator const * op)
+TupleStore * RelationGetTupleStore(Relation relation)
 {
-	return op->impl.machine.reader->impl == record->impl;
+	RelationRecord * record = findRelationRecord(relation);
+	ASSERT(record)
+	return record->tupleStore;
+}
+
+byte RelationAddTuple(Relation signature, Atom const tuple[], uint8 idPosition)
+{
+	RelationRecord * record = findRelationRecord(signature);
+	ASSERT(TupleStoreIsWritable(record->tupleStore))
+	return TupleStoreAddTuple(record->tupleStore, tuple, idPosition);
 }
 
 
-void DropRelation(RelationSignature signature)
+// size32 RelationNColumns(RelationSignature signature)
+// {
+// 	RelationRecord * record = findRelationRecord(signature);
+// 	return record->nColumns;
+// }
+
+
+size32 RelationNRows(Relation signature)
 {
 	RelationRecord * record = findRelationRecord(signature);
 	ASSERT(record)
-	// If the relation table has storage, it must be empty
-	ASSERT(!RelationImplIsWritable(record->impl) || (RelationImplNRows(record->impl) == 0))
+	ASSERT(record->tupleStore)
+	ASSERT(TupleStoreIsEnumerable(record->tupleStore))
+	return TupleStoreNTuples(record->tupleStore);
+}
 
 
-	if(record->ownsForm) {
-		// for all relations except a few "core" relations
-		IFactRelease(signature.termForm);
-	}
+byte RelationRemoveTuple(Relation signature, Atom const tuple[], uint8 idPosition)
+{
+	RelationRecord * record = findRelationRecord(signature);
+	ASSERT(record)
+	ASSERT(record->tupleStore)
+	ASSERT(TupleStoreIsWritable(record->tupleStore))
+	return TupleStoreRemoveTuple(record->tupleStore, tuple, idPosition);
+}
 
-	// Remove all services associated with the relation
+
+void DropRelation(Relation relation)
+{
+	RelationRecord * record = findRelationRecord(relation);
+	ASSERT(record)
+
+	if(record->tupleStore)
+		DropTupleStore(record->tupleStore);		// should remove primitive services
+
+	// Remove any other services associated with the relation
 	Service const * service;
 	do {
 		ServiceIterator iterator;
-		ServiceRegistryIterate(record->signature, &iterator);
+		ServiceRegistryIterate(relation, &iterator);
 		service = 0;
 		while(ServiceIteratorNext(&iterator)) {
 			Service const * candidate = ServiceIteratorPeekService(&iterator);
@@ -253,27 +191,25 @@ void DropRelation(RelationSignature signature)
 		}
 	} while(service);
 
-	FreeRelationImpl(record->impl);
-
-	RelationRecord key = {.signature = signature};
-	BTreeDelete(relationRegistry, &key, 0);
+	// The relation should now have been removed via ReleaseRelation()
+	ASSERT(!RelationExists(relation))
 }
 
 
-Atom RelationGetPredicateForm(RelationSignature relation)
+Atom RelationGetPredicateForm(Relation relation)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
 	return record->predicateForm;
 }
 
-bool RelationExists(RelationSignature relation)
+bool RelationExists(Relation relation)
 {
 	return (findRelationRecord(relation) != 0);
 }
 
 
-int8 CompareRelations(RelationSignature relation, RelationSignature relationOrKey)
+int8 CompareRelations(Relation relation, Relation relationOrKey)
 {
 	// First compare forms
 	if(relation.termForm.hash < relationOrKey.termForm.hash)
@@ -289,20 +225,20 @@ int8 CompareRelations(RelationSignature relation, RelationSignature relationOrKe
 	}
 }
 
-bool SameRelations(RelationSignature relation1, RelationSignature relation2)
+bool SameRelations(Relation relation1, Relation relation2)
 {
 	return SameAtoms(relation1.termForm, relation2.termForm) &&
 		SameTypeSignatures(relation1.typeSignature, relation2.typeSignature);
 }
 
 
-bool IsNullRelation(RelationSignature relation)
+bool IsNullRelation(Relation relation)
 {
 	return relation.termForm.hash == 0;
 }
 
 
-void RelationReleaseTermForm(RelationSignature relation)
+void RelationReleaseTermForm(Relation relation)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
@@ -313,7 +249,7 @@ void RelationReleaseTermForm(RelationSignature relation)
 }
 
 
-data64 RelationHash(RelationSignature relation, data64 initialHash)
+data64 RelationHash(Relation relation, data64 initialHash)
 {
 	data64 hash = initialHash;
 	// hash the form and types
@@ -371,7 +307,7 @@ bool RelationIteratorNext(RelationIterator * iterator)
 }
 
 
-RelationSignature RelationIteratorGet(RelationIterator const * iterator)
+Relation RelationIteratorGet(RelationIterator const * iterator)
 {
 	RelationRecord * record = BTreeIteratorPeekItem(&(iterator->btreeIterator));
 	return record->signature;

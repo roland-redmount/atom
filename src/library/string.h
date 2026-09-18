@@ -29,7 +29,7 @@ Atom GetStringRoleName(void);
 Atom GetStringPredicateForm(void);
 Atom GetStringTermForm(void);
 
-RelationSignature GetStringRelation(void);
+Relation GetStringRelation(void);
 
 // RelationWriter * GetStringRelationTable(void);
 

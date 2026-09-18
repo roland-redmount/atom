@@ -65,7 +65,20 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 	// find existing relation table, or create new
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	RelationSignature relation = CreateRelation(fact.form, typeSignature, &btreeStorageProvider, 0);
+	Relation relation = {.termForm = fact.form, .typeSignature = typeSignature};
+	AcquireRelation(relation);
+	TupleStore * store = RelationGetTupleStore(relation);
+	if(store) {
+		ASSERT(TupleStoreIsWritable(store))
+	}
+	else {
+		// Create a new tuple store
+		// TODO: what happens if this attempts to registers a service
+		// that already exists for the relation? Should we then construct a UNION service?
+		store = CreateTupleStore(relation, provider, fact.actors->nAtoms, 0);
+	}
+	ReleaseRelation(relation);
+
 	// Add the tuple
 	ASSERT(RelationAddTuple(relation, actorsArray, 0) == TUPLE_ADDED)
 	LookupAddPredicateRoles(relation, actorsArray);
@@ -134,8 +147,9 @@ void RetractFact(FormulaView fact)
 
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	RelationSignature relation = {.termForm = fact.form, .typeSignature = typeSignature};
-	if(!RelationExists(relation))
+	Relation relation = {.termForm = fact.form, .typeSignature = typeSignature};
+	TupleStore * store = RelationGetTupleStore(relation);
+	if(!store)
 		return;
 	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
 	// Remove the lookup entries before the tuple: removing the tuple releases the
@@ -143,9 +157,7 @@ void RetractFact(FormulaView fact)
 	// to an atom takes all of its lookup entries with it.
 	LookupRemovePredicateRoles(relation, actorsArray);
 	// Remove the tuple. This will not remove defining facts
-	RelationRemoveTuple(relation, actorsArray, 0);
-	// The RelationWriter will be dropped if it was created by AssertFact(),
-	// which retains no reference to it
+	TupleStoreRemoveTuple(store, actorsArray, 0);
 }
 
 
@@ -153,7 +165,8 @@ void RetractFact(FormulaView fact)
  * Structure for temporary storage of tuples for IFactCreate()
  */
 typedef struct s_IFactTuple {
-	RelationSignature relation;
+	Relation relation;
+	size8 nColumns;
 	index8 idColumn;
 	Atom tuple[RELATION_MAX_ARITY];
 } IFactTuple;
@@ -168,6 +181,7 @@ static int8 compareIFactTuples(void const * item1, void const * item2, size32 it
 {
 	IFactTuple const * tuple1 = item1;
 	IFactTuple const * tuple2 = item2;
+	ASSERT(tuple1->nColumns == tuple2->nColumns)
 	int8 relationOrder = CompareRelations(tuple1->relation, tuple2->relation);
 	if(relationOrder != 0)
 		return relationOrder;
@@ -195,7 +209,7 @@ static bool collectTermIFactTuples(
 	ASSERT(termArity <= RELATION_MAX_ARITY)
 
 	// Each term must contain exactly one generator, marking the identified atom.
-	IFactTuple ifactTuple = {0};
+	IFactTuple ifactTuple = {.nColumns = termArity};
 	TypeSignature termSignature = {0};
 	bool hasGenerator = false;
 	index8 i0 = termActorIndex ? * termActorIndex : 0;
@@ -220,7 +234,7 @@ static bool collectTermIFactTuples(
 	if(!hasGenerator)
 		return false;
 
-	ifactTuple.relation = (RelationSignature) {.termForm = termForm, .typeSignature = termSignature};
+	ifactTuple.relation = (Relation) {.termForm = termForm, .typeSignature = termSignature};
 	ResizingArrayAppend(ifactTupleArray, &ifactTuple);
 
 	if(termActorIndex)
@@ -312,12 +326,12 @@ Atom CreateIFact(FormulaView formula)
 			// Begin new conjunction, from a new RelationWriter
 			if(i > 0)
 				IFactEndConjunction(&draft);
-			if(!RelationExists(ifactTuples[i].relation))
-				CreateRelation(
-					ifactTuples[i].relation.termForm, ifactTuples[i].relation.typeSignature,
-					&btreeStorageProvider, 0
-				);
-			IFactBeginConjunction(&draft, ifactTuples[i].relation, ifactTuples[i].idColumn);
+			TupleStore * store = RelationGetTupleStore(ifactTuples[i].relation);
+			if(!store) {
+				store = CreateTupleStore(
+					ifactTuples[i].relation, &btreeStorageProvider, ifactTuples[i].nColumns, 0);
+			}
+			IFactBeginConjunction(&draft, store, ifactTuples[i].idColumn);
 		}
 		IFactAddTuple(&draft, ifactTuples[i].tuple);
 	}

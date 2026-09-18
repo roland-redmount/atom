@@ -14,7 +14,8 @@
 static Atom stringRoleName;
 static Atom stringPredicateForm;
 static Atom stringTermForm;
-static RelationSignature stringRelation;
+static Relation stringRelation;
+static TupleStore * stringTupleStore;
 static Operator * stringOperator;
 
 
@@ -36,7 +37,7 @@ Atom GetStringTermForm(void)
 }
 
 
-RelationSignature GetStringRelation(void)
+Relation GetStringRelation(void)
 {
 	return stringRelation;
 }
@@ -57,7 +58,7 @@ Atom CreateString(char const * chars, size32 length)
 	AddListToIFact(&draft, stringElementGenerator, chars, AT_LETTER, length);
 
 	// add (string @string) to ifact
-	IFactBeginConjunction(&draft, stringRelation, 0);
+	IFactBeginConjunction(&draft, stringTupleStore, 0);
 	Atom tuple[1] = {(Atom) {0}};
 	IFactAddTuple(&draft, tuple);
 	IFactEndConjunction(&draft);
@@ -110,7 +111,7 @@ void StringSetup(void)
 {
 	// Create the (string) predicate form
 	stringRoleName = CreateNameFromCString("string");
-	stringPredicateForm = CreatePredicateForm((Atom[]) {stringRoleName},	1);
+	stringPredicateForm = CreatePredicateForm((Atom[]) {stringRoleName}, 1);
 	NameRelease(stringRoleName);
 	
 	// Create the (string) term form
@@ -121,7 +122,8 @@ void StringSetup(void)
 	TypeSignature typeSignature = {
 		.atomTypes = {AT_ID}
 	};
-	stringRelation = CreateRelation(stringTermForm, typeSignature, &btreeStorageProvider, 0);
+	stringRelation = (Relation) {.termForm = stringTermForm, .typeSignature = typeSignature};
+	stringTupleStore = CreateTupleStore(stringRelation, &btreeStorageProvider, 1, 0);
 	IFactRelease(stringTermForm);
 
 	// Store a pointer to the (string<ID) service, created by the B-tree provider.

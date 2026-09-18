@@ -33,7 +33,7 @@ void testAssertRetract(void)
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(FormulaGetActors(fact1)), nColumns);
 
-	RelationSignature relation = {.termForm = FormulaGetForm(fact1), .typeSignature = typeSignature};
+	Relation relation = {.termForm = FormulaGetForm(fact1), .typeSignature = typeSignature};
 	// The relation does not exist until the first fact is asserted
 	ASSERT_FALSE(RelationExists(relation))
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact1), 0), ASSERT_OK)
@@ -94,7 +94,7 @@ void testAssertContradictsStoredFact(void)
 	// (! prec "a" succ "b") is refused, contradicting the fact just asserted
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(negatedFact), 0), ASSERT_FAIL)
 	// and the refused assert leaves no relation behind
-	RelationSignature relation = {.termForm = FormulaGetForm(negatedFact), .typeSignature = typeSignature};
+	Relation relation = {.termForm = FormulaGetForm(negatedFact), .typeSignature = typeSignature};
 	ASSERT_FALSE(RelationExists(relation))
 	
 	// Retracting the fact it contradicts makes the same assert succeed
@@ -128,7 +128,7 @@ void testAssertContradictsDerivedFact(void)
 	// (even 3) is refused: no relation holds (! even 3), but the rule derives it
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even3), 0), ASSERT_FAIL)
 	// no relation was created
-	RelationSignature relation = {
+	Relation relation = {
 		.termForm = FormulaGetForm(even3),
 		.typeSignature = CreateTypeSignature(
 			TypedTuplePeekAtomTypes(FormulaGetActors(even3)),
@@ -233,8 +233,8 @@ void testAssertFormulaRejects(void)
  */
 void testCreateIFactList(void)
 {
-	RelationSignature listLetter = GetListRelation(AT_LETTER);
-	RelationSignature listLength = GetListLengthRelation();
+	Relation listLetter = GetListRelation(AT_LETTER);
+	Relation listLength = GetListLengthRelation();
 	size32 listLetterNRows = RelationNRows(listLetter);
 	size32 listLengthNRows = RelationNRows(listLength);
 
@@ -300,7 +300,7 @@ void testCreateIFactTwoIdColumns(void)
 	byte atomTypes[2] = {AT_ID, AT_ID};
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, 2);
 	
-	RelationSignature relation = {.termForm = FormulaGetForm(sameFormTerm), .typeSignature = typeSignature};
+	Relation relation = {.termForm = FormulaGetForm(sameFormTerm), .typeSignature = typeSignature};
 	ASSERT_FALSE(RelationExists(relation))
 
 	Atom formula = CStringToConjunction("pair * other \"a\" & pair \"a\" other *");
@@ -331,7 +331,7 @@ void testCreateIFactTwoIdColumns(void)
  */
 void testCreateIFactExisting(void)
 {
-	RelationSignature listLength = GetListLengthRelation();
+	Relation listLength = GetListLengthRelation();
 	size32 listLengthNRows = RelationNRows(listLength);
 
 	Atom formula = CStringToConjunction("list * position 1 element 'C & list * length 1");
@@ -356,7 +356,7 @@ void testCreateIFactExisting(void)
  */
 void testCreateIFactDefiningFactsProtected(void)
 {
-	RelationSignature listLength = GetListLengthRelation();
+	Relation listLength = GetListLengthRelation();
 	size32 listLengthNRows = RelationNRows(listLength);
 
 	Atom formula = CStringToConjunction("list * position 1 element 'D & list * length 1");
@@ -413,7 +413,7 @@ void testCreateIFactTerm(void)
 		atomTypes[i] = SameTypedAtoms(actor, generatorAtom) ? AT_ID : actor.type;
 	}
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, nColumns);
-	RelationSignature relation = {.termForm = FormulaGetForm(term), .typeSignature = typeSignature};
+	Relation relation = {.termForm = FormulaGetForm(term), .typeSignature = typeSignature};
 	ASSERT_FALSE(RelationExists(relation))
 
 	Atom ifact = CreateIFact(FormulaGetView(term));

@@ -5,6 +5,7 @@
 #include "kernel/Parameter.h"
 #include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
+#include "kernel/TupleStore.h"
 #include "lang/formula.h"
 #include "library/MachineService.h"
 #include "memory/allocator.h"
@@ -24,7 +25,7 @@ uint32 RequestModuleID(void)
  */
 typedef struct s_ModuleRelation {
 	uint32 moduleID;
-	RelationSignature relation;
+	Relation relation;
 } ModuleRelation;
 
 static BTree * moduleRelations;
@@ -58,7 +59,7 @@ static int8 btreeCompareModuleRelations(void const * item, void const * itemOrKe
 /**
  * Associate a registered relation with a module ID
  */
-static void addModuleRelation(uint32 moduleID, RelationSignature relation)
+static void addModuleRelation(uint32 moduleID, Relation relation)
 {
 	// Create B-tree on first call
 	if(!moduleRelations) {
@@ -134,14 +135,16 @@ Service RegisterMachineServiceWithState(
 		termView.actors, indexOrder, &ioSignature);
 	
 	// Create the relation, unless it already exists
-	RelationSignature relation = {.termForm = termView.form, .typeSignature = typeSignature};
-	if(RelationExists(relation)) {
-		// TODO: verify that the relation's provider matches ours,
+	Relation relation = {.termForm = termView.form, .typeSignature = typeSignature};
+	AcquireRelation(relation);
+	TupleStore * store = RelationGetTupleStore(relation) ;
+	if(store) {
+		// TODO: verify that the store's provider matches ours,
 		// and the index order matches
 	}
 	else {
-		relation = CreateRelation(termView.form, typeSignature, &defaultProvider, indexOrder);
-		addModuleRelation(moduleID, relation);
+		store = CreateTupleStore(relation, &defaultProvider, arity, indexOrder);
+		// addModuleRelation(moduleID, relation);
 	}
 	ReleaseFormula(term);
 	
@@ -153,7 +156,7 @@ Service RegisterMachineServiceWithState(
 		.finalizeState = finalizeState,
 		.ioSignature = ioSignature
 	};
-	return RelationAddPrimitiveService(relation, &readerSpec);
+	return TupleStoreAddReader(store, &readerSpec);
 }
 
 

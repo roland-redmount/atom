@@ -18,8 +18,8 @@
  */
 typedef struct s_RelationReaderSpec
 {
-	IOSignature ioSignature;
-	void * readerData;					// any reader-specific data
+	IOSignature ioSignature;		// NOTE: this is w.r.t the provider's argument order
+	void * readerData;				// any reader-specific data
 	size32 stateSize;
 
 	/**
@@ -57,17 +57,6 @@ typedef struct s_RelationReaderSpec
 } RelationReaderSpec;
 
 struct s_RelationImpl;
-
-/**
- * This structure is managed by the kernel.
- */
-typedef struct s_RelationReader
-{
-	RelationReaderSpec spec;
-	struct s_RelationImpl * impl;		// provides access to the underlying storage
-	struct s_RelationReader * next;		// linked list pointer
-} RelationReader;
-
 
 /**
  * A storage provider is a particular data storage type, such as a B-tree or array.
@@ -142,58 +131,6 @@ typedef struct s_StorageProvider {
  * The default provider. This can only be used for read-only (non-mutable) relations.
  */
 extern StorageProvider defaultProvider;
-
-
-/**
- * Describes the implementation and storage for a specific relation.
- * Every relation must specify this struct.
- */
-typedef struct s_RelationImpl {
-	StorageProvider const * provider;
-	// size8 nColumns;
-	size32 nReaders;
-	void * storage;
-	RelationReader * firstReader;		// linked list of readers
-} RelationImpl;
-
-/**
- * Stable allocation of RelationImpl structs
- * TODO: make static ?
- */
-// RelationImpl * AllocateRelationImpl(void);
-
-/**
- * Stable allocation of RelationReader structs
- * TODO: make static ?
- */
-// RelationReader * AllocateRelationReader(void);
-
-// void FreeRelationReader(RelationReader const * reader);
-
-/**
- * Create a new relation implementation with the given storage provider.
- */
-RelationImpl * CreateRelationImpl(StorageProvider const * provider, size8 nColumns);
-
-/**
- * Remove the relation implementation, and all associated readers.
- */
-void FreeRelationImpl(RelationImpl const * impl);
-
-byte RelationImplAddTuple(RelationImpl * impl, Atom const tuple[], uint8 idPosition);
-
-byte RelationImplRemoveTuple(RelationImpl * impl, Atom const tuple[], uint8 idPosition);
-
-bool RelationImplIsWritable(RelationImpl * impl);
-
-bool RelationImplIsEnumerable(RelationImpl * impl);
-
-size32 RelationImplNRows(RelationImpl * impl);
-
-/**
- * Add a new reader to the given implementation.
- */
-RelationReader * RelationImplAddReader(RelationImpl * impl, RelationReaderSpec const * readerSpec);
 
 
 

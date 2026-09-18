@@ -15,7 +15,7 @@
 #ifndef	PARAMETER_H
 #define	PARAMETER_H 
 
-#include "kernel/RelationSignature.h"
+#include "kernel/Relation.h"
 #include "kernel/typedtuple.h"
 #include "lang/TypedAtom.h"
 #include "lang/Atom.h"

@@ -1437,15 +1437,15 @@ static void machineWriteArguments(
 static void machineSetupContext(OperatorContext * context)
 {
 	MachineOperatorContext * machineContext = (MachineOperatorContext *) &context->data;
-	RelationReader * reader = context->op->impl.machine.reader;
+	RelationReaderSpec const * readerSpec = context->op->impl.machine.readerSpec;
 	// setupState() reads the input arguments, so permute them first
 	machineReadArguments(context, machineContext);
-	if(reader->spec.setupState) {
-		reader->spec.setupState(
+	if(readerSpec->setupState) {
+		readerSpec->setupState(
 			machineContext->state,
 			machineContext->arguments,
-			reader->spec.readerData,
-			reader->impl->storage
+			readerSpec->readerData,
+			context->op->impl.machine.storage
 		);
 	}
 }
@@ -1453,22 +1453,21 @@ static void machineSetupContext(OperatorContext * context)
 
 static bool machineCall(OperatorContext * context)
 {
-	Operator const * op = context->op;
 	MachineOperatorContext * machineContext = (MachineOperatorContext *) &context->data;
 	if(machineContext->isExhausted)
 		return false;
 
 	machineReadArguments(context, machineContext);
-	RelationReader * reader = op->impl.machine.reader;
-	bool result = reader->spec.call(
+	RelationReaderSpec * readerSpec = context->op->impl.machine.readerSpec;
+	bool result = readerSpec->call(
 		machineContext->state,
 		machineContext->arguments,
-		reader->spec.readerData,
-		reader->impl->storage
+		readerSpec->readerData,
+		context->op->impl.machine.storage
 	);
 	if(result) {
 		machineWriteArguments(context, machineContext);
-		if(reader->spec.stateSize == 0) {
+		if(readerSpec->stateSize == 0) {
 			// operator is stateless, so we can have at most one tuple
 			machineContext->isExhausted = true;
 		}
@@ -1484,25 +1483,25 @@ static bool machineCall(OperatorContext * context)
 static void machineFinalizeContext(OperatorContext * context)
 {
 	MachineOperatorContext * machineContext = (MachineOperatorContext *) &context->data;
-	RelationReader const * reader = context->op->impl.machine.reader;
-	if(reader->spec.finalizeState) {
-		reader->spec.finalizeState(
+	RelationReaderSpec * readerSpec = context->op->impl.machine.readerSpec;
+	if(readerSpec->finalizeState) {
+		readerSpec->finalizeState(
 			machineContext->state,
-			reader->spec.readerData,
-			reader->impl->storage
+			readerSpec->readerData,
+			context->op->impl.machine.storage
 		);
 	}
 }
 
 
 Operator * CreateMachineOperator(
-	size8 nArguments, index8 const indexOrder[], RelationReader * reader)
+	size8 nArguments, index8 const indexOrder[], RelationReaderSpec * readerSpec, void * storage)
 {
 	ASSERT(nArguments <= RELATION_MAX_ARITY)
-	ASSERT(reader)
 	Operator * op = createOperator(
-		OPERATOR_MACHINE, nArguments, sizeof(MachineOperatorContext) + reader->spec.stateSize);
-	op->impl.machine.reader = reader;
+		OPERATOR_MACHINE, nArguments, sizeof(MachineOperatorContext) + readerSpec->stateSize);
+	op->impl.machine.storage = storage;
+	op->impl.machine.readerSpec = readerSpec;
 	allocateIndexOrder(op);
 	CopyMemory(indexOrder, op->indexOrder, nArguments);
 #ifdef DEBUG
@@ -1514,7 +1513,7 @@ Operator * CreateMachineOperator(
 
 static void teardownMachineOperator(Operator * op)
 {
-	// Deallocation of readers is now handled by DropRelation()
+	// Deallocation of readers is handled by DropTupleStore()
 
 	// RelationReader const * reader = op->impl.machine.reader;
 	// if(reader->finalizeReader)
@@ -1638,7 +1637,7 @@ static void teardownOperator(Operator * op)
 }
 
 
-void AttachOperator(Operator * op, RelationSignature signature)
+void AttachOperator(Operator * op, Relation signature)
 {
 	ASSERT(IsNullRelation(op->relation))
 	op->relation = signature;
@@ -1652,7 +1651,7 @@ void DetachOperator(Operator * op)
 	// has been subsumed into a UNION, and must be restored to
 	// the op->relation service
 
-	op->relation = (RelationSignature) {0};
+	op->relation = (Relation) {0};
 	CheckOperator(op);
 }
 

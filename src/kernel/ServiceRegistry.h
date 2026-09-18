@@ -10,7 +10,7 @@
 #include "btree/btree.h"
 #include "kernel/operator.h"
 #include "kernel/Parameter.h"
-#include "kernel/RelationSignature.h"
+#include "kernel/Relation.h"
 
 
 /**
@@ -21,7 +21,7 @@
  * a pair (Relation, Operator) is also 1:1 with a Service.
  */
 typedef struct s_Service {
-	RelationSignature relation;
+	Relation relation;
 	IOSignature ioSignature;
 	// Pointer to the root of the operator sub-tree defining this service.
 	Operator * op;
@@ -52,7 +52,7 @@ void SetupServiceRegistry(void);
  * move to a stable storage an always return const * pointers, with an explicit contract
  * that pointers are valid until the Service is removed.
  */
-Service CreateService(RelationSignature relation, IOSignature ioSignature, Operator * op);
+Service CreateService(Relation relation, IOSignature ioSignature, Operator * op);
 
 /**
  * Return true of the service's operator is an OPERATOR_MACHINE.
@@ -69,15 +69,16 @@ bool ServiceIsPrimitive(Service const * service);
 
 /**
  * Remove the service identified by the given operator and relation.
+ * The operator cannot be a MACHINE operator.
  * This removes the services' operator, and recursively removes all operators
  * and services that depend on it.
  */
-void RemoveService(RelationSignature relation, Operator const * op);
+void RemoveService(Relation relation, Operator const * op);
 
 /**
  * Remove all services for the given relation.
  */
-void ServiceRegistryRemoveAll(RelationSignature relation);
+void ServiceRegistryRemoveAll(Relation relation);
 
 /**
  * Deallocate the service registry. Before calling this function,
@@ -121,14 +122,14 @@ void RemoveAllCompiledServices(void);
  * Iterating over services
  */
 typedef struct {
-	RelationSignature relation;
+	Relation relation;
 	BTreeIterator btreeIterator;
 } ServiceIterator;
 
 /**
  * Create iterator over all services for a given relation
  */
-void ServiceRegistryIterate(RelationSignature relation, ServiceIterator * iterator);
+void ServiceRegistryIterate(Relation relation, ServiceIterator * iterator);
 
 bool ServiceIteratorNext(ServiceIterator * iterator);
 
@@ -141,7 +142,7 @@ void ServiceIteratorEnd(ServiceIterator * iterator);
  * must be filled to the relation arity.
  * If a matching service does not exist, returns 0
  */
-Operator * FindServiceOperator(RelationSignature relation, IOSignature ioSignature);
+Operator * FindServiceOperator(Relation relation, IOSignature ioSignature);
 
 /**
  * For debugging
@@ -152,7 +153,7 @@ void PrintService(Service const * service);
  * Dump all tuples of the given relation.
  * Requires an associated service for enumerating all tuples.
  */
-void RelationDump(RelationSignature relation);
+void RelationDump(Relation relation);
 
 /**
  * Print a list of all registered services

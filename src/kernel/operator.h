@@ -2,7 +2,9 @@
 #ifndef OPERATOR_H
 #define OPERATOR_H
 
-#include "kernel/RelationSignature.h"
+#include "kernel/Relation.h"
+#include "storage/StorageProvider.h"
+
 
 struct s_RelationReader;
 
@@ -185,7 +187,7 @@ struct s_Operator {
 	size32 nParents;		// number of parent operators
 	// The relation is set iff the operator is a root operator for a service,
 	// and can be used to locate that service. For a MACHINE operator, this must be 0.
-	RelationSignature relation;
+	Relation relation;
 	union {
 		// for OPERATOR_IDENTIFY
 		struct {
@@ -259,7 +261,8 @@ struct s_Operator {
 		struct {
 			// NOTE: this is not const, since operator calls may modify reader.spec.readerData
 			// It might be better not to have readerData in the spec?
-			struct s_RelationReader * reader;
+			RelationReaderSpec * readerSpec;
+			void * storage;
 		} machine;
 	} impl;
 };
@@ -300,7 +303,7 @@ Operator * CreatePermuteOperator(
  * The returned operator has zero references.
  */
 Operator * CreateMachineOperator(
-	size8 nArguments, index8 const indexOrder[], struct s_RelationReader * reader);
+	size8 nArguments, index8 const indexOrder[], RelationReaderSpec * readerSpec, void * storage);
 
 /**
  * Setup a JOIN operator with the specified number of arguments, from two existing
@@ -446,7 +449,7 @@ Operator * OperatorGetChild(Operator const * op, index8 index);
 /**
  * Attach an operator to a service, specified by its Relation
  */
-void AttachOperator(Operator * op, RelationSignature relation);
+void AttachOperator(Operator * op, Relation relation);
 
 /**
  * Detach an operator from its a service. This may deallocate the operator.

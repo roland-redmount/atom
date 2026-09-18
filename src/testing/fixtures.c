@@ -45,10 +45,12 @@ void SetupRelationFixture(
 		fixture->roleIndex[i] = RelationFixtureRoleIndex(fixture, roleNames[i]);
 		atomTypes[i] = AT_ID;
 	}
-	fixture->relation = CreateRelation(
-		fixture->termForm, CreateTypeSignature(atomTypes, nColumns),
-		&btreeStorageProvider, fixture->roleIndex
-	);
+	fixture->relation = (Relation) {
+		.termForm = fixture->termForm,
+		.typeSignature = CreateTypeSignature(atomTypes, nColumns)
+	};
+	fixture->store = CreateTupleStore(
+		fixture->relation, &btreeStorageProvider, nColumns, fixture->roleIndex);
 }
 
 

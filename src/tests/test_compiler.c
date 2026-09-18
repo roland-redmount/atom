@@ -383,17 +383,18 @@ void testCompileRecursiveJoin1(void)
 		"number n faculty f | ! < n > 0 | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
 	// Create terminating fact
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
-	RelationSignature relation = CreateRelation(
-		FormulaGetForm(terminatingFact),
-		CreateTypeSignature(
-			TypedTuplePeekAtomTypes(FormulaGetActors(terminatingFact)), 2),
-		&btreeStorageProvider, 0
-	);
-	RelationAddTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
+	Relation relation = {
+		.termForm = FormulaGetForm(terminatingFact),
+		.typeSignature = CreateTypeSignature(
+			TypedTuplePeekAtomTypes(FormulaGetActors(terminatingFact)), 2)
+	};
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	// Compile the query
 	Atom queryTerm = CStringToTerm("number 4 faculty f");
 
 	// CLAUDE: the stored service the compiled service takes over
+	// TODO: review this
 	IOSignature ioSignature = queryIOSignature(queryTerm);
 	Operator * storedOperator = FindServiceOperator(relation, ioSignature);
 	ASSERT_NOT_NULL(storedOperator)
@@ -455,13 +456,13 @@ void testCompileStoredFactsAndRule(void)
 	// ensure the role "base" is the first index column
 	index8 indexColumns[2];
 	setupBinaryRelationIndexColumns(FormulaGetForm(storedFact), "root", indexColumns);
-	RelationSignature relation = CreateRelation(
-		FormulaGetForm(storedFact),
-		CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2),
-		&btreeStorageProvider, indexColumns
-	);
+	Relation relation = {
+		.termForm = FormulaGetForm(storedFact),
+		.typeSignature = CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
+	};
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2,  indexColumns);
 	// Store a fact not entailed by the rule
-	RelationAddTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 	size32 nServicesBefore = NumberOfServices();
 
 	// Compile a query
@@ -511,31 +512,33 @@ void testCompileStoredFactsAndRule(void)
 
 
 /**
- * CLAUDE: A stored relation with no rule of its form. The query is answered as it stands,
- * so compiling it registers nothing and leaves the stored service in place.
+ * Test compiling a query that matches an existing service, but matches no rule.
+ * This should do nothing.
  */
-void testCompileStoredServiceAnswersQuery(void)
+void testCompileQueryNoMatchingRules(void)
 {
 	Atom storedFact = CStringToTerm("shade 3 value 7");
 	index8 indexColumns[2];
 	setupBinaryRelationIndexColumns(FormulaGetForm(storedFact), "shade", indexColumns);
-	RelationSignature relation = CreateRelation(
-		FormulaGetForm(storedFact),
-		CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2),
-		&btreeStorageProvider, indexColumns
-	);
-	RelationAddTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+	Relation relation = {
+		.termForm = FormulaGetForm(storedFact),
+		.typeSignature = CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
+	};
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, indexColumns);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 
 	Atom queryTerm = CStringToTerm("shade 3 value v");
 	IOSignature ioSignature = queryIOSignature(queryTerm);
-	Operator * storedOperator = FindServiceOperator(relation, ioSignature);
-	ASSERT_NOT_NULL(storedOperator)
+	Operator * machineOperator = FindServiceOperator(relation, ioSignature);
+	ASSERT_NOT_NULL(machineOperator)
 	size32 nServicesBefore = NumberOfServices();
 
+	// Attempt to compile the query should yield no services
 	Service services[MAX_COMPILED_SERVICES];
 	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 0)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)
-	ASSERT_PTR_EQUAL(FindServiceOperator(relation, ioSignature), storedOperator)
+	// The machine operator for the primitive service is still the same
+	ASSERT_PTR_EQUAL(FindServiceOperator(relation, ioSignature), machineOperator)
 
 	ReleaseFormula(queryTerm);
 	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
@@ -545,11 +548,9 @@ void testCompileStoredServiceAnswersQuery(void)
 
 
 /**
- * CLAUDE: A stored relation with a rule of its form that does not compile, its body term
- * having no service. The variant seeded from the stored service has nothing to union with
- * and is dropped again, leaving the stored service as it was.
+ * Test compile a query that matches a rule that yields no services.
  */
-void testCompileStoredServiceWithUncompilableRule(void)
+void testCompileQueryWithUselessRule(void)
 {
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
 		"tone n level v | ! nosuch n thing v");
@@ -557,12 +558,12 @@ void testCompileStoredServiceWithUncompilableRule(void)
 	Atom storedFact = CStringToTerm("tone 3 level 7");
 	index8 indexColumns[2];
 	setupBinaryRelationIndexColumns(FormulaGetForm(storedFact), "tone", indexColumns);
-	RelationSignature relation = CreateRelation(
-		FormulaGetForm(storedFact),
-		CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2),
-		&btreeStorageProvider, indexColumns
-	);
-	RelationAddTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+	Relation relation = {
+		.termForm = FormulaGetForm(storedFact),
+		.typeSignature = CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
+	};
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, indexColumns);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 
 	Atom queryTerm = CStringToTerm("tone 3 level v");
 	IOSignature ioSignature = queryIOSignature(queryTerm);
@@ -821,10 +822,11 @@ void testCompileRecursiveVariants(void)
 
 	// Add a second (prec succ) relation with types {AT_INT, AT_INT},
 	// defining a separate graph.
-	RelationSignature precSuccIntRelation = CreateRelation(
-		precSuccFixture.termForm, CreateTypeSignature((byte[]) {AT_INT, AT_INT}, 2),
-		&btreeStorageProvider, 0
-	);
+	Relation precSuccIntRelation = {
+		.termForm =	precSuccFixture.termForm,
+		.typeSignature = CreateTypeSignature((byte[]) {AT_INT, AT_INT}, 2)
+	};
+	TupleStore * store = CreateTupleStore(precSuccIntRelation, &btreeStorageProvider, 2, 0);
 	// Add the facts (prec 1 succ 2), (prec 2 succ 3)
 	index8 precRoleIndex = RelationFixtureRoleIndex(&precSuccFixture, "prec");
 	index8 succRoleIndex = RelationFixtureRoleIndex(&precSuccFixture, "succ");
@@ -832,7 +834,7 @@ void testCompileRecursiveVariants(void)
 	for(index8 i = 0; i < 2; i++) {
 		precSuccIntEdges[i][precRoleIndex] = (Atom) {._int = 1 + i};
 		precSuccIntEdges[i][succRoleIndex] = (Atom) {._int = 2 + i};
-		RelationAddTuple(precSuccIntRelation, precSuccIntEdges[i], 0);
+		TupleStoreAddTuple(store, precSuccIntEdges[i], 0);
 	}
 	// The query (before x after y) should now generate a (before after) service
 	// for both the AT_ID and AT_INT versions, seeded by the non-recursive rule
@@ -902,10 +904,12 @@ void testCompileNegatedTerm(void)
 {
 	// Setup the fact (odd 3)
 	Atom odd3term = CStringToTerm("odd 3");
-	RelationSignature evenRelation = CreateRelation(
-		FormulaGetForm(odd3term), CreateTypeSignature((byte[]) {AT_INT}, 1),
-		&btreeStorageProvider, 0);
-	RelationAddTuple(evenRelation, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
+	Relation oddRelation = {
+		.termForm = FormulaGetForm(odd3term),
+		.typeSignature = CreateTypeSignature((byte[]) {AT_INT}, 1)
+	};
+	TupleStore * store = CreateTupleStore(oddRelation, &btreeStorageProvider, 1, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	// setup the rule
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
 	Atom queryTerm = CStringToTerm("! even 3");
@@ -935,8 +939,8 @@ void testCompileNegatedTerm(void)
 	
 	DictionaryRemoveClause(&entry);
 
-	RelationRemoveTuple(evenRelation, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
-	DropRelation(evenRelation);
+	RelationRemoveTuple(oddRelation, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
+	DropRelation(oddRelation);
 	ReleaseFormula(odd3term);
 }
 
@@ -949,12 +953,15 @@ void testCompileNegatedTerm(void)
  */
 void testCompiledServiceReadsFactsLive(void)
 {
-	// (odd 3), and the rule making (! even x) follow from (odd x)
+	// Add the fact (odd 3)
 	Atom odd3term = CStringToTerm("odd 3");
-	RelationSignature oddRelation = CreateRelation(
-		FormulaGetForm(odd3term), CreateTypeSignature((byte[]) {AT_INT}, 1),
-	 	&btreeStorageProvider, 0);
-	RelationAddTuple(oddRelation, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
+	Relation oddRelation = {
+		.termForm = FormulaGetForm(odd3term),
+		.typeSignature = CreateTypeSignature((byte[]) {AT_INT}, 1)
+	};
+	TupleStore * store = CreateTupleStore(oddRelation, &btreeStorageProvider, 1, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
+	// Add the rule (odd x -> ! even x)
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
 
 	Atom queryTerm = CStringToTerm("! even 3");
@@ -1342,8 +1349,8 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testCompileRecursiveJoin1);
 	ExecuteTest(testCompileStoredFactsAndRule);
-	ExecuteTest(testCompileStoredServiceAnswersQuery);
-	ExecuteTest(testCompileStoredServiceWithUncompilableRule);
+	ExecuteTest(testCompileQueryNoMatchingRules);
+	ExecuteTest(testCompileQueryWithUselessRule);
 
 	UnloadLibraries();
 	TestSummary();

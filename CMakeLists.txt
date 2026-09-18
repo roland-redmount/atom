@@ -123,6 +123,7 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
     src/kernel/operator.c
     src/kernel/ServiceRegistry.c
     src/kernel/tuple.c
+	src/kernel/TupleStore.c
     src/kernel/typedtuple.c
 
 	src/compiler/choicepoints.c

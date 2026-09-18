@@ -77,7 +77,7 @@ size32 LookupTotalCount(void)
 }
 
 
-bool AtomHasRole(Atom atom, RelationSignature relation, Atom role)
+bool AtomHasRole(Atom atom, Relation relation, Atom role)
 {
 	LookupRecord record = {
 		.atom = atom,
@@ -101,7 +101,7 @@ static void addRecord(LookupRecord * record)
 }
 
 
-void AtomAddRole(Atom atom, RelationSignature relation, Atom role)
+void AtomAddRole(Atom atom, Relation relation, Atom role)
 {
 	LookupRecord record = {
 		.atom = atom,
@@ -113,7 +113,7 @@ void AtomAddRole(Atom atom, RelationSignature relation, Atom role)
 }
 
 
-void LookupAddPredicateRoles(RelationSignature relation, Atom const actors[])
+void LookupAddPredicateRoles(Relation relation, Atom const actors[])
 {
 	// iterate over roles names in the relation
 	// and add corresponding actors to lookup table
@@ -151,7 +151,7 @@ static void removeRecord(LookupRecord * record)
 }
 
 
-void AtomRemoveRole(Atom atom, RelationSignature relation, Atom role)
+void AtomRemoveRole(Atom atom, Relation relation, Atom role)
 {
 	LookupRecord record = {
 		.atom = atom,
@@ -174,13 +174,13 @@ void LookupRemoveAllRoles(Atom atom)
 	while(BTreeGetItem(lookup.btree, &key, &record)) {
 		lookup.nRolesTotal -= record.nFacts;
 		BTreeDelete(lookup.btree, &record, 0);
-		record.relation = (RelationSignature) {0};
+		record.relation = (Relation) {0};
 		record.role = (Atom) {0};
 	}
 }
 
 
-void LookupRemovePredicateRoles(RelationSignature relation, Atom const actors[])
+void LookupRemovePredicateRoles(Relation relation, Atom const actors[])
 {
 	LookupRecord record;
 	record.relation = relation;
@@ -270,7 +270,7 @@ bool LookupIteratorNext(LookupIterator * iterator)
 }
 
 
-RelationSignature LookupIteratorGetRelation(LookupIterator const * iterator)
+Relation LookupIteratorGetRelation(LookupIterator const * iterator)
 {
 	LookupRecord const * record = BTreeIteratorPeekItem(&(iterator->treeIterator));
 	return record->relation;
@@ -291,14 +291,14 @@ void LookupIteratorEnd(LookupIterator * iterator)
 }
 
 
-RelationSignature LookupFindRelation(Atom atom, Atom termForm, Atom role)
+Relation LookupFindRelation(Atom atom, Atom termForm, Atom role)
 {
-	RelationSignature relation = {0};
+	Relation relation = {0};
 	LookupIterator iterator;
 	LookupIterate(atom, &iterator);
 	while(LookupIteratorNext(&iterator)) {
 		Atom currentRole = LookupIteratorGetRole(&iterator);
-		RelationSignature currentRelation = LookupIteratorGetRelation(&iterator);
+		Relation currentRelation = LookupIteratorGetRelation(&iterator);
 
 		if(SameAtoms(currentRole, role) && SameAtoms(currentRelation.termForm, termForm)) {
 			ASSERT(IsNullRelation(relation))		// ensure we have only 1 matching relation

@@ -113,7 +113,7 @@ void FreeServiceRegistry(void)
  * Copy the service of the given relation evaluated by the given operator to *service.
  * Returns false if the registry holds no such service.
  */
-static bool findService(RelationSignature relation, Operator const * op, Service * service)
+static bool findService(Relation relation, Operator const * op, Service * service)
 {
 	// Iterate over all services for the given relation
 	Service key = {.relation = relation};
@@ -201,14 +201,15 @@ static void removeService(Service const * service)
 }
 
 
-Service CreateService(RelationSignature relation, IOSignature ioSignature, Operator * op)
+Service CreateService(Relation relation, IOSignature ioSignature, Operator * op)
 {
-	ASSERT(RelationExists(relation))
+	ASSERT(op->type != OPERATOR_MACHINE)
 	Service service = {
 		.relation = relation,
 		.ioSignature = ioSignature,
 		.op = op
 	};
+	AcquireRelation(relation);
 	AttachOperator(op, relation);
 
 	// Find descendants of the given operator with an attached service.
@@ -229,15 +230,33 @@ Service CreateService(RelationSignature relation, IOSignature ioSignature, Opera
 	// add to the service registry
 	ASSERT(BTreeInsert(services, &service) == BTREE_INSERTED)
 
-	if(ServiceIsPrimitive(&service)) {
-		// Any query of this term form could match this service, so
-		// whatever was compiled for such a query it is incomplete.
-		// QUESTION: the invalidation scope seems to broad: wouldn't it be enough to invalidate
-		// services from the same relation (so that type signature must agree) ?
-		InvalidateServicesByTermForm(relation.termForm);
-	}
-	else
-		nCompiledServices++;
+	nCompiledServices++;
+	return service;
+}
+
+
+/**
+ * This is only used by TupleStore
+ */
+Service CreatePrimitiveService(Relation relation, IOSignature ioSignature, Operator * op)
+{
+	ASSERT(op->type == OPERATOR_MACHINE)
+	Service service = {
+		.relation = relation,
+		.ioSignature = ioSignature,
+		.op = op
+	};
+	AttachOperator(op, relation);
+
+	// add to the service registry
+	ASSERT(BTreeInsert(services, &service) == BTREE_INSERTED)
+
+	// Any query of this term form could match this service, so
+	// whatever was compiled for such a query it is incomplete.
+	// QUESTION: the invalidation scope seems to broad: wouldn't it be enough to invalidate
+	// services from the same relation (so that type signature must agree) ?
+	InvalidateServicesByTermForm(relation.termForm);
+
 	return service;
 }
 
@@ -248,16 +267,17 @@ bool ServiceIsPrimitive(Service const * service)
 }
 
 
-void RemoveService(RelationSignature relation, Operator const * op)
+void RemoveService(Relation relation, Operator const * op)
 {
 	Service service;
 	bool found = findService(relation, op, &service);
 	ASSERT(found)
+	ASSERT(service.op->type != OPERATOR_MACHINE)
 	removeService(&service);
 }
 
 
-void ServiceRegistryRemoveAll(RelationSignature relation)
+void ServiceRegistryRemoveAll(Relation relation)
 {
 	// Add all services for the given relation to 
 	Service key = {.relation = relation };
@@ -306,7 +326,7 @@ void InvalidateServicesByTermForm(Atom termForm)
 	RelationIterator relationIterator;
 	RelationRegistryIterate(termForm, &relationIterator);
 	while(RelationIteratorNext(&relationIterator)) {
-		RelationSignature relation = RelationIteratorGet(&relationIterator);
+		Relation relation = RelationIteratorGet(&relationIterator);
 		// Find each compiled service for this relation
 		ServiceIterator serviceIterator;
 		ServiceRegistryIterate(relation, &serviceIterator);
@@ -373,7 +393,7 @@ size32 NumberOfCompiledServices(void)
 }
 
 
-void ServiceRegistryIterate(RelationSignature relation, ServiceIterator * iterator)
+void ServiceRegistryIterate(Relation relation, ServiceIterator * iterator)
 {
 	iterator->relation = relation;
 	BTreeIterate(&(iterator->btreeIterator), services);
@@ -415,7 +435,7 @@ void ServiceIteratorEnd(ServiceIterator * iterator)
 }
 
 
-Operator * FindServiceOperator(RelationSignature relation, IOSignature ioSignature)
+Operator * FindServiceOperator(Relation relation, IOSignature ioSignature)
 {
 	Service key = {.relation = relation, .ioSignature = ioSignature};
 	// QUESTION: Why use an iterator here to seek to a single item?
@@ -473,7 +493,7 @@ static bool signatureHasInputParameter(IOSignature ioSignature, size8 nParameter
 	return hasInput;
 }
 
-void RelationDump(RelationSignature relation)
+void RelationDump(Relation relation)
 {
 	// Find a service for enumerating all tuples from the relation
 	Service service = {0};

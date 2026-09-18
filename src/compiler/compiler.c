@@ -1363,7 +1363,7 @@ static size8 compileParameterizedQuery(
 
 	for(index8 i = 0; i < nVariants; i++) {
 		/* CLAUDE: A variant seeded from an existing service replaces it, so that service
-		   has to go before the new one can take its (RelationSignature, IOSignature) key. The order
+		   has to go before the new one can take its (Relation, IOSignature) key. The order
 		   is what makes this safe: the compiled operator holds the old service's operator
 		   as a branch of its union already, so DetachOperator() leaves the operator
 		   standing, and the variant's own reference keeps the Relation alive across the

@@ -123,11 +123,11 @@ void testDispatchNegatedTerm(void)
 
 	// Create the (even odd) relation
 	TypeSignature typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2);
-	RelationSignature relation = CreateRelation(
-		termForm, typeSignature, &btreeStorageProvider, 0);
+	Relation relation = {.termForm = termForm, .typeSignature = typeSignature};
+	AcquireRelation(relation);
 	// Create the (! even odd) relation
-	RelationSignature negatedRelation = CreateRelation(
-		negatedTermForm, typeSignature, &btreeStorageProvider, 0);
+	Relation negatedRelation = {.termForm = negatedTermForm, .typeSignature = typeSignature};
+	AcquireRelation(negatedRelation);
 	ASSERT_FALSE(SameRelations(relation, negatedRelation))
 
 	// Test that dispatches reaches the correct relation
@@ -143,8 +143,8 @@ void testDispatchNegatedTerm(void)
 	ASSERT_TRUE(SameRelations(service.relation, relation))
 	ReleaseFormula(query);
 
-	DropRelation(negatedRelation);
-	DropRelation(relation);
+	ReleaseRelation(negatedRelation);
+	ReleaseRelation(relation);
 	IFactRelease(negatedTermForm);
 	IFactRelease(termForm);
 }
@@ -199,12 +199,16 @@ void testDispatchIterator(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	RelationSignature idRelation = CreateRelation(
-		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2),
-		&btreeStorageProvider, 0);
-	RelationSignature intRelation = CreateRelation(
-		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2),
-		&btreeStorageProvider, 0);
+	Relation idRelation = {
+		.termForm = termForm,
+		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2)
+	};
+	AcquireRelation(idRelation);
+	Relation intRelation = {
+		.termForm = termForm,
+		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
+	};
+	AcquireRelation(intRelation);
 
 	// Only the service with two output parameters matches, so each table contributes
 	// one match
@@ -280,8 +284,8 @@ void testDispatchIterator(void)
 	DispatchIteratorEnd(&iterator);
 	ReleaseFormula(unknownQuery);
 
-	DropRelation(intRelation);
-	DropRelation(idRelation);
+	ReleaseRelation(intRelation);
+	ReleaseRelation(idRelation);
 	IFactRelease(termForm);
 }
 

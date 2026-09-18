@@ -24,7 +24,7 @@ Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size3
  * Find the relation (multiset m element e multiple n) where
  * e has the given atom type. Currently we only support multisets of ID or NAME atoms.
  */
-RelationSignature findMultisetRelation(byte elementType)
+Relation findMultisetRelation(byte elementType)
 {
 	switch(elementType) {
 		case AT_ID:
@@ -35,7 +35,7 @@ RelationSignature findMultisetRelation(byte elementType)
 
 		default:
 		ASSERT(false)
-		return (RelationSignature) {0};
+		return (Relation) {0};
 	}
 }
 
@@ -52,7 +52,7 @@ RelationSignature findMultisetRelation(byte elementType)
 /**
  * Find the relation associated with a multiset.
  */
-static RelationSignature lookupMultisetRelation(Atom multiset)
+static Relation lookupMultisetRelation(Atom multiset)
 {
 	return LookupFindRelation(
 		multiset,
@@ -67,7 +67,7 @@ static RelationSignature lookupMultisetRelation(Atom multiset)
  */
 static byte findMultisetElementType(Atom multiset)
 {
-	RelationSignature relation = lookupMultisetRelation(multiset);
+	Relation relation = lookupMultisetRelation(multiset);
 	return relation.typeSignature.atomTypes[
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)
 	];
@@ -78,12 +78,12 @@ void AddMultisetToIFact(
 	IFactDraft * draft,
 	MultisetElementGenerator generator, void const * data, size32 nUniqueElements, byte elementType)
 {
-	RelationSignature relation = findMultisetRelation(elementType);
+	Relation relation = findMultisetRelation(elementType);
 
 	// assert (multiset element multiple) facts
 	IFactBeginConjunction(
 		draft, 
-		relation,
+		RelationGetTupleStore(relation),
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 	);
 	Atom tuple[3];
@@ -177,7 +177,7 @@ size32 MultisetGetElementMultiple(Atom multiset, Atom element)
  */
 void MultisetIterate(Atom multiset, byte elementType, MultisetIterator * iterator)
 {
-	RelationSignature relation = findMultisetRelation(elementType);
+	Relation relation = findMultisetRelation(elementType);
 	byte parameterIO[3];
 	CoreFormSetByteArray(
 		FORM_MULTISET_ELEMENT_MULTIPLE,

@@ -1,4 +1,5 @@
 
+#include "lang/Atom.h"
 #include "kernel/ifact.h"
 #include "lang/formula.h"
 #include "lang/name.h"

@@ -18,7 +18,8 @@ static Atom pairRoleNames[3];
 // the canonical order indexes for roles (pair left right)
 static index8 pairTermRoleIndex[3];
 
-static RelationSignature pairRelation;
+static Relation pairRelation;
+static TupleStore * pairTupleStore;
 static Operator * pairOperator;
 
 
@@ -42,7 +43,7 @@ Atom CreatePair(Atom left, Atom right)
 void AddPairToIFact(IFactDraft * draft, Atom left, Atom right)
 {
 	// assert (pair left right)
-	IFactBeginConjunction(draft, pairRelation, pairTermRoleIndex[0]);
+	IFactBeginConjunction(draft, pairTupleStore, pairTermRoleIndex[0]);
 	
 	Atom tuple[3];
 	pairSetTuple(tuple, (Atom) {0}, left, right);
@@ -118,7 +119,8 @@ void PairSetup(void)
 	TypeSignature typeSignature = {0};
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_ID, AT_ID}, typeSignature.atomTypes, pairTermRoleIndex, 3);		
-	pairRelation = CreateRelation(pairTermForm, typeSignature, &btreeStorageProvider, pairTermRoleIndex);
+	pairRelation = (Relation) {.termForm = pairTermForm, .typeSignature = typeSignature};
+	pairTupleStore = CreateTupleStore(pairRelation, &btreeStorageProvider, 3, pairTermRoleIndex);
 	IFactRelease(pairTermForm);
 
 	// Store a pointer to the (pair<ID left>ID right<ID) service,

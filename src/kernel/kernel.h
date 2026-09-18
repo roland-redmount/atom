@@ -4,7 +4,7 @@
 
 #include "kernel/Relation.h"
 #include "kernel/operator.h"
-// for TRANSIENT_MEMORY and PERSISTENT_MEMORY
+#include "kernel/TupleStore.h"		// for TRANSIENT_MEMORY and PERSISTENT_MEMORY
 #include "memory/paging.h"
 #include "platform.h"
 
@@ -124,9 +124,9 @@ void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
  */
 Atom GetCoreRoleName(index32 roleId);
 
-RelationSignature GetCoreRelation(index32 relationId);
+Relation GetCoreRelation(index32 relationId);
 
-// RelationWriter * GetCoreRelationTable(index32 relationId);
+TupleStore * GetCoreTupleStore(index32 relationId);
 
 /**
  * Return the operator of a core service, given a SERVICE_* id.

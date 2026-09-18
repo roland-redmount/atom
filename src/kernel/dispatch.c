@@ -116,7 +116,7 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 		}
 
 		// Iterate over candidate services for the current relation
-		RelationSignature relation = RelationIteratorGet(&(iterator->relationIterator));
+		Relation relation = RelationIteratorGet(&(iterator->relationIterator));
 		while(ServiceIteratorNext(&(iterator->serviceIterator))) {
 			Service const * currentService = ServiceIteratorPeekService(&(iterator->serviceIterator));
 			if(permutationMatch(

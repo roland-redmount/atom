@@ -28,13 +28,16 @@ static Atom listLengthPredicateForm;
 static Atom listLengthTermForm;
 static index8 listLengthRoleIndex[2];
 
-static RelationSignature listIDRelation;
+static Relation listIDRelation;
+static TupleStore * listIDTupleStore;
 static Operator * listIDOperator;
 
-static RelationSignature listLetterRelation;
+static Relation listLetterRelation;
+static TupleStore * listLetterTupleStore;
 static Operator * listLetterOperator;
 
-static RelationSignature listLengthRelation;
+static Relation listLengthRelation;
+static TupleStore * listLengthTupleStore;
 static Operator * listLengthOperator;
 
 
@@ -92,7 +95,7 @@ index8 const * GetListLengthRoleIndex(void)
 }
 
 
-RelationSignature GetListRelation(byte elementType)
+Relation GetListRelation(byte elementType)
 {
 	switch(elementType) {
 	case AT_ID:
@@ -103,7 +106,7 @@ RelationSignature GetListRelation(byte elementType)
 
 	default:
 		ASSERT(false)
-		return (RelationSignature) {0};
+		return (Relation) {0};
 	}
 }
 
@@ -124,7 +127,7 @@ Operator * GetListOperator(byte elementType)
 }
 
 
-RelationSignature GetListLengthRelation(void)
+Relation GetListLengthRelation(void)
 {
 	return listLengthRelation;
 }
@@ -165,7 +168,7 @@ Atom CreateList(ListElementGenerator generator, void const * data, byte elementT
 // assert (list length) fact
 static void assertListLength(IFactDraft * draft, size32 nElements)
 {
-	IFactBeginConjunction(draft, listLengthRelation, listLengthRoleIndex[0]);
+	IFactBeginConjunction(draft, listLengthTupleStore, listLengthRoleIndex[0]);
 
 	Atom listLengthTuple[2];
 	listLengthTuple[listLengthRoleIndex[1]] = (Atom) {._int = nElements};
@@ -177,9 +180,9 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void const * data, byte elementType, size32 nElements)
 {
 	if(nElements > 0) {
-		RelationSignature relation = GetListRelation(elementType);
+		Relation relation = GetListRelation(elementType);
 		// assert (ĺist position elements) facts for each element
-		IFactBeginConjunction(draft, relation, listRoleIndex[0]);
+		IFactBeginConjunction(draft, RelationGetTupleStore(relation), listRoleIndex[0]);
 		Atom listElementTuple[3];
 		for(index32 i = 0; i < nElements; i++) {
 			TupleCopyPermuted(
@@ -253,7 +256,7 @@ size32 ListLength(Atom list)
  * TODO: this is not well-defined in general, there may be > 1 relation for lists
  * containing mixed types, although CreateList() does not yields such lists.
  */
-static RelationSignature lookupListElementRelation(Atom list)
+static Relation lookupListElementRelation(Atom list)
 {
 	return LookupFindRelation(list, listTermForm, listRoleName);
 }
@@ -262,7 +265,7 @@ static RelationSignature lookupListElementRelation(Atom list)
 Atom ListGetElement(Atom list, index32 position)
 {
 	ASSERT(ListLength(list) > 0)
-	RelationSignature relation = lookupListElementRelation(list);
+	Relation relation = lookupListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 
 	byte parameterIO[3];
@@ -282,7 +285,7 @@ Atom ListGetElement(Atom list, index32 position)
 index32 ListGetPosition(Atom list, Atom element)
 {
 	ASSERT(IsList(list))
-	RelationSignature relation = lookupListElementRelation(list);
+	Relation relation = lookupListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 
 	// TODO: this service is not one the B-tree provider registers, as its inputs are not
@@ -348,7 +351,7 @@ void ListIterate(Atom list, ListIterator * iterator)
 	iterator->queryTuple[listRoleIndex[0]] = list;
 
 	if(ListLength(list) > 0) {
-		RelationSignature relation = lookupListElementRelation(list);
+		Relation relation = lookupListElementRelation(list);
 		ASSERT(!IsNullRelation(relation))
 		
 		byte parameterIO[3];
@@ -389,7 +392,7 @@ void ListIteratorEnd(ListIterator * iterator)
 void PrintList(Atom list)
 {
 	PrintCString("LIST{");
-	RelationSignature relation = lookupListElementRelation(list);
+	Relation relation = lookupListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 	byte elementType = relation.typeSignature.atomTypes[listRoleIndex[2]];
 
@@ -440,17 +443,22 @@ void ListSetup(void)
 	// (list:ID position:INT element:ID)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_ID}, typeSignature.atomTypes, listRoleIndex, 3);
-	listIDRelation = CreateRelation(listTermForm, typeSignature, &btreeStorageProvider, listRoleIndex);
+	listIDRelation = (Relation) {.termForm = listTermForm, .typeSignature = typeSignature};
+	listIDTupleStore = CreateTupleStore(listIDRelation, &btreeStorageProvider, 3, listRoleIndex);
+	
 	// (list:ID position:INT element:LETTER)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_LETTER}, typeSignature.atomTypes, listRoleIndex, 3);
-	listLetterRelation = CreateRelation(listTermForm, typeSignature, &btreeStorageProvider, listRoleIndex);
+	listLetterRelation = (Relation) {.termForm = listTermForm, .typeSignature = typeSignature};
+	listLetterTupleStore = CreateTupleStore(listLetterRelation, &btreeStorageProvider, 3, listRoleIndex);
+	
 	// (list:ID length:INT)
 	typeSignature = (TypeSignature) {0};
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT}, typeSignature.atomTypes, listLengthRoleIndex, 2);
-	listLengthRelation = CreateRelation(listLengthTermForm, typeSignature, &btreeStorageProvider, listLengthRoleIndex);
-
+	listLengthRelation = (Relation) {.termForm = listLengthTermForm, .typeSignature = typeSignature};
+	listLengthTupleStore = CreateTupleStore(listLengthRelation, &btreeStorageProvider, 2, listLengthRoleIndex);
+	
 	IFactRelease(listLengthTermForm);
 	IFactRelease(listLengthPredicateForm);
 	IFactRelease(listTermForm);

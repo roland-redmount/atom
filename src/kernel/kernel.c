@@ -10,6 +10,7 @@
 #include "kernel/Parameter.h"
 #include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
+#include "kernel/TupleStore.h"
 #include "storage/RelationBTree.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
@@ -160,8 +161,9 @@ static struct s_Kernel {
 	// corePredicateRoleIndex[i][j] is the canonical order index of role j
 	// in "kernel order" for form i.
 	index8 corePredicateRoleIndex[N_CORE_FORMS + 1][CORE_FORMS_MAX_ARITY];
-	// Corresponding core relations and services
-	RelationSignature coreRelations[N_CORE_RELATIONS + 1];
+	// Corresponding core relations, tuple stores and services
+	Relation coreRelations[N_CORE_RELATIONS + 1];
+	TupleStore * coreTupleStores[N_CORE_RELATIONS + 1];
 	Operator * coreOperators[N_CORE_SERVICES + 1];
 
 	// number of ifacts and references created by bootstrapping
@@ -292,35 +294,35 @@ void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
  * Create a core relation table using the B-tree implementation, with primitive services.
  * This requires kernel.corePredicateRoleIndex to be initialized for the correponding form
  */
-static RelationSignature createCoreRelationTable(uint32 relationId)
+static void createCoreRelation(uint32 relationId)
 {
 	index32 formId = coreRelationFormId[relationId];
 	byte atomTypes[CORE_FORMS_MAX_ARITY];
 	CoreFormSetByteArray(formId, coreRelationAtomTypes[relationId], atomTypes);
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, corePredicateArity[formId]);
 
-	RelationSignature relation = CreateRelationBootstrap(
-		kernel.coreTermForms[formId], kernel.corePredicateForms[formId], typeSignature,
-		&btreeStorageProvider, kernel.corePredicateRoleIndex[formId]
-	);
-	return relation;
+	kernel.coreRelations[relationId] = (Relation) {
+		.termForm = kernel.coreTermForms[formId],
+		.typeSignature = typeSignature
+	};
+	CreateRelationBootstrap(kernel.coreRelations[relationId], kernel.corePredicateForms[formId]);
+	
+	kernel.coreTupleStores[relationId] = CreateTupleStore(
+		kernel.coreRelations[relationId],
+		&btreeStorageProvider, corePredicateArity[formId], kernel.corePredicateRoleIndex[formId]);
 }
 
 
-RelationSignature GetCoreRelation(index32 relationId)
+Relation GetCoreRelation(index32 relationId)
 {
-	index32 formId = coreRelationFormId[relationId];
-	byte atomTypes[CORE_FORMS_MAX_ARITY];
-	CoreFormSetByteArray(formId, coreRelationAtomTypes[relationId], atomTypes);
-	TypeSignature typeSignature = CreateTypeSignature(atomTypes, corePredicateArity[formId]);
-	return (RelationSignature) {.termForm = kernel.coreTermForms[formId], .typeSignature = typeSignature};
+	return kernel.coreRelations[relationId];
 }
 
 
-// RelationWriter * GetCoreRelationTable(index32 relationId)
-// {
-// 	return FindRelationTable(GetCoreRelation(relationId));
-// }
+TupleStore * GetCoreTupleStore(index32 relationId)
+{
+	return kernel.coreTupleStores[relationId];
+}
 
 
 /**
@@ -334,11 +336,15 @@ RelationSignature GetCoreRelation(index32 relationId)
  */
 static void bootstrapTermForm(Atom termForm, Atom predicateForm)
 {
-	RelationSignature relation = kernel.coreRelations[RELATION_TERM_FORM];
+	Relation relation = kernel.coreRelations[RELATION_TERM_FORM];
 
 	IFactDraft draft;
 	IFactBegin(&draft);
-	IFactBeginConjunction(&draft, relation, CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM));
+	IFactBeginConjunction(
+		&draft,
+		kernel.coreTupleStores[RELATION_TERM_FORM],
+		CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM)
+	);
 	Atom tuple[3];
 	// the term form itself goes in the id column, which createFacts() fills in
 	CoreFormSetTuple(
@@ -450,11 +456,11 @@ static void setupCoreServices(void)
 	IFactReserve(termFormTermForm.hash);
 
 	// Create table for multisets of AT_NAME, used for predicate forms
-	kernel.coreRelations[RELATION_MULTISET_NAME] = createCoreRelationTable(RELATION_MULTISET_NAME);
+	createCoreRelation(RELATION_MULTISET_NAME);
 	// Create table for multisets of AT_NAME, used for predicate forms
-	kernel.coreRelations[RELATION_MULTISET_ID] = createCoreRelationTable(RELATION_MULTISET_ID);
+	createCoreRelation(RELATION_MULTISET_ID);
 	// Create predicate form table
-	kernel.coreRelations[RELATION_PREDICATE_FORM] = createCoreRelationTable(RELATION_PREDICATE_FORM);
+	createCoreRelation(RELATION_PREDICATE_FORM);
 
 	/*
 	 * Create @multiset-form
@@ -465,7 +471,7 @@ static void setupCoreServices(void)
 	// defining facts
 	// (multiset @multiset-form element "multiset" multiple 1)
 	IFactBeginConjunction(
-		&multisetDraft, kernel.coreRelations[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
+		&multisetDraft, kernel.coreTupleStores[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
 	Atom multisetTuple[3];
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
@@ -490,7 +496,7 @@ static void setupCoreServices(void)
 	IFactEndConjunction(&multisetDraft);
 
 	// (predicate-form @multiset-form)
-	IFactBeginConjunction(&multisetDraft, kernel.coreRelations[RELATION_PREDICATE_FORM], 0);
+	IFactBeginConjunction(&multisetDraft, kernel.coreTupleStores[RELATION_PREDICATE_FORM], 0);
 	IFactAddTuple(&multisetDraft, (Atom[]) {multisetForm});
 	IFactEndConjunction(&multisetDraft);
 
@@ -526,7 +532,7 @@ static void setupCoreServices(void)
 	// defining facts
 	// (multiset @predicate-form element "predicate-form" multiple 1)
 	IFactBeginConjunction(
-		&predicateFormDraft, kernel.coreRelations[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
+		&predicateFormDraft, kernel.coreTupleStores[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
 		(Atom []) {predicateForm, GetCoreRoleName(ROLE_PREDICATE_FORM), (Atom) {._int = 1}},
@@ -536,7 +542,7 @@ static void setupCoreServices(void)
 	IFactEndConjunction(&predicateFormDraft);
 
 	// (predicate-form @predicate-form)
-	IFactBeginConjunction(&predicateFormDraft, kernel.coreRelations[RELATION_PREDICATE_FORM], 0);
+	IFactBeginConjunction(&predicateFormDraft, kernel.coreTupleStores[RELATION_PREDICATE_FORM], 0);
 	IFactAddTuple(&predicateFormDraft, (Atom[]) {predicateForm});
 	IFactEndConjunction(&predicateFormDraft);
 
@@ -572,7 +578,7 @@ static void setupCoreServices(void)
 		kernel.corePredicateRoleIndex[FORM_TERM_FORM][j] =
 			PredicateRoleIndex(kernel.corePredicateForms[FORM_TERM_FORM], roles[j]);
 	// Create the corresponding relation table, which CreateTermForm() writes into
-	kernel.coreRelations[RELATION_TERM_FORM] = createCoreRelationTable(RELATION_TERM_FORM);
+	createCoreRelation(RELATION_TERM_FORM);
 
 	/*
 	 * Build the three reserved term forms (multiset element multiple), (predicate)
@@ -598,9 +604,9 @@ static void setupCoreServices(void)
 	}
 	// NOTE: we now hold 1 reference to each of the core predicate forms and term forms.
 
-	// Create remaining B-tree relation tables.
+	// Create remaining B-tree relations and tuple stores
 	for(index32 i = RELATION_CLAUSE_FORM; i <= N_CORE_RELATIONS; i++)
-		kernel.coreRelations[i] = createCoreRelationTable(i);
+		createCoreRelation(i);
 
 	// The relation table registry now holds references to each core predicate form
 	// and term form, so we can release our references.
@@ -619,7 +625,7 @@ static void setupCoreServices(void)
 			coreServiceParameterIO[i],
 			parameterIO
 		);
-		RelationSignature relation = kernel.coreRelations[relationId];
+		Relation relation = kernel.coreRelations[relationId];
 		kernel.coreOperators[i] = FindServiceOperator(
 			relation,
 			CreateIOSignature(parameterIO, corePredicateArity[coreRelationFormId[relationId]])

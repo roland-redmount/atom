@@ -451,7 +451,7 @@ void testIndexOrder(void)
 	Operator * listOperator = GetListOperator(AT_LETTER);
 
 	// NOTE: indexOrder[] is currently not publicly accessible
-	// RelationSignature listRelation = GetListRelation(AT_LETTER);
+	// Relation listRelation = GetListRelation(AT_LETTER);
 	// ASSERT_NOT_NULL(listOperator->indexOrder)
 	// for(index8 i = 0; i < 3; i++)
 	// 	ASSERT_UINT32_EQUAL(listOperator->indexOrder[i], listRelation->indexColumns[i])
@@ -484,10 +484,9 @@ void testIndexOrder(void)
 		ASSERT_UINT32_EQUAL(joinOperator->indexOrder[i], expectedJoinOrder[i])
 
 	// A MACHINE operator declares the order its provider yields tuples in
-	RelationReader dummyReader = {0};
+	RelationReaderSpec dummyReaderSpec = {0};
 	Operator * machineOperator = CreateMachineOperator(
-		2, (index8[]) {1, 0}, &dummyReader
-	);
+		2, (index8[]) {1, 0}, &dummyReaderSpec, 0);
 	ASSERT_UINT32_EQUAL(machineOperator->indexOrder[0], 1)
 	ASSERT_UINT32_EQUAL(machineOperator->indexOrder[1], 0)
 

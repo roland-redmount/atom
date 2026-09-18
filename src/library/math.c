@@ -103,10 +103,10 @@ void MathSetup(void)
 	moduleID = RequestModuleID();
 
 	// The index order (from parameters) is fixed when creating the relation (columnIndex).
-	// Each service added need only give the RelationSignature and the RelationReader impl
+	// Each service added need only give the Relation and the RelationReader impl
 
 	// Atom addTermForm = CStringToTerm("+ @1<INT + @2<INT = @3<INT");
-	// RelationSignature addRelation = CreateRelationFromTerm(addTermForm, mathProvider);
+	// Relation addRelation = CreateRelationFromTerm(addTermForm, mathProvider);
 
 	// NOTE: RelationReader contains an IOSignature ...
 	RegisterMachineService(moduleID, "+ @1<INT + @2<INT = @3>INT", add1Call);

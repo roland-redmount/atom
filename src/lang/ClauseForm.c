@@ -23,8 +23,8 @@ Atom CreateClauseForm(Atom const termForms[], size8 nTermForms)
 	AddMultisetToIFactFromArrays(&draft, uniqueTermForms, multiplicities, nUniqueTermForms, AT_ID);
 
 	// (clause-form @form)
-	RelationSignature clauseFormRelation = GetCoreRelation(RELATION_CLAUSE_FORM);
-	IFactBeginConjunction(&draft, clauseFormRelation, 0);
+	TupleStore * clauseFormStore = GetCoreTupleStore(RELATION_CLAUSE_FORM);
+	IFactBeginConjunction(&draft, clauseFormStore, 0);
 	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
 	IFactEndConjunction(&draft);	
 

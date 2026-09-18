@@ -4,6 +4,7 @@
 #include "kernel/MixedTypeRelation.h"
 #include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
+#include "kernel/TupleStore.h"
 #include "library/library.h"
 #include "library/string.h"
 #include "lang/formula.h"
@@ -145,13 +146,18 @@ void testConcatAcrossRelations(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	RelationSignature idRelation = CreateRelation(
-		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2),
-		&btreeStorageProvider, 0);
-	RelationSignature intRelation = CreateRelation(
-		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2),
-		&btreeStorageProvider, 0);
-
+	Relation idRelation = {
+		.termForm = termForm,
+		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2)
+	};
+	TupleStore * idStore = CreateTupleStore(idRelation, &btreeStorageProvider, 2, 0);
+	
+	Relation intRelation = {
+		.termForm = termForm,
+		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
+	};
+	TupleStore * intStore = CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
+	
 	TypedAtom idActors[2] = {
 		CreateTypedAtom(AT_ID, CreateStringFromCString("a")),
 		CreateTypedAtom(AT_ID, CreateStringFromCString("b"))
@@ -162,8 +168,8 @@ void testConcatAcrossRelations(void)
 	};
 	TypedTuple * idTuple = CreateTypedTupleFromArray(idActors, 2);
 	TypedTuple * intTuple = CreateTypedTupleFromArray(intActors, 2);
-	RelationAddTuple(idRelation, TypedTuplePeekAtoms(idTuple), 0);
-	RelationAddTuple(intRelation, TypedTuplePeekAtoms(intTuple), 0);
+	TupleStoreAddTuple(idStore, TypedTuplePeekAtoms(idTuple), 0);
+	TupleStoreAddTuple(intStore, TypedTuplePeekAtoms(intTuple), 0);
 	for(index8 i = 0; i < 2; i++) {
 		ReleaseTypedAtom(idActors[i]);
 		ReleaseTypedAtom(intActors[i]);

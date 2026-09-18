@@ -9,6 +9,7 @@
 
 #include "kernel/dictionary.h"
 #include "kernel/Relation.h"
+#include "kernel/TupleStore.h"
 #include "kernel/typedtuple.h"
 
 
@@ -33,7 +34,8 @@
  */
 typedef struct {
 	Atom termForm;
-	RelationSignature relation;
+	Relation relation;
+	TupleStore * store;
 	size8 nColumns;
 	// Column index of each role, in the order the role names were given
 	index8 roleIndex[FIXTURE_MAX_COLUMNS];
