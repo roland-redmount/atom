@@ -442,31 +442,28 @@ void testCompileRecursiveJoin1(void)
 
 
 /**
- * Test creatig a relation with both stored facts and a rule. The compiled service takes over
- * the stored service and reads it as one branch of its union, so that a query is answered
- * by the stored facts and the rule together.
+ * Test creating a relation with both stored facts and a service compiled from a rule,
+ * resulting in a UNION operator.
  */
 void testCompileStoredFactsAndRule(void)
 {
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"root n square s | ! * n * n = s");
-
 	// Create relation with storage backed by B-tree
 	Atom storedFact = CStringToTerm("root 5 square 99");
-	// ensure the role "base" is the first index column
+	// ensure the role "root" is the first index column
 	index8 indexColumns[2];
 	setupBinaryRelationIndexColumns(FormulaGetForm(storedFact), "root", indexColumns);
-	Relation relation = {
-		.termForm = FormulaGetForm(storedFact),
-		.typeSignature = CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
-	};
+	Relation relation = RelationFromFact(FormulaGetView(storedFact));
 	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2,  indexColumns);
 	// Store a fact not entailed by the rule
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 	size32 nServicesBefore = NumberOfServices();
 
+	// Create a rule to compile against
+	// NOTE: this doesn't invalidate primitive services.
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"root n square s | ! * n * n = s");
 	// Compile a query
-	Atom queryTerm = CStringToTerm("base 5 squared s");
+	Atom queryTerm = CStringToTerm("root 5 square s");
 	IOSignature ioSignature = queryIOSignature(queryTerm);
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
@@ -1348,7 +1345,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testFilterServiceInvalidatedByRule);
 
 	ExecuteTest(testCompileRecursiveJoin1);
-	// ExecuteTest(testCompileStoredFactsAndRule);
+	ExecuteTest(testCompileStoredFactsAndRule);
 	ExecuteTest(testCompileQueryNoMatchingRules);
 	ExecuteTest(testCompileQueryWithUselessRule);
 

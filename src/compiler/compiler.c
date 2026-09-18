@@ -1088,10 +1088,11 @@ static size8 compileClauses(
  * Seeding happens before any clause compiles, so that a clause of the query signature
  * unions into the seeded variant rather than adding a variant of its own, and so that a
  * recursive clause has a variant to compile against, the stored facts being its base
- * case. That is what lets a recursive rule stand on stored facts alone, with no
- * non-recursive clause of its own. A seed no clause compiled into is dropped again; see
- * DiscardUnusedSeedVariants().
- *
+ * case. A seed no clause compiled into is dropped again; see DiscardUnusedSeedVariants().
+ * 
+ * NOTE: currently this is needed for the (number faculty) recursive case, since
+ * compileClauses() does not not dispatch the term itself to find an existing service.
+ * 
  * Returns the new number of variants.
  */
 static size8 seedVariantsFromServices(

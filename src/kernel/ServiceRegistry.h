@@ -1,7 +1,6 @@
 /**
- * The service registry keeps track of the services available for each registered
- * relation, which is how a relation can be read. Dispatch uses the registry to match
- * queries to services.
+ * The service registry keeps track of the Services registered for each Relation.
+ * Dispatch uses the service registry to match queries to services.
  */
 
 #ifndef SERVICE_REGISTRY_H
@@ -14,10 +13,9 @@
 
 
 /**
- * A Service provides processing of a query with a given IOSignature against a
- * specific Relation, and is uniquely defined by the (Relation, IOSignature) pair.
- * A service is implemented by an Operator tree, and holds a pointer to the root
- * operator of this tree. Because an Operator assumes a specific IOSignature,
+ * A Service is defined by an (Relation, IOSignature) pair.
+ * A service is implemented by an Operator graph, and holds a pointer to the root
+ * operator of this graph. Because an Operator assumes a specific IOSignature,
  * a pair (Relation, Operator) is also 1:1 with a Service.
  */
 typedef struct s_Service {
@@ -46,9 +44,7 @@ void SetupServiceRegistry(void);
  *
  * TODO: the Service structure is now returned by value since we cannot return pointers
  * into the B-tree storage structure (they may change over time). This is not great, since
- * the callers's copy may become invalide if the Service is deleted. We should probably
- * move to a stable storage an always return const * pointers, with an explicit contract
- * that pointers are valid until the Service is removed.
+ * the callers's copy may become invalid if the Service is deleted.
  */
 Service CreateService(Relation relation, IOSignature ioSignature, Operator * op);
 
