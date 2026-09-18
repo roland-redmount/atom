@@ -314,6 +314,14 @@ data64 RelationHash(Relation relation, data64 initialHash)
 }
 
 
+Relation RelationFromFact(FormulaView fact)
+{
+	TypeSignature typeSignature = CreateTypeSignature(
+		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
+	return (Relation) {.termForm = fact.form, .typeSignature = typeSignature};
+}
+
+
 void SetupRelationRegistry(void)
 {
 	// The lookup B-tree stores pointers to RelationRecords items.

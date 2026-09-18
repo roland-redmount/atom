@@ -67,9 +67,11 @@ void testAssertOverlapsService(void)
 	// This fact is already provided by the (+ + =) service
 	Atom knownFact = CStringToTerm("+ 1 + 1 = 2");
 
-	// Asserting the fact does nothing.
+	// Asserting the fact does nothing
+	// NOTE: this requires compiling a FILTER service
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(knownFact), 0), ASSERT_EXISTED)
 	
+	RemoveAllCompiledServices();
 	ReleaseFormula(knownFact);
 }
 
@@ -81,19 +83,18 @@ void testAssertOverlapsService(void)
  */
 void testAssertContradictsStoredFact(void)
 {
+	// Assert a fact
 	Atom fact = CStringToTerm("prec \"a\" succ \"b\"");
-	Atom negatedFact = CStringToTerm("! prec \"a\" succ \"b\"");
-	size8 nColumns = FormulaGetActors(negatedFact)->nAtoms;
-	TypeSignature typeSignature = CreateTypeSignature(
-		TypedTuplePeekAtomTypes(FormulaGetActors(negatedFact)), nColumns);
-
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_OK)
+	Relation relation = RelationFromFact(FormulaGetView(fact));
+	ASSERT_TRUE(RelationExists(relation))
 
 	// (! prec "a" succ "b") is refused, contradicting the fact just asserted
+	Atom negatedFact = CStringToTerm("! prec \"a\" succ \"b\"");
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(negatedFact), 0), ASSERT_FAIL)
 	// and the refused assert leaves no relation behind
-	Relation relation = {.termForm = FormulaGetForm(negatedFact), .typeSignature = typeSignature};
-	ASSERT_FALSE(RelationExists(relation))
+	Relation negatedRelation = RelationFromFact(FormulaGetView(negatedFact));
+	ASSERT_FALSE(RelationExists(negatedRelation))
 	
 	// Retracting the fact it contradicts makes the same assert succeed
 	RetractFact(FormulaGetView(fact));
@@ -103,6 +104,8 @@ void testAssertContradictsStoredFact(void)
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_FAIL)
 
 	RetractFact(FormulaGetView(negatedFact));
+	DropRelation(relation);
+	DropRelation(negatedRelation);
 	ReleaseFormula(negatedFact);
 	ReleaseFormula(fact);
 }
@@ -117,39 +120,41 @@ void testAssertContradictsDerivedFact(void)
 {
 	// (! even x) follows from (odd x), so (odd 3) entails (! even 3)
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
-	Atom odd3 = CStringToTerm("odd 3");
-	Atom even3 = CStringToTerm("even 3");
-	Atom even4 = CStringToTerm("even 4");
 
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(odd3), 0), ASSERT_OK)
+	Atom odd3 = CStringToTerm("odd 3");
+	FormulaView odd3View = FormulaGetView(odd3);
+	ASSERT_INT32_EQUAL(AssertFact(odd3View, 0), ASSERT_OK)
 
 	// (even 3) is refused: no relation holds (! even 3), but the rule derives it
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even3), 0), ASSERT_FAIL)
+	// from the (odd 3) fact
+	Atom even3 = CStringToTerm("even 3");
+	FormulaView even3View = FormulaGetView(even3);
+	ASSERT_INT32_EQUAL(AssertFact(even3View, 0), ASSERT_FAIL)
 	// no relation was created
-	Relation relation = {
-		.termForm = FormulaGetForm(even3),
-		.typeSignature = CreateTypeSignature(
-			TypedTuplePeekAtomTypes(FormulaGetActors(even3)),
-			FormulaGetActors(even3)->nAtoms
-		)
-	};
-	ASSERT_FALSE(RelationExists(relation))
+	Relation evenRelation = RelationFromFact(even3View);
+	ASSERT_FALSE(RelationExists(evenRelation))
+	ReleaseFormula(even3);
 
 	// (even 4) is accepted, as the rule derives (! even 4) only from (odd 4),
-	// which is not a fact
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even4), 0), ASSERT_OK)
+	// which has not been asserted
+	Atom even4 = CStringToTerm("even 4");
+	FormulaView even4View = FormulaGetView(even4);
+	ASSERT_INT32_EQUAL(AssertFact(even4View, 0), ASSERT_OK)
+	ASSERT_TRUE(RelationExists(evenRelation))
+	RetractFact(even4View);
+	DropRelation(evenRelation);
+	ReleaseFormula(even4);
+
+	RetractFact(odd3View);
+	DropRelation(RelationFromFact(odd3View));
+	ReleaseFormula(odd3);
 
 	DictionaryRemoveClause(&entry);
-	RetractFact(FormulaGetView(even4));
-	RetractFact(FormulaGetView(odd3));
-	ReleaseFormula(even4);
-	ReleaseFormula(even3);
-	ReleaseFormula(odd3);
 }
 
 
 /**
- * A term holding no variable is a fact, and asserting it is asserting that fact.
+ * A term holding no variable is a fact
  */
 void testAssertFormulaFact(void)
 {
@@ -165,6 +170,7 @@ void testAssertFormulaFact(void)
 	ReleaseFormula(negatedFact);
 
 	RetractFact(FormulaGetView(fact));
+	DropRelation(RelationFromFact(FormulaGetView(fact)));
 	ReleaseFormula(fact);
 }
 

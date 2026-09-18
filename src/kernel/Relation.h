@@ -15,6 +15,7 @@
 // #include "kernel/ServiceRegistry.h"
 #include "btree/btree.h"
 #include "lang/Atom.h"
+#include "lang/formula.h"
 
 
 struct s_TupleStore;
@@ -79,6 +80,12 @@ bool IsNullRelation(Relation signature);
  */
 data64 RelationHash(Relation signature, data64 initialHash);
 
+/**
+ * Return the relation (signature) that the given fact belongs to,
+ * based on its atom types. The returned Relation might not exist
+ * in the relation registry.
+ */
+Relation RelationFromFact(FormulaView fact);
 
 /**
  * Register a new Relation, or aquire a reference to one that already exists.
