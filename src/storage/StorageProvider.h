@@ -18,8 +18,13 @@
  */
 typedef struct s_RelationReaderSpec
 {
-	IOSignature ioSignature;		// NOTE: this is w.r.t the provider's argument order
-	void * readerData;				// any reader-specific data
+	// The reader's IO signature, w.r.t the provider's argument order.
+	// The provider is not aware of the canonical argument order, which is
+	// determined by Relation.termForm. 
+	IOSignature ioSignature;
+	// Any reader-specific data, owned by the reader
+	void * readerData;
+	// The size of the state data required in bytes
 	size32 stateSize;
 
 	/**

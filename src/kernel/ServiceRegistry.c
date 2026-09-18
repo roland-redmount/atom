@@ -195,7 +195,7 @@ static void removeService(Service const * service)
 	// Detach the root operator from the service.
 	// This may cause the operator to be deleted, and possibly its descendants.
 	DetachOperator(service->op);
-	// ReleaseRelation(service->relation);
+	ReleaseRelation(service->relation);
 	BTreeDeleteResult result = BTreeDelete(services, service, 0);
 	ASSERT(result == BTREE_DELETED)
 }
@@ -203,7 +203,6 @@ static void removeService(Service const * service)
 
 Service CreateService(Relation relation, IOSignature ioSignature, Operator * op)
 {
-	ASSERT(op->type != OPERATOR_MACHINE)
 	Service service = {
 		.relation = relation,
 		.ioSignature = ioSignature,
@@ -212,51 +211,33 @@ Service CreateService(Relation relation, IOSignature ioSignature, Operator * op)
 	AcquireRelation(relation);
 	AttachOperator(op, relation);
 
-	// Find descendants of the given operator with an attached service.
-	// The given service is a dependent of these operators' services.
-	ResizingArray descendantsArray;
-	CreateResizingArray(&descendantsArray, sizeof(Operator *), 10);
-	findOperatorDescendants(op, &descendantsArray);
-	// Add corresponding records to the ancestor table.
-	// NOTE: any duplicates in the array will be rejected by the B-tree
-	Operator ** descendants = ResizingArrayGetMemory(&descendantsArray);
-	for(index32 i = 0; i < descendantsArray.nElements; i++) {
-		ASSERT(descendants[i] != op)
-		OperatorAncestor pair = {.op = descendants[i], .ancestor = op};
-		BTreeInsert(operatorAncestors, &pair);
+	if(op->type == OPERATOR_MACHINE) {
+		// Any query of this term form could match this service, so
+		// whatever was compiled for such a query it is incomplete.
+		// QUESTION: the invalidation scope seems to broad: wouldn't it be enough to invalidate
+		// services from the same relation (so that type signature must agree) ?
+		InvalidateServicesByTermForm(relation.termForm);
 	}
-	FreeResizingArray(&descendantsArray);
+	else {
+		// Find descendants of the given operator with an attached service.
+		// The given service is a dependent of these operators' services.
+		ResizingArray descendantsArray;
+		CreateResizingArray(&descendantsArray, sizeof(Operator *), 10);
+		findOperatorDescendants(op, &descendantsArray);
+		// Add corresponding records to the ancestor table.
+		// NOTE: any duplicates in the array will be rejected by the B-tree
+		Operator ** descendants = ResizingArrayGetMemory(&descendantsArray);
+		for(index32 i = 0; i < descendantsArray.nElements; i++) {
+			ASSERT(descendants[i] != op)
+			OperatorAncestor pair = {.op = descendants[i], .ancestor = op};
+			BTreeInsert(operatorAncestors, &pair);
+		}
+		FreeResizingArray(&descendantsArray);
 
+		nCompiledServices++;
+	}
 	// add to the service registry
 	ASSERT(BTreeInsert(services, &service) == BTREE_INSERTED)
-
-	nCompiledServices++;
-	return service;
-}
-
-
-/**
- * This is only used by TupleStore
- */
-Service CreatePrimitiveService(Relation relation, IOSignature ioSignature, Operator * op)
-{
-	ASSERT(op->type == OPERATOR_MACHINE)
-	Service service = {
-		.relation = relation,
-		.ioSignature = ioSignature,
-		.op = op
-	};
-	AttachOperator(op, relation);
-
-	// add to the service registry
-	ASSERT(BTreeInsert(services, &service) == BTREE_INSERTED)
-
-	// Any query of this term form could match this service, so
-	// whatever was compiled for such a query it is incomplete.
-	// QUESTION: the invalidation scope seems to broad: wouldn't it be enough to invalidate
-	// services from the same relation (so that type signature must agree) ?
-	InvalidateServicesByTermForm(relation.termForm);
-
 	return service;
 }
 
@@ -272,7 +253,6 @@ void RemoveService(Relation relation, Operator const * op)
 	Service service;
 	bool found = findService(relation, op, &service);
 	ASSERT(found)
-	ASSERT(service.op->type != OPERATOR_MACHINE)
 	removeService(&service);
 }
 

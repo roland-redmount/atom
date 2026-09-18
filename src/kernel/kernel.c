@@ -306,10 +306,12 @@ static void createCoreRelation(uint32 relationId)
 		.typeSignature = typeSignature
 	};
 	CreateRelationBootstrap(kernel.coreRelations[relationId], kernel.corePredicateForms[formId]);
-	
 	kernel.coreTupleStores[relationId] = CreateTupleStore(
 		kernel.coreRelations[relationId],
 		&btreeStorageProvider, corePredicateArity[formId], kernel.corePredicateRoleIndex[formId]);
+	// Release the reference obtained from CreateRelationBootstrap(),
+	// since TupleStore and associated operators now hold references
+	ReleaseRelation(kernel.coreRelations[relationId]);
 }
 
 

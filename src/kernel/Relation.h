@@ -104,11 +104,6 @@ void CreateRelationBootstrap(Relation relation, Atom predicateForm);
 Relation CreateRelationFromTerm(Atom term);
 
 /**
- * Set the relation's tuple store. This should only be called from CreateTupleStore().
- */
-// void RelationSetTupleStore(Relation relation, struct s_TupleStore * store);
-
-/**
  * Return the TupleStore associated with this Relation, or 0 if none exists.
  */
 struct s_TupleStore * RelationGetTupleStore(Relation relation);

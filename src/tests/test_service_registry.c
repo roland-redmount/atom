@@ -52,7 +52,8 @@ static void setupFixture(void)
 static Service addDummyMachineOperator(TupleStore * store)
 {
 	RelationReaderSpec dummyReaderspec = {.ioSignature = exampleIOSignature};
-	return TupleStoreAddReader(store, &dummyReaderspec);
+	Operator * op = CreateMachineOperator(EXAMPLE_FORM_ARITY, 0, &dummyReaderspec, 0);
+	return CreateService(store->relation, exampleIOSignature, op);
 }
 
 

@@ -1418,6 +1418,12 @@ static void recurseFinalizeContext(OperatorContext * context)
 
 //------------------------------------- OPERATOR_MACHINE -----------------------------------------
 
+typedef struct s_MachineOperatorContext {
+	bool isExhausted;						// required for stateless services
+	Atom arguments[RELATION_MAX_ARITY];		// in the provider order	
+	byte state[];							// state size specified with CreateMachineOperator()
+} MachineOperatorContext;
+
 
 // Permute the caller's arguments into the provider order, and back again
 static void machineReadArguments(OperatorContext * context, MachineOperatorContext * machineContext)
@@ -1437,7 +1443,7 @@ static void machineWriteArguments(
 static void machineSetupContext(OperatorContext * context)
 {
 	MachineOperatorContext * machineContext = (MachineOperatorContext *) &context->data;
-	RelationReaderSpec const * readerSpec = context->op->impl.machine.readerSpec;
+	RelationReaderSpec const * readerSpec = &(context->op->impl.machine.readerSpec);
 	// setupState() reads the input arguments, so permute them first
 	machineReadArguments(context, machineContext);
 	if(readerSpec->setupState) {
@@ -1458,7 +1464,7 @@ static bool machineCall(OperatorContext * context)
 		return false;
 
 	machineReadArguments(context, machineContext);
-	RelationReaderSpec * readerSpec = context->op->impl.machine.readerSpec;
+	RelationReaderSpec const * readerSpec = &(context->op->impl.machine.readerSpec);
 	bool result = readerSpec->call(
 		machineContext->state,
 		machineContext->arguments,
@@ -1483,7 +1489,7 @@ static bool machineCall(OperatorContext * context)
 static void machineFinalizeContext(OperatorContext * context)
 {
 	MachineOperatorContext * machineContext = (MachineOperatorContext *) &context->data;
-	RelationReaderSpec * readerSpec = context->op->impl.machine.readerSpec;
+	RelationReaderSpec const * readerSpec = &(context->op->impl.machine.readerSpec);
 	if(readerSpec->finalizeState) {
 		readerSpec->finalizeState(
 			machineContext->state,
@@ -1495,13 +1501,13 @@ static void machineFinalizeContext(OperatorContext * context)
 
 
 Operator * CreateMachineOperator(
-	size8 nArguments, index8 const indexOrder[], RelationReaderSpec * readerSpec, void * storage)
+	size8 nArguments, index8 const indexOrder[], RelationReaderSpec const * readerSpec, void * storage)
 {
 	ASSERT(nArguments <= RELATION_MAX_ARITY)
 	Operator * op = createOperator(
 		OPERATOR_MACHINE, nArguments, sizeof(MachineOperatorContext) + readerSpec->stateSize);
 	op->impl.machine.storage = storage;
-	op->impl.machine.readerSpec = readerSpec;
+	op->impl.machine.readerSpec = *readerSpec;
 	allocateIndexOrder(op);
 	CopyMemory(indexOrder, op->indexOrder, nArguments);
 #ifdef DEBUG
@@ -1513,11 +1519,9 @@ Operator * CreateMachineOperator(
 
 static void teardownMachineOperator(Operator * op)
 {
-	// Deallocation of readers is handled by DropTupleStore()
-
-	// RelationReader const * reader = op->impl.machine.reader;
-	// if(reader->finalizeReader)
-	// 	reader->finalizeReader(reader->readerData);
+	RelationReaderSpec * readerSpec = &(op->impl.machine.readerSpec);
+	if(readerSpec->finalizeReader)
+		readerSpec->finalizeReader(readerSpec->readerData, op->impl.machine.storage);
 }
 
 

@@ -3,6 +3,11 @@
 #include "kernel/TupleStore.h"
 #include "memory/pool.h"
 
+// These are defined in Relation.c
+extern void RelationAttachTupleStore(Relation relation, TupleStore * store);
+void RelationDetachTupleStore(Relation relation, TupleStore * store);
+
+
 /**
  * Pool allocation for structures
  */
@@ -16,34 +21,25 @@ static TupleStore * allocateTupleStore(void)
 }
 
 
-void * readerPool = 0;
-
-RelationReader * AllocateRelationReader(void)
+static IOSignature TupleStoreGetCanonicalIOSignature(TupleStore const * store, IOSignature readerSignature)
 {
-	if(!readerPool)
-		readerPool = CreatePool(sizeof(RelationReader));
-	return PoolAllocate(readerPool);
+	IOSignature canonicalSignature = {.parameterIO = {0}};
+	for(index8 j = 0; j < store->nColumns; j++) {
+		canonicalSignature.parameterIO[store->indexColumns[j]] = readerSignature.parameterIO[j];
+	}
+	return canonicalSignature;
 }
 
-// defined in ServiceRegistry.c
-extern Service CreatePrimitiveService(Relation relation, IOSignature ioSignature, Operator * op);
 
 static Service createOperatorAndService(TupleStore const * store, RelationReaderSpec * readerSpec)
 {
 	Operator * op = CreateMachineOperator(
 		store->nColumns, store->indexColumns, readerSpec, store->storage);
 
-	// We must permute the reader IOSignature to match the Service order
-	IOSignature serviceIOSignature = {.parameterIO = {0}};
-	for(index8 j = 0; j < store->nColumns; j++) {
-		serviceIOSignature.parameterIO[store->indexColumns[j]] = readerSpec->ioSignature.parameterIO[j];
-	}
-	return CreatePrimitiveService(store->relation, serviceIOSignature, op);
+	IOSignature serviceIOSignature = TupleStoreGetCanonicalIOSignature(store, readerSpec->ioSignature);
+	return CreateService(store->relation, serviceIOSignature, op);
 }
 
-
-// This is defined in Relation.c
-extern void RelationSetTupleStore(Relation relation, TupleStore * store);
 
 TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provider, size8 nColumns, index8 const indexColumns[])
 {
@@ -52,7 +48,7 @@ TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provide
 	store->nColumns = nColumns;
 	store->provider = provider;
 	AcquireRelation(relation);
-	RelationSetTupleStore(relation, store);
+	RelationAttachTupleStore(relation, store);
 
 	// setup index column array
 	if(indexColumns)
@@ -63,16 +59,18 @@ TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provide
 			store->indexColumns[i] = i;
 	}
 
-	// Call the storage provider to setup the relation implementation and its readers
-	store->storage = provider->setupStorage(nColumns, &(store->nReaders));
-	// Setup readers
-	RelationReader ** readerSlot = &(store->firstReader);
-	for(index32 i = 0; i < store->nReaders; i++) {
-		*readerSlot = AllocateRelationReader();
-		provider->setupReader(&((*readerSlot)->spec), i, store->storage);
+	// Call the storage provider to setup the relation implementation
+	// and determine the number of readers
+	size32 nReaders;
+	store->storage = provider->setupStorage(nColumns, &nReaders);
+	// Setup readers. Here we call the provider to fill out a readerSpec,
+	// then we hand it over to machine operator.
+	RelationReaderSpec readerSpec;
+	for(index32 i = 0; i < nReaders; i++) {
+		readerSpec = (RelationReaderSpec) {0};
+		provider->setupReader(&readerSpec, i, store->storage);
 		// setup the MACHINE operator and primitive service
-		createOperatorAndService(store, &((*readerSlot)->spec));
-		readerSlot = &((*readerSlot)->next);
+		createOperatorAndService(store, &readerSpec);
 	}
 	return store;
 }
@@ -82,34 +80,10 @@ void DropTupleStore(TupleStore * store)
 {
 	// If the relation table has storage, it must be empty
 	ASSERT(!TupleStoreIsWritable(store) || (TupleStoreNTuples(store) == 0))
-
-	// free readers
-	RelationReader * reader = store->firstReader;
-	while(reader) {
-		if(reader->spec.finalizeReader)
-			reader->spec.finalizeReader(reader->spec.readerData, store->storage);
-		RelationReader * tmp = reader;
-		reader = reader->next;
-		PoolFreeItem(readerPool, tmp);
-	}
+	RelationDetachTupleStore(store->relation, store);
+	ReleaseRelation(store->relation);
 	store->provider->free(store->storage);
 	PoolFreeItem(storePool, store);
-}
-
-
-Service TupleStoreAddReader(TupleStore * store, RelationReaderSpec const * readerSpec)
-{
-	RelationReader * reader = AllocateRelationReader();
-	reader->spec = *readerSpec;		// store a copy
-
-	// Append to the list of readers
-	RelationReader ** readerSlot = &(store->firstReader);
-	while(*readerSlot)
-		readerSlot = &((*readerSlot)->next);
-	*readerSlot = reader;
-	store->nReaders++;
-
-	return createOperatorAndService(store, &(reader->spec));
 }
 
 

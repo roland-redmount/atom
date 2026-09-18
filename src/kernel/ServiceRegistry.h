@@ -34,10 +34,8 @@ void SetupServiceRegistry(void);
 
 /**
  * Create a new service with the given signature and Operator, adding it to
- * the service registry. The operator cannot be a MACHINE operator.
- * The relation must exist before this call.
- * Attaches the new Service to the operator.
- * Returns a copy of the created service.
+ * the service registry. Attaches the Relation to the Operator and acquires
+ * the Relation. Returns a copy of the created Service.
  * 
  * NOTE: For services whose form contain repeated roles, such as `(a b b)`,
  * the signature must be unique under form permutation: for example, the two services
@@ -53,6 +51,7 @@ void SetupServiceRegistry(void);
  * that pointers are valid until the Service is removed.
  */
 Service CreateService(Relation relation, IOSignature ioSignature, Operator * op);
+
 
 /**
  * Return true of the service's operator is an OPERATOR_MACHINE.

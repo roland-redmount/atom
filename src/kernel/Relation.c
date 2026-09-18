@@ -72,7 +72,8 @@ void CreateRelationBootstrap(Relation relation, Atom predicateForm)
 	RelationRecord record = {
 		.signature = relation,
 		.predicateForm = predicateForm,
-		.ownsForm = true
+		.ownsForm = true,
+		.referenceCount = 1
 	};
 	IFactAcquire(relation.termForm);
 	// Store a copy of the record in the B-tree
@@ -111,14 +112,28 @@ void ReleaseRelation(Relation relation)
 	}
 }
 
-
-void RelationSetTupleStore(Relation relation, TupleStore * store)
+/**
+ * Set the relation's tuple store. This should only be called from CreateTupleStore().
+ */
+void RelationAttachTupleStore(Relation relation, TupleStore * store)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
 	ASSERT(!record->tupleStore)
 	record->tupleStore = store;	
 }
+
+/**
+ * Unset the relation's tuple store. This should only be called from CreateTupleStore().
+ */
+void RelationDetachTupleStore(Relation relation, TupleStore * store)
+{
+	RelationRecord * record = findRelationRecord(relation);
+	ASSERT(record)
+	ASSERT(record->tupleStore)
+	record->tupleStore = 0;	
+}
+
 
 /**
  * Return the TupleStore associated with this Relation, or 0 if none exists.
@@ -170,10 +185,7 @@ void DropRelation(Relation relation)
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
 
-	if(record->tupleStore)
-		DropTupleStore(record->tupleStore);		// should remove primitive services
-
-	// Remove any other services associated with the relation
+	// Remove all services associated with the relation
 	Service const * service;
 	do {
 		ServiceIterator iterator;
@@ -190,6 +202,9 @@ void DropRelation(Relation relation)
 			RemoveService(service->relation, service->op);
 		}
 	} while(service);
+
+	if(record->tupleStore)
+		DropTupleStore(record->tupleStore);
 
 	// The relation should now have been removed via ReleaseRelation()
 	ASSERT(!RelationExists(relation))

@@ -11,12 +11,6 @@ struct s_RelationReader;
 typedef struct s_Operator Operator;
 typedef struct s_OperatorContext OperatorContext;
 
-typedef struct s_MachineOperatorContext {
-	bool isExhausted;						// required for stateless services
-	Atom arguments[RELATION_MAX_ARITY];		// in the provider order	
-	byte state[];							// state size specified with CreateMachineOperator()
-} MachineOperatorContext;
-
 
 /**
  * An operator is either a machine procedure or an operation on relations.
@@ -259,9 +253,7 @@ struct s_Operator {
 		} filter;
 		// for OPERATOR_MACHINE
 		struct {
-			// NOTE: this is not const, since operator calls may modify reader.spec.readerData
-			// It might be better not to have readerData in the spec?
-			RelationReaderSpec * readerSpec;
+			RelationReaderSpec readerSpec;
 			void * storage;
 		} machine;
 	} impl;
@@ -297,13 +289,14 @@ Operator * CreatePermuteOperator(
 /**
  * Create a machine code operator. The indexOrder array has length nArguments and gives
  * the order in which the provider yields its tuples; see the ordering contract above.
- * stateSize is the size in bytes of the state data provided to MachineOperatorProvider.call().
- * An operator with stateSize == 0 is assumed to be stateless, and will be called only
- * once.
+ * The readerSpec is copied.
+ * readerSpec.stateSize is the size in bytes of the state data provided to
+ * MachineOperatorProvider.call(). An operator with stateSize == 0 is assumed to be stateless,
+ * and will be called only once.
  * The returned operator has zero references.
  */
 Operator * CreateMachineOperator(
-	size8 nArguments, index8 const indexOrder[], RelationReaderSpec * readerSpec, void * storage);
+	size8 nArguments, index8 const indexOrder[], RelationReaderSpec const * readerSpec, void * storage);
 
 /**
  * Setup a JOIN operator with the specified number of arguments, from two existing

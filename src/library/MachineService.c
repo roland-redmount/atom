@@ -77,7 +77,8 @@ static void addModuleRelation(uint32 moduleID, Relation relation)
 
 /**
  * Read the given parameters (in canonical order), and write the corresponding
- * IOSignature and the indexOrder that orders parameters as 1, 2, ... arity.
+ * IOSignature and the indexOrder that orders parameters as 1, 2, ... arity;
+ * this is the same as the indexOrder given to TupleStore.
  * Returns the corresponding TypeSignature.
  */
 static TypeSignature readSignatureParameters(
@@ -136,15 +137,16 @@ Service RegisterMachineServiceWithState(
 	
 	// Create the relation, unless it already exists
 	Relation relation = {.termForm = termView.form, .typeSignature = typeSignature};
-	AcquireRelation(relation);
-	TupleStore * store = RelationGetTupleStore(relation) ;
+	TupleStore * store = 0;
+	if(RelationExists(relation))
+		store = RelationGetTupleStore(relation);
 	if(store) {
 		// TODO: verify that the store's provider matches ours,
 		// and the index order matches
 	}
 	else {
 		store = CreateTupleStore(relation, &defaultProvider, arity, indexOrder);
-		// addModuleRelation(moduleID, relation);
+		addModuleRelation(moduleID, relation);
 	}
 	ReleaseFormula(term);
 	
@@ -156,7 +158,8 @@ Service RegisterMachineServiceWithState(
 		.finalizeState = finalizeState,
 		.ioSignature = ioSignature
 	};
-	return TupleStoreAddReader(store, &readerSpec);
+	Operator * op = CreateMachineOperator(arity, indexOrder, &readerSpec, store->storage);
+	return CreateService(relation, ioSignature, op);
 }
 
 
