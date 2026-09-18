@@ -314,11 +314,19 @@ data64 RelationHash(Relation relation, data64 initialHash)
 }
 
 
-Relation RelationFromFact(FormulaView fact)
+Relation RelationFromFact(FormulaView term)
 {
+	ASSERT(IsTermForm(term.form))
 	TypeSignature typeSignature = CreateTypeSignature(
-		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	return (Relation) {.termForm = fact.form, .typeSignature = typeSignature};
+		TypedTuplePeekAtomTypes(term.actors), term.actors->nAtoms);
+	
+	// A generator atom corresponds to an AT_ID type
+	for(index8 i = 0; i < term.actors->nAtoms; i++) {
+		if(typeSignature.atomTypes[i] == AT_GENERATOR)
+			typeSignature.atomTypes[i] = AT_ID;
+	}
+
+	return (Relation) {.termForm = term.form, .typeSignature = typeSignature};
 }
 
 

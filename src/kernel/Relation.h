@@ -82,10 +82,11 @@ data64 RelationHash(Relation signature, data64 initialHash);
 
 /**
  * Return the relation (signature) that the given fact belongs to,
- * based on its atom types. The returned Relation might not exist
- * in the relation registry.
+ * based on its atom types. The fact must be a term.
+ * The returned Relation might not exist in the relation registry.
+ * If the fact contains an AT_GENERATOR atom, the relation type is inferred to be AT_ID.
  */
-Relation RelationFromFact(FormulaView fact);
+Relation RelationFromFact(FormulaView term);
 
 /**
  * Register a new Relation, or aquire a reference to one that already exists.

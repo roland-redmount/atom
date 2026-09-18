@@ -231,9 +231,7 @@ void testAssertFormulaRejects(void)
 
 
 /**
- * A conjunction of terms sharing one generator (*) defines an atom. The terms here are
- * the ones a list is built from, so the atom CreateIFact() returns is the list ('A 'B),
- * and CreateListFromArray() yields that same atom.
+ * Test creating an ifact from a conjunction of terms sharing one generator.
  */
 void testCreateIFactList(void)
 {
@@ -286,7 +284,19 @@ void testCreateIFactNewRelations(void)
 	ASSERT_TRUE(ifact.hash != 0)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
 
+	Atom colourNameTerm = CStringToTerm("colour * name \"red\"");
+	Relation colourNameRelation = RelationFromFact(FormulaGetView(colourNameTerm));
+	ReleaseFormula(colourNameTerm);
+	ASSERT_INT32_EQUAL(RelationNRows(colourNameRelation), 1)
+
+	Atom colourCodeTerm = CStringToTerm("colour * code 4");
+	Relation colourCodeRelation = RelationFromFact(FormulaGetView(colourCodeTerm));
+	ReleaseFormula(colourCodeTerm);
+	ASSERT_INT32_EQUAL(RelationNRows(colourCodeRelation), 1)
+
 	IFactRelease(ifact);
+	DropRelation(colourNameRelation);
+	DropRelation(colourCodeRelation);
 	ReleaseFormula(formula);
 }
 
@@ -319,11 +329,8 @@ void testCreateIFactTwoIdColumns(void)
 	// Releasing the atom retracts both facts
 	IFactRelease(ifact);
 	ASSERT_UINT32_EQUAL(RelationNRows(relation), 0)
-	// Cleanup any generated services
-	RemoveAllCompiledServices();
-	// The (pair other) relation is now dropped
-	ASSERT_FALSE(RelationExists(relation))
-
+	
+	DropRelation(relation);
 	ReleaseFormula(formula);
 	ReleaseFormula(sameFormTerm);
 }
@@ -428,10 +435,13 @@ void testCreateIFactTerm(void)
 	ASSERT_TRUE(RelationExists(relation))
 	ASSERT_UINT32_EQUAL(RelationNRows(relation), 1)
 
-	// Releasing the atom retracts the defining fact, which drops the table
-	// and the relation with it
+	// Releasing the atom retracts the defining fact
 	IFactRelease(ifact);
-	ASSERT_FALSE(RelationExists(relation))
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 0)
+	
+	// The relation still exists; drop it manually
+	ASSERT_TRUE(RelationExists(relation))
+	DropRelation(relation);
 
 	ReleaseFormula(term);
 }
@@ -446,33 +456,35 @@ void testCreateIFactIdColumnNotFirst(void)
 {
 	// The roles of this form order as (alpha zebra), so the generator is the second actor
 	Atom term = CStringToTerm("zebra * alpha 1");
+	FormulaView termView = FormulaGetView(term);
 	TypedAtom firstActor = TypedTupleGetElement(FormulaGetActors(term), 0);
 	ASSERT_FALSE(SameTypedAtoms(firstActor, generatorAtom))
 
-	// CreateIFact() here creates a COMPILED service using a FILTER operator
-	// to find its identifying fact tuples
-	Atom ifact = CreateIFact(FormulaGetView(term));
+	// CreateIFact() here creates a compiled service using a FILTER operator
+	// to find its identifying fact tuples, and creates the relation
+	Atom ifact = CreateIFact(termView);
 	ASSERT_TRUE(ifact.hash != 0)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
+	Relation relation = RelationFromFact(termView);
+	ASSERT_TRUE(RelationExists(relation))
 
-	// The same term a second time compares the defining fact against the one stored,
-	// which reads the table by the identified column as well
-	Atom sameIFact = CreateIFact(FormulaGetView(term));
+	// Calling again retrieves the ID atom already created
+	Atom sameIFact = CreateIFact(termView);
 	ASSERT_DATA64_EQUAL(sameIFact.hash, ifact.hash)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 2)
 
 	IFactRelease(sameIFact);
 	IFactRelease(ifact);
 	ReleaseFormula(term);
-	// Clean up the compiled service
-	RemoveAllCompiledServices();
+	// The relation is now empty
+	ASSERT_INT32_EQUAL(RelationNRows(relation), 0)
+	// Dropping the relation also removes the compiled FILTER service
+	DropRelation(relation);
 }
 
 
 /**
- * A clause of one term defines the atom that term defines. The clause form differs
- * from the term form, but the defining fact is the same fact, so both formulas
- * yield the same atom.
+ * Test creating an ifact from a clause.
  */
 void testCreateIFactClause(void)
 {
@@ -487,11 +499,14 @@ void testCreateIFactClause(void)
 
 	// The term states the same fact, so it defines the atom already there
 	Atom termIFact = CreateIFact(FormulaGetView(term));
-	ASSERT_DATA64_EQUAL(termIFact.hash, clauseIFact.hash)
+	ASSERT_TRUE(SameAtoms(termIFact, clauseIFact))
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(clauseIFact), 2)
+	Relation relation = RelationFromFact(FormulaGetView(term));
+	ASSERT_INT32_EQUAL(RelationNRows(relation), 1)
 
 	IFactRelease(termIFact);
 	IFactRelease(clauseIFact);
+	DropRelation(relation);
 	ReleaseFormula(clause);
 	ReleaseFormula(term);
 }
