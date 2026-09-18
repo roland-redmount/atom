@@ -66,8 +66,9 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
 	Relation relation = {.termForm = fact.form, .typeSignature = typeSignature};
-	AcquireRelation(relation);
-	TupleStore * store = RelationGetTupleStore(relation);
+	TupleStore * store = 0;
+	if(RelationExists(relation))
+	 	store = RelationGetTupleStore(relation);
 	if(store) {
 		ASSERT(TupleStoreIsWritable(store))
 	}
@@ -75,9 +76,11 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 		// Create a new tuple store
 		// TODO: what happens if this attempts to registers a service
 		// that already exists for the relation? Should we then construct a UNION service?
-		store = CreateTupleStore(relation, provider, fact.actors->nAtoms, 0);
+		store = CreateTupleStore(
+			relation,
+			provider ? provider : &btreeStorageProvider,
+			fact.actors->nAtoms, 0);
 	}
-	ReleaseRelation(relation);
 
 	// Add the tuple
 	ASSERT(RelationAddTuple(relation, actorsArray, 0) == TUPLE_ADDED)
@@ -149,8 +152,10 @@ void RetractFact(FormulaView fact)
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
 	Relation relation = {.termForm = fact.form, .typeSignature = typeSignature};
 	TupleStore * store = RelationGetTupleStore(relation);
-	if(!store)
+	if(!store) {
+		// The relation has no stored tuples
 		return;
+	}
 	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
 	// Remove the lookup entries before the tuple: removing the tuple releases the
 	// relation's reference to each of its atoms, and releasing the last reference
@@ -181,11 +186,11 @@ static int8 compareIFactTuples(void const * item1, void const * item2, size32 it
 {
 	IFactTuple const * tuple1 = item1;
 	IFactTuple const * tuple2 = item2;
-	ASSERT(tuple1->nColumns == tuple2->nColumns)
 	int8 relationOrder = CompareRelations(tuple1->relation, tuple2->relation);
 	if(relationOrder != 0)
 		return relationOrder;
 	else {
+		ASSERT(tuple1->nColumns == tuple2->nColumns)
 		if(tuple1->idColumn < tuple2->idColumn)
 			return -1;
 		else if(tuple1->idColumn > tuple2->idColumn)
@@ -326,7 +331,9 @@ Atom CreateIFact(FormulaView formula)
 			// Begin new conjunction, from a new RelationWriter
 			if(i > 0)
 				IFactEndConjunction(&draft);
-			TupleStore * store = RelationGetTupleStore(ifactTuples[i].relation);
+			TupleStore * store = 0;
+			if(RelationExists(ifactTuples[i].relation))
+				store = RelationGetTupleStore(ifactTuples[i].relation);
 			if(!store) {
 				store = CreateTupleStore(
 					ifactTuples[i].relation, &btreeStorageProvider, ifactTuples[i].nColumns, 0);

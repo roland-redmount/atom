@@ -20,8 +20,7 @@
 
 /**
  * Assert and retract two facts of a relation that does not exist beforehand.
- * The first assert creates the relation and its table, and retracting the last
- * fact drops both again.
+ * The first assert creates the relation and its tuple store.
  */
 void testAssertRetract(void)
 {
@@ -52,10 +51,9 @@ void testAssertRetract(void)
 	RetractFact(FormulaGetView(fact2));
 	ASSERT_UINT32_EQUAL(RelationNRows(relation), 1)
 
-	// Retracting the last fact drops the table, and the relation with it
 	RetractFact(FormulaGetView(fact1));
-	ASSERT_FALSE(RelationExists(relation))
 
+	DropRelation(relation);
 	ReleaseFormula(fact2);
 	ReleaseFormula(fact1);
 }

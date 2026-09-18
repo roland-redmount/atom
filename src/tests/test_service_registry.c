@@ -61,10 +61,9 @@ static Service addDummyMachineOperator(TupleStore * store)
  * Register a service with a PERMUTE operators built on the given operator,
  * which must have arity = EXAMPLE_FORM_ARITY
  */
-static Service createPermuteService(Relation relation, Operator * childOperator)
+static Service createIdentityOpService(Relation relation, Operator * childOperator)
 {
-	Operator * op = CreatePermuteOperator(
-		EXAMPLE_FORM_ARITY, 0, 0, 0, (index8[]) {0, 1, 2, 3}, childOperator);
+	Operator * op = CreateIdentityOperator(childOperator);
 	return CreateService(relation, exampleIOSignature, op);
 }
 
@@ -105,14 +104,14 @@ void testInvalidateDependentServices(void)
 		(byte[]) {AT_INT, AT_INT, AT_INT, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation relation1 = {.termForm = fixture.relation.termForm, .typeSignature = typeSignature1};
 	// The Service will acquire the relation
-	Service service1 = createPermuteService(relation1, service.op);
+	Service service1 = createIdentityOpService(relation1, service.op);
 	ASSERT_INT32_EQUAL(service1.op->nParents, 0)
 
 	// A second "compiled" service that depends on the first one
 	TypeSignature typeSignature2 = CreateTypeSignature(
 		(byte[]) {AT_INT, AT_INT, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation relation2 = {.termForm = fixture.relation.termForm, .typeSignature = typeSignature2};
-	Service service2 = createPermuteService(relation2, service1.op);
+	Service service2 = createIdentityOpService(relation2, service1.op);
 	ASSERT_FALSE(service1.op->nParents == 0)
 	// Nothing depends on the compiled service
 	ASSERT_INT32_EQUAL(service2.op->nParents, 0)
@@ -145,7 +144,7 @@ void testInvalidateOnPrimitiveService(void)
 	TypeSignature compiledTypes = CreateTypeSignature(
 		(byte[]) {AT_INT, AT_INT, AT_INT, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation compiledRelation = {.termForm = fixture.relation.termForm, .typeSignature = compiledTypes};
-	createPermuteService(compiledRelation, service.op);
+	createIdentityOpService(compiledRelation, service.op);
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 1)
 
 	// Create a second relation of the fixture form, with distinct atom types,
@@ -153,7 +152,7 @@ void testInvalidateOnPrimitiveService(void)
 	TypeSignature storedTypes = CreateTypeSignature(
 		(byte[]) {AT_LETTER, AT_LETTER, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation storedRelation = {.termForm = fixture.relation.termForm, .typeSignature = storedTypes};
-	TupleStore * store = CreateTupleStore(storedRelation, &btreeStorageProvider, EXAMPLE_FORM_ARITY, 0);
+	CreateTupleStore(storedRelation, &btreeStorageProvider, EXAMPLE_FORM_ARITY, 0);
 
 	// The compiled Service should now be invalidated (??)
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)
@@ -166,23 +165,12 @@ void testInvalidateOnPrimitiveService(void)
 }
 
 
-/*
- * CLAUDE: A signature no B-tree storage service provides, so that a computed service
- * can share the fixture relation with a RelationWriter. A B-tree registers one service
- * per prefix key, which for arity 4 gives IIII, IIIO, IIOO, IOOO and OOOO.
- * The fixture form repeats the role "bar", and this signature is unchanged by the
- * permutation swapping the two occurrences; see the note on CreateService().
- */
-static IOSignature const computedIOSignature = {.parameterIO = {
-	PARAMETER_OUT, PARAMETER_IN, PARAMETER_IN, PARAMETER_IN}};
-
-
 /**
- * Test removing relations with associated services
+ * Test dropping a relations with a compiled service
  */
 void testDropCompiledService(void)
 {
-	// Setup a fixture 
+	// Setup fixture with a relation + tuple store with default provider
 	setupFixture();
 	size32 initialNRelations = RelationRegistryNRelations();
 
@@ -195,13 +183,13 @@ void testDropCompiledService(void)
 	TypeSignature compiledTypes = CreateTypeSignature(
 		(byte[]) {AT_INT, AT_INT, AT_INT, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation compiledRelation = {.termForm = fixture.relation.termForm, .typeSignature = compiledTypes};
-	AcquireRelation(compiledRelation);
-	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), initialNRelations + 1)
 	// NOTE: this construction is incorrect, as compiledRelation has different
 	// type signature than fixture.relation. Doesn't matter here though
-	createPermuteService(compiledRelation, service.op);
+	createIdentityOpService(compiledRelation, service.op);
 	ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices + 2)
 	ASSERT_TRUE(service.op->nParents > 0)
+	// Creating the service will register the relation
+	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), initialNRelations + 1)
 
 	// Dropping the "compiled" relation also removes the compiled service
 	DropRelation(compiledRelation);
@@ -210,13 +198,7 @@ void testDropCompiledService(void)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices + 1)
 	ASSERT_NULL(FindServiceOperator(compiledRelation, exampleIOSignature))
 	// The primitive service is still registered
-	ASSERT_PTR_EQUAL(FindServiceOperator(fixture.relation, computedIOSignature), service.op)
-
-	// Removing the computed service
-	// RemoveService(fixture.relation, computedOperator);
-	// ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), initialNRelations)
-	// ASSERT_NULL(FindServiceOperator(fixture.relation, computedIOSignature))
-	// ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices)
+	ASSERT_PTR_EQUAL(FindServiceOperator(fixture.relation, exampleIOSignature), service.op)
 
 	teardownFixture();
 }
@@ -231,7 +213,6 @@ int main(void)
 	ExecuteTest(testAddRemoveService);
 	ExecuteTest(testInvalidateDependentServices);
 	ExecuteTest(testInvalidateOnPrimitiveService);
-	// ExecuteTest(testComputedServiceOutlivesTable);
 	ExecuteTest(testDropCompiledService);
 
 	UnloadLibraries();

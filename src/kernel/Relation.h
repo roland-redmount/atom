@@ -16,6 +16,7 @@
 #include "btree/btree.h"
 #include "lang/Atom.h"
 
+
 struct s_TupleStore;
 
 
@@ -157,6 +158,12 @@ byte RelationRemoveTuple(Relation signature, Atom const tuple[], uint8 idPositio
  * Drop the relation, all its services, and any associated tuple storage.
  */
 void DropRelation(Relation signature);
+
+/**
+ * Garbage collect any relations that have only primitive services
+ * and whose tuple store is empty.
+ */
+void DropEmptyRelations(void);
 
 /**
  * Release the references this relation holds to its term form, without releasing the relation.

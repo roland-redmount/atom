@@ -5,6 +5,7 @@
 #include "lang/TermForm.h"
 #include "memory/allocator.h"
 #include "util/hashing.h"
+#include "util/ResizingArray.h"
 
 
 TypeSignature CreateTypeSignature(byte const atomTypes[], size8 nColumns)
@@ -153,19 +154,12 @@ byte RelationAddTuple(Relation signature, Atom const tuple[], uint8 idPosition)
 }
 
 
-// size32 RelationNColumns(RelationSignature signature)
-// {
-// 	RelationRecord * record = findRelationRecord(signature);
-// 	return record->nColumns;
-// }
-
-
 size32 RelationNRows(Relation signature)
 {
 	RelationRecord * record = findRelationRecord(signature);
 	ASSERT(record)
 	ASSERT(record->tupleStore)
-	ASSERT(TupleStoreIsEnumerable(record->tupleStore))
+	ASSERT(TupleStoreIsFinite(record->tupleStore))
 	return TupleStoreNTuples(record->tupleStore);
 }
 
@@ -182,9 +176,6 @@ byte RelationRemoveTuple(Relation signature, Atom const tuple[], uint8 idPositio
 
 void DropRelation(Relation relation)
 {
-	RelationRecord * record = findRelationRecord(relation);
-	ASSERT(record)
-
 	// Remove all services associated with the relation
 	Service const * service;
 	do {
@@ -203,11 +194,60 @@ void DropRelation(Relation relation)
 		}
 	} while(service);
 
-	if(record->tupleStore)
+	// If the relation had no tuple store, it has already been removed at this point
+	RelationRecord * record = findRelationRecord(relation);
+	if(record) {
+		// if not, it must have a tupleStore holding the last reference
+		ASSERT(record->tupleStore)
 		DropTupleStore(record->tupleStore);
-
-	// The relation should now have been removed via ReleaseRelation()
+	}
+	// The relation should now have been removed
 	ASSERT(!RelationExists(relation))
+}
+
+
+static bool relationIsEmpty(RelationRecord * record)
+{
+	if(!record->tupleStore || !TupleStoreIsWritable(record->tupleStore)) {
+		// A relation without a tuple store, or with a read-only tuple store
+		// is never considered empty
+		return false;
+	}
+	if(TupleStoreNTuples(record->tupleStore) > 0)
+		return false;
+	// check for a non-primitive service
+	bool hasNonPrimitiveService = false;
+	ServiceIterator iterator;
+	ServiceRegistryIterate(record->signature, &iterator);
+	while(ServiceIteratorNext(&iterator)) {
+		Service const * service = ServiceIteratorPeekService(&iterator);
+		if(service->op->type != OPERATOR_MACHINE) {
+			hasNonPrimitiveService = true;
+			break;
+		}
+	}
+	ServiceIteratorEnd(&iterator);
+	return !hasNonPrimitiveService;
+}
+
+void DropEmptyRelations(void)
+{
+	// collect all empty relations
+	ResizingArray relationsArray;
+	CreateResizingArray(&relationsArray, sizeof(Relation), 10);
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, relationRegistry);
+	while(BTreeIteratorNext(&iterator)) {
+		RelationRecord * record = BTreeIteratorPeekItem(&iterator);
+		if(relationIsEmpty(record))
+			ResizingArrayAppend(&relationsArray, &(record->signature));
+	}
+	BTreeIteratorEnd(&iterator);
+
+	for(index32 i = 0; i < relationsArray.nElements; i++) {
+		Relation * relation = ResizingArrayGetElement(&relationsArray, i);
+		DropRelation(*relation);
+	}
 }
 
 

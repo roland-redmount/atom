@@ -136,9 +136,9 @@ byte TupleStoreRemoveTuple(TupleStore * store, Atom const tuple[], uint8 idPosit
 }
 
 
-bool TupleStoreIsEnumerable(TupleStore const * store)
+bool TupleStoreIsFinite(TupleStore const * store)
 {
-	// The relation is enumerable if the numberOfTuple() function is provided
+	// The relation is finite if the numberOfTuple() function is provided
 	return store->provider->numberOfTuples;
 }
 

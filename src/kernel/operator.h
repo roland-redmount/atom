@@ -287,12 +287,12 @@ Operator * CreatePermuteOperator(
 	index8 const argumentMap[], Operator * childOperator);
 
 /**
- * Create a machine code operator. The indexOrder array has length nArguments and gives
- * the order in which the provider yields its tuples; see the ordering contract above.
- * The readerSpec is copied.
- * readerSpec.stateSize is the size in bytes of the state data provided to
- * MachineOperatorProvider.call(). An operator with stateSize == 0 is assumed to be stateless,
- * and will be called only once.
+ * Create a machine code operator.
+ * The indexOrder array gives the order in which the provider yields its tuples;
+ * if set to zero, the identity order is assumed. See the ordering contract above.
+ * The readerSpec is copied. readerSpec.stateSize is the size in bytes of the state data
+ * provided to MachineOperatorProvider.call(). An operator with stateSize == 0 is assumed
+ * to be stateless,and will be called only once.
  * The returned operator has zero references.
  */
 Operator * CreateMachineOperator(

@@ -81,7 +81,7 @@ typedef struct s_StorageProvider {
 	 * Setup the implementation for a new relation. This must allocate and initialize
 	 * any necessary storage, and return a pointer to it. If no storage is required,
 	 * this function should do nothing and return 0. The nReaders field must be set
-	 * to the number of readers the providers needs to construct.
+	 * to the number of readers the provider needs to construct.
 	 */
 	void * (*setupStorage)(size8 nColumns, size32 * nReaders);
 
@@ -89,6 +89,7 @@ typedef struct s_StorageProvider {
 	 * Callback to setup a reader for the relation. This will be called multiple times
 	 * with readerIndex = 0, 1, ..., nReader-1, where nReaders is the value determined
 	 * by setupStorage(). The storage pointer is the one returned by setupStorage.
+	 * If setupStorage sets nReaders to 0, this pointer may be 0.
 	 */
 	void (*setupReader)(RelationReaderSpec * spec, index32 readerIndex, void * storage);
 

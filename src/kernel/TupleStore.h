@@ -54,13 +54,23 @@ void DropTupleStore(TupleStore * store);
  */
 // IOSignature TupleStoreGetCanonicalIOSignature(TupleStore * store, IOSignature readerSignature);
 
+/**
+ * Return true is the tuple store is writable.
+ * If so, TupleStoreAddTuple() and TupleStoreRemoveTuple() may be called.
+ */
 bool TupleStoreIsWritable(TupleStore const * store);
+
+/**
+ * Return true is the tuple store is finite.
+ * If so, TupleStoreNTuples() may be called.
+ * If the store is writable, it is always finite.
+ */
+bool TupleStoreIsFinite(TupleStore const * store);
+
 
 byte TupleStoreAddTuple(TupleStore * store, Atom const tuple[], uint8 idPosition);
 
 byte TupleStoreRemoveTuple(TupleStore * store, Atom const tuple[], uint8 idPosition);
-
-bool TupleStoreIsEnumerable(TupleStore const * store);
 
 size32 TupleStoreNTuples(TupleStore const * store);
 

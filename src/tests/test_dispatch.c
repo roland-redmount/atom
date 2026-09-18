@@ -124,10 +124,11 @@ void testDispatchNegatedTerm(void)
 	// Create the (even odd) relation
 	TypeSignature typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2);
 	Relation relation = {.termForm = termForm, .typeSignature = typeSignature};
-	AcquireRelation(relation);
+	// We must have a service to dispatch to, so create a B-tree storage
+	CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
 	// Create the (! even odd) relation
 	Relation negatedRelation = {.termForm = negatedTermForm, .typeSignature = typeSignature};
-	AcquireRelation(negatedRelation);
+	CreateTupleStore(negatedRelation, &btreeStorageProvider, 2, 0);
 	ASSERT_FALSE(SameRelations(relation, negatedRelation))
 
 	// Test that dispatches reaches the correct relation
@@ -143,8 +144,8 @@ void testDispatchNegatedTerm(void)
 	ASSERT_TRUE(SameRelations(service.relation, relation))
 	ReleaseFormula(query);
 
-	ReleaseRelation(negatedRelation);
-	ReleaseRelation(relation);
+	DropRelation(negatedRelation);
+	DropRelation(relation);
 	IFactRelease(negatedTermForm);
 	IFactRelease(termForm);
 }
@@ -203,13 +204,13 @@ void testDispatchIterator(void)
 		.termForm = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2)
 	};
-	AcquireRelation(idRelation);
+	CreateTupleStore(idRelation, &btreeStorageProvider, 2, 0);
 	Relation intRelation = {
 		.termForm = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
 	};
-	AcquireRelation(intRelation);
-
+	CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
+	
 	// Only the service with two output parameters matches, so each table contributes
 	// one match
 	Atom query = CStringToTerm("first x second y");
@@ -284,8 +285,8 @@ void testDispatchIterator(void)
 	DispatchIteratorEnd(&iterator);
 	ReleaseFormula(unknownQuery);
 
-	ReleaseRelation(intRelation);
-	ReleaseRelation(idRelation);
+	DropRelation(intRelation);
+	DropRelation(idRelation);
 	IFactRelease(termForm);
 }
 

@@ -1508,8 +1508,13 @@ Operator * CreateMachineOperator(
 		OPERATOR_MACHINE, nArguments, sizeof(MachineOperatorContext) + readerSpec->stateSize);
 	op->impl.machine.storage = storage;
 	op->impl.machine.readerSpec = *readerSpec;
-	allocateIndexOrder(op);
-	CopyMemory(indexOrder, op->indexOrder, nArguments);
+	if(indexOrder) {
+		allocateIndexOrder(op);
+		CopyMemory(indexOrder, op->indexOrder, nArguments);
+	}
+	else
+		setIdentityIndexOrder(op);
+
 #ifdef DEBUG
 	assertIsIndexOrder(op->indexOrder, nArguments);
 #endif
