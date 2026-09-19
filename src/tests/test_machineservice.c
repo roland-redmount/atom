@@ -52,6 +52,7 @@ static void testMachineServiceArgumentOrder(void)
 {
 	Service service = RegisterMachineService(
 		moduleID, "first @1<INT second @2<INT result @3>INT", weighCall);
+	Operator * operator = FindServiceOperator(service);
 
 	index8 firstIndex = roleIndex(service.relation.termForm, "first");
 	index8 secondIndex = roleIndex(service.relation.termForm, "second");
@@ -67,7 +68,7 @@ static void testMachineServiceArgumentOrder(void)
 	arguments[secondIndex] = (Atom) {._int = 4};
 	arguments[resultIndex] = (Atom) {._int = 0};
 
-	OperatorContext * context = OperatorCreateContext(service.op, arguments);
+	OperatorContext * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 	// 340, not the 430 that reading the inputs in column order would give
 	ASSERT_INT64_EQUAL(arguments[resultIndex]._int, 340)
@@ -97,15 +98,16 @@ static void testMachineServiceTestPredicate(void)
 {
 	Service service = RegisterMachineService(
 		moduleID, "even @1<INT", evenCall);
+	Operator * operator = FindServiceOperator(service);
 
 	Atom arguments[1] = {(Atom) {._int = 4}};
-	OperatorContext * context = OperatorCreateContext(service.op, arguments);
+	OperatorContext * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
 	arguments[0] = (Atom) {._int = 7};
-	context = OperatorCreateContext(service.op, arguments);
+	context = OperatorCreateContext(operator, arguments);
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
@@ -150,14 +152,15 @@ static void testMachineServiceIterator(void)
 
 	// A service declares the order its signature writes its arguments in;
 	// see the contract in operator.h
-	ASSERT_UINT32_EQUAL(service.op->indexOrder[0], fromIndex)
-	ASSERT_UINT32_EQUAL(service.op->indexOrder[1], countIndex)
-	ASSERT_UINT32_EQUAL(service.op->indexOrder[2], toIndex)
+	Operator * operator = FindServiceOperator(service);
+	ASSERT_UINT32_EQUAL(operator->indexOrder[0], fromIndex)
+	ASSERT_UINT32_EQUAL(operator->indexOrder[1], countIndex)
+	ASSERT_UINT32_EQUAL(operator->indexOrder[2], toIndex)
 
 	Atom arguments[3];
 	arguments[fromIndex] = (Atom) {._int = 1};
 	arguments[toIndex] = (Atom) {._int = 5};
-	OperatorContext * context = OperatorCreateContext(service.op, arguments);
+	OperatorContext * context = OperatorCreateContext(operator, arguments);
 	for(int64 expected = 1; expected <= 5; expected++) {
 		ASSERT_TRUE(OperatorCall(context))
 		ASSERT_INT64_EQUAL(arguments[countIndex]._int, expected)
@@ -170,7 +173,7 @@ static void testMachineServiceIterator(void)
 	// computing nothing also does
 	arguments[fromIndex] = (Atom) {._int = 5};
 	arguments[toIndex] = (Atom) {._int = 1};
-	context = OperatorCreateContext(service.op, arguments);
+	context = OperatorCreateContext(operator, arguments);
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
@@ -201,8 +204,9 @@ static void testMachineServiceIteratorState(void)
 	second[toIndex] = (Atom) {._int = 12};
 
 	// interleave the two, so that one advancing cannot be mistaken for the other
-	OperatorContext * firstContext = OperatorCreateContext(service.op, first);
-	OperatorContext * secondContext = OperatorCreateContext(service.op, second);
+	Operator * operator = FindServiceOperator(service);
+	OperatorContext * firstContext = OperatorCreateContext(operator, first);
+	OperatorContext * secondContext = OperatorCreateContext(operator, second);
 	for(int64 i = 0; i < 3; i++) {
 		ASSERT_TRUE(OperatorCall(firstContext))
 		ASSERT_INT64_EQUAL(first[countIndex]._int, 1 + i)
@@ -254,19 +258,21 @@ static void testMachineServiceSharedRelation(void)
 	// the second service shares the relation of the first
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 	ASSERT_TRUE(SameRelations(subtractService.relation, sumService.relation))
-	ASSERT_PTR_NOT_EQUAL(subtractService.op, sumService.op)
+	Operator * sumOperator = FindServiceOperator(sumService);
+	Operator * subtractOperator = FindServiceOperator(subtractService);
+	ASSERT_PTR_NOT_EQUAL(subtractOperator, sumOperator)
 
 	// dispatch tells the services apart by query argument types
 	Atom query = CStringToTerm("term 3 term 4 sum t");
 	Service dispatched;
 	index8 permutation[3];
 	ASSERT_TRUE(DispatchQueryFormula(query, &dispatched, permutation))
-	ASSERT_PTR_EQUAL(dispatched.op, sumService.op)
+	ASSERT_PTR_EQUAL(FindServiceOperator(dispatched), sumOperator)
 	ReleaseFormula(query);
 
 	query = CStringToTerm("term 3 term u sum 10");
 	ASSERT_TRUE(DispatchQueryFormula(query, &dispatched, permutation))
-	ASSERT_PTR_EQUAL(dispatched.op, subtractService.op)
+	ASSERT_PTR_EQUAL(FindServiceOperator(dispatched), subtractOperator)
 	ReleaseFormula(query);
 
 	FreeModuleRelations(moduleID);

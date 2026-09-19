@@ -304,9 +304,10 @@ static Operator * compileTerm(
 	if(!dispatchOrCompileAtNewChoicePoint(
 		compileStack, term, mode, &termService, permutation, choiceTree))
 		return 0;
+	Operator * termOperator = FindServiceOperator(termService);
 
 	return createTermOperator(
-		termService.relation.typeSignature, termService.ioSignature, termService.op,
+		termService.relation.typeSignature, termService.ioSignature, termOperator,
 		term.actors, permutation, serviceParameters, clauseMap);
 }
 
@@ -1108,14 +1109,15 @@ static size8 seedVariantsFromServices(
 
 	while(DispatchIteratorNext(&iterator)) {
 		ASSERT(nVariants < MAX_COMPILED_SERVICES)
-		Service const * service = DispatchIteratorPeekService(&iterator);
+		Service service = DispatchIteratorPeekService(&iterator);
 
 		/* CLAUDE: Only a stored (primitive) service is taken over. A compiled service of the query
 		   signature is what an earlier compilation of the same query left behind, and unioning
 		   that into a new one would compound it every time the query compiles. */
 		// NOTE: this should never happen; compilation should not be triggered if a
 		// compiled service already exists.
-		if(!ServiceIsPrimitive(service))
+		Operator * op = DispatchIteratorPeekOperator(&iterator);
+		if(op->type != OPERATOR_MACHINE)
 			continue;
 
 		/* A form whose roles repeat can match under a permutation, which would order the
@@ -1248,7 +1250,8 @@ static size8 compileFilterVariants(
 
 	while(DispatchIteratorNext(&iterator)) {
 		ASSERT(nVariants < MAX_COMPILED_SERVICES)
-		Service const * childService = DispatchIteratorPeekService(&iterator);
+		Service childService = DispatchIteratorPeekService(&iterator);
+		Operator * childOperator = DispatchIteratorPeekOperator(&iterator);
 
 		// The queyy arguments to filter are the ones that correspond to query inputs
 		// but child service outputs.
@@ -1256,7 +1259,7 @@ static size8 compileFilterVariants(
 		size8 nFiltered = 0;
 		for(index8 i = 0; i < arity; i++) {
 			if((queryParameters[permutation[i]].parameter.io == PARAMETER_IN)
-				&& (childService->ioSignature.parameterIO[i] == PARAMETER_OUT))
+				&& (childService.ioSignature.parameterIO[i] == PARAMETER_OUT))
 				filteredArguments[nFiltered++] = i;
 		}
 		// If there are no argument to filter, the child service is an exact match.
@@ -1281,7 +1284,7 @@ static size8 compileFilterVariants(
 					(Atom) {
 						.parameter = {
 							.number = permutation[i] + 1,
-							.atomType = childService->relation.typeSignature.atomTypes[i],
+							.atomType = childService.relation.typeSignature.atomTypes[i],
 							.io = queryParameters[permutation[i]].parameter.io
 						}
 					}
@@ -1290,7 +1293,7 @@ static size8 compileFilterVariants(
 		}
 		// The filter operator takes the arguments of the service it reads, so a form whose
 		// roles repeat needs a permute operator to place them in query argument order
-		variant->op = CreateFilterOperator(childService->op, filteredArguments, nFiltered);
+		variant->op = CreateFilterOperator(childOperator, filteredArguments, nFiltered);
 		variant->op = permuteToClauseArguments(variant->op, permutation, arity);
 		ASSERT(variant->op)
 	}
@@ -1363,30 +1366,29 @@ static size8 compileParameterizedQuery(
 #endif
 
 	for(index8 i = 0; i < nVariants; i++) {
+		// TODO: this should be replaced
+
 		/* CLAUDE: A variant seeded from an existing service replaces it, so that service
 		   has to go before the new one can take its (Relation, IOSignature) key. The order
 		   is what makes this safe: the compiled operator holds the old service's operator
 		   as a branch of its union already, so DetachOperator() leaves the operator
 		   standing, and the variant's own reference keeps the Relation alive across the
 		   exchange. See seedVariantsFromServices(). */
+
+		IOSignature ioSignature = CompiledVariantGetIOSignature(&variants[i]);
+		Service service = (Service) {.relation = variants[i].relation, .ioSignature = ioSignature};
 		if(variants[i].replacedOperator) {
 			ASSERT(variants[i].op != variants[i].replacedOperator)
 			ASSERT(variants[i].replacedOperator->nParents > 0)
-			RemoveService(variants[i].relation, variants[i].replacedOperator);
+			RemoveService(service);
 		}
-
 		// If a variant re-uses operator of an existing service, wrap it in an IDENTITY operator
 		// so that we can attach a service (an operator can only attach to one Service).
 		if(!IsNullRelation(variants[i].op->relation)) {
 			variants[i].op = CreateIdentityOperator(variants[i].op);
 		}
-
 		// Parameter types and the relation were resolved by compileQueryVariants()
-		Service service = CreateService(
-			variants[i].relation,
-			CompiledVariantGetIOSignature(&variants[i]),
-			variants[i].op
-		);
+		CreateService(service, variants[i].op);
 		
 #ifdef DEBUG_COMPILER
 		PrintService(&service);

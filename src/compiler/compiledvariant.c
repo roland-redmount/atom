@@ -47,7 +47,7 @@ void CompiledVariantSetRelation(CompiledVariant * variant, Atom queryTermForm)
 
 
 void CompiledVariantSeedFromService(
-	CompiledVariant * variant, Service const * service, TypedTuple const * queryParameters)
+	CompiledVariant * variant, Service service, TypedTuple const * queryParameters)
 {
 	size8 arity = queryParameters->nAtoms;
 	Atom const * parameters = TypedTuplePeekAtoms(queryParameters);
@@ -59,7 +59,7 @@ void CompiledVariantSeedFromService(
 				(Atom) {
 					.parameter = {
 						.number = i + 1,
-						.atomType = service->relation.typeSignature.atomTypes[i],
+						.atomType = service.relation.typeSignature.atomTypes[i],
 						.io = parameters[i].parameter.io
 					}
 				}
@@ -67,12 +67,10 @@ void CompiledVariantSeedFromService(
 		);
 	}
 	ASSERT(SameTypeSignatures(
-		CompiledVariantGetTypeSignature(variant), service->relation.typeSignature))
+		CompiledVariantGetTypeSignature(variant), service.relation.typeSignature))
 
-	variant->relation = service->relation;
-	// AcquireRelation(variant->relation);
-	variant->op = service->op;
-	variant->replacedOperator = service->op;
+	variant->relation = service.relation;
+	variant->replacedOperator = variant->op = FindServiceOperator(service);
 }
 
 

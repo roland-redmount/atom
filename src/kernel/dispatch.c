@@ -92,7 +92,7 @@ void DispatchIterate(
 	index8 permutation[], DispatchIterator * iterator)
 {
 	ASSERT(IsTermForm(queryTermForm))
-
+	SetMemory(iterator, sizeof(DispatchIterator), 0);
 	iterator->queryParameters = queryParameters;
 	iterator->nParameters = nParameters;
 	iterator->matchMode = matchMode;
@@ -111,22 +111,23 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 			if(!RelationIteratorNext(&(iterator->relationIterator)))
 				return false;
 			ServiceRegistryIterate(
-				RelationIteratorGet(&(iterator->relationIterator)), &(iterator->serviceIterator));
+				RelationIteratorGet(&(iterator->relationIterator)),
+				&(iterator->serviceIterator)
+			);
 			iterator->inRelation = true;
 		}
 
 		// Iterate over candidate services for the current relation
 		Relation relation = RelationIteratorGet(&(iterator->relationIterator));
 		while(ServiceIteratorNext(&(iterator->serviceIterator))) {
-			Service const * currentService = ServiceIteratorPeekService(&(iterator->serviceIterator));
+			ServiceRecord const * record = ServiceIteratorPeekRecord(&(iterator->serviceIterator));
 			if(permutationMatch(
-				relation.termForm, relation.typeSignature, currentService->ioSignature,
+				relation.termForm, relation.typeSignature, record->service.ioSignature,
 				iterator->queryParameters, iterator->nParameters, iterator->matchMode,
 				iterator->permutation))
 			{
-				// Copy the service, as a pointer into the service registry is only
-				// valid until the service iterator moves on.
-				iterator->service = *currentService;
+				iterator->service = record->service;
+				iterator->op = record->op;
 
 				// For DISPATCH_MATCH_EXACT, there can be only one match per relation,
 				// since we cannot have two services with the same IO signagure.
@@ -142,9 +143,15 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 }
 
 
-Service const * DispatchIteratorPeekService(DispatchIterator const * iterator)
+Service DispatchIteratorPeekService(DispatchIterator const * iterator)
 {
-	return &(iterator->service);
+	return iterator->service;
+}
+
+
+Operator * DispatchIteratorPeekOperator(DispatchIterator const * iterator)
+{
+	return iterator->op;
 }
 
 
@@ -188,8 +195,8 @@ bool DispatchParameterizedQuery(
 		*hasNextMatch = false;
 
 	while(DispatchIteratorNext(&iterator)) {
-		Service const * candidate = DispatchIteratorPeekService(&iterator);
-		if(isExcludedCandidate(candidate->relation.typeSignature, excludedSignatures, nExcluded))
+		Service candidate = DispatchIteratorPeekService(&iterator);
+		if(isExcludedCandidate(candidate.relation.typeSignature, excludedSignatures, nExcluded))
 			continue;
 		if(match) {
 			// There are additional matches beyond the one we return
@@ -198,7 +205,7 @@ bool DispatchParameterizedQuery(
 		}
 		match = true;
 		// copy the service struct and its permutation to the caller
-		*service = *candidate;
+		*service = candidate;
 		CopyMemory(candidatePermutation, permutation, nParameters * sizeof(index8));
 		// without a hasNextMatch request we can stop at the first match;
 		// else we continue to determine if there are additional matches

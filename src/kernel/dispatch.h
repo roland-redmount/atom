@@ -94,7 +94,9 @@ typedef struct {
 	ServiceIterator serviceIterator;
 	// whether serviceIterator is positioned within the services of a relation table
 	bool inRelation;
+	// The service and corresponding operator at the current positon
 	Service service;
+	Operator * op;
 #ifdef DEBUG
 	// Relation of the previous match, kept to verify that one query never matches two
 	// services of one relation; see ServiceRegistryAdd()
@@ -128,7 +130,9 @@ bool DispatchIteratorNext(DispatchIterator * iterator);
  * Only valid after DispatchIteratorNext() has returned true, and until the next
  * call to DispatchIteratorNext() or DispatchIteratorEnd().
  */
-Service const * DispatchIteratorPeekService(DispatchIterator const * iterator);
+Service DispatchIteratorPeekService(DispatchIterator const * iterator);
+
+Operator * DispatchIteratorPeekOperator(DispatchIterator const * iterator);
 
 void DispatchIteratorEnd(DispatchIterator * iterator);
 

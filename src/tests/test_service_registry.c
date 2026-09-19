@@ -46,14 +46,16 @@ static void setupFixture(void)
 
 
 /**
- * Add a dummy MACHINE operator to the given TupleStore.
+ * Add a dummy MACHINE operator to the given Relation.
  * This operator cannot evaluate anything, only useful for testing the registry.
  */
-static Service addDummyMachineOperator(TupleStore * store)
+static Service addDummyMachineOperator(Relation relation)
 {
 	RelationReaderSpec dummyReaderspec = {.ioSignature = exampleIOSignature};
 	Operator * op = CreateMachineOperator(EXAMPLE_FORM_ARITY, 0, &dummyReaderspec, 0);
-	return CreateService(store->relation, exampleIOSignature, op);
+	Service service = {.relation = relation, .ioSignature = exampleIOSignature};
+	CreateService(service, op);
+	return service;
 }
 
 
@@ -64,7 +66,9 @@ static Service addDummyMachineOperator(TupleStore * store)
 static Service createIdentityOpService(Relation relation, Operator * childOperator)
 {
 	Operator * op = CreateIdentityOperator(childOperator);
-	return CreateService(relation, exampleIOSignature, op);
+	Service service = {.relation = relation, .ioSignature = exampleIOSignature};
+	CreateService(service, op);
+	return service;
 }
 
 
@@ -79,13 +83,9 @@ void testAddRemoveService(void)
 	setupFixture();
 
 	// Add a dummy primitive service to the relation
-	Service service = addDummyMachineOperator(fixture.store);
-	ASSERT_TRUE(SameRelations(service.op->relation, fixture.relation))
-
-	ASSERT_PTR_EQUAL(
-		FindServiceOperator(fixture.relation, exampleIOSignature),
-		service.op
-	);
+	Service service = addDummyMachineOperator(fixture.store->relation);
+	ASSERT_TRUE(SameRelations(service.relation, fixture.relation))
+	ASSERT_NOT_NULL(FindServiceOperator(service));
 
 	teardownFixture();
 }
@@ -97,30 +97,36 @@ void testAddRemoveService(void)
 void testInvalidateDependentServices(void)
 {
 	setupFixture();
-	Service service = addDummyMachineOperator(fixture.store);
+	Service machineService = addDummyMachineOperator(fixture.store->relation);
+	Operator * machineOp = FindServiceOperator(machineService);
+	ASSERT(machineOp)
 
 	// Hand-build a "compiled" service that depends on the machine service
 	TypeSignature typeSignature1 = CreateTypeSignature(
 		(byte[]) {AT_INT, AT_INT, AT_INT, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation relation1 = {.termForm = fixture.relation.termForm, .typeSignature = typeSignature1};
 	// The Service will acquire the relation
-	Service service1 = createIdentityOpService(relation1, service.op);
-	ASSERT_INT32_EQUAL(service1.op->nParents, 0)
+	Service service1 = createIdentityOpService(relation1, machineOp);
+	Operator * op1 = FindServiceOperator(service1);
+	ASSERT_NOT_NULL(op1)
+	ASSERT_INT32_EQUAL(op1->nParents, 0)
 
 	// A second "compiled" service that depends on the first one
 	TypeSignature typeSignature2 = CreateTypeSignature(
 		(byte[]) {AT_INT, AT_INT, AT_LETTER, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation relation2 = {.termForm = fixture.relation.termForm, .typeSignature = typeSignature2};
-	Service service2 = createIdentityOpService(relation2, service1.op);
-	ASSERT_FALSE(service1.op->nParents == 0)
-	// Nothing depends on the compiled service
-	ASSERT_INT32_EQUAL(service2.op->nParents, 0)
+	Service service2 = createIdentityOpService(relation2, op1);
+	Operator * op2 = FindServiceOperator(service2);
+	ASSERT_NOT_NULL(op2)
+	// The first compiled operator now has parents
+	ASSERT_FALSE(op1->nParents == 0)
+	ASSERT_INT32_EQUAL(op2->nParents, 0)
 
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 2)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices + 3)
 
 	// Removing the machine service should remove both dependent services
-	RemoveService(fixture.relation, service.op);
+	RemoveService(machineService);
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices)
 	// The associated Relations are removed as well
@@ -138,13 +144,15 @@ void testInvalidateDependentServices(void)
 void testInvalidateOnPrimitiveService(void)
 {
 	setupFixture();
-	Service service = addDummyMachineOperator(fixture.store);
+	Service machineService = addDummyMachineOperator(fixture.store->relation);
+	Operator * machineOp = FindServiceOperator(machineService);
+	ASSERT(machineOp)
 
 	// Create a "compiled" Service depending on the machine service
 	TypeSignature compiledTypes = CreateTypeSignature(
 		(byte[]) {AT_INT, AT_INT, AT_INT, AT_LETTER}, EXAMPLE_FORM_ARITY);
 	Relation compiledRelation = {.termForm = fixture.relation.termForm, .typeSignature = compiledTypes};
-	createIdentityOpService(compiledRelation, service.op);
+	createIdentityOpService(compiledRelation, machineOp);
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 1)
 
 	// Create a second relation of the fixture form, with distinct atom types,
@@ -175,7 +183,9 @@ void testDropCompiledService(void)
 	size32 initialNRelations = RelationRegistryNRelations();
 
 	// Add a primitive service to the fixture relation
-	Service service = addDummyMachineOperator(fixture.store);
+	Service machineService = addDummyMachineOperator(fixture.store->relation);
+	Operator * machineOp = FindServiceOperator(machineService);
+	ASSERT(machineOp)
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), initialNRelations)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices + 1)
 
@@ -185,9 +195,9 @@ void testDropCompiledService(void)
 	Relation compiledRelation = {.termForm = fixture.relation.termForm, .typeSignature = compiledTypes};
 	// NOTE: this construction is incorrect, as compiledRelation has different
 	// type signature than fixture.relation. Doesn't matter here though
-	createIdentityOpService(compiledRelation, service.op);
+	Service compiledService = createIdentityOpService(compiledRelation, machineOp);
 	ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices + 2)
-	ASSERT_TRUE(service.op->nParents > 0)
+	ASSERT_TRUE(machineOp->nParents > 0)
 	// Creating the service will register the relation
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), initialNRelations + 1)
 
@@ -196,9 +206,9 @@ void testDropCompiledService(void)
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), initialNRelations)
 	ASSERT_FALSE(RelationExists(compiledRelation))
 	ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices + 1)
-	ASSERT_NULL(FindServiceOperator(compiledRelation, exampleIOSignature))
+	ASSERT_NULL(FindServiceOperator(compiledService))
 	// The primitive service is still registered
-	ASSERT_PTR_EQUAL(FindServiceOperator(fixture.relation, exampleIOSignature), service.op)
+	ASSERT_PTR_EQUAL(FindServiceOperator(machineService), machineOp)
 
 	teardownFixture();
 }

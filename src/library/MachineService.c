@@ -159,7 +159,9 @@ Service RegisterMachineServiceWithState(
 		.ioSignature = ioSignature
 	};
 	Operator * op = CreateMachineOperator(arity, indexOrder, &readerSpec, store->storage);
-	return CreateService(relation, ioSignature, op);
+	Service service = {.relation = relation, .ioSignature = ioSignature};
+	CreateService(service, op);
+	return service;
 }
 
 

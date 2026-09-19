@@ -272,8 +272,8 @@ Atom ListGetElement(Atom list, index32 position)
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT}, parameterIO, listRoleIndex, 3);
 	Operator const * op = FindServiceOperator(
-		relation, CreateIOSignature(parameterIO, 3));
-
+		(Service) {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 3)}
+	);
 	Atom arguments[3];
 	arguments[listRoleIndex[0]] = list;
 	arguments[listRoleIndex[1]] = (Atom) {._int = position};
@@ -298,7 +298,8 @@ index32 ListGetPosition(Atom list, Atom element)
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_IN}, parameterIO, listRoleIndex, 3);
 	Operator const * op = FindServiceOperator(
-		relation, CreateIOSignature(parameterIO, 3));
+		(Service) {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 3)}
+	);
 
 	Atom arguments[3];
 	arguments[listRoleIndex[0]] = list;
@@ -358,7 +359,8 @@ void ListIterate(Atom list, ListIterator * iterator)
 		CopyBytesPermuted(
 			(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT}, parameterIO, listRoleIndex, 3);
 		Operator const * op = FindServiceOperator(
-			relation, CreateIOSignature(parameterIO, 3));
+			(Service) {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 3)}
+		);
 		iterator->context = OperatorCreateContext(op, iterator->queryTuple);
 	}
 	else
@@ -470,16 +472,22 @@ void ListSetup(void)
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 		elementIOSignature.parameterIO, listRoleIndex, 3);
-	listIDOperator = FindServiceOperator(listIDRelation, elementIOSignature);
+	listIDOperator = FindServiceOperator(
+		(Service) {.relation = listIDRelation, .ioSignature = elementIOSignature}
+	);
 	ASSERT(listIDOperator)
-	listLetterOperator = FindServiceOperator(listLetterRelation, elementIOSignature);
+	listLetterOperator = FindServiceOperator(
+		(Service) {.relation = listLetterRelation, .ioSignature = elementIOSignature}
+	);
 	ASSERT(listLetterOperator)
 	// for (list <ID length >INT)
 	IOSignature lengthIOSignature = {0};
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT},
 		lengthIOSignature.parameterIO, listLengthRoleIndex, 2);
-	listLengthOperator = FindServiceOperator(listLengthRelation, lengthIOSignature);
+	listLengthOperator = FindServiceOperator(
+		(Service) {.relation = listLengthRelation, .ioSignature = lengthIOSignature}
+	);
 	ASSERT(listLengthOperator)
 }
 

@@ -31,7 +31,7 @@ void testDispatchToService(void)
 	query = CStringToTerm("+ 3 + 4 = _");
 	index8 permutation[3];
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	ASSERT_UINT32_EQUAL(service.op->type, OPERATOR_MACHINE)
+	ASSERT_UINT32_EQUAL(FindServiceOperator(service)->type, OPERATOR_MACHINE)
 	ReleaseFormula(query);
 
 	// one the following two queries requires form permutation to match
@@ -227,8 +227,9 @@ void testDispatchIterator(void)
 
 	size8 nMatches = 0;
 	while(DispatchIteratorNext(&iterator)) {
-		Service const * service = DispatchIteratorPeekService(&iterator);
-		
+		Service service = DispatchIteratorPeekService(&iterator);
+		Operator * operator = DispatchIteratorPeekOperator(&iterator);
+
 		// The service obtained from the iterator should be the same as the one obtained
 		// fromiDispatchParameterizedQuerys when previous iterations are excluded.
 		Service excludeService;
@@ -237,8 +238,8 @@ void testDispatchIterator(void)
 		ASSERT_TRUE(DispatchParameterizedQuery(
 			FormulaGetForm(query), parameters, 2, DISPATCH_MATCH_EXACT, &excludeService,
 			excludePermutation, excludedTypes, nMatches, &hasNextMatch))
-		ASSERT_TRUE(SameRelations(service->relation, excludeService.relation))
-		ASSERT_PTR_EQUAL(service->op, excludeService.op)
+		ASSERT_TRUE(SameRelations(service.relation, excludeService.relation))
+		ASSERT_PTR_EQUAL(operator, FindServiceOperator(excludeService))
 		for(index8 i = 0; i < 2; i++)
 			ASSERT_UINT32_EQUAL(permutation[i], excludePermutation[i])
 

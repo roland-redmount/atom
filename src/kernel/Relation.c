@@ -177,22 +177,25 @@ byte RelationRemoveTuple(Relation signature, Atom const tuple[], uint8 idPositio
 void DropRelation(Relation relation)
 {
 	// Remove all services associated with the relation
-	Service const * service;
+	bool foundService;
 	do {
+		// NOTE: we should have a GetFirstMatchingItem() in BTree instead of this
 		ServiceIterator iterator;
 		ServiceRegistryIterate(relation, &iterator);
-		service = 0;
+		Service service;
+		foundService = false;
 		while(ServiceIteratorNext(&iterator)) {
-			Service const * candidate = ServiceIteratorPeekService(&iterator);
-			service = candidate;
+			ServiceRecord const * record = ServiceIteratorPeekRecord(&iterator);
+			service = record->service;
+			foundService = true;
 			break;
 		}
 		// Close the iterator, since RemoveService() alters the service registry B-tree
 		ServiceIteratorEnd(&iterator);
-		if(service) {
-			RemoveService(service->relation, service->op);
+		if(foundService) {
+			RemoveService(service);
 		}
-	} while(service);
+	} while(foundService);
 
 	// If the relation had no tuple store, it has already been removed at this point
 	RelationRecord * record = findRelationRecord(relation);
@@ -220,8 +223,8 @@ static bool relationIsEmpty(RelationRecord * record)
 	ServiceIterator iterator;
 	ServiceRegistryIterate(record->signature, &iterator);
 	while(ServiceIteratorNext(&iterator)) {
-		Service const * service = ServiceIteratorPeekService(&iterator);
-		if(service->op->type != OPERATOR_MACHINE) {
+		ServiceRecord const * record = ServiceIteratorPeekRecord(&iterator);
+		if(record->op->type != OPERATOR_MACHINE) {
 			hasNonPrimitiveService = true;
 			break;
 		}

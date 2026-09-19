@@ -617,7 +617,7 @@ static void setupCoreServices(void)
 		IFactRelease(kernel.coreTermForms[i]);
 	}
 
-	// Lookup core services and store in array
+	// Lookup core services operators and store in array
 	kernel.coreOperators[0] = 0;
 	byte parameterIO[CORE_FORMS_MAX_ARITY];
 	for(index32 i = 1; i <= N_CORE_SERVICES; i++) {
@@ -627,10 +627,13 @@ static void setupCoreServices(void)
 			coreServiceParameterIO[i],
 			parameterIO
 		);
-		Relation relation = kernel.coreRelations[relationId];
+		IOSignature ioSignature = CreateIOSignature(
+			parameterIO, corePredicateArity[coreRelationFormId[relationId]]);
 		kernel.coreOperators[i] = FindServiceOperator(
-			relation,
-			CreateIOSignature(parameterIO, corePredicateArity[coreRelationFormId[relationId]])
+			(Service) {
+				.relation = kernel.coreRelations[relationId],
+				.ioSignature = ioSignature
+			}
 		);
 		ASSERT(kernel.coreOperators[i])
 	}

@@ -211,32 +211,18 @@ void IFactReserve(data64 hash)
  * Creates a FILTER operator based on an existing service for the relation.
  * Returns 0 if the relation has no suitable service to filter.
  */
-static Operator * createIdColumnService(Relation relation, index8 idColumn, IOSignature ioSignature)
+static Operator * createIdColumnService(Service service, index8 idColumn)
 {
-	// Find a service yielding an output wherever this one does, and at the identified
-	// column, which is the one the filter tests.
-	Operator * childOperator = 0;
-	ServiceIterator iterator;
-	ServiceRegistryIterate(relation, &iterator);
-	while(!childOperator && ServiceIteratorNext(&iterator)) {
-		Service const * service = ServiceIteratorPeekService(&iterator);
-		size8 nColumns = service->op->nArguments;
-		bool matches = (service->ioSignature.parameterIO[idColumn] == PARAMETER_OUT);
-		for(index8 i = 0; matches && (i < nColumns); i++)
-			matches = DispatchParameterIOMatch(
-				ioSignature.parameterIO[i], service->ioSignature.parameterIO[i],
-				DISPATCH_MATCH_RELAXED);
-		if(matches) {
-			childOperator = service->op;
-		}
-	}
-	ServiceIteratorEnd(&iterator);
+	// Find an all-output service
+	Service allOutputService = service;
+	allOutputService.ioSignature.parameterIO[idColumn] = PARAMETER_OUT;
+	Operator * childOperator = FindServiceOperator(allOutputService);
 	if(!childOperator)
 		return 0;
 	// Create the FILTER operator
 	Operator * op = CreateFilterOperator(childOperator, &idColumn, 1);
 	// Register the new service
-	CreateService(relation, ioSignature, op);
+	CreateService(allOutputService, op);
 	return op;
 }
 
@@ -248,14 +234,22 @@ static Operator * createIdColumnService(Relation relation, index8 idColumn, IOSi
  */
 static Operator const * conjunctionOperator(IFactConjunction const * conjunction)
 {
+	// define the needed IOSignature, with a single input parameter
 	byte parameterIO[conjunction->store->nColumns];
 	for(index8 i = 0; i < conjunction->store->nColumns; i++)
 		parameterIO[i] = (i == conjunction->idColumn) ? PARAMETER_IN : PARAMETER_OUT;
 	IOSignature ioSignature = CreateIOSignature(parameterIO, conjunction->store->nColumns);
-	Operator const * op = FindServiceOperator(conjunction->store->relation, ioSignature);
-	// If the relation lacks the necessary service yet, build it
-	if(!op)
-		op = createIdColumnService(conjunction->store->relation, conjunction->idColumn, ioSignature);
+	Service service = {
+		.relation = conjunction->store->relation,
+		.ioSignature = ioSignature,
+	};
+	// try to find an exact mathing service
+	Operator const * op = FindServiceOperator(service);
+	if(op)
+		return op;
+	// Else, try to find an all-output service and create the required service using
+	// a FILTER operator
+	op = createIdColumnService(service, conjunction->idColumn);
 	ASSERT(op)
 	return op;
 }

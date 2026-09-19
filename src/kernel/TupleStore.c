@@ -31,13 +31,16 @@ static IOSignature TupleStoreGetCanonicalIOSignature(TupleStore const * store, I
 }
 
 
-static Service createOperatorAndService(TupleStore const * store, RelationReaderSpec * readerSpec)
+static void createOperatorAndService(TupleStore const * store, RelationReaderSpec * readerSpec)
 {
 	Operator * op = CreateMachineOperator(
 		store->nColumns, store->indexColumns, readerSpec, store->storage);
 
 	IOSignature serviceIOSignature = TupleStoreGetCanonicalIOSignature(store, readerSpec->ioSignature);
-	return CreateService(store->relation, serviceIOSignature, op);
+	CreateService(
+		(Service) {.relation = store->relation, .ioSignature = serviceIOSignature},
+		op
+	);
 }
 
 

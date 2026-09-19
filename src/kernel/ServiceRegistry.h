@@ -21,9 +21,15 @@
 typedef struct s_Service {
 	Relation relation;
 	IOSignature ioSignature;
-	// Pointer to the root of the operator sub-tree defining this service.
-	Operator * op;
 } Service;
+
+
+typedef struct s_ServiceRecord {
+	Service service;
+	// Pointer to the root of the operator graph defining this service.
+	Operator * op;
+} ServiceRecord;
+
 
 /**
  * Setup an empty service registry. Called during bootstrapping only.
@@ -46,8 +52,7 @@ void SetupServiceRegistry(void);
  * into the B-tree storage structure (they may change over time). This is not great, since
  * the callers's copy may become invalid if the Service is deleted.
  */
-Service CreateService(Relation relation, IOSignature ioSignature, Operator * op);
-
+void CreateService(Service service, Operator * op);
 
 /**
  * Return true of the service's operator is an OPERATOR_MACHINE.
@@ -60,7 +65,7 @@ Service CreateService(Relation relation, IOSignature ioSignature, Operator * op)
  * on a set of rules and facts, and must be invalidated if any of those rules
  * or facts change. See ServiceRegistryInvalidateTermForm().
  */
-bool ServiceIsPrimitive(Service const * service);
+// bool ServiceIsPrimitive(Service const * service);
 
 /**
  * Remove the service identified by the given operator and relation.
@@ -68,7 +73,7 @@ bool ServiceIsPrimitive(Service const * service);
  * This removes the services' operator, and recursively removes all operators
  * and services that depend on it.
  */
-void RemoveService(Relation relation, Operator const * op);
+void RemoveService(Service service);
 
 /**
  * Remove all services for the given relation.
@@ -122,27 +127,26 @@ typedef struct {
 } ServiceIterator;
 
 /**
- * Create iterator over all services for a given relation
+ * Create iterator over all service records for a given relation
  */
 void ServiceRegistryIterate(Relation relation, ServiceIterator * iterator);
 
 bool ServiceIteratorNext(ServiceIterator * iterator);
 
-Service const * ServiceIteratorPeekService(ServiceIterator const * iterator);
+ServiceRecord const * ServiceIteratorPeekRecord(ServiceIterator const * iterator);
 
 void ServiceIteratorEnd(ServiceIterator * iterator);
 
 /**
- * Retrieve the operator of the service for the given relation and IO signature, which
- * must be filled to the relation arity.
- * If a matching service does not exist, returns 0
+ * Retrieve the operator of the service for the given Service.
+ * If the service is not registers, returns 0
  */
-Operator * FindServiceOperator(Relation relation, IOSignature ioSignature);
+Operator * FindServiceOperator(Service service);
 
 /**
  * For debugging
  */
-void PrintService(Service const * service);
+void PrintService(Service service);
 
 /**
  * Dump all tuples of the given relation.
