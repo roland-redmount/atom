@@ -5,7 +5,6 @@
 #include "kernel/lookup.h"
 #include "kernel/multiset.h"
 #include "kernel/Relation.h"
-#include "kernel/RelationTable.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"
 #include "lang/TermForm.h"
@@ -66,14 +65,27 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 	// find existing relation table, or create new
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	Relation relation = CreateRelation(fact.form, typeSignature);
-	RelationTable * table = FindOrCreateRelationTable(relation, &btreeStorageProvider);
-	ReleaseRelation(relation);
+	Relation relation = {.termForm = fact.form, .typeSignature = typeSignature};
+	TupleStore * store = 0;
+	if(RelationExists(relation))
+	 	store = RelationGetTupleStore(relation);
+	if(store) {
+		ASSERT(TupleStoreIsWritable(store))
+	}
+	else {
+		// Create a new tuple store
+		// TODO: what happens if this attempts to registers a service
+		// that already exists for the relation? Should we then construct a UNION service?
+		store = CreateTupleStore(
+			relation,
+			provider ? provider : &btreeStorageProvider,
+			fact.actors->nAtoms, 0);
+	}
+
 	// Add the tuple
-	ASSERT(RelationTableAddTuple(table, actorsArray, 0) == TUPLE_ADDED)
+	ASSERT(RelationAddTuple(relation, actorsArray, 0) == TUPLE_ADDED)
 	LookupAddPredicateRoles(relation, actorsArray);
 
-	ReleaseRelationTable(table);
 	return ASSERT_OK;
 }
 
@@ -132,25 +144,25 @@ void RetractFact(FormulaView fact)
 {
 	// If the fact does not exist, there is nothing to do.
 	// TODO: if the fact is produced by a compiled service and the relation
-	// also has a RelationTable that does not contain the fact, this won't work.
+	// also has storage that does not contain the fact, this won't work.
 	if(!factExists(fact))
 		return;
 
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
 	Relation relation = {.termForm = fact.form, .typeSignature = typeSignature};
-	RelationTable * table = FindRelationTable(relation);
-	if(!table)
+	TupleStore * store = RelationGetTupleStore(relation);
+	if(!store) {
+		// The relation has no stored tuples
 		return;
+	}
 	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
 	// Remove the lookup entries before the tuple: removing the tuple releases the
 	// relation's reference to each of its atoms, and releasing the last reference
 	// to an atom takes all of its lookup entries with it.
 	LookupRemovePredicateRoles(relation, actorsArray);
 	// Remove the tuple. This will not remove defining facts
-	RelationTableRemoveTuple(table, actorsArray, 0);
-	// The RelationTable will be dropped if it was created by AssertFact(),
-	// which retains no reference to it
+	TupleStoreRemoveTuple(store, actorsArray, 0);
 }
 
 
@@ -159,6 +171,7 @@ void RetractFact(FormulaView fact)
  */
 typedef struct s_IFactTuple {
 	Relation relation;
+	size8 nColumns;
 	index8 idColumn;
 	Atom tuple[RELATION_MAX_ARITY];
 } IFactTuple;
@@ -177,6 +190,7 @@ static int8 compareIFactTuples(void const * item1, void const * item2, size32 it
 	if(relationOrder != 0)
 		return relationOrder;
 	else {
+		ASSERT(tuple1->nColumns == tuple2->nColumns)
 		if(tuple1->idColumn < tuple2->idColumn)
 			return -1;
 		else if(tuple1->idColumn > tuple2->idColumn)
@@ -200,7 +214,7 @@ static bool collectTermIFactTuples(
 	ASSERT(termArity <= RELATION_MAX_ARITY)
 
 	// Each term must contain exactly one generator, marking the identified atom.
-	IFactTuple ifactTuple = {0};
+	IFactTuple ifactTuple = {.nColumns = termArity};
 	TypeSignature termSignature = {0};
 	bool hasGenerator = false;
 	index8 i0 = termActorIndex ? * termActorIndex : 0;
@@ -225,7 +239,7 @@ static bool collectTermIFactTuples(
 	if(!hasGenerator)
 		return false;
 
-	ifactTuple.relation = CreateRelation(termForm, termSignature);
+	ifactTuple.relation = (Relation) {.termForm = termForm, .typeSignature = termSignature};
 	ResizingArrayAppend(ifactTupleArray, &ifactTuple);
 
 	if(termActorIndex)
@@ -278,9 +292,6 @@ static bool collectConjunctionIFactTuples(
 
 static void freeIFactTuples(ResizingArray * ifactTupleArray)
 {
-	IFactTuple const * gatheredTuples = ResizingArrayGetMemory(ifactTupleArray);
-	for(index32 i = 0; i < ifactTupleArray->nElements; i++)
-		ReleaseRelation(gatheredTuples[i].relation);
 	FreeResizingArray(ifactTupleArray);
 }
 
@@ -317,13 +328,17 @@ Atom CreateIFact(FormulaView formula)
 	IFactBegin(&draft);
 	for(index32 i = 0; i < nTuples; i++) {
 		if(i == 0 || compareIFactTuples(&ifactTuples[i], &ifactTuples[i-1], sizeof(IFactTuple)) != 0) {
-			// Begin new conjunction, from a new RelationTable
+			// Begin new conjunction, from a new RelationWriter
 			if(i > 0)
 				IFactEndConjunction(&draft);
-			RelationTable * table = FindOrCreateRelationTable(
-				ifactTuples[i].relation, &btreeStorageProvider);
-			IFactBeginConjunction(&draft, table, ifactTuples[i].idColumn);
-			ReleaseRelationTable(table);	// the draft ifact now holds its own reference
+			TupleStore * store = 0;
+			if(RelationExists(ifactTuples[i].relation))
+				store = RelationGetTupleStore(ifactTuples[i].relation);
+			if(!store) {
+				store = CreateTupleStore(
+					ifactTuples[i].relation, &btreeStorageProvider, ifactTuples[i].nColumns, 0);
+			}
+			IFactBeginConjunction(&draft, store, ifactTuples[i].idColumn);
 		}
 		IFactAddTuple(&draft, ifactTuples[i].tuple);
 	}

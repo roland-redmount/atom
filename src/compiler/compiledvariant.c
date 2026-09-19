@@ -1,5 +1,6 @@
 
 #include "compiler/compiledvariant.h"
+#include "kernel/Relation.h"
 
 
 TypeSignature CompiledVariantGetTypeSignature(CompiledVariant const * variant)
@@ -37,15 +38,16 @@ CompiledVariant * FindCompiledVariant(
 
 void CompiledVariantSetRelation(CompiledVariant * variant, Atom queryTermForm)
 {
-	// Check if relation is already set, so that we don't acquire double references
+	// if relation is already set, we do nothing
 	if(!IsNullRelation(variant->relation))
 		return;
-	variant->relation = CreateRelation(queryTermForm, CompiledVariantGetTypeSignature(variant));
+	variant->relation = (Relation) {
+		.termForm = queryTermForm, .typeSignature = CompiledVariantGetTypeSignature(variant)};
 }
 
 
 void CompiledVariantSeedFromService(
-	CompiledVariant * variant, Service const * service, TypedTuple const * queryParameters)
+	CompiledVariant * variant, Service service, TypedTuple const * queryParameters)
 {
 	size8 arity = queryParameters->nAtoms;
 	Atom const * parameters = TypedTuplePeekAtoms(queryParameters);
@@ -57,7 +59,7 @@ void CompiledVariantSeedFromService(
 				(Atom) {
 					.parameter = {
 						.number = i + 1,
-						.atomType = service->relation.typeSignature.atomTypes[i],
+						.atomType = service.relation.typeSignature.atomTypes[i],
 						.io = parameters[i].parameter.io
 					}
 				}
@@ -65,12 +67,10 @@ void CompiledVariantSeedFromService(
 		);
 	}
 	ASSERT(SameTypeSignatures(
-		CompiledVariantGetTypeSignature(variant), service->relation.typeSignature))
+		CompiledVariantGetTypeSignature(variant), service.relation.typeSignature))
 
-	variant->relation = service->relation;
-	AcquireRelation(variant->relation);
-	variant->op = service->op;
-	variant->replacedOperator = service->op;
+	variant->relation = service.relation;
+	variant->replacedOperator = variant->op = FindServiceOperator(service);
 }
 
 
@@ -88,7 +88,7 @@ size8 DiscardUnusedSeedVariants(CompiledVariant variants[], size8 nVariants)
 		// The variant owns its parameters and a reference to the relation. Its operator
 		// still belongs to the service it was seeded from, so there is nothing to release.
 		FreeTypedTuple(variant->parameters);
-		ReleaseRelation(variant->relation);
+		// ReleaseRelation(variant->relation);
 		for(index8 i = v; i < nVariants; i++)
 			variants[i - 1] = variants[i];
 		nVariants--;

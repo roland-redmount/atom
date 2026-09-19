@@ -2,7 +2,6 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/Relation.h"
-#include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
 #include "library/string.h"
 #include "lang/name.h"
@@ -46,12 +45,12 @@ void SetupRelationFixture(
 		fixture->roleIndex[i] = RelationFixtureRoleIndex(fixture, roleNames[i]);
 		atomTypes[i] = AT_ID;
 	}
-	Relation relation = CreateRelation(
-		fixture->termForm, CreateTypeSignature(atomTypes, nColumns));
-	fixture->table = CreateRelationTable(
-		relation, &btreeStorageProvider, fixture->roleIndex);
-	// the table holds its own reference to the relation
-	ReleaseRelation(relation);
+	fixture->relation = (Relation) {
+		.termForm = fixture->termForm,
+		.typeSignature = CreateTypeSignature(atomTypes, nColumns)
+	};
+	fixture->store = CreateTupleStore(
+		fixture->relation, &btreeStorageProvider, nColumns, fixture->roleIndex);
 }
 
 
@@ -65,7 +64,7 @@ void RelationFixtureAddTuple(RelationFixture * fixture, char const * const atomN
 
 	TypedTuple * tuple = CreateTypedTupleFromArray(actors, fixture->nColumns);
 	// the relation table now holds a reference to each atom
-	RelationTableAddTuple(fixture->table, TypedTuplePeekAtoms(tuple), 0);
+	RelationAddTuple(fixture->relation, TypedTuplePeekAtoms(tuple), 0);
 	for(index8 i = 0; i < fixture->nColumns; i++)
 		ReleaseTypedAtom(actors[i]);
 
@@ -86,11 +85,11 @@ void TeardownRelationFixture(RelationFixture * fixture)
 {
 	// the relation table must be empty before it can be removed
 	for(index8 i = 0; i < fixture->nTuples; i++) {
-		RelationTableRemoveTuple(
-			fixture->table, TypedTuplePeekAtoms(fixture->tuples[i]), 0);
+		RelationRemoveTuple(
+			fixture->relation, TypedTuplePeekAtoms(fixture->tuples[i]), 0);
 		FreeTypedTuple(fixture->tuples[i]);
 	}
-	ReleaseRelationTable(fixture->table);
+	DropRelation(fixture->relation);
 	IFactRelease(fixture->termForm);
 	SetMemory(fixture, sizeof(RelationFixture), 0);
 }

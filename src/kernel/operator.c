@@ -1,7 +1,7 @@
 
 #include "btree/btree.h"
 #include "kernel/operator.h"
-#include "kernel/RelationTable.h"
+#include "kernel/Relation.h"
 #include "kernel/tuple.h"
 #include "lang/TermForm.h"			// for PrintTermForm()
 #include "memory/allocator.h"
@@ -14,13 +14,12 @@
  * records as its parent. Contexts created by a caller outside the operator tree have
  * no parent; see OperatorCreateContext().
  */
-static OperatorContext * createChildContext(
+static OperatorContext * createContext(
 	OperatorContext * parent, Operator const * op, Atom arguments[]);
 
 
 /**
- * Create an Operator and setup common fields. The index order is left undeclared,
- * for the caller to derive from its children or take from its provider.
+ * Create an Operator and setup common fields. The index order must be set by the caller.
  * The caller obtains a reference to the created operator.
  */
 static Operator * createOperator(enum OperatorType type, size8 nArguments, size32 contextSize)
@@ -207,6 +206,64 @@ static void assertArgumentsAreDistinct(
 #endif
 
 
+//------------------------------------- OPERATOR_IDENTITY -----------------------------------------
+
+typedef struct s_IdentityContext {
+	OperatorContext * childContext;
+} IdentityContext;
+
+
+Operator * CreateIdentityOperator(Operator * childOperator)
+{
+	Operator * op = createOperator(OPERATOR_IDENTITY, childOperator->nArguments, sizeof(IdentityContext));
+	op->impl.identity.childOperator = childOperator;
+	addParent(childOperator);
+	allocateIndexOrder(op);
+	CopyMemory(childOperator->indexOrder, op->indexOrder, op->nArguments);
+	return op;
+}
+
+
+static void identitySetupContext(OperatorContext * context)
+{
+	IdentityContext * identityContext = (IdentityContext *) &context->data;
+	Operator const * op = context->op;
+
+	// setup child context
+	identityContext->childContext = createContext(
+		context,
+		op->impl.identity.childOperator,
+		context->arguments
+	);
+}
+
+
+static bool identityCall(OperatorContext * context)
+{
+	IdentityContext * identityContext = (IdentityContext *) &context->data;
+	bool success = OperatorCall(identityContext->childContext);
+	if(success) {
+		// copy child arguments
+		TupleCopy(identityContext->childContext->arguments, context->arguments, context->op->nArguments);
+	}
+	return success;
+}
+
+
+static void identityFinalizeContext(OperatorContext * context)
+{
+	IdentityContext * identityContext = (IdentityContext *) &context->data;
+	OperatorFreeContext(identityContext->childContext);
+}
+
+
+static void teardownIdentityOperator(Operator * op)
+{
+	ASSERT(op->type == OPERATOR_IDENTITY)
+	removeParent(op->impl.identity.childOperator);
+}
+
+
 //------------------------------------- OPERATOR_PERMUTE -----------------------------------------
 
 typedef struct s_PermuteContext {
@@ -274,7 +331,7 @@ static void permuteSetupContext(OperatorContext * context)
 			: op->impl.permute.constants[index - nArguments];
 	}
 	// setup child context
-	permuteContext->childContext = createChildContext(
+	permuteContext->childContext = createContext(
 		context,
 		op->impl.permute.childOperator,
 		permuteContext->childArguments
@@ -376,7 +433,7 @@ static void constrainSetupContext(OperatorContext * context)
 		context->arguments, constrainContext->childArguments,
 		op->impl.constrain.argumentMap, nChildArguments);
 
-	constrainContext->childContext = createChildContext(
+	constrainContext->childContext = createContext(
 		context,
 		op->impl.constrain.childOperator,
 		constrainContext->childArguments
@@ -478,7 +535,7 @@ static void filterSetupContext(OperatorContext * context)
 	filterContext->childArguments = Allocate(nArguments * sizeof(Atom));
 	CopyMemory(context->arguments, filterContext->childArguments, nArguments * sizeof(Atom));
 
-	filterContext->childContext = createChildContext(
+	filterContext->childContext = createContext(
 		context,
 		op->impl.filter.childOperator,
 		filterContext->childArguments
@@ -644,7 +701,7 @@ static bool joinEvaluateLeft(OperatorContext * context)
 	scatterArguments(
 		context->arguments, joinContext->rightArguments,
 		op->impl.join.rightMap, op->impl.join.right->nArguments);
-	joinContext->rightContext = createChildContext(
+	joinContext->rightContext = createContext(
 		context,
 		op->impl.join.right,
 		joinContext->rightArguments
@@ -668,7 +725,7 @@ static void joinSetupContext(OperatorContext * context)
 	scatterArguments(
 		context->arguments, joinContext->leftArguments,
 		op->impl.join.leftMap, op->impl.join.left->nArguments);
-	joinContext->leftContext = createChildContext(
+	joinContext->leftContext = createContext(
 		context,
 		op->impl.join.left,
 		joinContext->leftArguments
@@ -772,9 +829,9 @@ static void unionSetupContext(OperatorContext * context)
 	unionContext->lookahead = Allocate(context->op->nArguments * sizeof(Atom));
 	// Arbitratily assign child operators to previous and next
 	// both child operators write to the arguments tuple
-	unionContext->lookaheadContext = createChildContext(
+	unionContext->lookaheadContext = createContext(
 		context, context->op->impl._union.first, context->arguments);
-	unionContext->nextContext = createChildContext(
+	unionContext->nextContext = createContext(
 		context, context->op->impl._union.second, context->arguments);
 	// Obtain the lookahead tuple
 	if(OperatorCall(unionContext->lookaheadContext)) {
@@ -928,7 +985,7 @@ static void projectSetupContext(OperatorContext * context)
 	for(index8 i = 0; i < nArguments; i++)
 		childArguments[op->impl.project.argumentMap[i]] = context->arguments[i];
 
-	OperatorContext * childContext = createChildContext(context, childOperator, childArguments);
+	OperatorContext * childContext = createContext(context, childOperator, childArguments);
 	// Retrieve all tuples from the child relation, gathering the kept arguments
 	projectContext->btree = BTreeCreate(
 		nArguments * sizeof(Atom),
@@ -1182,7 +1239,7 @@ static void fixpointApplyChildOperator(OperatorContext * context, Atom const * a
 	printFixpointTuple("  call", arguments, op->nArguments);
 #endif
 	CopyMemory(arguments, fixpointContext->childArguments, tupleSize);
-	OperatorContext * childContext = createChildContext(
+	OperatorContext * childContext = createContext(
 		context, op->impl.fixpoint.childOperator, fixpointContext->childArguments);
 	// Iterate over all tuples generate by the child operator and store them
 	// as pending tuples
@@ -1361,6 +1418,12 @@ static void recurseFinalizeContext(OperatorContext * context)
 
 //------------------------------------- OPERATOR_MACHINE -----------------------------------------
 
+typedef struct s_MachineOperatorContext {
+	bool isExhausted;						// required for stateless services
+	Atom arguments[RELATION_MAX_ARITY];		// in the provider order	
+	byte state[];							// state size specified with CreateMachineOperator()
+} MachineOperatorContext;
+
 
 // Permute the caller's arguments into the provider order, and back again
 static void machineReadArguments(OperatorContext * context, MachineOperatorContext * machineContext)
@@ -1380,14 +1443,15 @@ static void machineWriteArguments(
 static void machineSetupContext(OperatorContext * context)
 {
 	MachineOperatorContext * machineContext = (MachineOperatorContext *) &context->data;
-	MachineOperatorSpec provider = context->op->impl.machine.spec;
+	RelationReaderSpec const * readerSpec = &(context->op->impl.machine.readerSpec);
 	// setupState() reads the input arguments, so permute them first
 	machineReadArguments(context, machineContext);
-	if(provider.setupState) {
-		provider.setupState(
+	if(readerSpec->setupState) {
+		readerSpec->setupState(
 			machineContext->state,
 			machineContext->arguments,
-			context->op->impl.machine.spec.operatorData
+			readerSpec->readerData,
+			context->op->impl.machine.storage
 		);
 	}
 }
@@ -1395,20 +1459,21 @@ static void machineSetupContext(OperatorContext * context)
 
 static bool machineCall(OperatorContext * context)
 {
-	Operator const * op = context->op;
 	MachineOperatorContext * machineContext = (MachineOperatorContext *) &context->data;
 	if(machineContext->isExhausted)
 		return false;
 
 	machineReadArguments(context, machineContext);
-	bool result = op->impl.machine.spec.call(
+	RelationReaderSpec const * readerSpec = &(context->op->impl.machine.readerSpec);
+	bool result = readerSpec->call(
 		machineContext->state,
 		machineContext->arguments,
-		context->op->impl.machine.spec.operatorData
+		readerSpec->readerData,
+		context->op->impl.machine.storage
 	);
 	if(result) {
 		machineWriteArguments(context, machineContext);
-		if(op->impl.machine.spec.stateSize == 0) {
+		if(readerSpec->stateSize == 0) {
 			// operator is stateless, so we can have at most one tuple
 			machineContext->isExhausted = true;
 		}
@@ -1424,24 +1489,32 @@ static bool machineCall(OperatorContext * context)
 static void machineFinalizeContext(OperatorContext * context)
 {
 	MachineOperatorContext * machineContext = (MachineOperatorContext *) &context->data;
-	MachineOperatorSpec provider = context->op->impl.machine.spec;
-	if(provider.finalizeState) {
-		provider.finalizeState(
+	RelationReaderSpec const * readerSpec = &(context->op->impl.machine.readerSpec);
+	if(readerSpec->finalizeState) {
+		readerSpec->finalizeState(
 			machineContext->state,
-			context->op->impl.machine.spec.operatorData
+			readerSpec->readerData,
+			context->op->impl.machine.storage
 		);
 	}
 }
 
 
-Operator * CreateMachineOperator(size8 nArguments, index8 const indexOrder[], MachineOperatorSpec spec)
+Operator * CreateMachineOperator(
+	size8 nArguments, index8 const indexOrder[], RelationReaderSpec const * readerSpec, void * storage)
 {
 	ASSERT(nArguments <= RELATION_MAX_ARITY)
 	Operator * op = createOperator(
-		OPERATOR_MACHINE, nArguments, sizeof(MachineOperatorContext) + spec.stateSize);
-	op->impl.machine.spec = spec;
-	allocateIndexOrder(op);
-	CopyMemory(indexOrder, op->indexOrder, nArguments);
+		OPERATOR_MACHINE, nArguments, sizeof(MachineOperatorContext) + readerSpec->stateSize);
+	op->impl.machine.storage = storage;
+	op->impl.machine.readerSpec = *readerSpec;
+	if(indexOrder) {
+		allocateIndexOrder(op);
+		CopyMemory(indexOrder, op->indexOrder, nArguments);
+	}
+	else
+		setIdentityIndexOrder(op);
+
 #ifdef DEBUG
 	assertIsIndexOrder(op->indexOrder, nArguments);
 #endif
@@ -1451,9 +1524,9 @@ Operator * CreateMachineOperator(size8 nArguments, index8 const indexOrder[], Ma
 
 static void teardownMachineOperator(Operator * op)
 {
-	MachineOperatorSpec provider = op->impl.machine.spec;
-	if(provider.finalizeOperator)
-		provider.finalizeOperator(op->impl.machine.spec.operatorData);
+	RelationReaderSpec * readerSpec = &(op->impl.machine.readerSpec);
+	if(readerSpec->finalizeReader)
+		readerSpec->finalizeReader(readerSpec->readerData, op->impl.machine.storage);
 }
 
 
@@ -1467,6 +1540,7 @@ size8 OperatorNChildren(Operator const * op)
 	case OPERATOR_UNION:
 		return 2;
 
+	case OPERATOR_IDENTITY:
 	case OPERATOR_PERMUTE:
 	case OPERATOR_PROJECT:
 	case OPERATOR_CONSTRAIN:
@@ -1489,14 +1563,17 @@ Operator * OperatorGetChild(Operator const * op, index8 index)
 {
 	ASSERT(index < OperatorNChildren(op))
 	switch(op->type) {
+	case OPERATOR_IDENTITY:
+		return op->impl.identity.childOperator;
+
 	case OPERATOR_PERMUTE:
 		return op->impl.permute.childOperator;
 
 	case OPERATOR_JOIN:
-		return index ? op->impl.join.right : op->impl.join.left;
+		return index == 0 ? op->impl.join.right : op->impl.join.left;
 
 	case OPERATOR_UNION:
-		return index ? op->impl._union.second : op->impl._union.first;
+		return index == 0 ? op->impl._union.second : op->impl._union.first;
 
 	case OPERATOR_PROJECT:
 		return op->impl.project.childOperator;
@@ -1520,6 +1597,10 @@ Operator * OperatorGetChild(Operator const * op, index8 index)
 static void teardownOperator(Operator * op)
 {
 	switch(op->type) {
+	case OPERATOR_IDENTITY:
+		teardownIdentityOperator(op);
+		break;
+
 	case OPERATOR_PERMUTE:
 		teardownPermuteOperator(op);
 		break;
@@ -1565,16 +1646,20 @@ static void teardownOperator(Operator * op)
 }
 
 
-void AttachOperator(Operator * op, Relation relation)
+void AttachOperator(Operator * op, Relation signature)
 {
 	ASSERT(IsNullRelation(op->relation))
-	op->relation = relation;
+	op->relation = signature;
 }
 
 
 void DetachOperator(Operator * op)
 {
 	ASSERT(!IsNullRelation(op->relation))
+	// TODO: any descendant MACHINE operator that is detached
+	// has been subsumed into a UNION, and must be restored to
+	// the op->relation service
+
 	op->relation = (Relation) {0};
 	CheckOperator(op);
 }
@@ -1584,34 +1669,35 @@ void CheckOperator(Operator * op)
 {
 	if(op->nParents == 0) {
 		if(IsNullRelation(op->relation)) {
-			// TODO: a MACHINE operator that has been subsume into a UNION
-			// would get deallocated here if the UNION is invalidated,
-			// since it no longer is a root operator, and op->relation == 0.
 			teardownOperator(op);
 		}
-		else {
-			if(op->type == OPERATOR_MACHINE) {
-				if(op->impl.machine.spec.relationTable) {
-					// A MACHINE operator acting on storage must notify
-					// its RelationTable, which could now become stale.
-					CheckRelationTable(op->impl.machine.spec.relationTable);
-				}
-			}
-		}
+		// else {
+		// 	if(op->type == OPERATOR_MACHINE) {
+		// 		if(op->impl.machine.spec.relationTable) {
+		// 			// A MACHINE operator acting on storage must notify
+		// 			// its RelationWriter, which could now become stale.
+		// 			CheckRelationTable(op->impl.machine.spec.relationTable);
+		// 		}
+		// 	}
+		// }
 	}
 }
 
 
-static OperatorContext * createChildContext(
-	OperatorContext * parent, Operator const * op, Atom arguments[])
+static OperatorContext * createContext(
+	OperatorContext * parentContext, Operator const * op, Atom arguments[])
 {
 	size32 contextSize = sizeof(OperatorContext) + op->contextSize;
 	OperatorContext * context = Allocate(contextSize);
 	context->op = op;
 	context->arguments = arguments;
-	context->parent = parent;
+	context->parent = parentContext;
 
 	switch(op->type) {
+	case OPERATOR_IDENTITY:
+		identitySetupContext(context);
+		break;
+
 	case OPERATOR_PERMUTE:
 		permuteSetupContext(context);
 		break;
@@ -1658,7 +1744,7 @@ static OperatorContext * createChildContext(
 
 OperatorContext * OperatorCreateContext(Operator const * op, Atom arguments[])
 {
-	return createChildContext(0, op, arguments);
+	return createContext(0, op, arguments);
 }
 
 
@@ -1689,6 +1775,10 @@ bool OperatorCall(OperatorContext * context)
 {
 	bool success;
 	switch(context->op->type) {
+	case OPERATOR_IDENTITY:
+		success = identityCall(context);
+		break;
+
 	case OPERATOR_PERMUTE:
 		success = permuteCall(context);
 		break;
@@ -1741,6 +1831,10 @@ bool OperatorCall(OperatorContext * context)
 void OperatorFreeContext(OperatorContext * context)
 {
 	switch(context->op->type) {
+	case OPERATOR_IDENTITY:
+		identityFinalizeContext(context);
+		break;
+
 	case OPERATOR_PERMUTE:
 		permuteFinalizeContext(context);
 		break;
@@ -1841,6 +1935,12 @@ static void printOperatorRecursive(Operator const * op, uint32 depth)
 		PrintChar(' ');
 
 	switch(op->type) {
+	case OPERATOR_IDENTITY:
+		printOperatorHead(op, "IDENTITY");
+		PrintChar('(');
+		printOperatorRecursive(op->impl.identity.childOperator, depth + 1);
+		PrintChar(')');
+
 	case OPERATOR_PERMUTE:
 		printOperatorHead(op, "PERMUTE");
 		PrintChar('(');
@@ -1920,12 +2020,7 @@ static void printOperatorRecursive(Operator const * op, uint32 depth)
 
 	case OPERATOR_MACHINE:
 		printOperatorHead(op, "MACHINE");
-		if(op->impl.machine.spec.relationTable) {
-			// A operator on table storage, print the storage relation (??)
-			PrintTermForm(op->impl.machine.spec.relationTable->relation.termForm);
-		}
-		else if(!IsNullRelation(op->relation)) {
-			// An operator without storage  
+		if(!IsNullRelation(op->relation)) {
 			PrintTermForm(op->relation.termForm);
 		}
 		break;

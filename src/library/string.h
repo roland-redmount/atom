@@ -10,7 +10,6 @@
 #define STRING_H
 
 #include "kernel/Relation.h"
-#include "kernel/RelationTable.h"
 #include "lang/Atom.h"
 
 
@@ -32,7 +31,7 @@ Atom GetStringTermForm(void);
 
 Relation GetStringRelation(void);
 
-RelationTable * GetStringRelationTable(void);
+// RelationWriter * GetStringRelationTable(void);
 
 
 Atom CreateString(char const * chars, size32 length);

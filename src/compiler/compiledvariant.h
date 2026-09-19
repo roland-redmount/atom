@@ -67,7 +67,7 @@ void CompiledVariantSetRelation(CompiledVariant * variant, Atom queryTermForm);
  * and is dropped by DiscardUnusedSeedVariants().
  */
 void CompiledVariantSeedFromService(
-	CompiledVariant * variant, Service const * service, TypedTuple const * queryParameters);
+	CompiledVariant * variant, Service service, TypedTuple const * queryParameters);
 
 /**
  * CLAUDE: Drop the seeded variants that no clause compiled into, and return the new

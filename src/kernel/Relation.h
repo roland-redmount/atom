@@ -1,19 +1,24 @@
 /**
- * A Relation is a term form together with a column type per argument. It is the identifier
- * for a RelationTable. A Relation plus an IOSignature identifies a Service.
- * Using a term form (signed predicate) as key allows registering a negated predicate
- * like (! odd x) as a relation distinct from the non-negated (odd x).
- *
- * A Relation for which no RelationTable exists is a computed relation: it has services,
- * but no mutable facts. Examples are machine service such as those in library/math.c,
- * and services produced by the compiler.
+ * A Relation encapsulates a relation (a set of tuples), and is identified by
+ * a Relation. A Relaton may have one RelationWriter, and one or more Services.
+ * 
+ * A Relation for which no RelationWriter exists is read-only. Examples arithmetic relations,
+ * and relations (and their services) produced by the compiler.
+ * 
+ * A Relation with a RelationWriter but no services write-only, a kind of data sink.
+ * Output devices such as a screen canvas can be modelled as write-only relations.
  */
 
 #ifndef RELATION_H
 #define RELATION_H
 
-#include "lang/Atom.h"
+// #include "kernel/ServiceRegistry.h"
 #include "btree/btree.h"
+#include "lang/Atom.h"
+#include "lang/formula.h"
+
+
+struct s_TupleStore;
 
 
 // We limit the number of arguments a relation might have,
@@ -44,29 +49,75 @@ bool SameTypeSignatures(TypeSignature signature1, TypeSignature signature2);
  */
 size8 TypeSignatureNAtomTypes(TypeSignature typeSignature);
 
-
+/**
+ * A Relation is a pair (term form, type signature). Using a term form
+ * allows registering a negated predicate like (! odd x) as a relation distinct
+ * from the non-negated (odd x). 
+ * A Relation plus an IOSignature identifies a Service.
+ */
 typedef struct s_Relation {
 	Atom termForm;
 	TypeSignature typeSignature;
 } Relation;
 
 /**
- * Create a Relation. The caller holds one reference to the relation,
- * which must be released when no longer needed.
- * 
- * NOTE: an alternative is void AddRelation(Relation relation) where
- * the caller creates the struct (Relation) {termForm, typeSignature}.
- * Perhaps more transparent -- this function doesn't create a Relation
- * so much as add it to the registry
+ * Ordering of two relation signatures
  */
-Relation CreateRelation(Atom termForm, TypeSignature typeSignature);
+int8 CompareRelations(Relation relation, Relation relationOrKey);
+
+/**
+ * Test relation signatures for identity
+ */
+bool SameRelations(Relation relation1, Relation relation2);
+
+/**
+ * Test for a null relation, marking an absent value (no relation)
+ */
+bool IsNullRelation(Relation relation);
+
+/**
+ * Compute the hash of a relation, on top of an initialHash
+ */
+data64 RelationHash(Relation relation, data64 initialHash);
+
+/**
+ * Return the relation that the given fact belongs to,
+ * based on its atom types. The fact must be a term.
+ * The returned Relation might not exist in the relation registry.
+ * If the fact contains an AT_GENERATOR atom, the relation type is inferred to be AT_ID.
+ */
+Relation RelationFromFact(FormulaView term);
+
+/**
+ * Register a new Relation, or aquire a reference to one that already exists.
+ * 
+ * NOTE: Only Service and TupleStore should need to use this function.
+ */
+void AcquireRelation(Relation relation);
+
+/**
+ * Release a reference to a relation.
+ */
+void ReleaseRelation(Relation relation);
 
 /**
  * Create a relation with the predicate form given explicitly, rather than computed from
  * TermFormGetPredicateForm(termForm). This function is only for bootstrapping, where
  * TermFormGetPredicateForm() is not yet available. See setupCoreServices() in kernel.c
  */
-Relation CreateRelationBootstrap(Atom termForm, Atom predicateForm, TypeSignature typeSignature);
+void CreateRelationBootstrap(Relation relation, Atom predicateForm);
+
+/**
+ * Create a relation from a term, whose actors must be parameters, e.g.
+ * for example (+ @1<INT + @2<INT = @3>INT)
+ * The IO direction of each parameter is ignored.
+ */
+Relation CreateRelationFromTerm(Atom term);
+
+/**
+ * Return the TupleStore associated with this Relation, or 0 if none exists.
+ */
+struct s_TupleStore * RelationGetTupleStore(Relation relation);
 
 /**
  * Return the predicate form corresponding to the Relation's term form.
@@ -75,30 +126,47 @@ Relation CreateRelationBootstrap(Atom termForm, Atom predicateForm, TypeSignatur
  */
 Atom RelationGetPredicateForm(Relation relation);
 
-
+/**
+ * Test if the given relation exists in the registry.
+ */
 bool RelationExists(Relation relation);
 
 /**
- * Ordering of two relations
+ * Return the number of rows in a relation.
  */
-int8 CompareRelations(Relation relation, Relation relationOrKey);
-
-bool SameRelations(Relation relation1, Relation relation2);
+size32 RelationNRows(Relation relation);
 
 /**
- * Acquire a reference to a relation.
+ * Add a single tuple to the relation, acquiring each atom in the tuple.
+ * The relation must have a writable tuple store.
+ * If idPosition is > 0 it indicates the 1-based position of an identified atom.
+ * Acquires a reference to each atom in the tuple, except an identified atom.
+ * Does not add lookup entries; see AssertFact()
  */
-void AcquireRelation(Relation relation);
+byte RelationAddTuple(Relation relation, Atom const tuple[], uint8 idPosition);
 
 /**
- * Remove one reference to the given relation.
+ * Remove the given tuple from the relation.
+ * The relation must have a writable tuple store.
+ * If the tuple contains an identified atom, its position must match the given idPosition
+ * to remove the tuple.
+ * Does not remove the associated lookup entries; see RetractFact()
  */
-void ReleaseRelation(Relation relation);
+byte RelationRemoveTuple(Relation relation, Atom const tuple[], uint8 idPosition);
 
 /**
- * Test for a null relation, marking an absent value (no relation)
+ * Drop the relation, all its services, and any associated tuple storage.
  */
-bool IsNullRelation(Relation relation);
+void DropRelation(Relation relation);
+
+/**
+ * Garbage collect any relations that have only primitive services
+ * and whose tuple store is empty.
+ * 
+ * TODO: this is untested. Currently this will drop kernel relations too
+ * if they are empty.
+ */
+void DropEmptyRelations(void);
 
 /**
  * Release the references this relation holds to its term form, without releasing the relation.
@@ -117,11 +185,6 @@ bool IsNullRelation(Relation relation);
 void RelationReleaseTermForm(Relation relation);
 
 /**
- * Compute the hash of a relation, on top of an initialHash
- */
-data64 RelationHash(Relation relation, data64 initialHash);
-
-/**
  * Setup an empty relation registry. Called during bootstrapping only.
  */
 void SetupRelationRegistry(void);
@@ -129,7 +192,6 @@ void SetupRelationRegistry(void);
 /**
  * Deallocate the registry. Before calling this function,
  * all relations must have been released.
- * TODO: rename SetupRelations() ?
  */
 void FreeRelationRegistry(void);
 

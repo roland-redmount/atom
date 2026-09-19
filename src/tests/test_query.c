@@ -212,16 +212,17 @@ void testInvalidateServiceByNewRelation(void)
 	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 1)
 
-	// Add a second RelationTable of the (prec succ) form, creating new primitive services
+	// Add a second Relation of the (prec succ) form, creating new primitive services
 	// not present during the compilation above. This invalidates the compiled service
 	// since we now may have additional facts.
 	// NOTE: this is overly conservative: the compiled service actually does not depend
 	// on this new relation, since its type signature differs from the service found during compilation.
-	Relation intRelation = CreateRelation(
-		precSuccFixture.termForm, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
-	RelationTable * intTable = CreateRelationTable(
-		intRelation, &btreeStorageProvider, (index8[]) {0, 1});
-	ReleaseRelation(intRelation);
+	Relation intRelation = {
+		.termForm = precSuccFixture.termForm,
+		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
+	};
+	CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
+	
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)
 
 	// Asking again compiles the query again, yielding a new (before after) relation.
@@ -231,7 +232,7 @@ void testInvalidateServiceByNewRelation(void)
 
 	// Cleanup
 	RemoveAllCompiledServices();
-	ReleaseRelationTable(intTable);
+	DropRelation(intRelation);
 	TeardownRelationFixture(&precSuccFixture);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);

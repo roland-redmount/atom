@@ -31,7 +31,7 @@ void testDispatchToService(void)
 	query = CStringToTerm("+ 3 + 4 = _");
 	index8 permutation[3];
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	ASSERT_UINT32_EQUAL(service.op->type, OPERATOR_MACHINE)
+	ASSERT_UINT32_EQUAL(FindServiceOperator(service)->type, OPERATOR_MACHINE)
 	ReleaseFormula(query);
 
 	// one the following two queries requires form permutation to match
@@ -123,34 +123,29 @@ void testDispatchNegatedTerm(void)
 
 	// Create the (even odd) relation
 	TypeSignature typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2);
-	Relation relation = CreateRelation(termForm, typeSignature);
-	RelationTable * table = CreateRelationTable(
-		relation, &btreeStorageProvider, (index8[]) {0, 1});
-	ReleaseRelation(relation);
+	Relation relation = {.termForm = termForm, .typeSignature = typeSignature};
+	// We must have a service to dispatch to, so create a B-tree storage
+	CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
 	// Create the (! even odd) relation
-	Relation negatedRelation = CreateRelation(negatedTermForm, typeSignature);
-	RelationTable * negatedTable = CreateRelationTable(
-		negatedRelation, &btreeStorageProvider, (index8[]) {0, 1});
-	ReleaseRelation(negatedRelation);
-	ASSERT_PTR_NOT_EQUAL(table, negatedTable)
-	ASSERT_TRUE(SameRelations(relation, table->relation))
-	ASSERT_TRUE(SameRelations(negatedRelation, negatedTable->relation))
+	Relation negatedRelation = {.termForm = negatedTermForm, .typeSignature = typeSignature};
+	CreateTupleStore(negatedRelation, &btreeStorageProvider, 2, 0);
+	ASSERT_FALSE(SameRelations(relation, negatedRelation))
 
 	// Test that dispatches reaches the correct relation
 	Service service;
 	index8 permutation[2];
 	Atom query = CStringToTerm("! even x odd y");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	ASSERT_TRUE(SameRelations(service.relation, negatedTable->relation))
+	ASSERT_TRUE(SameRelations(service.relation, negatedRelation))
 	ReleaseFormula(query);
 
 	query = CStringToTerm("even x odd y");
 	ASSERT_TRUE(DispatchQueryFormula(query, &service, permutation))
-	ASSERT_TRUE(SameRelations(service.relation, table->relation))
+	ASSERT_TRUE(SameRelations(service.relation, relation))
 	ReleaseFormula(query);
 
-	ReleaseRelationTable(negatedTable);
-	ReleaseRelationTable(table);
+	DropRelation(negatedRelation);
+	DropRelation(relation);
 	IFactRelease(negatedTermForm);
 	IFactRelease(termForm);
 }
@@ -205,17 +200,17 @@ void testDispatchIterator(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	Relation idRelation = CreateRelation(
-		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2));
-	RelationTable * idTable = CreateRelationTable(
-		idRelation, &btreeStorageProvider, (index8[]) {0, 1});
-	ReleaseRelation(idRelation);
-	Relation intRelation = CreateRelation(
-		termForm, CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2));
-	RelationTable * intTable = CreateRelationTable(
-		intRelation, &btreeStorageProvider, (index8[]) {0, 1});
-	ReleaseRelation(intRelation);
-
+	Relation idRelation = {
+		.termForm = termForm,
+		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2)
+	};
+	CreateTupleStore(idRelation, &btreeStorageProvider, 2, 0);
+	Relation intRelation = {
+		.termForm = termForm,
+		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
+	};
+	CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
+	
 	// Only the service with two output parameters matches, so each table contributes
 	// one match
 	Atom query = CStringToTerm("first x second y");
@@ -232,8 +227,9 @@ void testDispatchIterator(void)
 
 	size8 nMatches = 0;
 	while(DispatchIteratorNext(&iterator)) {
-		Service const * service = DispatchIteratorPeekService(&iterator);
-		
+		Service service = DispatchIteratorPeekService(&iterator);
+		Operator * operator = DispatchIteratorPeekOperator(&iterator);
+
 		// The service obtained from the iterator should be the same as the one obtained
 		// fromiDispatchParameterizedQuerys when previous iterations are excluded.
 		Service excludeService;
@@ -242,8 +238,8 @@ void testDispatchIterator(void)
 		ASSERT_TRUE(DispatchParameterizedQuery(
 			FormulaGetForm(query), parameters, 2, DISPATCH_MATCH_EXACT, &excludeService,
 			excludePermutation, excludedTypes, nMatches, &hasNextMatch))
-		ASSERT_TRUE(SameRelations(service->relation, excludeService.relation))
-		ASSERT_PTR_EQUAL(service->op, excludeService.op)
+		ASSERT_TRUE(SameRelations(service.relation, excludeService.relation))
+		ASSERT_PTR_EQUAL(operator, FindServiceOperator(excludeService))
 		for(index8 i = 0; i < 2; i++)
 			ASSERT_UINT32_EQUAL(permutation[i], excludePermutation[i])
 
@@ -290,8 +286,8 @@ void testDispatchIterator(void)
 	DispatchIteratorEnd(&iterator);
 	ReleaseFormula(unknownQuery);
 
-	ReleaseRelationTable(intTable);
-	ReleaseRelationTable(idTable);
+	DropRelation(intRelation);
+	DropRelation(idRelation);
 	IFactRelease(termForm);
 }
 

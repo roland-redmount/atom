@@ -15,7 +15,7 @@ static Atom stringRoleName;
 static Atom stringPredicateForm;
 static Atom stringTermForm;
 static Relation stringRelation;
-static RelationTable * stringRelationTable;
+static TupleStore * stringTupleStore;
 static Operator * stringOperator;
 
 
@@ -43,12 +43,6 @@ Relation GetStringRelation(void)
 }
 
 
-RelationTable * GetStringRelationTable(void)
-{
-	return stringRelationTable;
-}
-
-
 Atom stringElementGenerator(index32 index, void const * data)
 {
 	char const * string = (char const *) data;
@@ -64,7 +58,7 @@ Atom CreateString(char const * chars, size32 length)
 	AddListToIFact(&draft, stringElementGenerator, chars, AT_LETTER, length);
 
 	// add (string @string) to ifact
-	IFactBeginConjunction(&draft, stringRelationTable,0);
+	IFactBeginConjunction(&draft, stringTupleStore, 0);
 	Atom tuple[1] = {(Atom) {0}};
 	IFactAddTuple(&draft, tuple);
 	IFactEndConjunction(&draft);
@@ -117,7 +111,7 @@ void StringSetup(void)
 {
 	// Create the (string) predicate form
 	stringRoleName = CreateNameFromCString("string");
-	stringPredicateForm = CreatePredicateForm((Atom[]) {stringRoleName},	1);
+	stringPredicateForm = CreatePredicateForm((Atom[]) {stringRoleName}, 1);
 	NameRelease(stringRoleName);
 	
 	// Create the (string) term form
@@ -128,21 +122,19 @@ void StringSetup(void)
 	TypeSignature typeSignature = {
 		.atomTypes = {AT_ID}
 	};
-	stringRelation = CreateRelation(stringTermForm, typeSignature);
+	stringRelation = (Relation) {.termForm = stringTermForm, .typeSignature = typeSignature};
+	stringTupleStore = CreateTupleStore(stringRelation, &btreeStorageProvider, 1, 0);
 	IFactRelease(stringTermForm);
-
-	stringRelationTable = CreateRelationTable(stringRelation, &btreeStorageProvider, 0);
-	ReleaseRelation(stringRelation);
 
 	// Store a pointer to the (string<ID) service, created by the B-tree provider.
 	IOSignature ioSignature = {0};
 	ioSignature.parameterIO[0] = PARAMETER_IN;
-	stringOperator = FindService(stringRelation, ioSignature);
+	stringOperator = FindServiceOperator((Service) {.relation = stringRelation, .ioSignature = ioSignature});
 	ASSERT(stringOperator);
 }
 
 
 void StringShutdown(void)
 {
-	ReleaseRelationTable(stringRelationTable);
+	DropRelation(stringRelation);
 }

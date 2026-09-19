@@ -1,7 +1,9 @@
 
+#include "lang/Atom.h"
 #include "kernel/ifact.h"
 #include "lang/formula.h"
 #include "lang/name.h"
+#include "util/sort.h"
 
 
 int8 CompareAtoms(Atom atom1, Atom atom2)

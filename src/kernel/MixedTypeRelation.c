@@ -42,15 +42,17 @@ static bool queryVariableMap(TypedTuple const * queryActors, index8 equalityMap[
 static void openService(MixedTypeRelation * mixedRelation)
 {
 	size8 arity = mixedRelation->tuple->nAtoms;
-	mixedRelation->impl.concat.service = *DispatchIteratorPeekService(
+	mixedRelation->impl.concat.service = DispatchIteratorPeekService(
 		&(mixedRelation->impl.concat.dispatchIterator));
 
 	for(index8 i = 0; i < arity; i++)
 		mixedRelation->impl.concat.arguments[i] = TypedTupleGetAtom(
 			mixedRelation->impl.concat.queryActors, mixedRelation->impl.concat.permutation[i]);
 
+	Operator * op = FindServiceOperator(mixedRelation->impl.concat.service);
 	mixedRelation->impl.concat.context = OperatorCreateContext(
-		mixedRelation->impl.concat.service.op, mixedRelation->impl.concat.arguments);
+		op,	mixedRelation->impl.concat.arguments
+	);
 	mixedRelation->impl.concat.nServices++;
 }
 

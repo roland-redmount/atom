@@ -38,27 +38,20 @@ static void teardownFixture(void)
 
 
 /**
- * A relation registers itself when created and removes itself when its last reference
- * goes; see Relation.h
+ * Test add and remove a Relation
  */
 void testAddRemoveRelation(void)
 {
 	setupFixture();
 	size32 nRelationsInitial = RelationRegistryNRelations();
 
-	Relation relation = CreateRelation(fixture.form, fixture.typeSignature);
-	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
-	ASSERT_TRUE(RelationExists(relation))
-
-	// A second reference keeps the relation registered
+	Relation relation = {.termForm = fixture.form, .typeSignature = fixture.typeSignature};
 	AcquireRelation(relation);
-	ReleaseRelation(relation);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 
 	// Releasing the creation reference removes it
 	ReleaseRelation(relation);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial)
-	ASSERT_FALSE(RelationExists(relation))
 
 	teardownFixture();
 }

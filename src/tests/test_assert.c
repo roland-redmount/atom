@@ -7,7 +7,6 @@
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
 #include "kernel/Relation.h"
-#include "kernel/RelationTable.h"
 #include "lang/formula.h"
 #include "library/library.h"
 #include "library/list.h"
@@ -21,8 +20,7 @@
 
 /**
  * Assert and retract two facts of a relation that does not exist beforehand.
- * The first assert creates the relation and its table, and retracting the last
- * fact drops both again.
+ * The first assert creates the relation and its tuple store.
  */
 void testAssertRetract(void)
 {
@@ -40,25 +38,22 @@ void testAssertRetract(void)
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact1), 0), ASSERT_OK)
 	ASSERT_TRUE(RelationExists(relation))
 	
-	RelationTable const * table = FindRelationTable(relation);
-	ASSERT_NOT_NULL(table)
-	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 1)
 
 	// Asserting the same fact again changes nothing
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact1), 0), ASSERT_EXISTED)
-	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 1)
 
 	// The second fact goes in the same table
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact2), 0), ASSERT_OK)
-	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 2)
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 2)
 
 	RetractFact(FormulaGetView(fact2));
-	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 1)
 
-	// Retracting the last fact drops the table, and the relation with it
 	RetractFact(FormulaGetView(fact1));
-	ASSERT_FALSE(RelationExists(relation))
 
+	DropRelation(relation);
 	ReleaseFormula(fact2);
 	ReleaseFormula(fact1);
 }
@@ -72,9 +67,11 @@ void testAssertOverlapsService(void)
 	// This fact is already provided by the (+ + =) service
 	Atom knownFact = CStringToTerm("+ 1 + 1 = 2");
 
-	// Asserting the fact does nothing.
+	// Asserting the fact does nothing
+	// NOTE: this requires compiling a FILTER service
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(knownFact), 0), ASSERT_EXISTED)
 	
+	RemoveAllCompiledServices();
 	ReleaseFormula(knownFact);
 }
 
@@ -86,19 +83,18 @@ void testAssertOverlapsService(void)
  */
 void testAssertContradictsStoredFact(void)
 {
+	// Assert a fact
 	Atom fact = CStringToTerm("prec \"a\" succ \"b\"");
-	Atom negatedFact = CStringToTerm("! prec \"a\" succ \"b\"");
-	size8 nColumns = FormulaGetActors(negatedFact)->nAtoms;
-	TypeSignature typeSignature = CreateTypeSignature(
-		TypedTuplePeekAtomTypes(FormulaGetActors(negatedFact)), nColumns);
-
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_OK)
+	Relation relation = RelationFromFact(FormulaGetView(fact));
+	ASSERT_TRUE(RelationExists(relation))
 
 	// (! prec "a" succ "b") is refused, contradicting the fact just asserted
+	Atom negatedFact = CStringToTerm("! prec \"a\" succ \"b\"");
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(negatedFact), 0), ASSERT_FAIL)
 	// and the refused assert leaves no relation behind
-	Relation relation = {.termForm = FormulaGetForm(negatedFact), .typeSignature = typeSignature};
-	ASSERT_FALSE(RelationExists(relation))
+	Relation negatedRelation = RelationFromFact(FormulaGetView(negatedFact));
+	ASSERT_FALSE(RelationExists(negatedRelation))
 	
 	// Retracting the fact it contradicts makes the same assert succeed
 	RetractFact(FormulaGetView(fact));
@@ -108,6 +104,8 @@ void testAssertContradictsStoredFact(void)
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_FAIL)
 
 	RetractFact(FormulaGetView(negatedFact));
+	DropRelation(relation);
+	DropRelation(negatedRelation);
 	ReleaseFormula(negatedFact);
 	ReleaseFormula(fact);
 }
@@ -122,39 +120,41 @@ void testAssertContradictsDerivedFact(void)
 {
 	// (! even x) follows from (odd x), so (odd 3) entails (! even 3)
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
-	Atom odd3 = CStringToTerm("odd 3");
-	Atom even3 = CStringToTerm("even 3");
-	Atom even4 = CStringToTerm("even 4");
 
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(odd3), 0), ASSERT_OK)
+	Atom odd3 = CStringToTerm("odd 3");
+	FormulaView odd3View = FormulaGetView(odd3);
+	ASSERT_INT32_EQUAL(AssertFact(odd3View, 0), ASSERT_OK)
 
 	// (even 3) is refused: no relation holds (! even 3), but the rule derives it
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even3), 0), ASSERT_FAIL)
+	// from the (odd 3) fact
+	Atom even3 = CStringToTerm("even 3");
+	FormulaView even3View = FormulaGetView(even3);
+	ASSERT_INT32_EQUAL(AssertFact(even3View, 0), ASSERT_FAIL)
 	// no relation was created
-	Relation relation = {
-		.termForm = FormulaGetForm(even3),
-		.typeSignature = CreateTypeSignature(
-			TypedTuplePeekAtomTypes(FormulaGetActors(even3)),
-			FormulaGetActors(even3)->nAtoms
-		)
-	};
-	ASSERT_FALSE(RelationExists(relation))
+	Relation evenRelation = RelationFromFact(even3View);
+	ASSERT_FALSE(RelationExists(evenRelation))
+	ReleaseFormula(even3);
 
 	// (even 4) is accepted, as the rule derives (! even 4) only from (odd 4),
-	// which is not a fact
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even4), 0), ASSERT_OK)
+	// which has not been asserted
+	Atom even4 = CStringToTerm("even 4");
+	FormulaView even4View = FormulaGetView(even4);
+	ASSERT_INT32_EQUAL(AssertFact(even4View, 0), ASSERT_OK)
+	ASSERT_TRUE(RelationExists(evenRelation))
+	RetractFact(even4View);
+	DropRelation(evenRelation);
+	ReleaseFormula(even4);
+
+	RetractFact(odd3View);
+	DropRelation(RelationFromFact(odd3View));
+	ReleaseFormula(odd3);
 
 	DictionaryRemoveClause(&entry);
-	RetractFact(FormulaGetView(even4));
-	RetractFact(FormulaGetView(odd3));
-	ReleaseFormula(even4);
-	ReleaseFormula(even3);
-	ReleaseFormula(odd3);
 }
 
 
 /**
- * A term holding no variable is a fact, and asserting it is asserting that fact.
+ * A term holding no variable is a fact
  */
 void testAssertFormulaFact(void)
 {
@@ -170,6 +170,7 @@ void testAssertFormulaFact(void)
 	ReleaseFormula(negatedFact);
 
 	RetractFact(FormulaGetView(fact));
+	DropRelation(RelationFromFact(FormulaGetView(fact)));
 	ReleaseFormula(fact);
 }
 
@@ -230,16 +231,14 @@ void testAssertFormulaRejects(void)
 
 
 /**
- * A conjunction of terms sharing one generator (*) defines an atom. The terms here are
- * the ones a list is built from, so the atom CreateIFact() returns is the list ('A 'B),
- * and CreateListFromArray() yields that same atom.
+ * Test creating an ifact from a conjunction of terms sharing one generator.
  */
 void testCreateIFactList(void)
 {
-	RelationTable const * listLetter = GetListRelationTable(AT_LETTER);
-	RelationTable const * listLength = GetListLengthRelationTable();
-	size32 listLetterNRows = RelationTableNRows(listLetter);
-	size32 listLengthNRows = RelationTableNRows(listLength);
+	Relation listLetter = GetListRelation(AT_LETTER);
+	Relation listLength = GetListLengthRelation();
+	size32 listLetterNRows = RelationNRows(listLetter);
+	size32 listLengthNRows = RelationNRows(listLength);
 
 	Atom formula = CStringToConjunction(
 		"list * position 1 element 'A & list * position 2 element 'B & list * length 2");
@@ -248,8 +247,8 @@ void testCreateIFactList(void)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
 
 	// One defining fact per term, in the two relations the terms name
-	ASSERT_UINT32_EQUAL(RelationTableNRows(listLetter), listLetterNRows + 2)
-	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows + 1)
+	ASSERT_UINT32_EQUAL(RelationNRows(listLetter), listLetterNRows + 2)
+	ASSERT_UINT32_EQUAL(RelationNRows(listLength), listLengthNRows + 1)
 
 	// The defining facts are those of the list ('A 'B), so the atom is that list
 	ASSERT_UINT32_EQUAL(ListLength(ifact), 2)
@@ -261,14 +260,14 @@ void testCreateIFactList(void)
 		(Atom[]) {GetAlphabetLetter('A'), GetAlphabetLetter('B')}, AT_LETTER, 2);
 	ASSERT_DATA64_EQUAL(list.hash, ifact.hash)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 2)
-	ASSERT_UINT32_EQUAL(RelationTableNRows(listLetter), listLetterNRows + 2)
-	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows + 1)
+	ASSERT_UINT32_EQUAL(RelationNRows(listLetter), listLetterNRows + 2)
+	ASSERT_UINT32_EQUAL(RelationNRows(listLength), listLengthNRows + 1)
 
 	// Releasing the last reference retracts the defining facts
 	IFactRelease(list);
 	IFactRelease(ifact);
-	ASSERT_UINT32_EQUAL(RelationTableNRows(listLetter), listLetterNRows)
-	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows)
+	ASSERT_UINT32_EQUAL(RelationNRows(listLetter), listLetterNRows)
+	ASSERT_UINT32_EQUAL(RelationNRows(listLength), listLengthNRows)
 
 	ReleaseFormula(formula);
 }
@@ -285,7 +284,19 @@ void testCreateIFactNewRelations(void)
 	ASSERT_TRUE(ifact.hash != 0)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
 
+	Atom colourNameTerm = CStringToTerm("colour * name \"red\"");
+	Relation colourNameRelation = RelationFromFact(FormulaGetView(colourNameTerm));
+	ReleaseFormula(colourNameTerm);
+	ASSERT_INT32_EQUAL(RelationNRows(colourNameRelation), 1)
+
+	Atom colourCodeTerm = CStringToTerm("colour * code 4");
+	Relation colourCodeRelation = RelationFromFact(FormulaGetView(colourCodeTerm));
+	ReleaseFormula(colourCodeTerm);
+	ASSERT_INT32_EQUAL(RelationNRows(colourCodeRelation), 1)
+
 	IFactRelease(ifact);
+	DropRelation(colourNameRelation);
+	DropRelation(colourCodeRelation);
 	ReleaseFormula(formula);
 }
 
@@ -313,18 +324,13 @@ void testCreateIFactTwoIdColumns(void)
 
 	// Both defining facts are stored in the one relation the two terms share
 	ASSERT_TRUE(RelationExists(relation))
-	RelationTable const * table = FindRelationTable(relation);
-	ASSERT_NOT_NULL(table)
-	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 2)
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 2)
 
 	// Releasing the atom retracts both facts
 	IFactRelease(ifact);
-	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 0)
-	// Cleanup any generated services
-	RemoveAllCompiledServices();
-	// The (pair other) relation is now dropped
-	ASSERT_FALSE(RelationExists(relation))
-
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 0)
+	
+	DropRelation(relation);
 	ReleaseFormula(formula);
 	ReleaseFormula(sameFormTerm);
 }
@@ -336,22 +342,22 @@ void testCreateIFactTwoIdColumns(void)
  */
 void testCreateIFactExisting(void)
 {
-	RelationTable const * listLength = GetListLengthRelationTable();
-	size32 listLengthNRows = RelationTableNRows(listLength);
+	Relation listLength = GetListLengthRelation();
+	size32 listLengthNRows = RelationNRows(listLength);
 
 	Atom formula = CStringToConjunction("list * position 1 element 'C & list * length 1");
 	Atom ifact = CreateIFact(FormulaGetView(formula));
 	ASSERT_TRUE(ifact.hash != 0)
-	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows + 1)
+	ASSERT_UINT32_EQUAL(RelationNRows(listLength), listLengthNRows + 1)
 
 	Atom sameIFact = CreateIFact(FormulaGetView(formula));
 	ASSERT_DATA64_EQUAL(sameIFact.hash, ifact.hash)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 2)
-	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows + 1)
+	ASSERT_UINT32_EQUAL(RelationNRows(listLength), listLengthNRows + 1)
 
 	IFactRelease(sameIFact);
 	IFactRelease(ifact);
-	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows)
+	ASSERT_UINT32_EQUAL(RelationNRows(listLength), listLengthNRows)
 	ReleaseFormula(formula);
 }
 
@@ -361,14 +367,14 @@ void testCreateIFactExisting(void)
  */
 void testCreateIFactDefiningFactsProtected(void)
 {
-	RelationTable const * listLength = GetListLengthRelationTable();
-	size32 listLengthNRows = RelationTableNRows(listLength);
+	Relation listLength = GetListLengthRelation();
+	size32 listLengthNRows = RelationNRows(listLength);
 
 	Atom formula = CStringToConjunction("list * position 1 element 'D & list * length 1");
 	FormulaView formulaView = FormulaGetView(formula);
 	Atom ifact = CreateIFact(formulaView);
 	ASSERT_TRUE(ifact.hash != 0)
-	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows + 1)
+	ASSERT_UINT32_EQUAL(RelationNRows(listLength), listLengthNRows + 1)
 
 	// Build the (list length) term the ifact defines, by putting the identified atom
 	// where the generator stands. The conjunction holds the actors of both its terms,
@@ -388,13 +394,13 @@ void testCreateIFactDefiningFactsProtected(void)
 
 	// Retracting it leaves it in place
 	RetractFact(FormulaGetView(definingFact));
-	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows + 1)
+	ASSERT_UINT32_EQUAL(RelationNRows(listLength), listLengthNRows + 1)
 
 	// Releasing the atom removes it. The defining fact formula holds a reference
 	// to the atom it names, so that formula goes first.
 	ReleaseFormula(definingFact);
 	IFactRelease(ifact);
-	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength), listLengthNRows)
+	ASSERT_UINT32_EQUAL(RelationNRows(listLength), listLengthNRows)
 
 	ReleaseFormula(formula);
 }
@@ -425,16 +431,17 @@ void testCreateIFactTerm(void)
 	ASSERT_TRUE(ifact.hash != 0)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
 
-	// The defining fact is the only row in the corresponding RelationTable
+	// The defining fact is the only row in the corresponding RelationWriter
 	ASSERT_TRUE(RelationExists(relation))
-	RelationTable const * table = FindRelationTable(relation);
-	ASSERT_NOT_NULL(table)
-	ASSERT_UINT32_EQUAL(RelationTableNRows(table), 1)
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 1)
 
-	// Releasing the atom retracts the defining fact, which drops the table
-	// and the relation with it
+	// Releasing the atom retracts the defining fact
 	IFactRelease(ifact);
-	ASSERT_FALSE(RelationExists(relation))
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 0)
+	
+	// The relation still exists; drop it manually
+	ASSERT_TRUE(RelationExists(relation))
+	DropRelation(relation);
 
 	ReleaseFormula(term);
 }
@@ -449,33 +456,35 @@ void testCreateIFactIdColumnNotFirst(void)
 {
 	// The roles of this form order as (alpha zebra), so the generator is the second actor
 	Atom term = CStringToTerm("zebra * alpha 1");
+	FormulaView termView = FormulaGetView(term);
 	TypedAtom firstActor = TypedTupleGetElement(FormulaGetActors(term), 0);
 	ASSERT_FALSE(SameTypedAtoms(firstActor, generatorAtom))
 
-	// CreateIFact() here creates a COMPILED service using a FILTER operator
-	// to find its identifying fact tuples
-	Atom ifact = CreateIFact(FormulaGetView(term));
+	// CreateIFact() here creates a compiled service using a FILTER operator
+	// to find its identifying fact tuples, and creates the relation
+	Atom ifact = CreateIFact(termView);
 	ASSERT_TRUE(ifact.hash != 0)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
+	Relation relation = RelationFromFact(termView);
+	ASSERT_TRUE(RelationExists(relation))
 
-	// The same term a second time compares the defining fact against the one stored,
-	// which reads the table by the identified column as well
-	Atom sameIFact = CreateIFact(FormulaGetView(term));
+	// Calling again retrieves the ID atom already created
+	Atom sameIFact = CreateIFact(termView);
 	ASSERT_DATA64_EQUAL(sameIFact.hash, ifact.hash)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 2)
 
 	IFactRelease(sameIFact);
 	IFactRelease(ifact);
 	ReleaseFormula(term);
-	// Clean up the compiled service
-	RemoveAllCompiledServices();
+	// The relation is now empty
+	ASSERT_INT32_EQUAL(RelationNRows(relation), 0)
+	// Dropping the relation also removes the compiled FILTER service
+	DropRelation(relation);
 }
 
 
 /**
- * A clause of one term defines the atom that term defines. The clause form differs
- * from the term form, but the defining fact is the same fact, so both formulas
- * yield the same atom.
+ * Test creating an ifact from a clause.
  */
 void testCreateIFactClause(void)
 {
@@ -490,11 +499,14 @@ void testCreateIFactClause(void)
 
 	// The term states the same fact, so it defines the atom already there
 	Atom termIFact = CreateIFact(FormulaGetView(term));
-	ASSERT_DATA64_EQUAL(termIFact.hash, clauseIFact.hash)
+	ASSERT_TRUE(SameAtoms(termIFact, clauseIFact))
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(clauseIFact), 2)
+	Relation relation = RelationFromFact(FormulaGetView(term));
+	ASSERT_INT32_EQUAL(RelationNRows(relation), 1)
 
 	IFactRelease(termIFact);
 	IFactRelease(clauseIFact);
+	DropRelation(relation);
 	ReleaseFormula(clause);
 	ReleaseFormula(term);
 }

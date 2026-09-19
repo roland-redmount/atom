@@ -11,18 +11,18 @@
 
 
 /**
- * The registry of services, as a B-tree storing Service items.
+ * The registry of services, as a B-tree storing ServiceRecords.
  * This provides lookup of Services by Relation and IOSignature;
  * see compareServices().
  */
-static BTree * services;
+static BTree * serviceRecords;
 
 // Number of registered compiled (non-primitive) services
 static size32 nCompiledServices;
 
 
 /**
- * Order Service records by relation, then by IOSignature.
+ * Order Services by relation, then by IOSignature.
  * A zero IOSignature is a prefix key matching every service of the relation.
  */
 static int8 compareServices(Service const * service, Service const * serviceOrKey)
@@ -43,9 +43,11 @@ static int8 compareServices(Service const * service, Service const * serviceOrKe
 }
 
 
-static int8 btreeCompareServices(void const * item, void const * itemOrKey, size32 itemSize)
+static int8 btreeCompareServiceRecords(void const * item, void const * itemOrKey, size32 itemSize)
 {
-	return compareServices(item, itemOrKey);
+	ServiceRecord const * record  = item;
+	ServiceRecord const * recordOrKey = itemOrKey;
+	return compareServices(&(record->service), &(recordOrKey->service));
 }
 
 /**
@@ -87,9 +89,9 @@ static int8 btreeCompareOperatorAncestors(void const * item, void const * itemOr
 void SetupServiceRegistry(void)
 {
 	// B-tree of Services, mapping Relation, IOSignature -> Service
-	services = BTreeCreate(
-		sizeof(Service),
-		btreeCompareServices,
+	serviceRecords = BTreeCreate(
+		sizeof(ServiceRecord),
+		btreeCompareServiceRecords,
 		0	// nothing to deallocate
 	);
 
@@ -104,37 +106,30 @@ void SetupServiceRegistry(void)
 
 void FreeServiceRegistry(void)
 {
-	BTreeFree(services);
+	BTreeFree(serviceRecords);
 	BTreeFree(operatorAncestors);
 }
 
 
 /**
- * Copy the service of the given relation evaluated by the given operator to *service.
+ * Copy the ServiceRecord of the given relation evaluated by the given operator to *service.
  * Returns false if the registry holds no such service.
  */
 static bool findService(Relation relation, Operator const * op, Service * service)
 {
 	// Iterate over all services for the given relation
-	Service key = {.relation = relation};
-	BTreeIterator iterator;
-	BTreeIterate(&iterator, services);
+	ServiceIterator iterator;
+	ServiceRegistryIterate(relation, &iterator);
 	bool found = false;
-	if(BTreeIteratorSeek(&iterator, &key)) {
-		do {
-			Service const * candidate = BTreeIteratorPeekItem(&iterator);
-			// the seek finds the first service of the relation, so leave the loop
-			// once the services of another relation are reached
-			if(compareServices(candidate, &key) != 0)
-				break;
-			if(candidate->op == op) {
-				*service = *candidate;
-				found = true;
-				break;
-			}
-		} while(BTreeIteratorNext(&iterator));
+	while(ServiceIteratorNext(&iterator)) {
+		ServiceRecord const * record = ServiceIteratorPeekRecord(&iterator);
+		if(record->op == op) {
+			*service = record->service;
+			found = true;
+			break;
+		}
 	}
-	BTreeIteratorEnd(&iterator);
+	ServiceIteratorEnd(&iterator);
 	return found;
 }
 
@@ -144,7 +139,7 @@ static bool findService(Relation relation, Operator const * op, Service * servic
  * and have an associated Relation, and add them to the serviceArray.
  * The search stops at any operator that has an associated Relation,
  * so that we only return the operators for which the service corresponding
- * to op <op> is an immediate dependent of the returned operator's services.
+ * to operator <op> is an immediate dependent of the returned operator's services.
  */
 static void findOperatorDescendants(Operator * op, ResizingArray * serviceArray)
 {
@@ -166,127 +161,117 @@ static void findOperatorDescendants(Operator * op, ResizingArray * serviceArray)
  * Remove a service from the registry, and remove all OperatorAncestor records
  * where this service is the ancestor.
  */
-static void removeService(Service const * service)
+void RemoveService(Service service)
 {
-	if(!ServiceIsPrimitive(service))
+	// Get a copy of the service record, as changes to the registry
+	// may invalidate pointers
+	ServiceRecord record;
+	ASSERT(BTreeGetItem(serviceRecords, &service, &record));
+
+	if(record.op->type != OPERATOR_MACHINE)
 		nCompiledServices--;
 
 	// Find all ancestor services of the given service (dependents)
 	// and remove them recursively
-	OperatorAncestor key = {.op = service->op};
+	OperatorAncestor key = {.op = record.op};
 	OperatorAncestor pair;
-	while(BTreeGetItem(operatorAncestors, &key, &pair))
-		RemoveService(pair.ancestor->relation, pair.ancestor);
-
-	if(OperatorNChildren(service->op) > 0) {
+	while(BTreeGetItem(operatorAncestors, &key, &pair)) {
+		// remove the service identified by the (relation, operator) pair
+		Service ancestorService;
+		findService(pair.ancestor->relation, pair.ancestor, &ancestorService);
+		RemoveService(ancestorService);
+	}
+	if(OperatorNChildren(record.op) > 0) {
 		// Remove any records where this service is the ancestor.
 		// This is most efficiently done by following the operator child pointers,
 		// as in CreateService(). The descendants themselves are not removed.
 		ResizingArray descendantsArray;
 		CreateResizingArray(&descendantsArray, sizeof(Operator *), 10);
-		findOperatorDescendants(service->op, &descendantsArray);
+		findOperatorDescendants(record.op, &descendantsArray);
 		Operator ** descendants = ResizingArrayGetMemory(&descendantsArray);
 		for(index32 i = 0; i < descendantsArray.nElements; i++) {
-			OperatorAncestor pair = {.op = descendants[i], .ancestor = service->op};
+			OperatorAncestor pair = {.op = descendants[i], .ancestor = record.op};
 			ASSERT(BTreeDelete(operatorAncestors, &pair, 0) == BTREE_DELETED)
 		}
 		FreeResizingArray(&descendantsArray);
 	}
 	// Detach the root operator from the service.
 	// This may cause the operator to be deleted, and possibly its descendants.
-	DetachOperator(service->op);
-	ReleaseRelation(service->relation);
-	BTreeDeleteResult result = BTreeDelete(services, service, 0);
+	DetachOperator(record.op);
+	ReleaseRelation(service.relation);
+	BTreeDeleteResult result = BTreeDelete(serviceRecords, &record, 0);
 	ASSERT(result == BTREE_DELETED)
 }
 
 
-Service CreateService(Relation relation, IOSignature ioSignature, Operator * op)
+void CreateService(Service service, Operator * op)
 {
-	Service service = {
-		.relation = relation,
-		.ioSignature = ioSignature,
+	ServiceRecord record = {
+		.service = service,
 		.op = op
 	};
-	AcquireRelation(relation);
-	AttachOperator(op, relation);
+	AcquireRelation(service.relation);
+	AttachOperator(op, service.relation);
 
-	// Find descendants of the given operator with an attached service.
-	// The given service is a dependent of these operators' services.
-	ResizingArray descendantsArray;
-	CreateResizingArray(&descendantsArray, sizeof(Operator *), 10);
-	findOperatorDescendants(op, &descendantsArray);
-	// Add corresponding records to the ancestor table.
-	// NOTE: any duplicates in the array will be rejected by the B-tree
-	Operator ** descendants = ResizingArrayGetMemory(&descendantsArray);
-	for(index32 i = 0; i < descendantsArray.nElements; i++) {
-		ASSERT(descendants[i] != op)
-		OperatorAncestor pair = {.op = descendants[i], .ancestor = op};
-		BTreeInsert(operatorAncestors, &pair);
-	}
-	FreeResizingArray(&descendantsArray);
-
-	// add to the service registry
-	ASSERT(BTreeInsert(services, &service) == BTREE_INSERTED)
-
-	if(ServiceIsPrimitive(&service)) {
+	if(op->type == OPERATOR_MACHINE) {
 		// Any query of this term form could match this service, so
 		// whatever was compiled for such a query it is incomplete.
 		// QUESTION: the invalidation scope seems to broad: wouldn't it be enough to invalidate
 		// services from the same relation (so that type signature must agree) ?
-		InvalidateServicesByTermForm(relation.termForm);
+		InvalidateServicesByTermForm(service.relation.termForm);
 	}
-	else
+	else {
+		// Find descendants of the given operator with an attached service.
+		// The given service is a dependent of these operators' services.
+		ResizingArray descendantsArray;
+		CreateResizingArray(&descendantsArray, sizeof(Operator *), 10);
+		findOperatorDescendants(op, &descendantsArray);
+		// Add corresponding records to the ancestor table.
+		// NOTE: any duplicates in the array will be rejected by the B-tree
+		Operator ** descendants = ResizingArrayGetMemory(&descendantsArray);
+		for(index32 i = 0; i < descendantsArray.nElements; i++) {
+			ASSERT(descendants[i] != op)
+			OperatorAncestor pair = {.op = descendants[i], .ancestor = op};
+			BTreeInsert(operatorAncestors, &pair);
+		}
+		FreeResizingArray(&descendantsArray);
+
 		nCompiledServices++;
-	return service;
-}
-
-
-bool ServiceIsPrimitive(Service const * service)
-{
-	return service->op->type == OPERATOR_MACHINE;
-}
-
-
-void RemoveService(Relation relation, Operator const * op)
-{
-	Service service;
-	bool found = findService(relation, op, &service);
-	ASSERT(found)
-	removeService(&service);
+	}
+	// add to the service registry
+	ASSERT(BTreeInsert(serviceRecords, &record) == BTREE_INSERTED)
+	// return service;
 }
 
 
 void ServiceRegistryRemoveAll(Relation relation)
 {
 	// Add all services for the given relation to 
-	Service key = {.relation = relation };
-	Service service;
-	while(BTreeGetItem(services, &key, &service)) {
-		removeService(&service);
+	ServiceRecord key = {.service = (Service) {.relation = relation } };
+	ServiceRecord record;
+	while(BTreeGetItem(serviceRecords, &key, &record)) {
+		RemoveService(record.service);
 	}
-	// service is shallow-copied by BTreeGetItem() and does not need deallocation
 }
 
 
 /**
- * Add the immediate ancestor services of the given service to the given array.
+ * Add the immediate ancestor services of the given operator to the given array.
  */
-static void collectParentServices(Service const * service, ResizingArray * ancestorServices)
+static void collectParentServices(Operator const * op, ResizingArray * ancestorServices)
 {
-	OperatorAncestor key = {.op = service->op};
+	OperatorAncestor key = {.op = op};
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, operatorAncestors);
 	if(BTreeIteratorSeek(&iterator, &key)) {
 		do {
 			OperatorAncestor const * pair = BTreeIteratorPeekItem(&iterator);
-			if(pair->op != service->op)
+			if(pair->op != op)
 				break;
 			Service ancestorService;
 			bool found = findService(
 				pair->ancestor->relation, pair->ancestor, &ancestorService);
 			ASSERT(found)
-			ASSERT(!ServiceIsPrimitive(&ancestorService))
 			ResizingArrayAppend(ancestorServices, &ancestorService);
 		} while(BTreeIteratorNext(&iterator));
 	}
@@ -311,17 +296,17 @@ void InvalidateServicesByTermForm(Atom termForm)
 		ServiceIterator serviceIterator;
 		ServiceRegistryIterate(relation, &serviceIterator);
 		while(ServiceIteratorNext(&serviceIterator)) {
-			Service const * service = ServiceIteratorPeekService(&serviceIterator);
-			if(ServiceIsPrimitive(service)) {
+			ServiceRecord const * record = ServiceIteratorPeekRecord(&serviceIterator);
+			if(record->op->type == OPERATOR_MACHINE) {
 				// A primitive service is never stale, but introduction
 				// of another service with the same form renders its parents stale,
 				// so add them to the list
-				collectParentServices(service, &staleServices);
+				collectParentServices(record->op, &staleServices);
 			}
 			else {
 				// For terms invalidated by changes to a rule,
 				// A compiled service with the same term form is stale
-				ResizingArrayAppend(&staleServices, service);
+				ResizingArrayAppend(&staleServices, &(record->service));
 			}
 		}
 		ServiceIteratorEnd(&serviceIterator);
@@ -330,10 +315,10 @@ void InvalidateServicesByTermForm(Atom termForm)
 
 	// remove all stale services
 	for(index32 i = 0; i < staleServices.nElements; i++) {
-		Service service = * ((Service *) ResizingArrayGetElement(&staleServices, i));
-		if(!BTreeContainsItem(services, &service))
+		Service * service = ResizingArrayGetElement(&staleServices, i);
+		if(!BTreeContainsItem(serviceRecords, service))
 			continue;	// service already removed in a previous removeService() call
-		removeService(&service);
+		RemoveService(*service);
 	}
 	FreeResizingArray(&staleServices);
 }
@@ -344,18 +329,20 @@ void RemoveAllCompiledServices(void)
 	while(nCompiledServices > 0) {
 		// Find the next compiled service
 		BTreeIterator iterator;
-		BTreeIterate(&iterator, services);
-		Service service = {0};
+		BTreeIterate(&iterator, serviceRecords);
+		Service service;
+		bool found = false;
 		while(BTreeIteratorNext(&iterator)) {
-			Service * candidate = BTreeIteratorPeekItem(&iterator);
-			if(!ServiceIsPrimitive(candidate)) {
-				service = *candidate;
+			ServiceRecord * record = BTreeIteratorPeekItem(&iterator);
+			if(record->op->type != OPERATOR_MACHINE) {
+				service = record->service;
+				found = true;
 				break;
 			}
 		}
 		BTreeIteratorEnd(&iterator);
-		ASSERT(!IsNullRelation(service.relation))
-		removeService(&service);
+		ASSERT(found)
+		RemoveService(service);
 		// restart from the beginning, cannot iterate while modifying
 	}
 }
@@ -363,7 +350,7 @@ void RemoveAllCompiledServices(void)
 
 size32 NumberOfServices(void)
 {
-	return BTreeNItems(services);
+	return BTreeNItems(serviceRecords);
 }
 
 
@@ -376,11 +363,11 @@ size32 NumberOfCompiledServices(void)
 void ServiceRegistryIterate(Relation relation, ServiceIterator * iterator)
 {
 	iterator->relation = relation;
-	BTreeIterate(&(iterator->btreeIterator), services);
+	BTreeIterate(&(iterator->btreeIterator), serviceRecords);
 }
 
 
-Service const * ServiceIteratorPeekService(ServiceIterator const * iterator)
+ServiceRecord const * ServiceIteratorPeekRecord(ServiceIterator const * iterator)
 {
 	return BTreeIteratorPeekItem(&(iterator->btreeIterator));
 }
@@ -388,9 +375,11 @@ Service const * ServiceIteratorPeekService(ServiceIterator const * iterator)
 
 bool ServiceIteratorNext(ServiceIterator * iterator)
 {
-	Service key = {
-		.relation = iterator->relation,
-		.ioSignature = {.parameterIO = {0}},
+	ServiceRecord key = {
+		.service = (Service) {
+			.relation = iterator->relation,
+			.ioSignature = {.parameterIO = {0}}
+		},
 		.op = 0
 	};
 	bool foundItem;
@@ -401,8 +390,8 @@ bool ServiceIteratorNext(ServiceIterator * iterator)
 		foundItem = BTreeIteratorNext(&(iterator->btreeIterator));
 
 	if(foundItem) {
-		Service const * btreeService = BTreeIteratorPeekItem(&(iterator->btreeIterator));
-		if(compareServices(btreeService, &key) == 0)
+		ServiceRecord const * record = BTreeIteratorPeekItem(&(iterator->btreeIterator));
+		if(compareServices(&(record->service), &(key.service)) == 0)
 			return true;		
 	}
 	return false;
@@ -415,49 +404,42 @@ void ServiceIteratorEnd(ServiceIterator * iterator)
 }
 
 
-Operator * FindService(Relation relation, IOSignature ioSignature)
+Operator * FindServiceOperator(Service service)
 {
-	Service key = {.relation = relation, .ioSignature = ioSignature};
-	// QUESTION: Why use an iterator here to seek to a single item?
-	BTreeIterator iterator;
-	BTreeIterate(&iterator, services);
-	Operator * op = 0;
-	if(BTreeIteratorSeek(&iterator, &key)) {
-		Service * service = BTreeIteratorPeekItem(&iterator);
-		op = service->op;
-	}
-	BTreeIteratorEnd(&iterator);
-	return op;
+	ServiceRecord key = {.service = service};
+	ServiceRecord record;
+	if(BTreeGetItem(serviceRecords, &key, &record))
+		return record.op;
+	else
+		return 0;
 }
 
 
-void PrintService(Service const * service)
+void PrintService(Service service)
 {
-	TypedTuple * parameters = CreateTypedTuple(service->op->nArguments);
-	for(index8 i = 0; i < service->op->nArguments; i++) {
+	Operator * op  = FindServiceOperator(service);
+	ASSERT(op)
+
+	// Reconstruct a parameter tuple from the IO signature
+	// NOTE: could be moved to Parameter.c
+	TypedTuple * parameters = CreateTypedTuple(op->nArguments);
+	for(index8 i = 0; i < op->nArguments; i++) {
 		TypedAtom parameter = CreateTypedAtom(
 			AT_PARAMETER,
 			(Atom) {
 				.parameter = {
 					.number = i + 1,
-					.atomType =	service->relation.typeSignature.atomTypes[i],
-					.io = service->ioSignature.parameterIO[i]
+					.atomType =	service.relation.typeSignature.atomTypes[i],
+					.io = service.ioSignature.parameterIO[i]
 				}
 			}
 		);
 		TypedTupleSetElement(parameters, i, parameter);
 	}
-	PrintFormActorsAsFormula(service->relation.termForm, parameters);
+	PrintFormActorsAsFormula(service.relation.termForm, parameters);
 	FreeTypedTuple(parameters);
 	PrintCString(" => ");
-	PrintOperator(service->op);
-}
-
-
-static void btreePrintCallback(void const * item)
-{
-	PrintService((Service const *) item);
-	PrintChar('\n');
+	PrintOperator(op);
 }
 
 
@@ -475,27 +457,28 @@ static bool signatureHasInputParameter(IOSignature ioSignature, size8 nParameter
 
 void RelationDump(Relation relation)
 {
-	// Find a service for enumerating all tuples from the relation
-	Service service = {0};
+	// Find an all-outputs service for enumerating all tuples from the relation
+	// NOTE: this can be done by dispatch?
+	ServiceRecord record = {0};
 	ServiceIterator iterator;
 	ServiceRegistryIterate(relation, &iterator);
 	while(ServiceIteratorNext(&iterator)) {
-		Service const * candidate = ServiceIteratorPeekService(&iterator);
-		if(!signatureHasInputParameter(candidate->ioSignature, candidate->op->nArguments)) {
-			service = *candidate;
+		ServiceRecord const * candidate = ServiceIteratorPeekRecord(&iterator);
+		if(!signatureHasInputParameter(candidate->service.ioSignature, candidate->op->nArguments)) {
+			record = *candidate;
 			break;
 		}
 	}
-	if(!service.op) {
+	if(!record.op) {
 		PrintCString("Relation cannot be enumerated\n");
 		return;
 	}
 
-	size8 nArguments = service.op->nArguments;
+	size8 nArguments = record.op->nArguments;
 	PrintF("Relation %u columns\n", nArguments);
 
 	Atom arguments[nArguments];
-	OperatorContext * context = OperatorCreateContext(service.op, arguments);
+	OperatorContext * context = OperatorCreateContext(record.op, arguments);
 	size32 nTuples = 0;
 	while(OperatorCall(context)) {
 		// TODO: we should probably not print the full representaiton
@@ -509,8 +492,17 @@ void RelationDump(Relation relation)
 }
 
 
+
+static void btreePrintCallback(void const * item)
+{
+	ServiceRecord const * record = item;
+	PrintService(record->service);
+	PrintChar('\n');
+}
+
+
 void ServiceRegistryDump(void)
 {
-	BTreeTraversal(services, &btreePrintCallback);
+	BTreeTraversal(serviceRecords, &btreePrintCallback);
 }
 

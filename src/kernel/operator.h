@@ -3,60 +3,13 @@
 #define OPERATOR_H
 
 #include "kernel/Relation.h"
+#include "storage/StorageProvider.h"
+
+
+struct s_RelationReader;
 
 typedef struct s_Operator Operator;
 typedef struct s_OperatorContext OperatorContext;
-struct s_RelationTable;
-
-
-typedef struct s_MachineOperatorContext {
-	bool isExhausted;						// required for stateless services
-	Atom arguments[RELATION_MAX_ARITY];		// in the provider order	
-	byte state[];							// state size specified with CreateMachineOperator()
-} MachineOperatorContext;
-
-/**
- * This struct contains the data and functions needed to specify a machine operator.
- */
-typedef struct s_MachineOperatorSpec
-{
-	uint32 providerID;
-	void * operatorData;
-	size32 stateSize;
-	struct s_RelationTable * relationTable;		// for operators touching storage; else 0
-
-	/**
-	 * Initialize the machine operator's state data, such as an iterator structure.
-	 * This pointer may be 0 if the state needs no initialization.
-	 * The state data is always cleared before calling this function.
-	 * The operatorData pointer is the one given to CreateMachineOperator().
-	 * The arguments are given in provider order.
-	 */
-	void (*setupState)(void * state, Atom arguments[], void * operatorData);
-
-	/**
-	 * Call (resume) an executing operator, return true if a tuple was produced,
-	 * false if evaluation terminated. The call() function must write its results
-	 * to the arguments tuple. The arguments are given in provider order.
-	 * For an operator with no state, call() is only invoked once
-	 * An operator with state is can be called repeatedly, until it returns false.
-	 */
-	bool (*call)(void * state, Atom arguments[], void * operatorData);
-
-	/**
-	 * Finalize the machine operator's state data.
-	 * This pointer may be 0 if no finalization is required.
-	 */
-	void (*finalizeState)(void * state, void * operatorData);
-
-	/**
-	 * Finalize the machine operator (deallocate data structures, &c), called once when
-	 * the last reference to the operator is released.
-	 * This pointer may be 0 if no finalization is required.
-	 */
-	void (*finalizeOperator)(void * operatorData);
-
-} MachineOperatorSpec;
 
 
 /**
@@ -107,13 +60,20 @@ typedef struct s_MachineOperatorSpec
  * without regard for how that one was composed.
  */
  enum OperatorType {
+
+	/**
+	 * IDENTITY returns its child operator arguments unaltered.
+	 * This is mainly used to connect MACHINE operators to Services.
+	 */
+	OPERATOR_IDENTITY = 1,
+
 	/**
 	 * PERMUTE calls a child operator with its arguments reordered, and may bind
 	 * constants to child arguments. Every child argument is either taken from a parent
 	 * argument or a constant, so PERMUTE never drops a child argument and hence never
 	 * introduces duplicate tuples.
 	 */
-	OPERATOR_PERMUTE = 1,
+	OPERATOR_PERMUTE = 2,
 	
 	/**
 	 * JOIN is the inner join of the relations of two child operators, with equality
@@ -122,7 +82,7 @@ typedef struct s_MachineOperatorSpec
 	 * argument, whose value the left child determines and the right child is then
 	 * constrained by.
 	 */
-	OPERATOR_JOIN = 2,
+	OPERATOR_JOIN = 3,
 
 	/**
 	 * UNION gives the set union of the tuple sets from two child operators.
@@ -131,7 +91,7 @@ typedef struct s_MachineOperatorSpec
 	 * NOTE: if operators are required to be distinct (using preconditions)
 	 * then we should never have duplicate tuples in a UNION.
 	 */
-	OPERATOR_UNION = 3,
+	OPERATOR_UNION = 4,
 
 	/**
 	 * PROJECT is the projection onto the child arguments named by its argument map:
@@ -140,7 +100,7 @@ typedef struct s_MachineOperatorSpec
 	 * PROJECT merely sorts the child tuples according to the new index order;
 	 * see CreateProjectOperator().
 	 */
-	OPERATOR_PROJECT = 4,
+	OPERATOR_PROJECT = 5,
 
 	/**
 	 * CONSTRAIN is a restriction on an equality between arguments: it yields those
@@ -148,11 +108,8 @@ typedef struct s_MachineOperatorSpec
 	 * argument of this operator are equal. This expresses the equality constraint of
 	 * a variable occurring more than once in a query, such as (edge e from x to x)
 	 * asking for the self edges of a graph.
-	 *
-	 * NOTE: this is the only operator whose call may consume several child tuples,
-	 * as it can only test the constraint once the child operator has produced a tuple.
 	 */
-	OPERATOR_CONSTRAIN = 5,
+	OPERATOR_CONSTRAIN = 6,
 
 	/**
 	 * FIXPOINT evaluates a recursive clause. Its child operator must contains a RECURSE
@@ -180,7 +137,7 @@ typedef struct s_MachineOperatorSpec
 	 * would improve upon this. See for example
 	 * https://stackoverflow.com/questions/47043937/what-is-the-difference-between-naive-and-semi-naive-evaluation
 	 */
-	OPERATOR_FIXPOINT = 6,
+	OPERATOR_FIXPOINT = 7,
 
 	/**
 	 * RECURSE is the recursive occurrence of the relation that an enclosing FIXPOINT
@@ -188,7 +145,7 @@ typedef struct s_MachineOperatorSpec
 	 * It is always a leaf. The enclosing FIXPOINT operator is found via the
 	 * chain of parent pointers in the operator context when the recursion is evaluated.
 	 */
-	OPERATOR_RECURSE = 7,
+	OPERATOR_RECURSE = 8,
 
 	/**
 	 * FILTER yields those tuples of its child operator that agree with the arguments the
@@ -200,17 +157,16 @@ typedef struct s_MachineOperatorSpec
 	 * read by the services its storage registered, and a B-tree registers one per prefix
 	 * of its index column order, so a pattern binding a column out of that order has no
 	 * service; see compileFilterVariants() in compiler.c.
-	 *
-	 * NOTE: filtering reads every tuple the child yields, so it is a scan over whatever
-	 * the child does bind. The child binding the most is therefore the one to read; see
-	 * DispatchFilterableQuery().
 	 */
-	OPERATOR_FILTER = 8,
+	OPERATOR_FILTER = 9,
 
 	/**
-	 * Call a machine code function. Leaf of the operator tree
+	 * Call a machine code function. Leaf of the operator tree.
+	 * Cannot be the root operator of a Service.
+	 * 
+	 * TODO: rename -> OPERATOR_READER ?
 	 */
-	OPERATOR_MACHINE = 9,
+	OPERATOR_MACHINE = 10,
 };
 
 struct s_Operator {
@@ -223,11 +179,14 @@ struct s_Operator {
 	// Context size, in addition to sizeof(Context)
 	size32 contextSize;
 	size32 nParents;		// number of parent operators
-	// This relation pointer is nonzero iff the operator is a root operator for a service,
-	// and can be used to locate that service. If relation == 0 for a MACHINE operator,
-	// the operator has been subsumed into a UNION operator.
+	// The relation is set iff the operator is a root operator for a service,
+	// and can be used to locate that service. For a MACHINE operator, this must be 0.
 	Relation relation;
 	union {
+		// for OPERATOR_IDENTIFY
+		struct {
+			Operator * childOperator;
+		} identity;
 		// for OPERATOR_PERMUTE
 		struct {
 			Operator * childOperator;
@@ -294,13 +253,19 @@ struct s_Operator {
 		} filter;
 		// for OPERATOR_MACHINE
 		struct {
-			MachineOperatorSpec spec;
+			RelationReaderSpec readerSpec;
+			void * storage;
 		} machine;
 	} impl;
 };
 
 /**
- * Create a permute operator with the specified number of arguments.
+ * Create an IDENTIFY operator
+ */
+Operator * CreateIdentityOperator(Operator * childOperator);
+
+/**
+ * Create a PERMUTE operator with the specified number of arguments.
  * The argumentMap array has length equal to childOperator->nArguments and gives the
  * source of each child argument: an index below nArguments is the index of a parent
  * argument, an index of nArguments or above refers to constants[index - nArguments].
@@ -322,14 +287,16 @@ Operator * CreatePermuteOperator(
 	index8 const argumentMap[], Operator * childOperator);
 
 /**
- * Create a machine code operator. The indexOrder array has length nArguments and gives
- * the order in which the provider yields its tuples; see the ordering contract above.
- * stateSize is the size in bytes of the state data provided to MachineOperatorProvider.call().
- * An operator with stateSize == 0 is assumed to be stateless, and will be called only
- * once.
+ * Create a machine code operator.
+ * The indexOrder array gives the order in which the provider yields its tuples;
+ * if set to zero, the identity order is assumed. See the ordering contract above.
+ * The readerSpec is copied. readerSpec.stateSize is the size in bytes of the state data
+ * provided to MachineOperatorProvider.call(). An operator with stateSize == 0 is assumed
+ * to be stateless,and will be called only once.
  * The returned operator has zero references.
  */
-Operator * CreateMachineOperator(size8 nArguments, index8 const indexOrder[], MachineOperatorSpec spec);
+Operator * CreateMachineOperator(
+	size8 nArguments, index8 const indexOrder[], RelationReaderSpec const * readerSpec, void * storage);
 
 /**
  * Setup a JOIN operator with the specified number of arguments, from two existing
@@ -359,7 +326,7 @@ Operator * CreateJoinOperator(
 	Operator * rightChild, index8 const rightMap[]);
 
 /**
- * Setup a UNION operator, returning the union of two relations.
+ * Create a UNION operator, returning the union of two relations.
  * Merging two ordered relations requires that they are ordered alike, so the two child
  * operators must have the same index order, which this operator adopts. A child
  * declaring no order is ordered alike with any other, and takes the order of its sibling.

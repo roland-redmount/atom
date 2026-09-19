@@ -16,11 +16,11 @@
 
 static void testCreateList(void)
 {
-	RelationTable const * listLength = GetListLengthRelationTable();
-	RelationTable const * listPositionElement = GetListRelationTable(AT_LETTER);
+	Relation listLength = GetListLengthRelation();
+	Relation listPositionElement = GetListRelation(AT_LETTER);
 
-	size32 listLengthNRowsInitial = RelationTableNRows(listLength);
-	size32 listPositionElementNRowsInitial = RelationTableNRows(listPositionElement);
+	size32 listLengthNRowsInitial = RelationNRows(listLength);
+	size32 listPositionElementNRowsInitial = RelationNRows(listPositionElement);
 	
 	// create list
 	Atom listAtoms[EXAMPLE_LIST_N_ELEMENTS] = {
@@ -31,10 +31,10 @@ static void testCreateList(void)
 	Atom list = CreateListFromArray(listAtoms, AT_LETTER, EXAMPLE_LIST_N_ELEMENTS);
 
 	// test (list length) relation table
-	ASSERT_UINT32_EQUAL(RelationTableNRows(listLength),listLengthNRowsInitial + 1)
+	ASSERT_UINT32_EQUAL(RelationNRows(listLength),listLengthNRowsInitial + 1)
 	// test (list position element) relation table
 	ASSERT_UINT32_EQUAL(
-		RelationTableNRows(listPositionElement),
+		RelationNRows(listPositionElement),
 		listPositionElementNRowsInitial + EXAMPLE_LIST_N_ELEMENTS
 	)
 	// test elements are as expected

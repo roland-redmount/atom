@@ -43,10 +43,10 @@ Relation findMultisetRelation(byte elementType)
 /**
  * Find the tuple storage of the multiset relation for the given element atom type.
  */
-static RelationTable * findMultisetTable(byte elementType)
-{
-	return FindRelationTable(findMultisetRelation(elementType));
-}
+// static RelationWriter * findMultisetTable(byte elementType)
+// {
+// 	return FindRelationTable(findMultisetRelation(elementType));
+// }
 
 
 /**
@@ -78,12 +78,12 @@ void AddMultisetToIFact(
 	IFactDraft * draft,
 	MultisetElementGenerator generator, void const * data, size32 nUniqueElements, byte elementType)
 {
-	RelationTable * table = findMultisetTable(elementType);
+	Relation relation = findMultisetRelation(elementType);
 
 	// assert (multiset element multiple) facts
 	IFactBeginConjunction(
 		draft, 
-		table,
+		RelationGetTupleStore(relation),
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
 	);
 	Atom tuple[3];
@@ -184,8 +184,9 @@ void MultisetIterate(Atom multiset, byte elementType, MultisetIterator * iterato
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 		parameterIO
 	);
-	Operator const * op = FindService(
-		relation, CreateIOSignature(parameterIO, 3));
+	Operator const * op = FindServiceOperator(
+		(Service) {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 3)}
+	);
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
 		(Atom[]) {multiset, (Atom) {0}, (Atom) {0}},

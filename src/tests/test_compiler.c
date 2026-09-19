@@ -7,7 +7,6 @@
 #include "kernel/letter.h"
 #include "library/library.h"
 #include "kernel/Relation.h"
-#include "kernel/RelationTable.h"
 #include "kernel/ServiceRegistry.h"
 #include "library/string.h"
 #include "kernel/tuple.h"
@@ -24,15 +23,12 @@
 
 
 /**
- * CLAUDE: Index columns placing the named role of a binary relation first, so that a
- * query binding that role dispatches to a stored service: a B-tree provides one service
- * per prefix of its index columns. The roles of a form are not in the order they were
- * written, so the column has to be looked up. See RelationTable.indexColumns.
+ * Setup index columns for a binary relation placing the named role of a binary relation first.
  */
-static void indexBinaryRelationByRole(
-	Atom termForm, char const * roleName, index8 indexColumns[])
+static void setupBinaryRelationIndexColumns(
+	Atom termForm, char const * firstRole, index8 indexColumns[])
 {
-	Atom role = CreateNameFromCString(roleName);
+	Atom role = CreateNameFromCString(firstRole);
 	index8 column = PredicateRoleIndex(TermFormGetPredicateForm(termForm), role);
 	NameRelease(role);
 	indexColumns[0] = column;
@@ -70,13 +66,14 @@ void testCompilePermute1(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 
 	// TODO: verify the compiled service atom types are correct
 
 	// Call the service
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 3);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom d = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "=", 1);
@@ -85,7 +82,7 @@ void testCompilePermute1(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -104,11 +101,12 @@ void testCompilePermute2(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 
 	// Call the service
 	Atom arguments[2];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom x = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "number", 1);
@@ -121,7 +119,7 @@ void testCompilePermute2(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -155,11 +153,12 @@ void testCompileProject(void)
 	int k = 0;
 	for(index8 i = 0; i < nServices; i++) {
 		ASSERT_FALSE(IsNullRelation(services[i].relation))
-		ASSERT_NOT_NULL(services[i].op)
+		Operator * operator = FindServiceOperator(services[i]);
+		ASSERT_NOT_NULL(operator)
 
 		Atom arguments[2];
 		TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
-		void * context = OperatorCreateContext(services[i].op, arguments);
+		void * context = OperatorCreateContext(operator, arguments);
 		while(OperatorCall(context)) {
 			char c = LetterToChar(arguments[elementRoleIndex], LETTER_LOWERCASE);
 			ASSERT(k < 4)
@@ -171,7 +170,7 @@ void testCompileProject(void)
 	ASSERT_UINT32_EQUAL(k, 4);
 
 	for(index8 i = 0; i < nServices; i++) {
-		RemoveService(services[i].relation, services[i].op);
+		RemoveService(services[i]);
 	}
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -195,7 +194,7 @@ void testCompileUnconstrainedHeadVariable(void)
 	ASSERT_UINT32_EQUAL(nServices, 0)
 
 	for(index8 i = 0; i < nServices; i++) {
-		RemoveService(services[i].relation, services[i].op);
+		RemoveService(services[i]);
 	}
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
@@ -214,11 +213,12 @@ void testCompileJoin1(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 
 	// Call the service
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 3);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom y = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "second", 1);
@@ -230,7 +230,7 @@ void testCompileJoin1(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -252,11 +252,12 @@ void testCompileJoin2(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 
 	// Call the service
 	Atom arguments[2];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom t = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "third", 1);
@@ -265,7 +266,7 @@ void testCompileJoin2(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -286,11 +287,12 @@ void testCompileUnion(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 
 	// Call the service
 	Atom arguments[2];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
 	// The atom types are encoded in the relation table associated with
@@ -309,7 +311,7 @@ void testCompileUnion(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry1);
 	DictionaryRemoveClause(&entry2);
@@ -347,7 +349,7 @@ void testCompileConstrain(void)
 	size32 nTuples = 0;
 
 	Atom arguments[1] = {(Atom) {0}};
-	void * context = OperatorCreateContext(services[0].op, arguments);
+	void * context = OperatorCreateContext(FindServiceOperator(services[0]), arguments);
 	while(OperatorCall(context)) {
 		foundA = foundA || SameAtoms(arguments[0], nodeA);
 		foundB = foundB || SameAtoms(arguments[0], nodeB);
@@ -361,7 +363,7 @@ void testCompileConstrain(void)
 
 	IFactRelease(nodeA);
 	IFactRelease(nodeB);
-	RemoveService(services[0].relation, services[0].op);
+	RemoveService(services[0]);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 	TeardownRelationFixture(&edgeFixture);
@@ -385,23 +387,22 @@ void testCompileRecursiveJoin1(void)
 	// The recursive rule
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
 		"number n faculty f | ! < n > 0 | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
-	// Create terminating fact, provide by a B-tree service
+	// Create terminating fact
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
-	Relation relation = CreateRelation(
-		FormulaGetForm(terminatingFact),
-		CreateTypeSignature(
+	Relation relation = {
+		.termForm = FormulaGetForm(terminatingFact),
+		.typeSignature = CreateTypeSignature(
 			TypedTuplePeekAtomTypes(FormulaGetActors(terminatingFact)), 2)
-	);
-	RelationTable * table = CreateRelationTable(
-		relation, &btreeStorageProvider, (index8[]) {0, 1});
-	ReleaseRelation(relation);
-	RelationTableAddTuple(table, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
+	};
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	// Compile the query
 	Atom queryTerm = CStringToTerm("number 4 faculty f");
 
 	// CLAUDE: the stored service the compiled service takes over
+	// TODO: review this
 	IOSignature ioSignature = queryIOSignature(queryTerm);
-	Operator * storedOperator = FindService(relation, ioSignature);
+	Operator * storedOperator = FindServiceOperator((Service) {.relation = relation, .ioSignature = ioSignature});
 	ASSERT_NOT_NULL(storedOperator)
 	size32 nServicesBefore = NumberOfServices();
 	size32 nCompiledBefore = NumberOfCompiledServices();
@@ -410,19 +411,20 @@ void testCompileRecursiveJoin1(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
-	PrintService(&service);
+	Operator * operator = FindServiceOperator(service);
+	PrintService(service);
 
 	// CLAUDE: one service was taken over and one registered in its place,
 	// so the compiled service now answers what the stored service answered
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore + 1)
-	ASSERT_PTR_NOT_EQUAL(service.op, storedOperator)
-	ASSERT_PTR_EQUAL(FindService(relation, ioSignature), service.op)
+	ASSERT_PTR_NOT_EQUAL(operator, storedOperator)
+	ASSERT_PTR_EQUAL(FindServiceOperator((Service) {.relation = relation, .ioSignature = ioSignature}), operator)
 
 	// Call the service
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 3);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom f = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "faculty", 1);
@@ -431,15 +433,15 @@ void testCompileRecursiveJoin1(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	// CLAUDE: the taken-over operator goes with the union that held it, so the stored
 	// service is not restored. The storage provider creates its operators once, when the
 	// table is created, and nothing re-registers one.
-	ASSERT_NULL(FindService(relation, ioSignature))
+	ASSERT_NULL(FindServiceOperator((Service) {.relation = relation, .ioSignature = ioSignature}))
 
 	ReleaseFormula(queryTerm);
-	RelationTableRemoveTuple(table, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
-	ReleaseRelationTable(table);
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
+	DropRelation(relation);
 	ReleaseFormula(terminatingFact);
 	DictionaryRemoveClause(&entry);
 }
@@ -447,143 +449,141 @@ void testCompileRecursiveJoin1(void)
 
 
 /**
- * CLAUDE: A relation with both stored facts and a rule. The compiled service takes over
- * the stored service and reads it as one branch of its union, so that a query is answered
- * by the stored facts and the rule together.
+ * Test creating a relation with both stored facts and a service compiled from a rule,
+ * resulting in a UNION operator.
  */
 void testCompileStoredFactsAndRule(void)
 {
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"base n squared s | ! * n * n = s");
-
-	// A stored fact the rule does not derive
-	Atom storedFact = CStringToTerm("base 5 squared 99");
-	Relation relation = CreateRelation(
-		FormulaGetForm(storedFact),
-		CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
-	);
+	// Create relation with storage backed by B-tree
+	Atom storedFact = CStringToTerm("root 5 square 99");
+	// ensure the role "root" is the first index column
 	index8 indexColumns[2];
-	indexBinaryRelationByRole(FormulaGetForm(storedFact), "base", indexColumns);
-	RelationTable * table = CreateRelationTable(relation, &btreeStorageProvider, indexColumns);
-	ReleaseRelation(relation);
-	RelationTableAddTuple(table, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
-
-	Atom queryTerm = CStringToTerm("base 5 squared s");
-	IOSignature ioSignature = queryIOSignature(queryTerm);
+	setupBinaryRelationIndexColumns(FormulaGetForm(storedFact), "root", indexColumns);
+	Relation relation = RelationFromFact(FormulaGetView(storedFact));
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2,  indexColumns);
+	// Store a fact not entailed by the rule
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 	size32 nServicesBefore = NumberOfServices();
 
+	// Create a rule to compile against
+	// NOTE: this doesn't invalidate primitive services.
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"root n square s | ! * n * n = s");
+	// Compile a query
+	Atom queryTerm = CStringToTerm("root 5 square s");
+	IOSignature ioSignature = queryIOSignature(queryTerm);
 	Service services[MAX_COMPILED_SERVICES];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 
-	// The stored service was taken over, so no service was added
+	// The B-tree's primitive service becomes part of a union, so no service was added
+	ASSERT_INT32_EQUAL(operator->type, OPERATOR_UNION)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)
-	ASSERT_PTR_EQUAL(FindService(relation, ioSignature), service.op)
+	ASSERT_PTR_EQUAL(FindServiceOperator((Service) {.relation = relation, .ioSignature = ioSignature}), operator)
 
-	// The stored base yields both the derived square and the stored fact
+	// This query matches both the computed and the stored facts
 	Atom arguments[2];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 	ASSERT_INT64_EQUAL(
-		TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "squared", 1)._int, 25)
+		TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "square", 1)._int, 25)
 	ASSERT_TRUE(OperatorCall(context))
 	ASSERT_INT64_EQUAL(
-		TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "squared", 1)._int, 99)
+		TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "square", 1)._int, 99)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	// A base with no stored fact yields the derived square alone
-	Atom otherQuery = CStringToTerm("base 3 squared s");
+	// This query matches no stored fact, so yields only one computed fact
+	Atom otherQuery = CStringToTerm("root 3 square s");
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(otherQuery)), arguments, 2);
-	context = OperatorCreateContext(service.op, arguments);
+	context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 	ASSERT_INT64_EQUAL(
-		TermGetRoleActor(FormulaGetForm(otherQuery), arguments, "squared", 1)._int, 9)
+		TermGetRoleActor(FormulaGetForm(otherQuery), arguments, "square", 1)._int, 9)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 	ReleaseFormula(otherQuery);
 
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	ReleaseFormula(queryTerm);
-	RelationTableRemoveTuple(table, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
-	ReleaseRelationTable(table);
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+	DropRelation(relation);
 	ReleaseFormula(storedFact);
 	DictionaryRemoveClause(&entry);
 }
 
 
 /**
- * CLAUDE: A stored relation with no rule of its form. The query is answered as it stands,
- * so compiling it registers nothing and leaves the stored service in place.
+ * Test compiling a query that matches an existing service, but matches no rule.
+ * This should do nothing.
  */
-void testCompileStoredServiceAnswersQuery(void)
+void testCompileQueryNoMatchingRules(void)
 {
 	Atom storedFact = CStringToTerm("shade 3 value 7");
-	Relation relation = CreateRelation(
-		FormulaGetForm(storedFact),
-		CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
-	);
 	index8 indexColumns[2];
-	indexBinaryRelationByRole(FormulaGetForm(storedFact), "shade", indexColumns);
-	RelationTable * table = CreateRelationTable(relation, &btreeStorageProvider, indexColumns);
-	ReleaseRelation(relation);
-	RelationTableAddTuple(table, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+	setupBinaryRelationIndexColumns(FormulaGetForm(storedFact), "shade", indexColumns);
+	Relation relation = {
+		.termForm = FormulaGetForm(storedFact),
+		.typeSignature = CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
+	};
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, indexColumns);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 
 	Atom queryTerm = CStringToTerm("shade 3 value v");
 	IOSignature ioSignature = queryIOSignature(queryTerm);
-	Operator * storedOperator = FindService(relation, ioSignature);
-	ASSERT_NOT_NULL(storedOperator)
+	Operator * machineOperator = FindServiceOperator((Service) {.relation = relation, .ioSignature = ioSignature});
+	ASSERT_NOT_NULL(machineOperator)
 	size32 nServicesBefore = NumberOfServices();
 
+	// Attempt to compile the query should yield no services
 	Service services[MAX_COMPILED_SERVICES];
 	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 0)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)
-	ASSERT_PTR_EQUAL(FindService(relation, ioSignature), storedOperator)
+	// The machine operator for the primitive service is still the same
+	ASSERT_PTR_EQUAL(FindServiceOperator((Service) {.relation = relation, .ioSignature = ioSignature}), machineOperator)
 
 	ReleaseFormula(queryTerm);
-	RelationTableRemoveTuple(table, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
-	ReleaseRelationTable(table);
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+	DropRelation(relation);
 	ReleaseFormula(storedFact);
 }
 
 
 /**
- * CLAUDE: A stored relation with a rule of its form that does not compile, its body term
- * having no service. The variant seeded from the stored service has nothing to union with
- * and is dropped again, leaving the stored service as it was.
+ * Test compile a query that matches a rule that yields no services.
  */
-void testCompileStoredServiceWithUncompilableRule(void)
+void testCompileQueryWithUselessRule(void)
 {
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
 		"tone n level v | ! nosuch n thing v");
 
 	Atom storedFact = CStringToTerm("tone 3 level 7");
-	Relation relation = CreateRelation(
-		FormulaGetForm(storedFact),
-		CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
-	);
 	index8 indexColumns[2];
-	indexBinaryRelationByRole(FormulaGetForm(storedFact), "tone", indexColumns);
-	RelationTable * table = CreateRelationTable(relation, &btreeStorageProvider, indexColumns);
-	ReleaseRelation(relation);
-	RelationTableAddTuple(table, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+	setupBinaryRelationIndexColumns(FormulaGetForm(storedFact), "tone", indexColumns);
+	Relation relation = {
+		.termForm = FormulaGetForm(storedFact),
+		.typeSignature = CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
+	};
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, indexColumns);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 
 	Atom queryTerm = CStringToTerm("tone 3 level v");
 	IOSignature ioSignature = queryIOSignature(queryTerm);
-	Operator * storedOperator = FindService(relation, ioSignature);
+	Operator * storedOperator = FindServiceOperator((Service) {.relation = relation, .ioSignature = ioSignature});
 	ASSERT_NOT_NULL(storedOperator)
 	size32 nServicesBefore = NumberOfServices();
 
 	Service services[MAX_COMPILED_SERVICES];
 	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 0)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)
-	ASSERT_PTR_EQUAL(FindService(relation, ioSignature), storedOperator)
+	ASSERT_PTR_EQUAL(FindServiceOperator((Service) {.relation = relation, .ioSignature = ioSignature}), storedOperator)
 
 	ReleaseFormula(queryTerm);
-	RelationTableRemoveTuple(table, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
-	ReleaseRelationTable(table);
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+	DropRelation(relation);
 	ReleaseFormula(storedFact);
 	DictionaryRemoveClause(&entry);
 }
@@ -618,12 +618,13 @@ void testCompileRecursiveJoin2(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 
 	// Call the service. Both arguments are bound, so it yields the query tuple itself
 	// if the relation holds it, and nothing otherwise.
 	Atom arguments[2];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom before = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "before", 1);
@@ -638,7 +639,7 @@ void testCompileRecursiveJoin2(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -663,6 +664,7 @@ void testCompileRecursiveReachable(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 
 	// The nodes after a, which the fixpoint yields in its own order
 	char const * expectedNodes[3] = {"b", "c", "d"};
@@ -670,7 +672,7 @@ void testCompileRecursiveReachable(void)
 
 	Atom arguments[2];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	size32 nTuples = 0;
 	while(OperatorCall(context)) {
 		Atom after = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "after", 1);
@@ -687,7 +689,7 @@ void testCompileRecursiveReachable(void)
 	for(index8 i = 0; i < 3; i++)
 		ASSERT_TRUE(found[i])
 
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -730,7 +732,7 @@ void testCompileRecursiveTermUnboundInput(void)
 	size32 nTuples = 0;
 	Atom arguments[2];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
-	void * context = OperatorCreateContext(services[0].op, arguments);
+	void * context = OperatorCreateContext(FindServiceOperator(services[0]), arguments);
 	while(OperatorCall(context)) {
 		Atom hop = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "hop", 1);
 		ASSERT_TRUE(SameAtoms(hop, nodeB))
@@ -740,7 +742,7 @@ void testCompileRecursiveTermUnboundInput(void)
 	ASSERT_UINT32_EQUAL(nTuples, 1)
 
 	IFactRelease(nodeB);
-	RemoveService(services[0].relation, services[0].op);
+	RemoveService(services[0]);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&recursiveEntry);
 	DictionaryRemoveClause(&baseEntry);
@@ -771,6 +773,7 @@ void testCompileRecursiveClosure(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 
 	char const * expectedBefore[PREC_SUCC_N_CLOSURE_TUPLES] = {
 		"a", "a", "a", "b", "b", "b", "c", "c", "c", "e"};
@@ -780,7 +783,7 @@ void testCompileRecursiveClosure(void)
 
 	Atom arguments[2];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	size32 nTuples = 0;
 	while(OperatorCall(context)) {
 		Atom before = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "before", 1);
@@ -802,7 +805,7 @@ void testCompileRecursiveClosure(void)
 	for(index8 i = 0; i < PREC_SUCC_N_CLOSURE_TUPLES; i++)
 		ASSERT_TRUE(found[i])
 
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -827,11 +830,11 @@ void testCompileRecursiveVariants(void)
 
 	// Add a second (prec succ) relation with types {AT_INT, AT_INT},
 	// defining a separate graph.
-	Relation precSuccIntRelation = CreateRelation(
-		precSuccFixture.termForm, CreateTypeSignature((byte[]) {AT_INT, AT_INT}, 2));
-	RelationTable * precSuccIntTable = CreateRelationTable(
-		precSuccIntRelation, &btreeStorageProvider, (index8[]) {0, 1});
-	ReleaseRelation(precSuccIntRelation);
+	Relation precSuccIntRelation = {
+		.termForm =	precSuccFixture.termForm,
+		.typeSignature = CreateTypeSignature((byte[]) {AT_INT, AT_INT}, 2)
+	};
+	TupleStore * store = CreateTupleStore(precSuccIntRelation, &btreeStorageProvider, 2, 0);
 	// Add the facts (prec 1 succ 2), (prec 2 succ 3)
 	index8 precRoleIndex = RelationFixtureRoleIndex(&precSuccFixture, "prec");
 	index8 succRoleIndex = RelationFixtureRoleIndex(&precSuccFixture, "succ");
@@ -839,7 +842,7 @@ void testCompileRecursiveVariants(void)
 	for(index8 i = 0; i < 2; i++) {
 		precSuccIntEdges[i][precRoleIndex] = (Atom) {._int = 1 + i};
 		precSuccIntEdges[i][succRoleIndex] = (Atom) {._int = 2 + i};
-		RelationTableAddTuple(precSuccIntTable, precSuccIntEdges[i], 0);
+		TupleStoreAddTuple(store, precSuccIntEdges[i], 0);
 	}
 	// The query (before x after y) should now generate a (before after) service
 	// for both the AT_ID and AT_INT versions, seeded by the non-recursive rule
@@ -860,7 +863,7 @@ void testCompileRecursiveVariants(void)
 		bool intService = (compiledServices[i].relation.typeSignature.atomTypes[0] == AT_INT);
 		Atom arguments[2];
 		TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
-		void * context = OperatorCreateContext(compiledServices[i].op, arguments);
+		void * context = OperatorCreateContext(FindServiceOperator(compiledServices[i]), arguments);
 		while(OperatorCall(context)) {
 			if(!intService) {
 				// we have the AT_ID relation
@@ -887,11 +890,11 @@ void testCompileRecursiveVariants(void)
 
 	// Cleanup
 	for(index8 i = 0; i < nCompiledServices; i++)
-		RemoveService(compiledServices[i].relation, compiledServices[i].op);
+		RemoveService(compiledServices[i]);
 	ReleaseFormula(queryTerm);
 	for(index8 i = 0; i < 2; i++)
-		RelationTableRemoveTuple(precSuccIntTable, precSuccIntEdges[i], 0);
-	ReleaseRelationTable(precSuccIntTable);
+		RelationRemoveTuple(precSuccIntRelation, precSuccIntEdges[i], 0);
+	DropRelation(precSuccIntRelation);
 	DictionaryRemoveClause(&recursiveRule);
 	DictionaryRemoveClause(&baseRule);
 	TeardownRelationFixture(&precSuccFixture);
@@ -909,12 +912,12 @@ void testCompileNegatedTerm(void)
 {
 	// Setup the fact (odd 3)
 	Atom odd3term = CStringToTerm("odd 3");
-	Relation evenRelation = CreateRelation(
-		FormulaGetForm(odd3term), CreateTypeSignature((byte[]) {AT_INT}, 1));
-	RelationTable * evenTable = CreateRelationTable(
-		evenRelation, &btreeStorageProvider, (index8[]) {0});
-	ReleaseRelation(evenRelation);
-	RelationTableAddTuple(evenTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
+	Relation oddRelation = {
+		.termForm = FormulaGetForm(odd3term),
+		.typeSignature = CreateTypeSignature((byte[]) {AT_INT}, 1)
+	};
+	TupleStore * store = CreateTupleStore(oddRelation, &btreeStorageProvider, 1, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	// setup the rule
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
 	Atom queryTerm = CStringToTerm("! even 3");
@@ -924,11 +927,12 @@ void testCompileNegatedTerm(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 
 	// Call the resulting service
 	Atom arguments[1];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 1);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom x = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "even", 1);
@@ -939,13 +943,13 @@ void testCompileNegatedTerm(void)
 	OperatorFreeContext(context);
 
 	// teardown
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	ReleaseFormula(queryTerm);
 	
 	DictionaryRemoveClause(&entry);
 
-	RelationTableRemoveTuple(evenTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
-	ReleaseRelationTable(evenTable);
+	RelationRemoveTuple(oddRelation, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
+	DropRelation(oddRelation);
 	ReleaseFormula(odd3term);
 }
 
@@ -958,14 +962,15 @@ void testCompileNegatedTerm(void)
  */
 void testCompiledServiceReadsFactsLive(void)
 {
-	// (odd 3), and the rule making (! even x) follow from (odd x)
+	// Add the fact (odd 3)
 	Atom odd3term = CStringToTerm("odd 3");
-	Relation oddRelation = CreateRelation(
-		FormulaGetForm(odd3term), CreateTypeSignature((byte[]) {AT_INT}, 1));
-	RelationTable * oddTable = CreateRelationTable(
-		oddRelation, &btreeStorageProvider, (index8[]) {0});
-	ReleaseRelation(oddRelation);
-	RelationTableAddTuple(oddTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
+	Relation oddRelation = {
+		.termForm = FormulaGetForm(odd3term),
+		.typeSignature = CreateTypeSignature((byte[]) {AT_INT}, 1)
+	};
+	TupleStore * store = CreateTupleStore(oddRelation, &btreeStorageProvider, 1, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
+	// Add the rule (odd x -> ! even x)
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
 
 	Atom queryTerm = CStringToTerm("! even 3");
@@ -973,36 +978,37 @@ void testCompiledServiceReadsFactsLive(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 	size32 nCompiled = NumberOfCompiledServices();
 
 	Atom arguments[1];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 1);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 	OperatorFreeContext(context);
 
 	// Retracting the fact leaves the service registered, as the relation still exists
-	RelationTableRemoveTuple(oddTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
+	RelationRemoveTuple(oddRelation, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiled)
 
 	// and that same service now yields nothing, having read the change
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 1);
-	context = OperatorCreateContext(service.op, arguments);
+	context = OperatorCreateContext(operator, arguments);
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
 	// asserting it again brings the answer back, still without recompiling
-	RelationTableAddTuple(oddTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
+	RelationAddTuple(oddRelation, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 1);
-	context = OperatorCreateContext(service.op, arguments);
+	context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
-	RelationTableRemoveTuple(oddTable, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
-	ReleaseRelationTable(oddTable);
+	RelationRemoveTuple(oddRelation, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
+	DropRelation(oddRelation);
 	ReleaseFormula(odd3term);
 }
 
@@ -1025,10 +1031,11 @@ void testCompileSquares(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 
 	Atom arguments[2];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 
 	for(int64 expected = 1; expected <= 4; expected++) {
 		ASSERT_TRUE(OperatorCall(context))
@@ -1040,7 +1047,7 @@ void testCompileSquares(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
 }
@@ -1086,7 +1093,7 @@ void testCompileChainedRules(void)
 	Atom nodeC = CreateStringFromCString("c");
 	Atom arguments[2];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
-	void * context = OperatorCreateContext(services[0].op, arguments);
+	void * context = OperatorCreateContext(FindServiceOperator(services[0]), arguments);
 	ASSERT_TRUE(OperatorCall(context))
 	Atom x = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "grandparent", 1);
 	Atom z = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "grandchild", 1);
@@ -1097,7 +1104,7 @@ void testCompileChainedRules(void)
 
 	IFactRelease(nodeA);
 	IFactRelease(nodeC);
-	RemoveService(services[0].relation, services[0].op);
+	RemoveService(services[0]);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&grandparentEntry);
 	DictionaryRemoveClause(&parentEntry);
@@ -1144,7 +1151,7 @@ void testCompileChainedRuleOrder(void)
 	Atom labelA = CreateStringFromCString("la");
 	Atom arguments[2];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
-	void * context = OperatorCreateContext(services[0].op, arguments);
+	void * context = OperatorCreateContext(FindServiceOperator(services[0]), arguments);
 	ASSERT_TRUE(OperatorCall(context))
 	Atom g = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "give", 1);
 	ASSERT_TRUE(SameAtoms(g, labelA))
@@ -1162,7 +1169,7 @@ void testCompileChainedRuleOrder(void)
 	ASSERT_FALSE(DispatchQueryFormula(unboundAlias, &aliasService, aliasPermutation))
 	ReleaseFormula(unboundAlias);
 
-	RemoveService(services[0].relation, services[0].op);
+	RemoveService(services[0]);
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&pickEntry);
 	DictionaryRemoveClause(&aliasEntry);
@@ -1207,18 +1214,19 @@ void testCompileNewIOPattern(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 
 	// 'A is the first letter of "AB"
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 3);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 	Atom position = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "position", 1);
 	ASSERT_INT64_EQUAL(position._int, 1)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	ReleaseFormula(queryTerm);
 }
 
@@ -1235,11 +1243,12 @@ void testCompileNewIOPatternRepeated(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 
 	int64 const expectedPositions[] = {1, 5, 7};
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 3);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	for(index8 i = 0; i < 3; i++) {
 		ASSERT_TRUE(OperatorCall(context))
 		Atom position = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "position", 1);
@@ -1248,7 +1257,7 @@ void testCompileNewIOPatternRepeated(void)
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	ReleaseFormula(queryTerm);
 }
 
@@ -1271,12 +1280,13 @@ void testCompileFilterInRuleBody(void)
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
+	Operator * operator = FindServiceOperator(service);
 
 	// 'a occurs at positions 1, 4, 6, 8, 11 of "abracadabra"
 	int64 const expectedPositions[] = {1, 4, 6, 8, 11};
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 3);
-	void * context = OperatorCreateContext(service.op, arguments);
+	void * context = OperatorCreateContext(operator, arguments);
 	for(index8 i = 0; i < 5; i++) {
 		ASSERT_TRUE(OperatorCall(context))
 		Atom position = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "position", 1);
@@ -1287,7 +1297,7 @@ void testCompileFilterInRuleBody(void)
 
 	// Compiling the query also compiled a service for its body term, which is a cache
 	// over the list relation and outlives the rule; remove both
-	RemoveService(service.relation, service.op);
+	RemoveService(service);
 	RemoveAllCompiledServices();
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 
@@ -1353,8 +1363,8 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testCompileRecursiveJoin1);
 	ExecuteTest(testCompileStoredFactsAndRule);
-	ExecuteTest(testCompileStoredServiceAnswersQuery);
-	ExecuteTest(testCompileStoredServiceWithUncompilableRule);
+	ExecuteTest(testCompileQueryNoMatchingRules);
+	ExecuteTest(testCompileQueryWithUselessRule);
 
 	UnloadLibraries();
 	TestSummary();

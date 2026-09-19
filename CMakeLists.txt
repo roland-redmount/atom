@@ -120,10 +120,10 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
     src/kernel/multiset.c
     src/kernel/Parameter.c
     src/kernel/Relation.c
-    src/kernel/RelationTable.c
     src/kernel/operator.c
     src/kernel/ServiceRegistry.c
     src/kernel/tuple.c
+	src/kernel/TupleStore.c
     src/kernel/typedtuple.c
 
 	src/compiler/choicepoints.c
@@ -131,6 +131,7 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
     src/compiler/compiler.c
 	src/compiler/compilestack.c
 
+	src/storage/StorageProvider.c
     src/storage/RelationBTree.c
 
 	src/library/ifactservice.c

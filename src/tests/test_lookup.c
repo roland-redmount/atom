@@ -50,9 +50,7 @@ void testLookup(void)
 
 
 /**
- * Adding and removing the roles of a predicate must visit the same columns.
- * Only AT_ID columns obtain a lookup record, so a relation with a column of
- * another type tells the two apart.
+ * Test Adding and removing the roles of a predicate.
  */
 void testLookupPredicateRoles(void)
 {
@@ -69,8 +67,8 @@ void testLookupPredicateRoles(void)
 	atomTypes[nodeIndex] = AT_ID;
 	atomTypes[weightIndex] = AT_INT;
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, 2);
-	// a computed relation, as we only need it to describe the columns
-	Relation relation = CreateRelation(form, typeSignature);
+	Relation relation = {.termForm = form, .typeSignature = typeSignature};
+	AcquireRelation(relation);
 
 	Atom node = CreateStringFromCString("foo");
 	Atom actors[2];
@@ -85,8 +83,8 @@ void testLookupPredicateRoles(void)
 	LookupRemovePredicateRoles(relation, actors);
 	ASSERT_FALSE(AtomHasRole(node, relation, roles[0]))
 
-	IFactRelease(node);
 	ReleaseRelation(relation);
+	IFactRelease(node);
 	IFactRelease(form);
 	IFactRelease(predicateForm);
 	NameRelease(roles[0]);

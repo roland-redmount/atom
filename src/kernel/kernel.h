@@ -3,9 +3,8 @@
  */
 
 #include "kernel/Relation.h"
-#include "kernel/RelationTable.h"
 #include "kernel/operator.h"
-// for TRANSIENT_MEMORY and PERSISTENT_MEMORY
+#include "kernel/TupleStore.h"		// for TRANSIENT_MEMORY and PERSISTENT_MEMORY
 #include "memory/paging.h"
 #include "platform.h"
 
@@ -127,7 +126,7 @@ Atom GetCoreRoleName(index32 roleId);
 
 Relation GetCoreRelation(index32 relationId);
 
-RelationTable * GetCoreRelationTable(index32 relationId);
+TupleStore * GetCoreTupleStore(index32 relationId);
 
 /**
  * Return the operator of a core service, given a SERVICE_* id.
