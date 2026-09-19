@@ -221,7 +221,7 @@ void testInvalidateServiceByNewRelation(void)
 		.termForm = precSuccFixture.termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
 	};
-	TupleStore * store = CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
+	CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
 	
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)
 

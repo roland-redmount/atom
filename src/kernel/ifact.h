@@ -91,6 +91,9 @@ void IFactBegin(IFactDraft * draft);
  * Begin a new conjunction for the IFactDraft, storing tuples in the given TupleStore.
  * The idColumn indicates the actor that is being defined by the IFact.
  * The new conjunction acquires a reference to the given RelationWriter.
+ * 
+ * NOTE: this function may register a new service for the TupleStore's relation
+ * with the idColumn as the single input, if no such service already exists.
  */
 void IFactBeginConjunction(IFactDraft * draft, TupleStore * store, index8 idColumn);
 

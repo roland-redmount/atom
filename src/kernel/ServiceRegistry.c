@@ -244,12 +244,6 @@ void CreateService(Service service, Operator * op)
 }
 
 
-// bool ServiceIsPrimitive(Service const * service)
-// {
-// 	return service->op->type == OPERATOR_MACHINE;
-// }
-
-
 void ServiceRegistryRemoveAll(Relation relation)
 {
 	// Add all services for the given relation to 

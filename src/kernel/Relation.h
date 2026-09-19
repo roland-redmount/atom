@@ -73,15 +73,15 @@ bool SameRelations(Relation relation1, Relation relation2);
 /**
  * Test for a null relation, marking an absent value (no relation)
  */
-bool IsNullRelation(Relation signature);
+bool IsNullRelation(Relation relation);
 
 /**
- * Compute the hash of a relation signature, on top of an initialHash
+ * Compute the hash of a relation, on top of an initialHash
  */
-data64 RelationHash(Relation signature, data64 initialHash);
+data64 RelationHash(Relation relation, data64 initialHash);
 
 /**
- * Return the relation (signature) that the given fact belongs to,
+ * Return the relation that the given fact belongs to,
  * based on its atom types. The fact must be a term.
  * The returned Relation might not exist in the relation registry.
  * If the fact contains an AT_GENERATOR atom, the relation type is inferred to be AT_ID.
@@ -90,6 +90,8 @@ Relation RelationFromFact(FormulaView term);
 
 /**
  * Register a new Relation, or aquire a reference to one that already exists.
+ * 
+ * NOTE: Only Service and TupleStore should need to use this function.
  */
 void AcquireRelation(Relation relation);
 
@@ -117,13 +119,6 @@ Relation CreateRelationFromTerm(Atom term);
  */
 struct s_TupleStore * RelationGetTupleStore(Relation relation);
 
-
-/**
- * Add a primitive service to the relation, specified by a RelationReader.
- * This is a low-level method, should only be called by the storage provider.
- */
-// Service RelationAddPrimitiveService(Relation relation, RelationReaderSpec const * readerSpec);
-
 /**
  * Return the predicate form corresponding to the Relation's term form.
  * This is used to avoid calling TermFormGetPredicateForm() form LookupAddPredicateRoles(),
@@ -134,42 +129,42 @@ Atom RelationGetPredicateForm(Relation relation);
 /**
  * Test if the given relation exists in the registry.
  */
-bool RelationExists(Relation signature);
-
-/**
- * Return the number of columns in a relation.
- */
-// size32 RelationNColumns(Relation signature);
+bool RelationExists(Relation relation);
 
 /**
  * Return the number of rows in a relation.
  */
-size32 RelationNRows(Relation signature);
+size32 RelationNRows(Relation relation);
 
 /**
  * Add a single tuple to the relation, acquiring each atom in the tuple.
+ * The relation must have a writable tuple store.
  * If idPosition is > 0 it indicates the 1-based position of an identified atom.
  * Acquires a reference to each atom in the tuple, except an identified atom.
  * Does not add lookup entries; see AssertFact()
  */
-byte RelationAddTuple(Relation signature, Atom const tuple[], uint8 idPosition);
+byte RelationAddTuple(Relation relation, Atom const tuple[], uint8 idPosition);
 
 /**
  * Remove the given tuple from the relation.
+ * The relation must have a writable tuple store.
  * If the tuple contains an identified atom, its position must match the given idPosition
  * to remove the tuple.
  * Does not remove the associated lookup entries; see RetractFact()
  */
-byte RelationRemoveTuple(Relation signature, Atom const tuple[], uint8 idPosition);
+byte RelationRemoveTuple(Relation relation, Atom const tuple[], uint8 idPosition);
 
 /**
  * Drop the relation, all its services, and any associated tuple storage.
  */
-void DropRelation(Relation signature);
+void DropRelation(Relation relation);
 
 /**
  * Garbage collect any relations that have only primitive services
  * and whose tuple store is empty.
+ * 
+ * TODO: this is untested. Currently this will drop kernel relations too
+ * if they are empty.
  */
 void DropEmptyRelations(void);
 
@@ -187,7 +182,7 @@ void DropEmptyRelations(void);
  * still have its services, which are used to locate the tuples to retract. It should be
  * released immediately afterwards.
  */
-void RelationReleaseTermForm(Relation signature);
+void RelationReleaseTermForm(Relation relation);
 
 /**
  * Setup an empty relation registry. Called during bootstrapping only.
@@ -197,7 +192,6 @@ void SetupRelationRegistry(void);
 /**
  * Deallocate the registry. Before calling this function,
  * all relations must have been released.
- * TODO: rename SetupRelations() ?
  */
 void FreeRelationRegistry(void);
 
