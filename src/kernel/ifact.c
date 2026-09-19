@@ -208,21 +208,21 @@ void IFactReserve(data64 hash)
 
 /**
  * Register a service for the given relation with idColumn as the sole input parameter.
- * Creates a FILTER operator based on an existing service for the relation.
+ * Creates a FILTER operator based on an existing all-outputs for the relation.
  * Returns 0 if the relation has no suitable service to filter.
  */
-static Operator * createIdColumnService(Service service, index8 idColumn)
+static Operator * createSingleInputService(Service service, index8 idColumn)
 {
-	// Find an all-output service
+	// Find an all-output service. This will be the child of the FILTER operator.
 	Service allOutputService = service;
 	allOutputService.ioSignature.parameterIO[idColumn] = PARAMETER_OUT;
-	Operator * childOperator = FindServiceOperator(allOutputService);
-	if(!childOperator)
+	Operator * allOutputOperator = FindServiceOperator(allOutputService);
+	if(!allOutputOperator)
 		return 0;
 	// Create the FILTER operator
-	Operator * op = CreateFilterOperator(childOperator, &idColumn, 1);
+	Operator * op = CreateFilterOperator(allOutputOperator, &idColumn, 1);
 	// Register the new service
-	CreateService(allOutputService, op);
+	CreateService(service, op);
 	return op;
 }
 
@@ -239,17 +239,17 @@ static Operator const * conjunctionOperator(IFactConjunction const * conjunction
 	for(index8 i = 0; i < conjunction->store->nColumns; i++)
 		parameterIO[i] = (i == conjunction->idColumn) ? PARAMETER_IN : PARAMETER_OUT;
 	IOSignature ioSignature = CreateIOSignature(parameterIO, conjunction->store->nColumns);
-	Service service = {
+	Service singleInputService = {
 		.relation = conjunction->store->relation,
 		.ioSignature = ioSignature,
 	};
 	// try to find an exact mathing service
-	Operator const * op = FindServiceOperator(service);
+	Operator const * op = FindServiceOperator(singleInputService);
 	if(op)
 		return op;
 	// Else, try to find an all-output service and create the required service using
 	// a FILTER operator
-	op = createIdColumnService(service, conjunction->idColumn);
+	op = createSingleInputService(singleInputService, conjunction->idColumn);
 	ASSERT(op)
 	return op;
 }
