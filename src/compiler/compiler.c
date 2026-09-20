@@ -1047,7 +1047,7 @@ static size8 compileClauses(
 					}
 					else {
 						// add compiled variant of this clause
-						ASSERT(nVariants < MAX_COMPILED_SERVICES)
+						ASSERT(nVariants < MAX_COMPILED_VARIANTS)
 						variant = &(variants[nVariants++]);
 						SetMemory(variant, sizeof(CompiledVariant), 0);
 						TupleCopy(resolvedParameters, variant->parameters, query->arity);
@@ -1075,16 +1075,17 @@ static size8 compileClauses(
  * Initialize the list of compiled variants with any existing primitive services.
  * Returns the number of variants seeded.
  */
+
 static size8 seedVariantsFromServices(ParameterizedQuery const * query, CompiledVariant variants[])
 {
-	SetMemory(variants, sizeof(CompiledVariant) * MAX_COMPILED_SERVICES, 0);
+	SetMemory(variants, sizeof(CompiledVariant) * MAX_COMPILED_VARIANTS, 0);
 	size8 nVariants = 0;
 
 	index8 permutation[query->arity];
 	DispatchIterator iterator;
 	DispatchIterate(query, DISPATCH_MATCH_EXACT, permutation, &iterator);
 	while(DispatchIteratorNext(&iterator)) {
-		ASSERT(nVariants < MAX_COMPILED_SERVICES)
+		ASSERT(nVariants < MAX_COMPILED_VARIANTS)
 		Service service = DispatchIteratorPeekService(&iterator);
 
 #ifdef DEBUG
@@ -1094,9 +1095,6 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
 		ASSERT(op->type == OPERATOR_MACHINE)
 #endif
 
-		/* CLAUDE: A form whose roles repeat can match under a permutation, which would order the
-		   compiled operator differently from the relation it is registered against. Such a match
-		   is left alone.*/
 	//    if(!IsIdentityPermutation(permutation, arity))
 	// 		continue;
 
@@ -1129,15 +1127,15 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
  * the possible query type signatures. for each compiled variant. The recursive clauses then
  * compile against these type signatures. A recursive clause therefore cannot occur without
  * at least one non-recursive clause of the same signature.
+ * 
+ * NOTE: this does not work when the base case of recursion is a single term, such as a
+ * stored tuple with a primitive service.
  */
 static size8 compileQueryClauseForms(
 	CompileStack * compileStack, ParameterizedQuery const * query, CompiledVariant variants[])
 {
-	/* First "seed" known primitive services for the query as variants.
-	   The services compiled later will UNION with these and register the result
-	   under the same signature.  A seed no clause compiled into is dropped again;
-	   see DiscardUnusedSeedVariants().
-	   CLAUDE: Seeding for the outermost query only: a term compiled
+	// Initialize the set of variants with known primitive services as variants
+	/* CLAUDE: for depth 1 query only: a term compiled
 	   deeper is one dispatch did not answer, possibly because a choice point excluded the
 	   very service we would take over, and taking one over removes it, which the
 	   compilation in flight is building on. */
@@ -1227,7 +1225,7 @@ static size8 compileFilterVariants(ParameterizedQuery const * query, CompiledVar
 	DispatchIterate(query, DISPATCH_MATCH_RELAXED, permutation, &iterator);
 
 	while(DispatchIteratorNext(&iterator)) {
-		ASSERT(nVariants < MAX_COMPILED_SERVICES)
+		ASSERT(nVariants < MAX_COMPILED_VARIANTS)
 		Service childService = DispatchIteratorPeekService(&iterator);
 		Operator * childOperator = DispatchIteratorPeekOperator(&iterator);
 
@@ -1330,7 +1328,7 @@ static size8 compileParameterizedQuery(
 	PrintChar('\n');
 #endif
 	// Compile all variants for the query
-	CompiledVariant variants[MAX_COMPILED_SERVICES];
+	CompiledVariant variants[MAX_COMPILED_VARIANTS];
 	size8 nVariants = compileQueryVariants(compileStack, query, variants);
 
 #ifdef DEBUG_COMPILER

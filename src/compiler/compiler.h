@@ -8,7 +8,7 @@
 
 // Upper bound on the number of services one query may compile to.
 // NOTE: this bound must not be exceeded, or the compiler will ASSERT
-#define MAX_COMPILED_SERVICES	8
+#define MAX_COMPILED_VARIANTS	8
 
 /**
  * Attempt to compile a query, registering every generated service.

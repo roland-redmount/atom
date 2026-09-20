@@ -62,7 +62,7 @@ void testCompilePermute1(void)
 	Atom queryTerm = CStringToTerm("+ 7 - 4 = d");
 
 	// This will yield a new service from the existing (+ + =) service
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -97,7 +97,7 @@ void testCompilePermute2(void)
 	DictionaryEntry entry = DictionaryAddClauseFromCString("number x addtwo y | ! + x + 2 = y");
 	Atom queryTerm = CStringToTerm("number 3 addtwo z");
 
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -140,7 +140,7 @@ void testCompileProject(void)
 	// get one compiled service per element type, and must enumerate them all.
 	// Only the LETTER-element service yields tuples, as "alibaba" is a string;
 	// the ID-element service is registered but matches nothing.
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 2)
 
@@ -189,7 +189,7 @@ void testCompileUnconstrainedHeadVariable(void)
 		"set s element e size n | ! list s position p element e");
 	Atom queryTerm = CStringToTerm("set \"ab\" element e size z");
 
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 0)
 
@@ -209,7 +209,7 @@ void testCompileJoin1(void)
 		"first x second y third z | ! + x + 1 = y | ! + y + 1 = z");
 	Atom queryTerm = CStringToTerm("first 3 second s third t");
 
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -248,7 +248,7 @@ void testCompileJoin2(void)
 		"first x third z | ! + x + 1 = y | ! + y + 1 = z");
 	Atom queryTerm = CStringToTerm("first 3 third t");
 
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -283,7 +283,7 @@ void testCompileUnion(void)
 		"number x neighbor y | ! = x + y + 1");
 	Atom queryTerm = CStringToTerm("number 5 neighbor y");
 
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -336,7 +336,7 @@ void testCompileConstrain(void)
 		"self x | ! edge e from x to x");
 	Atom queryTerm = CStringToTerm("self y");
 
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
@@ -407,7 +407,7 @@ void testCompileRecursiveJoin1(void)
 	size32 nServicesBefore = NumberOfServices();
 	size32 nCompiledBefore = NumberOfCompiledServices();
 
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -472,7 +472,7 @@ void testCompileStoredFactsAndRule(void)
 	// Compile a query
 	Atom queryTerm = CStringToTerm("root 5 square s");
 	IOSignature ioSignature = queryIOSignature(queryTerm);
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -539,7 +539,7 @@ void testCompileQueryNoMatchingRules(void)
 	size32 nServicesBefore = NumberOfServices();
 
 	// Attempt to compile the query should yield no services
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 0)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)
 	// The machine operator for the primitive service is still the same
@@ -576,7 +576,7 @@ void testCompileQueryWithUselessRule(void)
 	ASSERT_NOT_NULL(storedOperator)
 	size32 nServicesBefore = NumberOfServices();
 
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 0)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)
 	ASSERT_PTR_EQUAL(FindServiceOperator((Service) {.relation = relation, .ioSignature = ioSignature}), storedOperator)
@@ -614,7 +614,7 @@ void testCompileRecursiveJoin2(void)
 	AddTransitiveClosureRules(&entry1, &entry2);
 
 	Atom queryTerm = CStringToTerm("before \"a\" after \"d\"");
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -660,7 +660,7 @@ void testCompileRecursiveReachable(void)
 	AddTransitiveClosureRules(&entry1, &entry2);
 
 	Atom queryTerm = CStringToTerm("before \"a\" after y");
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -723,7 +723,7 @@ void testCompileRecursiveTermUnboundInput(void)
 		"reach a hop b | ! reach c hop b | ! prec c succ a");
 
 	Atom queryTerm = CStringToTerm("reach \"a\" hop y");
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
@@ -769,7 +769,7 @@ void testCompileRecursiveClosure(void)
 	AddTransitiveClosureRules(&entry1, &entry2);
 
 	Atom queryTerm = CStringToTerm("before x after y");
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -848,7 +848,7 @@ void testCompileRecursiveVariants(void)
 	// for both the AT_ID and AT_INT versions, seeded by the non-recursive rule
 	// (before x after y <- prec x succ y)
 	Atom queryTerm = CStringToTerm("before x after y");
-	Service compiledServices[MAX_COMPILED_SERVICES];
+	Service compiledServices[MAX_COMPILED_VARIANTS];
 	size8 nCompiledServices = CompileQuery(FormulaGetView(queryTerm), compiledServices);
 	ASSERT_UINT32_EQUAL(nCompiledServices, 2)
 
@@ -923,7 +923,7 @@ void testCompileNegatedTerm(void)
 	Atom queryTerm = CStringToTerm("! even 3");
 
 	// compile the query
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -974,7 +974,7 @@ void testCompiledServiceReadsFactsLive(void)
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
 
 	Atom queryTerm = CStringToTerm("! even 3");
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -1027,7 +1027,7 @@ void testCompileSquares(void)
 		"number n square s | ! lower 1 number n upper 4 | ! * n * n = s");
 	Atom queryTerm = CStringToTerm("number n square s");
 
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -1080,7 +1080,7 @@ void testCompileChainedRules(void)
 
 	size32 nCompiledBefore = NumberOfCompiledServices();
 	Atom queryTerm = CStringToTerm("grandparent x grandchild z");
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
@@ -1144,7 +1144,7 @@ void testCompileChainedRuleOrder(void)
 		"pick p give g | ! start p point k | ! alias k as g");
 
 	Atom queryTerm = CStringToTerm("pick \"sa\" give g");
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
@@ -1190,7 +1190,7 @@ void testCompileMutualRecursion(void)
 	DictionaryEntry qEntry = DictionaryAddClauseFromCString("q x | ! p x");
 
 	Atom queryTerm = CStringToTerm("p n");
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 0)
 
@@ -1210,7 +1210,7 @@ void testCompileNewIOPattern(void)
 {
 	Atom queryTerm = CStringToTerm("list \"AB\" position _ element 'A");
 
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -1239,7 +1239,7 @@ void testCompileNewIOPatternRepeated(void)
 {
 	Atom queryTerm = CStringToTerm("list \"alibaba\" position _ element 'a");
 
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -1276,7 +1276,7 @@ void testCompileFilterInRuleBody(void)
 		"at s position p letter e | ! list s position p element e");
 	Atom queryTerm = CStringToTerm("at \"abracadabra\" position q letter 'a");
 
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
@@ -1314,7 +1314,7 @@ void testFilterServiceInvalidatedByRule(void)
 {
 	size32 nCompiledBefore = NumberOfCompiledServices();
 	Atom queryTerm = CStringToTerm("list \"AB\" position _ element 'A");
-	Service services[MAX_COMPILED_SERVICES];
+	Service services[MAX_COMPILED_VARIANTS];
 	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 1)
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore + 1)
 
