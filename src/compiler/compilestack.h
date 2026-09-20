@@ -16,25 +16,27 @@
 #ifndef COMPILE_STACK_H
 #define COMPILE_STACK_H
 
+#include "kernel/dispatch.h"
+#include "kernel/Relation.h"
 #include "lang/formula.h"
 
 
 #define MAX_COMPILE_STACK_DEPTH	16
 
 typedef struct s_CompileStack {
-	FormulaView terms[MAX_COMPILE_STACK_DEPTH];
+	ParameterizedQuery queries[MAX_COMPILE_STACK_DEPTH];
 	size8 depth;
 } CompileStack;
 
 
-void CompileStackAdd(CompileStack * stack, FormulaView term);
+void CompileStackPush(CompileStack * stack, ParameterizedQuery const * query);
 
 /**
  * Remove the term added last.
  */
-void CompileStackRemove(CompileStack * stack);
+void CompileStackPop(CompileStack * stack);
 
-bool CompileStackContainsTerm(CompileStack const * stack, FormulaView term);
+bool CompileStackContainsTerm(CompileStack const * stack, ParameterizedQuery const * query);
 
 
 #endif // COMPILE_STACK_H

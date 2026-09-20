@@ -916,8 +916,8 @@ void testCompileNegatedTerm(void)
 		.termForm = FormulaGetForm(odd3term),
 		.typeSignature = CreateTypeSignature((byte[]) {AT_INT}, 1)
 	};
-	TupleStore * store = CreateTupleStore(oddRelation, &btreeStorageProvider, 1, 0);
-	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
+	TupleStore * oddStore = CreateTupleStore(oddRelation, &btreeStorageProvider, 1, 0);
+	TupleStoreAddTuple(oddStore, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	// setup the rule
 	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
 	Atom queryTerm = CStringToTerm("! even 3");

@@ -12,6 +12,15 @@
 #include "lang/SubstitutionList.h"
 #include "lang/unification.h"
 
+
+void ParameterizeQuery(FormulaView query, ParameterizedQuery * parameterizedQuery)
+{
+	parameterizedQuery->termForm = query.form;
+	parameterizedQuery->arity = query.actors->nAtoms;
+	ActorsToParameters(query.actors, parameterizedQuery->parameters);
+}
+
+
 bool DispatchParameterIOMatch(byte queryIO, byte serviceIO, int matchMode)
 {
 	if(queryIO == serviceIO)
@@ -88,18 +97,17 @@ static bool permutationMatch(
 
 
 void DispatchIterate(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
-	index8 permutation[], DispatchIterator * iterator)
+	ParameterizedQuery const * query, int matchMode, index8 permutation[], DispatchIterator * iterator)
 {
-	ASSERT(IsTermForm(queryTermForm))
+	ASSERT(IsTermForm(query->termForm))
 	SetMemory(iterator, sizeof(DispatchIterator), 0);
-	iterator->queryParameters = queryParameters;
-	iterator->nParameters = nParameters;
+	iterator->queryParameters = query->parameters;
+	iterator->nParameters = query->arity;
 	iterator->matchMode = matchMode;
 	iterator->permutation = permutation;
 	iterator->inRelation = false;
 	// Iterate over relations matching the term form.
-	RelationRegistryIterate(queryTermForm, &(iterator->relationIterator));
+	RelationRegistryIterate(query->termForm, &(iterator->relationIterator));
 }
 
 
@@ -176,19 +184,17 @@ static bool isExcludedCandidate(TypeSignature candidateSignature, TypeSignature 
 
 
 bool DispatchParameterizedQuery(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
-	Service * service, index8 permutation[],
+	ParameterizedQuery const * query, int matchMode, Service * service, index8 permutation[],
 	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch)
 {
-	ASSERT(!nExcluded || (nParameters <= RELATION_MAX_ARITY))
+	// QUESTION: what is this assert good for? (added by Claude)
+	ASSERT(!nExcluded || (query->arity <= RELATION_MAX_ARITY))
 
 	// The iterator overwrites its permutation array on every match, so iterate into
 	// a scratch array to avoid clobbering the returned permutation.
-	index8 candidatePermutation[nParameters];
+	index8 candidatePermutation[query->arity];
 	DispatchIterator iterator;
-	DispatchIterate(
-		queryTermForm, queryParameters, nParameters, matchMode, candidatePermutation,
-		&iterator);
+	DispatchIterate(query, matchMode, candidatePermutation, &iterator);
 
 	bool match = false;
 	if(hasNextMatch)
@@ -206,7 +212,7 @@ bool DispatchParameterizedQuery(
 		match = true;
 		// copy the service struct and its permutation to the caller
 		*service = candidate;
-		CopyMemory(candidatePermutation, permutation, nParameters * sizeof(index8));
+		CopyMemory(candidatePermutation, permutation, query->arity * sizeof(index8));
 		// without a hasNextMatch request we can stop at the first match;
 		// else we continue to determine if there are additional matches
 		if(hasNextMatch == 0)
@@ -220,13 +226,14 @@ bool DispatchParameterizedQuery(
 
 bool DispatchQuery(FormulaView query, Service * service, index8 permutation[])
 {
-	size8 arity = query.actors->nAtoms;
-	Atom queryParameters[arity];
-	ActorsToParameters(query.actors, queryParameters);
+	ParameterizedQuery parameterizedQuery = {
+		.termForm = query.form,
+		.arity = query.actors->nAtoms,
+	};
+	ActorsToParameters(query.actors, parameterizedQuery.parameters);
 
 	return DispatchParameterizedQuery(
-		query.form, queryParameters, arity, DISPATCH_MATCH_EXACT, service, permutation,
-		0, 0, 0);
+		&parameterizedQuery, DISPATCH_MATCH_EXACT, service, permutation, 0, 0, 0);
 }
 
 

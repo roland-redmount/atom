@@ -1,4 +1,5 @@
 #include "lang/Variable.h"
+#include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
 #include "lang/TypedAtom.h"
 #include "memory/allocator.h"
@@ -113,6 +114,15 @@ TypedTuple * CreateTupleFromTuple(TypedTuple const * otherTuple)
 {
 	TypedTuple * tuple = CreateTypedTuple(otherTuple->nAtoms);
 	TypedTupleCopy(otherTuple, tuple);
+	return tuple;
+}
+
+
+TypedTuple * CreateTypedTupleFromTuple(byte atomType, Atom const atoms[], size8 nAtoms)
+{
+	TypedTuple * tuple = CreateTypedTuple(nAtoms);
+	SetMemory(tupleTypeArray(tuple), nAtoms, atomType);
+	TupleCopy(atoms, tupleAtomArray(tuple), nAtoms);
 	return tuple;
 }
 

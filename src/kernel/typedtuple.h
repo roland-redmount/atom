@@ -37,22 +37,27 @@ size32 TypedTupleNBytes(size8 tupleNAtoms);
 size8 TypedTupleNAtoms(size32 tupleNBytes);
 
 /**
- * Create an empty tuple (all atoms zero)
+ * Create an empty TypedTuple (all atoms zero)
  */
 TypedTuple * CreateTypedTuple(size8 nAtoms);
 
 /**
- * Create a tuple by copying an array of atoms
+ * Create a TypedTuple by copying an array of atoms
  */
 TypedTuple * CreateTypedTupleFromArray(TypedAtom const typedAtoms[], size8 nAtoms);
 
 /**
- * Create a tuple by copying another tuple
+ * Create a TypedTuple by copying another TypedTuple
  */
 TypedTuple * CreateTupleFromTuple(TypedTuple const * otherTuple);
 
 /**
- * Deallocate a typed tuple, releasing every element.
+ * Create a TypedTuple from an array where all atoms have the same atomType
+ */
+TypedTuple * CreateTypedTupleFromTuple(byte atomType, Atom const atoms[], size8 nAtoms);
+
+/**
+ * Deallocate a TypedTuple, releasing every element.
  */
 void FreeTypedTuple(TypedTuple const * tuple);
 
@@ -78,7 +83,7 @@ void TypedTupleSetElement(TypedTuple * tuple, index8 index, TypedAtom element);
 void TypedTupleSetAtom(TypedTuple * tuple, index8 index, Atom atom);
 
 /**
- * Return the tuple's atom array
+ * Return the TypedTuple's atom array
  */
 Atom const * TypedTuplePeekAtoms(TypedTuple const * tuple);
 

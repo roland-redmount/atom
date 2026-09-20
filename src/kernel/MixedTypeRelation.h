@@ -48,9 +48,8 @@ typedef struct s_MixedTypeRelation {
 		// for MIXED_TYPE_CONCAT
 		struct {
 			TypedTuple const * queryActors;
-			// The parameterized query, which is what dispatch matches, and
-			// which the dispatch iterator reads as it goes; see GetQueryParameters()
-			Atom * queryParameters;
+			// Store a copy of the parameterized query
+			ParameterizedQuery parameterizedQuery;
 			// Index of the first query actor denoting the same variable as query actor i,
 			// or just i when actor[i] is not a variable. Used to filter on equality constraints.
 			// Set to 0 when the query actors contain no repeated variables (the common case)

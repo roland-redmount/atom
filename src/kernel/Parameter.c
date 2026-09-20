@@ -60,16 +60,12 @@ IOSignature ParametersGetIOSignature(Atom const parameters[], size8 nParameters)
 }
 
 
-bool SameParameterSignature(TypedTuple const * first, TypedTuple const * second)
+bool SameParameterSignature(Atom const first[], Atom const second[], size8 nParameters)
 {
-	ASSERT(first->nAtoms == second->nAtoms)
-	for(index8 i = 0; i < first->nAtoms; i++) {
-		TypedAtom a = TypedTupleGetElement(first, i);
-		TypedAtom b = TypedTupleGetElement(second, i);
-		ASSERT((a.type == AT_PARAMETER) && (b.type == AT_PARAMETER))
-		if(a.atom.parameter.atomType != b.atom.parameter.atomType)
+	for(index8 i = 0; i < nParameters; i++) {
+		if(first[i].parameter.atomType != second[i].parameter.atomType)
 			return false;
-		if(a.atom.parameter.io != b.atom.parameter.io)
+		if(first[i].parameter.io != second[i].parameter.io)
 			return false;
 	}
 	return true;

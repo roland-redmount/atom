@@ -75,7 +75,7 @@ void ActorsToParameters(TypedTuple const * actors, Atom parameters[]);
  * Two parameter tuples denote the same service signature if they agree on
  * the type and direction of every parameter; parameter numbers are ignored here.
  */
-bool SameParameterSignature(TypedTuple const * first, TypedTuple const * second);
+bool SameParameterSignature(Atom const first[], Atom const second[], size8 nParameters);
 
 /**
  * Find the indices of the input (PARAMETER_IN) parameters in the IO signature

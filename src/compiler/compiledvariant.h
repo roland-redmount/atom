@@ -13,12 +13,11 @@
  */
 
 typedef struct s_CompiledVariant {
-	// resolved query parameters, owned by the variant
-	TypedTuple * parameters;
-	Operator * op;
-	// The relation this variant compiles to, and a reference to it. Created before the
-	// recursive clauses compile, as their recursive term reads it.
+	// The relation this variant compiles to.
 	Relation relation;
+	// resolved query parameters
+	Atom parameters[RELATION_MAX_ARITY];
+	Operator * op;
 	// whether this variant was derived from a recursive clause (and contains a FIXPOINT operator)
 	bool isRecursive;
 
@@ -27,7 +26,6 @@ typedef struct s_CompiledVariant {
 	// branch of the union it compiles into; see CompiledVariantSeedFromService().
 	Operator * replacedOperator;
 } CompiledVariant;
-
 
 /**
  * Extract the type signature of a compiled variant, from the resolved parameters.
@@ -43,7 +41,7 @@ IOSignature CompiledVariantGetIOSignature(CompiledVariant const * variant);
  * Find a compiled variant in the given array whose signature matches the given parameters.
  */
 CompiledVariant * FindCompiledVariant(
-	CompiledVariant variants[], size8 nVariants, TypedTuple const * parameters);
+	CompiledVariant variants[], size8 nVariants, Atom parameters[], size8 nParameters);
 
 /**
  * Set the relation for a CompiledVariant, determined from the given query term form
@@ -66,9 +64,7 @@ void CompiledVariantSetRelation(CompiledVariant * variant, Atom queryTermForm);
  * clauses compile into is what takes one; a variant nothing compiled into owes nothing
  * and is dropped by DiscardUnusedSeedVariants().
  */
-void CompiledVariantSeedFromService(
-	CompiledVariant * variant, Service service, TypedTuple const * queryParameters);
-
+void CompiledVariantSeedFromService(CompiledVariant * variant, Service service);
 /**
  * CLAUDE: Drop the seeded variants that no clause compiled into, and return the new
  * number of variants. Such a variant is nothing but the service it was seeded from,

@@ -3,25 +3,27 @@
 #include "kernel/Parameter.h"
 
 
-void CompileStackAdd(CompileStack * stack, FormulaView term)
+void CompileStackPush(CompileStack * stack, ParameterizedQuery const * query)
 {
 	ASSERT(stack->depth < MAX_COMPILE_STACK_DEPTH)
-	stack->terms[stack->depth++] = term;
+	stack->queries[stack->depth++] = *query;
 }
 
 
-void CompileStackRemove(CompileStack * stack)
+void CompileStackPop(CompileStack * stack)
 {
 	ASSERT(stack->depth > 0)
 	stack->depth--;
 }
 
 
-bool CompileStackContainsTerm(CompileStack const * stack, FormulaView term)
+bool CompileStackContainsTerm(CompileStack const * stack, ParameterizedQuery const * query)
 {
 	for(index8 i = 0; i < stack->depth; i++) {
-		if(SameAtoms(stack->terms[i].form, term.form)
-			&& SameParameterSignature(stack->terms[i].actors, term.actors))
+		if(!SameAtoms(stack->queries[i].termForm, query->termForm))
+			continue;
+		ASSERT(stack->queries[i].arity == query->arity)
+		if(SameParameterSignature(stack->queries[i].parameters, query->parameters, query->arity))
 			return true;
 	}
 	return false;

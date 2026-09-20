@@ -42,15 +42,24 @@ bool DispatchQuery(FormulaView query, Service * service, index8 permutation[]);
  */
 bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 permutation[]);
 
+/**
+ * A query (term) where actors have been replaced with a parameters tuple.
+ */
+typedef struct s_ParameterizedQuery {
+	Atom termForm;
+	Atom parameters[RELATION_MAX_ARITY];
+	size8 arity;
+} ParameterizedQuery;
+
+void ParameterizeQuery(FormulaView query, ParameterizedQuery * parameterizedQuery);
 
 /**
- * Dispatch a parameterized query. The queryParameters array must contain AT_PARAMETER
- * atoms only. A query parameter occurring at several positions must match a service
- * parameter of the same type at each position.
+ * Dispatch a parameterized query. A query parameter occurring at several positions
+ * must match a service parameter of the same type at each position.
  *
  * Several services may match when a query output parameter type is NONE (untyped).
  * There can be at most one matching service for each relation, so each service is
- * identified by the type signature of the corresponding relations.
+ * identified by the type signature of the corresponding relation.
  * 
  * The excludedSignatures array holds type signatures to exclude; a candidate service
  * with one of these signatures is skipped. Setting nExcluded = 0 excludes nothing.
@@ -66,8 +75,7 @@ bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 permutation[
 #define DISPATCH_MATCH_RELAXED		2
 
 bool DispatchParameterizedQuery(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
-	Service * service, index8 permutation[],
+	ParameterizedQuery const * query, int matchMode, Service * service, index8 permutation[],
 	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch);
 
 
@@ -116,8 +124,7 @@ typedef struct {
  * matchMode is the same as in DispatchParameterizedQuery()
  */
 void DispatchIterate(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
-	index8 permutation[], DispatchIterator * iterator);
+	ParameterizedQuery const * query, int matchMode, index8 permutation[], DispatchIterator * iterator);
 
 /**
  * Advance to the next matching service, if one exists, writing its argument

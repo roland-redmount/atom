@@ -7,22 +7,22 @@
 
 
 /**
- * Detect repeated variables. If queryActors[i] is a variable, equalityMap[i] i set to the index
- * of the first variable in queryActors that equals queryActors[i].
+ * Map repeated variables in the actors tuple. If actors[i] is a variable,
+ * equalityMap[i] i set to the index of the first variable in queryActors that equals queryActors[i].
  * Returns true if any repeated variables were found.
  */
-static bool queryVariableMap(TypedTuple const * queryActors, index8 equalityMap[])
+static bool repeatedVariablesMap(TypedTuple const * actors, index8 variableMap[])
 {
 	bool hasRepeatedVariable = false;
-	for(index8 i = 0; i < queryActors->nAtoms; i++) {
-		TypedAtom queryAtom = TypedTupleGetElement(queryActors, i);
-		equalityMap[i] = i;
+	for(index8 i = 0; i < actors->nAtoms; i++) {
+		TypedAtom queryAtom = TypedTupleGetElement(actors, i);
+		variableMap[i] = i;
 		if(queryAtom.type == AT_VARIABLE) {
 			// check for repeated variables
 			for(index8 j = 0; j < i; j++) {
-				TypedAtom previousAtom = TypedTupleGetElement(queryActors, j);
+				TypedAtom previousAtom = TypedTupleGetElement(actors, j);
 				if(previousAtom.type == AT_VARIABLE && SameVariable(queryAtom.atom, previousAtom.atom)) {
-					equalityMap[i] = j;
+					variableMap[i] = j;
 					hasRepeatedVariable = true;
 					break;
 				}
@@ -134,25 +134,27 @@ MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * 
 	mixedRelation->tuple = CreateTypedTuple(arity);
 	mixedRelation->impl.concat.queryActors = queryActors;
 
-	// The arguments, query parameters and permutation arrays share one allocation, the
-	// atoms first so that they keep the alignment of an Atom
+	// The arguments and permutation arrays share one allocation, the atoms first
+	// so that they keep the alignment of an Atom
 	mixedRelation->impl.concat.arguments = Allocate(
-		arity * (2 * sizeof(Atom) + sizeof(index8)));
-	mixedRelation->impl.concat.queryParameters = mixedRelation->impl.concat.arguments + arity;
+		arity * (sizeof(Atom) + sizeof(index8)));
 	mixedRelation->impl.concat.permutation =
-		(index8 *) (mixedRelation->impl.concat.queryParameters + arity);
+		(index8 *) (mixedRelation->impl.concat.arguments + arity);
 
 	// Create the variable map only if there are repeated variables
 	index8 variableMap[arity];
-	if(queryVariableMap(queryActors, variableMap)) {
+	if(repeatedVariablesMap(queryActors, variableMap)) {
 		mixedRelation->impl.concat.variableMap = Allocate(arity * sizeof(index8));
 		CopyMemory(variableMap, mixedRelation->impl.concat.variableMap, arity * sizeof(index8));
 	}
-
-	ActorsToParameters(queryActors, mixedRelation->impl.concat.queryParameters);
+	mixedRelation->impl.concat.parameterizedQuery.termForm = queryTermForm;
+	mixedRelation->impl.concat.parameterizedQuery.arity = arity;
+	ActorsToParameters(queryActors, mixedRelation->impl.concat.parameterizedQuery.parameters);
 	DispatchIterate(
-		queryTermForm, mixedRelation->impl.concat.queryParameters, arity, DISPATCH_MATCH_EXACT,
-		mixedRelation->impl.concat.permutation, &(mixedRelation->impl.concat.dispatchIterator));
+		&(mixedRelation->impl.concat.parameterizedQuery), DISPATCH_MATCH_EXACT,
+		mixedRelation->impl.concat.permutation,
+		&(mixedRelation->impl.concat.dispatchIterator)
+	);
 	return mixedRelation;
 }
 

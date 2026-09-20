@@ -78,15 +78,13 @@ void testDispatchRepeatedVariable(void)
 void testDispatchRepeatedParameter(void)
 {
 	Atom query = CStringToTerm("list \"ab\" position p element e");
-	size8 arity = FormulaGetActors(query)->nAtoms;
-	Atom parameters[arity];
-	ActorsToParameters(FormulaGetActors(query), parameters);
-
+	
+	ParameterizedQuery parameterizedQuery;
+	ParameterizeQuery(FormulaGetView(query), &parameterizedQuery);
 	Service service;
-	index8 permutation[arity];
+	index8 permutation[parameterizedQuery.arity];
 	ASSERT_TRUE(DispatchParameterizedQuery(
-		FormulaGetForm(query), parameters, arity, DISPATCH_MATCH_EXACT, &service,
-		permutation, 0, 0, 0))
+		&parameterizedQuery, DISPATCH_MATCH_EXACT, &service, permutation, 0, 0, 0))
 
 	// Give the position and the element one parameter, as a term (list s position p
 	// element p) has. The service has an INT position and a LETTER element, so no atom
@@ -101,11 +99,10 @@ void testDispatchRepeatedParameter(void)
 	index8 elementIndex = PredicateRoleIndex(predicateForm, elementRole);
 	NameRelease(positionRole);
 	NameRelease(elementRole);
-	parameters[positionIndex] = repeatedParameter;
-	parameters[elementIndex] = repeatedParameter;
+	parameterizedQuery.parameters[positionIndex] = repeatedParameter;
+	parameterizedQuery.parameters[elementIndex] = repeatedParameter;
 	ASSERT_FALSE(DispatchParameterizedQuery(
-		FormulaGetForm(query), parameters, arity, DISPATCH_MATCH_EXACT, &service,
-		permutation, 0, 0, 0))
+		&parameterizedQuery, DISPATCH_MATCH_EXACT, &service, permutation, 0, 0, 0))
 
 	ReleaseFormula(query);
 }
@@ -162,22 +159,20 @@ void testDispatchNegatedTerm(void)
 void testDispatchFilterable(void)
 {
 	Atom query = CStringToTerm("list \"ab\" position p element 'a");
-	size8 arity = FormulaGetActors(query)->nAtoms;
-	Atom parameters[arity];
-	ActorsToParameters(FormulaGetActors(query), parameters);
+
+	ParameterizedQuery parameterizedQuery;
+	ParameterizeQuery(FormulaGetView(query), &parameterizedQuery);
 
 	Service service;
-	index8 permutation[arity];
+	index8 permutation[parameterizedQuery.arity];
 
 	// No service provides this pattern
 	ASSERT_FALSE(DispatchParameterizedQuery(
-		FormulaGetForm(query), parameters, arity, DISPATCH_MATCH_EXACT, &service,
-		permutation, 0, 0, 0))
+		&parameterizedQuery, DISPATCH_MATCH_EXACT, &service, permutation, 0, 0, 0))
 
 	// Filtering finds one, which binds the list and produces the position and the element
 	ASSERT_TRUE(DispatchParameterizedQuery(
-		FormulaGetForm(query), parameters, arity, DISPATCH_MATCH_RELAXED, &service,
-		permutation, 0, 0, 0))
+		&parameterizedQuery, DISPATCH_MATCH_RELAXED, &service, permutation, 0, 0, 0))
 	index8 const * listRoleIndex = GetListRoleIndex();
 	index8 listIndex = listRoleIndex[LIST_ROLE_LIST];
 	index8 positionIndex = listRoleIndex[LIST_ROLE_POSITION];
@@ -214,12 +209,13 @@ void testDispatchIterator(void)
 	// Only the service with two output parameters matches, so each table contributes
 	// one match
 	Atom query = CStringToTerm("first x second y");
-	Atom parameters[2];
-	ActorsToParameters(FormulaGetActors(query), parameters);
+
+	ParameterizedQuery parameterizedQuery;
+	ParameterizeQuery(FormulaGetView(query), &parameterizedQuery);
+
 	index8 permutation[2];
 	DispatchIterator iterator;
-	DispatchIterate(
-		FormulaGetForm(query), parameters, 2, DISPATCH_MATCH_EXACT, permutation, &iterator);
+	DispatchIterate(&parameterizedQuery, DISPATCH_MATCH_EXACT, permutation, &iterator);
 
 	TypeSignature excludedTypes[2];
 	bool foundIdRelation = false;
@@ -235,9 +231,11 @@ void testDispatchIterator(void)
 		Service excludeService;
 		index8 excludePermutation[2];
 		bool hasNextMatch;
-		ASSERT_TRUE(DispatchParameterizedQuery(
-			FormulaGetForm(query), parameters, 2, DISPATCH_MATCH_EXACT, &excludeService,
-			excludePermutation, excludedTypes, nMatches, &hasNextMatch))
+		ASSERT_TRUE(
+			DispatchParameterizedQuery(
+				&parameterizedQuery, DISPATCH_MATCH_EXACT, &excludeService,
+				excludePermutation, excludedTypes, nMatches, &hasNextMatch)
+		)
 		ASSERT_TRUE(SameRelations(service.relation, excludeService.relation))
 		ASSERT_PTR_EQUAL(operator, FindServiceOperator(excludeService))
 		for(index8 i = 0; i < 2; i++)
@@ -265,26 +263,24 @@ void testDispatchIterator(void)
 	Service exhaustedService;
 	index8 exhaustedPermutation[2];
 	ASSERT_FALSE(DispatchParameterizedQuery(
-		FormulaGetForm(query), parameters, 2, DISPATCH_MATCH_EXACT, &exhaustedService,
+		&parameterizedQuery, DISPATCH_MATCH_EXACT, &exhaustedService,
 		exhaustedPermutation, excludedTypes, 2, 0))
 
 	// An iterator abandoned before the last match is released just as well
 	DispatchIterate(
-		FormulaGetForm(query), parameters, 2, DISPATCH_MATCH_EXACT, permutation, &iterator);
+		&parameterizedQuery, DISPATCH_MATCH_EXACT, permutation, &iterator);
 	ASSERT_TRUE(DispatchIteratorNext(&iterator))
 	DispatchIteratorEnd(&iterator);
 	ReleaseFormula(query);
 
 	// A query for a form with no relation yields no match at all
-	Atom unknownQuery = CStringToTerm("nowhere x nothing y");
-	Atom unknownParameters[2];
-	ActorsToParameters(FormulaGetActors(unknownQuery), unknownParameters);
+	Atom nonsenseQuery = CStringToTerm("nowhere x nothing y");
+	ParameterizeQuery(FormulaGetView(nonsenseQuery), &parameterizedQuery);
 	DispatchIterate(
-		FormulaGetForm(unknownQuery), unknownParameters, 2, DISPATCH_MATCH_EXACT,
-		permutation, &iterator);
+		&parameterizedQuery, DISPATCH_MATCH_EXACT, permutation, &iterator);
 	ASSERT_FALSE(DispatchIteratorNext(&iterator))
 	DispatchIteratorEnd(&iterator);
-	ReleaseFormula(unknownQuery);
+	ReleaseFormula(nonsenseQuery);
 
 	DropRelation(intRelation);
 	DropRelation(idRelation);
