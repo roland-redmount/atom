@@ -964,8 +964,9 @@ static void copyTypedTupleToArray(TypedTuple * sourceTuple, index8 startOffset, 
 /**
  * Compile every rule (clause) of the matched clause form that unifies with the query.
  * 
- * The query.actors tuple must be a series of AT_PARAMETER atoms numbered 1, 2, ...
- * and is not modified; each compiled variant carries its own resolved parameters.
+ * The query actors must be a series of AT_PARAMETER atoms numbered 1, 2, ...
+ * Some query parameter types may be unknown; the resolved parameters are written
+ * to the CompiledVariant.parameters tuple.
  *
  * Recursive terms are compiled only when all parameters in query.actors have specified types,
  * so that the recursive term is well-defined.
@@ -1044,6 +1045,11 @@ static size8 compileClauses(
 							joinOperator = sortOperatorToIdentityOrder(joinOperator);
 						}
 						variant->op = CreateUnionOperator(variant->op, joinOperator);
+						// check if we replaced a seed variant
+						if(variant->isSeed) {
+							variant->isSeed = false;
+							variant->isReplaced = true;
+						}
 					}
 					else {
 						// add compiled variant of this clause
@@ -1160,12 +1166,11 @@ static size8 compileQueryClauseForms(
 			nVariants = compileClauses(compileStack, query, clauseMatch, variants, nVariants);
 	}
 
-	// A recursive clause requires the query type signature to be fully determined.
+	// To compile a recursive clause, the query type signature must be known.
 	// The possible options are the type signatures of the non-recursive variants compiled above.
 	// We try all possible such type such type signatures for each recursive clause.
 	size8 nNonRecursiveVariants = nVariants;
 	for(index8 v = 0; v < nNonRecursiveVariants; v++) {
-		CompiledVariantSetRelation(&variants[v], query->termForm);
 		ParameterizedQuery variantQuery = {
 			.termForm = query->termForm,
 			.arity = query->arity
@@ -1174,16 +1179,13 @@ static size8 compileQueryClauseForms(
 		for(index32 i = 0; i < nMatchedClauseForms; i++) {
 			QueryClauseMatch const * clause = ResizingArrayGetElement(&matchedClauseForms, i);
 			if(clause->recursive) {
-				nVariants = compileClauses(	compileStack, &variantQuery, clause, variants, nVariants);
+				nVariants = compileClauses(compileStack, &variantQuery, clause, variants, nVariants);
 			}
 		}
 	}
 	// If compilaton succeeds, a recursive clause yields a UNION with the non-recursive variant,
 	// so no new variants are added
 	ASSERT(nVariants == nNonRecursiveVariants)
-
-	// Drop any primitive services that were not compiled into a UNION
-	nVariants = DiscardUnusedSeedVariants(variants, nVariants);
 
 	FreeResizingArray(&matchedClauseForms);
 	return nVariants;
@@ -1289,7 +1291,7 @@ static size8 compileQueryVariants(
 			completeRecursiveVariant(&variants[i], query->arity);
 	}
 
-	// A query the rules do not answer may still be answered by filtering a service that
+	// CLAUDE: A query the rules do not answer may still be answered by filtering a service that
 	// produces what the query binds; see compileFilterVariants(). The rules are tried
 	// first, so a rule answering the query wins over reading a relation and filtering.
 	// NOTE: what if we don't currently have a service to be filtered, but one could
@@ -1297,11 +1299,6 @@ static size8 compileQueryVariants(
 	if(nVariants == 0)
 		nVariants = compileFilterVariants(query, variants, nVariants);
 
-	// A service is registered against a relation, so every variant needs one. The variants
-	// a recursive clause compiles against have theirs already; here we cover the rest.
-	// NOTE: can't this be done by compileQueryClauses() ?
-	for(index8 i = 0; i < nVariants; i++)
-		CompiledVariantSetRelation(&variants[i], query->termForm);
 	return nVariants;
 }
 
@@ -1335,31 +1332,29 @@ static size8 compileParameterizedQuery(
 	PrintCString("-> compiled operators:\n");
 #endif
 
+	// Register compiled services
+	size8 nRegisteredServices = 0;
 	for(index8 i = 0; i < nVariants; i++) {
-		// TODO: this should be replaced
-
-		/* CLAUDE: A variant seeded from an existing service replaces it, so that service
-		   has to go before the new one can take its (Relation, IOSignature) key. The order
-		   is what makes this safe: the compiled operator holds the old service's operator
-		   as a branch of its union already, so DetachOperator() leaves the operator
-		   standing, and the variant's own reference keeps the Relation alive across the
-		   exchange. See seedVariantsFromServices(). */
-
+		if(variants[i].isSeed)
+			continue;
 		IOSignature ioSignature = CompiledVariantGetIOSignature(&variants[i]);
-		Service service = (Service) {.relation = variants[i].relation, .ioSignature = ioSignature};
-		if(variants[i].replacedOperator) {
-			ASSERT(variants[i].op != variants[i].replacedOperator)
-			ASSERT(variants[i].replacedOperator->nParents > 0)
+		Relation relation = (Relation) {
+			.termForm = query->termForm,
+			.typeSignature = CompiledVariantGetTypeSignature(&variants[i]),
+		};
+		Service service = (Service) {.relation = relation, .ioSignature = ioSignature};
+		if(variants[i].isReplaced)
 			RemoveService(service);
+		else {
+			// If a variant re-uses operator of an existing service, wrap it in an IDENTITY operator
+			// so that we can attach a service (an operator can only attach to one Service).
+			if(!IsNullRelation(variants[i].op->relation)) {
+				variants[i].op = CreateIdentityOperator(variants[i].op);
+			}
 		}
-		// If a variant re-uses operator of an existing service, wrap it in an IDENTITY operator
-		// so that we can attach a service (an operator can only attach to one Service).
-		if(!IsNullRelation(variants[i].op->relation)) {
-			variants[i].op = CreateIdentityOperator(variants[i].op);
-		}
-		// Parameter types and the relation were resolved by compileQueryVariants()
 		CreateService(service, variants[i].op);
-		
+		nRegisteredServices++;
+
 #ifdef DEBUG_COMPILER
 		PrintService(&service);
 		PrintChar('\n');
@@ -1369,24 +1364,7 @@ static size8 compileParameterizedQuery(
 	}
 	// pop the query from the compilation stack
 	CompileStackPop(compileStack);
-	return nVariants;
-}
-
-
-/**
- * Parameterize a query. The caller must free the returned TypedTuple.
- */
-static TypedTuple * actorsToParametersTuple(TypedTuple const * queryActors)
-{
-	size8 arity = queryActors->nAtoms;
-	Atom parameters[arity];
-	ActorsToParameters(queryActors, parameters);
-	// The compiler works with typed tuples throughout,
-	// so wrap the parameters array in a TypedTuple
-	TypedTuple * queryParameters = CreateTypedTuple(arity);
-	for(index8 i = 0; i < arity; i++)
-		TypedTupleSetElement(queryParameters, i, CreateTypedAtom(AT_PARAMETER, parameters[i]));
-	return queryParameters;
+	return nRegisteredServices;
 }
 
 

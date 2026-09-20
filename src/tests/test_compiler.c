@@ -560,6 +560,7 @@ void testCompileQueryWithUselessRule(void)
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
 		"tone n level v | ! nosuch n thing v");
 
+	// Add a stored fact
 	Atom storedFact = CStringToTerm("tone 3 level 7");
 	index8 indexColumns[2];
 	setupBinaryRelationIndexColumns(FormulaGetForm(storedFact), "tone", indexColumns);
@@ -570,12 +571,15 @@ void testCompileQueryWithUselessRule(void)
 	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, indexColumns);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 
+	// Ensure we can find the primitive service
 	Atom queryTerm = CStringToTerm("tone 3 level v");
 	IOSignature ioSignature = queryIOSignature(queryTerm);
 	Operator * storedOperator = FindServiceOperator((Service) {.relation = relation, .ioSignature = ioSignature});
 	ASSERT_NOT_NULL(storedOperator)
 	size32 nServicesBefore = NumberOfServices();
 
+	// Compiling the query should not yield a new service,
+	// nor report back the existing primitive service
 	Service services[MAX_COMPILED_VARIANTS];
 	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 0)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)

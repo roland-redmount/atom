@@ -13,18 +13,15 @@
  */
 
 typedef struct s_CompiledVariant {
-	// The relation this variant compiles to.
-	Relation relation;
 	// resolved query parameters
 	Atom parameters[RELATION_MAX_ARITY];
 	Operator * op;
 	// whether this variant was derived from a recursive clause (and contains a FIXPOINT operator)
 	bool isRecursive;
-
-	// The operator of the service this variant will replace, if any; else 0.
-	// A seeded variant replaces that service in the registry, holding its operator as a
-	// branch of the union it compiles into; see CompiledVariantSeedFromService().
-	Operator * replacedOperator;
+	// whether this variant is an existing, primitive service
+	bool isSeed;
+	// whether this variant replaces an existing service
+	bool isReplaced;
 } CompiledVariant;
 
 /**
@@ -44,32 +41,9 @@ CompiledVariant * FindCompiledVariant(
 	CompiledVariant variants[], size8 nVariants, Atom parameters[], size8 nParameters);
 
 /**
- * Set the relation for a CompiledVariant, determined from the given query term form
- * and the variant's type signature.
- */
-void CompiledVariantSetRelation(CompiledVariant * variant, Atom queryTermForm);
-
-/**
- * CLAUDE: Seed a compiled variant from an existing service answering the query, so that
- * the clauses compiling for the query union into that service rather than register a
- * second service of its signature. The variant takes the signature of the service: the
- * types of the service's relation, and the IO direction of the query parameters.
- *
- * The variant is registered against the service's own relation, whose columns are in
- * relation order, which is what lets the compiled service take over the service's
- * registry key; see seedVariantsFromServices() in compiler.c. The queryParameters tuple
- * must therefore be in that same order.
- *
- * The variant borrows the service's operator without taking a reference. The union the
- * clauses compile into is what takes one; a variant nothing compiled into owes nothing
- * and is dropped by DiscardUnusedSeedVariants().
+ * Setup a compiled variant from an existing service.
  */
 void CompiledVariantSeedFromService(CompiledVariant * variant, Service service);
-/**
- * CLAUDE: Drop the seeded variants that no clause compiled into, and return the new
- * number of variants. Such a variant is nothing but the service it was seeded from,
- * which answers the query as it stands.
- */
-size8 DiscardUnusedSeedVariants(CompiledVariant variants[], size8 nVariants);
+
 
 #endif 	// COMPILED_VARIANT_H
