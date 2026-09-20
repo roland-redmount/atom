@@ -5,23 +5,15 @@
 
 TypeSignature CompiledVariantGetTypeSignature(CompiledVariant const * variant)
 {
-	size8 arity = variant->parameters->nAtoms;
-	byte atomTypes[arity];
-	Atom const * parameters = TypedTuplePeekAtoms(variant->parameters);
-	for(index8 i = 0; i < arity; i++)
-		atomTypes[i] = parameters[i].parameter.atomType;
-	return CreateTypeSignature(atomTypes, arity);
+	return ParametersGetTypeSignature(
+		TypedTuplePeekAtoms(variant->parameters), variant->parameters->nAtoms);
 }
 
 
 IOSignature CompiledVariantGetIOSignature(CompiledVariant const * variant)
 {
-	size8 arity = variant->parameters->nAtoms;
-	byte parameterIO[arity];
-	Atom const * parametersArray = TypedTuplePeekAtoms(variant->parameters);
-	for(index8 i = 0; i < arity; i++)
-		parameterIO[i] = parametersArray[i].parameter.io;
-	return CreateIOSignature(parameterIO, arity);
+	return ParametersGetIOSignature(
+		TypedTuplePeekAtoms(variant->parameters), variant->parameters->nAtoms);
 }
 
 

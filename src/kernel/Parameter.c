@@ -42,6 +42,24 @@ void ActorsToParameters(TypedTuple const * actors, Atom parameters[])
 }
 
 
+TypeSignature ParametersGetTypeSignature(Atom const parameters[], size8 nParameters)
+{
+	byte atomTypes[nParameters];
+	for(index8 i = 0; i < nParameters; i++)
+		atomTypes[i] = parameters[i].parameter.atomType;
+	return CreateTypeSignature(atomTypes, nParameters);
+}
+
+
+IOSignature ParametersGetIOSignature(Atom const parameters[], size8 nParameters)
+{
+	byte parameterIO[nParameters];
+	for(index8 i = 0; i < nParameters; i++)
+		parameterIO[i] = parameters[i].parameter.io;
+	return CreateIOSignature(parameterIO, nParameters);	
+}
+
+
 bool SameParameterSignature(TypedTuple const * first, TypedTuple const * second)
 {
 	ASSERT(first->nAtoms == second->nAtoms)

@@ -48,6 +48,15 @@ typedef struct s_IOSignature {
  */
 IOSignature CreateIOSignature(byte const parameterIO[], size8 nColumns);
 
+/**
+ * Extract a TypeSignature from an array of AT_PARAMETER atoms.
+ */
+TypeSignature ParametersGetTypeSignature(Atom const parameters[], size8 nParameters);
+
+/**
+ * Extract an IOSignature from an array of AT_PARAMETER atoms.
+ */
+IOSignature ParametersGetIOSignature(Atom const parameters[], size8 nParameters);
 
 /**
  * Generate an array of AT_PARAMETER atoms corresponding to the actors tuple,
