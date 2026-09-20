@@ -868,38 +868,15 @@ static bool sameIndexOrder(Operator const * first, Operator const * second)
  * Takes over the caller's reference to the operator; the caller instead obtains a reference
  * to the return Operator (which may or may not be be the same as the given operator).
  */
-static Operator * sortOperatorToIndexOrder(Operator * op)
+static Operator * sortOperatorToIdentityOrder(Operator * op)
 {
-	bool ordered = true;
-	for(index8 i = 0; i < op->nArguments; i++)
-		ordered = ordered && (op->indexOrder[i] == i);
-	if(ordered)
+	if(IsIdentityPermutation(op->indexOrder, op->nArguments))
 		return op;
 
 	index8 argumentMap[op->nArguments];
 	for(index8 i = 0; i < op->nArguments; i++)
 		argumentMap[i] = i;
-	Operator * sortOperator = CreateProjectOperator(op, op->nArguments, argumentMap);
-	return sortOperator;
-}
-
-
-/**
- * Union two Operatrors having the same signature, taking over the caller's
- * reference to each. If the operators have different indexOrder, they are sorted first
- * (UNION can only merge relations that agree on the order. Each clause of a rule compiles on its
- * own, and inherits its order from the relations its own terms read, so two branches of
- * one rule have no reason to agree.
- */
-static Operator * unionOperators(Operator * first, Operator * second)
-{
-	ASSERT(first != second)
-	if(!sameIndexOrder(first, second)) {
-		first = sortOperatorToIndexOrder(first);
-		second = sortOperatorToIndexOrder(second);
-	}
-	Operator * unionOperator = CreateUnionOperator(first, second);
-	return unionOperator;
+	return CreateProjectOperator(op, op->nArguments, argumentMap);
 }
 
 
@@ -1043,18 +1020,23 @@ static size8 compileClauses(
 					PrintFormActorsAsFormula(clauseForm, substClauseActors);
 					PrintChar('\n');
 #endif
-					Operator * newService = compileConjunction(
+					Operator * joinOperator = compileConjunction(
 						compileStack, clauseForm, substClauseActors, matchedTermIndex, query.form,
 						queryTermArity, &choiceTree);
-					if(!newService)
+					if(!joinOperator)
 						continue;
 					// Recover the unified parameters from the clause actors
 					TypedTupleCopyAt(substClauseActors, matchedTermActorsIndex, resolvedParameters);
 					// Check for previously compiled service with the same signature
 					CompiledVariant * variant = FindCompiledVariant(variants, nVariants, resolvedParameters);
 					if(variant) {
-						// Another clause yielded the same signature: union them
-						variant->op = unionOperators(variant->op, newService);
+						// Another clause yielded the same signature, so create a UNION.
+						// If the two operators have different indexOrder, they are sorted first.
+						if(!sameIndexOrder(variant->op, joinOperator)) {
+							variant->op = sortOperatorToIdentityOrder(variant->op);
+							joinOperator = sortOperatorToIdentityOrder(joinOperator);
+						}
+						variant->op = CreateUnionOperator(variant->op, joinOperator);
 					}
 					else {
 						// add compiled variant of this clause
@@ -1063,7 +1045,7 @@ static size8 compileClauses(
 						SetMemory(variant, sizeof(CompiledVariant), 0);
 						variant->parameters = CreateTypedTuple(queryTermArity);
 						TypedTupleCopy(resolvedParameters, variant->parameters);
-						variant->op = newService;
+						variant->op = joinOperator;
 					}
 					// Mark recursive variants; FIXPOINT operator is added by completeRecursiveVariant()
 					variant->isRecursive = variant->isRecursive || queryClauseMatch->recursive;
