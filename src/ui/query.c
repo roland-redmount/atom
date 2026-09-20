@@ -13,5 +13,5 @@ MixedTypeRelation * UserQuery(FormulaView query)
 	index8 permutation[query.actors->nAtoms];
 	DispatchOrCompileQuery(query, &service, permutation);
 
-	return CreateConcatRelation(query.form, query.actors);
+	return CreateConcatRelation(query);
 }

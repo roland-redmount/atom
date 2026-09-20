@@ -93,7 +93,7 @@ typedef struct s_MixedTypeRelation {
  * service registries. No service or relation may be registered while the tuples of this
  * relation are being read, so a query must be compiled before its answers are read.
  */
-MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * queryActors);
+MixedTypeRelation * CreateConcatRelation(FormulaView query);
 
 /**
  * Advance to the next tuple of the relation, if one exists. The relation is positioned

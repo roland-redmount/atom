@@ -1,6 +1,5 @@
 
 #include "kernel/MixedTypeRelation.h"
-#include "kernel/Parameter.h"
 #include "lang/TermForm.h"
 #include "lang/Variable.h"
 #include "memory/allocator.h"
@@ -123,14 +122,15 @@ static bool concatNext(MixedTypeRelation * mixedRelation)
 }
 
 
-MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * queryActors)
+MixedTypeRelation * CreateConcatRelation(FormulaView query)
 {
-	ASSERT(IsTermForm(queryTermForm))
+	ASSERT(IsTermForm(query.form))
+	TypedTuple const * queryActors = query.actors;
 	size8 arity = queryActors->nAtoms;
 
 	MixedTypeRelation * mixedRelation = Allocate(sizeof(MixedTypeRelation));
 	mixedRelation->type = MIXED_TYPE_CONCAT;
-	mixedRelation->termForm = queryTermForm;
+	mixedRelation->termForm = query.form;
 	mixedRelation->tuple = CreateTypedTuple(arity);
 	mixedRelation->impl.concat.queryActors = queryActors;
 
@@ -147,9 +147,7 @@ MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * 
 		mixedRelation->impl.concat.variableMap = Allocate(arity * sizeof(index8));
 		CopyMemory(variableMap, mixedRelation->impl.concat.variableMap, arity * sizeof(index8));
 	}
-	mixedRelation->impl.concat.parameterizedQuery.termForm = queryTermForm;
-	mixedRelation->impl.concat.parameterizedQuery.arity = arity;
-	ActorsToParameters(queryActors, mixedRelation->impl.concat.parameterizedQuery.parameters);
+	ParameterizeQuery(query, &(mixedRelation->impl.concat.parameterizedQuery));
 	DispatchIterate(
 		&(mixedRelation->impl.concat.parameterizedQuery), DISPATCH_MATCH_EXACT,
 		mixedRelation->impl.concat.permutation,

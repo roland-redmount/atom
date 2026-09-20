@@ -24,7 +24,7 @@ static RelationFixture edgeFixture;
 static size32 runQueryAndCountTuples(char const * queryString)
 {
 	Atom query = CStringToTerm(queryString);
-	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
+	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetView(query));
 	size32 nTuples = 0;
 	while(MixedTypeRelationNext(relation))
 		nTuples++;
@@ -41,7 +41,7 @@ static size32 runQueryAndCountTuples(char const * queryString)
 static size32 countQueryServices(char const * queryString)
 {
 	Atom query = CStringToTerm(queryString);
-	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
+	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetView(query));
 	while(MixedTypeRelationNext(relation))
 		;
 	size32 nServices = MixedTypeRelationNServices(relation);
@@ -60,7 +60,7 @@ void testConcatEveryTuple(void)
 	SetupEdgeFixture(&edgeFixture);
 	Atom query = CStringToTerm("edge e from x to y");
 
-	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
+	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetView(query));
 	ASSERT_DATA64_EQUAL(relation->termForm.hash, FormulaGetForm(query).hash)
 
 	// Each tuple of the relation arrives once, though we do not know in which order,
@@ -100,7 +100,7 @@ void testConcatRepeatedVariable(void)
 	SetupEdgeFixture(&edgeFixture);
 	Atom query = CStringToTerm("edge e from x to x");
 
-	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
+	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetView(query));
 	size32 nTuples = 0;
 	while(MixedTypeRelationNext(relation)) {
 		TypedTuple const * tuple = MixedTypeRelationPeekTuple(relation);
@@ -176,7 +176,7 @@ void testConcatAcrossRelations(void)
 	}
 
 	Atom query = CStringToTerm("first x second y");
-	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
+	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetView(query));
 
 	size32 nTuples = 0;
 	bool foundIdTuple = false;
@@ -245,8 +245,7 @@ void testConcatServiceCount(void)
 void testConcatWithoutMatch(void)
 {
 	Atom unknownQuery = CStringToTerm("nowhere x nothing y");
-	MixedTypeRelation * relation = CreateConcatRelation(
-		FormulaGetForm(unknownQuery), FormulaGetActors(unknownQuery));
+	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetView(unknownQuery));
 	ASSERT_FALSE(MixedTypeRelationNext(relation))
 	ASSERT_UINT32_EQUAL(MixedTypeRelationNServices(relation), 0)
 	// A relation read past its last tuple stays empty, and neither the dispatch
@@ -267,7 +266,7 @@ void testConcatAbandonedIteration(void)
 	SetupEdgeFixture(&edgeFixture);
 
 	Atom query = CStringToTerm("edge e from x to y");
-	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetForm(query), FormulaGetActors(query));
+	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetView(query));
 	ASSERT_TRUE(MixedTypeRelationNext(relation))
 	FreeMixedTypeRelation(relation);
 	ReleaseFormula(query);
