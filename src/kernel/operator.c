@@ -3,6 +3,7 @@
 #include "kernel/operator.h"
 #include "kernel/Relation.h"
 #include "kernel/tuple.h"
+#include "kernel/TupleStore.h"
 #include "lang/TermForm.h"			// for PrintTermForm()
 #include "memory/allocator.h"
 #include "util/ResizingArray.h"
@@ -1650,6 +1651,16 @@ void AttachOperator(Operator * op, Relation signature)
 {
 	ASSERT(IsNullRelation(op->relation))
 	op->relation = signature;
+
+#ifdef DEBUG
+	// If the Relation has a TupleStore, the new operator's
+	// index order must match that of the TupleStore.
+	TupleStore * store = RelationGetTupleStore(signature);
+	if(store) {
+		ASSERT(op->nArguments == store->nColumns)
+		ASSERT(CompareMemory(op->indexOrder, store->indexColumns, op->nArguments) == 0)
+	}
+#endif
 }
 
 
