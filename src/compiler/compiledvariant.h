@@ -43,7 +43,7 @@ CompiledVariant * FindCompiledVariant(
 /**
  * Setup a compiled variant from an existing service.
  */
-void CompiledVariantSeedFromService(CompiledVariant * variant, Service service);
+void SetupCompiledVariantFromService(CompiledVariant * variant, Service service);
 
 
 #endif 	// COMPILED_VARIANT_H

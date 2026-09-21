@@ -26,7 +26,7 @@ CompiledVariant * FindCompiledVariant(
 }
 
 
-void CompiledVariantSeedFromService(CompiledVariant * variant, Service service)
+void SetupCompiledVariantFromService(CompiledVariant * variant, Service service)
 {
 	variant->op = FindServiceOperator(service);
 	ASSERT(variant->op->type == OPERATOR_MACHINE)

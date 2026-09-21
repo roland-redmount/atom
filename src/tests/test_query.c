@@ -240,36 +240,38 @@ void testInvalidateServiceByNewRelation(void)
 
 
 /**
- * A rule asserted after a query of its form was compiled has to reach that query, so
- * adding or removing a rule removes the compiled services of every term form the rule
- * mentions. Here the recursive rule turns the edges of the graph into its closure.
+ * Test that adding or removing a rule (clause) invalidates services whose term form
+ * occurs in the new rule.
  */
-void testQueryInvalidatedByRule(void)
+void testInvalidateByRule(void)
 {
 	SetupPrecSuccFixture(&precSuccFixture);
-	DictionaryEntry baseEntry = DictionaryAddClauseFromCString(
+	DictionaryEntry rule1 = DictionaryAddClauseFromCString(
 		"before x after y | ! prec x succ y");
-	size32 nServices = NumberOfServices();
+	size32 nServicesInitial = NumberOfServices();
 
-	// With the base rule alone, the derived relation is the edge relation itself
+	// Given rule1, the (before x after y) query returns edge relation itself
 	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_EDGES)
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 1)
 
-	// The recursive rule makes the same query a different question
-	DictionaryEntry recursiveEntry = DictionaryAddClauseFromCString(
+	// Add a transitive rule
+	DictionaryEntry rule2 = DictionaryAddClauseFromCString(
 		"before x after y | ! prec x succ z | ! before z after y");
+	// The previously compiled service is now invalidated
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)
+	// Compile and run the (before x after y) query again,
+	// now returns the graph closure
 	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 1)
 
-	// And removing it again makes it the first question once more
-	DictionaryRemoveClause(&recursiveEntry);
+	// Removing rule 1 returns us to the previous state
+	DictionaryRemoveClause(&rule2);
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)
 	ASSERT_UINT32_EQUAL(runQueryAndCountTuples("before x after y"), PREC_SUCC_N_EDGES)
 
-	DictionaryRemoveClause(&baseEntry);
+	DictionaryRemoveClause(&rule1);
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)
-	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices)
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesInitial)
 	TeardownRelationFixture(&precSuccFixture);
 }
 
@@ -287,7 +289,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testQueryCompileIgnoresRepeatedVariable);
 	ExecuteTest(testQueryWithoutAnswer);
 	ExecuteTest(testInvalidateServiceByNewRelation);
-	ExecuteTest(testQueryInvalidatedByRule);
+	ExecuteTest(testInvalidateByRule);
 
 	UnloadLibraries();
 	KernelShutdown();

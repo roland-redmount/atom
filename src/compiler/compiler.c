@@ -1026,10 +1026,10 @@ static size8 compileClauses(
 					PrintFormActorsAsFormula(clauseForm, substClauseActors);
 					PrintChar('\n');
 #endif
-					Operator * joinOperator = compileConjunction(
+					Operator * conjunctionOp = compileConjunction(
 						compileStack, clauseForm, substClauseActors, matchedTermIndex, query->termForm,
 						query->arity, &choiceTree);
-					if(!joinOperator)
+					if(!conjunctionOp)
 						continue;
 					// Recover the resolved parameters (with types) from the clause actors
 					copyTypedTupleToArray(
@@ -1040,11 +1040,11 @@ static size8 compileClauses(
 					if(variant) {
 						// We already have a compiled variant with the same signature, so create a UNION.
 						// If the two operators have different indexOrder, they are sorted first.
-						if(!sameIndexOrder(variant->op, joinOperator)) {
+						if(!sameIndexOrder(variant->op, conjunctionOp)) {
 							variant->op = sortOperatorToIdentityOrder(variant->op);
-							joinOperator = sortOperatorToIdentityOrder(joinOperator);
+							conjunctionOp = sortOperatorToIdentityOrder(conjunctionOp);
 						}
-						variant->op = CreateUnionOperator(variant->op, joinOperator);
+						variant->op = CreateUnionOperator(variant->op, conjunctionOp);
 						// check if we replaced a seed variant
 						if(variant->isSeed) {
 							variant->isSeed = false;
@@ -1057,7 +1057,7 @@ static size8 compileClauses(
 						variant = &(variants[nVariants++]);
 						SetMemory(variant, sizeof(CompiledVariant), 0);
 						TupleCopy(resolvedParameters, variant->parameters, query->arity);
-						variant->op = joinOperator;
+						variant->op = conjunctionOp;
 					}
 					// Mark recursive variants; FIXPOINT operator is added by completeRecursiveVariant()
 					variant->isRecursive = variant->isRecursive || queryClauseMatch->recursive;
@@ -1081,7 +1081,6 @@ static size8 compileClauses(
  * Initialize the list of compiled variants with any existing primitive services.
  * Returns the number of variants seeded.
  */
-
 static size8 seedVariantsFromServices(ParameterizedQuery const * query, CompiledVariant variants[])
 {
 	SetMemory(variants, sizeof(CompiledVariant) * MAX_COMPILED_VARIANTS, 0);
@@ -1113,7 +1112,7 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
 	   ASSERT(IsIdentityPermutation(permutation, query->arity))
 
 		CompiledVariant * variant = &(variants[nVariants++]);
-		CompiledVariantSeedFromService(variant, service);
+		SetupCompiledVariantFromService(variant, service);
 
 #ifdef DEBUG_COMPILER
 		PrintCString("Seeded variant from service: ");

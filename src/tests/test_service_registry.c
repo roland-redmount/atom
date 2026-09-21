@@ -138,7 +138,7 @@ void testInvalidateDependentServices(void)
 
 
 /**
- * Registering a primitive service (SERVICE_PRIMITIVE) gives a query of its term form
+ * Registering a primitive service gives a query of its term form
  * one more relation to match, so compiled services depending on this form must be invalidated.
  */
 void testInvalidateOnPrimitiveService(void)
