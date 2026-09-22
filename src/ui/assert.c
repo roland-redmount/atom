@@ -60,7 +60,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 	if(factExists(fact))
 		return ASSERT_EXISTED;
 	if(negatedFactExists(fact))
-		return ASSERT_FAIL;
+		return ASSERT_CONTRADICTION;
 
 	// find existing relation table, or create new
 	TypeSignature typeSignature = CreateTypeSignature(
@@ -70,7 +70,9 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 	if(RelationExists(relation))
 	 	store = RelationGetTupleStore(relation);
 	if(store) {
-		ASSERT(TupleStoreIsWritable(store))
+		// NOTE: this is a limitation of having a single TupleStore per Relation
+		if(!TupleStoreIsWritable(store))
+			return ASSERT_NOT_WRITABLE;
 	}
 	else {
 		// Create a new tuple store

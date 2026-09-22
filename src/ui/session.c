@@ -153,7 +153,7 @@ static void printAssertResult(int result)
 		printLine("Already known.");
 		break;
 
-	case ASSERT_FAIL:
+	case ASSERT_CONTRADICTION:
 		printLine("Contradicts the knowledgebase.");
 		break;
 
@@ -171,6 +171,10 @@ static void printAssertResult(int result)
 
 	case ASSERT_NOT_CLAUSE:
 		printLine("Only a fact or a rule can be asserted.");
+		break;
+
+	case ASSERT_NOT_WRITABLE:
+		printLine("The relation is not writable.");
 		break;
 
 	default:

@@ -33,12 +33,13 @@ int AssertFormula(Atom formula);
 // Result codes for AssertFact() and AssertFormula()
 #define ASSERT_OK					1	// a new fact or rule was created
 #define ASSERT_EXISTED				2	// the fact or rule already existed, nothing changed
-#define ASSERT_FAIL					3	// logical contradiction, nothing changed
+#define ASSERT_CONTRADICTION		3	// logical contradiction, nothing changed
 #define ASSERT_TERM_VARIABLE		4	// a term containing variables cannot be a fact
 #define ASSERT_CLAUSE_NO_VARIABLE	5	// a clause with no variables cannot be a rule
 #define ASSERT_CLAUSE_ONE_TERM		6	// a clause of one term cannot be a rule
 #define ASSERT_NOT_CLAUSE			7	// a conjunction
 #define ASSERT_INVALID_IFACT		8	// a formula with generators that is not an ifact
+#define ASSERT_NOT_WRITABLE			9	// the specified relation is not writable
 
 /**
  * High level method to retract a fact. Removes the tuple from the corresponding

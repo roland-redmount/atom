@@ -91,7 +91,7 @@ void testAssertContradictsStoredFact(void)
 
 	// (! prec "a" succ "b") is refused, contradicting the fact just asserted
 	Atom negatedFact = CStringToTerm("! prec \"a\" succ \"b\"");
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(negatedFact), 0), ASSERT_FAIL)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(negatedFact), 0), ASSERT_CONTRADICTION)
 	// and the refused assert leaves no relation behind
 	Relation negatedRelation = RelationFromFact(FormulaGetView(negatedFact));
 	ASSERT_FALSE(RelationExists(negatedRelation))
@@ -101,7 +101,7 @@ void testAssertContradictsStoredFact(void)
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(negatedFact), 0), ASSERT_OK)
 
 	// and the positive fact is now the one refused
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_FAIL)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_CONTRADICTION)
 
 	RetractFact(FormulaGetView(negatedFact));
 	DropRelation(relation);
@@ -129,7 +129,7 @@ void testAssertContradictsDerivedFact(void)
 	// from the (odd 3) fact
 	Atom even3 = CStringToTerm("even 3");
 	FormulaView even3View = FormulaGetView(even3);
-	ASSERT_INT32_EQUAL(AssertFact(even3View, 0), ASSERT_FAIL)
+	ASSERT_INT32_EQUAL(AssertFact(even3View, 0), ASSERT_CONTRADICTION)
 	// no relation was created
 	Relation evenRelation = RelationFromFact(even3View);
 	ASSERT_FALSE(RelationExists(evenRelation))
@@ -166,7 +166,7 @@ void testAssertFormulaFact(void)
 
 	// a fact contradicting it is refused, as it is by AssertFact()
 	Atom negatedFact = CStringToTerm("! foo \"barf\" bar 1");
-	ASSERT_INT32_EQUAL(AssertFormula(negatedFact), ASSERT_FAIL)
+	ASSERT_INT32_EQUAL(AssertFormula(negatedFact), ASSERT_CONTRADICTION)
 	ReleaseFormula(negatedFact);
 
 	RetractFact(FormulaGetView(fact));
