@@ -1,4 +1,5 @@
 
+#include "kernel/dictionary.h"
 #include "kernel/operator.h"
 #include "kernel/TupleStore.h"
 #include "memory/pool.h"
@@ -54,7 +55,13 @@ TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provide
 	// since any service compiled from a rule containing this term form
 	// may now become dependent on the this relation.
 	size32 nInvalidated = InvalidateTermFormServices(relation.termForm, INVALIDATE_BY_PRIMITIVE);
-	
+
+	// CLAUDE: A primitive of this relation is stale when the stored tuples alone are not the
+	// full answer for its term form. That holds when a rule derives the term form (a query
+	// must union the stored tuples with the rule's tuples), or when adding this relation
+	// displaced a compiled service that must be rebuilt over the new primitives.
+	bool primitivesStale = (nInvalidated > 0) || ClauseFormExistsForTermForm(relation.termForm);
+
 	// Call the storage provider to setup the relation implementation
 	// and determine the number of readers
 	size32 nReaders;
@@ -72,7 +79,7 @@ TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provide
 			store, readerSpec.ioSignature);
 		Service service = {.relation = store->relation, .ioSignature = serviceIOSignature};
 		CreateService(service, op);
-		if(nInvalidated > 0)
+		if(primitivesStale)
 			ServiceMarkStale(service);
 	}
 	return store;

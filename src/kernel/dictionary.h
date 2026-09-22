@@ -38,6 +38,12 @@ DictionaryEntry DictionaryAddClause(Atom clause);
 bool DictionaryContainsClause(Atom clause);
 
 /**
+ * Whether any clause form holds the given term form, i.e. some rule derives the term form.
+ * Used to decide whether a newly created primitive service must be marked stale.
+ */
+bool ClauseFormExistsForTermForm(Atom termForm);
+
+/**
  * Parse a string into a clause (formula) and call DictionaryAddClause()
  */
 DictionaryEntry DictionaryAddClauseFromCString(const char * clauseString);

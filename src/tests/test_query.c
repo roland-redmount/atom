@@ -485,6 +485,44 @@ void testSelfJoinOverUnionRelation(void)
 }
 
 
+/**
+ * CLAUDE: A stored relation created after a rule already derives its term form must have its
+ * primitives marked stale, even though no compiled service was displaced (nothing to
+ * invalidate). This is the case ClauseFormExistsForTermForm() catches; see CreateTupleStore().
+ */
+void testStorePrimitiveStaleWhenRuleExists(void)
+{
+	// (gamma delta) stores the edge (C, D)
+	Atom gammaFact = CStringToTerm("gamma 'C delta 'D");
+	Relation gammaDeltaRelation = RelationFromFact(FormulaGetView(gammaFact));
+	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, &btreeStorageProvider, 2, 0);
+	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(gammaFact)), 0);
+
+	// A rule deriving (alpha beta) from (gamma delta), added before any (alpha beta) relation
+	// exists and before (alpha beta) is queried, so nothing is compiled or invalidated.
+	DictionaryEntry alphaRule = DictionaryAddClauseFromCString("alpha x beta y | ! gamma x delta y");
+
+	// Creating the (alpha beta) store with the edge (A, B). Its primitives must be stale
+	// because the rule already derives the term form, although nothing was invalidated.
+	Atom alphaFact = CStringToTerm("alpha 'A beta 'B");
+	Relation alphaBetaRelation = RelationFromFact(FormulaGetView(alphaFact));
+	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, &btreeStorageProvider, 2, 0);
+	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(alphaFact)), 0);
+	ASSERT_INT32_EQUAL(numberOfStaleServices(alphaBetaRelation), 3)
+
+	// The query unions the stored edge (A, B) with the derived edge (C, D)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("alpha x beta y"), 2)
+
+	DictionaryRemoveClause(&alphaRule);
+	RelationRemoveTuple(alphaBetaRelation, TypedTuplePeekAtoms(FormulaGetActors(alphaFact)), 0);
+	RelationRemoveTuple(gammaDeltaRelation, TypedTuplePeekAtoms(FormulaGetActors(gammaFact)), 0);
+	DropRelation(alphaBetaRelation);
+	DropRelation(gammaDeltaRelation);
+	ReleaseFormula(alphaFact);
+	ReleaseFormula(gammaFact);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -504,6 +542,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testStaleClearedAfterRuleRemoved);
 	ExecuteTest(testStaleBodyTermUsesPrimitiveOnly);
 	ExecuteTest(testSelfJoinOverUnionRelation);
+	ExecuteTest(testStorePrimitiveStaleWhenRuleExists);
 
 	UnloadLibraries();
 	KernelShutdown();

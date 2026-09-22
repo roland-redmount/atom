@@ -1,6 +1,8 @@
 #include "btree/btree.h"
 #include "kernel/dictionary.h"
+#include "kernel/kernel.h"
 #include "kernel/multiset.h"
+#include "kernel/operator.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/typedtuple.h"
 #include "lang/formula.h"
@@ -119,6 +121,37 @@ static bool findEntry(Atom clause, DictionaryEntry * entry)
 bool DictionaryContainsClause(Atom clause)
 {
 	return findEntry(clause, 0);
+}
+
+
+bool ClauseFormExistsForTermForm(Atom termForm)
+{
+	// CLAUDE: Scan every (multiset element multiple) tuple for a clause form holding the
+	// given term form. This is the existence-only counterpart of findMatchingClauseForms()
+	// in compiler.c, and is likewise a full scan for want of an element index; see the
+	// TODO there.
+	// CLAUDE: The core multiset service does not exist yet while the kernel bootstraps its
+	// own relations; no clause forms exist at that point either, so report none.
+	Operator const * multisetOperator = GetCoreOperator(SERVICE_MULTISET_ID_ALL);
+	if(!multisetOperator)
+		return false;
+	Atom multisetQueryTuple[3];
+	OperatorContext * multisetContext = OperatorCreateContext(multisetOperator, multisetQueryTuple);
+	bool found = false;
+	while(OperatorCall(multisetContext)) {
+		Atom element = multisetQueryTuple[
+			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
+		if(!SameAtoms(element, termForm))
+			continue;
+		Atom clauseForm = multisetQueryTuple[
+			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)];
+		if(!IsClauseForm(clauseForm))
+			continue;
+		found = true;
+		break;
+	}
+	OperatorFreeContext(multisetContext);
+	return found;
 }
 
 
