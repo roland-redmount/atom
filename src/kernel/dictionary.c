@@ -130,11 +130,12 @@ bool ClauseFormExistsForTermForm(Atom termForm)
 	// given term form. This is the existence-only counterpart of findMatchingClauseForms()
 	// in compiler.c, and is likewise a full scan for want of an element index; see the
 	// TODO there.
-	// CLAUDE: The core multiset service does not exist yet while the kernel bootstraps its
-	// own relations; no clause forms exist at that point either, so report none.
+
 	Operator const * multisetOperator = GetCoreOperator(SERVICE_MULTISET_ID_ALL);
-	if(!multisetOperator)
+	if(!multisetOperator) {
+		// The service does not exist during kernel bootstrapping
 		return false;
+	}
 	Atom multisetQueryTuple[3];
 	OperatorContext * multisetContext = OperatorCreateContext(multisetOperator, multisetQueryTuple);
 	bool found = false;
