@@ -585,9 +585,8 @@ static Operator * compileConjunctionRecursive(
 				// Extract term actors
 				TypedTupleCopyAt(clauseState->clauseActors, clauseState->termActorsIndices[termIndex], termActors);
 #ifdef DEBUG_COMPILER
-				PrintCString("Term: ");
+				PrintF("Pass  = %d, attempting term: ", pass);
 				PrintFormActorsAsFormula(negatedTermForm, termActors);
-				PrintChar('\n');
 #endif
 				// Attempt to compile this term. A recursive term reads the relation
 				// being derived and builds its own operator; every other term dispatches,
@@ -604,7 +603,7 @@ static Operator * compileConjunctionRecursive(
 				}
 				if(op) {
 #ifdef DEBUG_COMPILER
-					PrintCString("serviceParameters = ");
+					PrintCString(" serviceParameters = ");
 					TypedTuplePrint(serviceParameters);
 					PrintChar('\n');
 #endif
@@ -619,6 +618,12 @@ static Operator * compileConjunctionRecursive(
 #endif
 					break;
 				}
+#ifdef DEBUG_COMPILER
+				else {
+					PrintCString(" No match.\n");
+				}
+#endif
+						
 			}
 			FreeTypedTuple(serviceParameters);
 			FreeTypedTuple(termActors);
@@ -1325,10 +1330,6 @@ static size8 compileParameterizedQuery(
 	// Compile all variants for the query
 	CompiledVariant variants[MAX_COMPILED_VARIANTS];
 	size8 nVariants = compileQueryVariants(compileStack, query, variants);
-
-#ifdef DEBUG_COMPILER
-	PrintCString("-> compiled operators:\n");
-#endif
 
 	// Register compiled services
 	size8 nRegisteredServices = 0;
