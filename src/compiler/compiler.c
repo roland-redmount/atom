@@ -144,7 +144,11 @@ static bool dispatchOrCompileAtNewChoicePoint(
 		compileStack, &query, mode, service, permutation,
 		choicePoint->choiceSignatures, choicePoint->nChoices,
 		&(choicePoint->hasNextMatch)))
+	{
+		// The term did not dispatch, so release the choice point
+		choiceTree->depth--;
 		return false;
+	}
 
 	// Add the found relation's signature to the choices for the new choice point
 	choicePoint->choiceSignatures[choicePoint->nChoices] = service->relation.typeSignature;

@@ -443,6 +443,34 @@ void testCompileRecursiveJoin2(void)
 }
 
 /**
+ * Test an all-output query (number n faculty f) over the recursive faculty rule.
+ * This cannot compile to a terminating service, so the compiler must fail gracefully and register no service.
+ */
+void testCompileRecursiveQueryAllOutput(void)
+{
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"number n faculty f | ! < n > 0 | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
+	Atom terminatingFact = CStringToTerm("number 0 faculty 1");
+	Relation relation = RelationFromFact(FormulaGetView(terminatingFact));
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
+	size32 nServicesBefore = NumberOfServices();
+
+	// The all-output query compiles to nothing, and must not exhaust the choice points
+	Atom queryTerm = CStringToTerm("number n faculty f");
+	Service services[MAX_COMPILED_VARIANTS];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 0)
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)
+
+	ReleaseFormula(queryTerm);
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
+	DropRelation(relation);
+	ReleaseFormula(terminatingFact);
+	DictionaryRemoveClause(&entry);
+}
+
+
+/**
  * Test creating a relation with both stored facts and a service compiled from a rule,
  * resulting in a UNION operator.
  */
@@ -1366,6 +1394,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testFilterServiceInvalidatedByRule);
 
 	ExecuteTest(testCompileRecursiveJoin2);
+	ExecuteTest(testCompileRecursiveQueryAllOutput);
 	ExecuteTest(testCompileStoredFactsAndRule);
 	ExecuteTest(testCompileQueryNoMatchingRules);
 	ExecuteTest(testCompileQueryWithUselessRule);
