@@ -21,6 +21,15 @@ void ParameterizeQuery(FormulaView query, ParameterizedQuery * parameterizedQuer
 }
 
 
+void PrintParameterizedQuery(ParameterizedQuery const * parameterizedQuery)
+{
+	TypedTuple * tuple = CreateTypedTupleFromTuple(
+		AT_PARAMETER, parameterizedQuery->parameters, parameterizedQuery->arity);
+	PrintFormActorsAsFormula(parameterizedQuery->termForm, tuple);
+	FreeTypedTuple(tuple);
+}
+
+
 bool DispatchParameterIOMatch(byte queryIO, byte serviceIO, int matchMode)
 {
 	if(queryIO == serviceIO)

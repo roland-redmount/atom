@@ -89,7 +89,8 @@ static bool dispatchOrCompileTerm(
 {
 	DispatchResult dispatchResult = DispatchParameterizedQuery(
 		query, DISPATCH_MATCH_EXACT, service, permutation, excludedSignatures, nExcluded, hasNextMatch);
-	if((dispatchResult == DISPATCH_FOUND) || (dispatchResult == DISPATCH_FOUND_STALE))
+	// stale relations are not accepted here; they require re-compilation
+	if(dispatchResult == DISPATCH_FOUND)
 		return true;
 	if(mode == TERM_DISPATCH_ONLY)
 		return false;
@@ -531,6 +532,9 @@ static Operator * compileRecursiveTerm(
 static Operator * compileConjunctionRecursive(
 	CompileStack * compileStack, ClauseCompileState * clauseState, uint8 nTermsExcluded, index8 clauseMap[])
 {
+#ifdef DEBUG_COMPILER
+	PrintCString("compileConjunctionRecursive()\n");
+#endif
 	ASSERT(clauseState->nTerms >= 2)
 	Operator * op = 0;
 	// Clause arguments provided by the compiled term. A term may refer to the same
@@ -600,16 +604,16 @@ static Operator * compileConjunctionRecursive(
 						termCompileMode, serviceParameters,	termClauseMap, clauseState->choiceTree
 					);
 				}
-#ifdef DEBUG_COMPILER
-				PrintCString("serviceParameters = ");
-				TypedTuplePrint(serviceParameters);
-				PrintChar('\n');
-#endif
-
 				if(op) {
+#ifdef DEBUG_COMPILER
+					PrintCString("serviceParameters = ");
+					TypedTuplePrint(serviceParameters);
+					PrintChar('\n');
+#endif
 					clauseState->termExcluded[termIndex] = true;
 					nTermsExcluded++;
 					propagateTermParameterTypes(clauseState, termIndex, termActors, serviceParameters);
+
 #ifdef DEBUG_COMPILER
 					PrintCString("Updated clause: ");
 					PrintFormActorsAsFormula(clauseState->clauseForm, clauseState->clauseActors);
@@ -1079,7 +1083,8 @@ static size8 compileClauses(
 
 
 /**
- * Initialize the list of compiled variants with any existing primitive services.
+ * Initialize ("seed") the list of compiled variants with any existing primitive services.
+ * Uses DispatchIterate() to find services, which includes services from stale relations. 
  * Returns the number of variants seeded.
  */
 static size8 seedVariantsFromServices(ParameterizedQuery const * query, CompiledVariant variants[])
@@ -1116,7 +1121,7 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
 
 #ifdef DEBUG_COMPILER
 		PrintCString("Seeded variant from service: ");
-		PrintService(service);
+		PrintService(serviceRecord->service);
 		PrintChar('\n');
 #endif
 	}
@@ -1142,13 +1147,8 @@ static size8 compileQueryClauseForms(
 	CompileStack * compileStack, ParameterizedQuery const * query, CompiledVariant variants[])
 {
 	// Initialize the set of variants with known primitive services as variants
-	/* CLAUDE: for depth 1 query only: a term compiled
-	   deeper is one dispatch did not answer, possibly because a choice point excluded the
-	   very service we would take over, and taking one over removes it, which the
-	   compilation in flight is building on. */
 	size8 nVariants = 0;
-	if(compileStack->depth == 1)
-		nVariants = seedVariantsFromServices(query, variants);
+	nVariants = seedVariantsFromServices(query, variants);
 
 	// Collect all clauses matching the query term
 	ResizingArray matchedClauseForms;
@@ -1321,7 +1321,7 @@ static size8 compileParameterizedQuery(
 
 #ifdef DEBUG_COMPILER
 	PrintCString("\ncompileParameterizedQuery()\nqueryParameters: ");
-	PrintFormulaView(query);
+	PrintParameterizedQuery(query);
 	PrintChar('\n');
 #endif
 	// Compile all variants for the query
@@ -1358,7 +1358,7 @@ static size8 compileParameterizedQuery(
 		nRegisteredServices++;
 
 #ifdef DEBUG_COMPILER
-		PrintService(&service);
+		PrintService(service);
 		PrintChar('\n');
 #endif
 		if(services)

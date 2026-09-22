@@ -367,6 +367,49 @@ void testStaleClearedAfterRuleRemoved(void)
 }
 
 
+/**
+ * A rule body term whose relation is stale (its own rule not yet compiled) must
+ * trigger recompilation, so that the body sees the rule-derived tuples and not just the
+ * primitive service.
+ */
+void testStaleBodyTermUsesPrimitiveOnly(void)
+{
+	// Relation (alpha beta) storing one fact ("a" "b")
+	Atom alphaBetaFact = CStringToTerm("alpha \"a\" beta \"b\"");
+	Relation alphaBetaRelation = RelationFromFact(FormulaGetView(alphaBetaFact));
+	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, &btreeStorageProvider, 2, 0);
+	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(alphaBetaFact)), 0);
+
+	// Relation (gamma delta) storing one fact ("c" "d")
+	Atom gammaDeltaFact = CStringToTerm("gamma \"c\" delta \"d\"");
+	Relation gammaDeltaRelation = RelationFromFact(FormulaGetView(gammaDeltaFact));
+	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, &btreeStorageProvider, 2, 0);
+	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(gammaDeltaFact)), 0);
+
+	// Add rule giving (alpha beta) the tuples of (gamma delta), rendering the (alpha beta) relation stale.
+	DictionaryEntry aRule = DictionaryAddClauseFromCString("alpha x beta y | ! gamma x delta y");
+	ASSERT_TRUE(RelationIsStale(alphaBetaRelation))
+
+	// Add rule deriving relation (mu nu) from (alpha beta)
+	DictionaryEntry gRule = DictionaryAddClauseFromCString("mu x nu y | ! alpha x beta y");
+	ASSERT_TRUE(RelationIsStale(alphaBetaRelation))
+
+	// Query (mu nu) while (alpha beta) is still stale. This should yield both tuples of A,
+	// but the stale body term binds only A's primitive, so only one is returned.
+	// Pre-querying "alpha x beta y" here (compiling A's rule first) makes this pass.
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("mu x nu y"), 2)
+
+	DictionaryRemoveClause(&gRule);
+	DictionaryRemoveClause(&aRule);
+	RelationRemoveTuple(alphaBetaRelation, TypedTuplePeekAtoms(FormulaGetActors(alphaBetaFact)), 0);
+	RelationRemoveTuple(gammaDeltaRelation, TypedTuplePeekAtoms(FormulaGetActors(gammaDeltaFact)), 0);
+	DropRelation(alphaBetaRelation);
+	DropRelation(gammaDeltaRelation);
+	ReleaseFormula(alphaBetaFact);
+	ReleaseFormula(gammaDeltaFact);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -384,6 +427,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testInvalidateRelationByRule);
 	ExecuteTest(testCompileClearsStaleRelation);
 	ExecuteTest(testStaleClearedAfterRuleRemoved);
+	ExecuteTest(testStaleBodyTermUsesPrimitiveOnly);
 
 	UnloadLibraries();
 	KernelShutdown();

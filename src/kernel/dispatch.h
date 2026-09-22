@@ -60,6 +60,8 @@ typedef struct s_ParameterizedQuery {
 
 void ParameterizeQuery(FormulaView query, ParameterizedQuery * parameterizedQuery);
 
+void PrintParameterizedQuery(ParameterizedQuery const * parameterizedQuery);
+
 /**
  * Dispatch a parameterized query. A query parameter occurring at several positions
  * must match a service parameter of the same type at each position.
