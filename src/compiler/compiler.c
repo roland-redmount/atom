@@ -1133,6 +1133,8 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
  * compile against these type signatures. A recursive clause therefore cannot occur without
  * at least one non-recursive clause of the same signature.
  * 
+ * Returns the new number of variants in the variants[] array, including seed variants.
+ * 
  * NOTE: this does not work when the base case of recursion is a single term, such as a
  * stored tuple with a primitive service.
  */
@@ -1155,7 +1157,7 @@ static size8 compileQueryClauseForms(
 	size32 nMatchedClauseForms = matchedClauseForms.nElements;
 	if(nMatchedClauseForms == 0) {
 		FreeResizingArray(&matchedClauseForms);
-		return 0;
+		return nVariants;
 	}
 
 	// The non-recursive clauses compile first, settling the query parameters of each variant
@@ -1333,13 +1335,15 @@ static size8 compileParameterizedQuery(
 	// Register compiled services
 	size8 nRegisteredServices = 0;
 	for(index8 i = 0; i < nVariants; i++) {
-		if(variants[i].isSeed)
-			continue;
 		IOSignature ioSignature = CompiledVariantGetIOSignature(&variants[i]);
 		Relation relation = (Relation) {
 			.termForm = query->termForm,
 			.typeSignature = CompiledVariantGetTypeSignature(&variants[i]),
 		};
+		if(variants[i].isSeed) {
+			RelationMarkNotStale(relation);
+			continue;
+		}
 		Service service = (Service) {.relation = relation, .ioSignature = ioSignature};
 		if(variants[i].isReplaced)
 			RemoveService(service);

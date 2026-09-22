@@ -150,7 +150,7 @@ Service RegisterMachineServiceWithState(
 	}
 	ReleaseFormula(term);
 	
-	// Add the new reader to the relation
+	// Create a new primitive service
 	RelationReaderSpec readerSpec = {
 		.stateSize = stateSize,
 		.setupState = setupState,

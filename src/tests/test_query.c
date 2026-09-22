@@ -1,4 +1,5 @@
 
+#include "compiler/compiler.h"
 #include "kernel/dictionary.h"
 #include "kernel/kernel.h"
 #include "kernel/Relation.h"
@@ -301,7 +302,7 @@ void testInvalidateRelationByRule(void)
 		"number n faculty f | ! < n > 0 | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
 	ASSERT_TRUE(RelationIsStale(relation))
 
-	// Run a query
+	// Run a query to trigger re-compilation
 	Atom queryTerm = CStringToTerm("number 4 faculty f");
 	MixedTypeRelation * mixedTypeRelation = UserQuery(FormulaGetView(queryTerm));
 	ASSERT_TRUE(MixedTypeRelationNext(mixedTypeRelation))
@@ -315,6 +316,54 @@ void testInvalidateRelationByRule(void)
 	DictionaryRemoveClause(&entry);
 	DropRelation(relation);
 	ReleaseFormula(terminatingFact);
+}
+
+
+/**
+ * Test that compiling a query for a stale relation clears its stale flag, even when the query
+ * matches an existing primitive service so that no new service is compiled.
+ */
+void testCompileClearsStaleRelation(void)
+{
+	SetupPrecSuccFixture(&precSuccFixture);
+
+	// Mark the primitive relation stale, as adding a rule for its term form would
+	RelationMarkStale(precSuccFixture.relation);
+	ASSERT_TRUE(RelationIsStale(precSuccFixture.relation))
+
+	// Compiling the query considers the relation and clears the flag, although the
+	// query matches the existing primitive service and registers no new service
+	Atom query = CStringToTerm("prec x succ y");
+	CompileQuery(FormulaGetView(query), 0);
+	ASSERT_FALSE(RelationIsStale(precSuccFixture.relation))
+	ReleaseFormula(query);
+
+	TeardownRelationFixture(&precSuccFixture);
+}
+
+
+/**
+ * Test that adding or removing a rule that matches a relation with a TupleStore
+ * marks that relation stale.
+ */
+void testStaleClearedAfterRuleRemoved(void)
+{
+	SetupPrecSuccFixture(&precSuccFixture);
+
+	// Add a rule matching the stored (prec succ) relation
+	DictionaryEntry rule = DictionaryAddClauseFromCString("prec x succ y | ! before x after y");
+	ASSERT_TRUE(RelationIsStale(precSuccFixture.relation))
+	// Running the query triggers compilation, so that the rule is no longer stale
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("prec x succ y"), PREC_SUCC_N_EDGES)
+	ASSERT_FALSE(RelationIsStale(precSuccFixture.relation))
+
+	// Same, when removing the rule
+	DictionaryRemoveClause(&rule);
+	ASSERT_TRUE(RelationIsStale(precSuccFixture.relation))
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("prec x succ y"), PREC_SUCC_N_EDGES)
+	ASSERT_FALSE(RelationIsStale(precSuccFixture.relation))
+
+	TeardownRelationFixture(&precSuccFixture);
 }
 
 
@@ -333,6 +382,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testInvalidateServiceByNewRelation);
 	ExecuteTest(testInvalidateServiceByRule);
 	ExecuteTest(testInvalidateRelationByRule);
+	ExecuteTest(testCompileClearsStaleRelation);
+	ExecuteTest(testStaleClearedAfterRuleRemoved);
 
 	UnloadLibraries();
 	KernelShutdown();
