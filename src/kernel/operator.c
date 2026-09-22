@@ -1957,6 +1957,7 @@ static void printOperatorRecursive(Operator const * op, uint32 depth)
 		PrintChar('(');
 		printOperatorRecursive(op->impl.identity.childOperator, depth + 1);
 		PrintChar(')');
+		break;
 
 	case OPERATOR_PERMUTE:
 		printOperatorHead(op, "PERMUTE");

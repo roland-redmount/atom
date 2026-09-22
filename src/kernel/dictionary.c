@@ -69,16 +69,13 @@ static void setupEntry(DictionaryEntry * entry, Atom clauseForm, TypedTuple cons
 
 
 /**
- * Invalidate any compiled services that given clause form could have contributed to,
- * which may now be stale. The compiler resolves a query against the clauses whose form contains
+ * Invalidate any compiled services and relations whose term form is contains in thegiven clause form.
+ * The compiler resolves a query against the clauses whose form contains
  * the query term form, so it is sufficient to invalidate services associated with any of the
  * term forms in the given clause. See compileQueryClauses().
  */
 static void invalidateClauseServices(Atom clauseForm)
 {
-	if(NumberOfCompiledServices() == 0)
-		return;
-
 	// Collect the term forms before invalidating any service: the multiset iterator
 	// evaluates a service of its own, and invalidation removes services
 	ResizingArray termForms;
@@ -92,8 +89,10 @@ static void invalidateClauseServices(Atom clauseForm)
 	MultisetIteratorEnd(&iterator);
 
 	// Invalidate all term forms
-	for(index32 i = 0; i < termForms.nElements; i++)
-		InvalidateServicesByTermForm(*(Atom *) ResizingArrayGetElement(&termForms, i));
+	for(index32 i = 0; i < termForms.nElements; i++) {
+		Atom termForm = *(Atom *) ResizingArrayGetElement(&termForms, i);
+		InvalidateTermFormServices(termForm, INVALIDATE_BY_RULE);
+	}
 	FreeResizingArray(&termForms);
 }
 

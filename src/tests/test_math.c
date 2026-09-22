@@ -27,7 +27,7 @@ void testAdd1(void)
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(query)), arguments, 3);
 	
-	void * context = OperatorCreateContext(FindServiceOperator(service), arguments);
+	void * context = OperatorCreateContext(ServiceGetOperator(service), arguments);
 	ASSERT_TRUE(OperatorCall(context))
 	
 	Atom equalsRole = CreateNameFromCString("=");
@@ -56,7 +56,7 @@ void testAdd2(void)
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(query)), arguments, 3);
 	
-	void * context = OperatorCreateContext(FindServiceOperator(service), arguments);
+	void * context = OperatorCreateContext(ServiceGetOperator(service), arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
 	Atom plusRole = CreateNameFromCString("+");
@@ -98,7 +98,7 @@ void testRange(void)
 	);
 	NameRelease(numberRole);
 
-	OperatorContext * context = OperatorCreateContext(FindServiceOperator(service), arguments);
+	OperatorContext * context = OperatorCreateContext(ServiceGetOperator(service), arguments);
 	for(int64 expected = 2; expected <= 6; expected++) {
 		ASSERT_TRUE(OperatorCall(context))
 		ASSERT_INT64_EQUAL(arguments[numberIndex]._int, expected)

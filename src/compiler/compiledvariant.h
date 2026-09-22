@@ -43,7 +43,7 @@ CompiledVariant * FindCompiledVariant(
 /**
  * Setup a compiled variant from an existing service.
  */
-void SetupCompiledVariantFromService(CompiledVariant * variant, Service service);
+void SetupCompiledVariantFromServiceRecord(CompiledVariant * variant, ServiceRecord const * serviceRecord);
 
 
 #endif 	// COMPILED_VARIANT_H

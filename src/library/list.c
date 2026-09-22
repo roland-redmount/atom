@@ -271,7 +271,7 @@ Atom ListGetElement(Atom list, index32 position)
 	byte parameterIO[3];
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT}, parameterIO, listRoleIndex, 3);
-	Operator const * op = FindServiceOperator(
+	Operator const * op = ServiceGetOperator(
 		(Service) {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 3)}
 	);
 	Atom arguments[3];
@@ -297,7 +297,7 @@ index32 ListGetPosition(Atom list, Atom element)
 	byte parameterIO[3];
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_IN}, parameterIO, listRoleIndex, 3);
-	Operator const * op = FindServiceOperator(
+	Operator const * op = ServiceGetOperator(
 		(Service) {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 3)}
 	);
 
@@ -358,7 +358,7 @@ void ListIterate(Atom list, ListIterator * iterator)
 		byte parameterIO[3];
 		CopyBytesPermuted(
 			(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT}, parameterIO, listRoleIndex, 3);
-		Operator const * op = FindServiceOperator(
+		Operator const * op = ServiceGetOperator(
 			(Service) {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 3)}
 		);
 		iterator->context = OperatorCreateContext(op, iterator->queryTuple);
@@ -472,11 +472,11 @@ void ListSetup(void)
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 		elementIOSignature.parameterIO, listRoleIndex, 3);
-	listIDOperator = FindServiceOperator(
+	listIDOperator = ServiceGetOperator(
 		(Service) {.relation = listIDRelation, .ioSignature = elementIOSignature}
 	);
 	ASSERT(listIDOperator)
-	listLetterOperator = FindServiceOperator(
+	listLetterOperator = ServiceGetOperator(
 		(Service) {.relation = listLetterRelation, .ioSignature = elementIOSignature}
 	);
 	ASSERT(listLetterOperator)
@@ -485,7 +485,7 @@ void ListSetup(void)
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT},
 		lengthIOSignature.parameterIO, listLengthRoleIndex, 2);
-	listLengthOperator = FindServiceOperator(
+	listLengthOperator = ServiceGetOperator(
 		(Service) {.relation = listLengthRelation, .ioSignature = lengthIOSignature}
 	);
 	ASSERT(listLengthOperator)

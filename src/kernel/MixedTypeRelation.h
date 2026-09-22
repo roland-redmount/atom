@@ -59,7 +59,7 @@ typedef struct s_MixedTypeRelation {
 			Atom * arguments;
 			index8 * permutation;
 			DispatchIterator dispatchIterator;
-			Service service;
+			// Service service;
 			// Number of services read from so far, counted as each is opened;
 			// see MixedTypeRelationNServices()
 			size32 nServices;

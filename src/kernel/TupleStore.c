@@ -62,6 +62,12 @@ TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provide
 			store->indexColumns[i] = i;
 	}
 
+	// Invalidate compiled services for this term form,
+	// and mark corresponding relations "stale" if services were invalidated.
+	// NOTE: it is not sufficient to invalidate only the current relation,
+	// since any service compiled from a rule containing this term form
+	// may now become dependent on the this relation.
+	InvalidateTermFormServices(relation.termForm, INVALIDATE_BY_PRIMITIVE);
 	// Call the storage provider to setup the relation implementation
 	// and determine the number of readers
 	size32 nReaders;

@@ -40,7 +40,8 @@ typedef struct s_RelationRecord {
 	Atom predicateForm;
 	// Whether this relation holds a reference to its forms; see RelationReleaseForm()
 	bool ownsForm;
-
+	// Whether this relation is "stale"; see RelationMarkStale()
+	bool isStale;
 	TupleStore * tupleStore;	// may be 0
 	uint32 referenceCount;
 } RelationRecord;
@@ -134,6 +135,31 @@ void RelationDetachTupleStore(Relation relation, TupleStore * store)
 	ASSERT(record->tupleStore)
 	record->tupleStore = 0;	
 }
+
+
+void RelationMarkStale(Relation relation)
+{
+	RelationRecord * record = findRelationRecord(relation);
+	ASSERT(record)
+	record->isStale = true;
+}
+
+
+void RelationMarkNotStale(Relation relation)
+{
+	RelationRecord * record = findRelationRecord(relation);
+	ASSERT(record)
+	record->isStale = false;
+}
+
+
+bool RelationIsStale(Relation relation)
+{
+	RelationRecord * record = findRelationRecord(relation);
+	ASSERT(record)
+	return(record->isStale);	
+}
+
 
 
 /**

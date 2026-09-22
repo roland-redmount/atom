@@ -129,7 +129,7 @@ void PairSetup(void)
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 		ioSignature.parameterIO, pairTermRoleIndex, 3);
-	pairOperator = FindServiceOperator(
+	pairOperator = ServiceGetOperator(
 		(Service) {.relation = pairRelation, .ioSignature = ioSignature}
 	);
 	ASSERT(pairOperator);

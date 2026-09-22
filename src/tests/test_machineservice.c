@@ -52,7 +52,7 @@ static void testMachineServiceArgumentOrder(void)
 {
 	Service service = RegisterMachineService(
 		moduleID, "first @1<INT second @2<INT result @3>INT", weighCall);
-	Operator * operator = FindServiceOperator(service);
+	Operator * operator = ServiceGetOperator(service);
 
 	index8 firstIndex = roleIndex(service.relation.termForm, "first");
 	index8 secondIndex = roleIndex(service.relation.termForm, "second");
@@ -98,7 +98,7 @@ static void testMachineServiceTestPredicate(void)
 {
 	Service service = RegisterMachineService(
 		moduleID, "even @1<INT", evenCall);
-	Operator * operator = FindServiceOperator(service);
+	Operator * operator = ServiceGetOperator(service);
 
 	Atom arguments[1] = {(Atom) {._int = 4}};
 	OperatorContext * context = OperatorCreateContext(operator, arguments);
@@ -152,7 +152,7 @@ static void testMachineServiceIterator(void)
 
 	// A service declares the order its signature writes its arguments in;
 	// see the contract in operator.h
-	Operator * operator = FindServiceOperator(service);
+	Operator * operator = ServiceGetOperator(service);
 	ASSERT_UINT32_EQUAL(operator->indexOrder[0], fromIndex)
 	ASSERT_UINT32_EQUAL(operator->indexOrder[1], countIndex)
 	ASSERT_UINT32_EQUAL(operator->indexOrder[2], toIndex)
@@ -204,7 +204,7 @@ static void testMachineServiceIteratorState(void)
 	second[toIndex] = (Atom) {._int = 12};
 
 	// interleave the two, so that one advancing cannot be mistaken for the other
-	Operator * operator = FindServiceOperator(service);
+	Operator * operator = ServiceGetOperator(service);
 	OperatorContext * firstContext = OperatorCreateContext(operator, first);
 	OperatorContext * secondContext = OperatorCreateContext(operator, second);
 	for(int64 i = 0; i < 3; i++) {
@@ -258,8 +258,8 @@ static void testMachineServiceSharedRelation(void)
 	// the second service shares the relation of the first
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 	ASSERT_TRUE(SameRelations(subtractService.relation, sumService.relation))
-	Operator * sumOperator = FindServiceOperator(sumService);
-	Operator * subtractOperator = FindServiceOperator(subtractService);
+	Operator * sumOperator = ServiceGetOperator(sumService);
+	Operator * subtractOperator = ServiceGetOperator(subtractService);
 	ASSERT_PTR_NOT_EQUAL(subtractOperator, sumOperator)
 
 	// dispatch tells the services apart by query argument types
@@ -267,12 +267,12 @@ static void testMachineServiceSharedRelation(void)
 	Service dispatched;
 	index8 permutation[3];
 	ASSERT_TRUE(DispatchQueryFormula(query, &dispatched, permutation))
-	ASSERT_PTR_EQUAL(FindServiceOperator(dispatched), sumOperator)
+	ASSERT_PTR_EQUAL(ServiceGetOperator(dispatched), sumOperator)
 	ReleaseFormula(query);
 
 	query = CStringToTerm("term 3 term u sum 10");
 	ASSERT_TRUE(DispatchQueryFormula(query, &dispatched, permutation))
-	ASSERT_PTR_EQUAL(FindServiceOperator(dispatched), subtractOperator)
+	ASSERT_PTR_EQUAL(ServiceGetOperator(dispatched), subtractOperator)
 	ReleaseFormula(query);
 
 	FreeModuleRelations(moduleID);

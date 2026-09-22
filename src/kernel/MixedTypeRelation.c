@@ -33,24 +33,23 @@ static bool repeatedVariablesMap(TypedTuple const * actors, index8 variableMap[]
 
 
 /**
- * Bind the arguments of the service at the current dispatch position and open its
+ * Bind the arguments of the service at the current dispatch position and create its
  * context. Every query actor is copied into the arguments tuple, which binds the query
  * constants to the input parameters of the service; the service overwrites the arguments
  * taken by its output parameters.
  */
-static void openService(MixedTypeRelation * mixedRelation)
+static void createServiceContext(MixedTypeRelation * mixedRelation)
 {
 	size8 arity = mixedRelation->tuple->nAtoms;
-	mixedRelation->impl.concat.service = DispatchIteratorPeekService(
+	ServiceRecord const * serviceRecord = DispatchIteratorPeekServiceRecord(
 		&(mixedRelation->impl.concat.dispatchIterator));
 
 	for(index8 i = 0; i < arity; i++)
 		mixedRelation->impl.concat.arguments[i] = TypedTupleGetAtom(
 			mixedRelation->impl.concat.queryActors, mixedRelation->impl.concat.permutation[i]);
 
-	Operator * op = FindServiceOperator(mixedRelation->impl.concat.service);
 	mixedRelation->impl.concat.context = OperatorCreateContext(
-		op,	mixedRelation->impl.concat.arguments
+		serviceRecord->op, mixedRelation->impl.concat.arguments
 	);
 	mixedRelation->impl.concat.nServices++;
 }
@@ -60,14 +59,16 @@ static void openService(MixedTypeRelation * mixedRelation)
  * Copy the arguments of the current service into the tuple of the relation, which is in
  * query actor order and carries the column types of that service.
  */
-static void gatherTuple(MixedTypeRelation * mixedRelation)
+static void copyResultToTypedTuple(MixedTypeRelation * mixedRelation)
 {
-	byte const * atomTypes = mixedRelation->impl.concat.service.relation.typeSignature.atomTypes;
+	ServiceRecord const * serviceRecord = DispatchIteratorPeekServiceRecord(
+		&(mixedRelation->impl.concat.dispatchIterator));
+	TypeSignature typeSignature = serviceRecord->service.relation.typeSignature;
 	for(index8 i = 0; i < mixedRelation->tuple->nAtoms; i++)
 		TypedTupleSetElement(
 			mixedRelation->tuple,
 			mixedRelation->impl.concat.permutation[i],
-			CreateTypedAtom(atomTypes[i], mixedRelation->impl.concat.arguments[i])
+			CreateTypedAtom(typeSignature.atomTypes[i], mixedRelation->impl.concat.arguments[i])
 		);
 }
 
@@ -76,7 +77,7 @@ static void gatherTuple(MixedTypeRelation * mixedRelation)
  * Test whether the current tuple of the relation satisfies the equality constraints
  * of the query, if any. Equality-constrained arguments must always have the same atom type.
  */
-static bool tupleSatisfiesConstraints(MixedTypeRelation const * mixedRelation)
+static bool checkEqualityConstraints(MixedTypeRelation const * mixedRelation)
 {
 	index8 const * variableMap = mixedRelation->impl.concat.variableMap;
 	if(!variableMap)
@@ -100,16 +101,17 @@ static bool concatNext(MixedTypeRelation * mixedRelation)
 {
 	while(!mixedRelation->impl.concat.isExhausted) {
 		if(!mixedRelation->impl.concat.context) {
+			// Look for next service
 			if(!DispatchIteratorNext(&(mixedRelation->impl.concat.dispatchIterator))) {
 				mixedRelation->impl.concat.isExhausted = true;
 				break;
 			}
-			openService(mixedRelation);
+			createServiceContext(mixedRelation);
 		}
-
+		// Call the current service context
 		if(OperatorCall(mixedRelation->impl.concat.context)) {
-			gatherTuple(mixedRelation);
-			if(tupleSatisfiesConstraints(mixedRelation))
+			copyResultToTypedTuple(mixedRelation);
+			if(checkEqualityConstraints(mixedRelation))
 				return true;
 		}
 		else {

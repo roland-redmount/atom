@@ -275,7 +275,7 @@ static void executeInspect(char const * queryText, index32 linePosition)
 	size32 nServices = 0;
 	while(DispatchIteratorNext(&iterator)) {
 		SessionPrintMargin();
-		PrintService(DispatchIteratorPeekService(&iterator));
+		PrintService(DispatchIteratorPeekServiceRecord(&iterator)->service);
 		PrintChar('\n');
 		nServices++;
 	}

@@ -26,21 +26,21 @@ CompiledVariant * FindCompiledVariant(
 }
 
 
-void SetupCompiledVariantFromService(CompiledVariant * variant, Service service)
+void SetupCompiledVariantFromServiceRecord(CompiledVariant * variant, ServiceRecord const * serviceRecord)
 {
-	variant->op = FindServiceOperator(service);
+	variant->op = serviceRecord->op;
 	ASSERT(variant->op->type == OPERATOR_MACHINE)
 	variant->isSeed = true;
 
+	TypeSignature typeSignature = serviceRecord->service.relation.typeSignature;
 	for(index8 i = 0; i < variant->op->nArguments; i++) {
 		variant->parameters[i] = (Atom) {
 			.parameter = {
 				.number = i + 1,
-				.atomType = service.relation.typeSignature.atomTypes[i],
-				.io = service.ioSignature.parameterIO[i]
+				.atomType = typeSignature.atomTypes[i],
+				.io = serviceRecord->service.ioSignature.parameterIO[i]
 			}
 		};
 	}
-	ASSERT(SameTypeSignatures(
-		CompiledVariantGetTypeSignature(variant), service.relation.typeSignature))
+	ASSERT(SameTypeSignatures(CompiledVariantGetTypeSignature(variant), typeSignature))
 }

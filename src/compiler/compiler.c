@@ -87,8 +87,9 @@ static bool dispatchOrCompileTerm(
 	Service * service, index8 permutation[],
 	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch)
 {
-	if(DispatchParameterizedQuery(query, DISPATCH_MATCH_EXACT, service, permutation,
-		excludedSignatures, nExcluded, hasNextMatch))
+	DispatchResult dispatchResult = DispatchParameterizedQuery(
+		query, DISPATCH_MATCH_EXACT, service, permutation, excludedSignatures, nExcluded, hasNextMatch);
+	if((dispatchResult == DISPATCH_FOUND) || (dispatchResult == DISPATCH_FOUND_STALE))
 		return true;
 	if(mode == TERM_DISPATCH_ONLY)
 		return false;
@@ -96,9 +97,8 @@ static bool dispatchOrCompileTerm(
 	// Else attempt to compile new services for the term
 	ASSERT(mode == TERM_DISPATCH_OR_COMPILE)
 	
-	// Renumber parameters 1, 2, ..., termArity
-	// since compileParameterizedQuery() expects this format. 
-	// NOTE: this is inconsistent -- DispatchParameterizedQuery() respects repeated
+	// Renumber parameters 1, 2, ..., termArity since compileParameterizedQuery() expects this format. 
+	// TODO: this is inconsistent -- DispatchParameterizedQuery() respects repeated
 	// parameter numbers, but compileParameterizedQuery() does not. 
 	ParameterizedQuery queryRenumbered = *query;
 	for(index8 i = 0; i < query->arity; i++)
@@ -109,8 +109,9 @@ static bool dispatchOrCompileTerm(
 		return false;
 
 	// New services were compiled, so re-try dispatch
-	return DispatchParameterizedQuery(query, DISPATCH_MATCH_EXACT, service, permutation,
-		excludedSignatures, nExcluded, hasNextMatch);
+	dispatchResult = DispatchParameterizedQuery(
+		query, DISPATCH_MATCH_EXACT, service, permutation, excludedSignatures, nExcluded, hasNextMatch);
+	return dispatchResult == DISPATCH_FOUND;
 }
 
 
@@ -303,7 +304,7 @@ static Operator * compileTerm(
 	if(!dispatchOrCompileAtNewChoicePoint(
 		compileStack, term, mode, &termService, permutation, choiceTree))
 		return 0;
-	Operator * termOperator = FindServiceOperator(termService);
+	Operator * termOperator = ServiceGetOperator(termService);
 
 	return createTermOperator(
 		termService.relation.typeSignature, termService.ioSignature, termOperator,
@@ -1091,13 +1092,12 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
 	DispatchIterate(query, DISPATCH_MATCH_EXACT, permutation, &iterator);
 	while(DispatchIteratorNext(&iterator)) {
 		ASSERT(nVariants < MAX_COMPILED_VARIANTS)
-		Service service = DispatchIteratorPeekService(&iterator);
+		ServiceRecord const * serviceRecord = DispatchIteratorPeekServiceRecord(&iterator);
 
 #ifdef DEBUG
 		// The service must be primitive, since compilation should never run
 		// if a compiled variant already exists.
-		Operator * op = DispatchIteratorPeekOperator(&iterator);
-		ASSERT(op->type == OPERATOR_MACHINE)
+		ASSERT(serviceRecord->op->type == OPERATOR_MACHINE)
 #endif
 
 	//    if(!IsIdentityPermutation(permutation, arity))
@@ -1112,7 +1112,7 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
 	   ASSERT(IsIdentityPermutation(permutation, query->arity))
 
 		CompiledVariant * variant = &(variants[nVariants++]);
-		SetupCompiledVariantFromService(variant, service);
+		SetupCompiledVariantFromServiceRecord(variant, serviceRecord);
 
 #ifdef DEBUG_COMPILER
 		PrintCString("Seeded variant from service: ");
@@ -1227,8 +1227,7 @@ static size8 compileFilterVariants(ParameterizedQuery const * query, CompiledVar
 
 	while(DispatchIteratorNext(&iterator)) {
 		ASSERT(nVariants < MAX_COMPILED_VARIANTS)
-		Service childService = DispatchIteratorPeekService(&iterator);
-		Operator * childOperator = DispatchIteratorPeekOperator(&iterator);
+		ServiceRecord const * childServiceRecord = DispatchIteratorPeekServiceRecord(&iterator);
 
 		// The query arguments to filter are the ones that correspond to query inputs
 		// but child service outputs.
@@ -1236,7 +1235,7 @@ static size8 compileFilterVariants(ParameterizedQuery const * query, CompiledVar
 		size8 nFiltered = 0;
 		for(index8 i = 0; i < query->arity; i++) {
 			if((query->parameters[permutation[i]].parameter.io == PARAMETER_IN)
-				&& (childService.ioSignature.parameterIO[i] == PARAMETER_OUT))
+				&& (childServiceRecord->service.ioSignature.parameterIO[i] == PARAMETER_OUT))
 				filteredArguments[nFiltered++] = i;
 		}
 		// If there are no argument to filter, the child service is an exact match.
@@ -1257,14 +1256,14 @@ static size8 compileFilterVariants(ParameterizedQuery const * query, CompiledVar
 			variant->parameters[permutation[i]] = (Atom) {
 				.parameter = {
 					.number = permutation[i] + 1,
-					.atomType = childService.relation.typeSignature.atomTypes[i],
+					.atomType = childServiceRecord->service.relation.typeSignature.atomTypes[i],
 					.io = query->parameters[permutation[i]].parameter.io
 				}
 			};
 		}
 		// The filter operator takes the arguments of the service it reads, so a form whose
 		// roles repeat needs a permute operator to place them in query argument order
-		variant->op = CreateFilterOperator(childOperator, filteredArguments, nFiltered);
+		variant->op = CreateFilterOperator(childServiceRecord->op, filteredArguments, nFiltered);
 		variant->op = permuteToClauseArguments(variant->op, permutation, query->arity);
 		ASSERT(variant->op)
 	}
@@ -1370,12 +1369,12 @@ static size8 compileParameterizedQuery(
 bool DispatchOrCompileQuery(FormulaView query, Service * service, index8 permutation[])
 {
 	// Attempt to dispatch to an existing service
-	if(DispatchQuery(query, service, permutation))
+	if(DispatchQuery(query, service, permutation) == DISPATCH_FOUND)
 		return true;
 	// Else attempt to compile a service
 	if(CompileQuery(query, 0) > 0) {
 		// Attempt to dispatch again to the newly compiled services
-		return DispatchQuery(query, service, permutation);
+		return DispatchQuery(query, service, permutation) == DISPATCH_FOUND;
 	}
 	else
 		return false;

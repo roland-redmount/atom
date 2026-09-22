@@ -101,6 +101,18 @@ void AcquireRelation(Relation relation);
 void ReleaseRelation(Relation relation);
 
 /**
+ * Mark the relation as "stale", so that next query that matches any
+ * service from this relation will trigger compilation. This is necessary
+ * when adding a TupleStore to a Relation that already has associated Services;
+ * see CreateTupleStore()
+ */
+void RelationMarkStale(Relation relation);
+
+void RelationMarkNotStale(Relation relation);
+
+bool RelationIsStale(Relation relation);
+
+/**
  * Create a relation with the predicate form given explicitly, rather than computed from
  * TermFormGetPredicateForm(termForm). This function is only for bootstrapping, where
  * TermFormGetPredicateForm() is not yet available. See setupCoreServices() in kernel.c
