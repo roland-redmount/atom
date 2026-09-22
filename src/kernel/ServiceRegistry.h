@@ -29,6 +29,7 @@ bool SameServices(Service service1, Service service2);
 typedef struct s_ServiceRecord {
 	Service service;
 	Operator * op;		// The root operator of the operator graph for this service
+	bool isStale;
 } ServiceRecord;
 
 
@@ -79,6 +80,18 @@ size32 NumberOfServices(void);
  * Number of registered services compiled from rules.
  */
 size32 NumberOfCompiledServices(void);
+
+/**
+ * Mark a primitive service as "stale", so that next query matching it
+ * will trigger compilation. 
+ */
+void ServiceMarkStale(Service service);
+
+
+void ServiceMarkNotStale(Service service);
+
+
+bool ServiceIsStale(Service service);
 
 
 /**

@@ -133,7 +133,7 @@ void testInvalidateDependentServices(void)
 
 /**
  * Registering a primitive service of the same signature as an existing compiled service
- * should remove the compiled service and mark the primitive service "pending".
+ * should remove the compiled service and mark the primitive service stale.
  */
 void testInvalidateOnPrimitiveService(void)
 {
@@ -155,14 +155,14 @@ void testInvalidateOnPrimitiveService(void)
 	CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
 
 	// The compiled operator should now be detached, and the service should
-	// point to the machine operator from the tuples store, marked "pending"
+	// point to the machine operator from the tuples store, marked stale
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)
 	ASSERT_TRUE(RelationExists(relation))
 	ServiceRecord const * record = ServiceGetRecord(service);
 	ASSERT_NOT_NULL(record)
 	ASSERT_INT32_EQUAL(record->op->type, OPERATOR_MACHINE)
 	ASSERT_TRUE(SameRelations(record->op->relation, relation))
-	ASSERT_TRUE(RelationIsStale(relation))
+	ASSERT_TRUE(ServiceIsStale(service))
 
 	DropRelation(relation);
 

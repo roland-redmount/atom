@@ -206,7 +206,7 @@ size32 RemoveService(Service service)
 	// Detach the root operator from the service.
 	// This may cause the operator to be deleted, and possibly its descendants.
 	DetachOperator(record.op);
-	RelationMarkStale(service.relation);
+	// RelationMarkStale(service.relation);
 	ReleaseRelation(service.relation);
 	BTreeDeleteResult result = BTreeDelete(serviceRecords, &record, 0);
 	ASSERT(result == BTREE_DELETED)
@@ -243,11 +243,41 @@ void CreateService(Service service, Operator * op)
 		.op = op,
 	};
 	AcquireRelation(service.relation);
-	// Ensure the relation is no longer marked stale
-	if(op->type != OPERATOR_MACHINE)
-		RelationMarkNotStale(service.relation);
 	AttachOperator(op, service.relation);
 	ASSERT(BTreeInsert(serviceRecords, &record) == BTREE_INSERTED)
+}
+
+
+static ServiceRecord * findServiceRecord(Service service)
+{
+	ServiceRecord key = {.service = service };
+	return BTreePeekItem(serviceRecords, &key);
+}
+
+
+void ServiceMarkStale(Service service)
+{
+	ServiceRecord * record = findServiceRecord(service);
+	ASSERT(record)
+	ASSERT(record->op->type == OPERATOR_MACHINE)
+	record->isStale = true;
+}
+
+
+void ServiceMarkNotStale(Service service)
+{
+	ServiceRecord * record = findServiceRecord(service);
+	ASSERT(record)
+	ASSERT(record->op->type == OPERATOR_MACHINE)
+	record->isStale = false;
+}
+
+
+bool ServiceIsStale(Service service)
+{
+	ServiceRecord * record = findServiceRecord(service);
+	ASSERT(record)
+	return record->isStale;	
 }
 
 
@@ -296,9 +326,9 @@ static size32 invalidateRelationServices(Relation relation, InvalidationUseCase 
 	while(ServiceIteratorNext(&serviceIterator)) {
 		ServiceRecord const * record = ServiceIteratorPeekRecord(&serviceIterator);
 		if(record->op->type == OPERATOR_MACHINE) {
-			// A primitive service is never stale, but introduction
-			// of another service with the same form renders its parents stale,
-			// so add them to the list
+			if(useCase == INVALIDATE_BY_RULE)
+				ServiceMarkStale(record->service);
+			// Collect parents of the primitive service for removal
 			collectParentServices(record->op, &staleServices);
 		}
 		else {
@@ -308,7 +338,7 @@ static size32 invalidateRelationServices(Relation relation, InvalidationUseCase 
 	}
 	ServiceIteratorEnd(&serviceIterator);
 
-	// remove all stale services
+	// Remove all stale services
 	size32 nServicesRemoved = 0;
 	for(index32 i = 0; i < staleServices.nElements; i++) {
 		Service * service = ResizingArrayGetElement(&staleServices, i);
@@ -318,11 +348,6 @@ static size32 invalidateRelationServices(Relation relation, InvalidationUseCase 
 		nServicesRemoved++;
 	}
 	FreeResizingArray(&staleServices);
-
-	// The relation is always stale if invalidating due to a new rule;
-	// else it is stale if any service was removed.
-	if(useCase == INVALIDATE_BY_RULE && RelationExists(relation))
-		RelationMarkStale(relation);
 
 	return nServicesRemoved;
 }

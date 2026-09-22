@@ -28,10 +28,15 @@ static RelationFixture precSuccFixture;
 static size32 runUserQueryAndCountTuples(char const * queryString)
 {
 	Atom query = CStringToTerm(queryString);
-	MixedTypeRelation * relation = UserQuery(FormulaGetView(query));
+	FormulaView queryView = FormulaGetView(query);
+	MixedTypeRelation * relation = UserQuery(queryView);
 	size32 nTuples = 0;
-	while(MixedTypeRelationNext(relation))
+	while(MixedTypeRelationNext(relation)) {
+		// TypedTuple const * tuple = MixedTypeRelationPeekTuple(relation);
+		// PrintFormActorsAsFormula(queryView.form, tuple);
+		// PrintChar('\n');
 		nTuples++;
+	}
 	FreeMixedTypeRelation(relation);
 	ReleaseFormula(query);
 	return nTuples;
@@ -218,8 +223,7 @@ void testInvalidateServiceByNewRelation(void)
 
 	// Add a second Relation of the (prec succ) form, but with different type signature,
 	// creating new primitive services not present during the compilation above.
-	// This should invalidate the service created by SetupPrecSuccFixture(), since it now
-	// depends on the new relation.
+	// This should invalidate the compiled service, since it now depends on the new relation.
 	Relation intRelation = {
 		.termForm = precSuccFixture.termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
@@ -229,11 +233,9 @@ void testInvalidateServiceByNewRelation(void)
 
 	// Querying again compiles an additional service for the (before:ID after:INT) relation.
 	// Since the (prec:ID succ:INT) relation was empty, there are no additional tuples.
-	// TODO: this does not work. Since the service is not invalidated above, re-compilation is
-	// not triggered, and we do not discover the additional type variant.
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 2)
-
+	
 	// Cleanup
 	RemoveAllCompiledServices();
 	DropRelation(intRelation);
@@ -279,6 +281,19 @@ void testInvalidateServiceByRule(void)
 	TeardownRelationFixture(&precSuccFixture);
 }
 
+size32 numberOfStaleServices(Relation relation)
+{
+	ServiceIterator iterator;
+	ServiceRegistryIterate(relation, &iterator);
+	size32 nStale = 0;
+	while(ServiceIteratorNext(&iterator)) {
+		if(ServiceIteratorPeekRecord(&iterator)->isStale)
+			nStale++;
+	}
+	ServiceIteratorEnd(&iterator);
+	return nStale;
+}
+
 
 /**
  * Same example as testCompileRecursiveJoin2() in test_compiler.c, but here we create the rule
@@ -296,11 +311,10 @@ void testInvalidateRelationByRule(void)
 	index8 facultyColumn = PredicateRoleIndex(TermFormGetPredicateForm(relation.termForm), faculty);
 	NameRelease(faculty);
 
-	// Adding the recursive rule should mark the relation as stale
-	// NOTE: A new rule must invalidate a primitive relation even if no
+	// Adding the recursive rule should mark the service as stale
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
 		"number n faculty f | ! < n > 0 | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
-	ASSERT_TRUE(RelationIsStale(relation))
+	ASSERT_INT32_EQUAL(numberOfStaleServices(relation), 3)
 
 	// Run a query to trigger re-compilation
 	Atom queryTerm = CStringToTerm("number 4 faculty f");
@@ -327,15 +341,21 @@ void testCompileClearsStaleRelation(void)
 {
 	SetupPrecSuccFixture(&precSuccFixture);
 
-	// Mark the primitive relation stale, as adding a rule for its term form would
-	RelationMarkStale(precSuccFixture.relation);
-	ASSERT_TRUE(RelationIsStale(precSuccFixture.relation))
+	// Mark the (prec >ID succ >ID) service stale
+	Atom query = CStringToTerm("prec x succ y");
+	Service service;
+	index8 permutation[2];
+	ASSERT_INT32_EQUAL(
+		DispatchQuery(FormulaGetView(query), &service, permutation),
+		DISPATCH_FOUND
+	)
+	ServiceMarkStale(service);
+	ASSERT_TRUE(ServiceIsStale(service))
 
 	// Compiling the query considers the relation and clears the flag, although the
 	// query matches the existing primitive service and registers no new service
-	Atom query = CStringToTerm("prec x succ y");
-	CompileQuery(FormulaGetView(query), 0);
-	ASSERT_FALSE(RelationIsStale(precSuccFixture.relation))
+	ASSERT_INT32_EQUAL(CompileQuery(FormulaGetView(query), 0), 0);
+	ASSERT_FALSE(ServiceIsStale(service))
 	ReleaseFormula(query);
 
 	TeardownRelationFixture(&precSuccFixture);
@@ -343,8 +363,7 @@ void testCompileClearsStaleRelation(void)
 
 
 /**
- * Test that adding or removing a rule that matches a relation with a TupleStore
- * marks that relation stale.
+ * Test that adding or removing a rule marks primitive services as stale.
  */
 void testStaleClearedAfterRuleRemoved(void)
 {
@@ -352,16 +371,16 @@ void testStaleClearedAfterRuleRemoved(void)
 
 	// Add a rule matching the stored (prec succ) relation
 	DictionaryEntry rule = DictionaryAddClauseFromCString("prec x succ y | ! before x after y");
-	ASSERT_TRUE(RelationIsStale(precSuccFixture.relation))
-	// Running the query triggers compilation, so that the rule is no longer stale
+	ASSERT_UINT32_EQUAL(numberOfStaleServices(precSuccFixture.relation), 3)
+	// Running the query triggers compilation of the (prec >ID succ >ID) service
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("prec x succ y"), PREC_SUCC_N_EDGES)
-	ASSERT_FALSE(RelationIsStale(precSuccFixture.relation))
-
+	ASSERT_UINT32_EQUAL(numberOfStaleServices(precSuccFixture.relation), 2)
+	
 	// Same, when removing the rule
 	DictionaryRemoveClause(&rule);
-	ASSERT_TRUE(RelationIsStale(precSuccFixture.relation))
+	ASSERT_UINT32_EQUAL(numberOfStaleServices(precSuccFixture.relation), 3)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("prec x succ y"), PREC_SUCC_N_EDGES)
-	ASSERT_FALSE(RelationIsStale(precSuccFixture.relation))
+	ASSERT_UINT32_EQUAL(numberOfStaleServices(precSuccFixture.relation), 2)
 
 	TeardownRelationFixture(&precSuccFixture);
 }
@@ -386,18 +405,20 @@ void testStaleBodyTermUsesPrimitiveOnly(void)
 	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, &btreeStorageProvider, 2, 0);
 	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(gammaDeltaFact)), 0);
 
-	// Add rule giving (alpha beta) the tuples of (gamma delta), rendering the (alpha beta) relation stale.
+	// Add rule giving (alpha beta) the tuples of (gamma delta), rendering all
+	// primitive services of the (alpha beta) relation stale.
 	DictionaryEntry aRule = DictionaryAddClauseFromCString("alpha x beta y | ! gamma x delta y");
-	ASSERT_TRUE(RelationIsStale(alphaBetaRelation))
+	ASSERT_INT32_EQUAL(numberOfStaleServices(alphaBetaRelation), 3)
 
 	// Add rule deriving relation (mu nu) from (alpha beta)
 	DictionaryEntry gRule = DictionaryAddClauseFromCString("mu x nu y | ! alpha x beta y");
-	ASSERT_TRUE(RelationIsStale(alphaBetaRelation))
+	ASSERT_INT32_EQUAL(numberOfStaleServices(alphaBetaRelation), 3)
 
-	// Query (mu nu) while (alpha beta) is still stale. This should yield both tuples of A,
-	// but the stale body term binds only A's primitive, so only one is returned.
-	// Pre-querying "alpha x beta y" here (compiling A's rule first) makes this pass.
+	// Query (mu nu) while (alpha beta) is still stale. This should recompile the
+	// (alpha >ID beta >ID) service first, as it was marked stale
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("mu x nu y"), 2)
+	// One less stale service
+	ASSERT_INT32_EQUAL(numberOfStaleServices(alphaBetaRelation), 2)
 
 	DictionaryRemoveClause(&gRule);
 	DictionaryRemoveClause(&aRule);
@@ -407,6 +428,60 @@ void testStaleBodyTermUsesPrimitiveOnly(void)
 	DropRelation(gammaDeltaRelation);
 	ReleaseFormula(alphaBetaFact);
 	ReleaseFormula(gammaDeltaFact);
+}
+
+
+/**
+ * Test compiling a relation with both primitive and compiled services to a JOIN of
+ * UNION services.
+ */
+void testSelfJoinOverUnionRelation(void)
+{
+	// Relation (alpha beta) stores the edges (A, B) and (B, C)
+	Atom edge1 = CStringToTerm("alpha 'A beta 'B");
+	Relation alphaBetaRelation = RelationFromFact(FormulaGetView(edge1));
+	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, &btreeStorageProvider, 2, 0);
+	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(edge1)), 0);
+	Atom edge2 = CStringToTerm("alpha 'B beta 'C");
+	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(edge2)), 0);
+
+	// Relation (gamma delta) stores the edge (C, D)
+	Atom edge3 = CStringToTerm("gamma 'C delta 'D");
+	Relation gammaDeltaRelation = RelationFromFact(FormulaGetView(edge3));
+	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, &btreeStorageProvider, 2, 0);
+	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(edge3)), 0);
+
+	// The below rule adds (C, D) to (alpha beta), its service is a UNION with tuples
+	// (alpha A beta B)
+	// (alpha B beta C)
+	// (alpha C beta D)
+	DictionaryEntry alphaRule = DictionaryAddClauseFromCString("alpha x beta y | ! gamma x delta y");
+	// Adding the rule invalidates all 3 (alpha beta) services
+	ASSERT_INT32_EQUAL(numberOfStaleServices(alphaBetaRelation), 3)
+	// Running this query restores the (alpha >LETTER beta >LETTER) service
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("alpha x beta y"), 3)
+	ASSERT_INT32_EQUAL(numberOfStaleServices(alphaBetaRelation), 2)
+
+
+	// (mu nu) joins (alpha beta) with itself: the length-two paths a->c and b->d.
+	// We expect a JOIN operator generating the tuples
+	// (mu A nu C)
+	// (mu B nu C)
+	DictionaryEntry muRule = DictionaryAddClauseFromCString(
+		"mu x nu y | ! alpha x beta z | ! alpha z beta y");
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("mu x nu y"), 2)
+	ASSERT_INT32_EQUAL(numberOfStaleServices(alphaBetaRelation), 1)
+
+	DictionaryRemoveClause(&muRule);
+	DictionaryRemoveClause(&alphaRule);
+	RelationRemoveTuple(alphaBetaRelation, TypedTuplePeekAtoms(FormulaGetActors(edge1)), 0);
+	RelationRemoveTuple(alphaBetaRelation, TypedTuplePeekAtoms(FormulaGetActors(edge2)), 0);
+	RelationRemoveTuple(gammaDeltaRelation, TypedTuplePeekAtoms(FormulaGetActors(edge3)), 0);
+	DropRelation(alphaBetaRelation);
+	DropRelation(gammaDeltaRelation);
+	ReleaseFormula(edge1);
+	ReleaseFormula(edge2);
+	ReleaseFormula(edge3);
 }
 
 
@@ -428,6 +503,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileClearsStaleRelation);
 	ExecuteTest(testStaleClearedAfterRuleRemoved);
 	ExecuteTest(testStaleBodyTermUsesPrimitiveOnly);
+	ExecuteTest(testSelfJoinOverUnionRelation);
 
 	UnloadLibraries();
 	KernelShutdown();

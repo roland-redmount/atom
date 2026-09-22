@@ -208,7 +208,7 @@ DispatchResult DispatchParameterizedQuery(
 			break;
 		}
 		Service candidateService = iterator.serviceRecord->service;
-		result = RelationIsStale(candidateService.relation) ? DISPATCH_FOUND_STALE : DISPATCH_FOUND;
+		result = ServiceIsStale(candidateService) ? DISPATCH_FOUND_STALE : DISPATCH_FOUND;
 		// copy the service struct and its permutation to the caller
 		*service = candidateService;
 		CopyMemory(candidatePermutation, permutation, query->arity * sizeof(index8));

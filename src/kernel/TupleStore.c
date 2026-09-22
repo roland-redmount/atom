@@ -31,19 +31,6 @@ static IOSignature TupleStoreGetCanonicalIOSignature(TupleStore const * store, I
 }
 
 
-static void createOperatorAndService(TupleStore const * store, RelationReaderSpec * readerSpec)
-{
-	Operator * op = CreateMachineOperator(
-		store->nColumns, store->indexColumns, readerSpec, store->storage);
-
-	IOSignature serviceIOSignature = TupleStoreGetCanonicalIOSignature(store, readerSpec->ioSignature);
-	CreateService(
-		(Service) {.relation = store->relation, .ioSignature = serviceIOSignature},
-		op
-	);
-}
-
-
 TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provider, size8 nColumns, index8 const indexColumns[])
 {
 	TupleStore * store = allocateTupleStore();
@@ -62,12 +49,12 @@ TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provide
 			store->indexColumns[i] = i;
 	}
 
-	// Invalidate compiled services for this term form,
-	// and mark corresponding relations "stale" if services were invalidated.
+	// Invalidate compiled services for this term form.
 	// NOTE: it is not sufficient to invalidate only the current relation,
 	// since any service compiled from a rule containing this term form
 	// may now become dependent on the this relation.
-	InvalidateTermFormServices(relation.termForm, INVALIDATE_BY_PRIMITIVE);
+	size32 nInvalidated = InvalidateTermFormServices(relation.termForm, INVALIDATE_BY_PRIMITIVE);
+	
 	// Call the storage provider to setup the relation implementation
 	// and determine the number of readers
 	size32 nReaders;
@@ -78,8 +65,15 @@ TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provide
 	for(index32 i = 0; i < nReaders; i++) {
 		readerSpec = (RelationReaderSpec) {0};
 		provider->setupReader(&readerSpec, i, store->storage);
-		// setup the MACHINE operator and primitive service
-		createOperatorAndService(store, &readerSpec);
+		// create the MACHINE operator and primitive service
+		Operator * op = CreateMachineOperator(
+			store->nColumns, store->indexColumns, &readerSpec, store->storage);
+		IOSignature serviceIOSignature = TupleStoreGetCanonicalIOSignature(
+			store, readerSpec.ioSignature);
+		Service service = {.relation = store->relation, .ioSignature = serviceIOSignature};
+		CreateService(service, op);
+		if(nInvalidated > 0)
+			ServiceMarkStale(service);
 	}
 	return store;
 }

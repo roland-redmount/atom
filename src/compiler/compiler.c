@@ -104,12 +104,10 @@ static bool dispatchOrCompileTerm(
 	ParameterizedQuery queryRenumbered = *query;
 	for(index8 i = 0; i < query->arity; i++)
 		queryRenumbered.parameters[i].parameter.number = i + 1;
+	compileParameterizedQuery(compileStack, &queryRenumbered,	0);
 
-	size8 nServices = compileParameterizedQuery(compileStack, &queryRenumbered,	0);
-	if(!nServices)
-		return false;
-
-	// New services were compiled, so re-try dispatch
+	// Re-dispatch, even if no new service was registered. Compilation may have only
+	// cleared the stale flag of a primitive service, which dispatch can now accept.
 	dispatchResult = DispatchParameterizedQuery(
 		query, DISPATCH_MATCH_EXACT, service, permutation, excludedSignatures, nExcluded, hasNextMatch);
 	return dispatchResult == DISPATCH_FOUND;
@@ -1340,11 +1338,11 @@ static size8 compileParameterizedQuery(
 			.termForm = query->termForm,
 			.typeSignature = CompiledVariantGetTypeSignature(&variants[i]),
 		};
+		Service service = (Service) {.relation = relation, .ioSignature = ioSignature};
 		if(variants[i].isSeed) {
-			RelationMarkNotStale(relation);
+			ServiceMarkNotStale(service);
 			continue;
 		}
-		Service service = (Service) {.relation = relation, .ioSignature = ioSignature};
 		if(variants[i].isReplaced)
 			RemoveService(service);
 		else {
