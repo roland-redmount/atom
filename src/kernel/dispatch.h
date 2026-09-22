@@ -17,46 +17,65 @@
 #include "lang/formula.h"
 
 
+typedef enum e_DispatchResult {
+	DISPATCH_FOUND = 1,				// Found a valid service
+	DISPATCH_FOUND_STALE = 2,		// Found a service from a stale relation
+	DISPATCH_NOT_FOUND = 3,
+} DispatchResult;
+
+
 /**
  * Dispatch a query, copying the first matching service to *service, if any.
  * The queryAtoms tuple must not contain parameters (AT_PARAMETER) atoms;
  * see DispatchParameterizedQuery().
- * Returns true if a match was found.
  * The argument permutation required to match the service is written
  * to the given permutation array, such that queryActors element permutation[i]
  * matches service parameter i.
+ * Returns true if a match was found.
  *
- * NOTE: we return Services here rather than just the associated Operators,
+ * NOTE: we return a Service rather than the associated Operator,
  * since we often want to know the atom (column) types of the matched service.
  *
  * NOTE: the query is parameterized so that each actor is mapped to a distinct
- * parameter, as services do not (currently) allow repeated parameters.
- * A matched service may therefore yield tuples the query did not ask for when
+ * parameter, since Services cannot (currently) represent repeated parameters.
+ * The returned Service may therefore yield tuples the query did not ask for when
  * the query contains repeated variables, for example (edge e from x to x).
  * The caller must filter out these tuples; see MixedTypeRelation.h.
  */
-bool DispatchQuery(FormulaView query, Service * service, index8 permutation[]);
+DispatchResult DispatchQuery(FormulaView query, Service * service, index8 permutation[]);
 
 /**
  * Same, using a term (formula) instead of a termform and actors tuple
  */
-bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 permutation[]);
-
+DispatchResult DispatchQueryFormula(Atom queryTerm, Service * service, index8 permutation[]);
 
 /**
- * Dispatch a parameterized query. The queryParameters array must contain AT_PARAMETER
- * atoms only. A query parameter occurring at several positions must match a service
- * parameter of the same type at each position.
+ * A query (term) where actors have been replaced with a parameters tuple.
+ */
+typedef struct s_ParameterizedQuery {
+	Atom termForm;
+	Atom parameters[RELATION_MAX_ARITY];
+	size8 arity;
+} ParameterizedQuery;
+
+void ParameterizeQuery(FormulaView query, ParameterizedQuery * parameterizedQuery);
+
+void PrintParameterizedQuery(ParameterizedQuery const * parameterizedQuery);
+
+/**
+ * Dispatch a parameterized query. A query parameter occurring at several positions
+ * must match a service parameter of the same type at each position.
  *
  * Several services may match when a query output parameter type is NONE (untyped).
  * There can be at most one matching service for each relation, so each service is
- * identified by the type signature of the corresponding relations.
+ * identified by the type signature of the corresponding relation.
  * 
  * The excludedSignatures array holds type signatures to exclude; a candidate service
  * with one of these signatures is skipped. Setting nExcluded = 0 excludes nothing.
  *
  * *hasNextMatch is set to true if a match outside the exclusion list exists beyond the one
  * returned. Caller can pass hasNextMatch = 0 if only one match is required.
+ * TODO: can't we solve this "lookahead" problem more cleanly with DispatchIterate()
  *
  * With matchMode = DISPATCH_MATCH_EXACT, returns a service with exact matching signatures.
  * With matchMode = DISPATCH_MATCH_RELAXED, returns a service that matches all
@@ -65,9 +84,8 @@ bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 permutation[
 #define DISPATCH_MATCH_EXACT		1
 #define DISPATCH_MATCH_RELAXED		2
 
-bool DispatchParameterizedQuery(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
-	Service * service, index8 permutation[],
+DispatchResult DispatchParameterizedQuery(
+	ParameterizedQuery const * query, int matchMode, Service * service, index8 permutation[],
 	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch);
 
 
@@ -94,9 +112,8 @@ typedef struct {
 	ServiceIterator serviceIterator;
 	// whether serviceIterator is positioned within the services of a relation table
 	bool inRelation;
-	// The service and corresponding operator at the current positon
-	Service service;
-	Operator * op;
+	// The service record at the current positon
+	ServiceRecord const * serviceRecord;
 #ifdef DEBUG
 	// Relation of the previous match, kept to verify that one query never matches two
 	// services of one relation; see ServiceRegistryAdd()
@@ -116,8 +133,7 @@ typedef struct {
  * matchMode is the same as in DispatchParameterizedQuery()
  */
 void DispatchIterate(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
-	index8 permutation[], DispatchIterator * iterator);
+	ParameterizedQuery const * query, int matchMode, index8 permutation[], DispatchIterator * iterator);
 
 /**
  * Advance to the next matching service, if one exists, writing its argument
@@ -126,13 +142,11 @@ void DispatchIterate(
 bool DispatchIteratorNext(DispatchIterator * iterator);
 
 /**
- * The service at the current iterator position.
+ * View the service record for the service at the current iterator position.
  * Only valid after DispatchIteratorNext() has returned true, and until the next
  * call to DispatchIteratorNext() or DispatchIteratorEnd().
  */
-Service DispatchIteratorPeekService(DispatchIterator const * iterator);
-
-Operator * DispatchIteratorPeekOperator(DispatchIterator const * iterator);
+ServiceRecord const * DispatchIteratorPeekServiceRecord(DispatchIterator const * iterator);
 
 void DispatchIteratorEnd(DispatchIterator * iterator);
 

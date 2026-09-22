@@ -48,9 +48,8 @@ typedef struct s_MixedTypeRelation {
 		// for MIXED_TYPE_CONCAT
 		struct {
 			TypedTuple const * queryActors;
-			// The parameterized query, which is what dispatch matches, and
-			// which the dispatch iterator reads as it goes; see GetQueryParameters()
-			Atom * queryParameters;
+			// Store a copy of the parameterized query
+			ParameterizedQuery parameterizedQuery;
 			// Index of the first query actor denoting the same variable as query actor i,
 			// or just i when actor[i] is not a variable. Used to filter on equality constraints.
 			// Set to 0 when the query actors contain no repeated variables (the common case)
@@ -60,7 +59,7 @@ typedef struct s_MixedTypeRelation {
 			Atom * arguments;
 			index8 * permutation;
 			DispatchIterator dispatchIterator;
-			Service service;
+			// Service service;
 			// Number of services read from so far, counted as each is opened;
 			// see MixedTypeRelationNServices()
 			size32 nServices;
@@ -94,7 +93,7 @@ typedef struct s_MixedTypeRelation {
  * service registries. No service or relation may be registered while the tuples of this
  * relation are being read, so a query must be compiled before its answers are read.
  */
-MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * queryActors);
+MixedTypeRelation * CreateConcatRelation(FormulaView query);
 
 /**
  * Advance to the next tuple of the relation, if one exists. The relation is positioned

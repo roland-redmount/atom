@@ -629,7 +629,7 @@ static void setupCoreServices(void)
 		);
 		IOSignature ioSignature = CreateIOSignature(
 			parameterIO, corePredicateArity[coreRelationFormId[relationId]]);
-		kernel.coreOperators[i] = FindServiceOperator(
+		kernel.coreOperators[i] = ServiceGetOperator(
 			(Service) {
 				.relation = kernel.coreRelations[relationId],
 				.ioSignature = ioSignature

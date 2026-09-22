@@ -3,6 +3,7 @@
 #include "kernel/operator.h"
 #include "kernel/Relation.h"
 #include "kernel/tuple.h"
+#include "kernel/TupleStore.h"
 #include "lang/TermForm.h"			// for PrintTermForm()
 #include "memory/allocator.h"
 #include "util/ResizingArray.h"
@@ -922,12 +923,18 @@ static void unionFinalizeContext(OperatorContext * context)
 //------------------------------------- OPERATOR_PROJECT -----------------------------------------
 
 /**
- * PROJECT keeps the child arguments named by its argument map and drops the rest.
- * Dropping arguments may leave duplicate tuples, so we enumerate the entire child relation
- * into a B-tree keyed on the kept arguments, which both removes duplicates and orders the
- * result. Materializing is what a projection generally requires: dropping an argument
- * reorders the arguments the child ordered below it, so the child's order does not carry
- * over to the projected tuples.
+ * PROJECT retains the child arguments identified by its argument map and drops the rest.
+ * Dropping arguments may leave duplicate tuples, and can also cause the resulting tuples
+ * to become unordered. For example, if the child relation produces the tuples
+ *  ( 1 2 4 )
+ *  ( 1 3 2 )
+ * which are sorted w.r.t. the identity indexOrder {0, 1, 2}, and we create a PROJECT
+ * operators that drops the second column, we obtain
+ *  ( 1 4 )
+ *  ( 1 2 )
+ * which are not sorted. Therefore, we must in general re-sort the full relation.
+ * Here, materialize tuples after projection into a B-tree, which both removes duplicates
+ * and sorts the tuples. The PROJECT operator then always has identity index order.
  */
 
 typedef struct s_ProjectContext {
@@ -1650,6 +1657,16 @@ void AttachOperator(Operator * op, Relation signature)
 {
 	ASSERT(IsNullRelation(op->relation))
 	op->relation = signature;
+
+#ifdef DEBUG
+	// If the Relation has a TupleStore, the new operator's
+	// index order must match that of the TupleStore.
+	TupleStore * store = RelationGetTupleStore(signature);
+	if(store) {
+		ASSERT(op->nArguments == store->nColumns)
+		ASSERT(CompareMemory(op->indexOrder, store->indexColumns, op->nArguments) == 0)
+	}
+#endif
 }
 
 
@@ -1940,6 +1957,7 @@ static void printOperatorRecursive(Operator const * op, uint32 depth)
 		PrintChar('(');
 		printOperatorRecursive(op->impl.identity.childOperator, depth + 1);
 		PrintChar(')');
+		break;
 
 	case OPERATOR_PERMUTE:
 		printOperatorHead(op, "PERMUTE");

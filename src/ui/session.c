@@ -5,6 +5,7 @@
 #include "kernel/dispatch.h"
 #include "kernel/Parameter.h"
 #include "kernel/ServiceRegistry.h"
+#include "kernel/Parameter.h"
 #include "lang/formula.h"
 #include "ui/assert.h"
 #include "lang/TermForm.h"
@@ -152,7 +153,7 @@ static void printAssertResult(int result)
 		printLine("Already known.");
 		break;
 
-	case ASSERT_FAIL:
+	case ASSERT_CONTRADICTION:
 		printLine("Contradicts the knowledgebase.");
 		break;
 
@@ -170,6 +171,10 @@ static void printAssertResult(int result)
 
 	case ASSERT_NOT_CLAUSE:
 		printLine("Only a fact or a rule can be asserted.");
+		break;
+
+	case ASSERT_NOT_WRITABLE:
+		printLine("The relation is not writable.");
 		break;
 
 	default:
@@ -261,20 +266,20 @@ static void executeInspect(char const * queryText, index32 linePosition)
 
 	// CLAUDE: The query is parameterized as it is for an ordinary query, so that the services
 	// listed here are the ones asking the query would read; see CreateConcatRelation()
-	size8 arity = queryView.actors->nAtoms;
-	Atom queryParameters[arity];
-	index8 permutation[arity];
-	ActorsToParameters(queryView.actors, queryParameters);
-
+	ParameterizedQuery parameterizedQuery = {
+		.termForm = queryView.form,
+		.arity  = queryView.actors->nAtoms
+	};
+	ActorsToParameters(queryView.actors, parameterizedQuery.parameters);
+	index8 permutation[parameterizedQuery.arity];
+	
 	DispatchIterator iterator;
-	DispatchIterate(
-		queryView.form, queryParameters, arity, DISPATCH_MATCH_EXACT,
-		permutation, &iterator);
+	DispatchIterate(&parameterizedQuery, DISPATCH_MATCH_EXACT, permutation, &iterator);
 
 	size32 nServices = 0;
 	while(DispatchIteratorNext(&iterator)) {
 		SessionPrintMargin();
-		PrintService(DispatchIteratorPeekService(&iterator));
+		PrintService(DispatchIteratorPeekServiceRecord(&iterator)->service);
 		PrintChar('\n');
 		nServices++;
 	}

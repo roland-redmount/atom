@@ -23,11 +23,13 @@ typedef struct s_Service {
 	IOSignature ioSignature;
 } Service;
 
+bool SameServices(Service service1, Service service2);
+
 
 typedef struct s_ServiceRecord {
 	Service service;
-	// Pointer to the root of the operator graph defining this service.
-	Operator * op;
+	Operator * op;		// The root operator of the operator graph for this service
+	bool isStale;
 } ServiceRecord;
 
 
@@ -38,7 +40,8 @@ void SetupServiceRegistry(void);
 
 /**
  * Register a new Service with the given Operator. Attaches the services' Relation
- * to the Operator and acquires the Relation. This does not change the knowledgebase.
+ * to the Operator and acquires the Relation.
+ * If the service is compiled, there must not exist a service already.
  * 
  * NOTE: For services whose form contain repeated roles, such as `(a b b)`,
  * the signature must be unique under form permutation: for example, the two services
@@ -53,9 +56,9 @@ void CreateService(Service service, Operator * op);
  * Remove the service identified by the given operator and relation.
  * The operator cannot be a MACHINE operator.
  * This removes the services' operator, and recursively removes all operators
- * and services that depend on it.
+ * and services that depend on it. Return the total number of services removed.
  */
-void RemoveService(Service service);
+size32 RemoveService(Service service);
 
 /**
  * Remove all services for the given relation.
@@ -78,21 +81,36 @@ size32 NumberOfServices(void);
  */
 size32 NumberOfCompiledServices(void);
 
+/**
+ * Mark a primitive service as "stale", so that next query matching it
+ * will trigger compilation. 
+ */
+void ServiceMarkStale(Service service);
+
+
+void ServiceMarkNotStale(Service service);
+
+
+bool ServiceIsStale(Service service);
+
 
 /**
- * Invalidate compiled services for the given term form. This is called whenever
- * a service or rule involving the term form is added or removed.
+ * Invalidate compiled services for the given term form. 
  * This function removes (1) every compiled Service for each Relation matching the given form,
  * and (2) every compiled Service that calls any services matching the term form, transitively.
+ * Also marks the involved relations as stale; exactly when a relation become stale differs
+ * depending on useCase. Returns the total number of services removed.
  * 
- * A compiled service answers a query as the rules and the facts stood when it was compiled,
- * so a change to either has to remove the services it could affect; the next query then
- * compiles them again. Removing too much costs a compilation, removing too little gives a wrong answer.
- *
  * NOTE: this modifies the registries, so it cannot run while a query is being read: an
  * open DispatchIterator or MixedTypeRelation write-locks against modification.
  */
-void InvalidateServicesByTermForm(Atom termForm);
+typedef enum e_InvalidationUseCase
+{
+	INVALIDATE_BY_RULE = 1,				// invalidate due to adding/removing a rule
+	INVALIDATE_BY_PRIMITIVE = 2,		// invalidate due to adding primitive services
+} InvalidationUseCase;
+
+size32 InvalidateTermFormServices(Atom termForm, InvalidationUseCase useCase);
 
 /**
  * Remove all compiled services from the registry.
@@ -123,7 +141,13 @@ void ServiceIteratorEnd(ServiceIterator * iterator);
  * Retrieve the operator of the service for the given Service.
  * If the service is not registers, returns 0
  */
-Operator * FindServiceOperator(Service service);
+Operator * ServiceGetOperator(Service service);
+
+/**
+ * View the service record for the service. The returned pointer is
+ * valid only as long as the service registery is not altered.
+ */
+ServiceRecord const * ServiceGetRecord(Service service);
 
 /**
  * For debugging

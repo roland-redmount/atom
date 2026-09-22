@@ -5,93 +5,42 @@
 
 TypeSignature CompiledVariantGetTypeSignature(CompiledVariant const * variant)
 {
-	size8 arity = variant->parameters->nAtoms;
-	byte atomTypes[arity];
-	Atom const * parameters = TypedTuplePeekAtoms(variant->parameters);
-	for(index8 i = 0; i < arity; i++)
-		atomTypes[i] = parameters[i].parameter.atomType;
-	return CreateTypeSignature(atomTypes, arity);
+	return ParametersGetTypeSignature(variant->parameters, variant->op->nArguments);
 }
 
 
 IOSignature CompiledVariantGetIOSignature(CompiledVariant const * variant)
 {
-	size8 arity = variant->parameters->nAtoms;
-	byte parameterIO[arity];
-	Atom const * parametersArray = TypedTuplePeekAtoms(variant->parameters);
-	for(index8 i = 0; i < arity; i++)
-		parameterIO[i] = parametersArray[i].parameter.io;
-	return CreateIOSignature(parameterIO, arity);
+	return ParametersGetIOSignature(variant->parameters, variant->op->nArguments);
 }
 
 
 CompiledVariant * FindCompiledVariant(
-	CompiledVariant variants[], size8 nVariants, TypedTuple const * parameters)
+	CompiledVariant variants[], size8 nVariants, Atom parameters[], size8 nParameters)
 {
 	for(index8 i = 0; i < nVariants; i++) {
-		if(SameParameterSignature(variants[i].parameters, parameters))
+		if(SameParameterSignature(variants[i].parameters, parameters, nParameters))
 			return &(variants[i]);
 	}
 	return 0;
 }
 
 
-void CompiledVariantSetRelation(CompiledVariant * variant, Atom queryTermForm)
+void SetupCompiledVariantFromServiceRecord(CompiledVariant * variant, ServiceRecord const * serviceRecord)
 {
-	// if relation is already set, we do nothing
-	if(!IsNullRelation(variant->relation))
-		return;
-	variant->relation = (Relation) {
-		.termForm = queryTermForm, .typeSignature = CompiledVariantGetTypeSignature(variant)};
-}
+	variant->op = serviceRecord->op;
+	ASSERT(variant->op->type == OPERATOR_MACHINE)
+	variant->isSeed = true;
 
-
-void CompiledVariantSeedFromService(
-	CompiledVariant * variant, Service service, TypedTuple const * queryParameters)
-{
-	size8 arity = queryParameters->nAtoms;
-	Atom const * parameters = TypedTuplePeekAtoms(queryParameters);
-	variant->parameters = CreateTypedTuple(arity);
-	for(index8 i = 0; i < arity; i++) {
-		TypedTupleSetElement(variant->parameters, i,
-			CreateTypedAtom(
-				AT_PARAMETER,
-				(Atom) {
-					.parameter = {
-						.number = i + 1,
-						.atomType = service.relation.typeSignature.atomTypes[i],
-						.io = parameters[i].parameter.io
-					}
-				}
-			)
-		);
+	TypeSignature typeSignature = serviceRecord->service.relation.typeSignature;
+	for(index8 i = 0; i < variant->op->nArguments; i++) {
+		variant->parameters[i] = (Atom) {
+			.parameter = {
+				.number = i + 1,
+				.atomType = typeSignature.atomTypes[i],
+				.io = serviceRecord->service.ioSignature.parameterIO[i]
+			}
+		};
 	}
-	ASSERT(SameTypeSignatures(
-		CompiledVariantGetTypeSignature(variant), service.relation.typeSignature))
-
-	variant->relation = service.relation;
-	variant->replacedOperator = variant->op = FindServiceOperator(service);
-}
-
-
-size8 DiscardUnusedSeedVariants(CompiledVariant variants[], size8 nVariants)
-{
-	// Walk downwards, so that compacting the array cannot move a variant past the
-	// position being examined
-	for(index8 v = nVariants; v > 0; v--) {
-		CompiledVariant * variant = &(variants[v - 1]);
-		// A clause compiling into the variant always replaces the operator, since
-		// unionOperators() allocates a new one
-		if(!variant->replacedOperator || (variant->op != variant->replacedOperator))
-			continue;
-		ASSERT(!variant->isRecursive)
-		// The variant owns its parameters and a reference to the relation. Its operator
-		// still belongs to the service it was seeded from, so there is nothing to release.
-		FreeTypedTuple(variant->parameters);
-		// ReleaseRelation(variant->relation);
-		for(index8 i = v; i < nVariants; i++)
-			variants[i - 1] = variants[i];
-		nVariants--;
-	}
-	return nVariants;
+	ASSERT(SameTypeSignatures(CompiledVariantGetTypeSignature(variant), typeSignature))
 }

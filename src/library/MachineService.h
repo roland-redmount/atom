@@ -57,6 +57,10 @@ uint32 RequestModuleID(void);
  * expects its arguments.
  * If the corresponding Relation does not exist, it is created, with the default provider (no storage).
  * Returns the registered service.
+ * 
+ * NOTE: unlike CreateTupleStore(), this does not invalidate compiled services,
+ * and does not mark the relation stale. This function must not be called if there
+ * already are compiled services associated with the relation.
  */
 Service RegisterMachineService(
 	uint32 moduleID, char const * signature,

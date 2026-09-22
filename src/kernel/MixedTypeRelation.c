@@ -1,28 +1,27 @@
 
 #include "kernel/MixedTypeRelation.h"
-#include "kernel/Parameter.h"
 #include "lang/TermForm.h"
 #include "lang/Variable.h"
 #include "memory/allocator.h"
 
 
 /**
- * Detect repeated variables. If queryActors[i] is a variable, equalityMap[i] i set to the index
- * of the first variable in queryActors that equals queryActors[i].
+ * Map repeated variables in the actors tuple. If actors[i] is a variable,
+ * equalityMap[i] i set to the index of the first variable in queryActors that equals queryActors[i].
  * Returns true if any repeated variables were found.
  */
-static bool queryVariableMap(TypedTuple const * queryActors, index8 equalityMap[])
+static bool repeatedVariablesMap(TypedTuple const * actors, index8 variableMap[])
 {
 	bool hasRepeatedVariable = false;
-	for(index8 i = 0; i < queryActors->nAtoms; i++) {
-		TypedAtom queryAtom = TypedTupleGetElement(queryActors, i);
-		equalityMap[i] = i;
+	for(index8 i = 0; i < actors->nAtoms; i++) {
+		TypedAtom queryAtom = TypedTupleGetElement(actors, i);
+		variableMap[i] = i;
 		if(queryAtom.type == AT_VARIABLE) {
 			// check for repeated variables
 			for(index8 j = 0; j < i; j++) {
-				TypedAtom previousAtom = TypedTupleGetElement(queryActors, j);
+				TypedAtom previousAtom = TypedTupleGetElement(actors, j);
 				if(previousAtom.type == AT_VARIABLE && SameVariable(queryAtom.atom, previousAtom.atom)) {
-					equalityMap[i] = j;
+					variableMap[i] = j;
 					hasRepeatedVariable = true;
 					break;
 				}
@@ -34,24 +33,23 @@ static bool queryVariableMap(TypedTuple const * queryActors, index8 equalityMap[
 
 
 /**
- * Bind the arguments of the service at the current dispatch position and open its
+ * Bind the arguments of the service at the current dispatch position and create its
  * context. Every query actor is copied into the arguments tuple, which binds the query
  * constants to the input parameters of the service; the service overwrites the arguments
  * taken by its output parameters.
  */
-static void openService(MixedTypeRelation * mixedRelation)
+static void createServiceContext(MixedTypeRelation * mixedRelation)
 {
 	size8 arity = mixedRelation->tuple->nAtoms;
-	mixedRelation->impl.concat.service = DispatchIteratorPeekService(
+	ServiceRecord const * serviceRecord = DispatchIteratorPeekServiceRecord(
 		&(mixedRelation->impl.concat.dispatchIterator));
 
 	for(index8 i = 0; i < arity; i++)
 		mixedRelation->impl.concat.arguments[i] = TypedTupleGetAtom(
 			mixedRelation->impl.concat.queryActors, mixedRelation->impl.concat.permutation[i]);
 
-	Operator * op = FindServiceOperator(mixedRelation->impl.concat.service);
 	mixedRelation->impl.concat.context = OperatorCreateContext(
-		op,	mixedRelation->impl.concat.arguments
+		serviceRecord->op, mixedRelation->impl.concat.arguments
 	);
 	mixedRelation->impl.concat.nServices++;
 }
@@ -61,14 +59,16 @@ static void openService(MixedTypeRelation * mixedRelation)
  * Copy the arguments of the current service into the tuple of the relation, which is in
  * query actor order and carries the column types of that service.
  */
-static void gatherTuple(MixedTypeRelation * mixedRelation)
+static void copyResultToTypedTuple(MixedTypeRelation * mixedRelation)
 {
-	byte const * atomTypes = mixedRelation->impl.concat.service.relation.typeSignature.atomTypes;
+	ServiceRecord const * serviceRecord = DispatchIteratorPeekServiceRecord(
+		&(mixedRelation->impl.concat.dispatchIterator));
+	TypeSignature typeSignature = serviceRecord->service.relation.typeSignature;
 	for(index8 i = 0; i < mixedRelation->tuple->nAtoms; i++)
 		TypedTupleSetElement(
 			mixedRelation->tuple,
 			mixedRelation->impl.concat.permutation[i],
-			CreateTypedAtom(atomTypes[i], mixedRelation->impl.concat.arguments[i])
+			CreateTypedAtom(typeSignature.atomTypes[i], mixedRelation->impl.concat.arguments[i])
 		);
 }
 
@@ -77,7 +77,7 @@ static void gatherTuple(MixedTypeRelation * mixedRelation)
  * Test whether the current tuple of the relation satisfies the equality constraints
  * of the query, if any. Equality-constrained arguments must always have the same atom type.
  */
-static bool tupleSatisfiesConstraints(MixedTypeRelation const * mixedRelation)
+static bool checkEqualityConstraints(MixedTypeRelation const * mixedRelation)
 {
 	index8 const * variableMap = mixedRelation->impl.concat.variableMap;
 	if(!variableMap)
@@ -101,16 +101,17 @@ static bool concatNext(MixedTypeRelation * mixedRelation)
 {
 	while(!mixedRelation->impl.concat.isExhausted) {
 		if(!mixedRelation->impl.concat.context) {
+			// Look for next service
 			if(!DispatchIteratorNext(&(mixedRelation->impl.concat.dispatchIterator))) {
 				mixedRelation->impl.concat.isExhausted = true;
 				break;
 			}
-			openService(mixedRelation);
+			createServiceContext(mixedRelation);
 		}
-
+		// Call the current service context
 		if(OperatorCall(mixedRelation->impl.concat.context)) {
-			gatherTuple(mixedRelation);
-			if(tupleSatisfiesConstraints(mixedRelation))
+			copyResultToTypedTuple(mixedRelation);
+			if(checkEqualityConstraints(mixedRelation))
 				return true;
 		}
 		else {
@@ -123,36 +124,37 @@ static bool concatNext(MixedTypeRelation * mixedRelation)
 }
 
 
-MixedTypeRelation * CreateConcatRelation(Atom queryTermForm, TypedTuple const * queryActors)
+MixedTypeRelation * CreateConcatRelation(FormulaView query)
 {
-	ASSERT(IsTermForm(queryTermForm))
+	ASSERT(IsTermForm(query.form))
+	TypedTuple const * queryActors = query.actors;
 	size8 arity = queryActors->nAtoms;
 
 	MixedTypeRelation * mixedRelation = Allocate(sizeof(MixedTypeRelation));
 	mixedRelation->type = MIXED_TYPE_CONCAT;
-	mixedRelation->termForm = queryTermForm;
+	mixedRelation->termForm = query.form;
 	mixedRelation->tuple = CreateTypedTuple(arity);
 	mixedRelation->impl.concat.queryActors = queryActors;
 
-	// The arguments, query parameters and permutation arrays share one allocation, the
-	// atoms first so that they keep the alignment of an Atom
+	// The arguments and permutation arrays share one allocation, the atoms first
+	// so that they keep the alignment of an Atom
 	mixedRelation->impl.concat.arguments = Allocate(
-		arity * (2 * sizeof(Atom) + sizeof(index8)));
-	mixedRelation->impl.concat.queryParameters = mixedRelation->impl.concat.arguments + arity;
+		arity * (sizeof(Atom) + sizeof(index8)));
 	mixedRelation->impl.concat.permutation =
-		(index8 *) (mixedRelation->impl.concat.queryParameters + arity);
+		(index8 *) (mixedRelation->impl.concat.arguments + arity);
 
 	// Create the variable map only if there are repeated variables
 	index8 variableMap[arity];
-	if(queryVariableMap(queryActors, variableMap)) {
+	if(repeatedVariablesMap(queryActors, variableMap)) {
 		mixedRelation->impl.concat.variableMap = Allocate(arity * sizeof(index8));
 		CopyMemory(variableMap, mixedRelation->impl.concat.variableMap, arity * sizeof(index8));
 	}
-
-	ActorsToParameters(queryActors, mixedRelation->impl.concat.queryParameters);
+	ParameterizeQuery(query, &(mixedRelation->impl.concat.parameterizedQuery));
 	DispatchIterate(
-		queryTermForm, mixedRelation->impl.concat.queryParameters, arity, DISPATCH_MATCH_EXACT,
-		mixedRelation->impl.concat.permutation, &(mixedRelation->impl.concat.dispatchIterator));
+		&(mixedRelation->impl.concat.parameterizedQuery), DISPATCH_MATCH_EXACT,
+		mixedRelation->impl.concat.permutation,
+		&(mixedRelation->impl.concat.dispatchIterator)
+	);
 	return mixedRelation;
 }
 

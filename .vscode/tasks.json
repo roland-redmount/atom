@@ -23,6 +23,20 @@
 			"problemMatcher": "$gcc"
 		},
 		{
+			"label": "build debug-compiler",
+			"type": "shell",
+			"command": "cmake -B build/debug -DCMAKE_BUILD_TYPE=Debug -DDEBUG_COMPILER=ON && cmake --build build/debug",
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			},
+			"presentation": {
+				"clear": true,
+				"reveal": "always"
+			},
+			"problemMatcher": "$gcc"
+		},
+		{
 			"label": "build debug-allocate",
 			"type": "shell",
 			"command": "cmake -B build/debug-allocate -DCMAKE_BUILD_TYPE=Debug -DDEBUG_ALLOCATE=ON && cmake --build build/debug-allocate",

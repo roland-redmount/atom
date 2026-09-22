@@ -40,7 +40,6 @@ typedef struct s_RelationRecord {
 	Atom predicateForm;
 	// Whether this relation holds a reference to its forms; see RelationReleaseForm()
 	bool ownsForm;
-
 	TupleStore * tupleStore;	// may be 0
 	uint32 referenceCount;
 } RelationRecord;

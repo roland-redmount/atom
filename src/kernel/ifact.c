@@ -216,7 +216,7 @@ static Operator * createSingleInputService(Service service, index8 idColumn)
 	// Find an all-output service. This will be the child of the FILTER operator.
 	Service allOutputService = service;
 	allOutputService.ioSignature.parameterIO[idColumn] = PARAMETER_OUT;
-	Operator * allOutputOperator = FindServiceOperator(allOutputService);
+	Operator * allOutputOperator = ServiceGetOperator(allOutputService);
 	if(!allOutputOperator)
 		return 0;
 	// Create the FILTER operator
@@ -244,7 +244,7 @@ static Operator const * conjunctionOperator(IFactConjunction const * conjunction
 		.ioSignature = ioSignature,
 	};
 	// try to find an exact mathing service
-	Operator const * op = FindServiceOperator(singleInputService);
+	Operator const * op = ServiceGetOperator(singleInputService);
 	if(op)
 		return op;
 	// Else, try to find an all-output service and create the required service using

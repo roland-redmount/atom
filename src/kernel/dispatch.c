@@ -12,6 +12,24 @@
 #include "lang/SubstitutionList.h"
 #include "lang/unification.h"
 
+
+void ParameterizeQuery(FormulaView query, ParameterizedQuery * parameterizedQuery)
+{
+	parameterizedQuery->termForm = query.form;
+	parameterizedQuery->arity = query.actors->nAtoms;
+	ActorsToParameters(query.actors, parameterizedQuery->parameters);
+}
+
+
+void PrintParameterizedQuery(ParameterizedQuery const * parameterizedQuery)
+{
+	TypedTuple * tuple = CreateTypedTupleFromTuple(
+		AT_PARAMETER, parameterizedQuery->parameters, parameterizedQuery->arity);
+	PrintFormActorsAsFormula(parameterizedQuery->termForm, tuple);
+	FreeTypedTuple(tuple);
+}
+
+
 bool DispatchParameterIOMatch(byte queryIO, byte serviceIO, int matchMode)
 {
 	if(queryIO == serviceIO)
@@ -62,22 +80,22 @@ static bool signatureQueryTupleMatch(
 
 
 /**
- * Enumerate all possible argument permutations for the given term form
- * and test each for a match against parametersList.
+ * Enumerate all possible argument permutations for the given service's term form
+ * and test each for a match against the query parameters.
  */
 static bool permutationMatch(
-	Atom termForm, TypeSignature typeSignature, IOSignature ioSignature,
-	Atom const queryParameters[], size8 nParameters, int matchMode, index8 permutation[])
+	Service service, Atom const queryParameters[], size8 nParameters, int matchMode, index8 permutation[])
 {
 	// iterate over all permutations of the form
-	Atom predicateForm = TermFormGetPredicateForm(termForm);
+	Atom predicateForm = TermFormGetPredicateForm(service.relation.termForm);
 	FormIterator * iter = CreateFormIterator(predicateForm);
 	bool match = false;
 	do {
 		GetTuplePermutation(iter, permutation);
 		if(signatureQueryTupleMatch(
-			typeSignature, ioSignature, queryParameters, nParameters, matchMode,
-			permutation)) {
+			service.relation.typeSignature, service.ioSignature, queryParameters, nParameters, matchMode,
+			permutation))
+		{
 			match = true;
 			break;
 		}
@@ -88,18 +106,17 @@ static bool permutationMatch(
 
 
 void DispatchIterate(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
-	index8 permutation[], DispatchIterator * iterator)
+	ParameterizedQuery const * query, int matchMode, index8 permutation[], DispatchIterator * iterator)
 {
-	ASSERT(IsTermForm(queryTermForm))
+	ASSERT(IsTermForm(query->termForm))
 	SetMemory(iterator, sizeof(DispatchIterator), 0);
-	iterator->queryParameters = queryParameters;
-	iterator->nParameters = nParameters;
+	iterator->queryParameters = query->parameters;
+	iterator->nParameters = query->arity;
 	iterator->matchMode = matchMode;
 	iterator->permutation = permutation;
 	iterator->inRelation = false;
 	// Iterate over relations matching the term form.
-	RelationRegistryIterate(queryTermForm, &(iterator->relationIterator));
+	RelationRegistryIterate(query->termForm, &(iterator->relationIterator));
 }
 
 
@@ -118,17 +135,13 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 		}
 
 		// Iterate over candidate services for the current relation
-		Relation relation = RelationIteratorGet(&(iterator->relationIterator));
 		while(ServiceIteratorNext(&(iterator->serviceIterator))) {
-			ServiceRecord const * record = ServiceIteratorPeekRecord(&(iterator->serviceIterator));
+			iterator->serviceRecord = ServiceIteratorPeekRecord(&(iterator->serviceIterator));
 			if(permutationMatch(
-				relation.termForm, relation.typeSignature, record->service.ioSignature,
+				iterator->serviceRecord->service,
 				iterator->queryParameters, iterator->nParameters, iterator->matchMode,
 				iterator->permutation))
 			{
-				iterator->service = record->service;
-				iterator->op = record->op;
-
 				// For DISPATCH_MATCH_EXACT, there can be only one match per relation,
 				// since we cannot have two services with the same IO signagure.
 				// For DISPATCH_MATCH_RELAXED, we arbitrarily pick the first match for each relation.
@@ -143,15 +156,9 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 }
 
 
-Service DispatchIteratorPeekService(DispatchIterator const * iterator)
+ServiceRecord const * DispatchIteratorPeekServiceRecord(DispatchIterator const * iterator)
 {
-	return iterator->service;
-}
-
-
-Operator * DispatchIteratorPeekOperator(DispatchIterator const * iterator)
-{
-	return iterator->op;
+	return iterator->serviceRecord;
 }
 
 
@@ -175,38 +182,36 @@ static bool isExcludedCandidate(TypeSignature candidateSignature, TypeSignature 
 }
 
 
-bool DispatchParameterizedQuery(
-	Atom queryTermForm, Atom const queryParameters[], size8 nParameters, int matchMode,
-	Service * service, index8 permutation[],
+DispatchResult DispatchParameterizedQuery(
+	ParameterizedQuery const * query, int matchMode, Service * service, index8 permutation[],
 	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch)
 {
-	ASSERT(!nExcluded || (nParameters <= RELATION_MAX_ARITY))
+	// QUESTION: what is this assert good for? (added by Claude)
+	ASSERT(!nExcluded || (query->arity <= RELATION_MAX_ARITY))
 
 	// The iterator overwrites its permutation array on every match, so iterate into
 	// a scratch array to avoid clobbering the returned permutation.
-	index8 candidatePermutation[nParameters];
+	index8 candidatePermutation[query->arity];
 	DispatchIterator iterator;
-	DispatchIterate(
-		queryTermForm, queryParameters, nParameters, matchMode, candidatePermutation,
-		&iterator);
+	DispatchIterate(query, matchMode, candidatePermutation, &iterator);
 
-	bool match = false;
+	DispatchResult result = DISPATCH_NOT_FOUND;
 	if(hasNextMatch)
 		*hasNextMatch = false;
 
 	while(DispatchIteratorNext(&iterator)) {
-		Service candidate = DispatchIteratorPeekService(&iterator);
-		if(isExcludedCandidate(candidate.relation.typeSignature, excludedSignatures, nExcluded))
+		if(isExcludedCandidate(iterator.serviceRecord->service.relation.typeSignature, excludedSignatures, nExcluded))
 			continue;
-		if(match) {
+		if(result != DISPATCH_NOT_FOUND) {
 			// There are additional matches beyond the one we return
 			*hasNextMatch = true;
 			break;
 		}
-		match = true;
+		Service candidateService = iterator.serviceRecord->service;
+		result = ServiceIsStale(candidateService) ? DISPATCH_FOUND_STALE : DISPATCH_FOUND;
 		// copy the service struct and its permutation to the caller
-		*service = candidate;
-		CopyMemory(candidatePermutation, permutation, nParameters * sizeof(index8));
+		*service = candidateService;
+		CopyMemory(candidatePermutation, permutation, query->arity * sizeof(index8));
 		// without a hasNextMatch request we can stop at the first match;
 		// else we continue to determine if there are additional matches
 		if(hasNextMatch == 0)
@@ -214,23 +219,24 @@ bool DispatchParameterizedQuery(
 	}
 	DispatchIteratorEnd(&iterator);
 
-	return match;
+	return result;
 }
 
 
-bool DispatchQuery(FormulaView query, Service * service, index8 permutation[])
+DispatchResult DispatchQuery(FormulaView query, Service * service, index8 permutation[])
 {
-	size8 arity = query.actors->nAtoms;
-	Atom queryParameters[arity];
-	ActorsToParameters(query.actors, queryParameters);
+	ParameterizedQuery parameterizedQuery = {
+		.termForm = query.form,
+		.arity = query.actors->nAtoms,
+	};
+	ActorsToParameters(query.actors, parameterizedQuery.parameters);
 
 	return DispatchParameterizedQuery(
-		query.form, queryParameters, arity, DISPATCH_MATCH_EXACT, service, permutation,
-		0, 0, 0);
+		&parameterizedQuery, DISPATCH_MATCH_EXACT, service, permutation, 0, 0, 0);
 }
 
 
-bool DispatchQueryFormula(Atom queryTerm, Service * service, index8 permutation[])
+DispatchResult DispatchQueryFormula(Atom queryTerm, Service * service, index8 permutation[])
 {
 	FormulaView term = FormulaGetView(queryTerm);
 	return DispatchQuery(term, service, permutation);

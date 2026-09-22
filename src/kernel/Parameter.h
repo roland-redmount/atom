@@ -48,6 +48,15 @@ typedef struct s_IOSignature {
  */
 IOSignature CreateIOSignature(byte const parameterIO[], size8 nColumns);
 
+/**
+ * Extract a TypeSignature from an array of AT_PARAMETER atoms.
+ */
+TypeSignature ParametersGetTypeSignature(Atom const parameters[], size8 nParameters);
+
+/**
+ * Extract an IOSignature from an array of AT_PARAMETER atoms.
+ */
+IOSignature ParametersGetIOSignature(Atom const parameters[], size8 nParameters);
 
 /**
  * Generate an array of AT_PARAMETER atoms corresponding to the actors tuple,
@@ -66,7 +75,7 @@ void ActorsToParameters(TypedTuple const * actors, Atom parameters[]);
  * Two parameter tuples denote the same service signature if they agree on
  * the type and direction of every parameter; parameter numbers are ignored here.
  */
-bool SameParameterSignature(TypedTuple const * first, TypedTuple const * second);
+bool SameParameterSignature(Atom const first[], Atom const second[], size8 nParameters);
 
 /**
  * Find the indices of the input (PARAMETER_IN) parameters in the IO signature

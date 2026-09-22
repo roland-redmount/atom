@@ -1,6 +1,8 @@
 #include "btree/btree.h"
 #include "kernel/dictionary.h"
+#include "kernel/kernel.h"
 #include "kernel/multiset.h"
+#include "kernel/operator.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/typedtuple.h"
 #include "lang/formula.h"
@@ -69,16 +71,13 @@ static void setupEntry(DictionaryEntry * entry, Atom clauseForm, TypedTuple cons
 
 
 /**
- * Invalidate any compiled services that given clause form could have contributed to,
- * which may now be stale. The compiler resolves a query against the clauses whose form contains
+ * Invalidate any compiled services and relations whose term form is contains in thegiven clause form.
+ * The compiler resolves a query against the clauses whose form contains
  * the query term form, so it is sufficient to invalidate services associated with any of the
  * term forms in the given clause. See compileQueryClauses().
  */
 static void invalidateClauseServices(Atom clauseForm)
 {
-	if(NumberOfCompiledServices() == 0)
-		return;
-
 	// Collect the term forms before invalidating any service: the multiset iterator
 	// evaluates a service of its own, and invalidation removes services
 	ResizingArray termForms;
@@ -92,8 +91,10 @@ static void invalidateClauseServices(Atom clauseForm)
 	MultisetIteratorEnd(&iterator);
 
 	// Invalidate all term forms
-	for(index32 i = 0; i < termForms.nElements; i++)
-		InvalidateServicesByTermForm(*(Atom *) ResizingArrayGetElement(&termForms, i));
+	for(index32 i = 0; i < termForms.nElements; i++) {
+		Atom termForm = *(Atom *) ResizingArrayGetElement(&termForms, i);
+		InvalidateTermFormServices(termForm, INVALIDATE_BY_RULE);
+	}
 	FreeResizingArray(&termForms);
 }
 
@@ -120,6 +121,38 @@ static bool findEntry(Atom clause, DictionaryEntry * entry)
 bool DictionaryContainsClause(Atom clause)
 {
 	return findEntry(clause, 0);
+}
+
+
+bool ClauseFormExistsForTermForm(Atom termForm)
+{
+	// CLAUDE: Scan every (multiset element multiple) tuple for a clause form holding the
+	// given term form. This is the existence-only counterpart of findMatchingClauseForms()
+	// in compiler.c, and is likewise a full scan for want of an element index; see the
+	// TODO there.
+
+	Operator const * multisetOperator = GetCoreOperator(SERVICE_MULTISET_ID_ALL);
+	if(!multisetOperator) {
+		// The service does not exist during kernel bootstrapping
+		return false;
+	}
+	Atom multisetQueryTuple[3];
+	OperatorContext * multisetContext = OperatorCreateContext(multisetOperator, multisetQueryTuple);
+	bool found = false;
+	while(OperatorCall(multisetContext)) {
+		Atom element = multisetQueryTuple[
+			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
+		if(!SameAtoms(element, termForm))
+			continue;
+		Atom clauseForm = multisetQueryTuple[
+			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)];
+		if(!IsClauseForm(clauseForm))
+			continue;
+		found = true;
+		break;
+	}
+	OperatorFreeContext(multisetContext);
+	return found;
 }
 
 
