@@ -4,14 +4,18 @@
 
 
 #include "lang/Atom.h"
-#include "parser/ClauseBuilder.h"
+#include "parser/TermBuilder.h"
 #include "util/ResizingArray.h"
 
 
+/* CLAUDE: A conjunction builder collects terms joined by TOKEN_AND into a
+   conjunction. It mirrors the clause builder, which joins terms with TOKEN_OR;
+   see ClauseBuilder.h. */
 typedef struct s_ConjunctionBuilder {
-	ClauseBuilder clauseBuilder;
-	ResizingArray clauses;			// array of AT_ID atoms
+	TermBuilder termBuilder;
+	ResizingArray terms;			// array of AT_ID atoms
 	size8 arity;
+	bool isEmpty;
 	bool isValid;
 } ConjunctionBuilder;
 
@@ -19,17 +23,18 @@ void InitializeConjunctionBuilder(ConjunctionBuilder * builder, enum FormulaScop
 
 bool ConjunctionBuilderPush(ConjunctionBuilder * builder, Token token);
 
+/* CLAUDE: True if no tokens have been accepted by the builder. */
+bool ConjunctionBuilderIsEmpty(ConjunctionBuilder const * builder);
+
 bool ConjunctionBuilderIsValid(ConjunctionBuilder const * builder);
 
-/**
- * True if the builder has accepted no TOKEN_AND, so that its formula
- * is a conjunction of a single clause. That clause is held by the clause builder.
- */
-bool ConjunctionBuilderIsSingleClause(ConjunctionBuilder const * builder);
+/* CLAUDE: True if the builder has accepted no TOKEN_AND, so that its formula
+   is a conjunction of a single term. That term is held by the term builder. */
+bool ConjunctionBuilderIsSingleTerm(ConjunctionBuilder const * builder);
 
 /**
  * Complete the conjunction by adding the current term of the builder.
- * This must be called before ClauseBuilderCreateFormula().
+ * This must be called before ConjunctionBuilderCreateFormula().
  * Returns false if the completed conjunction is not valid; see ConjunctionBuilderIsValid().
  */
 bool ConjunctionBuilderFinish(ConjunctionBuilder * builder);

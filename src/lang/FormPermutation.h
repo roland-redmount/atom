@@ -96,20 +96,9 @@ bool NextClausePermutation(ClauseIterator * iter);
 void FreeClauseIterator(ClauseIterator * iter);
 
 
-/**
- * Iterator over all possible permutations of a conjunction
- */
-typedef struct s_ConjunctionIterator
-{
-	size8 nClauses;
-	Permutation ** clauseFormPerm;		// array permutations for each clause form
-	ClauseIterator *** clauseIter;		// iterators for each clause form an multiple
-} ConjunctionIterator;
-
-
-ConjunctionIterator * CreateConjectionIterator(Atom conjunctionForm);
-bool NextConjunctionPermutation(ConjunctionIterator * iter);
-void FreeConjunctionIterator(ConjunctionIterator * iter);
+/* CLAUDE: A conjunction form is a multiset of term forms, just like a clause
+   form, so the same iterator permutes both; see CreateFormIterator(). */
+typedef ClauseIterator ConjunctionIterator;
 
 
 typedef struct s_FormIterator {

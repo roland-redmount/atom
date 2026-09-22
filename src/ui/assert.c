@@ -264,7 +264,7 @@ static bool collectClauseIFactTuples(
 
 
 /**
- * Iterate over all clauses in a conjunction and gather ifact tuples.
+ * Iterate over all terms in a conjunction and gather ifact tuples.
  * Returns true iff the conjunction is a valid ifact.
  */
 static bool collectConjunctionIFactTuples(
@@ -274,14 +274,13 @@ static bool collectConjunctionIFactTuples(
 	MultisetIterate(conjunctionForm, AT_ID, &iterator);
 	index8 termActorIndex = 0;
 	bool formulaIsValid = true;
-	// iterate over clause forms
+	// iterate over term forms
 	while(formulaIsValid && MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
-		// iterate over clauses
+		// iterate over terms
 		for(index8 i = 0; i < elementMultiple.multiple; i++) {
-			// Each clause must have a single term.
-			Atom clauseForm = elementMultiple.element;
-			if(!collectClauseIFactTuples(clauseForm, actors, &termActorIndex, ifactTupleArray)) {
+			Atom termForm = elementMultiple.element;
+			if(!collectTermIFactTuples(termForm, actors, &termActorIndex, ifactTupleArray)) {
 				formulaIsValid = false;
 				break;
 			}

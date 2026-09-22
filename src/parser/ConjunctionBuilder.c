@@ -1,10 +1,8 @@
 
-#include "kernel/ifact.h"
 #include "kernel/multiset.h"
 #include "lang/formula.h"
 #include "parser/ConjunctionBuilder.h"
 #include "parser/Tokenizer.h"
-#include "util/sort.h"
 
 
 #define INITIAL_N_TERMS 3
@@ -12,66 +10,67 @@
 
 void InitializeConjunctionBuilder(ConjunctionBuilder * builder, enum FormulaScope scope)
 {
-	InitializeClauseBuilder(&(builder->clauseBuilder), scope);
-	CreateResizingArray(&(builder->clauses), sizeof(Atom), INITIAL_N_TERMS);
+	InitializeTermBuilder(&(builder->termBuilder), scope);
+	CreateResizingArray(&(builder->terms), sizeof(Atom), INITIAL_N_TERMS);
 	builder->arity = 0;
+	builder->isEmpty = true;
 	builder->isValid = false;
 }
 
 
-/**
- * Return true if the conjunction under construction contains the given clause.
- */
-static bool conjunctionHasClause(ConjunctionBuilder const * builder, Atom clause)
+/* CLAUDE: True if the conjunction under construction already has the given term. */
+static bool conjunctionHasTerm(ConjunctionBuilder const * builder, Atom term)
 {
-	size8 nClauses = builder->clauses.nElements;
-	for(index8 i = 0; i < nClauses; i++) {
-		if(SameAtoms(clause, *((Atom *) ResizingArrayGetElement(&(builder->clauses), i))))
+	size8 nTerms = builder->terms.nElements;
+	for(index8 i = 0; i < nTerms; i++) {
+		if(SameAtoms(term, *((Atom *) ResizingArrayGetElement(&(builder->terms), i))))
 			return true;
 	}
 	return false;
 }
 
 
-/**
- * Add the builder's current clause to the conjunction under construction.
- * Returns false if that clause is invalid, or if the conjunction already contains the clause.
- */
-static bool addCurrentClause(ConjunctionBuilder * builder)
+/* CLAUDE: Add the current term to the conjunction under construction.
+   Returns false if the conjunction already contains that term. */
+static bool addCurrentTerm(ConjunctionBuilder * builder)
 {
-	// add current clause to array
-	if(!ClauseBuilderFinish(&(builder->clauseBuilder)))
-		return false;
-	Atom clause = ClauseBuilderCreateFormula(&(builder->clauseBuilder));
-	if(conjunctionHasClause(builder, clause)) {
-		ReleaseFormula(clause);
+	Atom term = TermBuilderCreateFormula(&(builder->termBuilder));
+	if(conjunctionHasTerm(builder, term)) {
+		ReleaseFormula(term);
 		return false;
 	}
-	ClauseBuilderReset(&(builder->clauseBuilder));
+	TermBuilderReset(&(builder->termBuilder));
 	// update arity
-	uint8 clauseArity = FormulaArity(clause);
-	ASSERT(builder->arity <= 255 - clauseArity);
-	builder->arity += clauseArity;
-	ResizingArrayAppend(&(builder->clauses), &clause);
+	uint8 termArity = FormulaArity(term);
+	ASSERT(builder->arity <= 255 - termArity);
+	builder->arity += termArity;
+	ResizingArrayAppend(&(builder->terms), &term);
 	return true;
 }
 
 
 bool ConjunctionBuilderPush(ConjunctionBuilder * builder, Token token)
 {
-	// the clause builder is offered every token first, including TOKEN_AND;
+	// the term builder is offered every token first, including TOKEN_AND;
 	// see TermBuilderPush() for why
-	if(ClauseBuilderPush(&(builder->clauseBuilder), token)) {
-		builder->isValid = ClauseBuilderIsValid(&(builder->clauseBuilder));
+	if(TermBuilderPush(&(builder->termBuilder), token)) {
+		builder->isEmpty = false;
+		builder->isValid = TermBuilderIsValid(&(builder->termBuilder));
 		return true;
 	}
 
-	if((token.type != TOKEN_AND) || !ClauseBuilderIsValid(&(builder->clauseBuilder)))
+	if((token.type != TOKEN_AND) || !TermBuilderIsValid(&(builder->termBuilder)))
 		return false;
-	if(!addCurrentClause(builder))
+	if(!addCurrentTerm(builder))
 		return false;
 	builder->isValid = false;
 	return true;
+}
+
+
+bool ConjunctionBuilderIsEmpty(ConjunctionBuilder const * builder)
+{
+	return builder->isEmpty;
 }
 
 
@@ -81,24 +80,21 @@ bool ConjunctionBuilderIsValid(ConjunctionBuilder const * builder)
 }
 
 
-bool ConjunctionBuilderIsSingleClause(ConjunctionBuilder const * builder)
+bool ConjunctionBuilderIsSingleTerm(ConjunctionBuilder const * builder)
 {
-	// A clause is only appended to the clauses array when a TOKEN_AND is accepted,
-	// so a count of zero elements means we at most one clause.
-	return builder->clauses.nElements == 0;
+	// a term is only appended to the terms array when a TOKEN_AND is accepted
+	return builder->terms.nElements == 0;
 }
 
 
-/**
- * Complete the conjunction builder by adding the current clause, if one exists.
- * Returns false if that clause cannot be added; see addCurrentClause().
- */
+/* CLAUDE: Complete the conjunction builder by adding the current term, if one exists.
+   Returns false if that term already exists in the conjunction. */
 bool ConjunctionBuilderFinish(ConjunctionBuilder * builder)
 {
 	ASSERT(builder->isValid);
-	if(!ClauseBuilderIsEmpty(&(builder->clauseBuilder))) {
-		ASSERT(ClauseBuilderIsValid(&(builder->clauseBuilder)));
-		builder->isValid = addCurrentClause(builder);
+	if(!TermBuilderIsEmpty(&(builder->termBuilder))) {
+		ASSERT(TermBuilderIsValid(&(builder->termBuilder)));
+		builder->isValid = addCurrentTerm(builder);
 	}
 	return builder->isValid;
 }
@@ -108,29 +104,29 @@ Atom ConjunctionBuilderCreateFormula(ConjunctionBuilder * builder)
 {
 	ASSERT(builder->isValid);
 
-	size8 nClauses = builder->clauses.nElements;
-	Atom const * clauses = ResizingArrayGetMemory(&(builder->clauses));
-	return CreateConjunction(clauses, nClauses);
+	size8 nTerms = builder->terms.nElements;
+	Atom const * terms = ResizingArrayGetMemory(&(builder->terms));
+	return CreateConjunction(terms, nTerms);
 }
 
 
 void ConjunctionBuilderReset(ConjunctionBuilder * builder)
 {
-	ClauseBuilderReset(&(builder->clauseBuilder));
-	size8 nClauses = builder->clauses.nElements;
-	for(index8 i = 0; i < nClauses; i++) {
-		Atom clause = *((Atom *) ResizingArrayGetElement(&(builder->clauses), i));
-		ReleaseFormula(clause);
+	TermBuilderReset(&(builder->termBuilder));
+	size8 nTerms = builder->terms.nElements;
+	for(index8 i = 0; i < nTerms; i++) {
+		Atom term = *((Atom *) ResizingArrayGetElement(&(builder->terms), i));
+		ReleaseFormula(term);
 	}
-	ResizingArrayReset(&(builder->clauses));
+	ResizingArrayReset(&(builder->terms));
 }
 
 
 void CleanupConjunctionBuilder(ConjunctionBuilder * builder)
 {
 	ConjunctionBuilderReset(builder);
-	CleanupClauseBuilder(&(builder->clauseBuilder));
-	FreeResizingArray(&(builder->clauses));
+	TermBuilderFree(&(builder->termBuilder));
+	FreeResizingArray(&(builder->terms));
 }
 
 

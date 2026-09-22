@@ -386,7 +386,7 @@ static void testCStringToClause(void)
 static void testCStringToConjunction(void)
 {
 	// NOTE: this string must be in canonical order
-	Atom conjunction = CStringToConjunction("aarf \"foobar\" | foo x bar 123.45 & barf 42 frob y");
+	Atom conjunction = CStringToConjunction("aarf \"foobar\" & foo x bar 123.45 & barf 42 frob y");
 	// PrintFormula(conjunction);
 	// PrintChar('\n');
 
@@ -423,9 +423,9 @@ static void testCStringToFormula(void)
 	ReleaseFormula(clause);
 
 	// a formula with & is a conjunction
-	Atom conjunction = CStringToFormula("aarf \"foobar\" | foo x bar 123.45 & barf 42 frob y");
+	Atom conjunction = CStringToFormula("aarf \"foobar\" & foo x bar 123.45 & barf 42 frob y");
 	ASSERT_TRUE(FormulaIsConjunction(conjunction))
-	Atom expectedConjunction = CStringToConjunction("aarf \"foobar\" | foo x bar 123.45 & barf 42 frob y");
+	Atom expectedConjunction = CStringToConjunction("aarf \"foobar\" & foo x bar 123.45 & barf 42 frob y");
 	ASSERT_TRUE(SameAtoms(conjunction, expectedConjunction))
 	ReleaseFormula(expectedConjunction);
 	ReleaseFormula(conjunction);
@@ -623,11 +623,11 @@ static void testRepeatedTermRejected(void)
 	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 & foo 1 & baz 3", &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 14)
 
-	// A clause repeating a term is found when the clause is completed by the "&"
+	// CLAUDE: Mixing | and & is not a formula; the second connective is rejected where it appears
 	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 | foo 1 & bar 2", &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 14)
 
-	// The last term or clause of a formula is only completed once the string has ended,
+	// The last term of a formula is only completed once the string has ended,
 	// so a repeat there is reported at the end
 	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 | foo 1", &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 13)
@@ -647,8 +647,8 @@ static void testRepeatedTermRejected(void)
 
 	Atom conjunction = ParseFormula("foo 1 & foo 2", &errorPosition);
 	ASSERT_TRUE(conjunction.hash != 0)
-	ASSERT_UINT32_EQUAL(ConjunctionFormNClauseFormsTotal(FormulaGetForm(conjunction)), 2)
-	ASSERT_UINT32_EQUAL(ConjunctionFormNUniqueClauseForms(FormulaGetForm(conjunction)), 1)
+	ASSERT_UINT32_EQUAL(ConjunctionFormNTermsTotal(FormulaGetForm(conjunction)), 2)
+	ASSERT_UINT32_EQUAL(ConjunctionFormNUniqueTermForms(FormulaGetForm(conjunction)), 1)
 	ReleaseFormula(conjunction);
 }
 

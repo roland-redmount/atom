@@ -223,8 +223,8 @@ void testAssertFormulaRejects(void)
 	ReleaseFormula(singleTermClause);
 	ReleaseFormula(term);
 
-	// a conjunction is several rules at once, which this interface does not take
-	Atom conjunction = CStringToConjunction("foo x bar 1 | ! baz x & barf 42 frob y");
+	// a conjunction is several facts at once, which this interface does not take
+	Atom conjunction = CStringToConjunction("foo x bar 1 & barf 42 frob y");
 	ASSERT_INT32_EQUAL(AssertFormula(conjunction), ASSERT_NOT_CLAUSE)
 	ReleaseFormula(conjunction);
 }
@@ -527,12 +527,7 @@ void testCreateIFactRejects(void)
 	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(twoGenerators)).hash, 0)
 	ReleaseFormula(twoGenerators);
 
-	// a clause of two terms is a disjunction, which defines nothing
-	Atom disjunction = CStringToConjunction("list * length 1 & foo * bar 1 | baz * qux 2");
-	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(disjunction)).hash, 0)
-	ReleaseFormula(disjunction);
-
-	// the same three, without a conjunction around them
+	// the same two, without a conjunction around them
 	Atom termNoGenerator = CStringToTerm("foo 1 bar 2");
 	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(termNoGenerator)).hash, 0)
 	ReleaseFormula(termNoGenerator);
@@ -541,6 +536,7 @@ void testCreateIFactRejects(void)
 	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(termTwoGenerators)).hash, 0)
 	ReleaseFormula(termTwoGenerators);
 
+	// CLAUDE: a clause of two terms is a disjunction, which defines nothing
 	Atom clauseDisjunction = CStringToClause("foo * bar 1 | baz * qux 2");
 	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(clauseDisjunction)).hash, 0)
 	ReleaseFormula(clauseDisjunction);

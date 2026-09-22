@@ -320,14 +320,17 @@ static bool FormulasRepeat(Atom const formulas[], size8 nFormulas)
 }
 
 
-Atom CreateClause(Atom const terms[], size8 nTerms)
+/* CLAUDE: Create a clause or a conjunction from its terms. The two differ only
+   in the form they build, so createForm is CreateClauseForm or CreateConjunctionForm. */
+static Atom createTermMultiset(
+	Atom const terms[], size8 nTerms, Atom (* createForm)(Atom const termForms[], size8 nTermForms))
 {
-	// a clause without terms is meaningless, and would give zero length arrays below
+	// a term multiset without terms is meaningless, and would give zero length arrays below
 	ASSERT(nTerms > 0);
 	// All terms must be unique
 	ASSERT(!FormulasRepeat(terms, nTerms))
 
-	// Take a view of every term before building the clause, so that the terms
+	// Take a view of every term before building the form, so that the terms
 	// are read with one registry lookup each
 	FormulaView termViews[nTerms];
 	for(index8 i = 0; i < nTerms; i++)
@@ -336,84 +339,47 @@ Atom CreateClause(Atom const terms[], size8 nTerms)
 	// collect term forms and their arities
 	Atom termForms[nTerms];
 	size8 termArities[nTerms];
-	size8 clauseArity = 0;
+	size8 arity = 0;
 	for(index8 i = 0; i < nTerms; i++) {
 		termForms[i] = termViews[i].form;
 		termArities[i] = termViews[i].actors->nAtoms;
-		ASSERT(clauseArity < 255 - termArities[i]);
-		clauseArity += termArities[i];
+		ASSERT(arity < 255 - termArities[i]);
+		arity += termArities[i];
 	}
-	Atom clauseForm = CreateClauseForm(termForms, nTerms);
+	Atom form = createForm(termForms, nTerms);
 
 	// Collect actors from terms into a single array
-	TypedAtom actors[clauseArity];
+	TypedAtom actors[arity];
 	for(index8 i = 0, k = 0; i < nTerms; i++) {
 		for(index8 j = 0; j < termArities[i]; j++)
 			actors[k++] = TypedTupleGetElement(termViews[i].actors, j);
 	}
 
-	// reorder actors to match the name order of clauseForm
-	index8 termOrder[nTerms]; 
+	// reorder actors to match the name order of the form
+	index8 termOrder[nTerms];
 	// find ordering
-	MultisetIterationOrder(clauseForm, AT_ID, termForms, termOrder, nTerms);
+	MultisetIterationOrder(form, AT_ID, termForms, termOrder, nTerms);
 	// reorder actors
 	size32 blockSizes[nTerms];
 	for(index8 i = 0; i < nTerms; i++)
 		blockSizes[i] = termArities[i] * sizeof(TypedAtom);
 	ReorderRaggedArray(actors, termOrder, blockSizes, nTerms);
 
-	Atom clause = CreateFormulaFromArray(clauseForm, actors);
-	IFactRelease(clauseForm);
-	return clause;
+	Atom formula = CreateFormulaFromArray(form, actors);
+	IFactRelease(form);
+	return formula;
 }
 
 
-// NOTE: this is very similar to CreateClause, could be refactored
-Atom CreateConjunction(Atom const clauses[], size8 nClauses)
+Atom CreateClause(Atom const terms[], size8 nTerms)
 {
-	// as in CreateClause(), a conjunction without clauses is meaningless
-	ASSERT(nClauses > 0);
-	// All clauses must be unique
-	ASSERT(!FormulasRepeat(clauses, nClauses))
+	return createTermMultiset(terms, nTerms, CreateClauseForm);
+}
 
-	// Take a view of every clause before building the conjunction, so that the
-	// clauses are read with one registry lookup each
-	FormulaView clauseViews[nClauses];
-	for(index8 i = 0; i < nClauses; i++)
-		clauseViews[i] = FormulaGetView(clauses[i]);
 
-	// collect clause forms and their arities
-	Atom clauseForms[nClauses];
-	size8 clauseArities[nClauses];
-	size8 conjunctionArity = 0;
-	for(index8 i = 0; i < nClauses; i++) {
-		clauseForms[i] = clauseViews[i].form;
-		clauseArities[i] = clauseViews[i].actors->nAtoms;
-		ASSERT(conjunctionArity < 255 - clauseArities[i]);
-		conjunctionArity += clauseArities[i];
-	}
-	Atom conjunctionForm = CreateConjunctionForm(clauseForms, nClauses);
-
-	// collect actors from terms into a single array
-	TypedAtom actors[conjunctionArity];
-	for(index8 i = 0, k = 0; i < nClauses; i++) {
-		for(index8 j = 0; j < clauseArities[i]; j++)
-			actors[k++] = TypedTupleGetElement(clauseViews[i].actors, j);
-	}
-
-	// reorder actors to match the name order of clauseForm
-	index8 clauseOrder[nClauses]; 
-	// find ordering
-	MultisetIterationOrder(conjunctionForm, AT_ID, clauseForms, clauseOrder, nClauses);
-	// reorder actors
-	size32 blockSizes[nClauses];
-	for(index8 i = 0; i < nClauses; i++)
-		blockSizes[i] = clauseArities[i] * sizeof(TypedAtom);
-	ReorderRaggedArray(actors, clauseOrder, blockSizes, nClauses);
-
-	Atom conjunction = CreateFormulaFromArray(conjunctionForm, actors);
-	IFactRelease(conjunctionForm);
-	return conjunction;
+Atom CreateConjunction(Atom const terms[], size8 nTerms)
+{
+	return createTermMultiset(terms, nTerms, CreateConjunctionForm);
 }
 
 
@@ -560,13 +526,13 @@ static void printConjunction(Atom conjunctionForm, TypedTuple const * actors, in
 	MultisetIterator iterator;
 	MultisetIterate(conjunctionForm, AT_ID, &iterator);
 
-	size8 nClauseForms = ConjunctionFormNUniqueClauseForms(conjunctionForm);
-	for(index8 i = 0; i < nClauseForms; i++) {	
+	size8 nTermForms = ConjunctionFormNUniqueTermForms(conjunctionForm);
+	for(index8 i = 0; i < nTermForms; i++) {
 		ASSERT(MultisetIteratorNext(&iterator))
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
-			printClause(em.element, actors, atomIndex);
-			if((j < em.multiple - 1) || (i < nClauseForms - 1))
+			printTerm(em.element, actors, atomIndex);
+			if((j < em.multiple - 1) || (i < nTermForms - 1))
 				PrintCString(" & ");
 		}
 	}

@@ -3,18 +3,28 @@
 #define FORMULABUILDER_H
 
 
-#include "parser/ConjunctionBuilder.h"
+#include "lang/Atom.h"
+#include "parser/TermBuilder.h"
+#include "util/ResizingArray.h"
 
 
 /**
  * A FormulaBuilder accepts the tokens of any formula, and yields the simplest
  * formula that holds them: a term if the tokens contain no TOKEN_OR and no
- * TOKEN_AND, a clause if they contain a TOKEN_OR but no TOKEN_AND, and a
- * conjunction otherwise. This is what a reflection [ ... ] parses to, since the
+ * TOKEN_AND, a clause if they contain TOKEN_OR, and a conjunction if they
+ * contain TOKEN_AND. This is what a reflection [ ... ] parses to, since the
  * kind of formula inside the brackets is not known until the tokens have been read.
+ *
+ * CLAUDE: A clause is a disjunction of terms and a conjunction is a conjunction
+ * of terms, so the two cannot be nested. Mixing TOKEN_OR and TOKEN_AND in one
+ * formula is rejected; the first of the two accepted fixes the kind of formula.
  */
 typedef struct s_FormulaBuilder {
-	ConjunctionBuilder conjunctionBuilder;
+	TermBuilder termBuilder;
+	ResizingArray terms;			// array of AT_ID atoms
+	size8 arity;
+	uint8 connective;				// the connective accepted so far; see FormulaBuilder.c
+	bool isValid;
 } FormulaBuilder;
 
 
@@ -28,7 +38,7 @@ bool FormulaBuilderPush(FormulaBuilder * builder, Token token);
 bool FormulaBuilderIsValid(FormulaBuilder const * builder);
 
 /**
- * Finalize the formula builder, adding any remaining clause or term.
+ * Finalize the formula builder, adding any remaining term.
  * This must be called before calling FormulaBuilderCreateFormula().
  * Returns false if the formula is not valid.
  */

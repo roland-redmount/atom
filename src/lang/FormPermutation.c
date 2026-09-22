@@ -276,102 +276,6 @@ void FreeClauseIterator(ClauseIterator * iter)
 }
 
 
-/**
- * Create a new conjunction form iterator, starting from the identity permutation
- */
-ConjunctionIterator * CreateConjunctionIterator(Atom form)
-{
-	ConjunctionIterator* iter = Allocate(sizeof(ConjunctionIterator));
-	iter->nClauses = ConjunctionFormNUniqueClauseForms(form);
-
-	// allocate arrays
-	iter->clauseFormPerm = Allocate(iter->nClauses * sizeof(Permutation *));
-	iter->clauseIter = Allocate(iter->nClauses * sizeof(ClauseIterator **));
-
-	MultisetIterator iterator;
-	MultisetIterate(form, AT_ID, &iterator);
-	for(index8 i = 0; i < iter->nClauses; i++) {
-		ASSERT(MultisetIteratorNext(&iterator));
-		ElementMultiple em = MultisetIteratorGetElement(&iterator);
-	
-		iter->clauseFormPerm[i] = CreatePermutation(em.multiple);
-
-		// create a clause iterator for each multiple of each clause form
-		iter->clauseIter[i] = Allocate(em.multiple * sizeof(ClauseIterator *));
-		for(index8 j = 0; j < em.multiple; j++) {
-			iter->clauseIter[i][j] = CreateClauseIterator(em.element);
-		}
-	}
-	MultisetIteratorEnd(&iterator);
-	return iter;
-}
-
-
-/**
-* Advance conjunction form iterator to next permutation
-*/
-bool NextConjunctionPermutation(ConjunctionIterator * iter)
-{
-	// first try all clause iterators
-	for(index8 i = 0; i < iter->nClauses; i++) {
-		uint8 multiplicity = iter->clauseFormPerm[i]->size;
-		for(index8 j = 0; j < multiplicity; j++) {
-			// try permuting this clause
-			if(NextClausePermutation(iter->clauseIter[i][j])) {
-				return true;
-			}
-		}
-	}
-	// permute over clause forms
-	for(index8 i = 0; i < iter->nClauses; i++) {
-		if(NextPermutation(iter->clauseFormPerm[i]))
-			return true;
-	}
-	// no more permutations
-	return false;
-}
-
-
-void FreeConjunctionIterator(ConjunctionIterator* iter)
-{
-	// free clause iterators
-	for(index8 i = 0; i < iter->nClauses; i++) {
-		uint8 multiplicity = iter->clauseFormPerm[i]->size;
-		for(index8 j = 0; j < multiplicity; j++) {
-			FreeClauseIterator(iter->clauseIter[i][j]);
-		}
-		Free(iter->clauseIter[i]);
-	}
-	Free(iter->clauseIter);
-	// free permutations
-	for(index8 i = 0; i < iter->nClauses; i++) {
-		Free(iter->clauseFormPerm[i]);
-	}
-	Free(iter->clauseFormPerm);
-	Free(iter);
-}
-
-
-static void getConjunctionPermutation(const ConjunctionIterator * iter, index8 * tuplePerm)
-{
-	for(index8 i = 0, t = 0; i < iter->nClauses; i++) {
-		uint8 multiplicity = iter->clauseFormPerm[i]->size;
-		size8 clauseArity = iter->clauseIter[i][0]->arity;
-		
-		for(index8 j = 0; j < multiplicity; j++) {
-			// get permuted clause from clause iterator
-			index8 jperm = iter->clauseFormPerm[i]->order[j];
-
-			getClausePermutation(
-				iter->clauseIter[i][jperm],
-				&tuplePerm[t + j*clauseArity],
-				t + jperm*clauseArity);
-		}
-		t += multiplicity * clauseArity;
-	}
-}
-
-
 // we now need interface functions here since form can take several types
 // poor mans polymorphism ...
 
@@ -381,10 +285,10 @@ FormIterator* CreateFormIterator(Atom form)
 	iter->form = form;
 	if(IsPredicateForm(form))
 		iter->topIterator = CreatePredicateIterator(form);
-	else if(IsClauseForm(form))
+	// CLAUDE: a clause form and a conjunction form are both term multisets,
+	// so the same term-multiset iterator permutes either one
+	else if(IsClauseForm(form) || IsConjunctionForm(form))
 		iter->topIterator = CreateClauseIterator(form);
-	else if(IsConjunctionForm(form))
-		iter->topIterator = CreateConjunctionIterator(form);
 	else {
 		ASSERT(false);
 	}
@@ -396,10 +300,8 @@ bool NextFormPermutation(FormIterator * iter)
 {
 	if(IsPredicateForm(iter->form))
 		return NextPredicatePermutation(iter->topIterator);
-	else if(IsClauseForm(iter->form))
+	else if(IsClauseForm(iter->form) || IsConjunctionForm(iter->form))
 		return NextClausePermutation(iter->topIterator);
-	else if(IsConjunctionForm(iter->form))
-		return NextConjunctionPermutation(iter->topIterator);
 	else {
 		ASSERT(false);
 		return false;
@@ -411,10 +313,8 @@ void FreeFormIterator(const FormIterator* iter)
 {
 	if(IsPredicateForm(iter->form))
 		FreePredicateIterator(iter->topIterator);
-	else if(IsClauseForm(iter->form))
+	else if(IsClauseForm(iter->form) || IsConjunctionForm(iter->form))
 		FreeClauseIterator(iter->topIterator);
-	else if(IsConjunctionForm(iter->form))
-		FreeConjunctionIterator(iter->topIterator);
 	else
 		ASSERT(false);
 	Free(iter);
@@ -431,10 +331,8 @@ void GetTuplePermutation(const FormIterator * iter, index8 permutation[])
 	// TODO: the permutation vector should probably be supplied by caller
 	if(IsPredicateForm(iter->form))
 		getPredicatePermutation(iter->topIterator, permutation, 0);
-	else if(IsClauseForm(iter->form))
+	else if(IsClauseForm(iter->form) || IsConjunctionForm(iter->form))
 		getClausePermutation(iter->topIterator, permutation, 0);
-	else if(IsConjunctionForm(iter->form))
-		getConjunctionPermutation(iter->topIterator, permutation);
 	else
 		ASSERT(false);
 }

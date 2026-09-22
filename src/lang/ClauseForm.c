@@ -1,77 +1,43 @@
 
 #include "lang/ClauseForm.h"
 #include "lang/TermForm.h"
-#include "kernel/ifact.h"
+#include "lang/TermMultiset.h"
 #include "kernel/kernel.h"
-#include "kernel/lookup.h"
 #include "kernel/multiset.h"
-#include "kernel/Relation.h"
 
 
 Atom CreateClauseForm(Atom const termForms[], size8 nTermForms)
 {
-	// reduce to unique terms
-	// here we need an array of typed atoms, since they will be stored in a multiset
-	Atom uniqueTermForms[nTermForms];
-	CopyMemory(termForms, uniqueTermForms, nTermForms * sizeof(Atom));
-	uint32 multiplicities[nTermForms];
-	size8 nUniqueTermForms = ReduceAtomsArray(uniqueTermForms, multiplicities, nTermForms);
-
-	IFactDraft draft;
-	IFactBegin(&draft);
-
-	AddMultisetToIFactFromArrays(&draft, uniqueTermForms, multiplicities, nUniqueTermForms, AT_ID);
-
-	// (clause-form @form)
-	TupleStore * clauseFormStore = GetCoreTupleStore(RELATION_CLAUSE_FORM);
-	IFactBeginConjunction(&draft, clauseFormStore, 0);
-	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
-	IFactEndConjunction(&draft);	
-
-	return IFactEnd(&draft);
+	return CreateTermMultisetForm(termForms, nTermForms, RELATION_CLAUSE_FORM);
 }
 
 
 bool IsClauseForm(Atom form)
 {
-	return AtomHasRole(
-		form,
-		GetCoreRelation(RELATION_CLAUSE_FORM),
-		GetCoreRoleName(ROLE_CLAUSE_FORM)
-	);
+	return IsTermMultisetForm(form, RELATION_CLAUSE_FORM, ROLE_CLAUSE_FORM);
 }
 
 
 size8 ClauseFormNTermForms(Atom clauseForm)
 {
-	return MultisetNUniqueElements(clauseForm, AT_ID);
+	return TermMultisetNUniqueTermForms(clauseForm);
 }
 
 
 size8 ClauseFormNTerms(Atom clauseForm)
 {
-	return MultisetSize(clauseForm, AT_ID);
+	return TermMultisetNTerms(clauseForm);
 }
 
 
 size8 ClauseArity(Atom clauseForm)
 {
-	// the arity of a clause is the sum of unique terms arity * multiple
-	MultisetIterator iterator;
-	MultisetIterate(clauseForm, AT_ID, &iterator);
-	size8 arity = 0;
-	while(MultisetIteratorNext(&iterator)) {
-		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
-		uint8 termArity = TermFormArity(elementMultiple.element);
-		arity += termArity * elementMultiple.multiple;
-	}
-	MultisetIteratorEnd(&iterator);
-	return arity;
+	return TermMultisetArity(clauseForm);
 }
 
 
 void PrintClauseForm(Atom clauseForm)
-{	
+{
 	MultisetIterator iterator;
 	MultisetIterate(clauseForm, AT_ID, &iterator);
 
@@ -84,4 +50,3 @@ void PrintClauseForm(Atom clauseForm)
 	}
 	MultisetIteratorEnd(&iterator);
 }
-

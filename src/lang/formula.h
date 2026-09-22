@@ -130,9 +130,9 @@ void ClauseGetTermActorsIndices(Atom clauseForm, index8 termActorsIndices[]);
 
 /**
  * Create a conjunction from a list of terms, in any order.
- * No clause may be repeated.
+ * No term may be repeated.
  */
-Atom CreateConjunction(Atom const clauses[], size8 nClauses);
+Atom CreateConjunction(Atom const terms[], size8 nTerms);
 
 
 /**
