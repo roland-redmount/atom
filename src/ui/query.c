@@ -6,7 +6,7 @@
 
 MixedTypeRelation * UserQuery(FormulaView query)
 {
-	ASSERT(IsTermForm(query.form))
+	ASSERT(IsRelationForm(query.form))
 
 	// Compile the query unless a service answers it already; see FindOrCompileService()
 	Service service;

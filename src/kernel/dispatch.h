@@ -48,8 +48,9 @@ DispatchResult DispatchQueryFormula(Atom queryTerm, Service * service, index8 pe
 /**
  * A query (term) where actors have been replaced with a parameters tuple.
  */
+/* CLAUDE: The form is a term form or a conjunction form; see IsRelationForm() */
 typedef struct s_ParameterizedQuery {
-	Atom termForm;
+	Atom form;
 	Atom parameters[RELATION_MAX_ARITY];
 	size8 arity;
 } ParameterizedQuery;

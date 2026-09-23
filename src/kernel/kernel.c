@@ -302,7 +302,7 @@ static void createCoreRelation(uint32 relationId)
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, corePredicateArity[formId]);
 
 	kernel.coreRelations[relationId] = (Relation) {
-		.termForm = kernel.coreTermForms[formId],
+		.form = kernel.coreTermForms[formId],
 		.typeSignature = typeSignature
 	};
 	CreateRelationBootstrap(kernel.coreRelations[relationId], kernel.corePredicateForms[formId]);

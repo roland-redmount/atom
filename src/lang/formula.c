@@ -39,7 +39,7 @@ static struct {
 } formulaStorage;
 
 
-static size8 FormArity(Atom form)
+size8 FormArity(Atom form)
 {
 	if(IsPredicateForm(form))
 		return PredicateArity(form);
@@ -566,6 +566,19 @@ void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors)
 		printClause(form, actors, &atomIndex);
 	else if(IsConjunctionForm(form))
 		printConjunction(form, actors, &atomIndex);
+	else
+		ASSERT(false);
+}
+
+
+void PrintForm(Atom form)
+{
+	if(IsTermForm(form))
+		PrintTermForm(form);
+	else if(IsClauseForm(form))
+		PrintClauseForm(form);
+	else if(IsConjunctionForm(form))
+		PrintConjunctionForm(form);
 	else
 		ASSERT(false);
 }

@@ -67,7 +67,7 @@ void testLookupPredicateRoles(void)
 	atomTypes[nodeIndex] = AT_ID;
 	atomTypes[weightIndex] = AT_INT;
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, 2);
-	Relation relation = {.termForm = form, .typeSignature = typeSignature};
+	Relation relation = {.form = form, .typeSignature = typeSignature};
 	AcquireRelation(relation);
 
 	Atom node = CreateStringFromCString("foo");

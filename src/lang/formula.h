@@ -162,4 +162,14 @@ void PrintFormulaView(FormulaView formulaView);
 
 void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors);
 
+/**
+ * CLAUDE: The number of actors of a predicate, term, clause or conjunction form.
+ */
+size8 FormArity(Atom form);
+
+/**
+ * CLAUDE: Print a term, clause or conjunction form, without actors.
+ */
+void PrintForm(Atom form);
+
 #endif	// FORMULA_H

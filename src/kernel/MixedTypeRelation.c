@@ -83,13 +83,13 @@ static bool concatNext(MixedTypeRelation * mixedRelation)
 
 MixedTypeRelation * CreateConcatRelation(FormulaView query)
 {
-	ASSERT(IsTermForm(query.form))
+	ASSERT(IsRelationForm(query.form))
 	TypedTuple const * queryActors = query.actors;
 	size8 arity = queryActors->nAtoms;
 
 	MixedTypeRelation * mixedRelation = Allocate(sizeof(MixedTypeRelation));
 	mixedRelation->type = MIXED_TYPE_CONCAT;
-	mixedRelation->termForm = query.form;
+	mixedRelation->form = query.form;
 	mixedRelation->tuple = CreateTypedTuple(arity);
 	mixedRelation->impl.concat.queryActors = queryActors;
 

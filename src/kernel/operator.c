@@ -1965,17 +1965,17 @@ static void printOperatorRecursive(
 		// The operator is the head of another service; print its term form and end recursion
 		// An operator taking one argument per column is printed as a formula,
 		// such as (+ <@1 + 1 = @2>).
-		size8 arity = TermFormArity(op->relation.termForm);
+		size8 arity = FormArity(op->relation.form);
 		if(op->nArguments == arity) {
 			TypedTuple * actors = CreateTypedTuple(arity);
 			for(index8 i = 0; i < arity; i++) {
 				TypedTupleSetElement(actors, i, arguments[i]);
 			}
-			PrintFormActorsAsFormula(op->relation.termForm, actors);
+			PrintFormActorsAsFormula(op->relation.form, actors);
 			FreeTypedTuple(actors);
 		}
 		else {
-			PrintTermForm(op->relation.termForm);
+			PrintForm(op->relation.form);
 			printArguments(arguments, op->nArguments);
 		}
 		return;

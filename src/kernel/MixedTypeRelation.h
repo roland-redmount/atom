@@ -40,7 +40,8 @@ enum MixedTypeRelationType {
 typedef struct s_MixedTypeRelation {
 	enum MixedTypeRelationType type;
 	// Term form of the query this relation answers
-	Atom termForm;
+	// CLAUDE: or the conjunction form of a conjunction query
+	Atom form;
 	// The tuple of the current iterator position, in query actor order.
 	// Rewritten by every MixedTypeRelationNext().
 	TypedTuple * tuple;

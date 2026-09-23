@@ -122,7 +122,7 @@ void StringSetup(void)
 	TypeSignature typeSignature = {
 		.atomTypes = {AT_ID}
 	};
-	stringRelation = (Relation) {.termForm = stringTermForm, .typeSignature = typeSignature};
+	stringRelation = (Relation) {.form = stringTermForm, .typeSignature = typeSignature};
 	stringTupleStore = CreateTupleStore(stringRelation, &btreeStorageProvider, 1, 0);
 	IFactRelease(stringTermForm);
 

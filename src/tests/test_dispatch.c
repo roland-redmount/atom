@@ -167,11 +167,11 @@ void testDispatchNegatedTerm(void)
 
 	// Create the (even odd) relation
 	TypeSignature typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2);
-	Relation relation = {.termForm = termForm, .typeSignature = typeSignature};
+	Relation relation = {.form = termForm, .typeSignature = typeSignature};
 	// We must have a service to dispatch to, so create a B-tree storage
 	CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
 	// Create the (! even odd) relation
-	Relation negatedRelation = {.termForm = negatedTermForm, .typeSignature = typeSignature};
+	Relation negatedRelation = {.form = negatedTermForm, .typeSignature = typeSignature};
 	CreateTupleStore(negatedRelation, &btreeStorageProvider, 2, 0);
 	ASSERT_FALSE(SameRelations(relation, negatedRelation))
 
@@ -249,12 +249,12 @@ void testDispatchIterator(void)
 
 	// Two relation tables for the term form, one per combination of column types
 	Relation idRelation = {
-		.termForm = termForm,
+		.form = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2)
 	};
 	CreateTupleStore(idRelation, &btreeStorageProvider, 2, 0);
 	Relation intRelation = {
-		.termForm = termForm,
+		.form = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
 	};
 	CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);

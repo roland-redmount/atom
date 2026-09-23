@@ -487,7 +487,7 @@ void PrintService(Service service)
 	// Reconstruct a parameter tuple from the IO signature
 	// NOTE: could be moved to Parameter.c
 	// CLAUDE: The tuple has one parameter per column, numbered by the argument it takes
-	size8 nColumns = TermFormArity(service.relation.termForm);
+	size8 nColumns = FormArity(service.relation.form);
 	index8 argumentMap[nColumns];
 	EqualitySignatureGetArgumentMap(service.equalitySignature, nColumns, argumentMap);
 	TypedTuple * parameters = CreateTypedTuple(nColumns);
@@ -504,7 +504,7 @@ void PrintService(Service service)
 		);
 		TypedTupleSetElement(parameters, i, parameter);
 	}
-	PrintFormActorsAsFormula(service.relation.termForm, parameters);
+	PrintFormActorsAsFormula(service.relation.form, parameters);
 	// CLAUDE: The operator takes one argument per distinct parameter
 	Atom operatorParameters[op->nArguments];
 	for(index8 i = 0; i < nColumns; i++)

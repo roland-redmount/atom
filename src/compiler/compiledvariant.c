@@ -1,7 +1,7 @@
 
 #include "compiler/compiledvariant.h"
 #include "kernel/Relation.h"
-#include "lang/TermForm.h"
+#include "lang/formula.h"
 
 
 TypeSignature CompiledVariantGetTypeSignature(CompiledVariant const * variant, size8 arity)
@@ -41,7 +41,7 @@ void SetupCompiledVariantFromServiceRecord(CompiledVariant * variant, ServiceRec
 	variant->isSeed = true;
 
 	TypeSignature typeSignature = serviceRecord->service.relation.typeSignature;
-	size8 arity = TermFormArity(serviceRecord->service.relation.termForm);
+	size8 arity = FormArity(serviceRecord->service.relation.form);
 	index8 argumentMap[arity];
 	EqualitySignatureGetArgumentMap(serviceRecord->service.equalitySignature, arity, argumentMap);
 	for(index8 i = 0; i < arity; i++) {

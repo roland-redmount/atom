@@ -65,7 +65,7 @@ static bool nonStrictInequalityCall(void * state, Atom arguments[], void * reade
 
 /**
  * A "co-routine" machine function, returning multiple values.
- * This implements a range iterator (lower @1<INT number @2>INT upper @3<INT)
+ * This implements a range iterator (=< @2>INT >= @1<INT & >= @2>INT =< @3<INT)
  * which returns all values @2 between the lower and upper bound, inclusive.
  * The state holds the value returned by the previous call.
  *
@@ -102,21 +102,16 @@ void MathSetup(void)
 {
 	moduleID = RequestModuleID();
 
-	// The index order (from parameters) is fixed when creating the relation (columnIndex).
-	// Each service added need only give the Relation and the RelationReader impl
-
-	// Atom addTermForm = CStringToTerm("+ @1<INT + @2<INT = @3<INT");
-	// Relation addRelation = CreateRelationFromTerm(addTermForm, mathProvider);
-
-	// NOTE: RelationReader contains an IOSignature ...
 	RegisterMachineService(moduleID, "+ @1<INT + @2<INT = @3>INT", add1Call);
 
 	RegisterMachineService(moduleID, "+ @1<INT + @2>INT = @3<INT", add2Call);
 
 	RegisterMachineService(moduleID, "* @1<INT * @2<INT = @3>INT", mul1Call);
 
+	// The range a =< n =< b is the conjunction (n >= a & b >= n), since
+	// (=< x >= y) reads x >= y. Neither term is a finite relation on its own.
 	RegisterMachineServiceWithState(
-		moduleID, "lower @1<INT number @2>INT upper @3<INT", sizeof(RangeState),
+		moduleID, "=< @2>INT >= @1<INT & >= @2>INT =< @3<INT", sizeof(RangeState),
 		rangeSetup,	rangeCall, 0
 	);
 

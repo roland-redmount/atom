@@ -445,20 +445,20 @@ void ListSetup(void)
 	// (list:ID position:INT element:ID)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_ID}, typeSignature.atomTypes, listRoleIndex, 3);
-	listIDRelation = (Relation) {.termForm = listTermForm, .typeSignature = typeSignature};
+	listIDRelation = (Relation) {.form = listTermForm, .typeSignature = typeSignature};
 	listIDTupleStore = CreateTupleStore(listIDRelation, &btreeStorageProvider, 3, listRoleIndex);
 	
 	// (list:ID position:INT element:LETTER)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_LETTER}, typeSignature.atomTypes, listRoleIndex, 3);
-	listLetterRelation = (Relation) {.termForm = listTermForm, .typeSignature = typeSignature};
+	listLetterRelation = (Relation) {.form = listTermForm, .typeSignature = typeSignature};
 	listLetterTupleStore = CreateTupleStore(listLetterRelation, &btreeStorageProvider, 3, listRoleIndex);
 	
 	// (list:ID length:INT)
 	typeSignature = (TypeSignature) {0};
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT}, typeSignature.atomTypes, listLengthRoleIndex, 2);
-	listLengthRelation = (Relation) {.termForm = listLengthTermForm, .typeSignature = typeSignature};
+	listLengthRelation = (Relation) {.form = listLengthTermForm, .typeSignature = typeSignature};
 	listLengthTupleStore = CreateTupleStore(listLengthRelation, &btreeStorageProvider, 2, listLengthRoleIndex);
 	
 	IFactRelease(listLengthTermForm);

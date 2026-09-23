@@ -32,7 +32,7 @@ void testAssertRetract(void)
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(FormulaGetActors(fact1)), nColumns);
 
-	Relation relation = {.termForm = FormulaGetForm(fact1), .typeSignature = typeSignature};
+	Relation relation = {.form = FormulaGetForm(fact1), .typeSignature = typeSignature};
 	// The relation does not exist until the first fact is asserted
 	ASSERT_FALSE(RelationExists(relation))
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact1), 0), ASSERT_OK)
@@ -314,7 +314,7 @@ void testCreateIFactTwoIdColumns(void)
 	byte atomTypes[2] = {AT_ID, AT_ID};
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, 2);
 	
-	Relation relation = {.termForm = FormulaGetForm(sameFormTerm), .typeSignature = typeSignature};
+	Relation relation = {.form = FormulaGetForm(sameFormTerm), .typeSignature = typeSignature};
 	ASSERT_FALSE(RelationExists(relation))
 
 	Atom formula = CStringToConjunction("pair * other \"a\" & pair \"a\" other *");
@@ -424,7 +424,7 @@ void testCreateIFactTerm(void)
 		atomTypes[i] = SameTypedAtoms(actor, generatorAtom) ? AT_ID : actor.type;
 	}
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, nColumns);
-	Relation relation = {.termForm = FormulaGetForm(term), .typeSignature = typeSignature};
+	Relation relation = {.form = FormulaGetForm(term), .typeSignature = typeSignature};
 	ASSERT_FALSE(RelationExists(relation))
 
 	Atom ifact = CreateIFact(FormulaGetView(term));

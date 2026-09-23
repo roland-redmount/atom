@@ -22,6 +22,7 @@
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "lang/ClauseForm.h"
+#include "lang/ConjunctionForm.h"
 #include "lang/SubstitutionList.h"
 #include "lang/TermForm.h"
 #include "lang/Variable.h"
@@ -137,7 +138,7 @@ static bool dispatchOrCompileAtNewChoicePoint(
 
 	// dispatch term, parameterized
 	ParameterizedQuery query = {
-		.termForm = term.form,
+		.form = term.form,
 		.arity = term.actors->nAtoms,
 	};
 	termActorsToParameters(term.actors, query.parameters);
@@ -408,6 +409,23 @@ static size8 setupJoinArgumentMaps(
 	return nArguments;
 }
 
+
+/**
+ * The matched term index of a conjunction query, which is compiled from all of its
+ * terms; see compileConjunctionQuery().
+ * 
+ * TODO: We need a better representation for the conjunction that compileConjunctionQuery()
+ * processes, rather than work off the clause, which now may or may not have a "head" term.
+ */
+#define NO_MATCHED_TERM			255
+
+/**
+ * CLAUDE: The terms of a compiled conjunction are either the terms of a clause, negated,
+ * or the terms of a conjunction query as given.
+ */
+#define BODY_TERMS_NEGATED		1
+#define BODY_TERMS_AS_GIVEN		2
+
 /**
  * The state of compiling one clause into a conjunction of operators, shared by the
  * recursion over its terms. The clause actors and the termExcluded flags are updated as terms
@@ -440,8 +458,10 @@ typedef struct s_ClauseCompileState {
 	bool * termExcluded;
 	// Choice points taken during the compilation of the clause
 	ChoiceTree * choiceTree;
-	// CLAUDE: Set when a recursive term has compiled to a RECURSE operator
+	// Set when a recursive term has compiled to a RECURSE operator
 	bool hasRecurseOperator;
+	// CLAUDE: BODY_TERMS_NEGATED or BODY_TERMS_AS_GIVEN
+	uint32 bodyTerms;
 	// The fully typed parameters of the query, if known; else 0.
 	// This is needed to compile recursive terms; see compileRecursiveTerm().
 	TypedTuple const * queryParameters;
@@ -495,7 +515,8 @@ static void propagateTermParameterTypes(
 
 		// Type the parameter in the query-matched term, unless it is a clause-local
 		// variable, which has no counterpart there
-		if(parameterNumber <= clauseState->nQueryArguments) {
+		if((clauseState->matchedTermIndex != NO_MATCHED_TERM)
+			&& (parameterNumber <= clauseState->nQueryArguments)) {
 			// CLAUDE: A repeated query parameter occurs at several columns of the matched term
 			index8 matchedTermEnd = clauseState->termActorsIndices[clauseState->matchedTermIndex + 1];
 			for(index8 k = clauseState->termActorsIndices[clauseState->matchedTermIndex]; k < matchedTermEnd; k++) {
@@ -696,10 +717,11 @@ static Operator * compileConjunctionRecursive(
 			}
 			Atom termForm = em.element;
 			size8 termArity = TermFormArity(termForm);
-			// negate the term form
+			// negate the term form if necessary
+			bool negate = (clauseState->bodyTerms == BODY_TERMS_NEGATED);
 			Atom negatedTermForm = CreateTermForm(
 				TermFormGetPredicateForm(termForm),
-				!TermFormGetSign(termForm)
+				negate ? !TermFormGetSign(termForm) : TermFormGetSign(termForm)
 			);
 			// A term of the query's own form _may_ be recursive.
 			// A term of a different form is not recursive, and is skipped in pass 2
@@ -831,8 +853,13 @@ static size8 parameterizeLocalVariables(
 	TypedTuple * clauseActors, index8 matchedTermIndex, index8 const termActorsIndices[],
 	size8 nQueryArguments)
 {
-	index8 matchedTermBegin = termActorsIndices[matchedTermIndex];
-	index8 matchedTermEnd = termActorsIndices[matchedTermIndex + 1];
+	// CLAUDE: Without a matched term, the range of actors to skip is empty
+	index8 matchedTermBegin = 0;
+	index8 matchedTermEnd = 0;
+	if(matchedTermIndex != NO_MATCHED_TERM) {
+		matchedTermBegin = termActorsIndices[matchedTermIndex];
+		matchedTermEnd = termActorsIndices[matchedTermIndex + 1];
+	}
 	size8 nLocalVariables = 0;
 
 	for(index8 i = 0; i < clauseActors->nAtoms; i++) {
@@ -934,11 +961,13 @@ static bool checkParameterTypes(TypedTuple const * querySignature)
  */
 /* CLAUDE: nArguments is the number of distinct query parameters, which is the number of
  * arguments of the returned operator. *hasRecurseOperator is set to true if a recursive
- * term compiled to a RECURSE operator, so that the clause needs a FIXPOINT operator. */
+ * term compiled to a RECURSE operator, so that the clause needs a FIXPOINT operator.
+ * bodyTerms is BODY_TERMS_NEGATED for a clause. For a conjunction query it is
+ * BODY_TERMS_AS_GIVEN, and matchedTermIndex is NO_MATCHED_TERM; see compileConjunctionQuery(). */
 static Operator * compileConjunction(
 	CompileStack * compileStack,
 	Atom clauseForm, TypedTuple * clauseActors, index8 matchedTermIndex, Atom queryTermForm,
-	size8 nArguments, ChoiceTree * choiceTree, bool * hasRecurseOperator)
+	size8 nArguments, ChoiceTree * choiceTree, int bodyTerms, bool * hasRecurseOperator)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	index8 termActorsIndices[clauseNTerms + 1];
@@ -955,13 +984,19 @@ static Operator * compileConjunction(
 		clauseActors, matchedTermIndex, termActorsIndices, nArguments);
 
 	// Extract the query parameters, if present
-	size8 matchedTermArity =
-		termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex];
-	TypedTuple * queryParameters = CreateTypedTuple(matchedTermArity);
-	TypedTupleCopyAt(clauseActors, termActorsIndices[matchedTermIndex], queryParameters);
-	if(!checkParameterTypes(queryParameters)) {
-		FreeTypedTuple(queryParameters);
-		queryParameters = 0;
+	// CLAUDE: Without a matched term there are no query parameters to read a
+	// recursive term against
+	size8 matchedTermArity = 0;
+	TypedTuple * queryParameters = 0;
+	if(matchedTermIndex != NO_MATCHED_TERM) {
+		matchedTermArity =
+			termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex];
+		queryParameters = CreateTypedTuple(matchedTermArity);
+		TypedTupleCopyAt(clauseActors, termActorsIndices[matchedTermIndex], queryParameters);
+		if(!checkParameterTypes(queryParameters)) {
+			FreeTypedTuple(queryParameters);
+			queryParameters = 0;
+		}
 	}
 	// Setup the initial clause state
 	// TODO: this has to be modeled better, way too many fields. What is a "state" ?
@@ -978,12 +1013,15 @@ static Operator * compileConjunction(
 		.nQueryArguments = nArguments,
 		.termExcluded = termExcluded,
 		.choiceTree = choiceTree,
-		.queryParameters = queryParameters
+		.queryParameters = queryParameters,
+		.bodyTerms = bodyTerms
 	};
 
 	// Compile the conjunction recursively, joining one term at a time
 	index8 clauseMap[clauseActors->nAtoms];
-	Operator * op = compileConjunctionRecursive(compileStack, &clauseState, 1, clauseMap);
+	// CLAUDE: The matched term is excluded from the start
+	uint8 nTermsExcluded = (matchedTermIndex == NO_MATCHED_TERM) ? 0 : 1;
+	Operator * op = compileConjunctionRecursive(compileStack, &clauseState, nTermsExcluded, clauseMap);
 	*hasRecurseOperator = clauseState.hasRecurseOperator;
 	if(queryParameters)
 		FreeTypedTuple(queryParameters);
@@ -1111,6 +1149,45 @@ static void findMatchingClauseForms(Atom queryTermForm, ResizingArray * queryCla
 }
 
 
+/**
+ * CLAUDE: Add a compiled operator with the given resolved parameters to the variants array.
+ * An operator whose signature matches an existing variant is combined with that variant by
+ * a UNION operator. Otherwise a new variant is appended, and *nVariants is incremented.
+ * Returns the variant the operator was added to.
+ */
+static CompiledVariant * addCompiledVariant(
+	CompiledVariant variants[], size8 * nVariants, Atom resolvedParameters[], size8 arity,
+	Operator * conjunctionOp)
+{
+	// Check for previously compiled service with the same signature
+	CompiledVariant * variant = FindCompiledVariant(
+		variants, *nVariants, resolvedParameters, arity);
+	if(variant) {
+		// We already have a compiled variant with the same signature, so create a UNION.
+		// If the two operators have different indexOrder, they are sorted first.
+		if(!sameIndexOrder(variant->op, conjunctionOp)) {
+			variant->op = sortOperatorToIdentityOrder(variant->op);
+			conjunctionOp = sortOperatorToIdentityOrder(conjunctionOp);
+		}
+		variant->op = CreateUnionOperator(variant->op, conjunctionOp);
+		// check if we replaced a seed variant
+		if(variant->isSeed) {
+			variant->isSeed = false;
+			variant->isReplaced = true;
+		}
+	}
+	else {
+		// add compiled variant of this clause
+		ASSERT(*nVariants < MAX_COMPILED_VARIANTS)
+		variant = &(variants[(*nVariants)++]);
+		SetMemory(variant, sizeof(CompiledVariant), 0);
+		TupleCopy(resolvedParameters, variant->parameters, arity);
+		variant->op = conjunctionOp;
+	}
+	return variant;
+}
+
+
 static void copyTypedTupleToArray(TypedTuple * sourceTuple, index8 startOffset, Atom destination[], size8 nAtoms)
 {
 	TupleCopy(TypedTuplePeekAtoms(sourceTuple) + startOffset, destination, nAtoms);
@@ -1159,7 +1236,7 @@ static size8 compileClauses(
 
 		// Iterate over all occurences of the query term in the matched clause
 		// and find one that unifies, if any.
-		index8 matchedTermActorsOffset = ClauseGetTermActorsIndex(clauseForm, query->termForm, 1);
+		index8 matchedTermActorsOffset = ClauseGetTermActorsIndex(clauseForm, query->form, 1);
 		bool foundTerm = false;
 		for(index8 m = 1; !foundTerm && (m <= queryClauseMatch->termMultiple); m++) {
 			// extract actors for the matching term in the clause
@@ -1170,7 +1247,7 @@ static size8 compileClauses(
 			TypedTuple * queryParameters = CreateTypedTupleFromTuple(AT_PARAMETER, query->parameters, query->arity);
 			foundTerm = UnifyTuples(queryParameters, matchedTermActors, &querySubst, &matchedTermSubst);
 			if(foundTerm) {
-				index8 matchedTermIndex = ClauseGetTermIndex(clauseForm, query->termForm, m);
+				index8 matchedTermIndex = ClauseGetTermIndex(clauseForm, query->form, m);
 				// Compile the conjunction once per combination of choices. A term that leaves
 				// an output parameter untyped may match several services, each
 				// yielding a differently typed variant of the query service.
@@ -1187,38 +1264,15 @@ static size8 compileClauses(
 #endif
 					bool hasRecurseOperator = false;
 					Operator * conjunctionOp = compileConjunction(
-						compileStack, clauseForm, substClauseActors, matchedTermIndex, query->termForm,
-						nQueryArguments, &choiceTree, &hasRecurseOperator);
+						compileStack, clauseForm, substClauseActors, matchedTermIndex, query->form,
+						nQueryArguments, &choiceTree, BODY_TERMS_NEGATED, &hasRecurseOperator);
 					if(!conjunctionOp)
 						continue;
 					// Recover the resolved parameters (with types) from the clause actors
 					copyTypedTupleToArray(
 						substClauseActors, matchedTermActorsOffset, resolvedParameters, query->arity);
-					// Check for previously compiled service with the same signature
-					CompiledVariant * variant = FindCompiledVariant(
-						variants, nVariants, resolvedParameters, query->arity);
-					if(variant) {
-						// We already have a compiled variant with the same signature, so create a UNION.
-						// If the two operators have different indexOrder, they are sorted first.
-						if(!sameIndexOrder(variant->op, conjunctionOp)) {
-							variant->op = sortOperatorToIdentityOrder(variant->op);
-							conjunctionOp = sortOperatorToIdentityOrder(conjunctionOp);
-						}
-						variant->op = CreateUnionOperator(variant->op, conjunctionOp);
-						// check if we replaced a seed variant
-						if(variant->isSeed) {
-							variant->isSeed = false;
-							variant->isReplaced = true;
-						}
-					}
-					else {
-						// add compiled variant of this clause
-						ASSERT(nVariants < MAX_COMPILED_VARIANTS)
-						variant = &(variants[nVariants++]);
-						SetMemory(variant, sizeof(CompiledVariant), 0);
-						TupleCopy(resolvedParameters, variant->parameters, query->arity);
-						variant->op = conjunctionOp;
-					}
+					CompiledVariant * variant = addCompiledVariant(
+						variants, &nVariants, resolvedParameters, query->arity, conjunctionOp);
 					// Mark recursive variants; FIXPOINT operator is added by completeRecursiveVariant()
 					// CLAUDE: A clause of a recursive clause form needs no FIXPOINT operator
 					// when its term of the query form is not recursive;
@@ -1236,6 +1290,57 @@ static size8 compileClauses(
 	FreeTypedTuple(substClauseActors);
 	FreeTypedTuple(matchedTermActors);
 
+	return nVariants;
+}
+
+
+/**
+ * CLAUDE: Compile a conjunction query, such as (parent x child y & parent y child z), into
+ * a JOIN of its terms, as the body of a clause is compiled; see compileConjunction(). The
+ * terms are compiled as given rather than negated, and every term is compiled, since no
+ * term is matched by the query. A variable occurring in several terms is provided by the
+ * term compiled first, and constrains the terms compiled later through the JOIN.
+ *
+ * Appends the new compiled variants to the variants array and returns the new number of
+ * variants in the array.
+ */
+static size8 compileConjunctionQuery(
+	CompileStack * compileStack, ParameterizedQuery const * query,
+	CompiledVariant variants[], size8 nVariants)
+{
+	index8 queryArgumentMap[query->arity];
+	size8 nQueryArguments = ParametersGetArgumentMap(query->parameters, query->arity, queryArgumentMap);
+	TypedTuple * queryActors = CreateTypedTupleFromTuple(AT_PARAMETER, query->parameters, query->arity);
+	TypedTuple * conjunctionActors = CreateTypedTuple(query->arity);
+	Atom resolvedParameters[query->arity];
+
+	// Compile the conjunction once per combination of choices; see compileClauses()
+	ChoiceTree choiceTree;
+	ChoiceTreeReset(&choiceTree);
+	do {
+		// compileConjunction() updates parameter types in the actors, so copy them anew
+		// for each branch
+		TypedTupleCopy(queryActors, conjunctionActors);
+		bool hasRecurseOperator = false;
+		Operator * conjunctionOp = compileConjunction(
+			compileStack, query->form, conjunctionActors, NO_MATCHED_TERM, query->form,
+			nQueryArguments, &choiceTree, BODY_TERMS_AS_GIVEN, &hasRecurseOperator);
+		if(!conjunctionOp)
+			continue;
+		ASSERT(!hasRecurseOperator)
+		// The type of each query parameter is resolved in the actors of the compiled terms.
+		// The parameter number and IO are those of the query.
+		for(index8 i = 0; i < query->arity; i++) {
+			resolvedParameters[i] = query->parameters[i];
+			resolvedParameters[i].parameter.atomType =
+				TypedTupleGetAtom(conjunctionActors, i).parameter.atomType;
+			ASSERT(resolvedParameters[i].parameter.atomType)
+		}
+		addCompiledVariant(variants, &nVariants, resolvedParameters, query->arity, conjunctionOp);
+	} while(ChoiceTreeNextBranch(&choiceTree));
+
+	FreeTypedTuple(conjunctionActors);
+	FreeTypedTuple(queryActors);
 	return nVariants;
 }
 
@@ -1347,10 +1452,15 @@ static size8 compileQueryClauseForms(
 	size8 nVariants = 0;
 	nVariants = seedVariantsFromServices(query, variants);
 
+	// CLAUDE: No clause holds a conjunction form, so a conjunction query is compiled
+	// from its own terms
+	if(IsConjunctionForm(query->form))
+		return compileConjunctionQuery(compileStack, query, variants, nVariants);
+
 	// Collect all clauses matching the query term
 	ResizingArray matchedClauseForms;
 	CreateResizingArray(&matchedClauseForms, sizeof(QueryClauseMatch), 8);
-	findMatchingClauseForms(query->termForm, &matchedClauseForms);
+	findMatchingClauseForms(query->form, &matchedClauseForms);
 	size32 nMatchedClauseForms = matchedClauseForms.nElements;
 	if(nMatchedClauseForms == 0) {
 		FreeResizingArray(&matchedClauseForms);
@@ -1370,7 +1480,7 @@ static size8 compileQueryClauseForms(
 	size8 nNonRecursiveVariants = nVariants;
 	for(index8 v = 0; v < nNonRecursiveVariants; v++) {
 		ParameterizedQuery variantQuery = {
-			.termForm = query->termForm,
+			.form = query->form,
 			.arity = query->arity
 		};
 		TupleCopy(variants[v].parameters, variantQuery.parameters, query->arity);
@@ -1545,7 +1655,7 @@ static size8 compileParameterizedQuery(
 	for(index8 i = 0; i < nVariants; i++) {
 		IOSignature ioSignature = CompiledVariantGetIOSignature(&variants[i], query->arity);
 		Relation relation = (Relation) {
-			.termForm = query->termForm,
+			.form = query->form,
 			.typeSignature = CompiledVariantGetTypeSignature(&variants[i], query->arity),
 		};
 		Service service = (Service) {
@@ -1599,7 +1709,7 @@ bool DispatchOrCompileQuery(FormulaView query, Service * service, index8 permuta
 
 size8 CompileQuery(FormulaView query, Service services[])
 {
-	ASSERT(IsTermForm(query.form))
+	ASSERT(IsRelationForm(query.form))
 
 	ParameterizedQuery parameterizedQuery;
 	ParameterizeQuery(query, &parameterizedQuery);

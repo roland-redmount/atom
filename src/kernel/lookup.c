@@ -3,6 +3,7 @@
 #include "kernel/lookup.h"
 #include "kernel/multiset.h"
 #include "lang/Atom.h"
+#include "lang/formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
@@ -186,7 +187,7 @@ void LookupRemovePredicateRoles(Relation relation, Atom const actors[])
 	record.relation = relation;
 
 	MultisetIterator formIterator;
-	Atom predicateForm = TermFormGetPredicateForm(relation.termForm);
+	Atom predicateForm = TermFormGetPredicateForm(relation.form);
 	MultisetIterate(predicateForm, AT_NAME, &formIterator);
 	index8 index = 0;
 	while(MultisetIteratorNext(&formIterator)) {
@@ -300,7 +301,7 @@ Relation LookupFindRelation(Atom atom, Atom termForm, Atom role)
 		Atom currentRole = LookupIteratorGetRole(&iterator);
 		Relation currentRelation = LookupIteratorGetRelation(&iterator);
 
-		if(SameAtoms(currentRole, role) && SameAtoms(currentRelation.termForm, termForm)) {
+		if(SameAtoms(currentRole, role) && SameAtoms(currentRelation.form, termForm)) {
 			ASSERT(IsNullRelation(relation))		// ensure we have only 1 matching relation
 			relation = currentRelation;
 		}
@@ -319,7 +320,7 @@ void LookupDump(void)
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
 		IFactPrint(record->atom);
 		PrintChar(' ');
-		PrintTermForm(record->relation.termForm);
+		PrintForm(record->relation.form);
 		PrintChar(' ');
 		PrintName(record->role);
 		PrintF(" %u\n", record->nFacts);

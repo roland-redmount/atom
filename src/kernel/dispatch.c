@@ -7,6 +7,7 @@
 #include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/ClauseForm.h"
+#include "lang/ConjunctionForm.h"
 #include "lang/FormPermutation.h"
 #include "lang/formula.h"
 #include "lang/SubstitutionList.h"
@@ -15,7 +16,7 @@
 
 void ParameterizeQuery(FormulaView query, ParameterizedQuery * parameterizedQuery)
 {
-	parameterizedQuery->termForm = query.form;
+	parameterizedQuery->form = query.form;
 	parameterizedQuery->arity = query.actors->nAtoms;
 	ActorsToParameters(query.actors, parameterizedQuery->parameters);
 }
@@ -25,7 +26,7 @@ void PrintParameterizedQuery(ParameterizedQuery const * parameterizedQuery)
 {
 	TypedTuple * tuple = CreateTypedTupleFromTuple(
 		AT_PARAMETER, parameterizedQuery->parameters, parameterizedQuery->arity);
-	PrintFormActorsAsFormula(parameterizedQuery->termForm, tuple);
+	PrintFormActorsAsFormula(parameterizedQuery->form, tuple);
 	FreeTypedTuple(tuple);
 }
 
@@ -103,8 +104,11 @@ static bool permutationMatch(
 	Service service, Atom const queryParameters[], size8 nParameters, int matchMode, index8 permutation[])
 {
 	// iterate over all permutations of the form
-	Atom predicateForm = TermFormGetPredicateForm(service.relation.termForm);
-	FormIterator * iter = CreateFormIterator(predicateForm);
+	// CLAUDE: A conjunction form is permuted as a whole: its terms of equal form, and the
+	// roles within each term. A term form is permuted by its predicate form.
+	Atom permutedForm = IsConjunctionForm(service.relation.form) ?
+		service.relation.form : TermFormGetPredicateForm(service.relation.form);
+	FormIterator * iter = CreateFormIterator(permutedForm);
 	bool match = false;
 	do {
 		GetTuplePermutation(iter, permutation);
@@ -124,7 +128,7 @@ static bool permutationMatch(
 void DispatchIterate(
 	ParameterizedQuery const * query, int matchMode, index8 permutation[], DispatchIterator * iterator)
 {
-	ASSERT(IsTermForm(query->termForm))
+	ASSERT(IsRelationForm(query->form))
 	SetMemory(iterator, sizeof(DispatchIterator), 0);
 	iterator->queryParameters = query->parameters;
 	iterator->nParameters = query->arity;
@@ -132,7 +136,7 @@ void DispatchIterate(
 	iterator->permutation = permutation;
 	iterator->inRelation = false;
 	// Iterate over relations matching the term form.
-	RelationRegistryIterate(query->termForm, &(iterator->relationIterator));
+	RelationRegistryIterate(query->form, &(iterator->relationIterator));
 }
 
 
@@ -242,7 +246,7 @@ DispatchResult DispatchParameterizedQuery(
 DispatchResult DispatchQuery(FormulaView query, Service * service, index8 permutation[])
 {
 	ParameterizedQuery parameterizedQuery = {
-		.termForm = query.form,
+		.form = query.form,
 		.arity = query.actors->nAtoms,
 	};
 	ActorsToParameters(query.actors, parameterizedQuery.parameters);

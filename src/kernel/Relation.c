@@ -2,6 +2,7 @@
 #include "kernel/ifact.h"
 #include "kernel/Relation.h"
 #include "kernel/TupleStore.h"
+#include "lang/ConjunctionForm.h"
 #include "lang/TermForm.h"
 #include "memory/allocator.h"
 #include "util/hashing.h"
@@ -75,7 +76,7 @@ void CreateRelationBootstrap(Relation relation, Atom predicateForm)
 		.ownsForm = true,
 		.referenceCount = 1
 	};
-	IFactAcquire(relation.termForm);
+	IFactAcquire(relation.form);
 	// Store a copy of the record in the B-tree
 	ASSERT(BTreeInsert(relationRegistry, &record) == BTREE_INSERTED)
 }
@@ -87,8 +88,12 @@ void AcquireRelation(Relation relation)
 	if(existingRecord) {
 		existingRecord->referenceCount++;
 	}
-	else
-		CreateRelationBootstrap(relation, TermFormGetPredicateForm(relation.termForm));
+	else {
+		// CLAUDE: A conjunction form has no predicate form of its own
+		Atom predicateForm = IsConjunctionForm(relation.form) ?
+			(Atom) {0} : TermFormGetPredicateForm(relation.form);
+		CreateRelationBootstrap(relation, predicateForm);
+	}
 }
 
 
@@ -105,7 +110,7 @@ void ReleaseRelation(Relation relation)
 
 		if(record->ownsForm) {
 			// for all relations except a few "core" relations
-			IFactRelease(record->relation.termForm);
+			IFactRelease(record->relation.form);
 		}
 		RelationRecord key = {.relation = record->relation};
 		BTreeDelete(relationRegistry, &key, 0);
@@ -259,6 +264,7 @@ Atom RelationGetPredicateForm(Relation relation)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
+	ASSERT(record->predicateForm.hash)
 	return record->predicateForm;
 }
 
@@ -271,9 +277,9 @@ bool RelationExists(Relation relation)
 int8 CompareRelations(Relation relation, Relation relationOrKey)
 {
 	// First compare forms
-	if(relation.termForm.hash < relationOrKey.termForm.hash)
+	if(relation.form.hash < relationOrKey.form.hash)
 		return -1;
-	else if(relation.termForm.hash > relationOrKey.termForm.hash)
+	else if(relation.form.hash > relationOrKey.form.hash)
 		return 1;
 	else {
 		// then compare atom types
@@ -286,14 +292,14 @@ int8 CompareRelations(Relation relation, Relation relationOrKey)
 
 bool SameRelations(Relation relation1, Relation relation2)
 {
-	return SameAtoms(relation1.termForm, relation2.termForm) &&
+	return SameAtoms(relation1.form, relation2.form) &&
 		SameTypeSignatures(relation1.typeSignature, relation2.typeSignature);
 }
 
 
 bool IsNullRelation(Relation relation)
 {
-	return relation.termForm.hash == 0;
+	return relation.form.hash == 0;
 }
 
 
@@ -304,7 +310,7 @@ void RelationReleaseTermForm(Relation relation)
 	ASSERT(record->ownsForm)
 	// Clear the flag first, as IFactRelease() may retract tuples from this relation
 	record->ownsForm = false;
-	IFactRelease(record->relation.termForm);
+	IFactRelease(record->relation.form);
 }
 
 
@@ -312,7 +318,7 @@ data64 RelationHash(Relation relation, data64 initialHash)
 {
 	data64 hash = initialHash;
 	// hash the form and types
-	hash = DJB2DoubleHashAdd(&relation.termForm.hash, sizeof(data64), initialHash);
+	hash = DJB2DoubleHashAdd(&relation.form.hash, sizeof(data64), initialHash);
 	hash = DJB2DoubleHashAdd(&relation.typeSignature.atomTypes, RELATION_MAX_ARITY, hash);
 	return hash;
 }
@@ -330,7 +336,7 @@ Relation RelationFromFact(FormulaView term)
 			typeSignature.atomTypes[i] = AT_ID;
 	}
 
-	return (Relation) {.termForm = term.form, .typeSignature = typeSignature};
+	return (Relation) {.form = term.form, .typeSignature = typeSignature};
 }
 
 
@@ -367,7 +373,7 @@ void RelationRegistryIterate(Atom form, RelationIterator * iterator)
 bool RelationIteratorNext(RelationIterator * iterator)
 {
 	// A key without type signature matches every relation for the term form
-	RelationRecord key = { .relation = { .termForm = iterator->form }};
+	RelationRecord key = { .relation = { .form = iterator->form }};
 	bool foundItem;
 	if(BTreeIteratorBeforeFirst(&(iterator->btreeIterator)))
 		foundItem = BTreeIteratorSeek(&(iterator->btreeIterator), &key);
@@ -392,4 +398,10 @@ Relation RelationIteratorGet(RelationIterator const * iterator)
 void RelationIteratorEnd(RelationIterator * iterator)
 {
 	BTreeIteratorEnd(&(iterator->btreeIterator));
+}
+
+
+bool IsRelationForm(Atom form)
+{
+	return IsTermForm(form) || IsConjunctionForm(form);
 }

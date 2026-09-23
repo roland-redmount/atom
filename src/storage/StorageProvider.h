@@ -20,7 +20,7 @@ typedef struct s_RelationReaderSpec
 {
 	// The reader's IO signature, w.r.t the provider's argument order.
 	// The provider is not aware of the canonical argument order, which is
-	// determined by Relation.termForm. 
+	// determined by Relation.form
 	IOSignature ioSignature;
 	// Any reader-specific data, owned by the reader
 	void * readerData;

@@ -65,7 +65,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 	// find existing relation table, or create new
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	Relation relation = {.termForm = fact.form, .typeSignature = typeSignature};
+	Relation relation = {.form = fact.form, .typeSignature = typeSignature};
 	TupleStore * store = 0;
 	if(RelationExists(relation))
 	 	store = RelationGetTupleStore(relation);
@@ -152,7 +152,7 @@ void RetractFact(FormulaView fact)
 
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	Relation relation = {.termForm = fact.form, .typeSignature = typeSignature};
+	Relation relation = {.form = fact.form, .typeSignature = typeSignature};
 	TupleStore * store = RelationGetTupleStore(relation);
 	if(!store) {
 		// The relation has no stored tuples
@@ -241,7 +241,7 @@ static bool collectTermIFactTuples(
 	if(!hasGenerator)
 		return false;
 
-	ifactTuple.relation = (Relation) {.termForm = termForm, .typeSignature = termSignature};
+	ifactTuple.relation = (Relation) {.form = termForm, .typeSignature = termSignature};
 	ResizingArrayAppend(ifactTupleArray, &ifactTuple);
 
 	if(termActorIndex)

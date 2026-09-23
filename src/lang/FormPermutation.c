@@ -241,10 +241,13 @@ static void getClausePermutation(ClauseIterator const * iter, index8 * tuplePerm
 		for(index8 j = 0; j < multiplicity; j++) {
 			// get permuted predicate index from predicate iterator
 			index8 jperm = iter->predFormPerm[i]->order[j];
+			// CLAUDE: The actors of term j are taken from the actors of term jperm. Using
+			// the offset of term jperm for both would yield the identity for every order.
+			index8 termSlotOffset = termOffset + j * termArity;
 			index8 predOffset = termOffset + jperm * termArity;
 			getPredicatePermutation(
 				iter->predIter[i][jperm],
-				&tuplePerm[predOffset],
+				&tuplePerm[termSlotOffset],
 				offset + predOffset
 			);
 		}
