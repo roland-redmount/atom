@@ -1962,10 +1962,9 @@ static void printOperatorRecursive(
 		PrintChar(' ');
 
 	if((depth > 0) && !IsNullRelation(op->relation)) {
-		// operator is the head of another service; print its term form and end recursion
+		// The operator is the head of another service; print its term form and end recursion
 		// An operator taking one argument per column is printed as a formula,
-		// such as (+ @1 + 1 = @2). A parameter is printed by its number only.
-		// CLAUDE: The direction of a parameter is also printed, as @1<
+		// such as (+ <@1 + 1 = @2>).
 		size8 arity = TermFormArity(op->relation.termForm);
 		if(op->nArguments == arity) {
 			TypedTuple * actors = CreateTypedTuple(arity);
