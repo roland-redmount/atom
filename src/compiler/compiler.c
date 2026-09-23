@@ -547,10 +547,10 @@ static Operator * compileConjunctionRecursive(
 	 * Find a term that can be compiled, in three passes over the term forms of the clause:
 	 * 
 	 * pass = 0: only terms that dispatch to an existing service are considered.
-	 * pass = 1: we attempt to compile terms recursively, given the current rule dictionary.
+	 * pass = 1: we attempt to compile terms given the current rule dictionary.
 	 * pass = 2: recursive terms are compiled to a RECURSE operator, provided that the
 	 *         query-matched term has fully determined types.
-	 * 
+
 	 */
 	for(index8 pass = 0; !op && (pass < 3); pass++) {
 		// We attempt to compile terms (recursively) only in the second pass.

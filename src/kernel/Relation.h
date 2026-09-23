@@ -12,7 +12,6 @@
 #ifndef RELATION_H
 #define RELATION_H
 
-// #include "kernel/ServiceRegistry.h"
 #include "btree/btree.h"
 #include "lang/Atom.h"
 #include "lang/formula.h"
