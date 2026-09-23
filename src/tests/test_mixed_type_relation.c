@@ -1,4 +1,5 @@
 
+#include "compiler/compiler.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/MixedTypeRelation.h"
@@ -100,6 +101,9 @@ void testConcatRepeatedVariable(void)
 	SetupEdgeFixture(&edgeFixture);
 	Atom query = CStringToTerm("edge e from x to x");
 
+	// CLAUDE: The edge relation registers no service repeating a parameter, so a service
+	// for the query must be compiled before the relation can read it
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(query), 0), 1)
 	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetView(query));
 	size32 nTuples = 0;
 	while(MixedTypeRelationNext(relation)) {
@@ -229,8 +233,10 @@ void testConcatServiceCount(void)
 
 	// those same services are read for this query, whose repeated variable drops
 	// every tuple they yield
+	// CLAUDE: A position is never a letter, so no service can repeat a parameter at the
+	// position and the element, and no service answers this query
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("list \"ab\" position x element x"), 0)
-	ASSERT_UINT32_EQUAL(countQueryServices("list \"ab\" position x element x"), 2)
+	ASSERT_UINT32_EQUAL(countQueryServices("list \"ab\" position x element x"), 0)
 
 	// no service answers this form at all
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("nowhere x nothing y"), 0)

@@ -27,12 +27,19 @@ typedef struct s_CompiledVariant {
 /**
  * Extract the type signature of a compiled variant, from the resolved parameters.
  */
-TypeSignature CompiledVariantGetTypeSignature(CompiledVariant const * variant);
+TypeSignature CompiledVariantGetTypeSignature(CompiledVariant const * variant, size8 arity);
 
 /**
  * Extract the IO signature of a compiled variant, from the resolved parameters.
  */
-IOSignature CompiledVariantGetIOSignature(CompiledVariant const * variant);
+IOSignature CompiledVariantGetIOSignature(CompiledVariant const * variant, size8 arity);
+
+/**
+ * CLAUDE: Extract the equality signature of a compiled variant, from the resolved parameters.
+ * The arity is the number of resolved parameters, which is the arity of the query; the
+ * operator of the variant takes one argument per distinct parameter.
+ */
+EqualitySignature CompiledVariantGetEqualitySignature(CompiledVariant const * variant, size8 arity);
 
 /**
  * Find a compiled variant in the given array whose signature matches the given parameters.

@@ -371,6 +371,145 @@ void testCompileConstrain(void)
 
 
 /**
+ * CLAUDE: The query (edge e from x to x) repeats the variable x. With no rule for the edge
+ * relation, the query compiles to a CONSTRAIN operator over the edge relation. The service
+ * repeats the parameter of x, and its operator takes one argument per distinct parameter.
+ * Invalidating the edge term form removes the service again.
+ */
+void testCompileRepeatedQueryParameter(void)
+{
+	SetupEdgeFixture(&edgeFixture);
+	Atom queryTerm = CStringToTerm("edge e from x to x");
+
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	ASSERT_TRUE(HasRepeatedParameters(services[0].equalitySignature))
+	Operator * op = ServiceGetOperator(services[0]);
+	ASSERT_UINT32_EQUAL(op->type, OPERATOR_CONSTRAIN)
+	ASSERT_UINT32_EQUAL(op->nArguments, 2)
+
+	// The self edges are eq (a to a) and er (b to b)
+	Atom arguments[2];
+	void * context = OperatorCreateContext(op, arguments);
+	size32 nTuples = 0;
+	while(OperatorCall(context))
+		nTuples++;
+	OperatorFreeContext(context);
+	ASSERT_UINT32_EQUAL(nTuples, 2)
+
+	// Asking again dispatches to the compiled service
+	Service service;
+	index8 permutation[3];
+	ASSERT_INT32_EQUAL(DispatchQueryFormula(queryTerm, &service, permutation), DISPATCH_FOUND)
+	ASSERT_TRUE(SameServices(service, services[0]))
+
+	ASSERT_UINT32_EQUAL(InvalidateTermFormServices(FormulaGetForm(queryTerm), INVALIDATE_BY_RULE), 1)
+	ASSERT_NULL(ServiceGetOperator(services[0]))
+
+	ReleaseFormula(queryTerm);
+	TeardownRelationFixture(&edgeFixture);
+}
+
+
+/**
+ * CLAUDE: A query repeating a variable is compiled from a rule with the repeated
+ * parameter in the rule body. Here the query (twostep x to x) asks for the nodes with a
+ * walk of two edges back to themselves. The parameter of x is provided by the first edge
+ * term, and constrains the second edge term through the JOIN operator.
+ */
+void testCompileRepeatedQueryParameterRule(void)
+{
+	SetupEdgeFixture(&edgeFixture);
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"twostep x to z | ! edge d from x to y | ! edge f from y to z");
+	Atom queryTerm = CStringToTerm("twostep x to x");
+
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	ASSERT_TRUE(HasRepeatedParameters(services[0].equalitySignature))
+	Operator * op = ServiceGetOperator(services[0]);
+	ASSERT_UINT32_EQUAL(op->nArguments, 1)
+
+	// Only a (a to a to a) and b (b to b to b) have such a walk
+	Atom nodeA = CreateStringFromCString("a");
+	Atom nodeB = CreateStringFromCString("b");
+	bool foundA = false;
+	bool foundB = false;
+	size32 nTuples = 0;
+	Atom arguments[1] = {(Atom) {0}};
+	void * context = OperatorCreateContext(op, arguments);
+	while(OperatorCall(context)) {
+		foundA = foundA || SameAtoms(arguments[0], nodeA);
+		foundB = foundB || SameAtoms(arguments[0], nodeB);
+		nTuples++;
+	}
+	OperatorFreeContext(context);
+	ASSERT_UINT32_EQUAL(nTuples, 2)
+	ASSERT_TRUE(foundA)
+	ASSERT_TRUE(foundB)
+
+	IFactRelease(nodeA);
+	IFactRelease(nodeB);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+	TeardownRelationFixture(&edgeFixture);
+}
+
+
+/**
+ * CLAUDE: A query repeating a variable over a relation with stored facts and a recursive
+ * rule. The query (sym x with x) under the rule (sym x with y <- sym y with x) has the
+ * recursive term (sym x with x), which repeats the parameter the query repeats, and so
+ * compiles to a RECURSE operator reading the relation being derived. The stored facts
+ * are read through a CONSTRAIN operator, and the stored diagonal facts a and c are the
+ * answers.
+ */
+void testCompileRepeatedQueryParameterRecursive(void)
+{
+	char const * storedFacts[3] = {"sym \"a\" with \"a\"", "sym \"a\" with \"b\"", "sym \"c\" with \"c\""};
+	Atom firstFact = CStringToTerm(storedFacts[0]);
+	Relation relation = RelationFromFact(FormulaGetView(firstFact));
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	for(index8 i = 0; i < 3; i++) {
+		Atom fact = CStringToTerm(storedFacts[i]);
+		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+		ReleaseFormula(fact);
+	}
+	DictionaryEntry entry = DictionaryAddClauseFromCString("sym x with y | ! sym y with x");
+	size32 nServicesBefore = NumberOfServices();
+
+	Atom queryTerm = CStringToTerm("sym x with x");
+	Service services[MAX_COMPILED_VARIANTS];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 1)
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore + 1)
+	Operator * op = ServiceGetOperator(services[0]);
+	ASSERT_UINT32_EQUAL(op->type, OPERATOR_FIXPOINT)
+	ASSERT_UINT32_EQUAL(op->nArguments, 1)
+
+	Atom arguments[1] = {(Atom) {0}};
+	void * context = OperatorCreateContext(op, arguments);
+	size32 nTuples = 0;
+	while(OperatorCall(context))
+		nTuples++;
+	OperatorFreeContext(context);
+	ASSERT_UINT32_EQUAL(nTuples, 2)
+
+	RemoveService(services[0]);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+	for(index8 i = 0; i < 3; i++) {
+		Atom fact = CStringToTerm(storedFacts[i]);
+		RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+		ReleaseFormula(fact);
+	}
+	DropRelation(relation);
+	ReleaseFormula(firstFact);
+}
+
+
+/**
  * Compile the query term (number 4 faculty f) under the recursive rule
  * 
  *  number n faculty f <- < n > 0 & + m + 1 = n & number m faculty e & * e * n = f
@@ -457,10 +596,15 @@ void testCompileRecursiveQueryAllOutput(void)
 	size32 nServicesBefore = NumberOfServices();
 
 	// The all-output query compiles to nothing, and must not exhaust the choice points
+	// CLAUDE: The query now compiles to one service. The recursive term provides n
+	// through (+ m + 1 = n), and n is then an input of (< n > 0). The service derives
+	// every factorial, and so never terminates; it must not be called. The service
+	// replaces the stored all-output service, so the number of services is unchanged.
 	Atom queryTerm = CStringToTerm("number n faculty f");
 	Service services[MAX_COMPILED_VARIANTS];
-	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 0)
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 1)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)
+	RemoveService(services[0]);
 
 	ReleaseFormula(queryTerm);
 	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
@@ -1373,6 +1517,9 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileUnion);
 	ExecuteTest(testCompileUnconstrainedHeadVariable);
 	ExecuteTest(testCompileConstrain);
+	ExecuteTest(testCompileRepeatedQueryParameter);
+	ExecuteTest(testCompileRepeatedQueryParameterRule);
+	ExecuteTest(testCompileRepeatedQueryParameterRecursive);
 
 	ExecuteTest(testCompileRecursiveJoin1);
 	ExecuteTest(testCompileRecursiveReachable);

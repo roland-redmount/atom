@@ -23,7 +23,8 @@ bool CompileStackContainsTerm(CompileStack const * stack, ParameterizedQuery con
 		if(!SameAtoms(stack->queries[i].termForm, query->termForm))
 			continue;
 		ASSERT(stack->queries[i].arity == query->arity)
-		if(SameParameterSignature(stack->queries[i].parameters, query->parameters, query->arity))
+		if(SameParameterSignature(stack->queries[i].parameters, query->parameters, query->arity)
+			&& SameParameterRepeats(stack->queries[i].parameters, query->parameters, query->arity))
 			return true;
 	}
 	return false;

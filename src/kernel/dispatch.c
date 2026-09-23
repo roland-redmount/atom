@@ -34,7 +34,7 @@ bool DispatchParameterIOMatch(byte queryIO, byte serviceIO, int matchMode)
 {
 	if(queryIO == serviceIO)
 		return true;
-	return (matchMode == DISPATCH_MATCH_RELAXED) && (serviceIO == PARAMETER_OUT);
+	return (matchMode & DISPATCH_MATCH_RELAXED) && (serviceIO == PARAMETER_OUT);
 }
 
 
@@ -52,9 +52,13 @@ bool DispatchParameterIOMatch(byte queryIO, byte serviceIO, int matchMode)
  * Returns true if the query matches.
  */
 static bool signatureQueryTupleMatch(
-	TypeSignature typeSignature, IOSignature ioSignature, Atom const queryParameters[],
-	size8 nParameters, int matchMode, index8 const permutation[])
+	TypeSignature typeSignature, IOSignature ioSignature, EqualitySignature equalitySignature,
+	Atom const queryParameters[], size8 nParameters, int matchMode, index8 const permutation[])
 {
+	// CLAUDE: The service argument taken by each column, to compare repeated parameters
+	index8 serviceArgumentMap[nParameters];
+	EqualitySignatureGetArgumentMap(equalitySignature, nParameters, serviceArgumentMap);
+
 	// iterate over query parameters
 	for(index8 i = 0; i < nParameters; i++) {
 		Atom queryParameter = queryParameters[permutation[i]];
@@ -72,6 +76,18 @@ static bool signatureQueryTupleMatch(
 		for(index8 j = 0; j < i; j++) {
 			if((queryParameters[permutation[j]].parameter.number == queryParameter.parameter.number)
 				&& (typeSignature.atomTypes[j] != serviceParameterType))
+				return false;
+		}
+		// CLAUDE: A service repeating a parameter the query does not repeat never matches.
+		// A query repeating a parameter the service does not repeat matches only with
+		// DISPATCH_RELAX_EQUALITY.
+		for(index8 j = 0; j < i; j++) {
+			bool queryRepeats =
+				(queryParameters[permutation[j]].parameter.number == queryParameter.parameter.number);
+			bool serviceRepeats = (serviceArgumentMap[j] == serviceArgumentMap[i]);
+			if(serviceRepeats && !queryRepeats)
+				return false;
+			if(queryRepeats && !serviceRepeats && !(matchMode & DISPATCH_RELAX_EQUALITY))
 				return false;
 		}
 	}
@@ -93,8 +109,8 @@ static bool permutationMatch(
 	do {
 		GetTuplePermutation(iter, permutation);
 		if(signatureQueryTupleMatch(
-			service.relation.typeSignature, service.ioSignature, queryParameters, nParameters, matchMode,
-			permutation))
+			service.relation.typeSignature, service.ioSignature, service.equalitySignature,
+			queryParameters, nParameters, matchMode, permutation))
 		{
 			match = true;
 			break;

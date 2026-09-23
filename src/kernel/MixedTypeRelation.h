@@ -50,10 +50,9 @@ typedef struct s_MixedTypeRelation {
 			TypedTuple const * queryActors;
 			// Store a copy of the parameterized query
 			ParameterizedQuery parameterizedQuery;
-			// Index of the first query actor denoting the same variable as query actor i,
-			// or just i when actor[i] is not a variable. Used to filter on equality constraints.
-			// Set to 0 when the query actors contain no repeated variables (the common case)
-			index8 * variableMap;
+			// CLAUDE: The argument of the current service taken by each column; see
+			// EqualitySignatureGetArgumentMap()
+			index8 argumentMap[RELATION_MAX_ARITY];
 			// The arguments tuple the current service is called with, and the argument
 			// permutation matching it, both in service parameter order
 			Atom * arguments;

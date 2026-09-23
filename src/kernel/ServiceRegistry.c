@@ -4,6 +4,7 @@
 #include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
+#include "lang/TermForm.h"
 #include "lang/TypedAtom.h"
 #include "lang/formula.h"
 #include "memory/allocator.h"
@@ -35,8 +36,16 @@ static int8 compareServices(Service const * service, Service const * serviceOrKe
 		// then compare IO signatures; a zeroed signature for the key matches any IO
 		if(!serviceOrKey->ioSignature.parameterIO[0])
 			return 0;
-		return CompareMemory(
+		int8 ioOrder = CompareMemory(
 			service->ioSignature.parameterIO, serviceOrKey->ioSignature.parameterIO,
+			RELATION_MAX_ARITY
+		);
+		if(ioOrder != 0)
+			return ioOrder;
+		// CLAUDE: then compare equality signatures, in reverse so that a service with
+		// repeated parameters comes before the service of the same IO without them
+		return CompareMemory(
+			serviceOrKey->equalitySignature.repeatOf, service->equalitySignature.repeatOf,
 			RELATION_MAX_ARITY
 		);
 	}
@@ -477,13 +486,17 @@ void PrintService(Service service)
 
 	// Reconstruct a parameter tuple from the IO signature
 	// NOTE: could be moved to Parameter.c
-	TypedTuple * parameters = CreateTypedTuple(op->nArguments);
-	for(index8 i = 0; i < op->nArguments; i++) {
+	// CLAUDE: The tuple has one parameter per column, numbered by the argument it takes
+	size8 nColumns = TermFormArity(service.relation.termForm);
+	index8 argumentMap[nColumns];
+	EqualitySignatureGetArgumentMap(service.equalitySignature, nColumns, argumentMap);
+	TypedTuple * parameters = CreateTypedTuple(nColumns);
+	for(index8 i = 0; i < nColumns; i++) {
 		TypedAtom parameter = CreateTypedAtom(
 			AT_PARAMETER,
 			(Atom) {
 				.parameter = {
-					.number = i + 1,
+					.number = argumentMap[i] + 1,
 					.atomType =	service.relation.typeSignature.atomTypes[i],
 					.io = service.ioSignature.parameterIO[i]
 				}
@@ -519,6 +532,9 @@ void RelationDump(Relation relation)
 	ServiceRegistryIterate(relation, &iterator);
 	while(ServiceIteratorNext(&iterator)) {
 		ServiceRecord const * candidate = ServiceIteratorPeekRecord(&iterator);
+		// CLAUDE: a service with repeated parameters yields only some of the tuples
+		if(HasRepeatedParameters(candidate->service.equalitySignature))
+			continue;
 		if(!signatureHasInputParameter(candidate->service.ioSignature, candidate->op->nArguments)) {
 			record = *candidate;
 			break;

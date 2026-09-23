@@ -51,6 +51,9 @@ void testDispatchToService(void)
  * The tuples such a service yields are more than the query asked for, and the caller
  * filters them; see MixedTypeRelation.h.
  */
+/* CLAUDE: A repeated variable now yields a repeated parameter, which only matches a service
+ * repeating the same parameter; see EqualitySignature. No such service is registered for
+ * the (list position element) form, so the query with a repeated variable does not dispatch. */
 void testDispatchRepeatedVariable(void)
 {
 	Service service;
@@ -59,7 +62,7 @@ void testDispatchRepeatedVariable(void)
 	// A position is never a letter, so no atom satisfies this query, and it dispatches
 	// to the (list <ID position >INT element >LETTER) service all the same
 	Atom query = CStringToTerm("list \"ab\" position x element x");
-	ASSERT_INT32_EQUAL(DispatchQueryFormula(query, &service, permutation), DISPATCH_FOUND)
+	ASSERT_INT32_EQUAL(DispatchQueryFormula(query, &service, permutation), DISPATCH_NOT_FOUND)
 	ReleaseFormula(query);
 
 	// Distinct variables at those same positions match the same service
@@ -109,8 +112,46 @@ void testDispatchRepeatedParameter(void)
 			&parameterizedQuery, DISPATCH_MATCH_EXACT, &service, permutation, 0, 0, 0),
 		DISPATCH_NOT_FOUND
 	)
+	// CLAUDE: The service repeats no parameter, so it matches the repeated parameter only
+	// with DISPATCH_RELAX_EQUALITY, and not even then, since the types differ
+	ASSERT_INT32_EQUAL(
+		DispatchParameterizedQuery(
+			&parameterizedQuery, DISPATCH_RELAX_EQUALITY, &service, permutation, 0, 0, 0),
+		DISPATCH_NOT_FOUND
+	)
 
 	ReleaseFormula(query);
+}
+
+
+/**
+ * CLAUDE: A query repeating a variable matches a service repeating no parameter only with
+ * DISPATCH_RELAX_EQUALITY, which leaves the caller to constrain the repeated arguments.
+ */
+void testDispatchRelaxEquality(void)
+{
+	RelationFixture edgeFixture;
+	SetupEdgeFixture(&edgeFixture);
+	Atom query = CStringToTerm("edge e from x to x");
+	ParameterizedQuery parameterizedQuery;
+	ParameterizeQuery(FormulaGetView(query), &parameterizedQuery);
+	Service service;
+	index8 permutation[parameterizedQuery.arity];
+
+	ASSERT_INT32_EQUAL(
+		DispatchParameterizedQuery(
+			&parameterizedQuery, DISPATCH_MATCH_EXACT, &service, permutation, 0, 0, 0),
+		DISPATCH_NOT_FOUND
+	)
+	ASSERT_INT32_EQUAL(
+		DispatchParameterizedQuery(
+			&parameterizedQuery, DISPATCH_RELAX_EQUALITY, &service, permutation, 0, 0, 0),
+		DISPATCH_FOUND
+	)
+	ASSERT_FALSE(HasRepeatedParameters(service.equalitySignature))
+
+	ReleaseFormula(query);
+	TeardownRelationFixture(&edgeFixture);
 }
 
 
@@ -310,6 +351,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testDispatchToService);
 	ExecuteTest(testDispatchRepeatedVariable);
 	ExecuteTest(testDispatchRepeatedParameter);
+	ExecuteTest(testDispatchRelaxEquality);
 	ExecuteTest(testDispatchNegatedTerm);
 	ExecuteTest(testDispatchIterator);
 	ExecuteTest(testDispatchFilterable);
