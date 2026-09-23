@@ -668,11 +668,18 @@ static Operator * compileConjunctionRecursive(
 	/**
 	 * Find a term that can be compiled, in three passes over the term forms of the clause:
 	 * 
-	 * pass = 0: only terms that dispatch to an existing service are considered.
-	 * pass = 1: we attempt to compile terms given the current rule dictionary.
-	 * pass = 2: recursive terms are compiled to a RECURSE operator, provided that the
-	 *         query-matched term has fully determined types.
-
+	 * pass = 0: Only terms that dispatch to an existing service are considered.
+	 * pass = 1: Terms that do not dispatch to an existing service are compiled,
+	 *           but recursive terms are not compiled.
+	 * pass = 2: Only recursive terms are compiled, producing a RECURSE operator,
+	 *           provided that all their types have been determined.
+	 * 
+	 * The 3 passes serve to prioritize the candidate terms, so that in each call to 
+	 * compileConjunctionRecursive() we prefer terms in pass 0 over those in pass 1,
+	 * and those in pass 1 over those in pass 2. This is a heuristic scheme aiming to
+	 * obtain a more efficient operator graph: we want to determine local parameters
+	 * as early as possible, to avoid generating calls to table-scanning operators which
+	 * then have to be filtered. It will not always yield the optimal solution.
 	 */
 	for(index8 pass = 0; !op && (pass < 3); pass++) {
 		// We attempt to compile terms (recursively) only in the second pass.
@@ -694,8 +701,8 @@ static Operator * compileConjunctionRecursive(
 				TermFormGetPredicateForm(termForm),
 				!TermFormGetSign(termForm)
 			);
-			// A term of the query's own form is recursive. Process these only in the third pass,
-			// and only if the query is fully typed.
+			// A term of the query's own form _may_ be recursive.
+			// A term of a different form is not recursive, and is skipped in pass 2
 			bool isRecursiveForm = SameAtoms(negatedTermForm, clauseState->queryTermForm);
 			if(!isRecursiveForm && (pass == 2)) {
 				termIndex += em.multiple;
@@ -710,10 +717,11 @@ static Operator * compileConjunctionRecursive(
 					continue;
 				// Extract term actors
 				TypedTupleCopyAt(clauseState->clauseActors, clauseState->termActorsIndices[termIndex], termActors);
-				// CLAUDE: A term of the query's own form is recursive only if it repeats
+				// A term of the same form as the query is recursive only if it repeats
 				// the parameters the query repeats; see termRepeatsQueryParameters()
 				bool isRecursiveTerm =
 					isRecursiveForm && termRepeatsQueryParameters(clauseState, termActors);
+				// Compile a recursive term only in pass 2, and only if the queryParameters are set
 				if((isRecursiveTerm != (pass == 2)) || (isRecursiveTerm && !clauseState->queryParameters))
 					continue;
 #ifdef DEBUG_COMPILER

@@ -169,6 +169,9 @@ typedef struct s_OperatorContext OperatorContext;
 	OPERATOR_MACHINE = 10,
 };
 
+#define N_OPERATOR_TYPES 10
+
+
 struct s_Operator {
 	enum OperatorType type;
 	// Number of arguments for this operator
@@ -507,8 +510,11 @@ bool OperatorCallOnce(Operator const * op, Atom arguments[]);
 
 /**
  * Print operator information.
+ * The parameters array holds one AT_PARAMETER atom per operator argument. Each
+ * operator of the tree is printed with the arguments it is called with, as in
+ * "JOIN(@1 @2 @3)", mapped from the given parameters as when the operators are called.
  */
-void PrintOperator(Operator const * op);
+void PrintOperator(Operator const * op, Atom const parameters[]);
 
 
 #endif	// OPERATOR_H

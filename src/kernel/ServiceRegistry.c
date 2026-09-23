@@ -505,9 +505,13 @@ void PrintService(Service service)
 		TypedTupleSetElement(parameters, i, parameter);
 	}
 	PrintFormActorsAsFormula(service.relation.termForm, parameters);
+	// CLAUDE: The operator takes one argument per distinct parameter
+	Atom operatorParameters[op->nArguments];
+	for(index8 i = 0; i < nColumns; i++)
+		operatorParameters[argumentMap[i]] = TypedTupleGetAtom(parameters, i);
 	FreeTypedTuple(parameters);
 	PrintCString(" => ");
-	PrintOperator(op);
+	PrintOperator(op, operatorParameters);
 }
 
 
