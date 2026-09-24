@@ -2,6 +2,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
+#include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
 #include "lang/formula.h"
 #include "lang/name.h"
@@ -307,19 +308,6 @@ Atom TermGetRoleActor(Atom termForm, Atom const termActors[], const char * role,
 }
 
 
-/**
- * Returhs true if the formulas array contains repeated formula atoms.
- */
-static bool FormulasRepeat(Atom const formulas[], size8 nFormulas)
-{
-	for(index8 i = 1; i < nFormulas; i++)
-		for(index8 j = 0; j < i; j++)
-			if(SameAtoms(formulas[i], formulas[j]))
-				return true;
-	return false;
-}
-
-
 /* CLAUDE: Create a clause or a conjunction from its terms. The two differ only
    in the form they build, so createForm is CreateClauseForm or CreateConjunctionForm. */
 static Atom createTermMultiset(
@@ -328,7 +316,7 @@ static Atom createTermMultiset(
 	// a term multiset without terms is meaningless, and would give zero length arrays below
 	ASSERT(nTerms > 0);
 	// All terms must be unique
-	ASSERT(!FormulasRepeat(terms, nTerms))
+	ASSERT(!TupleContainsDuplicates(terms, nTerms))
 
 	// Take a view of every term before building the form, so that the terms
 	// are read with one registry lookup each
@@ -436,27 +424,6 @@ index8 ClauseGetTermActorsIndex(Atom clauseForm, Atom termForm, uint8 m)
 	size8 termArity = FormArity(termForm);
 	index += (m - 1) * termArity;
 	return index;
-}
-
-
-void ClauseGetTermActorsIndices(Atom clauseForm, index8 termActorsIndices[])
-{
-	// iterate over terms in the clause and compute indices
-	MultisetIterator iterator;
-	MultisetIterate(clauseForm, AT_ID, &iterator);
-
-	index8 k = 0;
-	termActorsIndices[k] = 0;
-	ElementMultiple elementMultiple;
-	while(MultisetIteratorNext(&iterator)) {
-		elementMultiple = MultisetIteratorGetElement(&iterator);
-		size8 termArity = TermFormArity(elementMultiple.element);
-		for(index8 i = 0; i < elementMultiple.multiple; i++) {
-			termActorsIndices[k + 1] = termActorsIndices[k] + termArity;
-			k++;
-		}
-	}
-	MultisetIteratorEnd(&iterator);
 }
 
 

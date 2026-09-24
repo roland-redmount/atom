@@ -22,6 +22,8 @@
 #include "parser/TermBuilder.h"
 #include "testing/fixtures.h"
 #include "testing/testing.h"
+#include "ui/query.h"
+#include "util/sort.h"
 
 
 /**
@@ -540,6 +542,59 @@ void testCompileConjunctionQuery(void)
 
 	ReleaseFormula(query);
 	TeardownRelationFixture(&edgeFixture);
+}
+
+
+/**
+ * CLAUDE: A query may match a primitive service only under a permutation of the roles of
+ * its form. The query (+ x + 3 = 5) matches the service (+ @1<INT + @2>INT = @3<INT) only
+ * with its two + roles swapped. The rule (+ x + y = z <- plus x and y is z) makes the
+ * primitive services of the (+ + =) form stale, so the query is compiled, and
+ * seedVariantsFromServices() seeds a variant from the service under that permutation;
+ * see the TODO there. The query should yield x = 2 from the primitive service, and x = 7
+ * from the rule and the stored fact (plus 7 and 3 is 5).
+ */
+void testCompileSeedPermutation(void)
+{
+	Atom storedFact = CStringToTerm("plus 7 and 3 is 5");
+	Relation relation = RelationFromFact(FormulaGetView(storedFact));
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 3, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+	DictionaryEntry entry = DictionaryAddClauseFromCString("+ x + y = z | ! plus x and y is z");
+
+	// Dispatch finds the stale primitive service, under a permutation
+	Atom queryTerm = CStringToTerm("+ x + 3 = 5");
+	FormulaView queryView = FormulaGetView(queryTerm);
+	Service service;
+	index8 permutation[3];
+	ASSERT_INT32_EQUAL(DispatchQueryFormula(queryTerm, &service, permutation), DISPATCH_FOUND_STALE)
+	ASSERT_FALSE(IsIdentityPermutation(permutation, 3))
+
+	// The column of x
+	index8 xIndex = 0;
+	while(TypedTupleGetElement(queryView.actors, xIndex).type != AT_VARIABLE)
+		xIndex++;
+
+	bool found2 = false;
+	bool found7 = false;
+	size32 nTuples = 0;
+	MixedTypeRelation * result = UserQuery(queryView);
+	while(MixedTypeRelationNext(result)) {
+		int64 x = TypedTupleGetAtom(MixedTypeRelationPeekTuple(result), xIndex)._int;
+		found2 = found2 || (x == 2);
+		found7 = found7 || (x == 7);
+		nTuples++;
+	}
+	FreeMixedTypeRelation(result);
+	ASSERT_UINT32_EQUAL(nTuples, 2)
+	ASSERT_TRUE(found2)
+	ASSERT_TRUE(found7)
+
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
+	DropRelation(relation);
+	ReleaseFormula(storedFact);
 }
 
 
@@ -1555,6 +1610,9 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileRepeatedQueryParameterRule);
 	ExecuteTest(testCompileRepeatedQueryParameterRecursive);
 	ExecuteTest(testCompileConjunctionQuery);
+	// CLAUDE: Disabled, since the seed permutation is not handled yet: a DEBUG build fails
+	// the ASSERT in seedVariantsFromServices(), and a release build loses the x = 7 answer
+	// ExecuteTest(testCompileSeedPermutation);
 
 	ExecuteTest(testCompileRecursiveJoin1);
 	ExecuteTest(testCompileRecursiveReachable);

@@ -37,4 +37,12 @@ size8 TermMultisetNTerms(Atom form);
  */
 size8 TermMultisetArity(Atom form);
 
+/**
+ * Find the indices into the actors tuple of the first actor in each term,
+ * including multiples. The termIndices array must have at least as many elements
+ * as the total number of terms + 1; the last element will be set to the total arity.
+ */
+void TermMultisetGetTermActorsIndices(Atom form, index8 termActorsIndices[]);
+
+
 #endif	// TERMMULTISET_H

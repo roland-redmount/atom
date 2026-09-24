@@ -44,6 +44,16 @@ bool TupleEqual(Atom const tuple1[], Atom const tuple2[], size8 nAtoms)
 }
 
 
+bool TupleContainsDuplicates(Atom const tuple[], size8 nAtoms)
+{
+	for(index8 i = 1; i < nAtoms; i++)
+		for(index8 j = 0; j < i; j++)
+			if(SameAtoms(tuple[i], tuple[j]))
+				return true;
+	return false;
+}
+
+
 void TupleAcquire(byte const atomTypes[], Atom const tuple[], size8 nAtoms)
 {
 	for(index8 i = 0; i < nAtoms; i++)

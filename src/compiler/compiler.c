@@ -23,6 +23,7 @@
 #include "kernel/tuple.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"
+#include "lang/IndexedFormula.h"
 #include "lang/SubstitutionList.h"
 #include "lang/TermForm.h"
 #include "lang/Variable.h"
@@ -426,6 +427,7 @@ static size8 setupJoinArgumentMaps(
 #define BODY_TERMS_NEGATED		1
 #define BODY_TERMS_AS_GIVEN		2
 
+
 /**
  * The state of compiling one clause into a conjunction of operators, shared by the
  * recursion over its terms. The clause actors and the termExcluded flags are updated as terms
@@ -445,10 +447,7 @@ static size8 setupJoinArgumentMaps(
  * identifies a subset of terms, and their argument positions.
  */
 typedef struct s_ClauseCompileState {
-	Atom clauseForm;
-	TypedTuple * clauseActors;
-	// Index into clauseActors of the first actor of each term, plus one entry for the end
-	index8 const * termActorsIndices;
+	IndexedFormula * indexedClause;
 	uint8 nTerms;
 	// Total number of clause arguments, including the local variables
 	size8 nArguments;
@@ -528,28 +527,30 @@ static void propagateTermParameterTypes(
 		if((clauseState->queryTermIndex != NO_QUERY_TERM)
 			&& (parameterNumber <= clauseState->nQueryArguments)) {
 			// CLAUDE: A repeated query parameter occurs at several columns of the matched term
-			index8 matchedTermEnd = clauseState->termActorsIndices[clauseState->queryTermIndex + 1];
-			for(index8 k = clauseState->termActorsIndices[clauseState->queryTermIndex]; k < matchedTermEnd; k++) {
-				TypedAtom matchedActor = TypedTupleGetElement(clauseState->clauseActors, k);
+			for(index8 k = 0; k < clauseState->queryTermArity; k++) {
+				TypedAtom matchedActor = IndexedFormulaGetTermElement(
+					clauseState->indexedClause, clauseState->queryTermIndex, k);
 				ASSERT(matchedActor.type == AT_PARAMETER)
-				if(matchedActor.atom.parameter.number == parameterNumber)
-					TypedTupleSetAtom(clauseState->clauseActors, k, outputParameter);
+				if(matchedActor.atom.parameter.number == parameterNumber) {
+					IndexedFormulaSetTermAtom(
+						clauseState->indexedClause, clauseState->queryTermIndex, k, outputParameter);
+				}
 			}
 		}
 		// Also set the type of the parameter in the term that compiled
 		// NOTE: not necessary, this term is not used for anything at this point
-		TypedTupleSetAtom(
-			clauseState->clauseActors, clauseState->termActorsIndices[termIndex] + i, outputParameter);
+		IndexedFormulaSetTermAtom(
+			clauseState->indexedClause, termIndex, i, outputParameter);
 
 		// The terms still to compile take the parameter as an input
 		for(index8 j = 0; j < clauseState->nTerms; j++) {
 			if(clauseState->termExcluded[j])
 				continue;
-			index8 termEnd = clauseState->termActorsIndices[j + 1];
-			for(index8 k = clauseState->termActorsIndices[j]; k < termEnd; k++) {
-				TypedAtom actor = TypedTupleGetElement(clauseState->clauseActors, k);
+			index8 termArity = IndexedFormulaTermArity(clauseState->indexedClause, j);
+			for(index8 k = 0; k < termArity; k++) {
+				TypedAtom actor = IndexedFormulaGetTermElement(clauseState->indexedClause, j, k);
 				if(SameTypedAtoms(actor, termActor))
-					TypedTupleSetAtom(clauseState->clauseActors, k, inputParameter);
+					IndexedFormulaSetTermAtom(clauseState->indexedClause, j, k, inputParameter);
 			}
 		}
 	}
@@ -588,15 +589,17 @@ static size8 findInputArguments(
 static bool termRepeatsQueryParameters(
 	ClauseCompileState const * clauseState, TypedTuple const * termActors)
 {
-	index8 matchedTermBegin = clauseState->termActorsIndices[clauseState->queryTermIndex];
-	for(index8 i = 0; i < termActors->nAtoms; i++) {
-		TypedAtom matchedActor = TypedTupleGetElement(clauseState->clauseActors, matchedTermBegin + i);
+	for(index8 i = 0; i < clauseState->queryTermArity; i++) {
+		Atom queryParameter = IndexedFormulaGetTermAtom(
+			clauseState->indexedClause, clauseState->queryTermIndex, i);
 		for(index8 j = 0; j < i; j++) {
-			TypedAtom otherMatchedActor = TypedTupleGetElement(
-				clauseState->clauseActors, matchedTermBegin + j);
-			if((matchedActor.atom.parameter.number == otherMatchedActor.atom.parameter.number)
-				&& !SameTypedAtoms(TypedTupleGetElement(termActors, i), TypedTupleGetElement(termActors, j)))
-				return false;
+			Atom otherQueryParameter = IndexedFormulaGetTermAtom(
+				clauseState->indexedClause, clauseState->queryTermIndex, j);
+			if(queryParameter.parameter.number == otherQueryParameter.parameter.number) {
+				// parameter i repeats in the query term
+				if(!SameTypedAtoms(TypedTupleGetElement(termActors, i), TypedTupleGetElement(termActors, j)))
+					return false;
+			}
 		}
 	}
 	return true;
@@ -629,8 +632,7 @@ static Operator * compileRecursiveTerm(
 	Atom termParameters[termArity];
 	termActorsToParameters(termActors, termParameters);
 	// The query portion of the clause actors. Must be fully typed AT_PARAMETER atoms.
-	Atom const * queryParameterArray = 
-		TypedTuplePeekAtoms(state->clauseActors) + state->termActorsIndices[state->queryTermIndex];
+	Atom const * queryParameterArray = IndexedFormulaPeekAtoms(state->indexedClause, state->queryTermIndex);
 
 	byte atomTypes[termArity];
 	byte parameterIO[termArity];
@@ -690,7 +692,7 @@ static Operator * compileConjunctionRecursive(
 	Operator * op = 0;
 	// Clause arguments provided by the compiled term. A term may refer to the same
 	// clause argument more than once, so it may have more arguments than the clause.
-	index8 termClauseMap[clauseState->clauseActors->nAtoms];
+	index8 termClauseMap[clauseState->indexedClause->actors->nAtoms];
 
 	/**
 	 * Find a term that can be compiled, in three passes over the term forms of the clause:
@@ -713,7 +715,7 @@ static Operator * compileConjunctionRecursive(
 		int termCompileMode = (pass == 1) ? TERM_DISPATCH_OR_COMPILE : TERM_DISPATCH_ONLY;
 		// Iterate over term forms in the clause form
 		MultisetIterator termFormIterator;
-		MultisetIterate(clauseState->clauseForm, AT_ID, &termFormIterator);
+		MultisetIterate(clauseState->indexedClause->form, AT_ID, &termFormIterator);
 		size8 termIndex = 0;
 		while(!op && nTermsExcluded < clauseState->nTerms && MultisetIteratorNext(&termFormIterator)) {
 			ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
@@ -745,7 +747,11 @@ static Operator * compileConjunctionRecursive(
 					continue;
 				// Extract term actors
 				// TODO: this also seems unnecessary
-				TypedTupleCopyAt(clauseState->clauseActors, clauseState->termActorsIndices[termIndex], termActors);
+				TypedTupleCopyAt(
+					clauseState->indexedClause->actors,
+					clauseState->indexedClause->termActorsIndices[termIndex],
+					termActors
+				);
 				// A term of the same form as the query is recursive only if it repeats
 				// the parameters the query repeats; see termRepeatsQueryParameters()
 				bool isRecursiveTerm =
@@ -810,7 +816,7 @@ static Operator * compileConjunctionRecursive(
 
 	if(nTermsExcluded < clauseState->nTerms) {
 		// Recurse on remaining terms.
-		index8 nextClauseMap[clauseState->clauseActors->nAtoms];
+		index8 nextClauseMap[clauseState->indexedClause->actors->nAtoms];
 		Operator * nextOperator = compileConjunctionRecursive(
 			compileStack, clauseState, nTermsExcluded, nextClauseMap);
 		if(nextOperator) {
@@ -855,23 +861,22 @@ static Operator * compileConjunctionRecursive(
  * Returns the number of unique local variables found.
  */
 static size8 parameterizeLocalVariables(
-	TypedTuple * clauseActors, index8 matchedTermIndex, index8 const termActorsIndices[],
-	size8 nQueryArguments)
+	IndexedFormula * indexedClause, index8 matchedTermIndex, size8 nQueryArguments)
 {
 	// CLAUDE: Without a matched term, the range of actors to skip is empty
 	index8 matchedTermBegin = 0;
 	index8 matchedTermEnd = 0;
 	if(matchedTermIndex != NO_QUERY_TERM) {
-		matchedTermBegin = termActorsIndices[matchedTermIndex];
-		matchedTermEnd = termActorsIndices[matchedTermIndex + 1];
+		matchedTermBegin = indexedClause->termActorsIndices[matchedTermIndex];
+		matchedTermEnd = indexedClause->termActorsIndices[matchedTermIndex + 1];
 	}
 	size8 nLocalVariables = 0;
 
-	for(index8 i = 0; i < clauseActors->nAtoms; i++) {
+	for(index8 i = 0; i < indexedClause->actors->nAtoms; i++) {
 		// Skip the actors of the matched term
 		if((i >= matchedTermBegin) && (i < matchedTermEnd))
 			continue;
-		TypedAtom actor = TypedTupleGetElement(clauseActors, i);
+		TypedAtom actor = TypedTupleGetElement(indexedClause->actors, i);
 		if(actor.type != AT_VARIABLE) {
 			// actor is a constant
 			continue;
@@ -889,13 +894,13 @@ static size8 parameterizeLocalVariables(
 			}
 		);
 		// Replace this occurence and of the variable, and any followiing ones
-		TypedTupleSetElement(clauseActors, i, parameter);
-		for(index8 j = i + 1; j < clauseActors->nAtoms; j++) {
+		TypedTupleSetElement(indexedClause->actors, i, parameter);
+		for(index8 j = i + 1; j < indexedClause->actors->nAtoms; j++) {
 			if((j >= matchedTermBegin) && (j < matchedTermEnd))
 				continue;
-			TypedAtom other = TypedTupleGetElement(clauseActors, j);
+			TypedAtom other = TypedTupleGetElement(indexedClause->actors, j);
 			if((other.type == AT_VARIABLE) && SameVariable(other.atom, actor.atom))
-				TypedTupleSetElement(clauseActors, j, parameter);
+				TypedTupleSetElement(indexedClause->actors, j, parameter);
 		}
 	}
 	return nLocalVariables;
@@ -944,14 +949,13 @@ static Operator * permuteToClauseArguments(
 
 
 /**
- * Returns true iff the given tuple contains only fully typed parameters
- * for the elements at [startIndex ... startIndex + nElements - 1]
+ * Returns true iff the term i of an IndexedFormula contains only fully typed parameters
  */
-static bool hasFullyTypedParameters(TypedTuple const * tuple, index8 startIndex, size8 nElements)
+static bool hasFullyTypedParameters(IndexedFormula * indexedFormula, index8 i)
 {
-	ASSERT(startIndex + nElements <= tuple->nAtoms)
-	for(index8 i = startIndex; i < startIndex + nElements; i++) {
-		TypedAtom parameter = TypedTupleGetElement(tuple, i);
+	size8 nElements = IndexedFormulaTermArity(indexedFormula, i);
+	for(index8 j = 0; j < nElements; j++) {
+		TypedAtom parameter = IndexedFormulaGetTermElement(indexedFormula, i, j);
 		if((parameter.type != AT_PARAMETER) || !parameter.atom.parameter.atomType)
 			return false;
 	}
@@ -981,9 +985,11 @@ static Operator * compileConjunction(
 	size8 nQueryArguments, ChoiceTree * choiceTree, int bodyTerms, bool * hasRecurseOperator)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
-	index8 termActorsIndices[clauseNTerms + 1];
-	ClauseGetTermActorsIndices(clauseForm, termActorsIndices);
+	// index8 termActorsIndices[clauseNTerms + 1];
+	// ClauseGetTermActorsIndices(clauseForm, termActorsIndices);
 	// Exclude the match term from the conjunction
+	IndexedFormula * indexedClause = CreateIndexedFormula(clauseForm, clauseActors);
+
 	bool termExcluded[clauseNTerms];
 	for(index8 i = 0; i < clauseNTerms; i++)
 		termExcluded[i] = (i == queryTermIndex);
@@ -992,26 +998,22 @@ static Operator * compileConjunction(
 	// that are not present in the query-matched term. These become additional parameters,
 	// and the conjunction is compiled with this extended arguments tuple.
 	size8 nLocalVariables = parameterizeLocalVariables(
-		clauseActors, queryTermIndex, termActorsIndices, nQueryArguments);
+		indexedClause, queryTermIndex, nQueryArguments);
 
 	// Extract the query parameters, if present. If not, recursive clauses cannot compile.
 	size8 queryTermArity = 0;
 	bool queryParametersKnown = false;
 	// Without a query term there are no query parameters to read a recursive term against
 	if(queryTermIndex != NO_QUERY_TERM) {
-		queryTermArity =
-			termActorsIndices[queryTermIndex + 1] - termActorsIndices[queryTermIndex];
+		queryTermArity = IndexedFormulaTermArity(indexedClause, queryTermIndex);
 		// // NOTE: if we found a non-parameter, we scrap the tuple again ...
-		queryParametersKnown = hasFullyTypedParameters(
-			clauseActors, termActorsIndices[queryTermIndex], queryTermArity);
+		queryParametersKnown = hasFullyTypedParameters(indexedClause, queryTermIndex);
 	}
 
 	// Setup the initial clause state
 	// TODO: this has to be modeled better, way too many fields.
 	ClauseCompileState clauseState = {
-		.clauseForm = clauseForm,
-		.clauseActors = clauseActors,
-		.termActorsIndices = termActorsIndices,
+		.indexedClause = indexedClause,
 		.nTerms = clauseNTerms,
 		.nArguments = nQueryArguments + nLocalVariables,
 
@@ -1032,22 +1034,22 @@ static Operator * compileConjunction(
 	uint8 nTermsExcluded = (queryTermIndex == NO_QUERY_TERM) ? 0 : 1;
 	Operator * op = compileConjunctionRecursive(compileStack, &clauseState, nTermsExcluded, clauseMap);
 	*hasRecurseOperator = clauseState.hasRecurseOperator;
-	if(!op)
-		return 0;	// conjunction could not be compiled
+	if(op) {	
+		// The compiled terms provide the clause arguments in their own order
+		op = permuteToClauseArguments(op, clauseMap, clauseState.nArguments);
 
-	// The compiled terms provide the clause arguments in their own order
-	op = permuteToClauseArguments(op, clauseMap, clauseState.nArguments);
-
-	// Drop the local variable arguments again, and any duplicate tuples this creates.
-	// permuteToClauseArguments() has put the arguments in clause order, so the ones
-	// to keep are the leading query arguments.
-	if(op && nLocalVariables) {
-		index8 keptArguments[nQueryArguments];
-		for(index8 i = 0; i < nQueryArguments; i++)
-			keptArguments[i] = i;
-		Operator * projectOperator = CreateProjectOperator(op, nQueryArguments, keptArguments);
-		op = projectOperator;
+		// Drop the local variable arguments again, and any duplicate tuples this creates.
+		// permuteToClauseArguments() has put the arguments in clause order, so the ones
+		// to keep are the leading query arguments.
+		if(op && nLocalVariables) {
+			index8 keptArguments[nQueryArguments];
+			for(index8 i = 0; i < nQueryArguments; i++)
+				keptArguments[i] = i;
+			Operator * projectOperator = CreateProjectOperator(op, nQueryArguments, keptArguments);
+			op = projectOperator;
+		}
 	}
+	FreeIndexedFormula(indexedClause);
 	return op;
 }
 
@@ -1201,6 +1203,11 @@ static void copyTypedTupleToArray(TypedTuple * sourceTuple, index8 startOffset, 
 }
 
 
+static void negateClause(FormulaView clause, index8 matchedTermIndex)
+{
+
+}
+
 /**
  * Compile every rule (clause) of the matched clause form that unifies with the query.
  * 
@@ -1270,6 +1277,7 @@ static size8 compileClauses(
 					PrintChar('\n');
 #endif
 					bool hasRecurseOperator = false;
+					// TODO:  here we should create the conjunction of negated terms, and give that to compileConjunction() 
 					Operator * conjunctionOp = compileConjunction(
 						compileStack, clauseForm, substClauseActors, matchedTermIndex, query->form,
 						nQueryArguments, &choiceTree, BODY_TERMS_NEGATED, &hasRecurseOperator);

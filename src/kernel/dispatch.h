@@ -95,7 +95,6 @@ DispatchResult DispatchParameterizedQuery(
 	ParameterizedQuery const * query, int matchMode, Service * service, index8 permutation[],
 	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch);
 
-
 /**
  * Test if a service parameter IO direction matches a query parameter IO direction.
  * With matchMode = DISPATCH_MATCH_EXACT, the two must agree; with DISPATCH_MATCH_RELAXED
