@@ -137,7 +137,7 @@ bool HasRepeatedParameters(EqualitySignature equalitySignature)
 
 
 size8 EqualitySignatureGetArgumentMap(
-	EqualitySignature equalitySignature, size8 nColumns, index8 argumentMap[])
+	EqualitySignature equalitySignature, size8 nColumns, index8 * argumentMap)
 {
 	ASSERT(nColumns <= RELATION_MAX_ARITY)
 	size8 nArguments = 0;
@@ -154,7 +154,7 @@ size8 EqualitySignatureGetArgumentMap(
 }
 
 
-size8 ParametersGetArgumentMap(Atom const parameters[], size8 nParameters, index8 argumentMap[])
+size8 ParametersGetArgumentMap(Atom const parameters[], size8 nParameters, index8 * argumentMap)
 {
 	return EqualitySignatureGetArgumentMap(
 		ParametersGetEqualitySignature(parameters, nParameters), nParameters, argumentMap);

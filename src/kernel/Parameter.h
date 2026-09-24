@@ -76,15 +76,19 @@ bool HasRepeatedParameters(EqualitySignature equalitySignature);
  * order of first occurrence. The service (foo @1 bar @2 baz @1) has argumentMap = {0, 1, 0}.
  * The argument map format is used by the CONSTRAIN operator; see CreateConstrainOperator().
  * Returns the number of arguments, which is the same as the number of unique parameters.
+ * 
+ * NOTE: argumentMap is written as a pointer rather than as an array, here and in
+ * ParametersGetArgumentMap(), since callers pass a variable length array, and array syntax
+ * causes an optimized build to read that as a zero length region; see -Wstringop-overflow.
  */
 size8 EqualitySignatureGetArgumentMap(
-	EqualitySignature equalitySignature, size8 nParameters, index8 argumentMap[]);
+	EqualitySignature equalitySignature, size8 nParameters, index8 * argumentMap);
 
 /**
  * Same as EqualitySignatureGetArgumentMap(), for an array of AT_PARAMETER atoms.
  * Parameters with the same number take the same argument.
  */
-size8 ParametersGetArgumentMap(Atom const parameters[], size8 nParameters, index8 argumentMap[]);
+size8 ParametersGetArgumentMap(Atom const parameters[], size8 nParameters, index8 * argumentMap);
 
 /**
  * CLAUDE: Renumber an array of AT_PARAMETER atoms 1, 2, ... in order of first occurrence,
