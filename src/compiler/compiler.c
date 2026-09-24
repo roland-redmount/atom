@@ -431,6 +431,18 @@ static size8 setupJoinArgumentMaps(
  * recursion over its terms. The clause actors and the termExcluded flags are updated as terms
  * compile: an actor is given its atom type once a term providing it has dispatched, and
  * a term is marked excluded once it has been compiled.
+ * 
+ * TODO: I think we should factor out a struct representing only the conjunction being
+ * compiled, without the matched (query; head) term. We should keep a SubstitutionList that records
+ * the updated parameters as they are discovered, and update the query term _after_
+ * the conjunction has compiled.
+ * 
+ * The hitch is the recursive terms: these can only occur in a conjunction that is assocated
+ * with a query term. For 
+ * 
+ * In refactoring this, we should think ahead to a generalized compiler that works with subsets
+ * of terms, we could have a recursive *conjunction*.) We'll need some index structure that
+ * identifies a subset of terms, and their argument positions.
  */
 typedef struct s_ClauseCompileState {
 	Atom clauseForm;
@@ -443,16 +455,18 @@ typedef struct s_ClauseCompileState {
 
 	// The term matched by the query, excluded from the conjunction.
 	// To compile recursive clauses, the parameters of this term must be fully typed.
-	index8 matchedTermIndex;
+	index8 queryTermIndex;
 	// The form of the query-matched term, which is the same as for a recursive term
 	Atom queryTermForm;
 	// Arity of the query-matched term. A parameter number > matchedTermArity 
 	// is a clause-local variable, which does not occur in the query-matched term.
-	size8 matchedTermArity;
-	// CLAUDE: Number of distinct query parameters, which are numbered 1, 2, ...
-	// A parameter number > nQueryArguments is a clause-local variable. This is less than
-	// matchedTermArity when the query repeats a parameter.
+	size8 queryTermArity;
+	// Number of distinct query parameters. This is less than queryTermArity if
+	// at least one query parameter is repeated. Query parameters are numbered
+	// 1, 2, ...nQueryArguments; a parameter number > nQueryArguments is a clause-local variable. 
 	size8 nQueryArguments;
+	// Whether the query parameters are fully known; else recursive terms cannot compile
+	bool queryParametersKnown;
 
 	// termExcluded[i] is true for each term compiled so far, and for the matched term
 	bool * termExcluded;
@@ -462,24 +476,20 @@ typedef struct s_ClauseCompileState {
 	bool hasRecurseOperator;
 	// CLAUDE: BODY_TERMS_NEGATED or BODY_TERMS_AS_GIVEN
 	uint32 bodyTerms;
-	// The fully typed parameters of the query, if known; else 0.
-	// This is needed to compile recursive terms; see compileRecursiveTerm().
-	TypedTuple const * queryParameters;
 } ClauseCompileState;
 
 
 /**
- * Write the parameter types that were resolved by compiling a term back into the clause.
- * Dispatching a term resolves its the types of its output parameters,
- * and the terms sharing those parameters need to know them:
+ * Update the conjunction parameter types from a newly resolved term given by termIndex.
  *
  *  - in the query-matched term the parameter stays an output, and so gives the service
  *    being compiled its signature;
  *  - in the terms not yet compiled it becomes an input, as the term that just compiled
  *    is what provides it.
  *
- * The term that compiled must already be marked excluded, so that it is not mistaken for
- * one of the terms still to come.
+ * Compiled terms must be marked excluded.
+ * TODO: might be cleaner to write the termActors back into the conjunction tuple first,
+ * then update the clause base on that?
  */
 static void propagateTermParameterTypes(
 	ClauseCompileState * clauseState, index8 termIndex,
@@ -515,11 +525,11 @@ static void propagateTermParameterTypes(
 
 		// Type the parameter in the query-matched term, unless it is a clause-local
 		// variable, which has no counterpart there
-		if((clauseState->matchedTermIndex != NO_MATCHED_TERM)
+		if((clauseState->queryTermIndex != NO_MATCHED_TERM)
 			&& (parameterNumber <= clauseState->nQueryArguments)) {
 			// CLAUDE: A repeated query parameter occurs at several columns of the matched term
-			index8 matchedTermEnd = clauseState->termActorsIndices[clauseState->matchedTermIndex + 1];
-			for(index8 k = clauseState->termActorsIndices[clauseState->matchedTermIndex]; k < matchedTermEnd; k++) {
+			index8 matchedTermEnd = clauseState->termActorsIndices[clauseState->queryTermIndex + 1];
+			for(index8 k = clauseState->termActorsIndices[clauseState->queryTermIndex]; k < matchedTermEnd; k++) {
 				TypedAtom matchedActor = TypedTupleGetElement(clauseState->clauseActors, k);
 				ASSERT(matchedActor.type == AT_PARAMETER)
 				if(matchedActor.atom.parameter.number == parameterNumber)
@@ -547,19 +557,19 @@ static void propagateTermParameterTypes(
 
 
 /**
- * CLAUDE: Find the indices of the input arguments of an operator taking one argument per
- * distinct parameter of a service signature (ioSignature, equalitySignature) over nColumns
- * columns. The inputArguments array must hold RELATION_MAX_ARITY indices.
+ * Find the indices of the input arguments of a service with the given ioSignature
+ * and equalitySignature, and write them to the inputArguments array.
+ * The inputArguments array must hold RELATION_MAX_ARITY indices.
  * Returns the number of inputs found. See also FindInputArguments().
  */
 static size8 findInputArguments(
-	IOSignature ioSignature, EqualitySignature equalitySignature, size8 nColumns,
+	IOSignature ioSignature, EqualitySignature equalitySignature, size8 nArguments,
 	index8 inputArguments[])
 {
-	index8 argumentMap[nColumns];
-	EqualitySignatureGetArgumentMap(equalitySignature, nColumns, argumentMap);
+	index8 argumentMap[nArguments];
+	EqualitySignatureGetArgumentMap(equalitySignature, nArguments, argumentMap);
 	size8 nInputs = 0;
-	for(index8 i = 0; i < nColumns; i++) {
+	for(index8 i = 0; i < nArguments; i++) {
 		if(!equalitySignature.repeatOf[i] && (ioSignature.parameterIO[i] == PARAMETER_IN))
 			inputArguments[nInputs++] = argumentMap[i];
 	}
@@ -568,7 +578,7 @@ static size8 findInputArguments(
 
 
 /**
- * CLAUDE: Test whether a term of the query's term form repeats an actor everywhere the
+ * Test whether a term of the query's term form repeats an actor everywhere the
  * query-matched term repeats a parameter. Only such a term is recursive, reading the
  * relation being derived: the derived relation holds only the tuples in which the
  * repeated query parameters are equal. For example, with the query (before @1 after @1)
@@ -578,7 +588,7 @@ static size8 findInputArguments(
 static bool termRepeatsQueryParameters(
 	ClauseCompileState const * clauseState, TypedTuple const * termActors)
 {
-	index8 matchedTermBegin = clauseState->termActorsIndices[clauseState->matchedTermIndex];
+	index8 matchedTermBegin = clauseState->termActorsIndices[clauseState->queryTermIndex];
 	for(index8 i = 0; i < termActors->nAtoms; i++) {
 		TypedAtom matchedActor = TypedTupleGetElement(clauseState->clauseActors, matchedTermBegin + i);
 		for(index8 j = 0; j < i; j++) {
@@ -595,13 +605,9 @@ static bool termRepeatsQueryParameters(
 
 /**
  * Compile a recursive term to a RECURSE operator.
- * The operator enumerates the tuples derived so far by the FIXPOINT
- * operator that completeRecursiveVariant() puts above the clause.
  *
- * The querySignature tuple is the signature the query compiled to, which the non-recursive
- * clauses settled: the parameters of the variant this clause is being compiled into. A
- * recursive term reads that variant, so the signature says both what its outputs resolve to
- * and which arguments it has to bind.
+ * The query actors contained in state->clauseActors must be fully determined parameters
+ * when calling this function, which the recursive term's actor (termActors) must match.
  *
  * The term is taken last of the clause, so every argument another term provides is already
  * an input by then and the rest are outputs: the parameter IO of the term is settled, and
@@ -613,28 +619,32 @@ static bool termRepeatsQueryParameters(
  * derivation is keyed on what the query binds, so a term asking for less has no call
  * binding to name it; assertCallBindingIsNamed() in operator.c is the same condition where
  * the operators meet. See testCompileRecursiveTermUnboundInput().
+ * 
+ * NOTE: queryParameters are all AT_PARAMETER, could be an Atom[] array
  */
 static Operator * compileRecursiveTerm(
-	TypedTuple const * querySignature, TypedTuple const * termActors,
-	TypedTuple * serviceParameters, index8 clauseMap[])
+	ClauseCompileState * state, TypedTuple const * termActors, TypedTuple * serviceParameters, index8 clauseMap[])
 {
+	// Determine parameters of the recursive term
 	size8 termArity = termActors->nAtoms;
-	ASSERT(termArity == querySignature->nAtoms)
+	ASSERT(termArity == state->queryTermArity)
 	Atom termParameters[termArity];
 	termActorsToParameters(termActors, termParameters);
-	Atom const * queryParameters = TypedTuplePeekAtoms(querySignature);
+	// The query portion of the clause actors. Must be fully typed AT_PARAMETER atoms.
+	Atom const * queryParameterArray = 
+		TypedTuplePeekAtoms(state->clauseActors) + state->termActorsIndices[state->queryTermIndex];
 
 	byte atomTypes[termArity];
 	byte parameterIO[termArity];
 	for(index8 i = 0; i < termArity; i++) {
 		// A parameter of a known type must be the type of the column it reads
-		atomTypes[i] = queryParameters[i].parameter.atomType;
+		atomTypes[i] = queryParameterArray[i].parameter.atomType;
 		if(termParameters[i].parameter.atomType
 			&& (termParameters[i].parameter.atomType != atomTypes[i]))
 			return 0;
 		// The term has to bind at least the arguments the query binds
 		parameterIO[i] = termParameters[i].parameter.io;
-		if((queryParameters[i].parameter.io == PARAMETER_IN)
+		if((queryParameterArray[i].parameter.io == PARAMETER_IN)
 			&& (parameterIO[i] != PARAMETER_IN))
 			return 0;
 	}
@@ -642,7 +652,7 @@ static Operator * compileRecursiveTerm(
 	IOSignature ioSignature = CreateIOSignature(parameterIO, termArity);
 	// CLAUDE: The derived relation repeats the parameters the query repeats, so the
 	// RECURSE operator takes one argument per distinct query parameter
-	EqualitySignature equalitySignature = ParametersGetEqualitySignature(queryParameters, termArity);
+	EqualitySignature equalitySignature = ParametersGetEqualitySignature(queryParameterArray, termArity);
 	index8 argumentMap[termArity];
 	size8 nArguments = EqualitySignatureGetArgumentMap(equalitySignature, termArity, argumentMap);
 	index8 inputArguments[RELATION_MAX_ARITY];
@@ -711,7 +721,7 @@ static Operator * compileConjunctionRecursive(
 		size8 termIndex = 0;
 		while(!op && nTermsExcluded < clauseState->nTerms && MultisetIteratorNext(&termFormIterator)) {
 			ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
-			if(termIndex == clauseState->matchedTermIndex) {
+			if(termIndex == clauseState->queryTermIndex) {
 				termIndex += em.multiple;
 				continue;
 			}
@@ -738,13 +748,14 @@ static Operator * compileConjunctionRecursive(
 				if(clauseState->termExcluded[termIndex])
 					continue;
 				// Extract term actors
+				// TODO: this also seems unnecessary
 				TypedTupleCopyAt(clauseState->clauseActors, clauseState->termActorsIndices[termIndex], termActors);
 				// A term of the same form as the query is recursive only if it repeats
 				// the parameters the query repeats; see termRepeatsQueryParameters()
 				bool isRecursiveTerm =
 					isRecursiveForm && termRepeatsQueryParameters(clauseState, termActors);
 				// Compile a recursive term only in pass 2, and only if the queryParameters are set
-				if((isRecursiveTerm != (pass == 2)) || (isRecursiveTerm && !clauseState->queryParameters))
+				if((isRecursiveTerm != (pass == 2)) || (isRecursiveTerm && !clauseState->queryParametersKnown))
 					continue;
 #ifdef DEBUG_COMPILER
 				PrintF("Pass = %d, attempting term: ", pass);
@@ -755,8 +766,7 @@ static Operator * compileConjunctionRecursive(
 				// being derived and builds its own operator; every other term dispatches,
 				// adding a choice point.
 				if(isRecursiveTerm) {
-					op = compileRecursiveTerm(
-						clauseState->queryParameters, termActors, serviceParameters, termClauseMap);
+					op = compileRecursiveTerm(clauseState, termActors, serviceParameters, termClauseMap);
 				}
 				else {
 					op = compileTerm(
@@ -939,12 +949,14 @@ static Operator * permuteToClauseArguments(
 
 
 /**
- * Returns true iff the given tuple contains only fully types parameters.
+ * Returns true iff the given tuple contains only fully typed parameters
+ * for the elements at [startIndex ... startIndex + nElements - 1]
  */
-static bool checkParameterTypes(TypedTuple const * querySignature)
+static bool hasFullyTypedParameters(TypedTuple const * tuple, index8 startIndex, size8 nElements)
 {
-	for(index8 i = 0; i < querySignature->nAtoms; i++) {
-		TypedAtom parameter = TypedTupleGetElement(querySignature, i);
+	ASSERT(startIndex + nElements <= tuple->nAtoms)
+	for(index8 i = startIndex; i < startIndex + nElements; i++) {
+		TypedAtom parameter = TypedTupleGetElement(tuple, i);
 		if((parameter.type != AT_PARAMETER) || !parameter.atom.parameter.atomType)
 			return false;
 	}
@@ -983,37 +995,36 @@ static Operator * compileConjunction(
 	size8 nLocalVariables = parameterizeLocalVariables(
 		clauseActors, matchedTermIndex, termActorsIndices, nArguments);
 
-	// Extract the query parameters, if present
-	// CLAUDE: Without a matched term there are no query parameters to read a
-	// recursive term against
+	// Extract the query parameters, if present. If not, recursive clauses cannot compile.
+	// NOTE: this copy is unnecessary; we can use the corresponding elements of clauseActors instead.
 	size8 matchedTermArity = 0;
-	TypedTuple * queryParameters = 0;
+	bool queryParametersKnown = false;
+	// Without a matched term there are no query parameters to read a recursive term against
 	if(matchedTermIndex != NO_MATCHED_TERM) {
 		matchedTermArity =
 			termActorsIndices[matchedTermIndex + 1] - termActorsIndices[matchedTermIndex];
-		queryParameters = CreateTypedTuple(matchedTermArity);
-		TypedTupleCopyAt(clauseActors, termActorsIndices[matchedTermIndex], queryParameters);
-		if(!checkParameterTypes(queryParameters)) {
-			FreeTypedTuple(queryParameters);
-			queryParameters = 0;
-		}
+		// // NOTE: if we found a non-parameter, we scrap the tuple again ...
+		queryParametersKnown = hasFullyTypedParameters(
+			clauseActors, termActorsIndices[matchedTermIndex], matchedTermArity);
 	}
+
 	// Setup the initial clause state
-	// TODO: this has to be modeled better, way too many fields. What is a "state" ?
-	// Description of the conjunction to be compiled? What are the state changes?
+	// TODO: this has to be modeled better, way too many fields.
 	ClauseCompileState clauseState = {
 		.clauseForm = clauseForm,
 		.clauseActors = clauseActors,
 		.termActorsIndices = termActorsIndices,
 		.nTerms = clauseNTerms,
 		.nArguments = nArguments + nLocalVariables,
-		.matchedTermIndex = matchedTermIndex,
+
+		.queryTermIndex = matchedTermIndex,
 		.queryTermForm = queryTermForm,
-		.matchedTermArity = matchedTermArity,
+		.queryTermArity = matchedTermArity,
 		.nQueryArguments = nArguments,
+		.queryParametersKnown = queryParametersKnown,
+
 		.termExcluded = termExcluded,
 		.choiceTree = choiceTree,
-		.queryParameters = queryParameters,
 		.bodyTerms = bodyTerms
 	};
 
@@ -1023,8 +1034,6 @@ static Operator * compileConjunction(
 	uint8 nTermsExcluded = (matchedTermIndex == NO_MATCHED_TERM) ? 0 : 1;
 	Operator * op = compileConjunctionRecursive(compileStack, &clauseState, nTermsExcluded, clauseMap);
 	*hasRecurseOperator = clauseState.hasRecurseOperator;
-	if(queryParameters)
-		FreeTypedTuple(queryParameters);
 	if(!op)
 		return 0;	// conjunction could not be compiled
 
