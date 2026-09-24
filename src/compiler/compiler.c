@@ -966,16 +966,19 @@ static bool hasFullyTypedParameters(TypedTuple const * tuple, index8 startIndex,
  * A recursive term of the clause is compiled against the signature of the query, which
  * the query-matched term carries once its parameters are typed.
  *
- * nArguments is the number of distinct query parameters, which equals the number of
- * arguments of the returned operator. *hasRecurseOperator is set to true if a recursive
- * term compiled to a RECURSE operator, so that the clause needs a FIXPOINT operator.
+ * nQueryArguments is the number of unique query parameters, which equals the number of
+ * arguments of the returned operator.
+ * 
+ * *hasRecurseOperator is set to true if a recursive term was compiled to a RECURSE operator,
+ * so that the clause needs a FIXPOINT operator.
+ * 
  * bodyTerms is BODY_TERMS_NEGATED for a clause. For a conjunction query it is
  * BODY_TERMS_AS_GIVEN, and matchedTermIndex is NO_MATCHED_TERM; see compileConjunctionQuery().
  */
 static Operator * compileConjunction(
 	CompileStack * compileStack,
 	Atom clauseForm, TypedTuple * clauseActors, index8 queryTermIndex, Atom queryTermForm,
-	size8 nArguments, ChoiceTree * choiceTree, int bodyTerms, bool * hasRecurseOperator)
+	size8 nQueryArguments, ChoiceTree * choiceTree, int bodyTerms, bool * hasRecurseOperator)
 {
 	uint8 clauseNTerms = ClauseFormNTerms(clauseForm);
 	index8 termActorsIndices[clauseNTerms + 1];
@@ -989,7 +992,7 @@ static Operator * compileConjunction(
 	// that are not present in the query-matched term. These become additional parameters,
 	// and the conjunction is compiled with this extended arguments tuple.
 	size8 nLocalVariables = parameterizeLocalVariables(
-		clauseActors, queryTermIndex, termActorsIndices, nArguments);
+		clauseActors, queryTermIndex, termActorsIndices, nQueryArguments);
 
 	// Extract the query parameters, if present. If not, recursive clauses cannot compile.
 	size8 queryTermArity = 0;
@@ -1010,12 +1013,12 @@ static Operator * compileConjunction(
 		.clauseActors = clauseActors,
 		.termActorsIndices = termActorsIndices,
 		.nTerms = clauseNTerms,
-		.nArguments = nArguments + nLocalVariables,
+		.nArguments = nQueryArguments + nLocalVariables,
 
 		.queryTermIndex = queryTermIndex,
 		.queryTermForm = queryTermForm,
 		.queryTermArity = queryTermArity,
-		.nQueryArguments = nArguments,
+		.nQueryArguments = nQueryArguments,
 		.queryParametersKnown = queryParametersKnown,
 
 		.termExcluded = termExcluded,
@@ -1039,10 +1042,10 @@ static Operator * compileConjunction(
 	// permuteToClauseArguments() has put the arguments in clause order, so the ones
 	// to keep are the leading query arguments.
 	if(op && nLocalVariables) {
-		index8 keptArguments[nArguments];
-		for(index8 i = 0; i < nArguments; i++)
+		index8 keptArguments[nQueryArguments];
+		for(index8 i = 0; i < nQueryArguments; i++)
 			keptArguments[i] = i;
-		Operator * projectOperator = CreateProjectOperator(op, nArguments, keptArguments);
+		Operator * projectOperator = CreateProjectOperator(op, nQueryArguments, keptArguments);
 		op = projectOperator;
 	}
 	return op;
@@ -1299,12 +1302,9 @@ static size8 compileClauses(
 
 
 /**
- * CLAUDE: Compile a conjunction query, such as (parent x child y & parent y child z), into
- * a JOIN of its terms, as the body of a clause is compiled; see compileConjunction(). The
- * terms are compiled as given rather than negated, and every term is compiled, since no
- * term is matched by the query. A variable occurring in several terms is provided by the
+ * Compile a conjunction query, such as (parent x child y & parent y child z), into
+ * a JOIN of its terms. A variable occurring in several terms is provided by the
  * term compiled first, and constrains the terms compiled later through the JOIN.
- *
  * Appends the new compiled variants to the variants array and returns the new number of
  * variants in the array.
  */
@@ -1437,30 +1437,23 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
 
 
 /**
- * Find all clause forms matching the given query and compile each to variants.
+ * Find all clause forms matching the given query and compile each to variants. Seed variants
+ * must have been added to the variants[] array before this call.
  * 
  * Matched rules are processed in two passes. Non-recursive clauses compile first, and determine
  * the possible query type signatures. for each compiled variant. The recursive clauses then
  * compile against these type signatures. A recursive clause therefore cannot occur without
  * at least one non-recursive clause of the same signature.
  * 
- * Returns the new number of variants in the variants[] array, including seed variants.
+ * Returns the new number of variants in the variants[] array.
  * 
  * NOTE: this does not work when the base case of recursion is a single term, such as a
  * stored tuple with a primitive service.
  */
 static size8 compileQueryClauseForms(
-	CompileStack * compileStack, ParameterizedQuery const * query, CompiledVariant variants[])
+	CompileStack * compileStack, ParameterizedQuery const * query,
+	CompiledVariant variants[], size8 nVariants)
 {
-	// Initialize the set of variants with known primitive services as variants
-	size8 nVariants = 0;
-	nVariants = seedVariantsFromServices(query, variants);
-
-	// CLAUDE: No clause holds a conjunction form, so a conjunction query is compiled
-	// from its own terms
-	if(IsConjunctionForm(query->form))
-		return compileConjunctionQuery(compileStack, query, variants, nVariants);
-
 	// Collect all clauses matching the query term
 	ResizingArray matchedClauseForms;
 	CreateResizingArray(&matchedClauseForms, sizeof(QueryClauseMatch), 8);
@@ -1600,9 +1593,18 @@ static size8 compileFilterVariants(ParameterizedQuery const * query, CompiledVar
 static size8 compileQueryVariants(
 	CompileStack * compileStack, ParameterizedQuery const * query, CompiledVariant variants[])
 {
-	// Every matching clause compiles here, the recursive ones into the variants the
-	// non-recursive ones settled
-	size8 nVariants = compileQueryClauseForms(compileStack, query, variants);
+	// Initialize the set of variants with known primitive services as variants
+	size8 nVariants = seedVariantsFromServices(query, variants);
+
+	if(IsConjunctionForm(query->form)) {
+		// Currently, a conjunction query is compiled direcly, not involving rules
+		nVariants = compileConjunctionQuery(compileStack, query, variants, nVariants);
+	}
+	else {
+		// Every matching clause compiles here, the recursive ones into the variants the
+		// non-recursive ones settled
+		nVariants = compileQueryClauseForms(compileStack, query, variants, nVariants);
+	}
 
 	// Any recursive variant must be completed by wrapping with a FIXPOINT operator
 	for(index8 i = 0; i < nVariants; i++) {
