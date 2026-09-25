@@ -46,7 +46,7 @@ void SetupRelationFixture(
 		atomTypes[i] = AT_ID;
 	}
 	fixture->relation = (Relation) {
-		.termForm = fixture->termForm,
+		.form = fixture->termForm,
 		.typeSignature = CreateTypeSignature(atomTypes, nColumns)
 	};
 	fixture->store = CreateTupleStore(
@@ -123,7 +123,7 @@ void SetupEdgeFixture(RelationFixture * fixture)
 {
 	SetupRelationFixture(fixture, (char const * []) {"edge", "from", "to"}, 3);
 
-	char const * edgeNames[EDGE_N_EDGES] = {"ep", "eq", "er", "es"};
+	char const * edgeNames[EDGE_N_EDGES] = {"ab", "aa", "bb", "bc"};
 	char const * fromNames[EDGE_N_EDGES] = {"a", "a", "b", "b"};
 	char const * toNames[EDGE_N_EDGES] = {"b", "a", "b", "c"};
 	for(index8 i = 0; i < EDGE_N_EDGES; i++)

@@ -100,10 +100,12 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
     src/lang/ConjunctionForm.c
     src/lang/formula.c
     src/lang/FormPermutation.c
+    src/lang/IndexedFormula.c
     src/lang/name.c
     src/lang/PredicateForm.c
     src/lang/SubstitutionList.c
     src/lang/TermForm.c
+    src/lang/TermMultiset.c
     src/lang/TypedAtom.c
     src/lang/unification.c
     src/lang/Variable.c

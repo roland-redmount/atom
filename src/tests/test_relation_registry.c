@@ -45,7 +45,7 @@ void testAddRemoveRelation(void)
 	setupFixture();
 	size32 nRelationsInitial = RelationRegistryNRelations();
 
-	Relation relation = {.termForm = fixture.form, .typeSignature = fixture.typeSignature};
+	Relation relation = {.form = fixture.form, .typeSignature = fixture.typeSignature};
 	AcquireRelation(relation);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 
@@ -77,7 +77,7 @@ void testIterateRelations(void)
 	while(RelationIteratorNext(&iterator)) {
 		Relation relation = RelationIteratorGet(&iterator);
 		// every relation yielded must belong to the form we asked for
-		ASSERT_TRUE(SameAtoms(relation.termForm, form))
+		ASSERT_TRUE(SameAtoms(relation.form, form))
 		if(SameRelations(relation, multisetName))
 			foundName = true;
 		if(SameRelations(relation, multisetId))

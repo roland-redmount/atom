@@ -12,7 +12,6 @@
 #ifndef RELATION_H
 #define RELATION_H
 
-// #include "kernel/ServiceRegistry.h"
 #include "btree/btree.h"
 #include "lang/Atom.h"
 #include "lang/formula.h"
@@ -50,15 +49,20 @@ bool SameTypeSignatures(TypeSignature signature1, TypeSignature signature2);
 size8 TypeSignatureNAtomTypes(TypeSignature typeSignature);
 
 /**
- * A Relation is a pair (term form, type signature). Using a term form
- * allows registering a negated predicate like (! odd x) as a relation distinct
- * from the non-negated (odd x). 
- * A Relation plus an IOSignature identifies a Service.
+ * A Relation is a pair (form, type signature). The form may be a term form,
+ * such as (! odd x) or (odd x), or a conjunction form, such as (=< n >= a & >= n =< b),
+ * but not a clause form. A Relation plus an IOSignature identifies a Service.
  */
 typedef struct s_Relation {
-	Atom termForm;
+	Atom form;
 	TypeSignature typeSignature;
 } Relation;
+
+/**
+ * CLAUDE: Test whether a form can be the form of a relation, which is a term form or a
+ * conjunction form.
+ */
+bool IsRelationForm(Atom form);
 
 /**
  * Ordering of two relation signatures
@@ -125,6 +129,12 @@ struct s_TupleStore * RelationGetTupleStore(Relation relation);
  * which is critical during bootstrap; see CreateRelationBootstrap()
  */
 Atom RelationGetPredicateForm(Relation relation);
+
+/**
+ * Test whether the relation's form is a conjunction form rather than a term form.
+ * Unlike IsConjunctionForm(), this also works during bootstrap; see RelationGetPredicateForm().
+ */
+bool RelationIsConjunction(Relation relation);
 
 /**
  * Test if the given relation exists in the registry.

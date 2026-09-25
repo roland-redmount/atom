@@ -47,20 +47,19 @@ void SessionPrintBanner(void)
 static void printHelp(void)
 {
 	PrintChar('\n');
-	printLine("Enter a query as a term, such as");
-	printLine("  + 2 + 3 = s");
+	printLine("Enter a query as a term or conjunction, such as");
+	printLine("  + 2 + 3 = s    or    foo x bar y & foo y bar z");
 	printLine("to view every matching fact in the knowledgebase.");
 	printLine("Variables are single letters and _ is the anonymous variable.");
 	PrintChar('\n');
 	printLine("Commands:");
-	printLine("  :assert <term>      Assert a fact. The term must not contain variables.");
-	printLine("  :assert <clause>    Assert a rule. The clause must have at least two terms");
-	printLine("                      and contain at least one variable.");
-	printLine("  :inspect <term>     Print the services the term dispatches to, without");
-	printLine("                      asking it.");
-	printLine("  :retract <term>     Retract a fact. The term must not contain variables.");
-	printLine("  :help               Print this text.");
-	printLine("  :quit, ctrl-D       End the session.");
+	printLine("  :assert <term>        Assert a fact. The term must not contain variables.");
+	printLine("  :assert <clause>      Assert a rule. The clause must have at least two terms");
+	printLine("                        and contain at least one variable.");
+	printLine("  :inspect <formula>    Print the service(s) that the formula dispatches to");
+	printLine("  :retract <term>       Retract a fact. The term must not contain variables.");
+	printLine("  :help                 Print this text.");
+	printLine("  :quit, ctrl-D         End the session.");
 	PrintChar('\n');
 }
 
@@ -91,12 +90,12 @@ static void printQueryResultSummary(MixedTypeRelation const * mixedTypeRelation,
 
 
 /*
- * CLAUDE: Print a summary of the services a query dispatches to
+ * Print a summary of the services a query dispatches to
  */
 static void printInspectSummary(size32 nServices)
 {
 	if(nServices == 0) {
-		printLine("No matching service. A query compiles one when it is asked.");
+		printLine("No matching service. Execute a query to compile a service.");
 		return;
 	}
 	SessionPrintMargin();
@@ -104,9 +103,8 @@ static void printInspectSummary(size32 nServices)
 }
 
 
-/*
- * Answer one query, printing every answer and how many there were. A line that is not a
- * query at all is reported here rather than being asked, since UserQuery() takes a term.
+/**
+ * Submit one query and print each resulting fact and the total number of facts.
  */
 static void executeQuery(char const * line)
 {
@@ -117,8 +115,8 @@ static void executeQuery(char const * line)
 		return;
 	}
 	FormulaView queryView = FormulaGetView(query);
-	if(!IsTermForm(queryView.form)) {
-		printLine("A query must be a single term.");
+	if(!IsRelationForm(queryView.form)) {
+		printLine("A query must be a term or a conjunction of terms.");
 		ReleaseFormula(query);
 		return;
 	}
@@ -240,14 +238,14 @@ static void executeRetract(char const * factText, index32 linePosition)
 
 
 /*
- * CLAUDE: Print the services one query dispatches to, which is the text following the :inspect
- * command. The query is not asked, and no service is compiled for it, so a query no
- * service answers yet lists nothing. See dispatch.h.
+ * Print the services the query dispatches to, which is the text following the :inspect
+ * command. The query is not executed, and no service is compiled for it, so a query that
+ * does not dispatch to an existing service gives no output. See dispatch.h.
  */
 static void executeInspect(char const * queryText, index32 linePosition)
 {
 	if(!*queryText) {
-		printLine(":inspect requires a term.");
+		printLine(":inspect requires a formula.");
 		return;
 	}
 
@@ -258,8 +256,8 @@ static void executeInspect(char const * queryText, index32 linePosition)
 		return;
 	}
 	FormulaView queryView = FormulaGetView(query);
-	if(!IsTermForm(queryView.form)) {
-		printLine("A query must be a single term.");
+	if(!IsRelationForm(queryView.form)) {
+		printLine("A query must be a term or a conjunction of terms.");
 		ReleaseFormula(query);
 		return;
 	}
@@ -267,7 +265,7 @@ static void executeInspect(char const * queryText, index32 linePosition)
 	// CLAUDE: The query is parameterized as it is for an ordinary query, so that the services
 	// listed here are the ones asking the query would read; see CreateConcatRelation()
 	ParameterizedQuery parameterizedQuery = {
-		.termForm = queryView.form,
+		.form = queryView.form,
 		.arity  = queryView.actors->nAtoms
 	};
 	ActorsToParameters(queryView.actors, parameterizedQuery.parameters);

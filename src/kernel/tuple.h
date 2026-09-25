@@ -39,6 +39,11 @@ int8 TupleCompareInOrder(
 bool TupleEqual(Atom const tuple1[], Atom const tuple2[], size8 nAtoms);
 
 /**
+ * Returhs true if the tuple contains a duplicated atom
+ */
+bool TupleContainsDuplicates(Atom const tuple[], size8 nAtoms);
+
+/**
  * Acquire a reference to each atom of the tuple. Only atom types identifying
  * a shared object are reference counted; see AcquireAtom().
  */

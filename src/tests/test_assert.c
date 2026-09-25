@@ -32,7 +32,7 @@ void testAssertRetract(void)
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(FormulaGetActors(fact1)), nColumns);
 
-	Relation relation = {.termForm = FormulaGetForm(fact1), .typeSignature = typeSignature};
+	Relation relation = {.form = FormulaGetForm(fact1), .typeSignature = typeSignature};
 	// The relation does not exist until the first fact is asserted
 	ASSERT_FALSE(RelationExists(relation))
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact1), 0), ASSERT_OK)
@@ -223,8 +223,8 @@ void testAssertFormulaRejects(void)
 	ReleaseFormula(singleTermClause);
 	ReleaseFormula(term);
 
-	// a conjunction is several rules at once, which this interface does not take
-	Atom conjunction = CStringToConjunction("foo x bar 1 | ! baz x & barf 42 frob y");
+	// a conjunction is several facts at once, which this interface does not take
+	Atom conjunction = CStringToConjunction("foo x bar 1 & barf 42 frob y");
 	ASSERT_INT32_EQUAL(AssertFormula(conjunction), ASSERT_NOT_CLAUSE)
 	ReleaseFormula(conjunction);
 }
@@ -314,7 +314,7 @@ void testCreateIFactTwoIdColumns(void)
 	byte atomTypes[2] = {AT_ID, AT_ID};
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, 2);
 	
-	Relation relation = {.termForm = FormulaGetForm(sameFormTerm), .typeSignature = typeSignature};
+	Relation relation = {.form = FormulaGetForm(sameFormTerm), .typeSignature = typeSignature};
 	ASSERT_FALSE(RelationExists(relation))
 
 	Atom formula = CStringToConjunction("pair * other \"a\" & pair \"a\" other *");
@@ -424,7 +424,7 @@ void testCreateIFactTerm(void)
 		atomTypes[i] = SameTypedAtoms(actor, generatorAtom) ? AT_ID : actor.type;
 	}
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, nColumns);
-	Relation relation = {.termForm = FormulaGetForm(term), .typeSignature = typeSignature};
+	Relation relation = {.form = FormulaGetForm(term), .typeSignature = typeSignature};
 	ASSERT_FALSE(RelationExists(relation))
 
 	Atom ifact = CreateIFact(FormulaGetView(term));
@@ -527,12 +527,7 @@ void testCreateIFactRejects(void)
 	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(twoGenerators)).hash, 0)
 	ReleaseFormula(twoGenerators);
 
-	// a clause of two terms is a disjunction, which defines nothing
-	Atom disjunction = CStringToConjunction("list * length 1 & foo * bar 1 | baz * qux 2");
-	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(disjunction)).hash, 0)
-	ReleaseFormula(disjunction);
-
-	// the same three, without a conjunction around them
+	// the same two, without a conjunction around them
 	Atom termNoGenerator = CStringToTerm("foo 1 bar 2");
 	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(termNoGenerator)).hash, 0)
 	ReleaseFormula(termNoGenerator);
@@ -541,6 +536,7 @@ void testCreateIFactRejects(void)
 	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(termTwoGenerators)).hash, 0)
 	ReleaseFormula(termTwoGenerators);
 
+	// CLAUDE: a clause of two terms is a disjunction, which defines nothing
 	Atom clauseDisjunction = CStringToClause("foo * bar 1 | baz * qux 2");
 	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(clauseDisjunction)).hash, 0)
 	ReleaseFormula(clauseDisjunction);

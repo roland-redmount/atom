@@ -12,7 +12,9 @@
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
 #include "library/MachineService.h"
+#include "parser/FormulaBuilder.h"
 #include "parser/TermBuilder.h"
+#include "ui/query.h"
 #include "testing/testing.h"
 
 
@@ -80,33 +82,45 @@ void testAdd2(void)
  * The range service yields one tuple per number in the range, rather than the single
  * tuple an arithmetic service computes.
  */
-void testRange(void)
+/* CLAUDE: The range service has the conjunction form (=< >= & =< >=), and the query
+ * repeats the variable n in both terms. The two terms have the same form, so the query
+ * may list them in either order; dispatch finds the service under a permutation. */
+static void assertRange(char const * queryString, int64 lower, int64 upper)
 {
-	Atom query = CStringToTerm("lower 2 number n upper 6");
+	Atom query = CStringToFormula(queryString);
+	FormulaView queryView = FormulaGetView(query);
+	size32 nServices = NumberOfServices();
 
 	Service service;
-	index8 permutation[3];
-	ASSERT(DispatchQueryFormula(query, &service, permutation))
+	index8 permutation[queryView.actors->nAtoms];
+	ASSERT_INT32_EQUAL(DispatchQueryFormula(query, &service, permutation), DISPATCH_FOUND)
+	ASSERT_TRUE(HasRepeatedParameters(service.equalitySignature))
 
-	Atom arguments[3];
-	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(query)), arguments, 3);
+	// The column of the first occurrence of n
+	index8 numberIndex = 0;
+	while(TypedTupleGetElement(queryView.actors, numberIndex).type != AT_VARIABLE)
+		numberIndex++;
 
-	Atom numberRole = CreateNameFromCString("number");
-	index8 numberIndex = PredicateRoleIndex(
-		TermFormGetPredicateForm(FormulaGetForm(query)),
-		numberRole
-	);
-	NameRelease(numberRole);
-
-	OperatorContext * context = OperatorCreateContext(ServiceGetOperator(service), arguments);
-	for(int64 expected = 2; expected <= 6; expected++) {
-		ASSERT_TRUE(OperatorCall(context))
-		ASSERT_INT64_EQUAL(arguments[numberIndex]._int, expected)
+	MixedTypeRelation * relation = UserQuery(queryView);
+	for(int64 expected = lower; expected <= upper; expected++) {
+		ASSERT_TRUE(MixedTypeRelationNext(relation))
+		TypedTuple const * tuple = MixedTypeRelationPeekTuple(relation);
+		ASSERT_INT64_EQUAL(TypedTupleGetAtom(tuple, numberIndex)._int, expected)
 	}
-	ASSERT_FALSE(OperatorCall(context))
+	ASSERT_FALSE(MixedTypeRelationNext(relation))
+	FreeMixedTypeRelation(relation);
 
-	OperatorFreeContext(context);
+	// The query is answered by the primitive service, so nothing was compiled
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices)
 	ReleaseFormula(query);
+}
+
+
+void testRange(void)
+{
+	assertRange("=< n >= 2 & >= n =< 6", 2, 6);
+	assertRange(">= n =< 6 & =< n >= 2", 2, 6);
+	assertRange("=< n >= 3 & >= n =< 1", 3, 2);
 }
 
 

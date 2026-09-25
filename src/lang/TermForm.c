@@ -34,12 +34,21 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 
 bool IsTermForm(Atom atom)
 {
-	return AtomHasRole(
+	return LookupHasEntry(
 		atom,
 		GetCoreRelation(RELATION_TERM_FORM),
+		GetCoreRelation(RELATION_TERM_FORM).form,
 		GetCoreRoleName(ROLE_TERM_FORM)
 	);
 }
+
+
+Atom TermFormCreateOppositeForm(Atom termForm)
+{
+	bool sign = TermFormGetSign(termForm);
+	return CreateTermForm(TermFormGetPredicateForm(termForm), !sign);	
+}
+
 
 // Retrieve the (unique) tuple from the (term-form predicate-form sign) relation
 // matching the given term form atom

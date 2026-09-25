@@ -9,7 +9,7 @@
 #include "lang/formula.h"
 #include "library/MachineService.h"
 #include "memory/allocator.h"
-#include "parser/TermBuilder.h"
+#include "parser/FormulaBuilder.h"
 
 
 static uint32 nextModuleID = 1;
@@ -77,16 +77,29 @@ static void addModuleRelation(uint32 moduleID, Relation relation)
 
 /**
  * Read the given parameters (in canonical order), and write the corresponding
- * IOSignature and the indexOrder that orders parameters as 1, 2, ... arity;
- * this is the same as the indexOrder given to TupleStore.
+ * IOSignature and the indexOrder that orders parameters as 1, 2, ... nArguments.
+ * A parameter may be repeated, as in (foo @2>INT bar @1<INT & bar @2>INT baz @3<INT).
+ * Repeated parameters are written to *equalitySignature.
+ * The service operator then takes one argument per distinct parameter,
+ * and the indexOrder has one entry per distinct parameter: indexOrder[number - 1] is the
+ * operator argument taken by the parameter with that number.
+ * 
  * Returns the corresponding TypeSignature.
  */
 static TypeSignature readSignatureParameters(
-	TypedTuple const * parameters, index8 indexOrder[], IOSignature * ioSignature)
+	TypedTuple const * parameters, index8 indexOrder[], IOSignature * ioSignature,
+	EqualitySignature * equalitySignature)
 {
 	bool numberSeen[RELATION_MAX_ARITY] = {0};
 	byte atomTypes[RELATION_MAX_ARITY];
 	byte parameterIO[RELATION_MAX_ARITY];
+
+	*equalitySignature = ParametersGetEqualitySignature(
+		TypedTuplePeekAtoms(parameters), parameters->nAtoms);
+	index8 argumentMap[RELATION_MAX_ARITY];
+	// nArguments equals the number of distinct parameters
+	size8 nArguments = EqualitySignatureGetArgumentMap(
+		*equalitySignature, parameters->nAtoms, argumentMap);
 
 	for(index8 i = 0; i < parameters->nAtoms; i++) {
 		TypedAtom actor = TypedTupleGetElement(parameters, i);
@@ -96,13 +109,21 @@ static TypeSignature readSignatureParameters(
 		atomTypes[i] = actor.atom.parameter.atomType;
 		parameterIO[i] = actor.atom.parameter.io;
 
-		// a signature numbers its arguments 1 ... arity, each number occurs exactly once
+		// A repeated parameter must always have the type and IO direction
+		uint8 repeatOf = equalitySignature->repeatOf[i];
+		if(repeatOf) {
+			ASSERT(atomTypes[i] == atomTypes[repeatOf - 1])
+			ASSERT(parameterIO[i] == parameterIO[repeatOf - 1])
+			continue;
+		}
+
+		// a signature numbers its arguments 1 ... nArguments
 		index8 number = actor.atom.parameter.number;
 		index8 index = number - 1;
-		ASSERT((number >= 1) && (number <= parameters->nAtoms))
+		ASSERT((number >= 1) && (number <= nArguments))
 		ASSERT(!numberSeen[index])
 		numberSeen[index] = true;
-		indexOrder[index] = i;
+		indexOrder[index] = argumentMap[i];
 	}
 	*ioSignature = CreateIOSignature(parameterIO, parameters->nAtoms);
 	return CreateTypeSignature(atomTypes, parameters->nAtoms);
@@ -124,19 +145,24 @@ Service RegisterMachineServiceWithState(
 	void (*finalizeState)(void *, void *, void *))
 {
 	// Parse the signature
-	Atom term = CStringToTerm(signature);
+	// CLAUDE: The signature is a term or a conjunction of terms
+	Atom term = CStringToFormula(signature);
 	FormulaView termView = FormulaGetView(term);
+	ASSERT(IsRelationForm(termView.form))
 	size8 arity = termView.actors->nAtoms;
 	ASSERT(arity <= RELATION_MAX_ARITY)
 
 	// Determine the indexOrder, type signature and IO signature from the parameter numbers
 	IOSignature ioSignature;
+	EqualitySignature equalitySignature;
 	index8 indexOrder[RELATION_MAX_ARITY];
 	TypeSignature typeSignature = readSignatureParameters(
-		termView.actors, indexOrder, &ioSignature);
+		termView.actors, indexOrder, &ioSignature, &equalitySignature);
+	index8 argumentMap[RELATION_MAX_ARITY];
+	size8 nArguments = EqualitySignatureGetArgumentMap(equalitySignature, arity, argumentMap);
 	
 	// Create the relation, unless it already exists
-	Relation relation = {.termForm = termView.form, .typeSignature = typeSignature};
+	Relation relation = {.form = termView.form, .typeSignature = typeSignature};
 	TupleStore * store = 0;
 	if(RelationExists(relation))
 		store = RelationGetTupleStore(relation);
@@ -145,7 +171,10 @@ Service RegisterMachineServiceWithState(
 		// and the index order matches
 	}
 	else {
-		store = CreateTupleStore(relation, &defaultProvider, arity, indexOrder);
+		// CLAUDE: With repeated parameters the indexOrder has fewer entries than the
+		// store has columns, and the store takes the identity column order
+		store = CreateTupleStore(
+			relation, &defaultProvider, arity, (nArguments == arity) ? indexOrder : 0);
 		addModuleRelation(moduleID, relation);
 	}
 	ReleaseFormula(term);
@@ -158,8 +187,12 @@ Service RegisterMachineServiceWithState(
 		.finalizeState = finalizeState,
 		.ioSignature = ioSignature
 	};
-	Operator * op = CreateMachineOperator(arity, indexOrder, &readerSpec, store->storage);
-	Service service = {.relation = relation, .ioSignature = ioSignature};
+	Operator * op = CreateMachineOperator(nArguments, indexOrder, &readerSpec, store->storage);
+	Service service = {
+		.relation = relation,
+		.ioSignature = ioSignature,
+		.equalitySignature = equalitySignature
+	};
 	CreateService(service, op);
 	return service;
 }

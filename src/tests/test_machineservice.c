@@ -54,9 +54,9 @@ static void testMachineServiceArgumentOrder(void)
 		moduleID, "first @1<INT second @2<INT result @3>INT", weighCall);
 	Operator * operator = ServiceGetOperator(service);
 
-	index8 firstIndex = roleIndex(service.relation.termForm, "first");
-	index8 secondIndex = roleIndex(service.relation.termForm, "second");
-	index8 resultIndex = roleIndex(service.relation.termForm, "result");
+	index8 firstIndex = roleIndex(service.relation.form, "first");
+	index8 secondIndex = roleIndex(service.relation.form, "second");
+	index8 resultIndex = roleIndex(service.relation.form, "result");
 
 	// The test only has teeth while the canonical order differs from the signature
 	// order. Should these roles ever hash into the signature order, pick other names.
@@ -146,9 +146,9 @@ static void testMachineServiceIterator(void)
 		moduleID, "from @1<INT count @2>INT to @3<INT",
 		sizeof(CountState), countSetup, countCall, 0);
 
-	index8 fromIndex = roleIndex(service.relation.termForm, "from");
-	index8 countIndex = roleIndex(service.relation.termForm, "count");
-	index8 toIndex = roleIndex(service.relation.termForm, "to");
+	index8 fromIndex = roleIndex(service.relation.form, "from");
+	index8 countIndex = roleIndex(service.relation.form, "count");
+	index8 toIndex = roleIndex(service.relation.form, "to");
 
 	// A service declares the order its signature writes its arguments in;
 	// see the contract in operator.h
@@ -192,9 +192,9 @@ static void testMachineServiceIteratorState(void)
 		moduleID, "from @1<INT count @2>INT to @3<INT",
 		sizeof(CountState), countSetup, countCall, 0);
 
-	index8 fromIndex = roleIndex(service.relation.termForm, "from");
-	index8 countIndex = roleIndex(service.relation.termForm, "count");
-	index8 toIndex = roleIndex(service.relation.termForm, "to");
+	index8 fromIndex = roleIndex(service.relation.form, "from");
+	index8 countIndex = roleIndex(service.relation.form, "count");
+	index8 toIndex = roleIndex(service.relation.form, "to");
 
 	Atom first[3];
 	first[fromIndex] = (Atom) {._int = 1};

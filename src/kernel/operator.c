@@ -4,7 +4,10 @@
 #include "kernel/Relation.h"
 #include "kernel/tuple.h"
 #include "kernel/TupleStore.h"
+#include "kernel/typedtuple.h"
+#include "lang/formula.h"
 #include "lang/TermForm.h"			// for PrintTermForm()
+#include "lang/TypedAtom.h"
 #include "memory/allocator.h"
 #include "util/ResizingArray.h"
 #include "util/utilities.h"
@@ -1588,11 +1591,11 @@ Operator * OperatorGetChild(Operator const * op, index8 index)
 	case OPERATOR_CONSTRAIN:
 		return op->impl.constrain.childOperator;
 
-	case OPERATOR_FILTER:
-		return op->impl.filter.childOperator;
-
 	case OPERATOR_FIXPOINT:
 		return op->impl.fixpoint.childOperator;
+
+	case OPERATOR_FILTER:
+		return op->impl.filter.childOperator;
 
 	default:
 		ASSERT(false)
@@ -1628,16 +1631,16 @@ static void teardownOperator(Operator * op)
 		teardownConstrainOperator(op);
 		break;
 
-	case OPERATOR_FILTER:
-		teardownFilterOperator(op);
-		break;
-
 	case OPERATOR_FIXPOINT:
 		teardownFixpointOperator(op);
 		break;
 
 	case OPERATOR_RECURSE:
 		teardownRecurseOperator(op);
+		break;
+
+	case OPERATOR_FILTER:
+		teardownFilterOperator(op);
 		break;
 
 	case OPERATOR_MACHINE:
@@ -1662,10 +1665,13 @@ void AttachOperator(Operator * op, Relation signature)
 	// If the Relation has a TupleStore, the new operator's
 	// index order must match that of the TupleStore.
 	TupleStore * store = RelationGetTupleStore(signature);
-	if(store) {
-		ASSERT(op->nArguments == store->nColumns)
+	// CLAUDE: An operator of a service repeating a parameter takes fewer arguments than
+	// the relation has columns, and is not checked; see EqualitySignature.
+	if(store && (op->nArguments == store->nColumns)) {
 		ASSERT(CompareMemory(op->indexOrder, store->indexColumns, op->nArguments) == 0)
 	}
+	if(store)
+		ASSERT(op->nArguments <= store->nColumns)
 #endif
 }
 
@@ -1688,15 +1694,6 @@ void CheckOperator(Operator * op)
 		if(IsNullRelation(op->relation)) {
 			teardownOperator(op);
 		}
-		// else {
-		// 	if(op->type == OPERATOR_MACHINE) {
-		// 		if(op->impl.machine.spec.relationTable) {
-		// 			// A MACHINE operator acting on storage must notify
-		// 			// its RelationWriter, which could now become stale.
-		// 			CheckRelationTable(op->impl.machine.spec.relationTable);
-		// 		}
-		// 	}
-		// }
 	}
 }
 
@@ -1735,16 +1732,16 @@ static OperatorContext * createContext(
 		constrainSetupContext(context);
 		break;
 
-	case OPERATOR_FILTER:
-		filterSetupContext(context);
-		break;
-
 	case OPERATOR_FIXPOINT:
 		fixpointSetupContext(context);
 		break;
 
 	case OPERATOR_RECURSE:
 		recurseSetupContext(context);
+		break;
+
+	case OPERATOR_FILTER:
+		filterSetupContext(context);
 		break;
 
 	case OPERATOR_MACHINE:
@@ -1816,16 +1813,16 @@ bool OperatorCall(OperatorContext * context)
 		success = constrainCall(context);
 		break;
 
-	case OPERATOR_FILTER:
-		success = filterCall(context);
-		break;
-
 	case OPERATOR_FIXPOINT:
 		success = fixpointCall(context);
 		break;
 
 	case OPERATOR_RECURSE:
 		success = recurseCall(context);
+		break;
+
+	case OPERATOR_FILTER:
+		success = filterCall(context);
 		break;
 
 	case OPERATOR_MACHINE:
@@ -1872,16 +1869,16 @@ void OperatorFreeContext(OperatorContext * context)
 		constrainFinalizeContext(context);
 		break;
 
-	case OPERATOR_FILTER:
-		filterFinalizeContext(context);
-		break;
-
 	case OPERATOR_FIXPOINT:
 		fixpointFinalizeContext(context);
 		break;
 
 	case OPERATOR_RECURSE:
 		recurseFinalizeContext(context);
+		break;
+
+	case OPERATOR_FILTER:
+		filterFinalizeContext(context);
 		break;
 
 	case OPERATOR_MACHINE:
@@ -1908,139 +1905,197 @@ bool OperatorCallOnce(Operator const * op, Atom arguments[])
 	return result;
 }
 
+static const char * operatorNames[N_OPERATOR_TYPES + 1] = {
+	"",
+	"IDENTITY",
+	"PERMUTE",
+	"JOIN",
+	"UNION",
+	"PROJECT",
+	"CONSTRAIN",
+	"FIXPOINT",
+	"RECURSE",
+	"FILTER",
+	"MACHINE"
+};
 
 /**
- * Print the name and arity of an operator, followed by the order in which it yields
- * its tuples, as "JOIN/3[0 2 1]".
+ * CLAUDE: Print the arguments tuple of an operator call, as "(@1< @2> 5)". A parameter is
+ * printed by PrintParameter(); see PrintOperator() for why no type is printed. A constant
+ * is printed by its value.
  */
-static void printOperatorHead(Operator const * op, char const * name)
+static void printArguments(TypedAtom const arguments[], size8 nArguments)
 {
-	PrintF("%s/%u[", name, op->nArguments);
-	for(index8 i = 0; i < op->nArguments; i++) {
+	PrintChar('(');
+	for(index8 i = 0; i < nArguments; i++) {
 		if(i)
 			PrintChar(' ');
-		PrintF("%u", op->indexOrder[i]);
+		PrintTypedAtom(arguments[i]);
 	}
-	PrintChar(']');
+	PrintChar(')');
 }
 
 
 /**
- * Print the arguments a caller binds when calling a fixpoint or recurse operator, as
- * "<0 2>", following the convention that marks an input parameter of a service. An
- * operator binding none prints nothing.
+ * CLAUDE: Set the IO direction of an argument, if the argument is a parameter.
  */
-static void printInputArguments(index8 const inputArguments[], size8 nInputs)
+static void setArgumentIO(TypedAtom * argument, byte io)
 {
-	if(!nInputs)
-		return;
-	PrintChar('<');
-	for(index8 i = 0; i < nInputs; i++) {
-		if(i)
-			PrintChar(' ');
-		PrintF("%u", inputArguments[i]);
-	}
-	PrintChar('>');
+	if(argument->type == AT_PARAMETER)
+		argument->atom.parameter.io = io;
 }
 
 
-static void printOperatorRecursive(Operator const * op, uint32 depth)
+/**
+ * Print an operator call with the given arguments, and recursively each child
+ * operator called with the arguments this operator passes to it. The arguments are
+ * typed since operators may include arbitrary atoms as constants. Arguments are
+ * mapped from parent to child as when the operators are called. A child argument dropped
+ * by a PROJECT operator is given a new parameter, numbered from *nextParameterNumber.
+ */
+static void printOperatorRecursive(
+	Operator const * op, TypedAtom const arguments[], uint8 * nextParameterNumber, uint32 depth)
 {
 	// Indent on new line by depth
 	PrintChar('\n');
 	for(index8 i = 0; i < 3 * depth; i++)
 		PrintChar(' ');
 
+	if((depth > 0) && !IsNullRelation(op->relation)) {
+		// The operator is the head of another service; print its term form and end recursion
+		// An operator taking one argument per column is printed as a formula,
+		// such as (+ <@1 + 1 = @2>).
+		size8 arity = FormArity(op->relation.form);
+		if(op->nArguments == arity) {
+			TypedTuple * actors = CreateTypedTuple(arity);
+			for(index8 i = 0; i < arity; i++) {
+				TypedTupleSetElement(actors, i, arguments[i]);
+			}
+			PrintFormActorsAsFormula(op->relation.form, actors);
+			FreeTypedTuple(actors);
+		}
+		else {
+			PrintForm(op->relation.form);
+			printArguments(arguments, op->nArguments);
+		}
+		return;
+	}
+
+	// root operator, or internal node; print operator
+	PrintCString(operatorNames[op->type]);
+	printArguments(arguments, op->nArguments);
+
 	switch(op->type) {
 	case OPERATOR_IDENTITY:
-		printOperatorHead(op, "IDENTITY");
-		PrintChar('(');
-		printOperatorRecursive(op->impl.identity.childOperator, depth + 1);
+		PrintCString(" (");
+		printOperatorRecursive(op->impl.identity.childOperator, arguments, nextParameterNumber, depth + 1);
 		PrintChar(')');
 		break;
 
-	case OPERATOR_PERMUTE:
-		printOperatorHead(op, "PERMUTE");
-		PrintChar('(');
-		for(index8 i = 0; i < op->impl.permute.childOperator->nArguments; i++)
-			PrintF("%u ", op->impl.permute.argumentMap[i]);
-		PrintChar('{');
-		PrintTuple(
-			op->impl.permute.constantTypes,
-			op->impl.permute.constants,
-			op->impl.permute.nConstants
-		);
-		PrintCString("} ");
-		printOperatorRecursive(op->impl.permute.childOperator, depth + 1);
+	case OPERATOR_PERMUTE: {
+		Operator const * child = op->impl.permute.childOperator;
+		TypedAtom childArguments[child->nArguments];
+		for(index8 i = 0; i < child->nArguments; i++) {
+			index8 source = op->impl.permute.argumentMap[i];
+			if(source < op->nArguments)
+				childArguments[i] = arguments[source];
+			else
+				childArguments[i] = CreateTypedAtom(
+					op->impl.permute.constantTypes[source - op->nArguments],
+					op->impl.permute.constants[source - op->nArguments]);
+		}
+		PrintCString(" (");
+		printOperatorRecursive(child, childArguments, nextParameterNumber, depth + 1);
 		PrintChar(')');
 		break;
+	}
 
-	case OPERATOR_JOIN:
-		printOperatorHead(op, "JOIN");
-		PrintChar('(');
-		for(index8 i = 0; i < op->impl.join.left->nArguments; i++)
-			PrintF("%u ", op->impl.join.leftMap[i]);
-		printOperatorRecursive(op->impl.join.left, depth + 1);
-		for(index8 i = 0; i < op->impl.join.right->nArguments; i++)
-			PrintF("%u ", op->impl.join.rightMap[i]);
-		printOperatorRecursive(op->impl.join.right, depth + 1);
+	case OPERATOR_JOIN: {
+		Operator const * left = op->impl.join.left;
+		Operator const * right = op->impl.join.right;
+		TypedAtom leftArguments[left->nArguments];
+		TypedAtom rightArguments[right->nArguments];
+		for(index8 i = 0; i < left->nArguments; i++)
+			leftArguments[i] = arguments[op->impl.join.leftMap[i]];
+		for(index8 i = 0; i < right->nArguments; i++)
+			rightArguments[i] = arguments[op->impl.join.rightMap[i]];
+		// CLAUDE: The right child takes the arguments the left child provides as inputs
+		for(index8 i = 0; i < right->nArguments; i++) {
+			for(index8 j = 0; j < left->nArguments; j++) {
+				if(op->impl.join.rightMap[i] == op->impl.join.leftMap[j])
+					setArgumentIO(&rightArguments[i], PARAMETER_IN);
+			}
+		}
+		PrintCString(" (");
+		printOperatorRecursive(left, leftArguments, nextParameterNumber, depth + 1);
+		printOperatorRecursive(right, rightArguments, nextParameterNumber, depth + 1);
 		PrintChar(')');
 		break;
+	}
 
 	case OPERATOR_UNION:
-		printOperatorHead(op, "UNION");
-		PrintChar('(');
-		printOperatorRecursive(op->impl._union.first, depth + 1);
-		printOperatorRecursive(op->impl._union.second, depth + 1);
+		PrintCString(" (");
+		printOperatorRecursive(op->impl._union.first, arguments, nextParameterNumber, depth + 1);
+		printOperatorRecursive(op->impl._union.second, arguments, nextParameterNumber, depth + 1);
 		PrintChar(')');
 		break;
 
-	case OPERATOR_PROJECT:
-		printOperatorHead(op, "PROJECT");
-		PrintChar('(');
-		for(index8 i = 0; i < op->nArguments; i++)
-			PrintF("%u ", op->impl.project.argumentMap[i]);
-		printOperatorRecursive(op->impl.project.childOperator, depth + 1);
+	case OPERATOR_PROJECT: {
+		Operator const * child = op->impl.project.childOperator;
+		TypedAtom childArguments[child->nArguments];
+		bool kept[child->nArguments];
+		SetMemory(kept, child->nArguments * sizeof(bool), 0);
+		for(index8 i = 0; i < op->nArguments; i++) {
+			childArguments[op->impl.project.argumentMap[i]] = arguments[i];
+			kept[op->impl.project.argumentMap[i]] = true;
+		}
+		for(index8 i = 0; i < child->nArguments; i++) {
+			if(!kept[i])
+				childArguments[i] = CreateTypedAtom(
+					AT_PARAMETER,
+					(Atom) {.parameter = {.number = (*nextParameterNumber)++, .io = PARAMETER_OUT}});
+		}
+		PrintCString(" (");
+		printOperatorRecursive(child, childArguments, nextParameterNumber, depth + 1);
 		PrintChar(')');
 		break;
+	}
 
-	case OPERATOR_CONSTRAIN:
-		printOperatorHead(op, "CONSTRAIN");
-		PrintChar('(');
-		for(index8 i = 0; i < op->impl.constrain.childOperator->nArguments; i++)
-			PrintF("%u ", op->impl.constrain.argumentMap[i]);
-		printOperatorRecursive(op->impl.constrain.childOperator, depth + 1);
+	case OPERATOR_CONSTRAIN: {
+		Operator const * child = op->impl.constrain.childOperator;
+		TypedAtom childArguments[child->nArguments];
+		for(index8 i = 0; i < child->nArguments; i++)
+			childArguments[i] = arguments[op->impl.constrain.argumentMap[i]];
+		PrintCString(" (");
+		printOperatorRecursive(child, childArguments, nextParameterNumber, depth + 1);
 		PrintChar(')');
 		break;
-
-	case OPERATOR_FILTER:
-		printOperatorHead(op, "FILTER");
-		printInputArguments(op->impl.filter.inputArguments, op->impl.filter.nInputs);
-		PrintChar('(');
-		printOperatorRecursive(op->impl.filter.childOperator, depth + 1);
-		PrintChar(')');
-		break;
+	}
 
 	case OPERATOR_FIXPOINT:
-		printOperatorHead(op, "FIXPOINT");
-		printInputArguments(
-			op->impl.fixpoint.inputArguments, op->impl.fixpoint.nInputs);
-		PrintChar('(');
-		printOperatorRecursive(op->impl.fixpoint.childOperator, depth + 1);
+		PrintCString(" (");
+		printOperatorRecursive(op->impl.fixpoint.childOperator, arguments, nextParameterNumber, depth + 1);
 		PrintChar(')');
 		break;
 
 	case OPERATOR_RECURSE:
-		printOperatorHead(op, "RECURSE");
-		printInputArguments(
-			op->impl.recurse.inputArguments, op->impl.recurse.nInputs);
+		// a leaf; nothing more to print
 		break;
 
+	case OPERATOR_FILTER: {
+		// CLAUDE: The child produces the filtered arguments as outputs
+		TypedAtom childArguments[op->nArguments];
+		CopyMemory(arguments, childArguments, op->nArguments * sizeof(TypedAtom));
+		for(index8 i = 0; i < op->impl.filter.nInputs; i++)
+			setArgumentIO(&childArguments[op->impl.filter.inputArguments[i]], PARAMETER_OUT);
+		PrintCString(" (");
+		printOperatorRecursive(op->impl.filter.childOperator, childArguments, nextParameterNumber, depth + 1);
+		PrintChar(')');
+		break;
+	}
+
 	case OPERATOR_MACHINE:
-		printOperatorHead(op, "MACHINE");
-		if(!IsNullRelation(op->relation)) {
-			PrintTermForm(op->relation.termForm);
-		}
+		// nothing to print
 		break;
 
 	default:
@@ -2050,8 +2105,21 @@ static void printOperatorRecursive(Operator const * op, uint32 depth)
 }
 
 
-void PrintOperator(Operator const * op)
+void PrintOperator(Operator const * op, Atom const parameters[])
 {
-	printOperatorRecursive(op, 0);
+	// Local parameters, for arguments dropped by a PROJECT operator, are numbered
+	// after the given parameters, so we must determine the number of unique parameters.
+	uint8 nextParameterNumber = 1;
+	TypedAtom arguments[op->nArguments];
+	for(index8 i = 0; i < op->nArguments; i++) {
+		arguments[i] = CreateTypedAtom(AT_PARAMETER, parameters[i]);
+		// We erase the parameter types, as they clutter up the printout,
+		// and we cannot determine types for local variables when traversing the
+		// operator tree top-down.
+		arguments[i].atom.parameter.atomType = 0;
+		if(parameters[i].parameter.number >= nextParameterNumber)
+			nextParameterNumber = parameters[i].parameter.number + 1;
+	}
+	printOperatorRecursive(op, arguments, &nextParameterNumber, 0);
 	PrintChar('\n');
 }

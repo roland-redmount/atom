@@ -40,9 +40,10 @@ bool IsPredicateForm(Atom atom)
 	if(SameAtoms(atom, GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE)))
 		return true;
 
-	return AtomHasRole(
+	return LookupHasEntry(
 		atom,
 		GetCoreRelation(RELATION_PREDICATE_FORM),
+		GetCoreRelation(RELATION_PREDICATE_FORM).form,
 		GetCoreRoleName(ROLE_PREDICATE_FORM)
 	);
 }

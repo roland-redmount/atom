@@ -20,10 +20,11 @@ void CompileStackPop(CompileStack * stack)
 bool CompileStackContainsTerm(CompileStack const * stack, ParameterizedQuery const * query)
 {
 	for(index8 i = 0; i < stack->depth; i++) {
-		if(!SameAtoms(stack->queries[i].termForm, query->termForm))
+		if(!SameAtoms(stack->queries[i].form, query->form))
 			continue;
 		ASSERT(stack->queries[i].arity == query->arity)
-		if(SameParameterSignature(stack->queries[i].parameters, query->parameters, query->arity))
+		if(SameParameterSignature(stack->queries[i].parameters, query->parameters, query->arity)
+			&& SameParameterRepeats(stack->queries[i].parameters, query->parameters, query->arity))
 			return true;
 	}
 	return false;

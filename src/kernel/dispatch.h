@@ -28,19 +28,15 @@ typedef enum e_DispatchResult {
  * Dispatch a query, copying the first matching service to *service, if any.
  * The queryAtoms tuple must not contain parameters (AT_PARAMETER) atoms;
  * see DispatchParameterizedQuery().
+ * If the query contains repeated variables, it will match only a Service
+ * with the same repeated parameters.
  * The argument permutation required to match the service is written
  * to the given permutation array, such that queryActors element permutation[i]
  * matches service parameter i.
  * Returns true if a match was found.
  *
- * NOTE: we return a Service rather than the associated Operator,
+ * NOTE: this function yields a Service rather than the associated Operator,
  * since we often want to know the atom (column) types of the matched service.
- *
- * NOTE: the query is parameterized so that each actor is mapped to a distinct
- * parameter, since Services cannot (currently) represent repeated parameters.
- * The returned Service may therefore yield tuples the query did not ask for when
- * the query contains repeated variables, for example (edge e from x to x).
- * The caller must filter out these tuples; see MixedTypeRelation.h.
  */
 DispatchResult DispatchQuery(FormulaView query, Service * service, index8 permutation[]);
 
@@ -52,8 +48,9 @@ DispatchResult DispatchQueryFormula(Atom queryTerm, Service * service, index8 pe
 /**
  * A query (term) where actors have been replaced with a parameters tuple.
  */
+/* CLAUDE: The form is a term form or a conjunction form; see IsRelationForm() */
 typedef struct s_ParameterizedQuery {
-	Atom termForm;
+	Atom form;
 	Atom parameters[RELATION_MAX_ARITY];
 	size8 arity;
 } ParameterizedQuery;
@@ -77,17 +74,26 @@ void PrintParameterizedQuery(ParameterizedQuery const * parameterizedQuery);
  * returned. Caller can pass hasNextMatch = 0 if only one match is required.
  * TODO: can't we solve this "lookahead" problem more cleanly with DispatchIterate()
  *
- * With matchMode = DISPATCH_MATCH_EXACT, returns a service with exact matching signatures.
- * With matchMode = DISPATCH_MATCH_RELAXED, returns a service that matches all
- * input parameters and has as few output parameters as possible.
+ * matchMode is a combination of these flags:
+ * DISPATCH_MATCH_RELAXED: return a service that matches all input parameters
+ *   and has as few output parameters as possible.
+ * DISPATCH_RELAX_EQUALITY accepts a service that repeats a parameter
+ * only where the query repeats it, but not necessarily everywhere the query repeats it.
+ * The caller must then constrain the remaining repeated query parameters to be equal.
+ *
+ * With no flag, dispatch returns a service with exact matching signature.
+ 
  */
-#define DISPATCH_MATCH_EXACT		1
-#define DISPATCH_MATCH_RELAXED		2
+/* CLAUDE: . DISPATCH_MATCH_EXACT (no flags) also
+ * requires the service to repeat parameters at exactly the positions where the query
+ * repeats parameters. . */
+#define DISPATCH_MATCH_EXACT		0
+#define DISPATCH_MATCH_RELAXED		1
+#define DISPATCH_RELAX_EQUALITY		2
 
 DispatchResult DispatchParameterizedQuery(
 	ParameterizedQuery const * query, int matchMode, Service * service, index8 permutation[],
 	TypeSignature const excludedSignatures[], size8 nExcluded, bool * hasNextMatch);
-
 
 /**
  * Test if a service parameter IO direction matches a query parameter IO direction.

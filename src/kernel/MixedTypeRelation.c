@@ -1,35 +1,7 @@
 
 #include "kernel/MixedTypeRelation.h"
 #include "lang/TermForm.h"
-#include "lang/Variable.h"
 #include "memory/allocator.h"
-
-
-/**
- * Map repeated variables in the actors tuple. If actors[i] is a variable,
- * equalityMap[i] i set to the index of the first variable in queryActors that equals queryActors[i].
- * Returns true if any repeated variables were found.
- */
-static bool repeatedVariablesMap(TypedTuple const * actors, index8 variableMap[])
-{
-	bool hasRepeatedVariable = false;
-	for(index8 i = 0; i < actors->nAtoms; i++) {
-		TypedAtom queryAtom = TypedTupleGetElement(actors, i);
-		variableMap[i] = i;
-		if(queryAtom.type == AT_VARIABLE) {
-			// check for repeated variables
-			for(index8 j = 0; j < i; j++) {
-				TypedAtom previousAtom = TypedTupleGetElement(actors, j);
-				if(previousAtom.type == AT_VARIABLE && SameVariable(queryAtom.atom, previousAtom.atom)) {
-					variableMap[i] = j;
-					hasRepeatedVariable = true;
-					break;
-				}
-			}
-		}
-	}
-	return hasRepeatedVariable;
-}
 
 
 /**
@@ -44,8 +16,13 @@ static void createServiceContext(MixedTypeRelation * mixedRelation)
 	ServiceRecord const * serviceRecord = DispatchIteratorPeekServiceRecord(
 		&(mixedRelation->impl.concat.dispatchIterator));
 
+	// CLAUDE: The service takes one argument per distinct parameter; a repeated query
+	// variable is copied once per column, to the same argument
+	index8 * argumentMap = mixedRelation->impl.concat.argumentMap;
+	EqualitySignatureGetArgumentMap(
+		serviceRecord->service.equalitySignature, arity, argumentMap);
 	for(index8 i = 0; i < arity; i++)
-		mixedRelation->impl.concat.arguments[i] = TypedTupleGetAtom(
+		mixedRelation->impl.concat.arguments[argumentMap[i]] = TypedTupleGetAtom(
 			mixedRelation->impl.concat.queryActors, mixedRelation->impl.concat.permutation[i]);
 
 	mixedRelation->impl.concat.context = OperatorCreateContext(
@@ -68,31 +45,12 @@ static void copyResultToTypedTuple(MixedTypeRelation * mixedRelation)
 		TypedTupleSetElement(
 			mixedRelation->tuple,
 			mixedRelation->impl.concat.permutation[i],
-			CreateTypedAtom(typeSignature.atomTypes[i], mixedRelation->impl.concat.arguments[i])
+			CreateTypedAtom(
+				typeSignature.atomTypes[i],
+				mixedRelation->impl.concat.arguments[mixedRelation->impl.concat.argumentMap[i]])
 		);
 }
 
-
-/**
- * Test whether the current tuple of the relation satisfies the equality constraints
- * of the query, if any. Equality-constrained arguments must always have the same atom type.
- */
-static bool checkEqualityConstraints(MixedTypeRelation const * mixedRelation)
-{
-	index8 const * variableMap = mixedRelation->impl.concat.variableMap;
-	if(!variableMap)
-		return true;	// no constraints to check
-
-	for(index8 i = 0; i < mixedRelation->tuple->nAtoms; i++) {
-		if(variableMap[i] == i)
-			continue;
-		if(!SameTypedAtoms(
-			TypedTupleGetElement(mixedRelation->tuple, i),
-			TypedTupleGetElement(mixedRelation->tuple, variableMap[i])))
-			return false;
-	}
-	return true;
-}
 
 /**
  * Get the next tuple (if any) from a MIXED_TYPE_CONCAT relation 
@@ -111,8 +69,7 @@ static bool concatNext(MixedTypeRelation * mixedRelation)
 		// Call the current service context
 		if(OperatorCall(mixedRelation->impl.concat.context)) {
 			copyResultToTypedTuple(mixedRelation);
-			if(checkEqualityConstraints(mixedRelation))
-				return true;
+			return true;
 		}
 		else {
 			// This service is exhausted, and its context must not be called again
@@ -126,13 +83,13 @@ static bool concatNext(MixedTypeRelation * mixedRelation)
 
 MixedTypeRelation * CreateConcatRelation(FormulaView query)
 {
-	ASSERT(IsTermForm(query.form))
+	ASSERT(IsRelationForm(query.form))
 	TypedTuple const * queryActors = query.actors;
 	size8 arity = queryActors->nAtoms;
 
 	MixedTypeRelation * mixedRelation = Allocate(sizeof(MixedTypeRelation));
 	mixedRelation->type = MIXED_TYPE_CONCAT;
-	mixedRelation->termForm = query.form;
+	mixedRelation->form = query.form;
 	mixedRelation->tuple = CreateTypedTuple(arity);
 	mixedRelation->impl.concat.queryActors = queryActors;
 
@@ -143,12 +100,6 @@ MixedTypeRelation * CreateConcatRelation(FormulaView query)
 	mixedRelation->impl.concat.permutation =
 		(index8 *) (mixedRelation->impl.concat.arguments + arity);
 
-	// Create the variable map only if there are repeated variables
-	index8 variableMap[arity];
-	if(repeatedVariablesMap(queryActors, variableMap)) {
-		mixedRelation->impl.concat.variableMap = Allocate(arity * sizeof(index8));
-		CopyMemory(variableMap, mixedRelation->impl.concat.variableMap, arity * sizeof(index8));
-	}
 	ParameterizeQuery(query, &(mixedRelation->impl.concat.parameterizedQuery));
 	DispatchIterate(
 		&(mixedRelation->impl.concat.parameterizedQuery), DISPATCH_MATCH_EXACT,
@@ -194,8 +145,6 @@ void FreeMixedTypeRelation(MixedTypeRelation * mixedRelation)
 			OperatorFreeContext(mixedRelation->impl.concat.context);
 		DispatchIteratorEnd(&(mixedRelation->impl.concat.dispatchIterator));
 		Free(mixedRelation->impl.concat.arguments);
-		if(mixedRelation->impl.concat.variableMap)
-			Free(mixedRelation->impl.concat.variableMap);
 		break;
 
 	default:

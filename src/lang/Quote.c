@@ -49,7 +49,7 @@ Atom CreateQuote(Atom quoted)
 
 bool IsQuote(Atom atom)
 {
-	return AtomHasRole(
+	return LookupHasEntry(
 		atom,
 		GetCorePredicateForm(FORM_QUOTE_QUOTED),
 		GetCoreRoleName(ROLE_QUOTE)

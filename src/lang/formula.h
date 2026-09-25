@@ -122,17 +122,10 @@ index8 ClauseGetTermIndex(Atom clauseForm, Atom termForm, uint8 m);
 index8 ClauseGetTermActorsIndex(Atom clauseForm, Atom termForm, uint8 m);
 
 /**
- * Find the indices into a clauseForm tuple of the first actor in each term,
- * including multiples. The termIndices array must have at least as many elements
- * as the total number of terms + 1; the last element will be set to the total clause arity.
- */
-void ClauseGetTermActorsIndices(Atom clauseForm, index8 termActorsIndices[]);
-
-/**
  * Create a conjunction from a list of terms, in any order.
- * No clause may be repeated.
+ * No term may be repeated.
  */
-Atom CreateConjunction(Atom const clauses[], size8 nClauses);
+Atom CreateConjunction(Atom const terms[], size8 nTerms);
 
 
 /**
@@ -161,5 +154,15 @@ void PrintFormula(Atom formula);
 void PrintFormulaView(FormulaView formulaView);
 
 void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors);
+
+/**
+ * CLAUDE: The number of actors of a predicate, term, clause or conjunction form.
+ */
+size8 FormArity(Atom form);
+
+/**
+ * CLAUDE: Print a term, clause or conjunction form, without actors.
+ */
+void PrintForm(Atom form);
 
 #endif	// FORMULA_H

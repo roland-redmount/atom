@@ -1,4 +1,5 @@
 
+#include "compiler/compiler.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/MixedTypeRelation.h"
@@ -61,7 +62,7 @@ void testConcatEveryTuple(void)
 	Atom query = CStringToTerm("edge e from x to y");
 
 	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetView(query));
-	ASSERT_DATA64_EQUAL(relation->termForm.hash, FormulaGetForm(query).hash)
+	ASSERT_DATA64_EQUAL(relation->form.hash, FormulaGetForm(query).hash)
 
 	// Each tuple of the relation arrives once, though we do not know in which order,
 	// as the relation is stored sorted by atom
@@ -100,6 +101,9 @@ void testConcatRepeatedVariable(void)
 	SetupEdgeFixture(&edgeFixture);
 	Atom query = CStringToTerm("edge e from x to x");
 
+	// CLAUDE: The edge relation registers no service repeating a parameter, so a service
+	// for the query must be compiled before the relation can read it
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(query), 0), 1)
 	MixedTypeRelation * relation = CreateConcatRelation(FormulaGetView(query));
 	size32 nTuples = 0;
 	while(MixedTypeRelationNext(relation)) {
@@ -128,9 +132,9 @@ void testConcatConstantQuery(void)
 {
 	SetupEdgeFixture(&edgeFixture);
 
-	// The edge eq is the self edge of a
-	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("edge \"eq\" from \"a\" to \"a\""), 1)
-	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("edge \"eq\" from \"a\" to \"b\""), 0)
+	// The edge aa is the self edge of a
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("edge \"aa\" from \"a\" to \"a\""), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("edge \"aa\" from \"a\" to \"b\""), 0)
 
 	TeardownRelationFixture(&edgeFixture);
 }
@@ -147,13 +151,13 @@ void testConcatAcrossRelations(void)
 
 	// Two relation tables for the term form, one per combination of column types
 	Relation idRelation = {
-		.termForm = termForm,
+		.form = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2)
 	};
 	TupleStore * idStore = CreateTupleStore(idRelation, &btreeStorageProvider, 2, 0);
 	
 	Relation intRelation = {
-		.termForm = termForm,
+		.form = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
 	};
 	TupleStore * intStore = CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
@@ -229,8 +233,10 @@ void testConcatServiceCount(void)
 
 	// those same services are read for this query, whose repeated variable drops
 	// every tuple they yield
+	// CLAUDE: A position is never a letter, so no service can repeat a parameter at the
+	// position and the element, and no service answers this query
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("list \"ab\" position x element x"), 0)
-	ASSERT_UINT32_EQUAL(countQueryServices("list \"ab\" position x element x"), 2)
+	ASSERT_UINT32_EQUAL(countQueryServices("list \"ab\" position x element x"), 0)
 
 	// no service answers this form at all
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("nowhere x nothing y"), 0)

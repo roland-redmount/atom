@@ -12,6 +12,7 @@
 #include "library/MachineService.h"
 #include "library/string.h"
 #include "storage/RelationBTree.h"
+#include "parser/FormulaBuilder.h"
 #include "parser/TermBuilder.h"
 #include "testing/fixtures.h"
 #include "testing/testing.h"
@@ -27,7 +28,8 @@ static RelationFixture precSuccFixture;
  */
 static size32 runUserQueryAndCountTuples(char const * queryString)
 {
-	Atom query = CStringToTerm(queryString);
+	// CLAUDE: The query may be a term or a conjunction
+	Atom query = CStringToFormula(queryString);
 	FormulaView queryView = FormulaGetView(query);
 	MixedTypeRelation * relation = UserQuery(queryView);
 	size32 nTuples = 0;
@@ -147,14 +149,17 @@ void testQueryRepeatedVariable(void)
 	size32 nServices = NumberOfServices();
 
 	// b and c lie on a cycle, and so come after themselves
+	// CLAUDE: This compiles the service (before @1 after @1) repeating a parameter. Its
+	// recursive clause reads the distinct service (before >ID after <ID), which is
+	// compiled as well; see termRepeatsQueryParameters() in compiler.c.
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("before x after x"), 2)
-	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 1)
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 2)
 
 	// This query yields no tuples, since the (list position element) service
 	// has distinct parameter types for the position and element roles, and
 	// therefore all tuples from the servuce will fail the equality constraint.
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("list \"ab\" position x element x"), 0)
-	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 1)
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 2)
 
 	DictionaryRemoveClause(&entry2);
 	DictionaryRemoveClause(&entry1);
@@ -182,6 +187,9 @@ void testQueryCompileIgnoresRepeatedVariable(void)
 
 	// This query re-uses the above compiled services, but yields no tuples
 	// since the element type is never an INT.
+	// CLAUDE: The query repeats a parameter, so it does not re-use the above services.
+	// It compiles no service, since no (list position element) service can repeat a
+	// parameter at the INT position and the element.
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("item z index z"), 0)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 2)
 
@@ -225,7 +233,7 @@ void testInvalidateServiceByNewRelation(void)
 	// creating new primitive services not present during the compilation above.
 	// This should invalidate the compiled service, since it now depends on the new relation.
 	Relation intRelation = {
-		.termForm = precSuccFixture.termForm,
+		.form = precSuccFixture.termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
 	};
 	CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
@@ -308,7 +316,7 @@ void testInvalidateRelationByRule(void)
 	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	Atom faculty = CreateNameFromCString("faculty");
-	index8 facultyColumn = PredicateRoleIndex(TermFormGetPredicateForm(relation.termForm), faculty);
+	index8 facultyColumn = PredicateRoleIndex(TermFormGetPredicateForm(relation.form), faculty);
 	NameRelease(faculty);
 
 	// Adding the recursive rule should mark the service as stale
@@ -523,6 +531,67 @@ void testStorePrimitiveStaleWhenRuleExists(void)
 }
 
 
+static RelationFixture edgeFixture;
+
+
+/**
+ * CLAUDE: A conjunction query is compiled to a JOIN of its terms, as a rule body is. The
+ * edge relation has the edges a to b, a to a, b to b and b to c, and the query below asks
+ * for every walk of two edges. The variable y repeats across the two terms, so the
+ * compiled service repeats a parameter. Asking again re-uses the compiled service.
+ */
+void testQueryConjunction(void)
+{
+	size32 nServicesBefore = NumberOfServices();
+	SetupEdgeFixture(&edgeFixture);
+	size32 nServices = NumberOfServices();
+
+	// The second term reads the edges from a given node. The edge relation has no service
+	// binding only the from role, so a FILTER service is compiled for it as well.
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("edge d from x to y & edge f from y to z"), 6)
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 2)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("edge d from x to y & edge f from y to z"), 6)
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 2)
+
+	// A constant binds the first term; the walks from a are a-b-b, a-b-c, a-a-b and a-a-a.
+	// Both terms read the FILTER service compiled above.
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("edge d from \"a\" to y & edge f from y to z"), 4)
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 3)
+
+	// No walk of two edges leads back to its start, except by a self edge
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("edge d from x to y & edge f from y to x"), 2)
+
+	// Dropping the edge relation removes the compiled services reading it
+	TeardownRelationFixture(&edgeFixture);
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServicesBefore)
+}
+
+
+/**
+ * CLAUDE: A term of a conjunction query may be answered by a rule, which is compiled when
+ * the conjunction is. Adding a rule for a term form of the conjunction invalidates the
+ * compiled conjunction service.
+ */
+void testQueryConjunctionRule(void)
+{
+	SetupEdgeFixture(&edgeFixture);
+	DictionaryEntry entry = DictionaryAddClauseFromCString("reach x to y | ! edge e from x to y");
+	size32 nServices = NumberOfServices();
+
+	// reach has the pairs a-b, a-a, b-b and b-c, followed by an edge from b, a, b and c
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("reach x to y & edge f from y to z"), 6)
+	// the conjunction service, the (reach to) service it reads, and a FILTER service
+	// the (reach to) service reads
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 3)
+
+	// The FILTER service reads only the edge relation, and remains
+	DictionaryRemoveClause(&entry);
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 1)
+
+	TeardownRelationFixture(&edgeFixture);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -543,6 +612,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testStaleBodyTermUsesPrimitiveOnly);
 	ExecuteTest(testSelfJoinOverUnionRelation);
 	ExecuteTest(testStorePrimitiveStaleWhenRuleExists);
+	ExecuteTest(testQueryConjunction);
+	ExecuteTest(testQueryConjunctionRule);
 
 	UnloadLibraries();
 	KernelShutdown();

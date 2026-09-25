@@ -65,7 +65,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 	// find existing relation table, or create new
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	Relation relation = {.termForm = fact.form, .typeSignature = typeSignature};
+	Relation relation = {.form = fact.form, .typeSignature = typeSignature};
 	TupleStore * store = 0;
 	if(RelationExists(relation))
 	 	store = RelationGetTupleStore(relation);
@@ -86,7 +86,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 
 	// Add the tuple
 	ASSERT(RelationAddTuple(relation, actorsArray, 0) == TUPLE_ADDED)
-	LookupAddPredicateRoles(relation, actorsArray);
+	LookupAddFactRoles(relation, actorsArray);
 
 	return ASSERT_OK;
 }
@@ -152,7 +152,7 @@ void RetractFact(FormulaView fact)
 
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	Relation relation = {.termForm = fact.form, .typeSignature = typeSignature};
+	Relation relation = {.form = fact.form, .typeSignature = typeSignature};
 	TupleStore * store = RelationGetTupleStore(relation);
 	if(!store) {
 		// The relation has no stored tuples
@@ -162,7 +162,7 @@ void RetractFact(FormulaView fact)
 	// Remove the lookup entries before the tuple: removing the tuple releases the
 	// relation's reference to each of its atoms, and releasing the last reference
 	// to an atom takes all of its lookup entries with it.
-	LookupRemovePredicateRoles(relation, actorsArray);
+	LookupRemoveFactRoles(relation, actorsArray);
 	// Remove the tuple. This will not remove defining facts
 	TupleStoreRemoveTuple(store, actorsArray, 0);
 }
@@ -241,7 +241,7 @@ static bool collectTermIFactTuples(
 	if(!hasGenerator)
 		return false;
 
-	ifactTuple.relation = (Relation) {.termForm = termForm, .typeSignature = termSignature};
+	ifactTuple.relation = (Relation) {.form = termForm, .typeSignature = termSignature};
 	ResizingArrayAppend(ifactTupleArray, &ifactTuple);
 
 	if(termActorIndex)
@@ -264,7 +264,7 @@ static bool collectClauseIFactTuples(
 
 
 /**
- * Iterate over all clauses in a conjunction and gather ifact tuples.
+ * Iterate over all terms in a conjunction and gather ifact tuples.
  * Returns true iff the conjunction is a valid ifact.
  */
 static bool collectConjunctionIFactTuples(
@@ -274,14 +274,13 @@ static bool collectConjunctionIFactTuples(
 	MultisetIterate(conjunctionForm, AT_ID, &iterator);
 	index8 termActorIndex = 0;
 	bool formulaIsValid = true;
-	// iterate over clause forms
+	// iterate over term forms
 	while(formulaIsValid && MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
-		// iterate over clauses
+		// iterate over terms
 		for(index8 i = 0; i < elementMultiple.multiple; i++) {
-			// Each clause must have a single term.
-			Atom clauseForm = elementMultiple.element;
-			if(!collectClauseIFactTuples(clauseForm, actors, &termActorIndex, ifactTupleArray)) {
+			Atom termForm = elementMultiple.element;
+			if(!collectTermIFactTuples(termForm, actors, &termActorIndex, ifactTupleArray)) {
 				formulaIsValid = false;
 				break;
 			}

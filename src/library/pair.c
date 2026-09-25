@@ -54,7 +54,7 @@ void AddPairToIFact(IFactDraft * draft, Atom left, Atom right)
 
 bool IsPair(Atom atom)
 {
-	return AtomHasRole(atom, pairRelation, pairRoleNames[0]);
+	return LookupHasEntry(atom, pairRelation, pairTermForm, pairRoleNames[0]);
 }
 
 
@@ -119,7 +119,7 @@ void PairSetup(void)
 	TypeSignature typeSignature = {0};
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_ID, AT_ID}, typeSignature.atomTypes, pairTermRoleIndex, 3);		
-	pairRelation = (Relation) {.termForm = pairTermForm, .typeSignature = typeSignature};
+	pairRelation = (Relation) {.form = pairTermForm, .typeSignature = typeSignature};
 	pairTupleStore = CreateTupleStore(pairRelation, &btreeStorageProvider, 3, pairTermRoleIndex);
 	IFactRelease(pairTermForm);
 

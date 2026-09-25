@@ -13,14 +13,24 @@
 
 
 /**
- * A Service is defined by an (Relation, IOSignature) pair.
+ * A Service is defined by an (Relation, IOSignature, EqualitySignature) tuple.
  * A service is implemented by an Operator graph, and holds a pointer to the root
- * operator of this graph. Because an Operator assumes a specific IOSignature,
- * a pair (Relation, Operator) is also 1:1 with a Service.
+ * operator of this graph. 
+ * The operator takes as many arguments as there are unique parameters, and the EqualitySignature
+ * indicates columns that map to the same parameter. For example, the service
+ * (edge @1<ID from @2<ID to @2>ID) has 3 parameters but only 2 unique parameters,
+ * and its root operator then takes 2 arguments; its EqualitySignature is {0, 0, 2},
+ * where each element is 0 if the parameter occurs for the first time at that position,
+ * or else the 1-based position of the first occurence. This format allows us to encode
+ * a service with no repeated arguments as the zero vector. See EqualitySignatureGetArgumentMap()
+ * 
+ * Because an Operator assumes a specific IOSignature, the pair (Relation, Operator)
+ * is also 1:1 with a Service.
  */
 typedef struct s_Service {
 	Relation relation;
 	IOSignature ioSignature;
+	EqualitySignature equalitySignature;
 } Service;
 
 bool SameServices(Service service1, Service service2);

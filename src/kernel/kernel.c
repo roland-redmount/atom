@@ -302,7 +302,7 @@ static void createCoreRelation(uint32 relationId)
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, corePredicateArity[formId]);
 
 	kernel.coreRelations[relationId] = (Relation) {
-		.termForm = kernel.coreTermForms[formId],
+		.form = kernel.coreTermForms[formId],
 		.typeSignature = typeSignature
 	};
 	CreateRelationBootstrap(kernel.coreRelations[relationId], kernel.corePredicateForms[formId]);
@@ -358,8 +358,8 @@ static void bootstrapTermForm(Atom termForm, Atom predicateForm)
 	IFactEndConjunction(&draft);
 	IFactEndBootstrap(&draft, termForm.hash);
 
-	AtomAddRole(termForm, relation, GetCoreRoleName(ROLE_TERM_FORM));
-	AtomAddRole(predicateForm, relation, GetCoreRoleName(ROLE_PREDICATE_FORM));
+	LookupAddRole(termForm, relation, relation.form, GetCoreRoleName(ROLE_TERM_FORM));
+	LookupAddRole(predicateForm, relation, relation.form, GetCoreRoleName(ROLE_PREDICATE_FORM));
 }
 
 
@@ -459,7 +459,7 @@ static void setupCoreServices(void)
 
 	// Create table for multisets of AT_NAME, used for predicate forms
 	createCoreRelation(RELATION_MULTISET_NAME);
-	// Create table for multisets of AT_NAME, used for predicate forms
+	// Create table for multisets of AT_ID, used for clause and conjunction forms
 	createCoreRelation(RELATION_MULTISET_ID);
 	// Create predicate form table
 	createCoreRelation(RELATION_PREDICATE_FORM);
@@ -513,14 +513,16 @@ static void setupCoreServices(void)
 	IFactEndBootstrap(&multisetDraft, multisetForm.hash);
 
 	// Add lookup
-	AtomAddRole(
+	LookupAddRole(
 		multisetForm,
 		kernel.coreRelations[RELATION_MULTISET_NAME],
+		kernel.coreRelations[RELATION_MULTISET_NAME].form,
 		GetCoreRoleName(ROLE_MULTISET)
 	);
-	AtomAddRole(
+	LookupAddRole(
 		multisetForm,
 		kernel.coreRelations[RELATION_PREDICATE_FORM],
+		kernel.coreRelations[RELATION_PREDICATE_FORM].form,
 		GetCoreRoleName(ROLE_PREDICATE_FORM)
 	);
 	
@@ -552,14 +554,16 @@ static void setupCoreServices(void)
 	IFactEndBootstrap(&predicateFormDraft, predicateForm.hash);
 
 	// add lookup
-	AtomAddRole(
+	LookupAddRole(
 		predicateForm,
 		kernel.coreRelations[RELATION_MULTISET_NAME],
+		kernel.coreRelations[RELATION_MULTISET_NAME].form,
 		GetCoreRoleName(ROLE_MULTISET)
 	);
-	AtomAddRole(
+	LookupAddRole(
 		predicateForm,
 		kernel.coreRelations[RELATION_PREDICATE_FORM],
+		kernel.coreRelations[RELATION_PREDICATE_FORM].form,
 		GetCoreRoleName(ROLE_PREDICATE_FORM)
 	);
 

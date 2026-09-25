@@ -75,7 +75,7 @@ Atom CreateStringFromCString(char const * cString)
 
 bool IsString(Atom atom)
 {
-	return AtomHasRole(atom, stringRelation, stringRoleName);
+	return LookupHasEntry(atom, stringRelation, stringTermForm, stringRoleName);
 }
 
 
@@ -122,7 +122,7 @@ void StringSetup(void)
 	TypeSignature typeSignature = {
 		.atomTypes = {AT_ID}
 	};
-	stringRelation = (Relation) {.termForm = stringTermForm, .typeSignature = typeSignature};
+	stringRelation = (Relation) {.form = stringTermForm, .typeSignature = typeSignature};
 	stringTupleStore = CreateTupleStore(stringRelation, &btreeStorageProvider, 1, 0);
 	IFactRelease(stringTermForm);
 
