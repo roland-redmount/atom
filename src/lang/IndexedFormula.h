@@ -54,9 +54,20 @@ void IndexedFormulaSetTermAtom(
 /**
  * Return a view of the atoms array for term i
  */
-Atom const * IndexedFormulaPeekAtoms(IndexedFormula const * indexedFormula, index8 i);
+Atom const * IndexedFormulaPeekTermAtoms(IndexedFormula const * indexedFormula, index8 i);
 
+/**
+ * Create a new TypedTuple of the elements for term i.
+ * This cannot be a view, since TypedTuple does not allow viewing sub-tuples.
+ * The caller is responsible for deallocating the returned TypedTuple.
+ */
+TypedTuple * IndexedFormulaGetTermTuple(IndexedFormula const * indexedFormula, index8 i);
 
+void PrintIndexedFormula(IndexedFormula const * indexedFormula);
+
+/**
+ * Free an IndexedFormula
+ */
 void FreeIndexedFormula(IndexedFormula const * indexedFormula);
 
 

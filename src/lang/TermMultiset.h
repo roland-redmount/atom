@@ -1,9 +1,8 @@
 /**
  * A term multiset is a multiset of term forms (see TermForm.h) stored in a
  * core relation. Both a clause form and a conjunction form are term multisets;
- * they differ only in the relation that holds them, the separator they print
- * with, and their meaning (disjunction versus conjunction). See ClauseForm.h
- * and ConjunctionForm.h.
+ * they differ only in the relation that holds them, and the separator printed.
+ * See ClauseForm.h and ConjunctionForm.h.
  */
 
 #ifndef TERMMULTISET_H

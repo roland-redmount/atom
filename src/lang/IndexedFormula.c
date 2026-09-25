@@ -1,4 +1,5 @@
 
+#include "lang/formula.h"
 #include "lang/IndexedFormula.h"
 #include "lang/TermMultiset.h"
 #include "memory/allocator.h"
@@ -55,9 +56,24 @@ void IndexedFormulaSetTermAtom(
 }
 
 
-Atom const * IndexedFormulaPeekAtoms(IndexedFormula const * indexedFormula, index8 i)
+Atom const * IndexedFormulaPeekTermAtoms(IndexedFormula const * indexedFormula, index8 i)
 {
 	return TypedTuplePeekAtoms(indexedFormula->actors) + indexedFormula->termActorsIndices[i];
+}
+
+
+TypedTuple * IndexedFormulaGetTermTuple(IndexedFormula const * indexedFormula, index8 i)
+{
+	size8 arity = IndexedFormulaTermArity(indexedFormula, i);
+	TypedTuple * tuple = CreateTypedTuple(arity);
+	TypedTupleCopyAt(indexedFormula->actors, indexedFormula->termActorsIndices[i], tuple);
+	return tuple;
+}
+
+
+void PrintIndexedFormula(IndexedFormula const * indexedFormula)
+{
+	PrintFormActorsAsFormula(indexedFormula->form, indexedFormula->actors);
 }
 
 
