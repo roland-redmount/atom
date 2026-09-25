@@ -32,7 +32,7 @@ Atom CreateTermMultisetForm(Atom const termForms[], size8 nTermForms, index32 re
 
 bool IsTermMultisetForm(Atom form, index32 relation, index32 roleName)
 {
-	return AtomHasRole(form, GetCoreRelation(relation), GetCoreRoleName(roleName));
+	return LookupHasEntry(form, GetCoreRelation(relation), GetCoreRelation(relation).form, GetCoreRoleName(roleName));
 }
 
 

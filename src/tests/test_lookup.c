@@ -16,34 +16,33 @@ void testLookup(void)
 {
 	Atom string = CreateStringFromCString("foo");
 	Relation stringRelation = GetStringRelation();
+	Atom termForm = stringRelation.form;
 	Atom stringRole = GetStringRoleName();
 
-	ASSERT_TRUE(AtomHasRole(string, stringRelation, stringRole))
-	ASSERT_TRUE(AtomHasRole(string, stringRelation, (Atom) {0}))
-	ASSERT_TRUE(AtomHasRole(string, (Relation) {0}, (Atom) {0}))
+	ASSERT_TRUE(LookupHasEntry(string, stringRelation, termForm, stringRole))
 
 	// add 1 occurence of role
-	AtomAddRole(string, stringRelation, stringRole);
-	ASSERT_TRUE(AtomHasRole(string, stringRelation, stringRole))
+	LookupAddRole(string, stringRelation, termForm, stringRole);
+	ASSERT_TRUE(LookupHasEntry(string, stringRelation, termForm, stringRole))
 	
-	AtomRemoveRole(string, stringRelation, stringRole);
-	ASSERT_TRUE(AtomHasRole(string, stringRelation, stringRole))
+	LookupRemoveRole(string, stringRelation, termForm, stringRole);
+	ASSERT_TRUE(LookupHasEntry(string, stringRelation, termForm, stringRole))
 
 	// remove last occurence of role
-	AtomRemoveRole(string, stringRelation, stringRole);
-	ASSERT_FALSE(AtomHasRole(string, stringRelation, stringRole))
+	LookupRemoveRole(string, stringRelation, termForm, stringRole);
+	ASSERT_FALSE(LookupHasEntry(string, stringRelation, termForm, stringRole))
 
 	// restore role
-	AtomAddRole(string, stringRelation, stringRole);
-	ASSERT_TRUE(AtomHasRole(string, stringRelation, stringRole))
+	LookupAddRole(string, stringRelation, termForm, stringRole);
+	ASSERT_TRUE(LookupHasEntry(string, stringRelation, termForm, stringRole))
 
 	// add 1 occurence of role
-	AtomAddRole(string, stringRelation, stringRole);
-	ASSERT_TRUE(AtomHasRole(string, stringRelation, stringRole))
+	LookupAddRole(string, stringRelation, termForm, stringRole);
+	ASSERT_TRUE(LookupHasEntry(string, stringRelation, termForm, stringRole))
 
 	// remove both occurences
 	LookupRemoveAllRoles(string);
-	ASSERT_FALSE(AtomHasRole(string, stringRelation, stringRole))
+	ASSERT_FALSE(LookupHasEntry(string, stringRelation, termForm, stringRole))
 
 	IFactRelease(string);
 }
@@ -59,7 +58,7 @@ void testLookupPredicateRoles(void)
 		CreateNameFromCString("weight")
 	};
 	Atom predicateForm = CreatePredicateForm(roles, 2);
-	Atom form = CreateTermForm(predicateForm, true);
+	Atom termForm = CreateTermForm(predicateForm, true);
 	index8 nodeIndex = PredicateRoleIndex(predicateForm, roles[0]);
 	index8 weightIndex = PredicateRoleIndex(predicateForm, roles[1]);
 
@@ -67,7 +66,7 @@ void testLookupPredicateRoles(void)
 	atomTypes[nodeIndex] = AT_ID;
 	atomTypes[weightIndex] = AT_INT;
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, 2);
-	Relation relation = {.form = form, .typeSignature = typeSignature};
+	Relation relation = {.form = termForm, .typeSignature = typeSignature};
 	AcquireRelation(relation);
 
 	Atom node = CreateStringFromCString("foo");
@@ -76,16 +75,16 @@ void testLookupPredicateRoles(void)
 	actors[weightIndex] = (Atom) {._int = 42};
 
 	// only the node column obtains a lookup record
-	LookupAddPredicateRoles(relation, actors);
-	ASSERT_TRUE(AtomHasRole(node, relation, roles[0]))
-	ASSERT_FALSE(AtomHasRole(node, relation, roles[1]))
+	LookupAddFactRoles(relation, actors);
+	ASSERT_TRUE(LookupHasEntry(node, relation, termForm, roles[0]))
+	ASSERT_FALSE(LookupHasEntry(node, relation, termForm, roles[1]))
 
-	LookupRemovePredicateRoles(relation, actors);
-	ASSERT_FALSE(AtomHasRole(node, relation, roles[0]))
+	LookupRemoveFactRoles(relation, actors);
+	ASSERT_FALSE(LookupHasEntry(node, relation, termForm, roles[0]))
 
 	ReleaseRelation(relation);
 	IFactRelease(node);
-	IFactRelease(form);
+	IFactRelease(termForm);
 	IFactRelease(predicateForm);
 	NameRelease(roles[0]);
 	NameRelease(roles[1]);

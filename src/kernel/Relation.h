@@ -131,6 +131,12 @@ struct s_TupleStore * RelationGetTupleStore(Relation relation);
 Atom RelationGetPredicateForm(Relation relation);
 
 /**
+ * Test whether the relation's form is a conjunction form rather than a term form.
+ * Unlike IsConjunctionForm(), this also works during bootstrap; see RelationGetPredicateForm().
+ */
+bool RelationIsConjunction(Relation relation);
+
+/**
  * Test if the given relation exists in the registry.
  */
 bool RelationExists(Relation relation);

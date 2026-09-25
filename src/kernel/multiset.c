@@ -145,13 +145,15 @@ bool IsMultiset(Atom atom)
 {
 	// NOTE: for now, we assume there are only two multiset relations
 	return (
-		AtomHasRole(
+		LookupHasEntry(
 			atom,
 			GetCoreRelation(RELATION_MULTISET_ID),
+			GetCoreRelation(RELATION_MULTISET_ID).form,
 			GetCoreRoleName(ROLE_MULTISET)) ||
-		AtomHasRole(
+		LookupHasEntry(
 			atom,
 			GetCoreRelation(RELATION_MULTISET_NAME),
+			GetCoreRelation(RELATION_MULTISET_NAME).form,
 			GetCoreRoleName(ROLE_MULTISET)
 		)
 	);

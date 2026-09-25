@@ -75,7 +75,7 @@ Atom CreateStringFromCString(char const * cString)
 
 bool IsString(Atom atom)
 {
-	return AtomHasRole(atom, stringRelation, stringRoleName);
+	return LookupHasEntry(atom, stringRelation, stringTermForm, stringRoleName);
 }
 
 

@@ -3,6 +3,7 @@
 #include "kernel/lookup.h"
 #include "kernel/multiset.h"
 #include "lang/Atom.h"
+#include "lang/ConjunctionForm.h"
 #include "lang/formula.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
@@ -19,9 +20,7 @@ struct s_Lookup {
 
 /**
  * Comparison function for lookup records, used for both queries and item ordering.
- * If the recordOrKey->predicateForm is 0, any item matching the atom is considered a match,
- * so a key with null role can be passed as first argument to match all roles
- * associated with a given atom.
+ * Order by atom, then by relation, then by termForm, then by role.
  */
 static int8 compareRecords(LookupRecord const * record, LookupRecord const * recordOrKey)
 {
@@ -30,12 +29,22 @@ static int8 compareRecords(LookupRecord const * record, LookupRecord const * rec
 		if(!IsNullRelation(recordOrKey->relation)) {
 			int8 relationOrder = CompareRelations(record->relation, recordOrKey->relation);
 			if(relationOrder == 0) {
-				if(recordOrKey->role.hash)
-					return CompareAtoms(record->role, recordOrKey->role);
+				if(recordOrKey->termForm.hash) {
+					int8 termFormOrder = CompareAtoms(record->termForm, recordOrKey->termForm);
+					if(termFormOrder == 0) {
+						if(recordOrKey->role.hash)
+							return CompareAtoms(record->role, recordOrKey->role);
+						else
+							return 0;
+					}
+					else
+						return termFormOrder;
+				}
 				else
 					return 0;
 			}
-			else return relationOrder;
+			else
+				return relationOrder;
 		}
 		else
 			return 0;
@@ -78,11 +87,15 @@ size32 LookupTotalCount(void)
 }
 
 
-bool AtomHasRole(Atom atom, Relation relation, Atom role)
+bool LookupHasEntry(Atom atom, Relation relation, Atom termForm, Atom role)
 {
+	ASSERT(!IsNullRelation(relation))
+	ASSERT(termForm.hash)
+	ASSERT(role.hash)
 	LookupRecord record = {
 		.atom = atom,
 		.relation = relation,
+		.termForm = termForm,
 		.role = role
 	};
 	return BTreeContainsItem(lookup.btree, &record);
@@ -102,40 +115,16 @@ static void addRecord(LookupRecord * record)
 }
 
 
-void AtomAddRole(Atom atom, Relation relation, Atom role)
+void LookupAddRole(Atom atom, Relation relation, Atom termForm, Atom role)
 {
 	LookupRecord record = {
 		.atom = atom,
 		.relation = relation,
+		.termForm = termForm,
 		.role = role
 	};
 	// TODO: We should verify that the role actally exists in the given relation
 	addRecord(&record);
-}
-
-
-void LookupAddPredicateRoles(Relation relation, Atom const actors[])
-{
-	// iterate over roles names in the relation
-	// and add corresponding actors to lookup table
-	LookupRecord record;
-	record.relation = relation;
-	Atom predicateForm = RelationGetPredicateForm(relation);
-
-	MultisetIterator formIterator;
-	MultisetIterate(predicateForm, AT_NAME, &formIterator);
-	index8 index = 0;
-	while(MultisetIteratorNext(&formIterator)) {
-		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
-		for(index8 i = 0; i < em.multiple; i++, index++) {
-			if(relation.typeSignature.atomTypes[index] != AT_ID)
-				continue;
-			record.atom = actors[index];
-			record.role = em.element;
-			addRecord(&record);
-		}
-	}
-	MultisetIteratorEnd(&formIterator);
 }
 
 
@@ -152,11 +141,12 @@ static void removeRecord(LookupRecord * record)
 }
 
 
-void AtomRemoveRole(Atom atom, Relation relation, Atom role)
+void LookupRemoveRole(Atom atom, Relation relation, Atom termForm, Atom role)
 {
 	LookupRecord record = {
 		.atom = atom,
 		.relation = relation,
+		.termForm = termForm,
 		.role = role
 	};
 	removeRecord(&record);
@@ -165,11 +155,7 @@ void AtomRemoveRole(Atom atom, Relation relation, Atom role)
 
 void LookupRemoveAllRoles(Atom atom)
 {
-	LookupRecord key = {
-		.atom = atom,
-		.relation = {0},
-		.role = (Atom) {0}
-	};
+	LookupRecord key = { .atom = atom };
 	LookupRecord record;
 	// TODO: can we delete the item via the B-tree iterator more efficiently?
 	while(BTreeGetItem(lookup.btree, &key, &record)) {
@@ -181,15 +167,22 @@ void LookupRemoveAllRoles(Atom atom)
 }
 
 
-void LookupRemovePredicateRoles(Relation relation, Atom const actors[])
+/**
+ * CLAUDE: Call updateRecord() with a lookup record for each AT_ID actor of one term
+ * in a fact. The term's actors start at actorsOffset in the actors array of the fact.
+ */
+static void updateTermRoles(
+	Relation relation, Atom termForm, Atom predicateForm, index8 actorsOffset, Atom const actors[],
+	void (*updateRecord)(LookupRecord *))
 {
-	LookupRecord record;
-	record.relation = relation;
+	LookupRecord record = {
+		.relation = relation,
+		.termForm = termForm
+	};
 
 	MultisetIterator formIterator;
-	Atom predicateForm = TermFormGetPredicateForm(relation.form);
 	MultisetIterate(predicateForm, AT_NAME, &formIterator);
-	index8 index = 0;
+	index8 index = actorsOffset;
 	while(MultisetIteratorNext(&formIterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
 		for(index8 i = 0; i < em.multiple; i++, index++) {
@@ -197,10 +190,55 @@ void LookupRemovePredicateRoles(Relation relation, Atom const actors[])
 				continue;
 			record.atom = actors[index];
 			record.role = em.element;
-			removeRecord(&record);
+			updateRecord(&record);
 		}
 	}
 	MultisetIteratorEnd(&formIterator);
+}
+
+
+/**
+ * CLAUDE: Call updateRecord() with a lookup record for each AT_ID actor in a fact.
+ * The relation's form is tested with RelationIsConjunction(), since IsTermForm()
+ * does not work during bootstrap.
+ */
+static void updateFactRoles(
+	Relation relation, Atom const actors[], void (*updateRecord)(LookupRecord *))
+{
+	if(!RelationIsConjunction(relation)) {
+		Atom predicateForm = RelationGetPredicateForm(relation);
+		updateTermRoles(relation, relation.form, predicateForm, 0, actors, updateRecord);
+	}
+	else {
+		MultisetIterator formIterator;
+		MultisetIterate(relation.form, AT_ID, &formIterator);
+		index8 actorsOffset = 0;
+		while(MultisetIteratorNext(&formIterator)) {
+			ElementMultiple em = MultisetIteratorGetElement(&formIterator);
+			Atom termForm = em.element;
+			size8 termArity = TermFormArity(termForm);
+			Atom predicateForm = TermFormGetPredicateForm(termForm);
+			for(index8 i = 0; i < em.multiple; i++) {
+				updateTermRoles(relation, termForm, predicateForm, actorsOffset, actors, updateRecord);
+				actorsOffset += termArity;
+			}
+		}
+		MultisetIteratorEnd(&formIterator);
+	}
+}
+
+
+void LookupAddFactRoles(Relation relation, Atom const actors[])
+{
+	// iterate over roles names in the relation
+	// and add corresponding actors to lookup table
+	updateFactRoles(relation, actors, addRecord);
+}
+
+
+void LookupRemoveFactRoles(Relation relation, Atom const actors[])
+{
+	updateFactRoles(relation, actors, removeRecord);
 }
 
 /*
@@ -241,11 +279,7 @@ void LookupRemoveAllPredicateRoles(Atom predicateForm)
 
 void LookupIterate(Atom atom, LookupIterator * iterator)
 {
-	iterator->query = (LookupRecord) {
-		.atom = atom,
-		.relation = {0},
-		.role = (Atom) {0}
-	};
+	iterator->query = (LookupRecord) { .atom = atom };
 	BTreeIterate(&(iterator->treeIterator), lookup.btree);
 }
 
@@ -275,6 +309,13 @@ Relation LookupIteratorGetRelation(LookupIterator const * iterator)
 {
 	LookupRecord const * record = BTreeIteratorPeekItem(&(iterator->treeIterator));
 	return record->relation;
+}
+
+
+Atom LookupIteratorGetTermForm(LookupIterator const * iterator)
+{
+	LookupRecord const * record = BTreeIteratorPeekItem(&(iterator->treeIterator));
+	return record->termForm;
 }
 
 
@@ -321,6 +362,8 @@ void LookupDump(void)
 		IFactPrint(record->atom);
 		PrintChar(' ');
 		PrintForm(record->relation.form);
+		PrintChar(' ');
+		PrintForm(record->termForm);
 		PrintChar(' ');
 		PrintName(record->role);
 		PrintF(" %u\n", record->nFacts);

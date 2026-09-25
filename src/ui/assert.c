@@ -86,7 +86,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 
 	// Add the tuple
 	ASSERT(RelationAddTuple(relation, actorsArray, 0) == TUPLE_ADDED)
-	LookupAddPredicateRoles(relation, actorsArray);
+	LookupAddFactRoles(relation, actorsArray);
 
 	return ASSERT_OK;
 }
@@ -162,7 +162,7 @@ void RetractFact(FormulaView fact)
 	// Remove the lookup entries before the tuple: removing the tuple releases the
 	// relation's reference to each of its atoms, and releasing the last reference
 	// to an atom takes all of its lookup entries with it.
-	LookupRemovePredicateRoles(relation, actorsArray);
+	LookupRemoveFactRoles(relation, actorsArray);
 	// Remove the tuple. This will not remove defining facts
 	TupleStoreRemoveTuple(store, actorsArray, 0);
 }

@@ -54,7 +54,7 @@ void AddPairToIFact(IFactDraft * draft, Atom left, Atom right)
 
 bool IsPair(Atom atom)
 {
-	return AtomHasRole(atom, pairRelation, pairRoleNames[0]);
+	return LookupHasEntry(atom, pairRelation, pairTermForm, pairRoleNames[0]);
 }
 
 

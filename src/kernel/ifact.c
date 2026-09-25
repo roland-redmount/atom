@@ -363,7 +363,7 @@ static void createFacts(IFactDraft * draft, bool bootstrap)
 			ASSERT(TupleStoreAddTuple(conjunction->store, tuple, conjunction->idColumn + 1) == TUPLE_ADDED)
 			// add lookup
 			if(!bootstrap) {
-				LookupAddPredicateRoles(conjunction->store->relation, tuple);
+				LookupAddFactRoles(conjunction->store->relation, tuple);
 			}
 			tuple += conjunction->store->nColumns;
 		}

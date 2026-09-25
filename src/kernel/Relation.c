@@ -268,6 +268,15 @@ Atom RelationGetPredicateForm(Relation relation)
 	return record->predicateForm;
 }
 
+
+bool RelationIsConjunction(Relation relation)
+{
+	RelationRecord * record = findRelationRecord(relation);
+	ASSERT(record)
+	return !record->predicateForm.hash;
+}
+
+
 bool RelationExists(Relation relation)
 {
 	return (findRelationRecord(relation) != 0);

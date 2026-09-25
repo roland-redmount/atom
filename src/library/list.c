@@ -236,7 +236,7 @@ bool IsList(Atom atom)
 {
 	// We define this from the (list length) relation since
 	// there may be no (list element position) fact if atom is an empty list.
-	return AtomHasRole(atom, listLengthRelation, listRoleName);
+	return LookupHasEntry(atom, listLengthRelation, listLengthTermForm, listRoleName);
 }
 
 
