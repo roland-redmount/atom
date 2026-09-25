@@ -718,94 +718,81 @@ static Operator * compileConjunctionRecursive(
 	for(index8 pass = 0; !op && (pass < 3); pass++) {
 		// We attempt to compile terms (recursively) only in the second pass.
 		int termCompileMode = (pass == 1) ? TERM_DISPATCH_OR_COMPILE : TERM_DISPATCH_ONLY;
-		// Iterate over term forms in the clause form
-		MultisetIterator termFormIterator;
-		MultisetIterate(clauseState->indexedClause->form, AT_ID, &termFormIterator);
-		size8 termIndex = 0;
-		while(!op && (clauseState->nTermsExcluded < clauseState->nTerms) && MultisetIteratorNext(&termFormIterator)) {
-			ElementMultiple em = MultisetIteratorGetElement(&termFormIterator);
-			if(termIndex == clauseState->headTermIndex) {
-				termIndex += em.multiple;
+		// Iterate over terms in the clause
+		IndexedFormulaIterator iterator;
+		IndexedFormulaIterate(clauseState->indexedClause, &iterator);
+		while(!op && (clauseState->nTermsExcluded < clauseState->nTerms) && IndexedFormulaIteratorNext(&iterator)) {
+			if(clauseState->termExcluded[iterator.termIndex])
 				continue;
-			}
-			Atom termForm = em.element;
-			size8 termArity = TermFormArity(termForm);
+			size8 termArity = TermFormArity(iterator.termForm);
 			// negate the term form if necessary
-			bool negate = (clauseState->bodyTerms == BODY_TERMS_NEGATED);
-			Atom negatedTermForm = CreateTermForm(
-				TermFormGetPredicateForm(termForm),
-				negate ? !TermFormGetSign(termForm) : TermFormGetSign(termForm)
-			);
+			Atom negatedTermForm;
+			if(clauseState->bodyTerms == BODY_TERMS_NEGATED)
+				negatedTermForm = TermFormCreateOppositeForm(iterator.termForm);
+			else {
+				negatedTermForm = iterator.termForm;
+				IFactAcquire(negatedTermForm);
+			}
 			// A term of the query's own form _may_ be recursive.
 			// A term of a different form is not recursive, and is skipped in pass 2
 			bool isRecursiveForm = SameAtoms(negatedTermForm, clauseState->headTermForm);
 			if(!isRecursiveForm && (pass == 2)) {
-				termIndex += em.multiple;
 				IFactRelease(negatedTermForm);
 				continue;
 			}
-			// iterate over all terms (multiples) of this form
-			TypedTuple * termActors = CreateTypedTuple(termArity);
-			TypedTuple * serviceParameters = CreateTypedTuple(termArity);
-			for(index8 m = 0; m < em.multiple; m++, termIndex++) {
-				if(clauseState->termExcluded[termIndex])
-					continue;
-				// Compile a recursive term only in pass 2, and only if the head term parameters are known
-				bool isRecursiveTerm =
-					isRecursiveForm && termRepeatsHeadTermParameters(clauseState, termIndex);
-				if((isRecursiveTerm != (pass == 2)) || (isRecursiveTerm && !clauseState->headParametersKnown))
-					continue;
+			// Compile a recursive term only in pass 2, and only if the head term parameters are known
+			bool isRecursiveTerm =
+				isRecursiveForm && termRepeatsHeadTermParameters(clauseState, iterator.termIndex);
+			if((isRecursiveTerm != (pass == 2)) || (isRecursiveTerm && !clauseState->headParametersKnown)) {
+				IFactRelease(negatedTermForm);
+				continue;
+			}
 #ifdef DEBUG_COMPILER
-				PrintF("Pass = %d, attempting term: ", pass);
-				TypedTuple * termActors = IndexedFormulaGetTermTuple(clauseState->indexedClause, termIndex);
-				PrintFormActorsAsFormula(negatedTermForm, termActors);
-				FreeTypedTuple(termActors);
+			PrintF("Pass = %d, attempting term: ", pass);
+			TypedTuple * termActors = IndexedFormulaIteratorGetTermActors(&iterator);
+			PrintFormActorsAsFormula(negatedTermForm, termActors);
+			PrintChar('\n');
+#endif
+			// Attempt to compile this term, determining serviceParameters and termClauseMap
+			TypedTuple * serviceParameters = CreateTypedTuple(termArity);
+			if(isRecursiveTerm) {
+				op = compileRecursiveTerm(clauseState, iterator.termIndex, serviceParameters, termClauseMap);
+			}
+			else {
+				TypedTuple * termActors = IndexedFormulaIteratorGetTermActors(&iterator);
+				op = compileTerm(
+					compileStack, (FormulaView) {.form = negatedTermForm, .actors = termActors},
+					termCompileMode, serviceParameters,	termClauseMap, clauseState->choiceTree
+				);
+			}
+			if(op) {
+				if(isRecursiveTerm)
+					clauseState->hasRecurseOperator = true;
+#ifdef DEBUG_COMPILER
+				PrintCString(" => serviceParameters = ");
+				TypedTuplePrint(serviceParameters);
 				PrintChar('\n');
 #endif
-				// Attempt to compile this term, determining serviceParameters and termClauseMap
-				if(isRecursiveTerm) {
-					op = compileRecursiveTerm(clauseState, termIndex, serviceParameters, termClauseMap);
-				}
-				else {
-					TypedTuple * termActors = IndexedFormulaGetTermTuple(clauseState->indexedClause, termIndex);
-					op = compileTerm(
-						compileStack, (FormulaView) {.form = negatedTermForm, .actors = termActors},
-						termCompileMode, serviceParameters,	termClauseMap, clauseState->choiceTree
-					);
-					FreeTypedTuple(termActors);
-				}
-				if(op) {
-					if(isRecursiveTerm)
-						clauseState->hasRecurseOperator = true;
-#ifdef DEBUG_COMPILER
-					PrintCString(" => serviceParameters = ");
-					TypedTuplePrint(serviceParameters);
-					PrintChar('\n');
-#endif
-					clauseState->termExcluded[termIndex] = true;
-					clauseState->nTermsExcluded++;
-					// Update the conjunction parameters
-					propagateTermParameterTypes(clauseState, termIndex, serviceParameters);
+				clauseState->termExcluded[iterator.termIndex] = true;
+				clauseState->nTermsExcluded++;
+				// Update the conjunction parameters
+				propagateTermParameterTypes(clauseState, iterator.termIndex, serviceParameters);
 
 #ifdef DEBUG_COMPILER
-					PrintCString("Updated clause: ");
-					PrintIndexedFormula(clauseState->indexedClause);
-					PrintChar('\n');
+				PrintCString("Updated clause: ");
+				PrintIndexedFormula(clauseState->indexedClause);
+				PrintChar('\n');
 #endif
-					break;
-				}
-#ifdef DEBUG_COMPILER
-				else {
-					PrintCString(" => no match.\n");
-				}
-#endif
-						
 			}
+#ifdef DEBUG_COMPILER
+			else {
+				PrintCString(" => no match.\n");
+			}
+#endif
 			FreeTypedTuple(serviceParameters);
-			FreeTypedTuple(termActors);
 			IFactRelease(negatedTermForm);
 		}
-		MultisetIteratorEnd(&termFormIterator);
+		IndexedFormulaIteratorEnd(&iterator);
 	}
 
 	if(!op) {

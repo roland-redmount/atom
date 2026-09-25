@@ -42,6 +42,14 @@ bool IsTermForm(Atom atom)
 	);
 }
 
+
+Atom TermFormCreateOppositeForm(Atom termForm)
+{
+	bool sign = TermFormGetSign(termForm);
+	return CreateTermForm(TermFormGetPredicateForm(termForm), !sign);	
+}
+
+
 // Retrieve the (unique) tuple from the (term-form predicate-form sign) relation
 // matching the given term form atom
 static void termFormGetTuple(Atom termForm, Atom tuple[])

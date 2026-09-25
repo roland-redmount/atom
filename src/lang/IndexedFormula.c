@@ -82,3 +82,60 @@ void FreeIndexedFormula(IndexedFormula const * indexedFormula)
 	Free(indexedFormula->termActorsIndices);
 	Free(indexedFormula);
 }
+
+
+void IndexedFormulaIterate(IndexedFormula const * indexedFormula, IndexedFormulaIterator * iterator)
+{
+	SetMemory(iterator, sizeof(IndexedFormulaIterator), 0);
+	iterator->indexedFormula = indexedFormula;
+	MultisetIterate(indexedFormula->form, AT_ID, &(iterator->multisetIterator));
+}
+
+
+bool IndexedFormulaIteratorNext(IndexedFormulaIterator * iterator)
+{
+	if(iterator->termActors && (iterator->termFormIndex < iterator->termFormMultiple - 1)) {
+		// Take next term of the current term form
+		iterator->termFormIndex++;
+		iterator->termIndex++;
+		FreeTypedTuple(iterator->termActors);
+		iterator->termActors = IndexedFormulaGetTermTuple(iterator->indexedFormula, iterator->termIndex);
+		return true;
+	}
+	// Else we take the next term form
+	if(MultisetIteratorNext(&(iterator->multisetIterator))) {
+		ElementMultiple em = MultisetIteratorGetElement(&(iterator->multisetIterator));
+		iterator->termForm = em.element;
+		iterator->termFormMultiple = em.multiple;
+		iterator->termFormIndex = 0;
+		if(iterator->termActors) {
+			// Except for the first call
+			iterator->termIndex++;
+			FreeTypedTuple(iterator->termActors);
+		}
+		iterator->termActors = IndexedFormulaGetTermTuple(iterator->indexedFormula, iterator->termIndex);
+		return true;
+	}
+	else
+		return false;
+}
+
+
+Atom IndexedFormulaIteratorGetTermForm(IndexedFormulaIterator const * iterator)
+{
+	return iterator->termForm;
+}
+
+
+TypedTuple * IndexedFormulaIteratorGetTermActors(IndexedFormulaIterator const * iterator)
+{
+	return iterator->termActors;
+}
+
+
+void IndexedFormulaIteratorEnd(IndexedFormulaIterator * iterator)
+{
+	MultisetIteratorEnd(&(iterator->multisetIterator));
+	if(iterator->termActors)
+		FreeTypedTuple(iterator->termActors);
+}

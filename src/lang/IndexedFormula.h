@@ -7,6 +7,7 @@
 #define INDEXEDFORMULA_H
 
 #include "kernel/typedtuple.h"
+#include "kernel/multiset.h"
 
 
 typedef struct s_IndexedFormula {
@@ -69,6 +70,30 @@ void PrintIndexedFormula(IndexedFormula const * indexedFormula);
  * Free an IndexedFormula
  */
 void FreeIndexedFormula(IndexedFormula const * indexedFormula);
+
+/**
+ * Iterator over the terms in an IndexedFormula
+ */
+typedef struct s_IndexedFormulaIterator {
+	IndexedFormula const * indexedFormula;
+	MultisetIterator multisetIterator;
+	Atom termForm;
+	size8 termFormMultiple;
+	size8 termFormIndex;		// 0 .. termFormMultiple-1
+	index8 termIndex;
+	TypedTuple * termActors;
+} IndexedFormulaIterator;
+
+
+void IndexedFormulaIterate(IndexedFormula const * indexedFormula, IndexedFormulaIterator * iterator);
+
+bool IndexedFormulaIteratorNext(IndexedFormulaIterator * iterator);
+
+Atom IndexedFormulaIteratorGetTermForm(IndexedFormulaIterator const * iterator);
+
+TypedTuple * IndexedFormulaIteratorGetTermActors(IndexedFormulaIterator const * iterator);
+
+void IndexedFormulaIteratorEnd(IndexedFormulaIterator * iterator);
 
 
 #endif	// INDEXEDFORMULA_H

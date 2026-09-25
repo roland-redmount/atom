@@ -15,6 +15,9 @@ Atom CreateTermForm(Atom predicateForm, bool sign);
 
 bool IsTermForm(Atom form);
 
+/**
+ * Return the predicate form contained in the term form
+ */
 Atom TermFormGetPredicateForm(Atom termForm);
 
 /**
@@ -23,12 +26,14 @@ Atom TermFormGetPredicateForm(Atom termForm);
 bool TermFormGetSign(Atom termForm);
 
 /**
- * Return the "opposite" of the given term form,
- * flipping the sign. The caller must release the
- * returned form when done.
+ * Return the "opposite" of the given term form, flipping the sign.
+ * The caller obtains a reference to the returned form.
  */
-// Atom TermFormCreateOppositeForm(termForm);
+Atom TermFormCreateOppositeForm(Atom termForm);
 
+/**
+ * Print a term form
+ */
 void PrintTermForm(Atom termForm);
 
 /**
