@@ -26,6 +26,7 @@
 #include "lang/IndexedFormula.h"
 #include "lang/SubstitutionList.h"
 #include "lang/TermForm.h"
+#include "lang/TermMultiset.h"
 #include "lang/Variable.h"
 #include "lang/unification.h"
 #include "memory/allocator.h"
@@ -413,50 +414,21 @@ static size8 setupJoinArgumentMaps(
 
 
 /**
- * The query term index of a conjunction query, which is compiled from all of its
- * terms; see compileConjunctionQuery().
- * 
- * TODO: We need a better representation for the conjunction that compileConjunctionQuery()
- * processes, rather than work off the clause, which now may or may not have a "head" term.
- */
-#define NO_HEAD_TERM			255
-
-/**
- * CLAUDE: The terms of a compiled conjunction are either the terms of a clause, negated,
- * or the terms of a conjunction query as given.
- */
-#define BODY_TERMS_NEGATED		1
-#define BODY_TERMS_AS_GIVEN		2
-
-
-/**
- * The state of compiling one clause into a conjunction of operators, shared by the
- * recursion over its terms. The clause actors and the termExcluded flags are updated as terms
- * compile: an actor is given its atom type once a term providing it has dispatched, and
+ * The state of compiling a conjunction, shared by the recursion over its terms.
+ * The term actors and the termExcluded flags are updated as terms compile:
+ * a parameter is given its atom type once a term providing it has dispatched, and
  * a term is marked excluded once it has been compiled.
- * 
- * TODO: I think we should factor out a struct representing only the conjunction being
- * compiled, without the matched (query; head) term. We should keep a SubstitutionList that records
- * the updated parameters as they are discovered, and update the query term _after_
- * the conjunction has compiled.
- * The hitch is the recursive terms: these can only occur in a conjunction that is assocated
- * with a query term.
- * 
- * In refactoring this, we should think ahead to a generalized compiler that works with subsets
- * of terms, we could have a recursive *conjunction*.) We'll need some index structure that
- * identifies a subset of terms, and their argument positions.
  */
 typedef struct s_ClauseCompileState {
-	IndexedFormula * indexedClause;
+	IndexedFormula * indexedFormula;
+	bool isConjunction;
 	uint8 nTerms;
 	// Total number of clause arguments, including the local variables
 	size8 nArguments;
 
 	// The head term is the term matched by the query, excluded from the conjunction.
 	index8 headTermIndex;
-	// The form of the head term, which is the same as for a recursive term
-	Atom headTermForm;
-	size8 headTermArity;	// NOTE: can be determined from indexeClause()
+	size8 headTermArity;
 	// Number of unique parameters in the head term. This is less than headTermArity if
 	// at least one head parameter is repeated. Head parameters are numbered
 	// 1, 2, ...nHeadArguments; a parameter number > nHeadArguments is local to the clause,
@@ -470,12 +442,16 @@ typedef struct s_ClauseCompileState {
 	bool * termExcluded;
 	size8 nTermsExcluded;
 
+	// termForms[i] is the form of term i as compiled: negated for a clause,
+	// as given for a conjunction query. The head term has no entry.
+	Atom * termForms;
+	// termIsRecursive[i] is true if term i is recursive; see compileConjunction()
+	bool * termIsRecursive;
+
 	// Choice points taken during the compilation of the clause
 	ChoiceTree * choiceTree;
 	// Set when a recursive term has compiled to a RECURSE operator
 	bool hasRecurseOperator;
-	// CLAUDE: BODY_TERMS_NEGATED or BODY_TERMS_AS_GIVEN
-	uint32 bodyTerms;
 } ClauseCompileState;
 
 
@@ -488,15 +464,14 @@ typedef struct s_ClauseCompileState {
  *    is what provides it.
  *
  * Compiled terms must be marked excluded.
- * 
  */
 static void propagateTermParameterTypes(
 	ClauseCompileState * clauseState, index8 termIndex, TypedTuple const * serviceParameters)
 {
 	ASSERT(clauseState->termExcluded[termIndex])
-	size8 termArity = IndexedFormulaTermArity(clauseState->indexedClause, termIndex);
+	size8 termArity = IndexedFormulaTermArity(clauseState->indexedFormula, termIndex);
 	for(index8 i = 0; i < termArity; i++) {
-		TypedAtom termActor = IndexedFormulaGetTermElement(clauseState->indexedClause, termIndex, i);
+		TypedAtom termActor = IndexedFormulaGetTermElement(clauseState->indexedFormula, termIndex, i);
 		// CLAUDE: An output parameter may be typed already, when the query parameters are
 		// typed for a recursive clause. The terms still to compile must take it as an
 		// input all the same, or a JOIN would not constrain them by it.
@@ -523,32 +498,32 @@ static void propagateTermParameterTypes(
 		};
 
 		// Type the parameter in the head term, unless it is a local parameter
-		if((clauseState->headTermIndex != NO_HEAD_TERM)	&& (parameterNumber <= clauseState->nHeadArguments)) {
+		if(!clauseState->isConjunction	&& (parameterNumber <= clauseState->nHeadArguments)) {
 			// The parameter may occur multiple times in the head term
 			for(index8 k = 0; k < clauseState->headTermArity; k++) {
 				TypedAtom matchedActor = IndexedFormulaGetTermElement(
-					clauseState->indexedClause, clauseState->headTermIndex, k);
+					clauseState->indexedFormula, clauseState->headTermIndex, k);
 				ASSERT(matchedActor.type == AT_PARAMETER)
 				if(matchedActor.atom.parameter.number == parameterNumber) {
 					IndexedFormulaSetTermAtom(
-						clauseState->indexedClause, clauseState->headTermIndex, k, outputParameter);
+						clauseState->indexedFormula, clauseState->headTermIndex, k, outputParameter);
 				}
 			}
 		}
 		// Also set the type of the parameter in the term that compiled
 		// NOTE: not necessary, this term is not used for anything at this point
 		IndexedFormulaSetTermAtom(
-			clauseState->indexedClause, termIndex, i, outputParameter);
+			clauseState->indexedFormula, termIndex, i, outputParameter);
 
 		// The terms still to compile take the parameter as an input
 		for(index8 j = 0; j < clauseState->nTerms; j++) {
 			if(clauseState->termExcluded[j])
 				continue;
-			index8 termArity = IndexedFormulaTermArity(clauseState->indexedClause, j);
+			index8 termArity = IndexedFormulaTermArity(clauseState->indexedFormula, j);
 			for(index8 k = 0; k < termArity; k++) {
-				TypedAtom actor = IndexedFormulaGetTermElement(clauseState->indexedClause, j, k);
+				TypedAtom actor = IndexedFormulaGetTermElement(clauseState->indexedFormula, j, k);
 				if(SameTypedAtoms(actor, termActor))
-					IndexedFormulaSetTermAtom(clauseState->indexedClause, j, k, inputParameter);
+					IndexedFormulaSetTermAtom(clauseState->indexedFormula, j, k, inputParameter);
 			}
 		}
 	}
@@ -590,14 +565,14 @@ static bool termRepeatsHeadTermParameters(ClauseCompileState const * clauseState
 	// whenever their parameter numbers are equal.
 	for(index8 i = 0; i < clauseState->headTermArity; i++) {
 		Atom headParameter1 = IndexedFormulaGetTermAtom(
-			clauseState->indexedClause, clauseState->headTermIndex, i);
+			clauseState->indexedFormula, clauseState->headTermIndex, i);
 		for(index8 j = 0; j < i; j++) {
 			Atom headParameter2 = IndexedFormulaGetTermAtom(
-				clauseState->indexedClause, clauseState->headTermIndex, j);
+				clauseState->indexedFormula, clauseState->headTermIndex, j);
 			if(headParameter1.parameter.number == headParameter2.parameter.number) {
 				// Parameters are identical in the head term; check actors in the given term
-				TypedAtom actor1 = IndexedFormulaGetTermElement(clauseState->indexedClause, termIndex, i);
-				TypedAtom actor2 = IndexedFormulaGetTermElement(clauseState->indexedClause, termIndex, j);
+				TypedAtom actor1 = IndexedFormulaGetTermElement(clauseState->indexedFormula, termIndex, i);
+				TypedAtom actor2 = IndexedFormulaGetTermElement(clauseState->indexedFormula, termIndex, j);
 				if(!SameTypedAtoms(actor1, actor2))
 					return false;
 			}
@@ -624,14 +599,14 @@ static Operator * compileRecursiveTerm(
 	ClauseCompileState * state, index8 termIndex, TypedTuple * serviceParameters, index8 clauseMap[])
 {
 	// Determine parameters of the recursive term
-	size8 termArity = IndexedFormulaTermArity(state->indexedClause, termIndex);
+	size8 termArity = IndexedFormulaTermArity(state->indexedFormula, termIndex);
 	ASSERT(termArity == state->headTermArity)
-	TypedTuple * termActors = IndexedFormulaGetTermTuple(state->indexedClause, termIndex);
+	TypedTuple * termActors = IndexedFormulaGetTermTuple(state->indexedFormula, termIndex);
 	Atom termParameters[termArity];
 	termActorsToParameters(termActors, termParameters);
 
 	// Extract the head term parameters from the clause actors. Must be fully typed AT_PARAMETER atoms.
-	Atom const * headParametersArray = IndexedFormulaPeekTermAtoms(state->indexedClause, state->headTermIndex);
+	Atom const * headParametersArray = IndexedFormulaPeekTermAtoms(state->indexedFormula, state->headTermIndex);
 
 	// The recursive term's parameter types are determined by the head term's
 	byte headAtomTypes[termArity];
@@ -697,7 +672,7 @@ static Operator * compileConjunctionRecursive(
 	Operator * op = 0;
 	// Clause arguments provided by the compiled term. A term may refer to the same
 	// clause argument more than once, so it may have more arguments than the clause.
-	index8 termClauseMap[clauseState->indexedClause->actors->nAtoms];
+	index8 termClauseMap[clauseState->indexedFormula->actors->nAtoms];
 
 	/**
 	 * Find a term that can be compiled, in three passes over the term forms of the clause:
@@ -720,33 +695,16 @@ static Operator * compileConjunctionRecursive(
 		int termCompileMode = (pass == 1) ? TERM_DISPATCH_OR_COMPILE : TERM_DISPATCH_ONLY;
 		// Iterate over terms in the clause
 		IndexedFormulaIterator iterator;
-		IndexedFormulaIterate(clauseState->indexedClause, &iterator);
+		IndexedFormulaIterate(clauseState->indexedFormula, &iterator);
 		while(!op && (clauseState->nTermsExcluded < clauseState->nTerms) && IndexedFormulaIteratorNext(&iterator)) {
 			if(clauseState->termExcluded[iterator.termIndex])
 				continue;
-			size8 termArity = TermFormArity(iterator.termForm);
-			// negate the term form if necessary
-			Atom negatedTermForm;
-			if(clauseState->bodyTerms == BODY_TERMS_NEGATED)
-				negatedTermForm = TermFormCreateOppositeForm(iterator.termForm);
-			else {
-				negatedTermForm = iterator.termForm;
-				IFactAcquire(negatedTermForm);
-			}
-			// A term of the query's own form _may_ be recursive.
-			// A term of a different form is not recursive, and is skipped in pass 2
-			bool isRecursiveForm = SameAtoms(negatedTermForm, clauseState->headTermForm);
-			if(!isRecursiveForm && (pass == 2)) {
-				IFactRelease(negatedTermForm);
-				continue;
-			}
 			// Compile a recursive term only in pass 2, and only if the head term parameters are known
-			bool isRecursiveTerm =
-				isRecursiveForm && termRepeatsHeadTermParameters(clauseState, iterator.termIndex);
-			if((isRecursiveTerm != (pass == 2)) || (isRecursiveTerm && !clauseState->headParametersKnown)) {
-				IFactRelease(negatedTermForm);
+			bool isRecursiveTerm = clauseState->termIsRecursive[iterator.termIndex];
+			if((isRecursiveTerm != (pass == 2)) || (isRecursiveTerm && !clauseState->headParametersKnown))
 				continue;
-			}
+			size8 termArity = TermFormArity(iterator.termForm);
+			Atom negatedTermForm = clauseState->termForms[iterator.termIndex];
 #ifdef DEBUG_COMPILER
 			PrintF("Pass = %d, attempting term: ", pass);
 			TypedTuple * termActors = IndexedFormulaIteratorGetTermActors(&iterator);
@@ -790,7 +748,6 @@ static Operator * compileConjunctionRecursive(
 			}
 #endif
 			FreeTypedTuple(serviceParameters);
-			IFactRelease(negatedTermForm);
 		}
 		IndexedFormulaIteratorEnd(&iterator);
 	}
@@ -803,7 +760,7 @@ static Operator * compileConjunctionRecursive(
 	if(clauseState->nTermsExcluded < clauseState->nTerms) {
 		// The operator just compiled will be the left child of the JOIN operator.
 		// Recurse on remaining terms to obtain the right child operator.
-		index8 rightClauseMap[clauseState->indexedClause->actors->nAtoms];
+		index8 rightClauseMap[clauseState->indexedFormula->actors->nAtoms];
 		Operator * rightOperator = compileConjunctionRecursive(
 			compileStack, clauseState, rightClauseMap);
 		if(rightOperator) {
@@ -847,12 +804,12 @@ static Operator * compileConjunctionRecursive(
  * Returns the number of unique local variables found.
  */
 static size8 parameterizeLocalVariables(
-	IndexedFormula * indexedClause, index8 headTermIndex, size8 nHeadArguments)
+	IndexedFormula * indexedClause, bool isConjunction, index8 headTermIndex, size8 nHeadArguments)
 {
 	// Skip the head term, if present
 	index8 headTermBegin = 0;
 	index8 headTermEnd = 0;
-	if(headTermIndex != NO_HEAD_TERM) {
+	if(!isConjunction) {
 		headTermBegin = indexedClause->termActorsIndices[headTermIndex];
 		headTermEnd = indexedClause->termActorsIndices[headTermIndex + 1];
 	}
@@ -950,70 +907,97 @@ static bool hasFullyTypedParameters(IndexedFormula * indexedFormula, index8 i)
 
 
 /**
- * Compile the conjunction formed by negating the given clause (clauseForm, clauseActors),
- * minus the head term (the clause term matching a query), indicated by headTermIndex.
+ * Compile a conjunction to a JOIN operator. There are two use cases:
+ * 
+ * If form is a conjunction form, the given (form, actors) is a conjunction, and we compile it directly;
+ * there is no head term, so headTermIndex, headTermForm and nHeadArguments are meaningless.
+ * 
+ * Else, the formula must be a clause, and we compile the conjunction obtained by negating its
+ * terms, except the for the head (query-matched) term, indicated by headTermIndex.
  * By definition, the head term has the same form and parameters as the query.
- * A recursive term in the conjunction is compiled against the head term, once its parameters
- * types have been fully determined.
- *
  * nHeadArguments is the number of unique parameters in the head term, which equals the number of
  * arguments of the returned operator.
- * bodyTerms is BODY_TERMS_NEGATED for a clause. For a conjunction query it is
- * BODY_TERMS_AS_GIVEN, and matchedTermIndex is NO_MATCHED_TERM; see compileConjunctionQuery().
+ * A recursive term in the conjunction is compiled against the head term, once its parameters
+ * types have been fully determined.
  * 
  * The function sets *hasRecurseOperator = true if a recursive term was compiled to a RECURSE operator.
  * The resulting operator must then be wrapped in a FIXPOINT operator; see completeRecursiveVariant().
  * Returns the compiled Operator.
- * 
  */
 static Operator * compileConjunction(
-	CompileStack * compileStack,
-	Atom clauseForm, TypedTuple * clauseActors, index8 headTermIndex, Atom headTermForm,
-	size8 nHeadArguments, ChoiceTree * choiceTree, int bodyTerms, bool * hasRecurseOperator)
+	CompileStack * compileStack, Atom form, TypedTuple * actors,
+	index8 headTermIndex, Atom headTermForm, size8 nHeadArguments,
+	ChoiceTree * choiceTree, bool * hasRecurseOperator)
 {
-	size8 clauseNTerms = ClauseFormNTerms(clauseForm);
-	IndexedFormula * indexedClause = CreateIndexedFormula(clauseForm, clauseActors);
+	bool isConjunction = IsConjunctionForm(form);
+	size8 nTerms = TermMultisetNTerms(form);
+	IndexedFormula * indexedFormula = CreateIndexedFormula(form, actors);
 
-	bool termExcluded[clauseNTerms];
-	for(index8 i = 0; i < clauseNTerms; i++)
-		termExcluded[i] = (i == headTermIndex);
-	size8 nTermsExcluded = (headTermIndex == NO_HEAD_TERM) ? 0 : 1;
+	bool termExcluded[nTerms];
+	for(index8 i = 0; i < nTerms; i++)
+		termExcluded[i] = isConjunction ? false : (i == headTermIndex);
+	size8 nTermsExcluded = isConjunction ? 0 : 1;
 
-	// Lcal variables are variables (AT_VARIABLE atoms) in the clause actors
-	// that are not present in the head term. These become local parameters,
-	// and are added to the arguments tuple.
+	// Local variables are any variables not present in the head term.
+	// These become local parameters, and are added to the arguments tuple.
 	size8 nLocalVariables = parameterizeLocalVariables(
-		indexedClause, headTermIndex, nHeadArguments);
+		indexedFormula, isConjunction, headTermIndex, nHeadArguments);
 
 	// Test if all head parameters are known; this is required to compile a recursive term.
 	size8 headTermArity = 0;
 	bool headParametersKnown = false;
 	// Without a query term there are no query parameters to read a recursive term against
-	if(headTermIndex != NO_HEAD_TERM) {
-		headTermArity = IndexedFormulaTermArity(indexedClause, headTermIndex);
-		headParametersKnown = hasFullyTypedParameters(indexedClause, headTermIndex);
+	if(!isConjunction) {
+		headTermArity = IndexedFormulaTermArity(indexedFormula, headTermIndex);
+		headParametersKnown = hasFullyTypedParameters(indexedFormula, headTermIndex);
 	}
 
 	// Setup the initial clause state
+	Atom termForms[nTerms];
+	bool termIsRecursive[nTerms];
 	ClauseCompileState clauseState = {
-		.indexedClause = indexedClause,
-		.nTerms = clauseNTerms,
+		.indexedFormula = indexedFormula,
+		.isConjunction = isConjunction,
+		.nTerms = nTerms,
 		.nArguments = nHeadArguments + nLocalVariables,
 
 		.headTermIndex = headTermIndex,
-		.headTermForm = headTermForm,
 		.headTermArity = headTermArity,
 		.nHeadArguments = nHeadArguments,
 		.headParametersKnown = headParametersKnown,
 
 		.termExcluded = termExcluded,
 		.nTermsExcluded = nTermsExcluded,
-		.choiceTree = choiceTree,
-		.bodyTerms = bodyTerms
+		.termForms = termForms,
+		.termIsRecursive = termIsRecursive,
+		.choiceTree = choiceTree
 	};
 
+	// Setup the form of each term except the head term, and flag recursive terms.
+	// termRepeatsHeadTermParameters() needs the clause state, so this follows its setup.
+	IndexedFormulaIterator iterator;
+	IndexedFormulaIterate(indexedFormula, &iterator);
+	while(IndexedFormulaIteratorNext(&iterator)) {
+		index8 i = iterator.termIndex;
+		termForms[i] = (Atom) {0};
+		termIsRecursive[i] = false;
+		if(isConjunction) {
+			termForms[i] = iterator.termForm;
+			IFactAcquire(termForms[i]);
+		}
+		else {
+			if(i == headTermIndex)
+				continue;
+			termForms[i] = TermFormCreateOppositeForm(iterator.termForm);
+			// A term is recursive if it has the head term 's form and repeats the same parameter
+			termIsRecursive[i] =
+				SameAtoms(termForms[i], headTermForm) && termRepeatsHeadTermParameters(&clauseState, i);
+		}
+	}
+	IndexedFormulaIteratorEnd(&iterator);
+
 	// Compile the conjunction recursively, joining one term at a time
-	index8 clauseMap[clauseActors->nAtoms];
+	index8 clauseMap[actors->nAtoms];
 	// CLAUDE: The matched term is excluded from the start
 	Operator * op = compileConjunctionRecursive(compileStack, &clauseState, clauseMap);
 
@@ -1033,7 +1017,11 @@ static Operator * compileConjunction(
 			op = projectOperator;
 		}
 	}
-	FreeIndexedFormula(indexedClause);
+	for(index8 i = 0; i < nTerms; i++) {
+		if(isConjunction || (i != headTermIndex))
+			IFactRelease(termForms[i]);
+	}
+	FreeIndexedFormula(indexedFormula);
 	return op;
 }
 
@@ -1259,7 +1247,7 @@ static size8 compileClauses(
 					// TODO:  here we should create the conjunction of negated terms, and give that to compileConjunction() 
 					Operator * conjunctionOp = compileConjunction(
 						compileStack, clauseForm, substClauseActors, matchedTermIndex, query->form,
-						nQueryArguments, &choiceTree, BODY_TERMS_NEGATED, &hasRecurseOperator);
+						nQueryArguments, &choiceTree, &hasRecurseOperator);
 					if(!conjunctionOp)
 						continue;
 					// Recover the resolved parameters (with types) from the clause actors
@@ -1314,8 +1302,9 @@ static size8 compileConjunctionQuery(
 		TypedTupleCopy(queryActors, conjunctionActors);
 		bool hasRecurseOperator = false;
 		Operator * conjunctionOp = compileConjunction(
-			compileStack, query->form, conjunctionActors, NO_HEAD_TERM, query->form,
-			nQueryArguments, &choiceTree, BODY_TERMS_AS_GIVEN, &hasRecurseOperator);
+			compileStack, query->form, conjunctionActors,
+			0, (Atom) {0}, nQueryArguments,		// these are misleading ...
+			&choiceTree, &hasRecurseOperator);
 		if(!conjunctionOp)
 			continue;
 		ASSERT(!hasRecurseOperator)
