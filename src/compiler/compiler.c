@@ -534,8 +534,7 @@ static void propagateTermParameterTypes(
  * Mark the terms given by termIndices as excluded.
  */
 static void excludeCompiledTerms(
-	ClauseCompileState * clauseState, index8 const termIndices[], size8 nCompiledTerms,
-	TypedTuple const * serviceParameters, index8 const actorIndices[])
+	ClauseCompileState * clauseState, index8 const termIndices[], size8 nCompiledTerms)
 {
 	for(index8 i = 0; i < nCompiledTerms; i++) {
 		ASSERT(!clauseState->termExcluded[termIndices[i]])
@@ -667,6 +666,113 @@ static Operator * compileRecursiveTerm(
 
 
 /**
+ * Mark the term given by termIndex as compiled, and update the parameter types of
+ * the conjunction from the serviceParameters of the term's operator.
+ */
+static void acceptCompiledTerm(
+	ClauseCompileState * clauseState, index8 termIndex, TypedTuple const * serviceParameters)
+{
+#ifdef DEBUG_COMPILER
+	PrintCString(" => serviceParameters = ");
+	TypedTuplePrint(serviceParameters);
+	PrintChar('\n');
+#endif
+	// Update the conjunction parameters
+	size8 termArity = IndexedFormulaTermArity(clauseState->indexedFormula, termIndex);
+	index8 actorIndices[termArity];
+	IndexedFormulaGetTermActorIndices(clauseState->indexedFormula, termIndex, actorIndices);
+	excludeCompiledTerms(clauseState, &termIndex, 1);
+	propagateTermParameterTypes(clauseState, serviceParameters, actorIndices);
+
+#ifdef DEBUG_COMPILER
+	PrintCString("Updated clause: ");
+	PrintIndexedFormula(clauseState->indexedFormula);
+	PrintChar('\n');
+#endif
+}
+
+
+/**
+ * Compile the first non-excluded term of the clause that is not recursive.
+ * With mode = TERM_DISPATCH_ONLY, we pick the first term that dispatches to an
+ * existing service; with mode = TERM_DISPATCH_OR_COMPILE, we pick the first term
+ * that can be compiled to a new service, using compileTerm().
+ * Returns the resulting operator, or 0 if no term compiled.
+ */
+static Operator * compileNextTerm(
+	CompileStack * compileStack, ClauseCompileState * clauseState, int mode, index8 termClauseMap[])
+{
+	Operator * op = 0;
+	// Iterate over terms in the clause
+	IndexedFormulaIterator iterator;
+	IndexedFormulaIterate(clauseState->indexedFormula, &iterator);
+	while(!op && IndexedFormulaIteratorNext(&iterator)) {
+		index8 termIndex = iterator.termIndex;
+		if(clauseState->termExcluded[termIndex] || clauseState->termIsRecursive[termIndex])
+			continue;
+		Atom termForm = clauseState->termForms[termIndex];
+		TypedTuple * termActors = IndexedFormulaIteratorGetTermActors(&iterator);
+#ifdef DEBUG_COMPILER
+		PrintF("Pass = %d, %s term: ", mode, mode == TERM_DISPATCH_ONLY ? "dispatch" : "compile");
+		PrintFormActorsAsFormula(termForm, termActors);
+		PrintChar('\n');
+#endif
+		// Attempt to compile this term, determining serviceParameters and termClauseMap
+		TypedTuple * serviceParameters = CreateTypedTuple(termActors->nAtoms);
+		op = compileTerm(
+			compileStack, (FormulaView) {.form = termForm, .actors = termActors},
+			mode, serviceParameters, termClauseMap, clauseState->choiceTree
+		);
+		if(op)
+			acceptCompiledTerm(clauseState, termIndex, serviceParameters);
+#ifdef DEBUG_COMPILER
+		else
+			PrintCString(" => no match.\n");
+#endif
+		FreeTypedTuple(serviceParameters);
+	}
+	IndexedFormulaIteratorEnd(&iterator);
+	return op;
+}
+
+
+/**
+ * Compile the first non-excluded recursive term to a RECURSE operator; see
+ * compileRecursiveTerm(). The term is then marked excluded. Returns 0 if no term compiled.
+ */
+static Operator * compileNextRecursiveTerm(ClauseCompileState * clauseState, index8 termClauseMap[])
+{
+	if(!clauseState->headParametersKnown)
+		return 0;
+	Operator * op = 0;
+	for(index8 termIndex = 0; !op && (termIndex < clauseState->nTerms); termIndex++) {
+		if(clauseState->termExcluded[termIndex] || !clauseState->termIsRecursive[termIndex])
+			continue;
+#ifdef DEBUG_COMPILER
+		PrintCString("Pass = 3, recursive term: ");
+		TypedTuple * termActors = IndexedFormulaGetTermTuple(clauseState->indexedFormula, termIndex);
+		PrintFormActorsAsFormula(clauseState->termForms[termIndex], termActors);
+		FreeTypedTuple(termActors);
+		PrintChar('\n');
+#endif
+		size8 termArity = IndexedFormulaTermArity(clauseState->indexedFormula, termIndex);
+		TypedTuple * serviceParameters = CreateTypedTuple(termArity);
+		op = compileRecursiveTerm(clauseState, termIndex, serviceParameters, termClauseMap);
+		if(op) {
+			clauseState->hasRecurseOperator = true;
+			acceptCompiledTerm(clauseState, termIndex, serviceParameters);
+		}
+#ifdef DEBUG_COMPILER
+		else
+			PrintCString(" => no match.\n");
+#endif
+		FreeTypedTuple(serviceParameters);
+	}
+	return op;
+}
+
+
+/**
  * Compile a JOIN operator from the conjunction obtained by negating the clause being
  * compiled, excluding the head (query-matched) term, and any term already compiled.
  * We iterate over all terms (negated) until we find a term that dispatches to a known service,
@@ -684,7 +790,7 @@ static Operator * compileConjunctionRecursive(
 	PrintCString("compileConjunctionRecursive()\n");
 #endif
 	ASSERT(clauseState->nTerms >= 2)
-	Operator * op = 0;
+	ASSERT(clauseState->nTermsExcluded < clauseState->nTerms)
 	// Clause arguments provided by the compiled term. A term may refer to the same
 	// clause argument more than once, so it may have more arguments than the clause.
 	index8 termClauseMap[clauseState->indexedFormula->actors->nAtoms];
@@ -692,11 +798,11 @@ static Operator * compileConjunctionRecursive(
 	/**
 	 * Find a term that can be compiled, in three passes over the term forms of the clause:
 	 * 
-	 * pass = 0: Only terms that dispatch to an existing service are considered.
-	 * pass = 1: Terms that do not dispatch to an existing service are compiled,
-	 *           but recursive terms are not compiled.
-	 * pass = 2: Only recursive terms are compiled, producing a RECURSE operator,
-	 *           provided that all their types have been determined.
+	 * pass 1: Only terms that dispatch to an existing service are considered.
+	 * pass 2: Terms that do not dispatch to an existing service are compiled,
+	 *         but recursive terms are not compiled.
+	 * pass 3: Only recursive terms are compiled, producing a RECURSE operator,
+	 *         provided that all their types have been determined.
 	 * 
 	 * The 3 passes serve to prioritize the candidate terms, so that in each call to 
 	 * compileConjunctionRecursive() we prefer terms in pass 0 over those in pass 1,
@@ -705,69 +811,14 @@ static Operator * compileConjunctionRecursive(
 	 * as early as possible, to avoid generating calls to table-scanning operators which
 	 * then have to be filtered. It will not always yield the optimal solution.
 	 */
-	for(index8 pass = 0; !op && (pass < 3); pass++) {
-		// We attempt to compile terms (recursively) only in the second pass.
-		int termCompileMode = (pass == 1) ? TERM_DISPATCH_OR_COMPILE : TERM_DISPATCH_ONLY;
-		// Iterate over terms in the clause
-		IndexedFormulaIterator iterator;
-		IndexedFormulaIterate(clauseState->indexedFormula, &iterator);
-		while(!op && (clauseState->nTermsExcluded < clauseState->nTerms) && IndexedFormulaIteratorNext(&iterator)) {
-			if(clauseState->termExcluded[iterator.termIndex])
-				continue;
-			// Compile a recursive term only in pass 2, and only if the head term parameters are known
-			bool isRecursiveTerm = clauseState->termIsRecursive[iterator.termIndex];
-			if((isRecursiveTerm != (pass == 2)) || (isRecursiveTerm && !clauseState->headParametersKnown))
-				continue;
-			size8 termArity = TermFormArity(iterator.termForm);
-			Atom negatedTermForm = clauseState->termForms[iterator.termIndex];
-#ifdef DEBUG_COMPILER
-			PrintF("Pass = %d, attempting term: ", pass);
-			TypedTuple * termActors = IndexedFormulaIteratorGetTermActors(&iterator);
-			PrintFormActorsAsFormula(negatedTermForm, termActors);
-			PrintChar('\n');
-#endif
-			// Attempt to compile this term, determining serviceParameters and termClauseMap
-			TypedTuple * serviceParameters = CreateTypedTuple(termArity);
-			if(isRecursiveTerm) {
-				op = compileRecursiveTerm(clauseState, iterator.termIndex, serviceParameters, termClauseMap);
-			}
-			else {
-				TypedTuple * termActors = IndexedFormulaIteratorGetTermActors(&iterator);
-				op = compileTerm(
-					compileStack, (FormulaView) {.form = negatedTermForm, .actors = termActors},
-					termCompileMode, serviceParameters,	termClauseMap, clauseState->choiceTree
-				);
-			}
-			if(op) {
-				if(isRecursiveTerm)
-					clauseState->hasRecurseOperator = true;
-#ifdef DEBUG_COMPILER
-				PrintCString(" => serviceParameters = ");
-				TypedTuplePrint(serviceParameters);
-				PrintChar('\n');
-#endif
-				// Update the conjunction parameters
-				index8 actorIndices[termArity];
-				IndexedFormulaGetTermActorIndices(clauseState->indexedFormula, iterator.termIndex, actorIndices);
-				excludeCompiledTerms(clauseState, &iterator.termIndex, 1, serviceParameters, actorIndices);
-				propagateTermParameterTypes(clauseState, serviceParameters, actorIndices);
-
-#ifdef DEBUG_COMPILER
-				PrintCString("Updated clause: ");
-				PrintIndexedFormula(clauseState->indexedFormula);
-				PrintChar('\n');
-#endif
-			}
-#ifdef DEBUG_COMPILER
-			else {
-				PrintCString(" => no match.\n");
-			}
-#endif
-			FreeTypedTuple(serviceParameters);
-		}
-		IndexedFormulaIteratorEnd(&iterator);
-	}
-
+	// pass 1
+	Operator * op = compileNextTerm(compileStack, clauseState, TERM_DISPATCH_ONLY, termClauseMap);
+	// pass 2
+	if(!op)
+		op = compileNextTerm(compileStack, clauseState, TERM_DISPATCH_OR_COMPILE, termClauseMap);
+	// pass 3
+	if(!op)
+		op = compileNextRecursiveTerm(clauseState, termClauseMap);
 	if(!op) {
 		// No remaining term could be dispatched
 		return 0;
@@ -794,7 +845,7 @@ static Operator * compileConjunctionRecursive(
 				nJoinArguments, op, leftMap, rightOperator, rightMap);
 		}
 		else {
-			// Failed to compile the rest of the cojnunction
+			// Failed to compile the rest of the conjunction
 			CheckOperator(op);
 			return 0;
 		}
