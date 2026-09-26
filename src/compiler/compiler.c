@@ -124,20 +124,13 @@ static bool dispatchOrCompileTerm(
  * Dispatch or compile a term, adding a choice point for it.
  * See dispatchOrCompileTerm()
  */
+/* CLAUDE: The given choice point belongs to the term; the service found is added to it as a
+ * new choice, and the relations of the choices already taken are excluded. A failed attempt
+ * leaves the choice point unchanged. */
 static bool dispatchOrCompileAtNewChoicePoint(
-	CompileStack * compileStack, FormulaView term, int mode, Service * service,
-	index8 permutation[], ChoiceTree * choiceTree)
+	CompileStack * compileStack, FormulaView term, int mode, ChoicePoint * choicePoint)
 {
-	// Add a new choice point
-	ASSERT(choiceTree->depth < MAX_CHOICE_POINTS)
-	ChoicePoint * choicePoint = &(choiceTree->choicePoints[choiceTree->depth++]);
-
 	ASSERT(choicePoint->nChoices < MAX_CHOICE_POINT_MATCHES)
-#ifdef DEBUG
-	if(choicePoint->nChoices)
-		ASSERT(SameAtoms(choicePoint->termForm, term.form))
-	choicePoint->termForm = term.form;
-#endif
 
 	// dispatch term, parameterized
 	ParameterizedQuery query = {
@@ -146,19 +139,22 @@ static bool dispatchOrCompileAtNewChoicePoint(
 	};
 	termActorsToParameters(term.actors, query.parameters);
 
+	TypeSignature excludedSignatures[MAX_CHOICE_POINT_MATCHES];
+	for(index8 i = 0; i < choicePoint->nChoices; i++)
+		excludedSignatures[i] = choicePoint->choices[i].relation.typeSignature;
+	Service service;
+	index8 permutation[RELATION_MAX_ARITY];
+	bool hasNextMatch = false;
 	if(!dispatchOrCompileTerm(
-		compileStack, &query, mode, service, permutation,
-		choicePoint->choiceSignatures, choicePoint->nChoices,
-		&(choicePoint->hasNextMatch)))
-	{
-		// The term did not dispatch, so release the choice point
-		choiceTree->depth--;
+		compileStack, &query, mode, &service, permutation,
+		excludedSignatures, choicePoint->nChoices, &hasNextMatch))
 		return false;
-	}
 
-	// Add the found relation's signature to the choices for the new choice point
-	choicePoint->choiceSignatures[choicePoint->nChoices] = service->relation.typeSignature;
+	// Add the found service to the choices of the choice point
+	choicePoint->choices[choicePoint->nChoices] = service;
 	choicePoint->nChoices++;
+	CopyMemory(permutation, choicePoint->permutation, query.arity * sizeof(index8));
+	choicePoint->hasNextMatch = hasNextMatch;
 	return true;
 }
 
@@ -352,26 +348,43 @@ static Operator * createTermOperator(
 }
 
 
+static Operator * buildOperatorFromChoicePoint(
+	TypedTuple const * termActors, ChoicePoint const * choicePoint,
+	TypedTuple * serviceParameters, index8 clauseMap[]);
+
+
 /**
  * Compile a term into an operator by either locating an existing service,
  * or if mode = TERM_DISPATCH_OR_COMPILE by compiling a new service.
  */
 static Operator * compileTerm(
-	CompileStack * compileStack, FormulaView term, int mode,
-	TypedTuple * serviceParameters, index8 clauseMap[], ChoiceTree * choiceTree)
+	CompileStack * compileStack, FormulaView term, int mode, ChoicePoint * choicePoint,
+	TypedTuple * serviceParameters, index8 clauseMap[])
 {
 	// attempt to locate a service for the term
-	size8 termArity = term.actors->nAtoms;
-	index8 permutation[termArity];
-	Service termService;
-	if(!dispatchOrCompileAtNewChoicePoint(
-		compileStack, term, mode, &termService, permutation, choiceTree))
+	if(!dispatchOrCompileAtNewChoicePoint(compileStack, term, mode, choicePoint))
 		return 0;
-	Operator * termOperator = ServiceGetOperator(termService);
+	return buildOperatorFromChoicePoint(term.actors, choicePoint, serviceParameters, clauseMap);
+}
 
+
+/**
+ * CLAUDE: Build the operator of a term from the service of the current choice of its choice
+ * point, choices[nChoices - 1], as compileTerm() does once dispatch has found the service.
+ * Returns 0 if the service is no longer registered, or is stale.
+ */
+static Operator * buildOperatorFromChoicePoint(
+	TypedTuple const * termActors, ChoicePoint const * choicePoint,
+	TypedTuple * serviceParameters, index8 clauseMap[])
+{
+	ASSERT(choicePoint->nChoices > 0)
+	Service service = choicePoint->choices[choicePoint->nChoices - 1];
+	Operator * serviceOperator = ServiceGetOperator(service);
+	if(!serviceOperator || ServiceIsStale(service))
+		return 0;
 	return createTermOperator(
-		termService.relation.typeSignature, termService.ioSignature, termService.equalitySignature,
-		termOperator, term.actors, permutation, serviceParameters, clauseMap);
+		service.relation.typeSignature, service.ioSignature, service.equalitySignature,
+		serviceOperator, termActors, choicePoint->permutation, serviceParameters, clauseMap);
 }
 
 
@@ -437,9 +450,13 @@ typedef struct s_ClauseCompileState {
 	// NOTE: this could be computed instead using hasFullyTypedParameters()
 	bool headParametersKnown;
 
-	// termExcluded[i] is true for each term compiled so far, and for the matched term
-	bool * termExcluded;
-	size8 nTermsExcluded;
+	// The terms of the conjunction, excluding the head term, in the order they compiled,
+	// followed the terms still to compile, in clause order. The first nCompiledTerms
+	// terms of this array have been successfully compiled. For these, termOrder[k], k < nCompiledTerms,
+	// is the index of the term of choice point k; see ChoiceTree.
+	index8 * termOrder;
+	size8 nConjunctionTerms;
+	size8 nCompiledTerms;
 
 	// termForms[i] is the form of term i as compiled: negated for a clause,
 	// as given for a conjunction query. The head term has no entry.
@@ -516,9 +533,8 @@ static void propagateTermParameterTypes(
 		TypedTupleSetAtom(actors, actorIndices[i], outputParameter);
 
 		// The terms still to compile take the parameter as an input
-		for(index8 j = 0; j < clauseState->nTerms; j++) {
-			if(clauseState->termExcluded[j])
-				continue;
+		for(index8 p = clauseState->nCompiledTerms; p < clauseState->nConjunctionTerms; p++) {
+			index8 j = clauseState->termOrder[p];
 			index8 termArity = IndexedFormulaTermArity(clauseState->indexedFormula, j);
 			for(index8 k = 0; k < termArity; k++) {
 				TypedAtom actor = IndexedFormulaGetTermElement(clauseState->indexedFormula, j, k);
@@ -531,16 +547,28 @@ static void propagateTermParameterTypes(
 
 
 /**
- * Mark the terms given by termIndices as excluded.
+ * Arrange clauseState->termOrder so that the the terms given by termIndices are
+ * marked a compiled. The terms are inserted following the current known compiled
+ * terms; remaining terms that have not yet compiled are shifted right, keeping their order.
  */
-static void excludeCompiledTerms(
-	ClauseCompileState * clauseState, index8 const termIndices[], size8 nCompiledTerms)
+static void arrangeCompiledTerms(
+	ClauseCompileState * clauseState, index8 const termIndices[], size8 nTerms)
 {
-	for(index8 i = 0; i < nCompiledTerms; i++) {
-		ASSERT(!clauseState->termExcluded[termIndices[i]])
-		clauseState->termExcluded[termIndices[i]] = true;
+	index8 * termOrder = clauseState->termOrder;
+	for(index8 i = 0; i < nTerms; i++) {
+		// Find the term among the terms that had previously not been compiled
+		index8 p = clauseState->nCompiledTerms;
+		while(termOrder[p] != termIndices[i]) {
+			p++;
+			ASSERT(p < clauseState->nConjunctionTerms)
+		}
+		// Insert the term at position nCompiledTerms, shifting
+		// the following terms at nCompiledTerms + 1 ... p one step to the right
+		for(; p > clauseState->nCompiledTerms; p--)
+			termOrder[p] = termOrder[p - 1];
+		termOrder[p] = termIndices[i];
+		clauseState->nCompiledTerms++;
 	}
-	clauseState->nTermsExcluded += nCompiledTerms;
 }
 
 
@@ -677,11 +705,15 @@ static void acceptCompiledTerm(
 	TypedTuplePrint(serviceParameters);
 	PrintChar('\n');
 #endif
+	// Record the term chosen in the current choice point
+	ChoiceTree * choiceTree = clauseState->choiceTree;
+	choiceTree->choicePoints[choiceTree->nChoicePoints].termIndex = termIndex;
+	choiceTree->nChoicePoints++;
 	// Update the conjunction parameters
 	size8 termArity = IndexedFormulaTermArity(clauseState->indexedFormula, termIndex);
 	index8 actorIndices[termArity];
 	IndexedFormulaGetTermActorIndices(clauseState->indexedFormula, termIndex, actorIndices);
-	excludeCompiledTerms(clauseState, &termIndex, 1);
+	arrangeCompiledTerms(clauseState, &termIndex, 1);
 	propagateTermParameterTypes(clauseState, serviceParameters, actorIndices);
 
 #ifdef DEBUG_COMPILER
@@ -703,15 +735,14 @@ static Operator * compileNextTerm(
 	CompileStack * compileStack, ClauseCompileState * clauseState, int mode, index8 termClauseMap[])
 {
 	Operator * op = 0;
-	// Iterate over terms in the clause
-	IndexedFormulaIterator iterator;
-	IndexedFormulaIterate(clauseState->indexedFormula, &iterator);
-	while(!op && IndexedFormulaIteratorNext(&iterator)) {
-		index8 termIndex = iterator.termIndex;
-		if(clauseState->termExcluded[termIndex] || clauseState->termIsRecursive[termIndex])
+	ChoicePoint * choicePoint = &(clauseState->choiceTree->choicePoints[clauseState->choiceTree->nChoicePoints]);
+	// Iterate over the terms still to compile
+	for(index8 p = clauseState->nCompiledTerms; !op && (p < clauseState->nConjunctionTerms); p++) {
+		index8 termIndex = clauseState->termOrder[p];
+		if(clauseState->termIsRecursive[termIndex])
 			continue;
 		Atom termForm = clauseState->termForms[termIndex];
-		TypedTuple * termActors = IndexedFormulaIteratorGetTermActors(&iterator);
+		TypedTuple * termActors = IndexedFormulaGetTermTuple(clauseState->indexedFormula, termIndex);
 #ifdef DEBUG_COMPILER
 		PrintF("Pass = %d, %s term: ", mode, mode == TERM_DISPATCH_ONLY ? "dispatch" : "compile");
 		PrintFormActorsAsFormula(termForm, termActors);
@@ -721,7 +752,7 @@ static Operator * compileNextTerm(
 		TypedTuple * serviceParameters = CreateTypedTuple(termActors->nAtoms);
 		op = compileTerm(
 			compileStack, (FormulaView) {.form = termForm, .actors = termActors},
-			mode, serviceParameters, termClauseMap, clauseState->choiceTree
+			mode, choicePoint, serviceParameters, termClauseMap
 		);
 		if(op)
 			acceptCompiledTerm(clauseState, termIndex, serviceParameters);
@@ -730,8 +761,8 @@ static Operator * compileNextTerm(
 			PrintCString(" => no match.\n");
 #endif
 		FreeTypedTuple(serviceParameters);
+		FreeTypedTuple(termActors);
 	}
-	IndexedFormulaIteratorEnd(&iterator);
 	return op;
 }
 
@@ -745,8 +776,9 @@ static Operator * compileNextRecursiveTerm(ClauseCompileState * clauseState, ind
 	if(!clauseState->headParametersKnown)
 		return 0;
 	Operator * op = 0;
-	for(index8 termIndex = 0; !op && (termIndex < clauseState->nTerms); termIndex++) {
-		if(clauseState->termExcluded[termIndex] || !clauseState->termIsRecursive[termIndex])
+	for(index8 p = clauseState->nCompiledTerms; !op && (p < clauseState->nConjunctionTerms); p++) {
+		index8 termIndex = clauseState->termOrder[p];
+		if(!clauseState->termIsRecursive[termIndex])
 			continue;
 #ifdef DEBUG_COMPILER
 		PrintCString("Pass = 3, recursive term: ");
@@ -773,6 +805,82 @@ static Operator * compileNextRecursiveTerm(ClauseCompileState * clauseState, ind
 
 
 /**
+ * CLAUDE: Compile the term of the current choice point again, taking the current choice of
+ * the choice point, which is a choice point before the branch of the choice tree; see
+ * ChoiceTreeNextBranch(). A recursive term is compiled again by compileRecursiveTerm().
+ * Returns 0 if the term does not compile.
+ */
+static Operator * replayTerm(ClauseCompileState * clauseState, index8 termClauseMap[])
+{
+	ChoiceTree * choiceTree = clauseState->choiceTree;
+	ChoicePoint const * choicePoint = &(choiceTree->choicePoints[choiceTree->nChoicePoints]);
+	index8 termIndex = choicePoint->termIndex;
+	TypedTuple * termActors = IndexedFormulaGetTermTuple(clauseState->indexedFormula, termIndex);
+#ifdef DEBUG_COMPILER
+	PrintCString("Replay term: ");
+	PrintFormActorsAsFormula(clauseState->termForms[termIndex], termActors);
+	PrintChar('\n');
+#endif
+	TypedTuple * serviceParameters = CreateTypedTuple(termActors->nAtoms);
+	Operator * op;
+	if(clauseState->termIsRecursive[termIndex]) {
+		op = compileRecursiveTerm(clauseState, termIndex, serviceParameters, termClauseMap);
+		if(op)
+			clauseState->hasRecurseOperator = true;
+	}
+	else
+		op = buildOperatorFromChoicePoint(termActors, choicePoint, serviceParameters, termClauseMap);
+
+	if(op)
+		acceptCompiledTerm(clauseState, termIndex, serviceParameters);
+#ifdef DEBUG_COMPILER
+	else
+		PrintCString(" => no match.\n");
+#endif
+	FreeTypedTuple(serviceParameters);
+	FreeTypedTuple(termActors);
+	return op;
+}
+
+
+/**
+ * Compile the term of the current choice point, which is the branch of the choice
+ * tree, taking a new choice; see ChoiceTreeNextBranch(). Returns 0 if the term does not compile.
+ */
+static Operator * compileNextChoice(
+	CompileStack * compileStack, ClauseCompileState * clauseState, index8 termClauseMap[])
+{
+	ChoiceTree * choiceTree = clauseState->choiceTree;
+	ChoicePoint * choicePoint = &(choiceTree->choicePoints[choiceTree->nChoicePoints]);
+	index8 termIndex = choicePoint->termIndex;
+	// CLAUDE: A recursive term has no choices, and so has no next choice either
+	ASSERT(!clauseState->termIsRecursive[termIndex])
+	TypedTuple * termActors = IndexedFormulaGetTermTuple(clauseState->indexedFormula, termIndex);
+#ifdef DEBUG_COMPILER
+	PrintCString("Next choice for term: ");
+	PrintFormActorsAsFormula(clauseState->termForms[termIndex], termActors);
+	PrintChar('\n');
+#endif
+	TypedTuple * serviceParameters = CreateTypedTuple(termActors->nAtoms);
+	// CLAUDE: The service of the next choice may be stale, and then compiling the term
+	// is what clears it; see dispatchOrCompileTerm()
+	Operator * op = compileTerm(
+		compileStack, (FormulaView) {.form = clauseState->termForms[termIndex], .actors = termActors},
+		TERM_DISPATCH_OR_COMPILE, choicePoint, serviceParameters, termClauseMap
+	);
+	if(op)
+		acceptCompiledTerm(clauseState, termIndex, serviceParameters);
+#ifdef DEBUG_COMPILER
+	else
+		PrintCString(" => no match.\n");
+#endif
+	FreeTypedTuple(serviceParameters);
+	FreeTypedTuple(termActors);
+	return op;
+}
+
+
+/**
  * Compile a JOIN operator from the conjunction obtained by negating the clause being
  * compiled, excluding the head (query-matched) term, and any term already compiled.
  * We iterate over all terms (negated) until we find a term that dispatches to a known service,
@@ -790,7 +898,7 @@ static Operator * compileConjunctionRecursive(
 	PrintCString("compileConjunctionRecursive()\n");
 #endif
 	ASSERT(clauseState->nTerms >= 2)
-	ASSERT(clauseState->nTermsExcluded < clauseState->nTerms)
+	ASSERT(clauseState->nCompiledTerms < clauseState->nConjunctionTerms)
 	// Clause arguments provided by the compiled term. A term may refer to the same
 	// clause argument more than once, so it may have more arguments than the clause.
 	index8 termClauseMap[clauseState->indexedFormula->actors->nAtoms];
@@ -811,20 +919,36 @@ static Operator * compileConjunctionRecursive(
 	 * as early as possible, to avoid generating calls to table-scanning operators which
 	 * then have to be filtered. It will not always yield the optimal solution.
 	 */
-	// pass 1
-	Operator * op = compileNextTerm(compileStack, clauseState, TERM_DISPATCH_ONLY, termClauseMap);
-	// pass 2
-	if(!op)
-		op = compileNextTerm(compileStack, clauseState, TERM_DISPATCH_OR_COMPILE, termClauseMap);
-	// pass 3
-	if(!op)
-		op = compileNextRecursiveTerm(clauseState, termClauseMap);
+	// CLAUDE: A choice point up to the branch names its term. A choice point after the
+	// branch starts afresh, and the passes below find its term.
+	ChoiceTree * choiceTree = clauseState->choiceTree;
+	index8 choicePointIndex = choiceTree->nChoicePoints;
+	ASSERT(choicePointIndex < MAX_CHOICE_POINTS)
+	bool hasBranch = (choiceTree->branchIndex != NO_BRANCH);
+	Operator * op = 0;
+	if(hasBranch && (choicePointIndex < choiceTree->branchIndex))
+		op = replayTerm(clauseState, termClauseMap);
+	else if(hasBranch && (choicePointIndex == choiceTree->branchIndex))
+		op = compileNextChoice(compileStack, clauseState, termClauseMap);
+	else {
+		ChoicePoint * choicePoint = &(choiceTree->choicePoints[choicePointIndex]);
+		choicePoint->nChoices = 0;
+		choicePoint->hasNextMatch = false;
+		// pass 1
+		op = compileNextTerm(compileStack, clauseState, TERM_DISPATCH_ONLY, termClauseMap);
+		// pass 2
+		if(!op)
+			op = compileNextTerm(compileStack, clauseState, TERM_DISPATCH_OR_COMPILE, termClauseMap);
+		// pass 3
+		if(!op)
+			op = compileNextRecursiveTerm(clauseState, termClauseMap);
+	}
 	if(!op) {
 		// No remaining term could be dispatched
 		return 0;
 	}
 
-	if(clauseState->nTermsExcluded < clauseState->nTerms) {
+	if(clauseState->nCompiledTerms < clauseState->nConjunctionTerms) {
 		// The operator just compiled will be the left child of the JOIN operator.
 		// Recurse on remaining terms to obtain the right child operator.
 		index8 rightClauseMap[clauseState->indexedFormula->actors->nAtoms];
@@ -981,15 +1105,47 @@ static void setupCompileStateCommon(
 	clauseState->indexedFormula = CreateIndexedFormula(form, actors);
 	size8 nTerms = TermMultisetNTerms(form);
 	clauseState->nTerms = nTerms;
-	clauseState->termExcluded = Allocate(nTerms * sizeof(bool));
+	clauseState->termOrder = Allocate(nTerms * sizeof(index8));
 	clauseState->termForms = Allocate(nTerms * sizeof(Atom));
 	clauseState->termIsRecursive = Allocate(nTerms * sizeof(bool));
 	for(index8 i = 0; i < nTerms; i++) {
-		clauseState->termExcluded[i] = false;
 		clauseState->termForms[i] = (Atom) {0};
 		clauseState->termIsRecursive[i] = false;
 	}
 	clauseState->choiceTree = choiceTree;
+}
+
+
+/**
+ * Fill termOrder with the terms of the fixed choice points of its choice tree, 
+ * which may be empty or determined during compilation of previous variant.
+ * Terms occur in the order they compiled, followed by the other terms of the
+ * conjunction, in their original (canonical) order.
+ * The head term, if any, is left out.
+ */
+static void setupTermOrder(ClauseCompileState * clauseState, bool hasHeadTerm)
+{
+	ChoiceTree const * choiceTree = clauseState->choiceTree;
+	// The head term, if any, is always marked "ordered"
+	bool isOrdered[clauseState->nTerms];
+	for(index8 i = 0; i < clauseState->nTerms; i++)
+		isOrdered[i] = hasHeadTerm && (i == clauseState->headTermIndex);
+	size8 nOrdered = 0;
+	size8 nOrderedChoicePoints =
+		(choiceTree->branchIndex == NO_BRANCH) ? 0 : choiceTree->branchIndex + 1;
+	for(index8 k = 0; k < nOrderedChoicePoints; k++) {
+		index8 termIndex = choiceTree->choicePoints[k].termIndex;
+		ASSERT(!isOrdered[termIndex])
+		clauseState->termOrder[nOrdered++] = termIndex;
+		isOrdered[termIndex] = true;
+	}
+	for(index8 i = 0; i < clauseState->nTerms; i++) {
+		if(!isOrdered[i])
+			clauseState->termOrder[nOrdered++] = i;
+	}
+	clauseState->nConjunctionTerms = nOrdered;
+	clauseState->nCompiledTerms = 0;
+	ASSERT(nOrdered <= MAX_CHOICE_POINTS)
 }
 
 
@@ -1017,6 +1173,7 @@ static void setupConjunctionCompileState(
 		IFactAcquire(iterator.termForm);
 	}
 	IndexedFormulaIteratorEnd(&iterator);
+	setupTermOrder(clauseState, false);
 }
 
 
@@ -1044,8 +1201,6 @@ static void setupClauseCompileState(
 	setupCompileStateCommon(clauseState, clauseForm, clauseActors, choiceTree);
 	IndexedFormula * indexedClause = clauseState->indexedFormula;
 	clauseState->headTermIndex = headTermIndex;
-	clauseState->termExcluded[headTermIndex] = true;
-	clauseState->nTermsExcluded = 1;
 
 	// The head term parameters are the query parameters
 	size8 headTermArity = IndexedFormulaTermArity(indexedClause, headTermIndex);
@@ -1082,6 +1237,7 @@ static void setupClauseCompileState(
 		clauseState->termIsRecursive[i] = SameAtoms(clauseState->termForms[i], headTermForm)
 			&& termRepeatsHeadTermParameters(clauseState, i);
 	}
+	setupTermOrder(clauseState, true);
 }
 
 
@@ -1098,7 +1254,7 @@ static void freeClauseCompileState(ClauseCompileState * clauseState)
 	}
 	Free(clauseState->termIsRecursive);
 	Free(clauseState->termForms);
-	Free(clauseState->termExcluded);
+	Free(clauseState->termOrder);
 	FreeIndexedFormula(clauseState->indexedFormula);
 }
 
@@ -1109,6 +1265,8 @@ static void freeClauseCompileState(ClauseCompileState * clauseState)
  */
 static Operator * compileConjunction(CompileStack * compileStack, ClauseCompileState * clauseState)
 {
+	// CLAUDE: The run records its choice points from the first; see ChoiceTree
+	clauseState->choiceTree->nChoicePoints = 0;
 	// Compile the conjunction recursively, joining one term at a time
 	index8 clauseMap[clauseState->indexedFormula->actors->nAtoms];
 	Operator * op = compileConjunctionRecursive(compileStack, clauseState, clauseMap);
@@ -1347,7 +1505,6 @@ static size8 compileClauses(
 					PrintFormActorsAsFormula(clauseForm, substClauseActors);
 					PrintChar('\n');
 #endif
-					// TODO:  here we should create the conjunction of negated terms, and give that to compileConjunction() 
 					ClauseCompileState clauseState;
 					setupClauseCompileState(
 						&clauseState, clauseForm, substClauseActors, matchedTermIndex, &choiceTree);
@@ -1362,9 +1519,6 @@ static size8 compileClauses(
 					CompiledVariant * variant = addCompiledVariant(
 						variants, &nVariants, resolvedParameters, query->arity, conjunctionOp);
 					// Mark recursive variants; FIXPOINT operator is added by completeRecursiveVariant()
-					// CLAUDE: A clause of a recursive clause form needs no FIXPOINT operator
-					// when its term of the query form is not recursive;
-					// see termRepeatsQueryParameters()
 					variant->isRecursive = variant->isRecursive || hasRecurseOperator;
 				} while(ChoiceTreeNextBranch(&choiceTree));
 			}

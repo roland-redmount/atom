@@ -31,6 +31,16 @@ void PrintParameterizedQuery(ParameterizedQuery const * parameterizedQuery)
 }
 
 
+bool SameParameterizedQueries(ParameterizedQuery const * query1, ParameterizedQuery const * query2)
+{
+	if(!SameAtoms(query1->form, query2->form))
+		return false;
+	ASSERT(query1->arity == query2->arity)
+	return SameParameterSignature(query1->parameters, query2->parameters, query1->arity)
+		&& SameParameterRepeats(query1->parameters, query2->parameters, query1->arity);
+}
+
+
 bool DispatchParameterIOMatch(byte queryIO, byte serviceIO, int matchMode)
 {
 	if(queryIO == serviceIO)

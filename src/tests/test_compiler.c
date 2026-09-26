@@ -182,6 +182,116 @@ void testCompileProject(void)
 
 
 /**
+ * CLAUDE: Two relations of the form (row amount), one with an INT amount and one with a
+ * string amount, each holding one fact.
+ */
+typedef struct {
+	Atom facts[2];
+	Relation relations[2];
+} RowRelations;
+
+static void setupRowRelations(RowRelations * rows)
+{
+	rows->facts[0] = CStringToTerm("row 1 amount 3");
+	rows->facts[1] = CStringToTerm("row 2 amount \"x\"");
+	for(index8 i = 0; i < 2; i++) {
+		rows->relations[i] = RelationFromFact(FormulaGetView(rows->facts[i]));
+		TupleStore * store = CreateTupleStore(rows->relations[i], &btreeStorageProvider, 2, 0);
+		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(rows->facts[i])), 0);
+	}
+	ASSERT_FALSE(SameRelations(rows->relations[0], rows->relations[1]))
+}
+
+static void teardownRowRelations(RowRelations * rows)
+{
+	for(index8 i = 0; i < 2; i++) {
+		RelationRemoveTuple(rows->relations[i], TypedTuplePeekAtoms(FormulaGetActors(rows->facts[i])), 0);
+		DropRelation(rows->relations[i]);
+		ReleaseFormula(rows->facts[i]);
+	}
+}
+
+
+/**
+ * Compile the query (result n square s) against the rule
+ * 
+ *   result n square s <- row n amount v & * v * v = s
+ * 
+ * The term (row n amount v) matches two relations with "amount" atom type INT or ID.
+ * creating a choice point, and the rule compiles once per choice. The term (* v * v = s)
+ * is tried first, but needs v as an input, so it fails to dispatch until the (row amount)
+ * term has compiled, and that failed attempt is made at the depth of the choice point in
+ * every run, and must not be taken for the choice made there.
+ * 
+ * NOTE: The order of the terms follows from their forms, so this test depends on the role names chosen.
+ */
+void testCompileChoicePointAfterFailedTerm(void)
+{
+	RowRelations rows;
+	setupRowRelations(&rows);
+
+	// result n square s <- row n amount v & * v * v = s
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"result n square s | ! row n amount v | ! * v * v = s");
+	Atom queryTerm = CStringToTerm("result n square s");
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
+	void * context = OperatorCreateContext(ServiceGetOperator(services[0]), arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	ASSERT_INT64_EQUAL(TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "result", 1)._int, 1)
+	ASSERT_INT64_EQUAL(TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "square", 1)._int, 9)
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	RemoveService(services[0]);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+	teardownRowRelations(&rows);
+}
+
+
+/**
+ * CLAUDE: Each of the two row terms matches both (row amount) relations, so the rule
+ * compiles once per combination of amount types, giving four services. Each service
+ * yields the one pair of facts of its types.
+ */
+void testCompileTwoChoicePoints(void)
+{
+	RowRelations rows;
+	setupRowRelations(&rows);
+
+	// pair a with b <- row n amount a & row m amount b
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"pair a with b | ! row n amount a | ! row m amount b");
+	Atom queryTerm = CStringToTerm("pair a with b");
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 4)
+
+	for(index8 i = 0; i < nServices; i++) {
+		for(index8 j = 0; j < i; j++)
+			ASSERT_FALSE(SameRelations(services[i].relation, services[j].relation))
+		Atom arguments[2];
+		TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
+		void * context = OperatorCreateContext(ServiceGetOperator(services[i]), arguments);
+		ASSERT_TRUE(OperatorCall(context))
+		ASSERT_FALSE(OperatorCall(context))
+		OperatorFreeContext(context);
+	}
+
+	for(index8 i = 0; i < nServices; i++)
+		RemoveService(services[i]);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+	teardownRowRelations(&rows);
+}
+
+
+/**
  * The head variable _n occurs in no body term, so no term of the conjunction
  * provides that argument. Such a rule cannot yield a valid relation, as that
  * argument would be left undefined, and so must be rejected.
@@ -1601,6 +1711,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompilePermute1);
 	ExecuteTest(testCompilePermute2);
 	ExecuteTest(testCompileProject);
+	ExecuteTest(testCompileChoicePointAfterFailedTerm);
+	ExecuteTest(testCompileTwoChoicePoints);
 	ExecuteTest(testCompileJoin1);
 	ExecuteTest(testCompileJoin2);
 	ExecuteTest(testCompileUnion);

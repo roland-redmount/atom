@@ -60,6 +60,13 @@ void ParameterizeQuery(FormulaView query, ParameterizedQuery * parameterizedQuer
 void PrintParameterizedQuery(ParameterizedQuery const * parameterizedQuery);
 
 /**
+ * CLAUDE: Test whether two parameterized queries have the same form, the same type and IO
+ * direction of each parameter, and repeat parameters at the same positions. The parameter
+ * numbers may differ. Two such queries dispatch to the same services.
+ */
+bool SameParameterizedQueries(ParameterizedQuery const * query1, ParameterizedQuery const * query2);
+
+/**
  * Dispatch a parameterized query. A query parameter occurring at several positions
  * must match a service parameter of the same type at each position.
  *
