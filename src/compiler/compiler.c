@@ -455,26 +455,26 @@ typedef struct s_ClauseCompileState {
 
 
 /**
- * Update the conjunction parameter types for a newly resolved term (termIndex) 
- *
- *  - In the head (query-matched) term the parameter stays an output, and so gives the service
- *    being compiled its signature;
- *  - In the terms not yet compiled it becomes an input, as the term that just compiled
- *    is what provides it.
- *
+ * Update the parameter types of the conjunction given newly resolved output parameters,
+ * indicated by actorIndices and corresponding serviceParameters.
+ * actorIndices[i] is the index into the actors tuple for the actor matched by service parameter i.
+ * In the head term (if it exists), matching output parameters are updated with type.
+ * In all other terms, the updated parameter becomes an input, provided by the 
+ * newly compiled term(s).
  * Compiled terms must be marked excluded.
  */
 static void propagateTermParameterTypes(
-	ClauseCompileState * clauseState, index8 termIndex, TypedTuple const * serviceParameters)
+	ClauseCompileState * clauseState, TypedTuple const * serviceParameters, index8 const actorIndices[])
 {
-	ASSERT(clauseState->termExcluded[termIndex])
-	size8 termArity = IndexedFormulaTermArity(clauseState->indexedFormula, termIndex);
-	for(index8 i = 0; i < termArity; i++) {
-		TypedAtom termActor = IndexedFormulaGetTermElement(clauseState->indexedFormula, termIndex, i);
-		// CLAUDE: An output parameter may be typed already, when the query parameters are
-		// typed for a recursive clause. The terms still to compile must take it as an
-		// input all the same, or a JOIN would not constrain them by it.
-		if((termActor.type != AT_PARAMETER) || (termActor.atom.parameter.io == PARAMETER_IN))
+	TypedTuple * actors = clauseState->indexedFormula->actors;
+	for(index8 i = 0; i < serviceParameters->nAtoms; i++) {
+		// Construct the updated parameter
+		TypedAtom termActor = TypedTupleGetElement(actors, actorIndices[i]);
+		// Skip any constants
+		if(termActor.type != AT_PARAMETER) 
+			continue;
+		// Input parameters of matched terms must be typed already
+		if(termActor.atom.parameter.io == PARAMETER_IN)
 			continue;
 
 		// The corresponding service parameter must be a typed output
@@ -497,13 +497,15 @@ static void propagateTermParameterTypes(
 		};
 
 		// Type the parameter in the head term, unless it is a local parameter
-		if(!clauseState->isConjunction	&& (parameterNumber <= clauseState->nQueryArguments)) {
+		if(!clauseState->isConjunction && (parameterNumber <= clauseState->nQueryArguments)) {
 			// The parameter may occur multiple times in the head term
 			for(index8 k = 0; k < clauseState->headTermArity; k++) {
-				TypedAtom matchedActor = IndexedFormulaGetTermElement(
+				TypedAtom headParameter = IndexedFormulaGetTermElement(
 					clauseState->indexedFormula, clauseState->headTermIndex, k);
-				ASSERT(matchedActor.type == AT_PARAMETER)
-				if(matchedActor.atom.parameter.number == parameterNumber) {
+				ASSERT(headParameter.type == AT_PARAMETER)
+				if(headParameter.atom.parameter.number == parameterNumber) {
+					// In the head term, only outputs can be untyped
+					ASSERT(headParameter.atom.parameter.io == PARAMETER_OUT)
 					IndexedFormulaSetTermAtom(
 						clauseState->indexedFormula, clauseState->headTermIndex, k, outputParameter);
 				}
@@ -511,8 +513,7 @@ static void propagateTermParameterTypes(
 		}
 		// Also set the type of the parameter in the term that compiled
 		// NOTE: not necessary, this term is not used for anything at this point
-		IndexedFormulaSetTermAtom(
-			clauseState->indexedFormula, termIndex, i, outputParameter);
+		TypedTupleSetAtom(actors, actorIndices[i], outputParameter);
 
 		// The terms still to compile take the parameter as an input
 		for(index8 j = 0; j < clauseState->nTerms; j++) {
@@ -526,6 +527,21 @@ static void propagateTermParameterTypes(
 			}
 		}
 	}
+}
+
+
+/**
+ * Mark the terms given by termIndices as excluded.
+ */
+static void excludeCompiledTerms(
+	ClauseCompileState * clauseState, index8 const termIndices[], size8 nCompiledTerms,
+	TypedTuple const * serviceParameters, index8 const actorIndices[])
+{
+	for(index8 i = 0; i < nCompiledTerms; i++) {
+		ASSERT(!clauseState->termExcluded[termIndices[i]])
+		clauseState->termExcluded[termIndices[i]] = true;
+	}
+	clauseState->nTermsExcluded += nCompiledTerms;
 }
 
 
@@ -730,10 +746,11 @@ static Operator * compileConjunctionRecursive(
 				TypedTuplePrint(serviceParameters);
 				PrintChar('\n');
 #endif
-				clauseState->termExcluded[iterator.termIndex] = true;
-				clauseState->nTermsExcluded++;
 				// Update the conjunction parameters
-				propagateTermParameterTypes(clauseState, iterator.termIndex, serviceParameters);
+				index8 actorIndices[termArity];
+				IndexedFormulaGetTermActorIndices(clauseState->indexedFormula, iterator.termIndex, actorIndices);
+				excludeCompiledTerms(clauseState, &iterator.termIndex, 1, serviceParameters, actorIndices);
+				propagateTermParameterTypes(clauseState, serviceParameters, actorIndices);
 
 #ifdef DEBUG_COMPILER
 				PrintCString("Updated clause: ");
