@@ -1398,38 +1398,23 @@ typedef struct QueryClauseMatch {
  */
 static void findMatchingClauseForms(Atom queryTermForm, ResizingArray * queryClauseMatches)
 {
-	/**
-	 * TODO: here we need the service (multiset >ID element <ID multiple >INT) where element is input
-	 * Since the element role is not a leading column, RelationBTree does not support this.
-	 * For now, we simply scan the entire table and filter on matching terms. This is obviously
-	 * highly inefficient. A better solution would require multiple indexes on the relation table.
-	 * NOTE: once FILTER operator is in place we can register a compiled service for this at bootstrap time.
-	 */
-	Operator const * multisetOperator = GetCoreOperator(SERVICE_MULTISET_ID_ALL);
-
-	Atom multisetQueryTuple[3];
-	OperatorContext * multisetContext = OperatorCreateContext(multisetOperator, multisetQueryTuple);
-	while(OperatorCall(multisetContext)) {
-		Atom termForm = multisetQueryTuple[
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
-		if(!SameAtoms(termForm, queryTermForm))
-			continue;
+	MultisetContainingIterator iterator;
+	MultisetContainingIterate(queryTermForm, &iterator);
+	while(MultisetContainingIteratorNext(&iterator)) {
 		// Found a multiset where the term form occurs
-		Atom clauseForm = multisetQueryTuple[
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)];
+		Atom clauseForm = MultisetContainingIteratorGetMultiset(&iterator);
 		// Ensure the multiset is a clause form
 		if(!IsClauseForm(clauseForm))
 			continue;
 
 		QueryClauseMatch matchedClauseForm = {
 			.clauseForm = clauseForm,
-			.termMultiple = multisetQueryTuple[
-				CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)]._int,
+			.termMultiple = MultisetContainingIteratorGetMultiple(&iterator),
 			.recursive = isRecursiveClauseForm(clauseForm, queryTermForm)
 		};
 		ResizingArrayAppend(queryClauseMatches, &matchedClauseForm);
 	}
-	OperatorFreeContext(multisetContext);
+	MultisetContainingIteratorEnd(&iterator);
 }
 
 

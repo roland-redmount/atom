@@ -100,6 +100,29 @@ ElementMultiple MultisetIteratorGetElement(MultisetIterator const * iterator);
 void MultisetIteratorEnd(MultisetIterator * iterator);
 
 /**
+ * CLAUDE: Iteration over the multisets of AT_ID elements that contain a given element,
+ * such as the clause forms and conjunction forms containing a term form. For each multiset,
+ * the iterator also gives the multiple of the element in it.
+ */
+typedef struct s_MultisetContainingIterator
+{
+	Atom element;
+	Atom queryTuple[3];
+	OperatorContext * context;
+} MultisetContainingIterator;
+
+
+void MultisetContainingIterate(Atom element, MultisetContainingIterator * iterator);
+
+bool MultisetContainingIteratorNext(MultisetContainingIterator * iterator);
+
+Atom MultisetContainingIteratorGetMultiset(MultisetContainingIterator const * iterator);
+
+size32 MultisetContainingIteratorGetMultiple(MultisetContainingIterator const * iterator);
+
+void MultisetContainingIteratorEnd(MultisetContainingIterator * iterator);
+
+/**
  * Find the element at position k in a multiset, according to the iteration order.
  * This uses MultisetIterator to reach position k.
  */
