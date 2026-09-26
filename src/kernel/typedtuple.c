@@ -225,6 +225,13 @@ void TypedTupleCopyAt(TypedTuple const * source, index8 sourceOffset, TypedTuple
 }
 
 
+void TypedTupleCopySubset(TypedTuple const * source, index8 const indices[], size8 nElements, TypedTuple * destination)
+{
+	for(index8 i = 0; i < nElements; i++)
+		TypedTupleSetElement(destination, i, TypedTupleGetElement(source, indices[i]));
+}
+
+
 data64 TypedTupleHash(TypedTuple const * tuple, data64 initialHash)
 {
 	// hash header

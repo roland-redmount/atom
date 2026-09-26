@@ -87,7 +87,6 @@ void TypedTupleSetAtom(TypedTuple * tuple, index8 index, Atom atom);
  */
 Atom const * TypedTuplePeekAtoms(TypedTuple const * tuple);
 
-
 /**
  * Return the tuple's atom types array
  */
@@ -106,6 +105,13 @@ void TypedTupleCopy(TypedTuple const * source, TypedTuple * destination);
  */
 
 void TypedTupleCopyAt(TypedTuple const * source, index8 sourceOffset, TypedTuple * destination);
+
+/**
+ * Copy nElements elements given by the indices[] array from the source tuple into the destination.
+ * The destination tuple must hold at least nElements elements.
+ */
+void TypedTupleCopySubset(
+	TypedTuple const * source, index8 const indices[], size8 nElements, TypedTuple * destination);
 
 /**
  * Compare two tuples for equality.

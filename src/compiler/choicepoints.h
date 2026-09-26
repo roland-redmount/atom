@@ -27,18 +27,26 @@
 #define MAX_CHOICE_POINT_MATCHES	8
 
 /**
- * One dispatched term, and the choices made for it so far.
+ * A ChoicePoint represents one dispatched term or conjunction, with the choices made
+ * (services found by dispatch) so far.
  */
 typedef struct s_ChoicePoint {
-	// The term compiled at this choice point, indexing into the clause actors list
-	index8 termIndex;
+	// The terms compiled at this choice point, as indices into the clause terms.
+	// Every term has at least one actor, so a set of terms dispatched to one relation
+	// has at most RELATION_MAX_ARITY terms.
+	index8 termIndices[RELATION_MAX_ARITY];
+	size8 nTerms;
+	// The index into the clause actors of each actor of the compiled terms (above).
+	// The permutation[] array refers to this array.
+	index8 actorIndices[RELATION_MAX_ARITY];
+	size8 nActors;
 	// The service dispatched to by each choice. The relations of these services
 	// are excluded when dispatching for a new choice. A recursive term compiles without
 	// dispatch, and has no choices.
 	Service choices[MAX_CHOICE_POINT_MATCHES];
 	size8 nChoices;
-	// CLAUDE: The argument permutation obtained from dispatch for the current choice,
-	// choices[nChoices - 1]
+	// The argument permutation obtained from dispatch for the current Service choice
+	// = choices[nChoices - 1]. Indexes into the actorIndices[] array.
 	index8 permutation[RELATION_MAX_ARITY];
 	// whether another matching service exists, in addition to the above
 	bool hasNextMatch;
