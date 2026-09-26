@@ -86,6 +86,7 @@ endif()
 add_library(atom ${ATOM_LIBRARY_TYPE}
     src/btree/btree.c
 
+    src/util/combinations.c
     src/util/LinkedList.c
     src/util/ResizingArray.c
     src/util/ResizingBuffer.c
