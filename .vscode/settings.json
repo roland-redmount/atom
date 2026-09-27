@@ -1,5 +1,6 @@
 {
 	"editor.quickSuggestionsDelay": 700,
+	"editor.cursorSurroundingLines" : 15,
 	"editor.tokenColorCustomizations": {
 		"textMateRules": [
 			{
