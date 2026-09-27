@@ -3,6 +3,7 @@
 #include "kernel/kernel.h"
 #include "memory/paging.h"
 #include "memory/allocator.h"
+#include "util/combinations.h"
 #include "util/LinkedList.h"
 #include "util/resources.h"
 #include "util/ResizingBuffer.h"
@@ -179,6 +180,34 @@ void testResizingBuffer(void)
 }
 
 
+/**
+ * CLAUDE: The combinations of 3 out of 5 items, in lexicographic order, and the single
+ * combinations of 0 and of all 5 items.
+ */
+void testCombinations(void)
+{
+	index8 const expected[10][3] = {
+		{0, 1, 2}, {0, 1, 3}, {0, 1, 4}, {0, 2, 3}, {0, 2, 4},
+		{0, 3, 4}, {1, 2, 3}, {1, 2, 4}, {1, 3, 4}, {2, 3, 4}
+	};
+	index8 indices[5];
+	FirstCombination(3, indices);
+	for(index8 i = 0; i < 10; i++) {
+		ASSERT_MEMORY_EQUAL(indices, expected[i], 3)
+		ASSERT_TRUE(NextCombination(5, 3, indices) == (i < 9))
+	}
+	// CLAUDE: The last combination is left unchanged
+	ASSERT_MEMORY_EQUAL(indices, expected[9], 3)
+
+	FirstCombination(5, indices);
+	ASSERT_MEMORY_EQUAL(indices, ((index8[]) {0, 1, 2, 3, 4}), 5)
+	ASSERT_FALSE(NextCombination(5, 5, indices))
+
+	FirstCombination(0, indices);
+	ASSERT_FALSE(NextCombination(5, 0, indices))
+}
+
+
 int main(int argc, char * argv[])
 {
 	SetupMemory(PERSISTENT_MEMORY);
@@ -190,6 +219,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testReorderRaggedArray);
 	ExecuteTest(testQuickSort);
 	ExecuteTest(testResizingBuffer);
+	ExecuteTest(testCombinations);
 
 	CleanupMemory();
 

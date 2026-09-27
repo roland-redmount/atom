@@ -222,6 +222,51 @@ void MultisetIteratorEnd(MultisetIterator * iterator)
 }
 
 
+void MultisetContainingIterate(Atom element, MultisetContainingIterator * iterator)
+{
+	/**
+	 * TODO: here we need the service (multiset >ID element <ID multiple >INT) where element is input
+	 * Since the element role is not a leading column, RelationBTree does not support this.
+	 * For now, we simply scan the entire table and filter on matching terms. This is obviously
+	 * highly inefficient. A better solution would require multiple indexes on the relation table.
+	 * NOTE: once FILTER operator is in place we can register a compiled service for this at bootstrap time.
+	 */
+	iterator->element = element;
+	iterator->context = OperatorCreateContext(GetCoreOperator(SERVICE_MULTISET_ID_ALL), iterator->queryTuple);
+}
+
+
+bool MultisetContainingIteratorNext(MultisetContainingIterator * iterator)
+{
+	while(OperatorCall(iterator->context)) {
+		Atom element = iterator->queryTuple[
+			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
+		if(SameAtoms(element, iterator->element))
+			return true;
+	}
+	return false;
+}
+
+
+Atom MultisetContainingIteratorGetMultiset(MultisetContainingIterator const * iterator)
+{
+	return iterator->queryTuple[CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)];
+}
+
+
+size32 MultisetContainingIteratorGetMultiple(MultisetContainingIterator const * iterator)
+{
+	return iterator->queryTuple[CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)]._int;
+}
+
+
+void MultisetContainingIteratorEnd(MultisetContainingIterator * iterator)
+{
+	OperatorFreeContext(iterator->context);
+	SetMemory(iterator, sizeof(MultisetContainingIterator), 0);
+}
+
+
 Atom MultisetFindElement(Atom multiset, byte elementType, index32 k)
 {
 	MultisetIterator iterator;

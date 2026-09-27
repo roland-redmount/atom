@@ -1,7 +1,7 @@
 /**
  * The compile stack.
  * 
- * A rule body term with no matching service will itself be compiled by compileTerm(),
+ * A rule body term with no matching service will itself be compiled by compileTermSet(),
  * which for cross-recursive rules may lead to a term that is already being compiled.
  * For example, the rules (p x <- q x) and (q x <- p x) recurse through one another.
  * 

@@ -26,9 +26,11 @@
 #include "lang/IndexedFormula.h"
 #include "lang/SubstitutionList.h"
 #include "lang/TermForm.h"
+#include "lang/TermMultiset.h"
 #include "lang/Variable.h"
 #include "lang/unification.h"
 #include "memory/allocator.h"
+#include "util/combinations.h"
 #include "util/ResizingArray.h"
 
 
@@ -123,20 +125,13 @@ static bool dispatchOrCompileTerm(
  * Dispatch or compile a term, adding a choice point for it.
  * See dispatchOrCompileTerm()
  */
+/* CLAUDE: The given choice point belongs to the term; the service found is added to it as a
+ * new choice, and the relations of the choices already taken are excluded. A failed attempt
+ * leaves the choice point unchanged. */
 static bool dispatchOrCompileAtNewChoicePoint(
-	CompileStack * compileStack, FormulaView term, int mode, Service * service,
-	index8 permutation[], ChoiceTree * choiceTree)
+	CompileStack * compileStack, FormulaView term, int dispatchMode, ChoicePoint * choicePoint)
 {
-	// Add a new choice point
-	ASSERT(choiceTree->depth < MAX_CHOICE_POINTS)
-	ChoicePoint * choicePoint = &(choiceTree->choicePoints[choiceTree->depth++]);
-
 	ASSERT(choicePoint->nChoices < MAX_CHOICE_POINT_MATCHES)
-#ifdef DEBUG
-	if(choicePoint->nChoices)
-		ASSERT(SameAtoms(choicePoint->termForm, term.form))
-	choicePoint->termForm = term.form;
-#endif
 
 	// dispatch term, parameterized
 	ParameterizedQuery query = {
@@ -145,19 +140,22 @@ static bool dispatchOrCompileAtNewChoicePoint(
 	};
 	termActorsToParameters(term.actors, query.parameters);
 
+	TypeSignature excludedSignatures[MAX_CHOICE_POINT_MATCHES];
+	for(index8 i = 0; i < choicePoint->nChoices; i++)
+		excludedSignatures[i] = choicePoint->choices[i].relation.typeSignature;
+	Service service;
+	index8 permutation[RELATION_MAX_ARITY];
+	bool hasNextMatch = false;
 	if(!dispatchOrCompileTerm(
-		compileStack, &query, mode, service, permutation,
-		choicePoint->choiceSignatures, choicePoint->nChoices,
-		&(choicePoint->hasNextMatch)))
-	{
-		// The term did not dispatch, so release the choice point
-		choiceTree->depth--;
+		compileStack, &query, dispatchMode, &service, permutation,
+		excludedSignatures, choicePoint->nChoices, &hasNextMatch))
 		return false;
-	}
 
-	// Add the found relation's signature to the choices for the new choice point
-	choicePoint->choiceSignatures[choicePoint->nChoices] = service->relation.typeSignature;
+	// Add the found service to the choices of the choice point
+	choicePoint->choices[choicePoint->nChoices] = service;
 	choicePoint->nChoices++;
+	CopyMemory(permutation, choicePoint->permutation, query.arity * sizeof(index8));
+	choicePoint->hasNextMatch = hasNextMatch;
 	return true;
 }
 
@@ -352,25 +350,22 @@ static Operator * createTermOperator(
 
 
 /**
- * Compile a term into an operator by either locating an existing service,
- * or if mode = TERM_DISPATCH_OR_COMPILE by compiling a new service.
+ * Build the operator of a term from the service of the current choice of its choice
+ * point, choices[nChoices - 1], as compileTermSet() does once dispatch has found the service.
+ * Returns 0 if the service is no longer registered, or is stale.
  */
-static Operator * compileTerm(
-	CompileStack * compileStack, FormulaView term, int mode,
-	TypedTuple * serviceParameters, index8 clauseMap[], ChoiceTree * choiceTree)
+static Operator * buildOperatorFromChoicePoint(
+	TypedTuple const * termActors, ChoicePoint const * choicePoint,
+	TypedTuple * serviceParameters, index8 clauseMap[])
 {
-	// attempt to locate a service for the term
-	size8 termArity = term.actors->nAtoms;
-	index8 permutation[termArity];
-	Service termService;
-	if(!dispatchOrCompileAtNewChoicePoint(
-		compileStack, term, mode, &termService, permutation, choiceTree))
+	ASSERT(choicePoint->nChoices > 0)
+	Service service = choicePoint->choices[choicePoint->nChoices - 1];
+	Operator * serviceOperator = ServiceGetOperator(service);
+	if(!serviceOperator || ServiceIsStale(service))
 		return 0;
-	Operator * termOperator = ServiceGetOperator(termService);
-
 	return createTermOperator(
-		termService.relation.typeSignature, termService.ioSignature, termService.equalitySignature,
-		termOperator, term.actors, permutation, serviceParameters, clauseMap);
+		service.relation.typeSignature, service.ioSignature, service.equalitySignature,
+		serviceOperator, termActors, choicePoint->permutation, serviceParameters, clauseMap);
 }
 
 
@@ -413,94 +408,73 @@ static size8 setupJoinArgumentMaps(
 
 
 /**
- * The query term index of a conjunction query, which is compiled from all of its
- * terms; see compileConjunctionQuery().
- * 
- * TODO: We need a better representation for the conjunction that compileConjunctionQuery()
- * processes, rather than work off the clause, which now may or may not have a "head" term.
- */
-#define NO_HEAD_TERM			255
-
-/**
- * CLAUDE: The terms of a compiled conjunction are either the terms of a clause, negated,
- * or the terms of a conjunction query as given.
- */
-#define BODY_TERMS_NEGATED		1
-#define BODY_TERMS_AS_GIVEN		2
-
-
-/**
- * The state of compiling one clause into a conjunction of operators, shared by the
- * recursion over its terms. The clause actors and the termExcluded flags are updated as terms
- * compile: an actor is given its atom type once a term providing it has dispatched, and
+ * The state of compiling a conjunction, shared by the recursion over its terms.
+ * The term actors and the termExcluded flags are updated as terms compile:
+ * a parameter is given its atom type once a term providing it has dispatched, and
  * a term is marked excluded once it has been compiled.
- * 
- * TODO: I think we should factor out a struct representing only the conjunction being
- * compiled, without the matched (query; head) term. We should keep a SubstitutionList that records
- * the updated parameters as they are discovered, and update the query term _after_
- * the conjunction has compiled.
- * The hitch is the recursive terms: these can only occur in a conjunction that is assocated
- * with a query term.
- * 
- * In refactoring this, we should think ahead to a generalized compiler that works with subsets
- * of terms, we could have a recursive *conjunction*.) We'll need some index structure that
- * identifies a subset of terms, and their argument positions.
  */
 typedef struct s_ClauseCompileState {
-	IndexedFormula * indexedClause;
+	IndexedFormula * indexedFormula;
+	bool isConjunction;
 	uint8 nTerms;
 	// Total number of clause arguments, including the local variables
 	size8 nArguments;
 
 	// The head term is the term matched by the query, excluded from the conjunction.
 	index8 headTermIndex;
-	// The form of the head term, which is the same as for a recursive term
-	Atom headTermForm;
-	size8 headTermArity;	// NOTE: can be determined from indexeClause()
-	// Number of unique parameters in the head term. This is less than headTermArity if
-	// at least one head parameter is repeated. Head parameters are numbered
-	// 1, 2, ...nHeadArguments; a parameter number > nHeadArguments is local to the clause,
+	size8 headTermArity;
+	// Number of query arguments, which equals the numbero of unique parameters in the
+	// head term for a clause. A parameter number > nQueryArguments is local to the clause,
 	// and does not occur in the query.
-	size8 nHeadArguments;
+	size8 nQueryArguments;
 	// Whether the head parameters are fully known; else recursive terms cannot compile
 	// NOTE: this could be computed instead using hasFullyTypedParameters()
 	bool headParametersKnown;
 
-	// termExcluded[i] is true for each term compiled so far, and for the matched term
-	bool * termExcluded;
-	size8 nTermsExcluded;
+	// The terms of the conjunction, excluding the head term, in the order they compiled,
+	// followed the terms still to compile, in clause order. The first nCompiledTerms
+	// terms of this array have been successfully compiled.
+	index8 * termOrder;
+	size8 nConjunctionTerms;
+	size8 nCompiledTerms;
+
+	// termForms[i] is the form of term i as compiled: negated for a clause,
+	// as given for a conjunction query. The head term has no entry.
+	Atom * termForms;
+	// termIsRecursive[i] is true if term i is recursive; see compileConjunction()
+	bool * termIsRecursive;
+	// A cached of the conjunction forms (with > 2 terms) whose term forms all occur in the
+	// conjunction being compiled, sorted with most terms first; see findCandidateConjunctionForms()
+	ResizingArray candidateForms;
 
 	// Choice points taken during the compilation of the clause
 	ChoiceTree * choiceTree;
 	// Set when a recursive term has compiled to a RECURSE operator
 	bool hasRecurseOperator;
-	// CLAUDE: BODY_TERMS_NEGATED or BODY_TERMS_AS_GIVEN
-	uint32 bodyTerms;
 } ClauseCompileState;
 
 
 /**
- * Update the conjunction parameter types for a newly resolved term (termIndex) 
- *
- *  - In the head (query-matched) term the parameter stays an output, and so gives the service
- *    being compiled its signature;
- *  - In the terms not yet compiled it becomes an input, as the term that just compiled
- *    is what provides it.
- *
+ * Update the parameter types of the conjunction given newly resolved output parameters,
+ * indicated by actorIndices and corresponding serviceParameters.
+ * actorIndices[i] is the index into the actors tuple for the actor matched by service parameter i.
+ * In the head term (if it exists), matching output parameters are updated with type.
+ * In all other terms, the updated parameter becomes an input, provided by the 
+ * newly compiled term(s).
  * Compiled terms must be marked excluded.
- * 
  */
 static void propagateTermParameterTypes(
-	ClauseCompileState * clauseState, index8 termIndex, TypedTuple const * serviceParameters)
+	ClauseCompileState * clauseState, TypedTuple const * serviceParameters, index8 const actorIndices[])
 {
-	ASSERT(clauseState->termExcluded[termIndex])
-	size8 termArity = IndexedFormulaTermArity(clauseState->indexedClause, termIndex);
-	for(index8 i = 0; i < termArity; i++) {
-		TypedAtom termActor = IndexedFormulaGetTermElement(clauseState->indexedClause, termIndex, i);
-		// CLAUDE: An output parameter may be typed already, when the query parameters are
-		// typed for a recursive clause. The terms still to compile must take it as an
-		// input all the same, or a JOIN would not constrain them by it.
-		if((termActor.type != AT_PARAMETER) || (termActor.atom.parameter.io == PARAMETER_IN))
+	TypedTuple * actors = clauseState->indexedFormula->actors;
+	for(index8 i = 0; i < serviceParameters->nAtoms; i++) {
+		// Construct the updated parameter
+		TypedAtom termActor = TypedTupleGetElement(actors, actorIndices[i]);
+		// Skip any constants
+		if(termActor.type != AT_PARAMETER) 
+			continue;
+		// Input parameters of matched terms must be typed already
+		if(termActor.atom.parameter.io == PARAMETER_IN)
 			continue;
 
 		// The corresponding service parameter must be a typed output
@@ -523,34 +497,60 @@ static void propagateTermParameterTypes(
 		};
 
 		// Type the parameter in the head term, unless it is a local parameter
-		if((clauseState->headTermIndex != NO_HEAD_TERM)	&& (parameterNumber <= clauseState->nHeadArguments)) {
+		if(!clauseState->isConjunction && (parameterNumber <= clauseState->nQueryArguments)) {
 			// The parameter may occur multiple times in the head term
 			for(index8 k = 0; k < clauseState->headTermArity; k++) {
-				TypedAtom matchedActor = IndexedFormulaGetTermElement(
-					clauseState->indexedClause, clauseState->headTermIndex, k);
-				ASSERT(matchedActor.type == AT_PARAMETER)
-				if(matchedActor.atom.parameter.number == parameterNumber) {
+				TypedAtom headParameter = IndexedFormulaGetTermElement(
+					clauseState->indexedFormula, clauseState->headTermIndex, k);
+				ASSERT(headParameter.type == AT_PARAMETER)
+				if(headParameter.atom.parameter.number == parameterNumber) {
+					// In the head term, only outputs can be untyped
+					ASSERT(headParameter.atom.parameter.io == PARAMETER_OUT)
 					IndexedFormulaSetTermAtom(
-						clauseState->indexedClause, clauseState->headTermIndex, k, outputParameter);
+						clauseState->indexedFormula, clauseState->headTermIndex, k, outputParameter);
 				}
 			}
 		}
 		// Also set the type of the parameter in the term that compiled
 		// NOTE: not necessary, this term is not used for anything at this point
-		IndexedFormulaSetTermAtom(
-			clauseState->indexedClause, termIndex, i, outputParameter);
+		TypedTupleSetAtom(actors, actorIndices[i], outputParameter);
 
 		// The terms still to compile take the parameter as an input
-		for(index8 j = 0; j < clauseState->nTerms; j++) {
-			if(clauseState->termExcluded[j])
-				continue;
-			index8 termArity = IndexedFormulaTermArity(clauseState->indexedClause, j);
+		for(index8 p = clauseState->nCompiledTerms; p < clauseState->nConjunctionTerms; p++) {
+			index8 j = clauseState->termOrder[p];
+			index8 termArity = IndexedFormulaTermArity(clauseState->indexedFormula, j);
 			for(index8 k = 0; k < termArity; k++) {
-				TypedAtom actor = IndexedFormulaGetTermElement(clauseState->indexedClause, j, k);
+				TypedAtom actor = IndexedFormulaGetTermElement(clauseState->indexedFormula, j, k);
 				if(SameTypedAtoms(actor, termActor))
-					IndexedFormulaSetTermAtom(clauseState->indexedClause, j, k, inputParameter);
+					IndexedFormulaSetTermAtom(clauseState->indexedFormula, j, k, inputParameter);
 			}
 		}
+	}
+}
+
+
+/**
+ * Arrange clauseState->termOrder so that the the terms given by termIndices are
+ * marked a compiled. The terms are inserted following the current known compiled
+ * terms; remaining terms that have not yet compiled are shifted right, keeping their order.
+ */
+static void arrangeCompiledTerms(
+	ClauseCompileState * clauseState, index8 const termIndices[], size8 nTerms)
+{
+	index8 * termOrder = clauseState->termOrder;
+	for(index8 i = 0; i < nTerms; i++) {
+		// Find the term among the terms that had previously not been compiled
+		index8 p = clauseState->nCompiledTerms;
+		while(termOrder[p] != termIndices[i]) {
+			p++;
+			ASSERT(p < clauseState->nConjunctionTerms)
+		}
+		// Insert the term at position nCompiledTerms, shifting
+		// the following terms at nCompiledTerms + 1 ... p one step to the right
+		for(; p > clauseState->nCompiledTerms; p--)
+			termOrder[p] = termOrder[p - 1];
+		termOrder[p] = termIndices[i];
+		clauseState->nCompiledTerms++;
 	}
 }
 
@@ -590,14 +590,14 @@ static bool termRepeatsHeadTermParameters(ClauseCompileState const * clauseState
 	// whenever their parameter numbers are equal.
 	for(index8 i = 0; i < clauseState->headTermArity; i++) {
 		Atom headParameter1 = IndexedFormulaGetTermAtom(
-			clauseState->indexedClause, clauseState->headTermIndex, i);
+			clauseState->indexedFormula, clauseState->headTermIndex, i);
 		for(index8 j = 0; j < i; j++) {
 			Atom headParameter2 = IndexedFormulaGetTermAtom(
-				clauseState->indexedClause, clauseState->headTermIndex, j);
+				clauseState->indexedFormula, clauseState->headTermIndex, j);
 			if(headParameter1.parameter.number == headParameter2.parameter.number) {
 				// Parameters are identical in the head term; check actors in the given term
-				TypedAtom actor1 = IndexedFormulaGetTermElement(clauseState->indexedClause, termIndex, i);
-				TypedAtom actor2 = IndexedFormulaGetTermElement(clauseState->indexedClause, termIndex, j);
+				TypedAtom actor1 = IndexedFormulaGetTermElement(clauseState->indexedFormula, termIndex, i);
+				TypedAtom actor2 = IndexedFormulaGetTermElement(clauseState->indexedFormula, termIndex, j);
 				if(!SameTypedAtoms(actor1, actor2))
 					return false;
 			}
@@ -624,14 +624,14 @@ static Operator * compileRecursiveTerm(
 	ClauseCompileState * state, index8 termIndex, TypedTuple * serviceParameters, index8 clauseMap[])
 {
 	// Determine parameters of the recursive term
-	size8 termArity = IndexedFormulaTermArity(state->indexedClause, termIndex);
+	size8 termArity = IndexedFormulaTermArity(state->indexedFormula, termIndex);
 	ASSERT(termArity == state->headTermArity)
-	TypedTuple * termActors = IndexedFormulaGetTermTuple(state->indexedClause, termIndex);
+	TypedTuple * termActors = IndexedFormulaGetTermTuple(state->indexedFormula, termIndex);
 	Atom termParameters[termArity];
 	termActorsToParameters(termActors, termParameters);
 
 	// Extract the head term parameters from the clause actors. Must be fully typed AT_PARAMETER atoms.
-	Atom const * headParametersArray = IndexedFormulaPeekTermAtoms(state->indexedClause, state->headTermIndex);
+	Atom const * headParametersArray = IndexedFormulaPeekTermAtoms(state->indexedFormula, state->headTermIndex);
 
 	// The recursive term's parameter types are determined by the head term's
 	byte headAtomTypes[termArity];
@@ -677,6 +677,420 @@ static Operator * compileRecursiveTerm(
 
 
 /**
+ * Mark the terms given by termIndices as compiled, and update the parameter types of
+ * the conjunction from the serviceParameters of the term's operator.
+ * actorIndices[i] is the index into the clause actors of the actor matched by service parameter i.
+ */
+static void acceptCompiledTerms(
+	ClauseCompileState * clauseState, index8 const termIndices[], size8 nTerms,
+	index8 const actorIndices[], TypedTuple const * serviceParameters)
+{
+#ifdef DEBUG_COMPILER
+	PrintCString(" => serviceParameters = ");
+	TypedTuplePrint(serviceParameters);
+	PrintChar('\n');
+#endif
+	// Record the term chosen in the current choice point
+	// CLAUDE: A replayed choice point records its own terms and actors again
+	ChoiceTree * choiceTree = clauseState->choiceTree;
+	ChoicePoint * choicePoint = &(choiceTree->choicePoints[choiceTree->nChoicePoints]);
+	ASSERT(nTerms <= RELATION_MAX_ARITY)
+	ASSERT(serviceParameters->nAtoms <= RELATION_MAX_ARITY)
+	for(index8 i = 0; i < nTerms; i++)
+		choicePoint->termIndices[i] = termIndices[i];
+	choicePoint->nTerms = nTerms;
+	for(index8 i = 0; i < serviceParameters->nAtoms; i++)
+		choicePoint->actorIndices[i] = actorIndices[i];
+	choicePoint->nActors = serviceParameters->nAtoms;
+	choiceTree->nChoicePoints++;
+	// Update the conjunction parameters
+	arrangeCompiledTerms(clauseState, termIndices, nTerms);
+	propagateTermParameterTypes(clauseState, serviceParameters, actorIndices);
+
+#ifdef DEBUG_COMPILER
+	PrintCString("Updated clause: ");
+	PrintIndexedFormula(clauseState->indexedFormula);
+	PrintChar('\n');
+#endif
+}
+
+
+/**
+ * Same as acceptCompiledTerms(), for the single term given by termIndex.
+ */
+static void acceptCompiledTerm(
+	ClauseCompileState * clauseState, index8 termIndex, TypedTuple const * serviceParameters)
+{
+	size8 termArity = IndexedFormulaTermArity(clauseState->indexedFormula, termIndex);
+	index8 actorIndices[termArity];
+	IndexedFormulaGetTermActorIndices(clauseState->indexedFormula, termIndex, actorIndices);
+	acceptCompiledTerms(clauseState, &termIndex, 1, actorIndices, serviceParameters);
+}
+
+
+#ifdef DEBUG_COMPILER
+/**
+ * Print a set of terms from the conjunction, joined by '&'
+ */
+static void printTermSet(ClauseCompileState const * clauseState, index8 const termIndices[], size8 nTerms)
+{
+	for(index8 i = 0; i < nTerms; i++) {
+		if(i > 0)
+			PrintCString(" & ");
+		TypedTuple * actors = IndexedFormulaGetTermTuple(clauseState->indexedFormula, termIndices[i]);
+		PrintFormActorsAsFormula(clauseState->termForms[termIndices[i]], actors);
+		FreeTypedTuple(actors);
+	}
+}
+#endif
+
+
+/**
+ * Find the index into the clause actors for each actor of the given terms, and write
+ * into the actorIndices array, which must hold RELATION_MAX_ARITY indices.
+ * Returns the number of actors.
+ */
+static size8 getTermSetActorIndices(
+	ClauseCompileState const * clauseState, index8 const termIndices[], size8 nTerms, index8 actorIndices[])
+{
+	size8 nActors = 0;
+	for(index8 i = 0; i < nTerms; i++) {
+		size8 termArity = IndexedFormulaTermArity(clauseState->indexedFormula, termIndices[i]);
+		ASSERT(nActors + termArity <= RELATION_MAX_ARITY)
+		IndexedFormulaGetTermActorIndices(clauseState->indexedFormula, termIndices[i], actorIndices + nActors);
+		nActors += termArity;
+	}
+	return nActors;
+}
+
+
+/**
+ * Compile a the conjunction query defined by the given form and the actors of the terms
+ * indicated by termIndices[], with the given dispatchMode and choice point.
+ * The terms must be ordered according to the form. For a single term, the form is
+ * its term form; else it is a conjunction form. On success the terms are marked compiled.
+ */
+static Operator * compileTermSet(
+	CompileStack * compileStack, ClauseCompileState * clauseState, Atom form,
+	index8 const termIndices[], size8 nTerms, int dispatchMode, ChoicePoint * choicePoint,
+	index8 termClauseMap[])
+{
+	index8 actorIndices[RELATION_MAX_ARITY];
+	size8 nActors = getTermSetActorIndices(clauseState, termIndices, nTerms, actorIndices);
+	TypedTuple * termActors = CreateTypedTuple(nActors);
+	TypedTupleCopySubset(clauseState->indexedFormula->actors, actorIndices, nActors, termActors);
+#ifdef DEBUG_COMPILER
+	PrintF("Mode = %d, term set: ", dispatchMode);
+	printTermSet(clauseState, termIndices, nTerms);
+	PrintChar('\n');
+#endif
+	TypedTuple * serviceParameters = CreateTypedTuple(nActors);
+	Operator * op = 0;
+	// attempt to locate a service for the term
+	if(dispatchOrCompileAtNewChoicePoint(
+		compileStack, (FormulaView) {.form = form, .actors = termActors}, dispatchMode, choicePoint))
+		op = buildOperatorFromChoicePoint(termActors, choicePoint, serviceParameters, termClauseMap);
+	if(op)
+		acceptCompiledTerms(clauseState, termIndices, nTerms, actorIndices, serviceParameters);
+#ifdef DEBUG_COMPILER
+	else
+		PrintCString(" => no match.\n");
+#endif
+	FreeTypedTuple(serviceParameters);
+	FreeTypedTuple(termActors);
+	return op;
+}
+
+
+/**
+ * Compile the first non-excluded term of the clause that is not recursive.
+ * With mode = TERM_DISPATCH_ONLY, we pick the first term that dispatches to an
+ * existing service; with mode = TERM_DISPATCH_OR_COMPILE, we pick the first term
+ * that can be compiled to a new service, using compileTermSet().
+ * Returns the resulting operator, or 0 if no term compiled.
+ */
+static Operator * compileNextTerm(
+	CompileStack * compileStack, ClauseCompileState * clauseState, int mode, index8 termClauseMap[])
+{
+	Operator * op = 0;
+	ChoicePoint * choicePoint = &(clauseState->choiceTree->choicePoints[clauseState->choiceTree->nChoicePoints]);
+	// Iterate over the terms still to compile
+	for(index8 p = clauseState->nCompiledTerms; !op && (p < clauseState->nConjunctionTerms); p++) {
+		index8 termIndex = clauseState->termOrder[p];
+		if(clauseState->termIsRecursive[termIndex])
+			continue;
+		// Attempt to compile this term, determining serviceParameters and termClauseMap
+		op = compileTermSet(
+			compileStack, clauseState, clauseState->termForms[termIndex], &termIndex, 1,
+			mode, choicePoint, termClauseMap
+		);
+	}
+	return op;
+}
+
+
+/**
+ * An iterator over the sets of terms still to compile that match a conjunction form.
+ * For each term form of the conjunction form, in the order of the form, the iterator holds
+ * the non-recursive terms still to compile that have this term form, in clause order.
+ * A term set takes as many of these terms for each term form as the multiple of the term form
+ * in the conjunction form; see termSetIteratorNext().
+ */
+typedef struct {
+	size8 nTermForms;
+	// CLAUDE: multiple of each term form in the conjunction form
+	size8 termFormMultiple[RELATION_MAX_ARITY];
+	// CLAUDE: the terms still to compile that have each term form
+	size8 termFormNTerms[RELATION_MAX_ARITY];
+	index8 termFormTerms[RELATION_MAX_ARITY][MAX_CHOICE_POINTS];
+	// CLAUDE: the terms taken for each term form, as a combination of indices into termFormTerms
+	index8 termFormCombination[RELATION_MAX_ARITY][RELATION_MAX_ARITY];
+	bool isStarted;
+} TermSetIterator;
+
+
+/**
+ * Iterate over the term sets of the given conjunction form among the terms still to compile.
+ * Returns false if some term form of the conjunction form has too few terms, so that there
+ * is no term set.
+ */
+static bool termSetIterate(
+	ClauseCompileState const * clauseState, Atom conjunctionForm, TermSetIterator * iterator)
+{
+	iterator->nTermForms = 0;
+	iterator->isStarted = false;
+	bool hasTermSets = true;
+	MultisetIterator formIterator;
+	MultisetIterate(conjunctionForm, AT_ID, &formIterator);
+	while(hasTermSets && MultisetIteratorNext(&formIterator)) {
+		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
+		index8 f = iterator->nTermForms++;
+		ASSERT(f < RELATION_MAX_ARITY)
+		iterator->termFormMultiple[f] = em.multiple;
+		iterator->termFormNTerms[f] = 0;
+		for(index8 p = clauseState->nCompiledTerms; p < clauseState->nConjunctionTerms; p++) {
+			index8 termIndex = clauseState->termOrder[p];
+			if(!clauseState->termIsRecursive[termIndex]
+				&& SameAtoms(clauseState->termForms[termIndex], em.element))
+				iterator->termFormTerms[f][iterator->termFormNTerms[f]++] = termIndex;
+		}
+		hasTermSets = (iterator->termFormNTerms[f] >= em.multiple);
+	}
+	MultisetIteratorEnd(&formIterator);
+	return hasTermSets;
+}
+
+
+/**
+ * Advance to the next term set, or the first one on the first call, and write its
+ * terms to the termIndices array, which must hold RELATION_MAX_ARITY indices. The terms are
+ * ordered as the terms of the conjunction form. Returns the number of terms, or 0 when
+ * there are no more term sets.
+ */
+static size8 termSetIteratorNext(TermSetIterator * iterator, index8 termIndices[])
+{
+	if(!iterator->isStarted) {
+		for(index8 f = 0; f < iterator->nTermForms; f++)
+			FirstCombination(iterator->termFormMultiple[f], iterator->termFormCombination[f]);
+		iterator->isStarted = true;
+	}
+	else {
+		// Iterate over the combinations of the term forms, the last term form first
+		index8 f = iterator->nTermForms;
+		for(; f > 0; f--) {
+			if(NextCombination(
+				iterator->termFormNTerms[f - 1], iterator->termFormMultiple[f - 1],
+				iterator->termFormCombination[f - 1]))
+				break;
+			FirstCombination(iterator->termFormMultiple[f - 1], iterator->termFormCombination[f - 1]);
+		}
+		if(f == 0)
+			return 0;
+	}
+	size8 nTerms = 0;
+	for(index8 f = 0; f < iterator->nTermForms; f++) {
+		for(index8 i = 0; i < iterator->termFormMultiple[f]; i++)
+			termIndices[nTerms++] = iterator->termFormTerms[f][iterator->termFormCombination[f][i]];
+	}
+	return nTerms;
+}
+
+
+/**
+ * Dispatch the first set of terms still to compile that matches a service. The sets
+ * matching a candidate conjunction form come first, larger forms first; then single terms,
+ * as compileNextTerm() takes them. Returns 0 if no set of terms dispatched.
+ */
+static Operator * dispatchNextTerms(
+	CompileStack * compileStack, ClauseCompileState * clauseState, index8 termClauseMap[])
+{
+	ChoicePoint * choicePoint = &(clauseState->choiceTree->choicePoints[clauseState->choiceTree->nChoicePoints]);
+	Atom const * candidateForms = ResizingArrayGetMemory(&(clauseState->candidateForms));
+	Operator * op = 0;
+	for(index32 i = 0; !op && (i < clauseState->candidateForms.nElements); i++) {
+		TermSetIterator iterator;
+		if(!termSetIterate(clauseState, candidateForms[i], &iterator))
+			continue;
+		index8 termIndices[RELATION_MAX_ARITY];
+		size8 nTerms;
+		while(!op && (nTerms = termSetIteratorNext(&iterator, termIndices))) {
+			op = compileTermSet(
+				compileStack, clauseState, candidateForms[i], termIndices, nTerms,
+				TERM_DISPATCH_ONLY, choicePoint, termClauseMap
+			);
+		}
+	}
+	if(!op)
+		op = compileNextTerm(compileStack, clauseState, TERM_DISPATCH_ONLY, termClauseMap);
+	return op;
+}
+
+
+/**
+ * Compile the first non-excluded recursive term to a RECURSE operator; see
+ * compileRecursiveTerm(). The term is then marked excluded. Returns 0 if no term compiled.
+ */
+static Operator * compileNextRecursiveTerm(ClauseCompileState * clauseState, index8 termClauseMap[])
+{
+	if(!clauseState->headParametersKnown)
+		return 0;
+	Operator * op = 0;
+	for(index8 p = clauseState->nCompiledTerms; !op && (p < clauseState->nConjunctionTerms); p++) {
+		index8 termIndex = clauseState->termOrder[p];
+		if(!clauseState->termIsRecursive[termIndex])
+			continue;
+#ifdef DEBUG_COMPILER
+		PrintCString("Pass = 3, recursive term: ");
+		TypedTuple * termActors = IndexedFormulaGetTermTuple(clauseState->indexedFormula, termIndex);
+		PrintFormActorsAsFormula(clauseState->termForms[termIndex], termActors);
+		FreeTypedTuple(termActors);
+		PrintChar('\n');
+#endif
+		size8 termArity = IndexedFormulaTermArity(clauseState->indexedFormula, termIndex);
+		TypedTuple * serviceParameters = CreateTypedTuple(termArity);
+		op = compileRecursiveTerm(clauseState, termIndex, serviceParameters, termClauseMap);
+		if(op) {
+			clauseState->hasRecurseOperator = true;
+			acceptCompiledTerm(clauseState, termIndex, serviceParameters);
+		}
+#ifdef DEBUG_COMPILER
+		else
+			PrintCString(" => no match.\n");
+#endif
+		FreeTypedTuple(serviceParameters);
+	}
+	return op;
+}
+
+
+/**
+ * Compile the term of the current choice point again, taking the current choice of
+ * the choice point, which is a choice point before the branch of the choice tree; see
+ * ChoiceTreeNextBranch(). A recursive term is compiled again by compileRecursiveTerm().
+ * Returns 0 if the term does not compile.
+ */
+static Operator * replayTerm(ClauseCompileState * clauseState, index8 termClauseMap[])
+{
+	ChoiceTree * choiceTree = clauseState->choiceTree;
+	ChoicePoint const * choicePoint = &(choiceTree->choicePoints[choiceTree->nChoicePoints]);
+	index8 const * termIndices = choicePoint->termIndices;
+	TypedTuple * termActors = CreateTypedTuple(choicePoint->nActors);
+	TypedTupleCopySubset(
+		clauseState->indexedFormula->actors, choicePoint->actorIndices, choicePoint->nActors, termActors);
+#ifdef DEBUG_COMPILER
+	PrintCString("Replay term: ");
+	printTermSet(clauseState, termIndices, choicePoint->nTerms);
+	PrintChar('\n');
+#endif
+	TypedTuple * serviceParameters = CreateTypedTuple(termActors->nAtoms);
+	Operator * op;
+	if(clauseState->termIsRecursive[termIndices[0]]) {
+		// CLAUDE: A recursive term compiles on its own
+		ASSERT(choicePoint->nTerms == 1)
+		op = compileRecursiveTerm(clauseState, termIndices[0], serviceParameters, termClauseMap);
+		if(op)
+			clauseState->hasRecurseOperator = true;
+	}
+	else
+		op = buildOperatorFromChoicePoint(termActors, choicePoint, serviceParameters, termClauseMap);
+
+	if(op) {
+		acceptCompiledTerms(
+			clauseState, termIndices, choicePoint->nTerms, choicePoint->actorIndices, serviceParameters);
+	}
+#ifdef DEBUG_COMPILER
+	else
+		PrintCString(" => no match.\n");
+#endif
+	FreeTypedTuple(serviceParameters);
+	FreeTypedTuple(termActors);
+	return op;
+}
+
+
+/**
+ * Find the candidate conjunction form whose terms have the forms of the given terms,
+ * with the same multiples; see findCandidateConjunctionForms().
+ */
+static Atom findCandidateForm(ClauseCompileState const * clauseState, index8 const termIndices[], size8 nTerms)
+{
+	Atom const * candidateForms = ResizingArrayGetMemory(&(clauseState->candidateForms));
+	for(index32 i = 0; i < clauseState->candidateForms.nElements; i++) {
+		Atom form = candidateForms[i];
+		if(ConjunctionFormNTermsTotal(form) != nTerms)
+			continue;
+		bool isMatch = true;
+		for(index8 j = 0; isMatch && (j < nTerms); j++) {
+			Atom termForm = clauseState->termForms[termIndices[j]];
+			size8 multiple = 0;
+			for(index8 k = 0; k < nTerms; k++) {
+				if(SameAtoms(clauseState->termForms[termIndices[k]], termForm))
+					multiple++;
+			}
+			isMatch = (MultisetGetElementMultiple(form, termForm) == multiple);
+		}
+		if(isMatch)
+			return form;
+	}
+	ASSERT(false)
+	return (Atom) {0};
+}
+
+
+/**
+ * Compile the term of the current choice point, which is the branch of the choice
+ * tree, taking a new choice; see ChoiceTreeNextBranch(). Returns 0 if the term does not compile.
+ */
+static Operator * compileNextChoice(
+	CompileStack * compileStack, ClauseCompileState * clauseState, index8 termClauseMap[])
+{
+	ChoiceTree * choiceTree = clauseState->choiceTree;
+	ChoicePoint * choicePoint = &(choiceTree->choicePoints[choiceTree->nChoicePoints]);
+	index8 const * termIndices = choicePoint->termIndices;
+	// CLAUDE: A recursive term has no choices, and so has no next choice either
+	ASSERT(!clauseState->termIsRecursive[termIndices[0]])
+#ifdef DEBUG_COMPILER
+	PrintCString("Next choice\n");
+#endif
+	Atom form;
+	int mode;
+	if(choicePoint->nTerms == 1) {
+		form = clauseState->termForms[termIndices[0]];
+		// CLAUDE: The service of the next choice may be stale, and then compiling the term
+		// is what clears it; see dispatchOrCompileTerm()
+		mode = TERM_DISPATCH_OR_COMPILE;
+	}
+	else {
+		// CLAUDE: A set of several terms is only ever dispatched; see dispatchNextTerms()
+		form = findCandidateForm(clauseState, termIndices, choicePoint->nTerms);
+		mode = TERM_DISPATCH_ONLY;
+	}
+	return compileTermSet(
+		compileStack, clauseState, form, termIndices, choicePoint->nTerms, mode, choicePoint, termClauseMap);
+}
+
+
+/**
  * Compile a JOIN operator from the conjunction obtained by negating the clause being
  * compiled, excluding the head (query-matched) term, and any term already compiled.
  * We iterate over all terms (negated) until we find a term that dispatches to a known service,
@@ -694,19 +1108,19 @@ static Operator * compileConjunctionRecursive(
 	PrintCString("compileConjunctionRecursive()\n");
 #endif
 	ASSERT(clauseState->nTerms >= 2)
-	Operator * op = 0;
+	ASSERT(clauseState->nCompiledTerms < clauseState->nConjunctionTerms)
 	// Clause arguments provided by the compiled term. A term may refer to the same
 	// clause argument more than once, so it may have more arguments than the clause.
-	index8 termClauseMap[clauseState->indexedClause->actors->nAtoms];
+	index8 termClauseMap[clauseState->indexedFormula->actors->nAtoms];
 
 	/**
 	 * Find a term that can be compiled, in three passes over the term forms of the clause:
 	 * 
-	 * pass = 0: Only terms that dispatch to an existing service are considered.
-	 * pass = 1: Terms that do not dispatch to an existing service are compiled,
-	 *           but recursive terms are not compiled.
-	 * pass = 2: Only recursive terms are compiled, producing a RECURSE operator,
-	 *           provided that all their types have been determined.
+	 * pass 1: Only terms that dispatch to an existing service are considered.
+	 * pass 2: Terms that do not dispatch to an existing service are compiled,
+	 *         but recursive terms are not compiled.
+	 * pass 3: Only recursive terms are compiled, producing a RECURSE operator,
+	 *         provided that all their types have been determined.
 	 * 
 	 * The 3 passes serve to prioritize the candidate terms, so that in each call to 
 	 * compileConjunctionRecursive() we prefer terms in pass 0 over those in pass 1,
@@ -715,95 +1129,37 @@ static Operator * compileConjunctionRecursive(
 	 * as early as possible, to avoid generating calls to table-scanning operators which
 	 * then have to be filtered. It will not always yield the optimal solution.
 	 */
-	for(index8 pass = 0; !op && (pass < 3); pass++) {
-		// We attempt to compile terms (recursively) only in the second pass.
-		int termCompileMode = (pass == 1) ? TERM_DISPATCH_OR_COMPILE : TERM_DISPATCH_ONLY;
-		// Iterate over terms in the clause
-		IndexedFormulaIterator iterator;
-		IndexedFormulaIterate(clauseState->indexedClause, &iterator);
-		while(!op && (clauseState->nTermsExcluded < clauseState->nTerms) && IndexedFormulaIteratorNext(&iterator)) {
-			if(clauseState->termExcluded[iterator.termIndex])
-				continue;
-			size8 termArity = TermFormArity(iterator.termForm);
-			// negate the term form if necessary
-			Atom negatedTermForm;
-			if(clauseState->bodyTerms == BODY_TERMS_NEGATED)
-				negatedTermForm = TermFormCreateOppositeForm(iterator.termForm);
-			else {
-				negatedTermForm = iterator.termForm;
-				IFactAcquire(negatedTermForm);
-			}
-			// A term of the query's own form _may_ be recursive.
-			// A term of a different form is not recursive, and is skipped in pass 2
-			bool isRecursiveForm = SameAtoms(negatedTermForm, clauseState->headTermForm);
-			if(!isRecursiveForm && (pass == 2)) {
-				IFactRelease(negatedTermForm);
-				continue;
-			}
-			// Compile a recursive term only in pass 2, and only if the head term parameters are known
-			bool isRecursiveTerm =
-				isRecursiveForm && termRepeatsHeadTermParameters(clauseState, iterator.termIndex);
-			if((isRecursiveTerm != (pass == 2)) || (isRecursiveTerm && !clauseState->headParametersKnown)) {
-				IFactRelease(negatedTermForm);
-				continue;
-			}
-#ifdef DEBUG_COMPILER
-			PrintF("Pass = %d, attempting term: ", pass);
-			TypedTuple * termActors = IndexedFormulaIteratorGetTermActors(&iterator);
-			PrintFormActorsAsFormula(negatedTermForm, termActors);
-			PrintChar('\n');
-#endif
-			// Attempt to compile this term, determining serviceParameters and termClauseMap
-			TypedTuple * serviceParameters = CreateTypedTuple(termArity);
-			if(isRecursiveTerm) {
-				op = compileRecursiveTerm(clauseState, iterator.termIndex, serviceParameters, termClauseMap);
-			}
-			else {
-				TypedTuple * termActors = IndexedFormulaIteratorGetTermActors(&iterator);
-				op = compileTerm(
-					compileStack, (FormulaView) {.form = negatedTermForm, .actors = termActors},
-					termCompileMode, serviceParameters,	termClauseMap, clauseState->choiceTree
-				);
-			}
-			if(op) {
-				if(isRecursiveTerm)
-					clauseState->hasRecurseOperator = true;
-#ifdef DEBUG_COMPILER
-				PrintCString(" => serviceParameters = ");
-				TypedTuplePrint(serviceParameters);
-				PrintChar('\n');
-#endif
-				clauseState->termExcluded[iterator.termIndex] = true;
-				clauseState->nTermsExcluded++;
-				// Update the conjunction parameters
-				propagateTermParameterTypes(clauseState, iterator.termIndex, serviceParameters);
-
-#ifdef DEBUG_COMPILER
-				PrintCString("Updated clause: ");
-				PrintIndexedFormula(clauseState->indexedClause);
-				PrintChar('\n');
-#endif
-			}
-#ifdef DEBUG_COMPILER
-			else {
-				PrintCString(" => no match.\n");
-			}
-#endif
-			FreeTypedTuple(serviceParameters);
-			IFactRelease(negatedTermForm);
-		}
-		IndexedFormulaIteratorEnd(&iterator);
+	ChoiceTree * choiceTree = clauseState->choiceTree;
+	index8 choicePointIndex = choiceTree->nChoicePoints;
+	ASSERT(choicePointIndex < MAX_CHOICE_POINTS)
+	bool hasBranch = (choiceTree->branchIndex != NO_BRANCH);
+	Operator * op = 0;
+	if(hasBranch && (choicePointIndex < choiceTree->branchIndex))
+		op = replayTerm(clauseState, termClauseMap);
+	else if(hasBranch && (choicePointIndex == choiceTree->branchIndex))
+		op = compileNextChoice(compileStack, clauseState, termClauseMap);
+	else {
+		ChoicePoint * choicePoint = &(choiceTree->choicePoints[choicePointIndex]);
+		choicePoint->nChoices = 0;
+		choicePoint->hasNextMatch = false;
+		// pass 1
+		op = dispatchNextTerms(compileStack, clauseState, termClauseMap);
+		// pass 2
+		if(!op)
+			op = compileNextTerm(compileStack, clauseState, TERM_DISPATCH_OR_COMPILE, termClauseMap);
+		// pass 3
+		if(!op)
+			op = compileNextRecursiveTerm(clauseState, termClauseMap);
 	}
-
 	if(!op) {
 		// No remaining term could be dispatched
 		return 0;
 	}
 
-	if(clauseState->nTermsExcluded < clauseState->nTerms) {
+	if(clauseState->nCompiledTerms < clauseState->nConjunctionTerms) {
 		// The operator just compiled will be the left child of the JOIN operator.
 		// Recurse on remaining terms to obtain the right child operator.
-		index8 rightClauseMap[clauseState->indexedClause->actors->nAtoms];
+		index8 rightClauseMap[clauseState->indexedFormula->actors->nAtoms];
 		Operator * rightOperator = compileConjunctionRecursive(
 			compileStack, clauseState, rightClauseMap);
 		if(rightOperator) {
@@ -821,7 +1177,7 @@ static Operator * compileConjunctionRecursive(
 				nJoinArguments, op, leftMap, rightOperator, rightMap);
 		}
 		else {
-			// Failed to compile the rest of the cojnunction
+			// Failed to compile the rest of the conjunction
 			CheckOperator(op);
 			return 0;
 		}
@@ -850,12 +1206,8 @@ static size8 parameterizeLocalVariables(
 	IndexedFormula * indexedClause, index8 headTermIndex, size8 nHeadArguments)
 {
 	// Skip the head term, if present
-	index8 headTermBegin = 0;
-	index8 headTermEnd = 0;
-	if(headTermIndex != NO_HEAD_TERM) {
-		headTermBegin = indexedClause->termActorsIndices[headTermIndex];
-		headTermEnd = indexedClause->termActorsIndices[headTermIndex + 1];
-	}
+	index8 headTermBegin = indexedClause->termActorsIndices[headTermIndex];
+	index8 headTermEnd = indexedClause->termActorsIndices[headTermIndex + 1];
 	size8 nLocalVariables = 0;
 
 	for(index8 i = 0; i < indexedClause->actors->nAtoms; i++) {
@@ -950,82 +1302,280 @@ static bool hasFullyTypedParameters(IndexedFormula * indexedFormula, index8 i)
 
 
 /**
- * Compile the conjunction formed by negating the given clause (clauseForm, clauseActors),
- * minus the head term (the clause term matching a query), indicated by headTermIndex.
- * By definition, the head term has the same form and parameters as the query.
+ * Count the terms of the conjunction whose form is termForm, excluding the head term.
+ */
+static size8 countTermsOfForm(ClauseCompileState const * clauseState, Atom termForm)
+{
+	size8 count = 0;
+	for(index8 i = 0; i < clauseState->nTerms; i++) {
+		if(clauseState->termForms[i].hash && SameAtoms(clauseState->termForms[i], termForm))
+			count++;
+	}
+	return count;
+}
+
+
+/**
+ * Test whether each term form of the conjunction form occurs among the terms of the
+ * conjunction being compiled, at least as many times as in the conjunction form.
+ */
+static bool conjunctionFormFitsTerms(ClauseCompileState const * clauseState, Atom conjunctionForm)
+{
+	bool fits = true;
+	MultisetIterator iterator;
+	MultisetIterate(conjunctionForm, AT_ID, &iterator);
+	while(fits && MultisetIteratorNext(&iterator)) {
+		ElementMultiple em = MultisetIteratorGetElement(&iterator);
+		fits = (countTermsOfForm(clauseState, em.element) >= em.multiple);
+	}
+	MultisetIteratorEnd(&iterator);
+	return fits;
+}
+
+
+/**
+ * CLAUDE: Collect in clauseState->candidateForms the conjunction forms of two or more terms
+ * that could match a set of terms of the conjunction being compiled, largest first. A service
+ * of such a form may answer several terms at once; see dispatchNextTerms(). The conjunction
+ * query being compiled is not a candidate, as its services are already seeded; see
+ * seedVariantsFromServices(). A reference to each candidate form is held until
+ * freeClauseCompileState().
+ */
+static void findCandidateConjunctionForms(ClauseCompileState * clauseState)
+{
+	ResizingArray * candidateForms = &(clauseState->candidateForms);
+	CreateResizingArray(candidateForms, sizeof(Atom), 4);
+	for(index8 i = 0; i < clauseState->nTerms; i++) {
+		Atom termForm = clauseState->termForms[i];
+		if(!termForm.hash)
+			continue;
+		MultisetContainingIterator iterator;
+		MultisetContainingIterate(termForm, &iterator);
+		while(MultisetContainingIteratorNext(&iterator)) {
+			Atom form = MultisetContainingIteratorGetMultiset(&iterator);
+			if(!IsConjunctionForm(form) || (ConjunctionFormNTermsTotal(form) < 2))
+				continue;
+			if(clauseState->isConjunction && SameAtoms(form, clauseState->indexedFormula->form))
+				continue;
+			if(ResizingArrayContainsElement(candidateForms, &form))
+				continue;
+			if(!conjunctionFormFitsTerms(clauseState, form))
+				continue;
+			IFactAcquire(form);
+			ResizingArrayAppend(candidateForms, &form);
+		}
+		MultisetContainingIteratorEnd(&iterator);
+	}
+
+	// CLAUDE: Sort the candidate forms by number of terms, largest first
+	Atom * forms = ResizingArrayGetMemory(candidateForms);
+	for(index32 i = 1; i < candidateForms->nElements; i++) {
+		Atom form = forms[i];
+		size8 nTerms = ConjunctionFormNTermsTotal(form);
+		index32 j = i;
+		for(; (j > 0) && (ConjunctionFormNTermsTotal(forms[j - 1]) < nTerms); j--)
+			forms[j] = forms[j - 1];
+		forms[j] = form;
+	}
+}
+
+
+/**
+ * Setup the parts of a ClauseCompileState that are the same for a clause and a
+ * conjunction: no term is excluded, no term is recursive, and no term form is set.
+ * The arrays are allocated; see freeClauseCompileState().
+ */
+static void setupCompileStateCommon(
+	ClauseCompileState * clauseState, Atom form, TypedTuple * actors, ChoiceTree * choiceTree)
+{
+	SetMemory(clauseState, sizeof(ClauseCompileState), 0);
+	clauseState->indexedFormula = CreateIndexedFormula(form, actors);
+	size8 nTerms = TermMultisetNTerms(form);
+	clauseState->nTerms = nTerms;
+	clauseState->termOrder = Allocate(nTerms * sizeof(index8));
+	clauseState->termForms = Allocate(nTerms * sizeof(Atom));
+	clauseState->termIsRecursive = Allocate(nTerms * sizeof(bool));
+	for(index8 i = 0; i < nTerms; i++) {
+		clauseState->termForms[i] = (Atom) {0};
+		clauseState->termIsRecursive[i] = false;
+	}
+	clauseState->choiceTree = choiceTree;
+}
+
+
+/**
+ * Fill termOrder with the terms of the fixed choice points of its choice tree, 
+ * which may be empty or determined during compilation of previous variant.
+ * Terms occur in the order they compiled, followed by the other terms of the
+ * conjunction, in their original (canonical) order.
+ * The head term, if any, is left out.
+ */
+static void setupTermOrder(ClauseCompileState * clauseState, bool hasHeadTerm)
+{
+	ChoiceTree const * choiceTree = clauseState->choiceTree;
+	// The head term, if any, is always marked "ordered"
+	bool isOrdered[clauseState->nTerms];
+	for(index8 i = 0; i < clauseState->nTerms; i++)
+		isOrdered[i] = hasHeadTerm && (i == clauseState->headTermIndex);
+	size8 nOrdered = 0;
+	size8 nOrderedChoicePoints =
+		(choiceTree->branchIndex == NO_BRANCH) ? 0 : choiceTree->branchIndex + 1;
+	for(index8 k = 0; k < nOrderedChoicePoints; k++) {
+		ChoicePoint const * choicePoint = &(choiceTree->choicePoints[k]);
+		for(index8 i = 0; i < choicePoint->nTerms; i++) {
+			index8 termIndex = choicePoint->termIndices[i];
+			ASSERT(!isOrdered[termIndex])
+			clauseState->termOrder[nOrdered++] = termIndex;
+			isOrdered[termIndex] = true;
+		}
+	}
+	for(index8 i = 0; i < clauseState->nTerms; i++) {
+		if(!isOrdered[i])
+			clauseState->termOrder[nOrdered++] = i;
+	}
+	clauseState->nConjunctionTerms = nOrdered;
+	clauseState->nCompiledTerms = 0;
+	ASSERT(nOrdered <= MAX_CHOICE_POINTS)
+}
+
+
+/**
+ * Setup the state for compiling a conjunction query. The actors must be the query
+ * parameters, so there are no local variables. The operator takes one argument per distinct
+ * query parameter, which is held in nQueryArguments.
+ */
+static void setupConjunctionCompileState(
+	ClauseCompileState * clauseState, Atom conjunctionForm, TypedTuple * actors, ChoiceTree * choiceTree)
+{
+	ASSERT(IsConjunctionForm(conjunctionForm))
+	setupCompileStateCommon(clauseState, conjunctionForm, actors, choiceTree);
+	clauseState->isConjunction = true;
+
+	index8 argumentMap[actors->nAtoms];
+	size8 nArguments = ParametersGetArgumentMap(TypedTuplePeekAtoms(actors), actors->nAtoms, argumentMap);
+	clauseState->nArguments = nArguments;
+	clauseState->nQueryArguments = nArguments;
+
+	IndexedFormulaIterator iterator;
+	IndexedFormulaIterate(clauseState->indexedFormula, &iterator);
+	while(IndexedFormulaIteratorNext(&iterator)) {
+		clauseState->termForms[iterator.termIndex] = iterator.termForm;
+		IFactAcquire(iterator.termForm);
+	}
+	IndexedFormulaIteratorEnd(&iterator);
+	findCandidateConjunctionForms(clauseState);
+	setupTermOrder(clauseState, false);
+}
+
+
+/**
+ * Setup the state for compiling a clause, whose head term actors must be the query
+ * parameters. The clause actors are updated as the conjunction compiles, and the resolved
+ * query parameters are then read from the head term actors.
+ * 
+ * The conjunction is obtained by negating its terms, except the for the head (query-matched) term,
+ * indicated by headTermIndex. By definition, the head term has the same form and parameters as the query.
+ * nHeadArguments is the number of unique parameters in the head term.
  * A recursive term in the conjunction is compiled against the head term, once its parameters
  * types have been fully determined.
- *
- * nHeadArguments is the number of unique parameters in the head term, which equals the number of
- * arguments of the returned operator.
- * bodyTerms is BODY_TERMS_NEGATED for a clause. For a conjunction query it is
- * BODY_TERMS_AS_GIVEN, and matchedTermIndex is NO_MATCHED_TERM; see compileConjunctionQuery().
  * 
  * The function sets *hasRecurseOperator = true if a recursive term was compiled to a RECURSE operator.
  * The resulting operator must then be wrapped in a FIXPOINT operator; see completeRecursiveVariant().
  * Returns the compiled Operator.
- * 
+ 
  */
-static Operator * compileConjunction(
-	CompileStack * compileStack,
-	Atom clauseForm, TypedTuple * clauseActors, index8 headTermIndex, Atom headTermForm,
-	size8 nHeadArguments, ChoiceTree * choiceTree, int bodyTerms, bool * hasRecurseOperator)
+static void setupClauseCompileState(
+	ClauseCompileState * clauseState, Atom clauseForm, TypedTuple * clauseActors,
+	index8 headTermIndex, ChoiceTree * choiceTree)
 {
-	size8 clauseNTerms = ClauseFormNTerms(clauseForm);
-	IndexedFormula * indexedClause = CreateIndexedFormula(clauseForm, clauseActors);
+	ASSERT(IsClauseForm(clauseForm))
+	setupCompileStateCommon(clauseState, clauseForm, clauseActors, choiceTree);
+	IndexedFormula * indexedClause = clauseState->indexedFormula;
+	clauseState->headTermIndex = headTermIndex;
 
-	bool termExcluded[clauseNTerms];
-	for(index8 i = 0; i < clauseNTerms; i++)
-		termExcluded[i] = (i == headTermIndex);
-	size8 nTermsExcluded = (headTermIndex == NO_HEAD_TERM) ? 0 : 1;
+	// The head term parameters are the query parameters
+	size8 headTermArity = IndexedFormulaTermArity(indexedClause, headTermIndex);
+	index8 headArgumentMap[headTermArity];
+	size8 nHeadArguments = ParametersGetArgumentMap(
+		IndexedFormulaPeekTermAtoms(indexedClause, headTermIndex), headTermArity, headArgumentMap);
+	clauseState->headTermArity = headTermArity;
+	clauseState->nQueryArguments = nHeadArguments;
 
-	// Lcal variables are variables (AT_VARIABLE atoms) in the clause actors
-	// that are not present in the head term. These become local parameters,
-	// and are added to the arguments tuple.
-	size8 nLocalVariables = parameterizeLocalVariables(
-		indexedClause, headTermIndex, nHeadArguments);
+	// Local variables are any variables not present in the head term.
+	// These become local parameters, and are added to the arguments tuple.
+	size8 nLocalVariables = parameterizeLocalVariables(indexedClause, headTermIndex, nHeadArguments);
+	clauseState->nArguments = nHeadArguments + nLocalVariables;
 
 	// Test if all head parameters are known; this is required to compile a recursive term.
-	size8 headTermArity = 0;
-	bool headParametersKnown = false;
-	// Without a query term there are no query parameters to read a recursive term against
-	if(headTermIndex != NO_HEAD_TERM) {
-		headTermArity = IndexedFormulaTermArity(indexedClause, headTermIndex);
-		headParametersKnown = hasFullyTypedParameters(indexedClause, headTermIndex);
+	clauseState->headParametersKnown = hasFullyTypedParameters(indexedClause, headTermIndex);
+
+	// Negate the form of each term except the head term
+	Atom headTermForm = {0};
+	IndexedFormulaIterator iterator;
+	IndexedFormulaIterate(indexedClause, &iterator);
+	while(IndexedFormulaIteratorNext(&iterator)) {
+		if(iterator.termIndex == headTermIndex)
+			headTermForm = iterator.termForm;
+		else
+			clauseState->termForms[iterator.termIndex] = TermFormCreateOppositeForm(iterator.termForm);
 	}
+	IndexedFormulaIteratorEnd(&iterator);
 
-	// Setup the initial clause state
-	ClauseCompileState clauseState = {
-		.indexedClause = indexedClause,
-		.nTerms = clauseNTerms,
-		.nArguments = nHeadArguments + nLocalVariables,
+	for(index8 i = 0; i < clauseState->nTerms; i++) {
+		if(i == headTermIndex)
+			continue;
+		// A term is recursive if it has the head term 's form and repeats the same parameter
+		clauseState->termIsRecursive[i] = SameAtoms(clauseState->termForms[i], headTermForm)
+			&& termRepeatsHeadTermParameters(clauseState, i);
+	}
+	findCandidateConjunctionForms(clauseState);
+	setupTermOrder(clauseState, true);
+}
 
-		.headTermIndex = headTermIndex,
-		.headTermForm = headTermForm,
-		.headTermArity = headTermArity,
-		.nHeadArguments = nHeadArguments,
-		.headParametersKnown = headParametersKnown,
 
-		.termExcluded = termExcluded,
-		.nTermsExcluded = nTermsExcluded,
-		.choiceTree = choiceTree,
-		.bodyTerms = bodyTerms
-	};
+/**
+ * Free the memory held by a ClauseCompileState, and release its term forms.
+ * The actors tuple given to setupClauseCompileState() or setupConjunctionCompileState()
+ * is not freed.
+ */
+static void freeClauseCompileState(ClauseCompileState * clauseState)
+{
+	for(index8 i = 0; i < clauseState->nTerms; i++) {
+		if(clauseState->termForms[i].hash)
+			IFactRelease(clauseState->termForms[i]);
+	}
+	Atom const * candidateForms = ResizingArrayGetMemory(&(clauseState->candidateForms));
+	for(index32 i = 0; i < clauseState->candidateForms.nElements; i++)
+		IFactRelease(candidateForms[i]);
+	FreeResizingArray(&(clauseState->candidateForms));
+	Free(clauseState->termIsRecursive);
+	Free(clauseState->termForms);
+	Free(clauseState->termOrder);
+	FreeIndexedFormula(clauseState->indexedFormula);
+}
 
+
+/**
+ * Compile a conjunction described by clauseState to a JOIN operator.
+ * The clauseState is setup by setupClauseCompileState() or setupConjunctionCompileState().
+ */
+static Operator * compileConjunction(CompileStack * compileStack, ClauseCompileState * clauseState)
+{
+	// CLAUDE: The run records its choice points from the first; see ChoiceTree
+	clauseState->choiceTree->nChoicePoints = 0;
 	// Compile the conjunction recursively, joining one term at a time
-	index8 clauseMap[clauseActors->nAtoms];
-	// CLAUDE: The matched term is excluded from the start
-	Operator * op = compileConjunctionRecursive(compileStack, &clauseState, clauseMap);
+	index8 clauseMap[clauseState->indexedFormula->actors->nAtoms];
+	Operator * op = compileConjunctionRecursive(compileStack, clauseState, clauseMap);
 
-	*hasRecurseOperator = clauseState.hasRecurseOperator;
 	if(op) {	
 		// The compiled terms provide the clause arguments in their own order
-		op = permuteToClauseArguments(op, clauseMap, clauseState.nArguments);
+		op = permuteToClauseArguments(op, clauseMap, clauseState->nArguments);
 
 		// Drop the local variable arguments again, and any duplicate tuples this creates.
 		// permuteToClauseArguments() has put the arguments in clause order, so the ones
 		// to keep are the leading query arguments.
-		if(op && nLocalVariables) {
+		size8 nHeadArguments = clauseState->nQueryArguments;
+		if(op && (clauseState->nArguments > nHeadArguments)) {
 			index8 keptArguments[nHeadArguments];
 			for(index8 i = 0; i < nHeadArguments; i++)
 				keptArguments[i] = i;
@@ -1033,7 +1583,6 @@ static Operator * compileConjunction(
 			op = projectOperator;
 		}
 	}
-	FreeIndexedFormula(indexedClause);
 	return op;
 }
 
@@ -1107,38 +1656,23 @@ typedef struct QueryClauseMatch {
  */
 static void findMatchingClauseForms(Atom queryTermForm, ResizingArray * queryClauseMatches)
 {
-	/**
-	 * TODO: here we need the service (multiset >ID element <ID multiple >INT) where element is input
-	 * Since the element role is not a leading column, RelationBTree does not support this.
-	 * For now, we simply scan the entire table and filter on matching terms. This is obviously
-	 * highly inefficient. A better solution would require multiple indexes on the relation table.
-	 * NOTE: once FILTER operator is in place we can register a compiled service for this at bootstrap time.
-	 */
-	Operator const * multisetOperator = GetCoreOperator(SERVICE_MULTISET_ID_ALL);
-
-	Atom multisetQueryTuple[3];
-	OperatorContext * multisetContext = OperatorCreateContext(multisetOperator, multisetQueryTuple);
-	while(OperatorCall(multisetContext)) {
-		Atom termForm = multisetQueryTuple[
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
-		if(!SameAtoms(termForm, queryTermForm))
-			continue;
+	MultisetContainingIterator iterator;
+	MultisetContainingIterate(queryTermForm, &iterator);
+	while(MultisetContainingIteratorNext(&iterator)) {
 		// Found a multiset where the term form occurs
-		Atom clauseForm = multisetQueryTuple[
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)];
+		Atom clauseForm = MultisetContainingIteratorGetMultiset(&iterator);
 		// Ensure the multiset is a clause form
 		if(!IsClauseForm(clauseForm))
 			continue;
 
 		QueryClauseMatch matchedClauseForm = {
 			.clauseForm = clauseForm,
-			.termMultiple = multisetQueryTuple[
-				CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)]._int,
+			.termMultiple = MultisetContainingIteratorGetMultiple(&iterator),
 			.recursive = isRecursiveClauseForm(clauseForm, queryTermForm)
 		};
 		ResizingArrayAppend(queryClauseMatches, &matchedClauseForm);
 	}
-	OperatorFreeContext(multisetContext);
+	MultisetContainingIteratorEnd(&iterator);
 }
 
 
@@ -1209,9 +1743,6 @@ static size8 compileClauses(
 	CompiledVariant variants[], size8 nVariants)
 {
 	Atom clauseForm = queryClauseMatch->clauseForm;
-	// CLAUDE: The compiled operator takes one argument per distinct query parameter
-	index8 queryArgumentMap[query->arity];
-	size8 nQueryArguments = ParametersGetArgumentMap(query->parameters, query->arity, queryArgumentMap);
 
 	// Iterate over all rules (clauses) with this clause form.
 	DictionaryIterator dictIterator;
@@ -1255,11 +1786,12 @@ static size8 compileClauses(
 					PrintFormActorsAsFormula(clauseForm, substClauseActors);
 					PrintChar('\n');
 #endif
-					bool hasRecurseOperator = false;
-					// TODO:  here we should create the conjunction of negated terms, and give that to compileConjunction() 
-					Operator * conjunctionOp = compileConjunction(
-						compileStack, clauseForm, substClauseActors, matchedTermIndex, query->form,
-						nQueryArguments, &choiceTree, BODY_TERMS_NEGATED, &hasRecurseOperator);
+					ClauseCompileState clauseState;
+					setupClauseCompileState(
+						&clauseState, clauseForm, substClauseActors, matchedTermIndex, &choiceTree);
+					Operator * conjunctionOp = compileConjunction(compileStack, &clauseState);
+					bool hasRecurseOperator = clauseState.hasRecurseOperator;
+					freeClauseCompileState(&clauseState);
 					if(!conjunctionOp)
 						continue;
 					// Recover the resolved parameters (with types) from the clause actors
@@ -1268,9 +1800,6 @@ static size8 compileClauses(
 					CompiledVariant * variant = addCompiledVariant(
 						variants, &nVariants, resolvedParameters, query->arity, conjunctionOp);
 					// Mark recursive variants; FIXPOINT operator is added by completeRecursiveVariant()
-					// CLAUDE: A clause of a recursive clause form needs no FIXPOINT operator
-					// when its term of the query form is not recursive;
-					// see termRepeatsQueryParameters()
 					variant->isRecursive = variant->isRecursive || hasRecurseOperator;
 				} while(ChoiceTreeNextBranch(&choiceTree));
 			}
@@ -1299,8 +1828,6 @@ static size8 compileConjunctionQuery(
 	CompileStack * compileStack, ParameterizedQuery const * query,
 	CompiledVariant variants[], size8 nVariants)
 {
-	index8 queryArgumentMap[query->arity];
-	size8 nQueryArguments = ParametersGetArgumentMap(query->parameters, query->arity, queryArgumentMap);
 	TypedTuple * queryActors = CreateTypedTupleFromTuple(AT_PARAMETER, query->parameters, query->arity);
 	TypedTuple * conjunctionActors = CreateTypedTuple(query->arity);
 	Atom resolvedParameters[query->arity];
@@ -1312,13 +1839,13 @@ static size8 compileConjunctionQuery(
 		// compileConjunction() updates parameter types in the actors, so copy them anew
 		// for each branch
 		TypedTupleCopy(queryActors, conjunctionActors);
-		bool hasRecurseOperator = false;
-		Operator * conjunctionOp = compileConjunction(
-			compileStack, query->form, conjunctionActors, NO_HEAD_TERM, query->form,
-			nQueryArguments, &choiceTree, BODY_TERMS_AS_GIVEN, &hasRecurseOperator);
+		ClauseCompileState clauseState;
+		setupConjunctionCompileState(&clauseState, query->form, conjunctionActors, &choiceTree);
+		Operator * conjunctionOp = compileConjunction(compileStack, &clauseState);
+		ASSERT(!clauseState.hasRecurseOperator)
+		freeClauseCompileState(&clauseState);
 		if(!conjunctionOp)
 			continue;
-		ASSERT(!hasRecurseOperator)
 		// The type of each query parameter is resolved in the actors of the compiled terms.
 		// The parameter number and IO are those of the query.
 		for(index8 i = 0; i < query->arity; i++) {

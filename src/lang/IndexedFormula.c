@@ -26,6 +26,15 @@ size8 IndexedFormulaTermArity(IndexedFormula const * indexedFormula, index8 i)
 }
 
 
+void IndexedFormulaGetTermActorIndices(
+	IndexedFormula const * indexedFormula, index8 i, index8 actorIndices[])
+{
+	size8 arity = IndexedFormulaTermArity(indexedFormula, i);
+	for(index8 j = 0; j < arity; j++)
+		actorIndices[j] = indexedFormula->termActorsIndices[i] + j;
+}
+
+
 TypedAtom IndexedFormulaGetTermElement(IndexedFormula const * indexedFormula, index8 i, index8 j)
 {
 	return TypedTupleGetElement(

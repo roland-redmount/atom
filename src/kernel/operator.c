@@ -15,7 +15,7 @@
 
 /**
  * Create an execution context for a child of the given context, which the child
- * records as its parent. Contexts created by a caller outside the operator tree have
+ * records as its parent. Contexts created by a caller outside the operator graph have
  * no parent; see OperatorCreateContext().
  */
 static OperatorContext * createContext(
@@ -2115,7 +2115,7 @@ void PrintOperator(Operator const * op, Atom const parameters[])
 		arguments[i] = CreateTypedAtom(AT_PARAMETER, parameters[i]);
 		// We erase the parameter types, as they clutter up the printout,
 		// and we cannot determine types for local variables when traversing the
-		// operator tree top-down.
+		// operator graph top-down.
 		arguments[i].atom.parameter.atomType = 0;
 		if(parameters[i].parameter.number >= nextParameterNumber)
 			nextParameterNumber = parameters[i].parameter.number + 1;

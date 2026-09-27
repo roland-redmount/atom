@@ -14,7 +14,7 @@ typedef struct s_OperatorContext OperatorContext;
 
 /**
  * An operator is either a machine procedure or an operation on relations.
- * The compiler produces a tree of operators for a query, which is what a
+ * The compiler produces a graph of operators for a query, which is what a
  * service in the service registry is evaluated by; see ServiceRegistry.h.
  * A tree may contain any operator of the service registry, and operators are
  * therefore reference counted.
@@ -40,7 +40,7 @@ typedef struct s_OperatorContext OperatorContext;
 
 /**
  * Apart from machine operators, which provide the stored and computed relations
- * at the leaves of an operator tree, each operator is one of the operators of
+ * at the leaves of an operator graph, each operator is one of the operators of
  * relational algebra, applied to the relations of its child operators:
  *
  *   PERMUTE      rename, and restrict on a constant argument     rho, sigma
@@ -120,7 +120,7 @@ typedef struct s_OperatorContext OperatorContext;
 	 * tuple. The tuples are accumulated in a
 	 * B-tree, which the RECURSE operators in the child subtree read.
 	 *
-	 * Recursion is therefore a loop rather than a cycle in the operator tree, and terminates
+	 * Recursion is therefore a loop rather than a cycle in the operator graph, and terminates
 	 * whenever the derived relation is finite.
 	 *
 	 * The child derives the whole relation and so runs with every argument unbound.
@@ -161,7 +161,7 @@ typedef struct s_OperatorContext OperatorContext;
 	OPERATOR_FILTER = 9,
 
 	/**
-	 * Call a machine code function. Leaf of the operator tree.
+	 * Call a machine code function. Leaf of the operator graph.
 	 * Cannot be the root operator of a Service.
 	 * 
 	 * TODO: rename -> OPERATOR_READER ?
@@ -431,7 +431,7 @@ size32 FixpointNDerivedTuples(OperatorContext const * context);
 
 /**
  * Number of child operators of the given operator, which is 0 for a machine or recurse
- * operator, those being the leaves of an operator tree.
+ * operator, those being the leaves of an operator graph.
  */
 size8 OperatorNChildren(Operator const * op);
 
@@ -468,7 +468,7 @@ struct s_OperatorContext {
 	Operator const * op;
 	Atom * arguments;
 	// The context that created this one, or null for a context created by a caller
-	// outside the operator tree. A RECURSE operator follows this chain to reach the
+	// outside the operator graph. A RECURSE operator follows this chain to reach the
 	// FIXPOINT operator deriving the relation it enumerates.
 	// NOTE: this is redundant with the parent-operator B-tree, but pointer chasing is faster
 	OperatorContext * parent;

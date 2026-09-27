@@ -41,7 +41,7 @@ static void setupBinaryRelationIndexColumns(
 
 
 /**
- * CLAUDE: The IO signature a query dispatches with: an input where the query binds an
+ * The IO signature a query dispatches with: an input where the query binds an
  * actor, an output where it holds a variable. See ActorsToParameters().
  */
 static IOSignature queryIOSignature(Atom queryTerm)
@@ -55,6 +55,53 @@ static IOSignature queryIOSignature(Atom queryTerm)
 		parameterIO[i] = parameters[i].parameter.io;
 	return CreateIOSignature(parameterIO, arity);
 }
+
+
+
+/**
+ * Test whether the operator graph of op contains the operator target
+ */
+static bool operatorGraphContains(Operator const * op, Operator const * target)
+{
+	if(op == target)
+		return true;
+	for(index8 i = 0; i < OperatorNChildren(op); i++) {
+		if(operatorGraphContains(OperatorGetChild(op, i), target))
+			return true;
+	}
+	return false;
+}
+
+
+/**
+ * Count the operators of the given type in the operator graph of op. An operator
+ * with several parents is counted once for each parent.
+ */
+static size32 countOperators(Operator const * op, enum OperatorType type)
+{
+	size32 count = (op->type == type) ? 1 : 0;
+	for(index8 i = 0; i < OperatorNChildren(op); i++)
+		count += countOperators(OperatorGetChild(op, i), type);
+	return count;
+}
+
+
+/**
+ * Count the tuples of an operator, called with the actors of the query as arguments
+ */
+static size32 countQueryTuples(Operator const * op, Atom query)
+{
+	TypedTuple const * actors = FormulaGetActors(query);
+	Atom arguments[RELATION_MAX_ARITY];
+	TupleCopy(TypedTuplePeekAtoms(actors), arguments, actors->nAtoms);
+	void * context = OperatorCreateContext(op, arguments);
+	size32 nTuples = 0;
+	while(OperatorCall(context))
+		nTuples++;
+	OperatorFreeContext(context);
+	return nTuples;
+}
+
 
 
 
@@ -178,6 +225,169 @@ void testCompileProject(void)
 	}
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&entry);
+}
+
+
+/**
+ * CLAUDE: Two relations of the form (row amount), one with an INT amount and one with a
+ * string amount, each holding one fact.
+ */
+typedef struct {
+	Atom facts[2];
+	Relation relations[2];
+} RowRelations;
+
+static void setupRowRelations(RowRelations * rows)
+{
+	rows->facts[0] = CStringToTerm("row 1 amount 3");
+	rows->facts[1] = CStringToTerm("row 2 amount \"x\"");
+	for(index8 i = 0; i < 2; i++) {
+		rows->relations[i] = RelationFromFact(FormulaGetView(rows->facts[i]));
+		TupleStore * store = CreateTupleStore(rows->relations[i], &btreeStorageProvider, 2, 0);
+		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(rows->facts[i])), 0);
+	}
+	ASSERT_FALSE(SameRelations(rows->relations[0], rows->relations[1]))
+}
+
+static void teardownRowRelations(RowRelations * rows)
+{
+	for(index8 i = 0; i < 2; i++) {
+		RelationRemoveTuple(rows->relations[i], TypedTuplePeekAtoms(FormulaGetActors(rows->facts[i])), 0);
+		DropRelation(rows->relations[i]);
+		ReleaseFormula(rows->facts[i]);
+	}
+}
+
+
+/**
+ * Compile the query (result n square s) against the rule
+ * 
+ *   result n square s <- row n amount v & * v * v = s
+ * 
+ * The term (row n amount v) matches two relations with "amount" atom type INT or ID.
+ * creating a choice point, and the rule compiles once per choice. The term (* v * v = s)
+ * is tried first, but needs v as an input, so it fails to dispatch until the (row amount)
+ * term has compiled, and that failed attempt is made at the depth of the choice point in
+ * every run, and must not be taken for the choice made there.
+ * 
+ * NOTE: The order of the terms follows from their forms, so this test depends on the role names chosen.
+ */
+void testCompileChoicePointAfterFailedTerm(void)
+{
+	RowRelations rows;
+	setupRowRelations(&rows);
+
+	// result n square s <- row n amount v & * v * v = s
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"result n square s | ! row n amount v | ! * v * v = s");
+	Atom queryTerm = CStringToTerm("result n square s");
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+
+	Atom arguments[2];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
+	void * context = OperatorCreateContext(ServiceGetOperator(services[0]), arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	ASSERT_INT64_EQUAL(TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "result", 1)._int, 1)
+	ASSERT_INT64_EQUAL(TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "square", 1)._int, 9)
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	RemoveService(services[0]);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+	teardownRowRelations(&rows);
+}
+
+
+/**
+ * CLAUDE: Each of the two row terms matches both (row amount) relations, so the rule
+ * compiles once per combination of amount types, giving four services. Each service
+ * yields the one pair of facts of its types.
+ */
+void testCompileTwoChoicePoints(void)
+{
+	RowRelations rows;
+	setupRowRelations(&rows);
+
+	// pair a with b <- row n amount a & row m amount b
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"pair a with b | ! row n amount a | ! row m amount b");
+	Atom queryTerm = CStringToTerm("pair a with b");
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 4)
+
+	for(index8 i = 0; i < nServices; i++) {
+		for(index8 j = 0; j < i; j++)
+			ASSERT_FALSE(SameRelations(services[i].relation, services[j].relation))
+		Atom arguments[2];
+		TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
+		void * context = OperatorCreateContext(ServiceGetOperator(services[i]), arguments);
+		ASSERT_TRUE(OperatorCall(context))
+		ASSERT_FALSE(OperatorCall(context))
+		OperatorFreeContext(context);
+	}
+
+	for(index8 i = 0; i < nServices; i++)
+		RemoveService(services[i]);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+	teardownRowRelations(&rows);
+}
+
+
+/**
+ * The conjunction query (row n amount a & row m amount b) compiles to one service per
+ * combination of amount types. The body of the rule
+ * 
+ *   pair a with b <- row n amount a & row m amount b
+ * 
+ * then dispatches to this service as a conjunction, at a single choice point with four choices,
+ * rather than compiling a new JOIN operator over the two terms.
+ */
+void testCompileChoicePointOverConjunctionService(void)
+{
+	RowRelations rows;
+	setupRowRelations(&rows);
+	Atom conjunctionQuery = CStringToFormula("row n amount a & row m amount b");
+	Service conjunctionServices[MAX_COMPILED_VARIANTS];
+	size8 nConjunctionServices = CompileQuery(FormulaGetView(conjunctionQuery), conjunctionServices);
+	ASSERT_UINT32_EQUAL(nConjunctionServices, 4)
+
+	// The rule: pair a with b <- row n amount a & row m amount b
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"pair a with b | ! row n amount a | ! row m amount b");
+	Atom queryTerm = CStringToTerm("pair a with b");
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 4)
+
+	for(index8 i = 0; i < nServices; i++) {
+		Operator * op = ServiceGetOperator(services[i]);
+		// Each operator contains exactly 1 of the conjunction service operators
+		size8 nRead = 0;
+		for(index8 j = 0; j < nConjunctionServices; j++) {
+			Operator * conjunctionOperator = ServiceGetOperator(conjunctionServices[j]);
+			if(operatorGraphContains(op, conjunctionOperator)) {
+				nRead++;
+				ASSERT_UINT32_EQUAL(
+					countOperators(op, OPERATOR_JOIN), countOperators(conjunctionOperator, OPERATOR_JOIN))
+			}
+		}
+		ASSERT_UINT32_EQUAL(nRead, 1)
+		ASSERT_UINT32_EQUAL(countQueryTuples(op, queryTerm), 1)
+	}
+
+	for(index8 i = 0; i < nServices; i++)
+		RemoveService(services[i]);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+	for(index8 i = 0; i < nConjunctionServices; i++)
+		RemoveService(conjunctionServices[i]);
+	ReleaseFormula(conjunctionQuery);
+	teardownRowRelations(&rows);
 }
 
 
@@ -541,6 +751,77 @@ void testCompileConjunctionQuery(void)
 	ASSERT_UINT32_EQUAL(nTuples, 6)
 
 	ReleaseFormula(query);
+	TeardownRelationFixture(&edgeFixture);
+}
+
+
+/**
+ * The conjunction (edge from to & edge from to) is compiled to a service first. The
+ * body of the rule (walk to) is the same conjunction, and so dispatches to that service as a
+ * whole, rather than joining two edge terms.
+ */
+void testCompileRuleOverConjunctionService(void)
+{
+	SetupEdgeFixture(&edgeFixture);
+	Atom conjunctionQuery = CStringToFormula("edge d from x to y & edge f from y to z");
+	Service conjunctionServices[MAX_COMPILED_VARIANTS];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(conjunctionQuery), conjunctionServices), 1)
+	Operator * conjunctionOperator = ServiceGetOperator(conjunctionServices[0]);
+
+	// CLAUDE: walk x to z <- edge d from x to y & edge f from y to z
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"walk x to z | ! edge d from x to y | ! edge f from y to z");
+	Atom queryTerm = CStringToTerm("walk x to z");
+	Service services[MAX_COMPILED_VARIANTS];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 1)
+	Operator * op = ServiceGetOperator(services[0]);
+	ASSERT_TRUE(operatorGraphContains(op, conjunctionOperator))
+	// CLAUDE: The rule adds no JOIN to those of the conjunction service
+	ASSERT_UINT32_EQUAL(countOperators(op, OPERATOR_JOIN), countOperators(conjunctionOperator, OPERATOR_JOIN))
+	// CLAUDE: The walks of two edges begin and end at a-a, a-b, a-c, b-b and b-c
+	ASSERT_UINT32_EQUAL(countQueryTuples(op, queryTerm), 5)
+
+	RemoveService(services[0]);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+	RemoveService(conjunctionServices[0]);
+	ReleaseFormula(conjunctionQuery);
+	TeardownRelationFixture(&edgeFixture);
+}
+
+
+/**
+ * CLAUDE: Of the three edge terms in the body of the rule (trip to start end), only the first
+ * two share a node. These two match the service of (edge from to & edge from to), which
+ * repeats the shared node, and dispatch to it together; the third edge term is joined to it.
+ */
+void testCompileRuleOverConjunctionServiceAndTerm(void)
+{
+	SetupEdgeFixture(&edgeFixture);
+	Atom conjunctionQuery = CStringToFormula("edge d from x to y & edge f from y to z");
+	Service conjunctionServices[MAX_COMPILED_VARIANTS];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(conjunctionQuery), conjunctionServices), 1)
+	Operator * conjunctionOperator = ServiceGetOperator(conjunctionServices[0]);
+
+	// CLAUDE: trip x to z start u end v <- edge d from x to y & edge f from y to z & edge g from u to v
+	DictionaryEntry entry = DictionaryAddClauseFromCString(
+		"trip x to z start u end v | ! edge d from x to y | ! edge f from y to z | ! edge g from u to v");
+	Atom queryTerm = CStringToTerm("trip x to z start u end v");
+	Service services[MAX_COMPILED_VARIANTS];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(queryTerm), services), 1)
+	Operator * op = ServiceGetOperator(services[0]);
+	ASSERT_TRUE(operatorGraphContains(op, conjunctionOperator))
+	// CLAUDE: The rule adds one JOIN, of the conjunction service and the third edge term
+	ASSERT_UINT32_EQUAL(
+		countOperators(op, OPERATOR_JOIN), countOperators(conjunctionOperator, OPERATOR_JOIN) + 1)
+	// CLAUDE: The 5 pairs of ends of the walks of two edges, with each of the 4 edges
+	ASSERT_UINT32_EQUAL(countQueryTuples(op, queryTerm), 20)
+
+	RemoveService(services[0]);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&entry);
+	RemoveService(conjunctionServices[0]);
+	ReleaseFormula(conjunctionQuery);
 	TeardownRelationFixture(&edgeFixture);
 }
 
@@ -1275,15 +1556,18 @@ void testCompiledServiceReadsFactsLive(void)
 /**
  * Compile the query (number n square s) against rule
  * 
- *   number n square s <- lower 1 number n upper 4 & * n * n = s
+ *   number n square s <- =< n >= 1 & >= n =< 4 & * n * n = s
  * 
- * where (lower number upper) is the computed range relation, yielding the numbers
- * 1 to 4, and the JOIN evaluates the multiplication for each of them.
+ * where (=< n >= a & >= n =< b) is the computed range relation, yielding the integers
+ * from a to b. This relation has conjunction form (=< n >= a & >= n =< b) since
+ * neither term is a finite relation. Compiling the query requires dispatching the two
+ * terms (=< n >= 1) and (>= n =< 4) together as a conjunction; the (=< >=) inequality relation
+ * has no matching service (the relation would be infinite).
  */
 void testCompileSquares(void)
 {
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
-		"number n square s | ! lower 1 number n upper 4 | ! * n * n = s");
+		"number n square s | ! =< n >= 1 | ! >= n =< 4 | ! * n * n = s");
 	Atom queryTerm = CStringToTerm("number n square s");
 
 	Service services[MAX_COMPILED_VARIANTS];
@@ -1601,6 +1885,9 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompilePermute1);
 	ExecuteTest(testCompilePermute2);
 	ExecuteTest(testCompileProject);
+	ExecuteTest(testCompileChoicePointAfterFailedTerm);
+	ExecuteTest(testCompileTwoChoicePoints);
+	ExecuteTest(testCompileChoicePointOverConjunctionService);
 	ExecuteTest(testCompileJoin1);
 	ExecuteTest(testCompileJoin2);
 	ExecuteTest(testCompileUnion);
@@ -1610,6 +1897,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileRepeatedQueryParameterRule);
 	ExecuteTest(testCompileRepeatedQueryParameterRecursive);
 	ExecuteTest(testCompileConjunctionQuery);
+	ExecuteTest(testCompileRuleOverConjunctionService);
+	ExecuteTest(testCompileRuleOverConjunctionServiceAndTerm);
 	// CLAUDE: Disabled, since the seed permutation is not handled yet: a DEBUG build fails
 	// the ASSERT in seedVariantsFromServices(), and a release build loses the x = 7 answer
 	// ExecuteTest(testCompileSeedPermutation);
@@ -1622,9 +1911,7 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testCompileNegatedTerm);
 	ExecuteTest(testCompiledServiceReadsFactsLive);
-	// CLAUDE: Disabled, since the range relation now has the conjunction form
-	// (=< n >= a & >= n =< b), and the compiler dispatches a rule body one term at a time
-	// ExecuteTest(testCompileSquares);
+	ExecuteTest(testCompileSquares);
 
 	ExecuteTest(testCompileChainedRules);
 	ExecuteTest(testCompileChainedRuleOrder);

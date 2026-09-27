@@ -31,6 +31,13 @@ IndexedFormula * CreateIndexedFormula(Atom form, TypedTuple * actors);
 size8 IndexedFormulaTermArity(IndexedFormula const * indexedFormula, index8 i);
 
 /**
+ * Write the index into the actors tuple of each element in term i to the
+ * actorPositions array, which must hold IndexedFormulaTermArity() elements.
+ */
+void IndexedFormulaGetTermActorIndices(
+	IndexedFormula const * indexedFormula, index8 i, index8 actorIndices[]);
+
+/**
  * Return the element (typed atom) at index j in term i
 */
 TypedAtom IndexedFormulaGetTermElement(IndexedFormula const * indexedFormula, index8 i, index8 j);
