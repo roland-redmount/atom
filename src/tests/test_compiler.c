@@ -1556,14 +1556,14 @@ void testCompiledServiceReadsFactsLive(void)
 /**
  * Compile the query (number n square s) against rule
  * 
- *   number n square s <- lower 1 number n upper 4 & * n * n = s
+ *   number n square s <- =< n >= 1 & >= n =< 4 & * n * n = s
  * 
- * where (lower number upper) is the computed range relation, yielding the numbers
- * 1 to 4, and the JOIN evaluates the multiplication for each of them.
+ * where (=< n >= a & >= n =< b) is the computed range relation, yielding the integers
+ * from a to b. This relation has conjunction form (=< n >= a & >= n =< b) since
+ * neither term is a finite relation. Compiling the query requires dispatching the two
+ * terms (=< n >= 1) and (>= n =< 4) together as a conjunction; the (=< >=) inequality relation
+ * has no matching service (the relation would be infinite).
  */
-/* CLAUDE: The range relation has the conjunction form (=< n >= a & >= n =< b), so the rule
- * body states the range 1 =< n =< 4 by its two terms. Neither term is a finite relation on
- * its own, and the two dispatch together to the range service; see dispatchNextTerms(). */
 void testCompileSquares(void)
 {
 	DictionaryEntry entry = DictionaryAddClauseFromCString(
