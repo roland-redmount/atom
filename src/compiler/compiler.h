@@ -25,7 +25,7 @@
  * results must therefore iterate over all returned services.
  * 
  * NOTE: the compiler builds Operator graphs bottom-up, during which time assumption
- * about the graph structure may not hold. Therefore, operator trees must not be
+ * about the graph structure may not hold. Therefore, operator graphs must not be
  * modified while the compiler is running.
  */
 size8 CompileQuery(FormulaView query, Service services[]);

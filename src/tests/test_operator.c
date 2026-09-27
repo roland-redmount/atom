@@ -549,7 +549,7 @@ static void setupGraphFixture(void)
  * argument 0 is the succ role and argument 1 the prec role.
  *
  * The (before after) relation is a FIXPOINT/2 operator with argument order (x y).
- * With inputs = 1, this yieds the operator tree
+ * With inputs = 1, this yieds the operator graph
  *
  *	FIXPOINT/2[0 1]<0>(                      // derives (before after), x bound
  *		UNION/2[0 1](

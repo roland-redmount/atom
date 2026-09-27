@@ -1,6 +1,6 @@
 /**
  * A term with untyped output parameters may dispatch to multiple services
- * with different type signatures. This occurs in compileTerm(), and can therefore
+ * with different type signatures. This occurs in compileTermSet(), and can therefore
  * happen multiple times while compiling a clause. Each term dispatched during compilation
  * therefore creates a ChoicePoint, which may have 1 or more choices of type signatures.
  * The sequence of ChoicePoints encountered during compilation is a ChoiceTree.

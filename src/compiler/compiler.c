@@ -30,6 +30,7 @@
 #include "lang/Variable.h"
 #include "lang/unification.h"
 #include "memory/allocator.h"
+#include "util/combinations.h"
 #include "util/ResizingArray.h"
 
 
@@ -128,7 +129,7 @@ static bool dispatchOrCompileTerm(
  * new choice, and the relations of the choices already taken are excluded. A failed attempt
  * leaves the choice point unchanged. */
 static bool dispatchOrCompileAtNewChoicePoint(
-	CompileStack * compileStack, FormulaView term, int mode, ChoicePoint * choicePoint)
+	CompileStack * compileStack, FormulaView term, int dispatchMode, ChoicePoint * choicePoint)
 {
 	ASSERT(choicePoint->nChoices < MAX_CHOICE_POINT_MATCHES)
 
@@ -146,7 +147,7 @@ static bool dispatchOrCompileAtNewChoicePoint(
 	index8 permutation[RELATION_MAX_ARITY];
 	bool hasNextMatch = false;
 	if(!dispatchOrCompileTerm(
-		compileStack, &query, mode, &service, permutation,
+		compileStack, &query, dispatchMode, &service, permutation,
 		excludedSignatures, choicePoint->nChoices, &hasNextMatch))
 		return false;
 
@@ -348,29 +349,9 @@ static Operator * createTermOperator(
 }
 
 
-static Operator * buildOperatorFromChoicePoint(
-	TypedTuple const * termActors, ChoicePoint const * choicePoint,
-	TypedTuple * serviceParameters, index8 clauseMap[]);
-
-
 /**
- * Compile a term into an operator by either locating an existing service,
- * or if mode = TERM_DISPATCH_OR_COMPILE by compiling a new service.
- */
-static Operator * compileTerm(
-	CompileStack * compileStack, FormulaView term, int mode, ChoicePoint * choicePoint,
-	TypedTuple * serviceParameters, index8 clauseMap[])
-{
-	// attempt to locate a service for the term
-	if(!dispatchOrCompileAtNewChoicePoint(compileStack, term, mode, choicePoint))
-		return 0;
-	return buildOperatorFromChoicePoint(term.actors, choicePoint, serviceParameters, clauseMap);
-}
-
-
-/**
- * CLAUDE: Build the operator of a term from the service of the current choice of its choice
- * point, choices[nChoices - 1], as compileTerm() does once dispatch has found the service.
+ * Build the operator of a term from the service of the current choice of its choice
+ * point, choices[nChoices - 1], as compileTermSet() does once dispatch has found the service.
  * Returns 0 if the service is no longer registered, or is stale.
  */
 static Operator * buildOperatorFromChoicePoint(
@@ -462,6 +443,9 @@ typedef struct s_ClauseCompileState {
 	Atom * termForms;
 	// termIsRecursive[i] is true if term i is recursive; see compileConjunction()
 	bool * termIsRecursive;
+	// A cached of the conjunction forms (with > 2 terms) whose term forms all occur in the
+	// conjunction being compiled, sorted with most terms first; see findCandidateConjunctionForms()
+	ResizingArray candidateForms;
 
 	// Choice points taken during the compilation of the clause
 	ChoiceTree * choiceTree;
@@ -744,11 +728,85 @@ static void acceptCompiledTerm(
 }
 
 
+#ifdef DEBUG_COMPILER
+/**
+ * Print a set of terms from the conjunction, joined by '&'
+ */
+static void printTermSet(ClauseCompileState const * clauseState, index8 const termIndices[], size8 nTerms)
+{
+	for(index8 i = 0; i < nTerms; i++) {
+		if(i > 0)
+			PrintCString(" & ");
+		TypedTuple * actors = IndexedFormulaGetTermTuple(clauseState->indexedFormula, termIndices[i]);
+		PrintFormActorsAsFormula(clauseState->termForms[termIndices[i]], actors);
+		FreeTypedTuple(actors);
+	}
+}
+#endif
+
+
+/**
+ * Find the index into the clause actors for each actor of the given terms, and write
+ * into the actorIndices array, which must hold RELATION_MAX_ARITY indices.
+ * Returns the number of actors.
+ */
+static size8 getTermSetActorIndices(
+	ClauseCompileState const * clauseState, index8 const termIndices[], size8 nTerms, index8 actorIndices[])
+{
+	size8 nActors = 0;
+	for(index8 i = 0; i < nTerms; i++) {
+		size8 termArity = IndexedFormulaTermArity(clauseState->indexedFormula, termIndices[i]);
+		ASSERT(nActors + termArity <= RELATION_MAX_ARITY)
+		IndexedFormulaGetTermActorIndices(clauseState->indexedFormula, termIndices[i], actorIndices + nActors);
+		nActors += termArity;
+	}
+	return nActors;
+}
+
+
+/**
+ * Compile a the conjunction query defined by the given form and the actors of the terms
+ * indicated by termIndices[], with the given dispatchMode and choice point.
+ * The terms must be ordered according to the form. For a single term, the form is
+ * its term form; else it is a conjunction form. On success the terms are marked compiled.
+ */
+static Operator * compileTermSet(
+	CompileStack * compileStack, ClauseCompileState * clauseState, Atom form,
+	index8 const termIndices[], size8 nTerms, int dispatchMode, ChoicePoint * choicePoint,
+	index8 termClauseMap[])
+{
+	index8 actorIndices[RELATION_MAX_ARITY];
+	size8 nActors = getTermSetActorIndices(clauseState, termIndices, nTerms, actorIndices);
+	TypedTuple * termActors = CreateTypedTuple(nActors);
+	TypedTupleCopySubset(clauseState->indexedFormula->actors, actorIndices, nActors, termActors);
+#ifdef DEBUG_COMPILER
+	PrintF("Mode = %d, term set: ", dispatchMode);
+	printTermSet(clauseState, termIndices, nTerms);
+	PrintChar('\n');
+#endif
+	TypedTuple * serviceParameters = CreateTypedTuple(nActors);
+	Operator * op = 0;
+	// attempt to locate a service for the term
+	if(dispatchOrCompileAtNewChoicePoint(
+		compileStack, (FormulaView) {.form = form, .actors = termActors}, dispatchMode, choicePoint))
+		op = buildOperatorFromChoicePoint(termActors, choicePoint, serviceParameters, termClauseMap);
+	if(op)
+		acceptCompiledTerms(clauseState, termIndices, nTerms, actorIndices, serviceParameters);
+#ifdef DEBUG_COMPILER
+	else
+		PrintCString(" => no match.\n");
+#endif
+	FreeTypedTuple(serviceParameters);
+	FreeTypedTuple(termActors);
+	return op;
+}
+
+
 /**
  * Compile the first non-excluded term of the clause that is not recursive.
  * With mode = TERM_DISPATCH_ONLY, we pick the first term that dispatches to an
  * existing service; with mode = TERM_DISPATCH_OR_COMPILE, we pick the first term
- * that can be compiled to a new service, using compileTerm().
+ * that can be compiled to a new service, using compileTermSet().
  * Returns the resulting operator, or 0 if no term compiled.
  */
 static Operator * compileNextTerm(
@@ -761,28 +819,129 @@ static Operator * compileNextTerm(
 		index8 termIndex = clauseState->termOrder[p];
 		if(clauseState->termIsRecursive[termIndex])
 			continue;
-		Atom termForm = clauseState->termForms[termIndex];
-		TypedTuple * termActors = IndexedFormulaGetTermTuple(clauseState->indexedFormula, termIndex);
-#ifdef DEBUG_COMPILER
-		PrintF("Pass = %d, %s term: ", mode, mode == TERM_DISPATCH_ONLY ? "dispatch" : "compile");
-		PrintFormActorsAsFormula(termForm, termActors);
-		PrintChar('\n');
-#endif
 		// Attempt to compile this term, determining serviceParameters and termClauseMap
-		TypedTuple * serviceParameters = CreateTypedTuple(termActors->nAtoms);
-		op = compileTerm(
-			compileStack, (FormulaView) {.form = termForm, .actors = termActors},
-			mode, choicePoint, serviceParameters, termClauseMap
+		op = compileTermSet(
+			compileStack, clauseState, clauseState->termForms[termIndex], &termIndex, 1,
+			mode, choicePoint, termClauseMap
 		);
-		if(op)
-			acceptCompiledTerm(clauseState, termIndex, serviceParameters);
-#ifdef DEBUG_COMPILER
-		else
-			PrintCString(" => no match.\n");
-#endif
-		FreeTypedTuple(serviceParameters);
-		FreeTypedTuple(termActors);
 	}
+	return op;
+}
+
+
+/**
+ * An iterator over the sets of terms still to compile that match a conjunction form.
+ * For each term form of the conjunction form, in the order of the form, the iterator holds
+ * the non-recursive terms still to compile that have this term form, in clause order.
+ * A term set takes as many of these terms for each term form as the multiple of the term form
+ * in the conjunction form; see termSetIteratorNext().
+ */
+typedef struct {
+	size8 nTermForms;
+	// CLAUDE: multiple of each term form in the conjunction form
+	size8 termFormMultiple[RELATION_MAX_ARITY];
+	// CLAUDE: the terms still to compile that have each term form
+	size8 termFormNTerms[RELATION_MAX_ARITY];
+	index8 termFormTerms[RELATION_MAX_ARITY][MAX_CHOICE_POINTS];
+	// CLAUDE: the terms taken for each term form, as a combination of indices into termFormTerms
+	index8 termFormCombination[RELATION_MAX_ARITY][RELATION_MAX_ARITY];
+	bool isStarted;
+} TermSetIterator;
+
+
+/**
+ * Iterate over the term sets of the given conjunction form among the terms still to compile.
+ * Returns false if some term form of the conjunction form has too few terms, so that there
+ * is no term set.
+ */
+static bool termSetIterate(
+	ClauseCompileState const * clauseState, Atom conjunctionForm, TermSetIterator * iterator)
+{
+	iterator->nTermForms = 0;
+	iterator->isStarted = false;
+	bool hasTermSets = true;
+	MultisetIterator formIterator;
+	MultisetIterate(conjunctionForm, AT_ID, &formIterator);
+	while(hasTermSets && MultisetIteratorNext(&formIterator)) {
+		ElementMultiple em = MultisetIteratorGetElement(&formIterator);
+		index8 f = iterator->nTermForms++;
+		ASSERT(f < RELATION_MAX_ARITY)
+		iterator->termFormMultiple[f] = em.multiple;
+		iterator->termFormNTerms[f] = 0;
+		for(index8 p = clauseState->nCompiledTerms; p < clauseState->nConjunctionTerms; p++) {
+			index8 termIndex = clauseState->termOrder[p];
+			if(!clauseState->termIsRecursive[termIndex]
+				&& SameAtoms(clauseState->termForms[termIndex], em.element))
+				iterator->termFormTerms[f][iterator->termFormNTerms[f]++] = termIndex;
+		}
+		hasTermSets = (iterator->termFormNTerms[f] >= em.multiple);
+	}
+	MultisetIteratorEnd(&formIterator);
+	return hasTermSets;
+}
+
+
+/**
+ * Advance to the next term set, or the first one on the first call, and write its
+ * terms to the termIndices array, which must hold RELATION_MAX_ARITY indices. The terms are
+ * ordered as the terms of the conjunction form. Returns the number of terms, or 0 when
+ * there are no more term sets.
+ */
+static size8 termSetIteratorNext(TermSetIterator * iterator, index8 termIndices[])
+{
+	if(!iterator->isStarted) {
+		for(index8 f = 0; f < iterator->nTermForms; f++)
+			FirstCombination(iterator->termFormMultiple[f], iterator->termFormCombination[f]);
+		iterator->isStarted = true;
+	}
+	else {
+		// Iterate over the combinations of the term forms, the last term form first
+		index8 f = iterator->nTermForms;
+		for(; f > 0; f--) {
+			if(NextCombination(
+				iterator->termFormNTerms[f - 1], iterator->termFormMultiple[f - 1],
+				iterator->termFormCombination[f - 1]))
+				break;
+			FirstCombination(iterator->termFormMultiple[f - 1], iterator->termFormCombination[f - 1]);
+		}
+		if(f == 0)
+			return 0;
+	}
+	size8 nTerms = 0;
+	for(index8 f = 0; f < iterator->nTermForms; f++) {
+		for(index8 i = 0; i < iterator->termFormMultiple[f]; i++)
+			termIndices[nTerms++] = iterator->termFormTerms[f][iterator->termFormCombination[f][i]];
+	}
+	return nTerms;
+}
+
+
+/**
+ * Dispatch the first set of terms still to compile that matches a service. The sets
+ * matching a candidate conjunction form come first, larger forms first; then single terms,
+ * as compileNextTerm() takes them. Returns 0 if no set of terms dispatched.
+ */
+static Operator * dispatchNextTerms(
+	CompileStack * compileStack, ClauseCompileState * clauseState, index8 termClauseMap[])
+{
+	ChoicePoint * choicePoint = &(clauseState->choiceTree->choicePoints[clauseState->choiceTree->nChoicePoints]);
+	Atom const * candidateForms = ResizingArrayGetMemory(&(clauseState->candidateForms));
+	Operator * op = 0;
+	for(index32 i = 0; !op && (i < clauseState->candidateForms.nElements); i++) {
+		TermSetIterator iterator;
+		if(!termSetIterate(clauseState, candidateForms[i], &iterator))
+			continue;
+		index8 termIndices[RELATION_MAX_ARITY];
+		size8 nTerms;
+		while(!op && (nTerms = termSetIteratorNext(&iterator, termIndices))) {
+			op = compileTermSet(
+				compileStack, clauseState, candidateForms[i], termIndices, nTerms,
+				TERM_DISPATCH_ONLY, choicePoint, termClauseMap
+			);
+		}
+	}
+	if(!op)
+		op = compileNextTerm(compileStack, clauseState, TERM_DISPATCH_ONLY, termClauseMap);
 	return op;
 }
 
@@ -840,13 +999,7 @@ static Operator * replayTerm(ClauseCompileState * clauseState, index8 termClause
 		clauseState->indexedFormula->actors, choicePoint->actorIndices, choicePoint->nActors, termActors);
 #ifdef DEBUG_COMPILER
 	PrintCString("Replay term: ");
-	for(index8 i = 0; i < choicePoint->nTerms; i++) {
-		if(i > 0)
-			PrintCString(" & ");
-		TypedTuple * actors = IndexedFormulaGetTermTuple(clauseState->indexedFormula, termIndices[i]);
-		PrintFormActorsAsFormula(clauseState->termForms[termIndices[i]], actors);
-		FreeTypedTuple(actors);
-	}
+	printTermSet(clauseState, termIndices, choicePoint->nTerms);
 	PrintChar('\n');
 #endif
 	TypedTuple * serviceParameters = CreateTypedTuple(termActors->nAtoms);
@@ -876,6 +1029,35 @@ static Operator * replayTerm(ClauseCompileState * clauseState, index8 termClause
 
 
 /**
+ * Find the candidate conjunction form whose terms have the forms of the given terms,
+ * with the same multiples; see findCandidateConjunctionForms().
+ */
+static Atom findCandidateForm(ClauseCompileState const * clauseState, index8 const termIndices[], size8 nTerms)
+{
+	Atom const * candidateForms = ResizingArrayGetMemory(&(clauseState->candidateForms));
+	for(index32 i = 0; i < clauseState->candidateForms.nElements; i++) {
+		Atom form = candidateForms[i];
+		if(ConjunctionFormNTermsTotal(form) != nTerms)
+			continue;
+		bool isMatch = true;
+		for(index8 j = 0; isMatch && (j < nTerms); j++) {
+			Atom termForm = clauseState->termForms[termIndices[j]];
+			size8 multiple = 0;
+			for(index8 k = 0; k < nTerms; k++) {
+				if(SameAtoms(clauseState->termForms[termIndices[k]], termForm))
+					multiple++;
+			}
+			isMatch = (MultisetGetElementMultiple(form, termForm) == multiple);
+		}
+		if(isMatch)
+			return form;
+	}
+	ASSERT(false)
+	return (Atom) {0};
+}
+
+
+/**
  * Compile the term of the current choice point, which is the branch of the choice
  * tree, taking a new choice; see ChoiceTreeNextBranch(). Returns 0 if the term does not compile.
  */
@@ -884,34 +1066,27 @@ static Operator * compileNextChoice(
 {
 	ChoiceTree * choiceTree = clauseState->choiceTree;
 	ChoicePoint * choicePoint = &(choiceTree->choicePoints[choiceTree->nChoicePoints]);
-	// CLAUDE: The query of a set of several terms has a conjunction form, which is not
-	// at hand here
-	ASSERT(choicePoint->nTerms == 1)
-	index8 termIndex = choicePoint->termIndices[0];
+	index8 const * termIndices = choicePoint->termIndices;
 	// CLAUDE: A recursive term has no choices, and so has no next choice either
-	ASSERT(!clauseState->termIsRecursive[termIndex])
-	TypedTuple * termActors = IndexedFormulaGetTermTuple(clauseState->indexedFormula, termIndex);
+	ASSERT(!clauseState->termIsRecursive[termIndices[0]])
 #ifdef DEBUG_COMPILER
-	PrintCString("Next choice for term: ");
-	PrintFormActorsAsFormula(clauseState->termForms[termIndex], termActors);
-	PrintChar('\n');
+	PrintCString("Next choice\n");
 #endif
-	TypedTuple * serviceParameters = CreateTypedTuple(termActors->nAtoms);
-	// CLAUDE: The service of the next choice may be stale, and then compiling the term
-	// is what clears it; see dispatchOrCompileTerm()
-	Operator * op = compileTerm(
-		compileStack, (FormulaView) {.form = clauseState->termForms[termIndex], .actors = termActors},
-		TERM_DISPATCH_OR_COMPILE, choicePoint, serviceParameters, termClauseMap
-	);
-	if(op)
-		acceptCompiledTerm(clauseState, termIndex, serviceParameters);
-#ifdef DEBUG_COMPILER
-	else
-		PrintCString(" => no match.\n");
-#endif
-	FreeTypedTuple(serviceParameters);
-	FreeTypedTuple(termActors);
-	return op;
+	Atom form;
+	int mode;
+	if(choicePoint->nTerms == 1) {
+		form = clauseState->termForms[termIndices[0]];
+		// CLAUDE: The service of the next choice may be stale, and then compiling the term
+		// is what clears it; see dispatchOrCompileTerm()
+		mode = TERM_DISPATCH_OR_COMPILE;
+	}
+	else {
+		// CLAUDE: A set of several terms is only ever dispatched; see dispatchNextTerms()
+		form = findCandidateForm(clauseState, termIndices, choicePoint->nTerms);
+		mode = TERM_DISPATCH_ONLY;
+	}
+	return compileTermSet(
+		compileStack, clauseState, form, termIndices, choicePoint->nTerms, mode, choicePoint, termClauseMap);
 }
 
 
@@ -954,8 +1129,6 @@ static Operator * compileConjunctionRecursive(
 	 * as early as possible, to avoid generating calls to table-scanning operators which
 	 * then have to be filtered. It will not always yield the optimal solution.
 	 */
-	// CLAUDE: A choice point up to the branch names its term. A choice point after the
-	// branch starts afresh, and the passes below find its term.
 	ChoiceTree * choiceTree = clauseState->choiceTree;
 	index8 choicePointIndex = choiceTree->nChoicePoints;
 	ASSERT(choicePointIndex < MAX_CHOICE_POINTS)
@@ -970,7 +1143,7 @@ static Operator * compileConjunctionRecursive(
 		choicePoint->nChoices = 0;
 		choicePoint->hasNextMatch = false;
 		// pass 1
-		op = compileNextTerm(compileStack, clauseState, TERM_DISPATCH_ONLY, termClauseMap);
+		op = dispatchNextTerms(compileStack, clauseState, termClauseMap);
 		// pass 2
 		if(!op)
 			op = compileNextTerm(compileStack, clauseState, TERM_DISPATCH_OR_COMPILE, termClauseMap);
@@ -1129,6 +1302,85 @@ static bool hasFullyTypedParameters(IndexedFormula * indexedFormula, index8 i)
 
 
 /**
+ * Count the terms of the conjunction whose form is termForm, excluding the head term.
+ */
+static size8 countTermsOfForm(ClauseCompileState const * clauseState, Atom termForm)
+{
+	size8 count = 0;
+	for(index8 i = 0; i < clauseState->nTerms; i++) {
+		if(clauseState->termForms[i].hash && SameAtoms(clauseState->termForms[i], termForm))
+			count++;
+	}
+	return count;
+}
+
+
+/**
+ * Test whether each term form of the conjunction form occurs among the terms of the
+ * conjunction being compiled, at least as many times as in the conjunction form.
+ */
+static bool conjunctionFormFitsTerms(ClauseCompileState const * clauseState, Atom conjunctionForm)
+{
+	bool fits = true;
+	MultisetIterator iterator;
+	MultisetIterate(conjunctionForm, AT_ID, &iterator);
+	while(fits && MultisetIteratorNext(&iterator)) {
+		ElementMultiple em = MultisetIteratorGetElement(&iterator);
+		fits = (countTermsOfForm(clauseState, em.element) >= em.multiple);
+	}
+	MultisetIteratorEnd(&iterator);
+	return fits;
+}
+
+
+/**
+ * CLAUDE: Collect in clauseState->candidateForms the conjunction forms of two or more terms
+ * that could match a set of terms of the conjunction being compiled, largest first. A service
+ * of such a form may answer several terms at once; see dispatchNextTerms(). The conjunction
+ * query being compiled is not a candidate, as its services are already seeded; see
+ * seedVariantsFromServices(). A reference to each candidate form is held until
+ * freeClauseCompileState().
+ */
+static void findCandidateConjunctionForms(ClauseCompileState * clauseState)
+{
+	ResizingArray * candidateForms = &(clauseState->candidateForms);
+	CreateResizingArray(candidateForms, sizeof(Atom), 4);
+	for(index8 i = 0; i < clauseState->nTerms; i++) {
+		Atom termForm = clauseState->termForms[i];
+		if(!termForm.hash)
+			continue;
+		MultisetContainingIterator iterator;
+		MultisetContainingIterate(termForm, &iterator);
+		while(MultisetContainingIteratorNext(&iterator)) {
+			Atom form = MultisetContainingIteratorGetMultiset(&iterator);
+			if(!IsConjunctionForm(form) || (ConjunctionFormNTermsTotal(form) < 2))
+				continue;
+			if(clauseState->isConjunction && SameAtoms(form, clauseState->indexedFormula->form))
+				continue;
+			if(ResizingArrayContainsElement(candidateForms, &form))
+				continue;
+			if(!conjunctionFormFitsTerms(clauseState, form))
+				continue;
+			IFactAcquire(form);
+			ResizingArrayAppend(candidateForms, &form);
+		}
+		MultisetContainingIteratorEnd(&iterator);
+	}
+
+	// CLAUDE: Sort the candidate forms by number of terms, largest first
+	Atom * forms = ResizingArrayGetMemory(candidateForms);
+	for(index32 i = 1; i < candidateForms->nElements; i++) {
+		Atom form = forms[i];
+		size8 nTerms = ConjunctionFormNTermsTotal(form);
+		index32 j = i;
+		for(; (j > 0) && (ConjunctionFormNTermsTotal(forms[j - 1]) < nTerms); j--)
+			forms[j] = forms[j - 1];
+		forms[j] = form;
+	}
+}
+
+
+/**
  * Setup the parts of a ClauseCompileState that are the same for a clause and a
  * conjunction: no term is excluded, no term is recursive, and no term form is set.
  * The arrays are allocated; see freeClauseCompileState().
@@ -1211,6 +1463,7 @@ static void setupConjunctionCompileState(
 		IFactAcquire(iterator.termForm);
 	}
 	IndexedFormulaIteratorEnd(&iterator);
+	findCandidateConjunctionForms(clauseState);
 	setupTermOrder(clauseState, false);
 }
 
@@ -1275,6 +1528,7 @@ static void setupClauseCompileState(
 		clauseState->termIsRecursive[i] = SameAtoms(clauseState->termForms[i], headTermForm)
 			&& termRepeatsHeadTermParameters(clauseState, i);
 	}
+	findCandidateConjunctionForms(clauseState);
 	setupTermOrder(clauseState, true);
 }
 
@@ -1290,6 +1544,10 @@ static void freeClauseCompileState(ClauseCompileState * clauseState)
 		if(clauseState->termForms[i].hash)
 			IFactRelease(clauseState->termForms[i]);
 	}
+	Atom const * candidateForms = ResizingArrayGetMemory(&(clauseState->candidateForms));
+	for(index32 i = 0; i < clauseState->candidateForms.nElements; i++)
+		IFactRelease(candidateForms[i]);
+	FreeResizingArray(&(clauseState->candidateForms));
 	Free(clauseState->termIsRecursive);
 	Free(clauseState->termForms);
 	Free(clauseState->termOrder);
