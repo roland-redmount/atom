@@ -19,6 +19,10 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#ifndef __EMSCRIPTEN__
+#include <sys/ioctl.h>
+#include <termios.h>
+#endif
 
 #ifdef __linux__
 #include <linux/limits.h>
@@ -239,9 +243,344 @@ static void discardLine(void)
 }
 
 
-int ReadLine(char * buffer, size32 bufferSize)
+#ifndef __EMSCRIPTEN__
+
+/* CLAUDE: Line editing at a terminal, used by ReadLine() */
+
+// key codes returned by readKey() for keys that send an escape sequence
+#define KEY_LEFT		0x101
+#define KEY_RIGHT		0x102
+#define KEY_UP			0x103
+#define KEY_DOWN		0x104
+#define KEY_HOME		0x105
+#define KEY_END			0x106
+#define KEY_DELETE		0x107
+#define KEY_UNKNOWN		0x108
+
+#define CONTROL_KEY(letter)		((letter) - 'a' + 1)
+
+#define HISTORY_SIZE		64
+#define HISTORY_LINE_SIZE	1024
+
+/* CLAUDE: The line being edited by editLine(), shown after the prompt. */
+typedef struct {
+	char const * prompt;
+	char * buffer;
+	size32 bufferSize;
+	size32 length;
+	index32 cursorIndex;
+} EditedLine;
+
+static struct termios savedTerminalSettings;
+static bool isRawMode = false;
+
+// earlier lines, oldest first
+static char history[HISTORY_SIZE][HISTORY_LINE_SIZE];
+static size32 nHistoryLines = 0;
+// the line being typed, kept while the user steps through the history
+static char pendingLine[HISTORY_LINE_SIZE];
+
+
+/*
+ * CLAUDE: Put the terminal in raw mode: every key press is passed on at once,
+ * without echo. Ctrl-C does not send a signal, so the terminal cannot be left in
+ * raw mode by an interrupted process.
+ */
+static bool enterRawMode(void)
+{
+	if(tcgetattr(STDIN_FILENO, &savedTerminalSettings) == -1)
+		return false;
+	struct termios rawSettings = savedTerminalSettings;
+	rawSettings.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+	rawSettings.c_cc[VMIN] = 1;
+	rawSettings.c_cc[VTIME] = 0;
+	// TCSANOW rather than TCSAFLUSH, so that lines pasted ahead are not discarded
+	if(tcsetattr(STDIN_FILENO, TCSANOW, &rawSettings) == -1)
+		return false;
+	isRawMode = true;
+	return true;
+}
+
+
+static void leaveRawMode(void)
+{
+	if(!isRawMode)
+		return;
+	tcsetattr(STDIN_FILENO, TCSANOW, &savedTerminalSettings);
+	isRawMode = false;
+}
+
+
+static size32 getTerminalWidth(void)
+{
+	struct winsize size;
+	if((ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == -1) || (size.ws_col == 0))
+		return 80;
+	return size.ws_col;
+}
+
+
+// returns -1 at end of input
+static int readByte(void)
+{
+	unsigned char c;
+	if(read(STDIN_FILENO, &c, 1) != 1)
+		return -1;
+	return c;
+}
+
+
+/*
+ * CLAUDE: Read one key press. A key sending an escape sequence gives one of the
+ * KEY_ codes. Modifiers such as Ctrl-Left are ignored.
+ */
+static int readKey(void)
+{
+	int c = readByte();
+	if(c != '\x1b')
+		return c;
+	int introducer = readByte();
+	if((introducer != '[') && (introducer != 'O'))
+		return KEY_UNKNOWN;
+	// parameter bytes, as in ESC [ 3 ~ or ESC [ 1 ; 5 C
+	int number = 0;
+	bool isFirstNumber = true;
+	int finalByte;
+	while(((finalByte = readByte()) >= 0x30) && (finalByte <= 0x3F)) {
+		if(finalByte == ';')
+			isFirstNumber = false;
+		else if(isFirstNumber && isdigit(finalByte))
+			number = 10 * number + (finalByte - '0');
+	}
+	switch(finalByte) {
+	case 'A': return KEY_UP;
+	case 'B': return KEY_DOWN;
+	case 'C': return KEY_RIGHT;
+	case 'D': return KEY_LEFT;
+	case 'H': return KEY_HOME;
+	case 'F': return KEY_END;
+	case '~':
+		switch(number) {
+		case 1: case 7: return KEY_HOME;
+		case 3: return KEY_DELETE;
+		case 4: case 8: return KEY_END;
+		}
+	}
+	return KEY_UNKNOWN;
+}
+
+
+/*
+ * CLAUDE: Draw the prompt and the line, and place the cursor. A line too wide for
+ * the terminal is scrolled sideways, so that the cursor is always shown.
+ */
+static void redrawLine(EditedLine const * line)
+{
+	size32 promptLength = CStringLength(line->prompt);
+	size32 width = getTerminalWidth();
+	size32 nColumns = (width > promptLength + 1) ? width - promptLength : 1;
+	index32 startIndex = (line->cursorIndex >= nColumns) ? line->cursorIndex - nColumns + 1 : 0;
+	size32 nShown = line->length - startIndex;
+	if(nShown > nColumns - 1)
+		nShown = nColumns - 1;
+
+	fputc('\r', stdout);
+	fputs(line->prompt, stdout);
+	fwrite(line->buffer + startIndex, 1, nShown, stdout);
+	// clear to end of the terminal line, then move to the cursor column
+	fputs("\x1b[K\r", stdout);
+	size32 cursorColumn = promptLength + line->cursorIndex - startIndex;
+	if(cursorColumn > 0)
+		printf("\x1b[%uC", cursorColumn);
+	fflush(stdout);
+}
+
+
+static void insertCharacter(EditedLine * line, char c)
+{
+	if(line->length + 1 >= line->bufferSize) {
+		fputc('\a', stdout);
+		return;
+	}
+	char * cursor = line->buffer + line->cursorIndex;
+	MoveMemory(cursor, cursor + 1, line->length - line->cursorIndex);
+	*cursor = c;
+	line->length++;
+	line->cursorIndex++;
+}
+
+
+// remove the characters in [startIndex, endIndex)
+static void deleteCharacters(EditedLine * line, index32 startIndex, index32 endIndex)
+{
+	MoveMemory(line->buffer + endIndex, line->buffer + startIndex, line->length - endIndex);
+	line->length -= endIndex - startIndex;
+	line->cursorIndex = startIndex;
+}
+
+
+static void replaceLine(EditedLine * line, char const * text)
+{
+	size32 length = CStringLength(text);
+	if(length > line->bufferSize - 1)
+		length = line->bufferSize - 1;
+	CopyMemory(text, line->buffer, length);
+	line->length = length;
+	line->cursorIndex = length;
+}
+
+
+static void addHistoryLine(char const * text, size32 length)
+{
+	if((length == 0) || (length >= HISTORY_LINE_SIZE))
+		return;
+	if((nHistoryLines > 0) && (CStringCompare(history[nHistoryLines - 1], text) == 0))
+		return;
+	if(nHistoryLines == HISTORY_SIZE) {
+		MoveMemory(history[1], history[0], (HISTORY_SIZE - 1) * HISTORY_LINE_SIZE);
+		nHistoryLines--;
+	}
+	CopyMemory(text, history[nHistoryLines], length + 1);
+	nHistoryLines++;
+}
+
+
+/*
+ * CLAUDE: Read a line from a terminal in raw mode, with the editing keys listed
+ * at ReadLine(). A full buffer refuses further characters, so READLINE_TOO_LONG
+ * does not occur.
+ */
+static int editLine(char const * prompt, char * buffer, size32 bufferSize)
+{
+	EditedLine line = {prompt, buffer, bufferSize, 0, 0};
+	// the history line shown; nHistoryLines means the line being typed
+	index32 historyIndex = nHistoryLines;
+	redrawLine(&line);
+	while(true) {
+		int key = readKey();
+		switch(key) {
+		case -1:
+			return READLINE_END;
+
+		case '\r':
+		case '\n':
+			buffer[line.length] = 0;
+			addHistoryLine(buffer, line.length);
+			line.cursorIndex = line.length;
+			redrawLine(&line);
+			fputc('\n', stdout);
+			return READLINE_OK;
+
+		case CONTROL_KEY('d'):
+			if(line.length == 0)
+				return READLINE_END;
+			// otherwise Ctrl-D deletes as the Delete key
+		case KEY_DELETE:
+			if(line.cursorIndex < line.length)
+				deleteCharacters(&line, line.cursorIndex, line.cursorIndex + 1);
+			break;
+
+		case CONTROL_KEY('c'):
+			// discard the line and start over on a new line
+			line.cursorIndex = line.length;
+			redrawLine(&line);
+			fputs("^C\n", stdout);
+			line.length = 0;
+			line.cursorIndex = 0;
+			historyIndex = nHistoryLines;
+			break;
+
+		case 127:
+		case CONTROL_KEY('h'):
+			if(line.cursorIndex > 0)
+				deleteCharacters(&line, line.cursorIndex - 1, line.cursorIndex);
+			break;
+
+		case KEY_LEFT:
+		case CONTROL_KEY('b'):
+			if(line.cursorIndex > 0)
+				line.cursorIndex--;
+			break;
+
+		case KEY_RIGHT:
+		case CONTROL_KEY('f'):
+			if(line.cursorIndex < line.length)
+				line.cursorIndex++;
+			break;
+
+		case KEY_HOME:
+		case CONTROL_KEY('a'):
+			line.cursorIndex = 0;
+			break;
+
+		case KEY_END:
+		case CONTROL_KEY('e'):
+			line.cursorIndex = line.length;
+			break;
+
+		case CONTROL_KEY('k'):
+			line.length = line.cursorIndex;
+			break;
+
+		case CONTROL_KEY('u'):
+			deleteCharacters(&line, 0, line.cursorIndex);
+			break;
+
+		case CONTROL_KEY('w'): {
+			index32 wordIndex = line.cursorIndex;
+			while((wordIndex > 0) && (buffer[wordIndex - 1] == ' '))
+				wordIndex--;
+			while((wordIndex > 0) && (buffer[wordIndex - 1] != ' '))
+				wordIndex--;
+			deleteCharacters(&line, wordIndex, line.cursorIndex);
+			break;
+		}
+
+		case KEY_UP:
+			if(historyIndex > 0) {
+				if(historyIndex == nHistoryLines) {
+					size32 pendingLength = (line.length < HISTORY_LINE_SIZE) ?
+						line.length : HISTORY_LINE_SIZE - 1;
+					CopyMemory(buffer, pendingLine, pendingLength);
+					pendingLine[pendingLength] = 0;
+				}
+				historyIndex--;
+				replaceLine(&line, history[historyIndex]);
+			}
+			break;
+
+		case KEY_DOWN:
+			if(historyIndex < nHistoryLines) {
+				historyIndex++;
+				replaceLine(&line,
+					(historyIndex == nHistoryLines) ? pendingLine : history[historyIndex]);
+			}
+			break;
+
+		default:
+			// printable ASCII, and the bytes of a UTF-8 character
+			if((key >= ' ') && (key <= 0xFF) && (key != 127))
+				insertCharacter(&line, (char) key);
+			break;
+		}
+		redrawLine(&line);
+	}
+}
+
+#endif
+
+
+int ReadLine(char const * prompt, char * buffer, size32 bufferSize)
 {
 	ASSERT(bufferSize > 1)
+#ifndef __EMSCRIPTEN__
+	if(isatty(STDIN_FILENO) && isatty(STDOUT_FILENO) && enterRawMode()) {
+		int result = editLine(prompt, buffer, bufferSize);
+		leaveRawMode();
+		return result;
+	}
+#endif
+	PrintCString(prompt);
 	// a prompt ends in no line terminator, so it may still be buffered here
 	fflush(stdout);
 	if(!fgets(buffer, bufferSize, stdin))
@@ -700,6 +1039,9 @@ void ReleaseMemory(MemoryDescriptor * memory)
 
 void AbortProgram(void)
 {
+#ifndef __EMSCRIPTEN__
+	leaveRawMode();
+#endif
 	// abort() does not flush, which would discard whatever we printed
 	// to explain why we are aborting
 	fflush(stdout);
