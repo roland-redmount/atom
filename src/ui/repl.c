@@ -42,8 +42,7 @@ int main(int argc, char * argv[])
 	char line[LINE_BUFFER_SIZE];
 	bool isRunning = true;
 	while(isRunning) {
-		PrintCString(SESSION_PROMPT);
-		switch(ReadLine(line, LINE_BUFFER_SIZE)) {
+		switch(ReadLine(SESSION_PROMPT, line, LINE_BUFFER_SIZE)) {
 		case READLINE_OK:
 			isRunning = (SessionExecuteLine(line) == SESSION_CONTINUE);
 			break;

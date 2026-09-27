@@ -233,10 +233,13 @@ uint32 GetPrintIndent(void);
 /**
  * Read one line of input into the buffer, dropping the line terminator and
  * terminating the buffer with 0. Returns one of the READLINE_ codes.
- * Pending output is written out first, so a prompt printed without a line
- * terminator is on screen before the input is waited for.
+ * Prints the prompt before reading.
+ * In standard builds (for command line), this uses raw terminal mode to allow
+ * line editing: Left, Right, Home, End, Delete, Backspace, as well as
+ * Ctrl-A, Ctrl-E, Ctrl-K, Ctrl-U, Ctrl-W work in the same way as in bash.
+ * Up and Down step through previously input lines. Ctrl-C discards the line.
  */
-int ReadLine(char * buffer, size32 bufferSize);
+int ReadLine(char const * prompt, char * buffer, size32 bufferSize);
 
 // Result codes for ReadLine()
 #define READLINE_OK			1	// a line was read
