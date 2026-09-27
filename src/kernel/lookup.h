@@ -59,11 +59,6 @@ void LookupAddRole(Atom atom, Relation relation, Atom termForm, Atom role);
 void LookupRemoveRole(Atom atom, Relation relation, Atom termForm, Atom role);
 
 /**
- * Remove all roles for an AT_ID atom. This is used when removing a AT_ID atom.
- */
-void LookupRemoveAllRoles(Atom atom);
-
-/**
  * Add lookup entries for all actors in a fact from a given relation,
  * defined by an actor list corresponding to the relation's form.
  */

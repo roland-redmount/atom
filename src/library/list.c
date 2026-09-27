@@ -2,7 +2,6 @@
 #include "lang/Variable.h"
 #include "kernel/dispatch.h"
 #include "kernel/letter.h"
-#include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
 #include "kernel/Relation.h"
@@ -236,7 +235,9 @@ bool IsList(Atom atom)
 {
 	// We define this from the (list length) relation since
 	// there may be no (list element position) fact if atom is an empty list.
-	return LookupHasEntry(atom, listLengthRelation, listLengthTermForm, listRoleName);
+	Atom arguments[2];
+	arguments[listLengthRoleIndex[0]] = atom;
+	return OperatorCallOnce(listLengthOperator, arguments);
 }
 
 
@@ -256,16 +257,25 @@ size32 ListLength(Atom list)
  * TODO: this is not well-defined in general, there may be > 1 relation for lists
  * containing mixed types, although CreateList() does not yields such lists.
  */
-static Relation lookupListElementRelation(Atom list)
+static Relation findListElementRelation(Atom list)
 {
-	return LookupFindRelation(list, listTermForm, listRoleName);
+	Atom arguments[3];
+	arguments[listRoleIndex[0]] = list;
+	
+	if(OperatorCallOnce(listIDOperator, arguments))
+		return listIDRelation;
+	
+	if(OperatorCallOnce(listLetterOperator, arguments))
+		return listLetterRelation;
+	
+	return (Relation) {0};
 }
 
 
 Atom ListGetElement(Atom list, index32 position)
 {
 	ASSERT(ListLength(list) > 0)
-	Relation relation = lookupListElementRelation(list);
+	Relation relation = findListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 
 	byte parameterIO[3];
@@ -285,7 +295,7 @@ Atom ListGetElement(Atom list, index32 position)
 index32 ListGetPosition(Atom list, Atom element)
 {
 	ASSERT(IsList(list))
-	Relation relation = lookupListElementRelation(list);
+	Relation relation = findListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 
 	// TODO: this service is not one the B-tree provider registers, as its inputs are not
@@ -352,7 +362,7 @@ void ListIterate(Atom list, ListIterator * iterator)
 	iterator->queryTuple[listRoleIndex[0]] = list;
 
 	if(ListLength(list) > 0) {
-		Relation relation = lookupListElementRelation(list);
+		Relation relation = findListElementRelation(list);
 		ASSERT(!IsNullRelation(relation))
 		
 		byte parameterIO[3];
@@ -394,7 +404,7 @@ void ListIteratorEnd(ListIterator * iterator)
 void PrintList(Atom list)
 {
 	PrintCString("LIST{");
-	Relation relation = lookupListElementRelation(list);
+	Relation relation = findListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 	byte elementType = relation.typeSignature.atomTypes[listRoleIndex[2]];
 

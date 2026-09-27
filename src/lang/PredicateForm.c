@@ -1,6 +1,5 @@
 
 #include "kernel/ifact.h"
-#include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "kernel/tuple.h"
@@ -40,12 +39,9 @@ bool IsPredicateForm(Atom atom)
 	if(SameAtoms(atom, GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE)))
 		return true;
 
-	return LookupHasEntry(
-		atom,
-		GetCoreRelation(RELATION_PREDICATE_FORM),
-		GetCoreRelation(RELATION_PREDICATE_FORM).form,
-		GetCoreRoleName(ROLE_PREDICATE_FORM)
-	);
+	Operator * op = GetCoreOperator(SERVICE_PREDICATE_FORM);
+	Atom arguments[1] = {atom};
+	return OperatorCallOnce(op, arguments);
 }
 
 

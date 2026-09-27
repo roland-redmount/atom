@@ -4,7 +4,6 @@
 #include "kernel/dispatch.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/lookup.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
 #include "kernel/ServiceRegistry.h"
@@ -344,11 +343,8 @@ static void sortIFactDraft(IFactDraft * draft)
 
 /**
  * Create the defining facts represented by a draft ifact.
- * The assertFact() function is typically AssertFact()
- * but an alternative version is used during bootstrap.
  */
 static void createFacts(IFactDraft * draft, bool bootstrap)
-	// void (* assertFact)(Atom predicateForm, TypedTuple const * actors, uint8 idPosition))s
 {
 	Atom idAtom = (Atom) {.hash = draft->header.hash};
 
@@ -361,10 +357,6 @@ static void createFacts(IFactDraft * draft, bool bootstrap)
 			tuple[conjunction->idColumn] = idAtom;
 			// store the tuple
 			ASSERT(TupleStoreAddTuple(conjunction->store, tuple, conjunction->idColumn + 1) == TUPLE_ADDED)
-			// add lookup
-			if(!bootstrap) {
-				LookupAddFactRoles(conjunction->store->relation, tuple);
-			}
 			tuple += conjunction->store->nColumns;
 		}
 		conjunction++;
@@ -492,9 +484,6 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash) // , void (* assertFact)
 		ASSERT(BTreeInsert(ifactStorage.btree, &(draft->header)) == BTREE_INSERTED)
 		keepConjunctions = true;
 	}
-	// Release acquired table references
-	// for(index8 i = 0; i < draft->header.nConjunctions; i++)
-	// 	ReleaseRelationTable(draft->header.conjunctions[i].table);
 
 	if(!keepConjunctions)
 		Free(draft->header.conjunctions);
@@ -551,16 +540,10 @@ void IFactRelease(Atom idAtom)
 		IFactHeader headerCopy = *header;
 
 		// Retract defining facts.
-		// NOTE: can we locate the facts using lookup instead, so that we
-		// don't actually need to store the conjunctions after IFactEnd() ?
-		// We only need to know the predicate form (to identify the relation/service)
-		// and the role in which the AT_ID atom participates.
 		for(index8 i = 0; i < headerCopy.nConjunctions; i++) {
 			IFactConjunction * conjunction = &(headerCopy.conjunctions[i]);
 			removeIFactTuples(conjunction, idAtom);
 		}
-		LookupRemoveAllRoles(idAtom);
-
 		// remove IFact
 		Free(headerCopy.conjunctions);
 		ASSERT(BTreeDelete(ifactStorage.btree, &headerCopy, 0) == BTREE_DELETED);

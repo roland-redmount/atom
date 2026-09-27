@@ -88,12 +88,14 @@ void KernelShutdown(void);
  * There may be > 1 service per relation table.
  */
 #define SERVICE_MULTISET_NAME				1	// (multiset <ID element >NAME multiple >INT)
-#define SERVICE_PREDICATE_FORM				2	// (predicate-form >ID)
+#define SERVICE_PREDICATE_FORM				2	// (predicate-form <ID)
 #define SERVICE_MULTISET_ID					3	// (multiset <ID element >ID multiple >INT)
 #define SERVICE_MULTISET_ID_ALL				4	// (multiset >ID element >ID multiple >INT)
-#define SERVICE_TERM_FORM					5	// (term-form <ID predicate-form >ID)
+#define SERVICE_TERM_FORM					5	// (term-form <ID predicate-form >ID sign >INT)
+#define SERVICE_CLAUSE_FORM					6	// (clause-form <ID)
+#define SERVICE_CONJUNCTION_FORM			7	// (conjunction-form <ID)
 
-#define N_CORE_SERVICES                     5
+#define N_CORE_SERVICES                     7
 
 /**
  * Lookup one of the "primitive" forms for core tables

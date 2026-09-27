@@ -159,12 +159,14 @@ void RetractFact(FormulaView fact)
 		return;
 	}
 	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
-	// Remove the lookup entries before the tuple: removing the tuple releases the
-	// relation's reference to each of its atoms, and releasing the last reference
-	// to an atom takes all of its lookup entries with it.
-	LookupRemoveFactRoles(relation, actorsArray);
+
 	// Remove the tuple. This will not remove defining facts
-	TupleStoreRemoveTuple(store, actorsArray, 0);
+	byte removeResult = TupleStoreRemoveTuple(store, actorsArray, 0) ;
+	if(removeResult == TUPLE_REMOVED)
+		LookupRemoveFactRoles(relation, actorsArray);
+	else {
+		ASSERT(removeResult == TUPLE_PROTECTED)
+	}
 }
 
 

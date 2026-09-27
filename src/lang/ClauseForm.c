@@ -8,13 +8,15 @@
 
 Atom CreateClauseForm(Atom const termForms[], size8 nTermForms)
 {
-	return CreateTermMultisetForm(termForms, nTermForms, RELATION_CLAUSE_FORM);
+	return CreateTermMultiset(termForms, nTermForms, RELATION_CLAUSE_FORM);
 }
 
 
 bool IsClauseForm(Atom form)
 {
-	return IsTermMultisetForm(form, RELATION_CLAUSE_FORM, ROLE_CLAUSE_FORM);
+	Operator * op = GetCoreOperator(SERVICE_CLAUSE_FORM);
+	Atom arguments[1] = {form};
+	return OperatorCallOnce(op, arguments);
 }
 
 

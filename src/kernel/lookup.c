@@ -153,20 +153,6 @@ void LookupRemoveRole(Atom atom, Relation relation, Atom termForm, Atom role)
 }
 
 
-void LookupRemoveAllRoles(Atom atom)
-{
-	LookupRecord key = { .atom = atom };
-	LookupRecord record;
-	// TODO: can we delete the item via the B-tree iterator more efficiently?
-	while(BTreeGetItem(lookup.btree, &key, &record)) {
-		lookup.nRolesTotal -= record.nFacts;
-		BTreeDelete(lookup.btree, &record, 0);
-		record.relation = (Relation) {0};
-		record.role = (Atom) {0};
-	}
-}
-
-
 /**
  * CLAUDE: Call updateRecord() with a lookup record for each AT_ID actor of one term
  * in a fact. The term's actors start at actorsOffset in the actors array of the fact.
@@ -241,41 +227,7 @@ void LookupRemoveFactRoles(Relation relation, Atom const actors[])
 	updateFactRoles(relation, actors, removeRecord);
 }
 
-/*
-void LookupRemoveAllPredicateRoles(Atom predicateForm)
-{
-	// NOTE: this requires scanning the entire lookup table,
-	// since it is indexed by atom, not predicate form.
 
-	// Find all distinct atoms with a lookup entry for the given form.
-	ResizingArray datumArray;
-	CreateResizingArray(&datumArray, sizeof(Atom), 10);
-
-	BTreeIterator iterator;
-	BTreeIterate(&iterator, lookup.btree);
-	Atom previousAtom = {0};
-	while(BTreeIteratorNext(&iterator)) {
-		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
-		if(SameAtoms(record->predicateForm, predicateForm)) {
-			// since lookup entries are ordered by atom,
-			// we can skip any entry with the same atom as previous
-			if(!SameAtoms(record->atom, previousAtom)) {
-				ResizingArrayAppend(&datumArray, &(record->atom));
-				previousAtom = record->atom;
-			}
-		}
-	}
-	BTreeIteratorEnd(&iterator);
-
-	// Free all lookup entries for discovered atoms
-	Atom const * atoms = ResizingArrayGetMemory(&datumArray);
-	size32 nAtoms = ResizingArrayNElements(&datumArray);
-	for(index32 i = 0; i < nAtoms; i++)
-		LookupRemoveAllRoles(atoms[i]);
-		
-	FreeResizingArray(&datumArray);
-}
-*/
 
 void LookupIterate(Atom atom, LookupIterator * iterator)
 {
