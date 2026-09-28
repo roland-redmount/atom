@@ -7,6 +7,7 @@
 
 
 struct s_RelationReader;
+struct s_TupleStore;
 
 typedef struct s_Operator Operator;
 typedef struct s_OperatorContext OperatorContext;
@@ -167,9 +168,30 @@ typedef struct s_OperatorContext OperatorContext;
 	 * TODO: rename -> OPERATOR_READER ?
 	 */
 	OPERATOR_MACHINE = 10,
+
+	/**
+	 * IFACT creates an single-tuple ifact and yields that tuple. The ifact tuple is
+	 * stoered in the relation's TupleStore, with the identified atom in the ID column.
+	 * The caller binds every argument except the ID column, which is the output. If the ifact
+	 * already exists, IFACT yields the existing tuple. See ifact.h.
+	 *
+	 * A tuple stored by IFACT is a cached result, not an asserted fact. IFACT holds one
+	 * reference to each ifact it has created; see IFactMarkCached(). Removing the IFACT
+	 * operator releases those references.
+	 *
+	 * The child operator of IFACT reads the TupleStore with the ID column as the only input.
+	 * IFACT does not directly call this child operator, but it is called from ifact.c when
+	 * removing an ifact; see IFactSetupStoreOperator(). Keeping it as a child ensures that
+	 * the service registry removes the IFACT service befire the chid operator.
+	 *
+	 * NOTE: creating an ifact adds a tuple to the TupleStore. A query that reads the same
+	 * TupleStore while IFACT creates a new ifact will fail, since the TupleStore's B-tree
+	 * is write-locked while it is read.
+	 */
+	OPERATOR_IFACT = 11,
 };
 
-#define N_OPERATOR_TYPES 10
+#define N_OPERATOR_TYPES 11
 
 
 struct s_Operator {
@@ -259,6 +281,12 @@ struct s_Operator {
 			RelationReaderSpec readerSpec;
 			void * storage;
 		} machine;
+		// for OPERATOR_IFACT
+		struct {
+			Operator * childOperator;
+			struct s_TupleStore * store;
+			index8 idColumn;
+		} ifact;
 	} impl;
 };
 
@@ -381,6 +409,14 @@ Operator * CreateFilterOperator(
  */
 Operator * CreateProjectOperator(
 	Operator * childOperator, size8 nArguments, index8 const argumentMap[]);
+
+/**
+ * Create an IFACT operator creating ifacts in the given TupleStore, with the
+ * identified atom in idColumn; see OPERATOR_IFACT. The operator takes one argument
+ * per column of the TupleStore, and has the index order of the TupleStore.
+ * This function may register a new Service via IFactSetupStoreOperator().
+ */
+Operator * CreateIFactOperator(struct s_TupleStore * store, index8 idColumn);
 
 /**
  * Create a FIXPOINT operator deriving a recursive relation from the given child

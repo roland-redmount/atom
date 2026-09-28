@@ -1,5 +1,6 @@
 
 #include "btree/btree.h"
+#include "kernel/ifact.h"
 #include "kernel/operator.h"
 #include "kernel/Relation.h"
 #include "kernel/tuple.h"
@@ -1540,6 +1541,72 @@ static void teardownMachineOperator(Operator * op)
 }
 
 
+//------------------------------------- OPERATOR_IFACT -----------------------------------------
+
+typedef struct s_IFactOperatorContext {
+	bool isExhausted;
+} IFactOperatorContext;
+
+
+Operator * CreateIFactOperator(TupleStore * store, index8 idColumn)
+{
+	size8 nArguments = store->nColumns;
+	ASSERT(idColumn < nArguments)
+	Operator * op = createOperator(OPERATOR_IFACT, nArguments, sizeof(IFactOperatorContext));
+	op->impl.ifact.store = store;
+	op->impl.ifact.idColumn = idColumn;
+	op->impl.ifact.childOperator = IFactSetupStoreOperator(store, idColumn);
+	addParent(op->impl.ifact.childOperator);
+
+	allocateIndexOrder(op);
+	CopyMemory(store->indexColumns, op->indexOrder, nArguments);
+	return op;
+}
+
+
+static void ifactSetupContext(OperatorContext * context)
+{
+	// nothing to do, the context data is zeroed
+}
+
+
+static bool ifactCall(OperatorContext * context)
+{
+	IFactOperatorContext * ifactContext = (IFactOperatorContext *) &context->data;
+	if(ifactContext->isExhausted)
+		return false;
+	ifactContext->isExhausted = true;
+
+	Operator const * op = context->op;
+	IFactDraft draft;
+	IFactBegin(&draft);
+	IFactBeginConjunction(&draft, op->impl.ifact.store, op->impl.ifact.idColumn);
+	IFactAddTuple(&draft, context->arguments);
+	IFactEndConjunction(&draft);
+	Atom idAtom = IFactEnd(&draft);
+	IFactMarkCached(idAtom);
+
+	context->arguments[op->impl.ifact.idColumn] = idAtom;
+	return true;
+}
+
+
+static void teardownIFactOperator(Operator * op)
+{
+	ASSERT(op->type == OPERATOR_IFACT)
+	// Release cached ifacts before the child, since IFactRelease() reads the
+	// TupleStore through the child's service
+	IFactReleaseCached(op->impl.ifact.store, op->impl.ifact.idColumn);
+	removeParent(op->impl.ifact.childOperator);
+}
+
+
+static void ifactFinalizeContext(OperatorContext * context)
+{
+	// nothing to do
+}
+
+
 //------------------------------------- Generic Operator -----------------------------------------
 
 
@@ -1556,6 +1623,7 @@ size8 OperatorNChildren(Operator const * op)
 	case OPERATOR_CONSTRAIN:
 	case OPERATOR_FIXPOINT:
 	case OPERATOR_FILTER:
+	case OPERATOR_IFACT:
 		return 1;
 
 	case OPERATOR_MACHINE:
@@ -1596,6 +1664,9 @@ Operator * OperatorGetChild(Operator const * op, index8 index)
 
 	case OPERATOR_FILTER:
 		return op->impl.filter.childOperator;
+
+	case OPERATOR_IFACT:
+		return op->impl.ifact.childOperator;
 
 	default:
 		ASSERT(false)
@@ -1645,6 +1716,10 @@ static void teardownOperator(Operator * op)
 
 	case OPERATOR_MACHINE:
 		teardownMachineOperator(op);
+		break;
+
+	case OPERATOR_IFACT:
+		teardownIFactOperator(op);
 		break;
 	
 	default:
@@ -1747,6 +1822,10 @@ static OperatorContext * createContext(
 	case OPERATOR_MACHINE:
 		machineSetupContext(context);
 		break;
+
+	case OPERATOR_IFACT:
+		ifactSetupContext(context);
+		break;
 	
 	default:
 		ASSERT(false)
@@ -1829,6 +1908,10 @@ bool OperatorCall(OperatorContext * context)
 		success = machineCall(context);
 		break;
 
+	case OPERATOR_IFACT:
+		success = ifactCall(context);
+		break;
+
 	default:
 		ASSERT(false)
 		success = false;
@@ -1884,6 +1967,10 @@ void OperatorFreeContext(OperatorContext * context)
 	case OPERATOR_MACHINE:
 		machineFinalizeContext(context);
 		break;
+
+	case OPERATOR_IFACT:
+		ifactFinalizeContext(context);
+		break;
 	
 	default:
 		ASSERT(false)
@@ -1916,7 +2003,8 @@ static const char * operatorNames[N_OPERATOR_TYPES + 1] = {
 	"FIXPOINT",
 	"RECURSE",
 	"FILTER",
-	"MACHINE"
+	"MACHINE",
+	"IFACT"
 };
 
 /**
@@ -2096,6 +2184,10 @@ static void printOperatorRecursive(
 
 	case OPERATOR_MACHINE:
 		// nothing to print
+		break;
+
+	case OPERATOR_IFACT:
+		// CLAUDE: the child operator is not called by IFACT, and is not printed
 		break;
 
 	default:

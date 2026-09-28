@@ -54,6 +54,8 @@ struct s_IFactHeader {
 #define IFACT_NEW		1
 // header reserved by IFactReserve(), defining facts not yet built
 #define IFACT_RESERVED	2
+// indicates one reference to the ifact is held by the IFACT operator; see IFactMarkCached()
+#define IFACT_CACHED	4
 
 
 /**
@@ -143,6 +145,29 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash);
  * the same hash before the identified atom is used for anything else.
  */
 void IFactReserve(data64 hash);
+
+/**
+ * Return the operator of reading tuples from the given TupleStore with idColumn
+ * as the only input. If no such service exists, a FILTER service is registered for it.
+ * Registering a service is not allowed while a query is running, so the service
+ * must exist before a running query calls this function.
+ */
+Operator * IFactSetupStoreOperator(TupleStore const * store, index8 idColumn);
+
+/**
+ * CLAUDE: Mark an ifact as cached, taking over the reference the caller holds.
+ * A cached ifact holds exactly one reference owned by the cache. If the ifact is
+ * already cached, the caller's reference is released instead.
+ * See OPERATOR_IFACT in operator.h.
+ */
+void IFactMarkCached(Atom ifact);
+
+/**
+ * CLAUDE: Release the cache reference of every cached ifact consisting of a single
+ * conjunction on the given TupleStore and idColumn, and clear the IFACT_CACHED flag.
+ * An ifact with no other reference is removed, together with its tuple.
+ */
+void IFactReleaseCached(TupleStore const * store, index8 idColumn);
 
 /**
  * Acquire a reference to an AT_ID atom.
