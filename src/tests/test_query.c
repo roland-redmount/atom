@@ -592,6 +592,54 @@ void testQueryConjunctionRule(void)
 }
 
 
+/**
+ * This test demonstrate that a FILTER service might read a stale primitive service directly,
+ * since compileFilterVariants() finds its child service with DispatchIterate(), which does not
+ * skip stale services. When a compiled service later replaces that primitive service,
+ * the dependent FILTER service must be removed; see ReplacePrimitiveService().
+ *
+ * The rule (sym x with y | ! sym y with x) is recursive only. A query binding the second
+ * column of the store has no primitive service of its signature to use as a base case, so
+ * the rule compiles nothing for the query. The query is answered by a FILTER service over
+ * the stale all-output primitive service, which misses the derived tuple. The all-output
+ * query then compiles the rule with the primitive service as base case, and replaces the
+ * primitive service. The FILTER service is removed, and recompiling the first query
+ * reads the replacing service, which yields the derived tuple.
+ */
+void testFilterServiceOverReplacedPrimitive(void)
+{
+	Atom fact = CStringToTerm("sym \"a\" with \"b\"");
+	Relation relation = RelationFromFact(FormulaGetView(fact));
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+	FormulaView clause = DictionaryAddClauseFromCString("sym x with y | ! sym y with x");
+
+	// The query binding the second column; its only answer is the derived (sym "b" with "a")
+	Atom withRole = CreateNameFromCString("with");
+	index8 withIndex = PredicateRoleIndex(TermFormGetPredicateForm(relation.form), withRole);
+	NameRelease(withRole);
+	char const * secondColumnQuery = (withIndex == 1) ? "sym x with \"a\"" : "sym \"b\" with y";
+	byte parameterIO[2] = {PARAMETER_OUT, PARAMETER_IN};
+	Service filterService = {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 2)};
+
+	// The FILTER service reads the stale primitive service, and misses the derived tuple
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples(secondColumnQuery), 0)
+	ASSERT_UINT32_EQUAL(ServiceGetOperator(filterService)->type, OPERATOR_FILTER)
+
+	// The all-output query replaces the primitive service, and removes the FILTER service
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("sym x with y"), 2)
+	ASSERT_TRUE(ServiceGetOperator(filterService) == 0)
+
+	// The recompiled FILTER service reads the replacing service
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples(secondColumnQuery), 1)
+
+	DictionaryRemoveClause(&clause);
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+	DropRelation(relation);
+	ReleaseFormula(fact);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -614,6 +662,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testStorePrimitiveStaleWhenRuleExists);
 	ExecuteTest(testQueryConjunction);
 	ExecuteTest(testQueryConjunctionRule);
+	ExecuteTest(testFilterServiceOverReplacedPrimitive);
 
 	UnloadLibraries();
 	KernelShutdown();

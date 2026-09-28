@@ -17,6 +17,8 @@
  * Returns the number of services generated.
  * A stored service of the same signature is taken over by the compiled service, which
  * replaces it in the registry and reads it as one branch of its union.
+ * CLAUDE: The stored service is restored when the compiled service is removed;
+ * see ReplaceService().
  *
  * A query compiles to multiple services if at any point during the compilation
  * several services with same form but distinct types are matched. For example,

@@ -40,6 +40,8 @@ typedef struct s_ServiceRecord {
 	Service service;
 	Operator * op;		// The root operator of the operator graph for this service
 	bool isStale;
+	// The operator of the primitive service that this service replaced, if any
+	Operator * replacedOperator;
 } ServiceRecord;
 
 
@@ -61,6 +63,14 @@ void SetupServiceRegistry(void);
  * DEBUG builds assert this constraint in DispatchIteratorNext().
  */
 void CreateService(Service service, Operator * op);
+
+/**
+ * Replace a registered primitive service with a compiled service of the same
+ * Service, whose operator reads the operator of the primitive service. Any services
+ * depending on the primitive service are removed. When the compiled service is later
+ * removed by RemoveService(), the primitive service is restored, marked stale.
+ */
+void ReplacePrimitiveService(Service service, Operator * op);
 
 /**
  * Remove the service identified by the given operator and relation.

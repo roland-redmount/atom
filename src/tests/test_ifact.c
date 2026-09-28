@@ -420,11 +420,28 @@ void testCompileIFactRule(void)
 	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 1)
 
 	// Removing the rule removes the IFACT service and the cached ifact
+	// A primitive service of the same signature, replaced by the IFACT service,
+	// is restored; see ReplaceService()
 	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
-	ASSERT_TRUE(ServiceGetOperator(ifactService) == 0)
+	Operator const * ifactServiceOperator = ServiceGetOperator(ifactService);
+	ASSERT_TRUE(!ifactServiceOperator || (ifactServiceOperator->type == OPERATOR_MACHINE))
 	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 0)
 	ASSERT_UINT32_EQUAL(IFactTotalCount(), nIFacts)
 	teardownCircleRule(&circleRule);
+}
+
+
+/**
+ * Assert that the service is a UNION of an IFACT operator, as the first child,
+ * and the primitive service that the service replaced; see ReplaceService().
+ */
+static void assertIFactUnion(Service service)
+{
+	ServiceRecord const * record = ServiceGetRecord(service);
+	ASSERT_UINT32_EQUAL(record->op->type, OPERATOR_UNION)
+	ASSERT_UINT32_EQUAL(record->op->impl._union.first->type, OPERATOR_IFACT)
+	ASSERT_NOT_NULL(record->replacedOperator)
+	ASSERT_PTR_EQUAL(record->op->impl._union.second, record->replacedOperator)
 }
 
 
@@ -488,11 +505,32 @@ void testCompileIFactRuleWithSeed(void)
 	// A second query yields the same tuples, and caches no new ifact
 	ASSERT_UINT32_EQUAL(runQueryCountAtom(query, circleRule.circleIndex, circle, &nStored), 2)
 	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 2)
+
+	// CLAUDE: The compiled service is a UNION of the IFACT operator and the primitive
+	// service it replaced
+	Service ifactService = createCircleRuleService(&circleRule, PARAMETER_OUT, PARAMETER_IN);
+	assertIFactUnion(ifactService);
+
+	// CLAUDE: Creating an INT relation of the term form invalidates the compiled service,
+	// restoring the primitive service, marked stale; see ReplaceService()
+	Relation intRelation = circleRule.relation;
+	intRelation.typeSignature.atomTypes[circleRule.radiusIndex] = AT_INT;
+	CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
+	ASSERT_UINT32_EQUAL(ServiceGetOperator(ifactService)->type, OPERATOR_MACHINE)
+	ASSERT_TRUE(ServiceIsStale(ifactService))
+
+	// CLAUDE: A new query compiles the same service again, reading the primitive service
+	ASSERT_UINT32_EQUAL(runQueryCountAtom(query, circleRule.circleIndex, circle, &nStored), 2)
+	ASSERT_UINT32_EQUAL(nStored, 1)
+	assertIFactUnion(ifactService);
 	ReleaseFormula(query);
 
 	// Removing the rule removes the cached tuple, and leaves the stored one
 	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
 	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 1)
+	// CLAUDE: and restores the primitive service
+	ASSERT_UINT32_EQUAL(ServiceGetOperator(ifactService)->type, OPERATOR_MACHINE)
+	DropRelation(intRelation);
 	ASSERT_UINT32_EQUAL(TupleStoreRemoveTuple(store, tuple, 0), TUPLE_REMOVED)
 	IFactRelease(circle);
 	teardownCircleRule(&circleRule);

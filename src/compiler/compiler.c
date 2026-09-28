@@ -2319,16 +2319,18 @@ static size8 compileParameterizedQuery(
 			ServiceMarkNotStale(service);
 			continue;
 		}
-		if(variants[i].isReplaced)
-			RemoveService(service);
+		if(variants[i].isReplaced) {
+			// CLAUDE: the primitive service is restored when the compiled service is removed
+			ReplacePrimitiveService(service, variants[i].op);
+		}
 		else {
 			// If a variant re-uses operator of an existing service, wrap it in an IDENTITY operator
 			// so that we can attach a service (an operator can only attach to one Service).
 			if(!IsNullRelation(variants[i].op->relation)) {
 				variants[i].op = CreateIdentityOperator(variants[i].op);
 			}
+			CreateService(service, variants[i].op);
 		}
-		CreateService(service, variants[i].op);
 		nRegisteredServices++;
 
 #ifdef DEBUG_COMPILER

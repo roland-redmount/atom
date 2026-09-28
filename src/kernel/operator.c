@@ -1757,10 +1757,6 @@ void AttachOperator(Operator * op, Relation signature)
 void DetachOperator(Operator * op)
 {
 	ASSERT(!IsNullRelation(op->relation))
-	// TODO: any descendant MACHINE operator that is detached
-	// has been subsumed into a UNION, and must be restored to
-	// the op->relation service
-
 	op->relation = (Relation) {0};
 	CheckOperator(op);
 }

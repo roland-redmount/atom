@@ -941,8 +941,12 @@ void testCompileRecursiveJoin2(void)
 
 	// Removing the service also drops the primitive operator.
 	// NOTE: in normal usage, we would not remove the service, but invalidate the rule.
+	// The primitive service that was replaced by the compiled service is restored, marked
+	// stale; see ReplaceService()
 	RemoveService(service);
-	ASSERT_NULL(ServiceGetOperator(service))
+	ASSERT_PTR_EQUAL(ServiceGetOperator(service), storeOperator)
+	ASSERT_TRUE(ServiceIsStale(service))
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 
 	ReleaseFormula(queryTerm);
 	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
