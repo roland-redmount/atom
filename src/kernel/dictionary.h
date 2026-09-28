@@ -61,6 +61,11 @@ void DictionaryRemoveClause(FormulaView * clause);
 bool IsIFactRule(Atom formula);
 
 /**
+ * Index of the generator in the actors of an ifact rule.
+ */
+index8 IFactRuleFindGeneratorIndex(TypedTuple const * actors);
+
+/**
  * Add an ifact rule to the dictionary. The formula must be a valid ifact rule;
  * see IsIFactRule(). Two ifact rules are equal if they have the same term form and the
  * generator in the same role, so variable names do not matter. An ifact rule equal to

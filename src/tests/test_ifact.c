@@ -86,6 +86,9 @@ static void setupCircleFixture(CircleFixture * fixture)
  */
 static void teardownCircleFixture(CircleFixture * fixture)
 {
+	// CLAUDE: The IFACT operator of the fixture is not compiled from an ifact rule,
+	// so its cached ifacts are released here
+	IFactReleaseCached(fixture->store, fixture->circleIndex);
 	RemoveService(fixture->byIdService);
 	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture->store), 0)
 	ASSERT_TRUE(ServiceGetOperator(fixture->ifactService) == 0)
@@ -146,7 +149,6 @@ void testIFactOperator(void)
 	ReleaseFormula(fact);
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(circle5), 1)
 
-	// Removing the IFACT service removes the cached ifacts
 	teardownCircleFixture(&fixture);
 	ASSERT_UINT32_EQUAL(IFactTotalCount(), nIFacts)
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledServices)
@@ -166,6 +168,26 @@ static size32 runQuery(Atom query, TypedTuple ** lastTuple)
 		if(*lastTuple)
 			FreeTypedTuple(*lastTuple);
 		*lastTuple = CreateTupleFromTuple(MixedTypeRelationPeekTuple(relation));
+		nTuples++;
+	}
+	FreeMixedTypeRelation(relation);
+	return nTuples;
+}
+
+
+/**
+ * CLAUDE: Run a query and count the tuples having the given atom at the given index.
+ * Returns the total number of tuples.
+ */
+static size32 runQueryCountAtom(Atom query, index8 index, Atom atom, size32 * nMatching)
+{
+	MixedTypeRelation * relation = UserQuery(FormulaGetView(query));
+	size32 nTuples = 0;
+	*nMatching = 0;
+	while(MixedTypeRelationNext(relation)) {
+		TypedTuple const * tuple = MixedTypeRelationPeekTuple(relation);
+		if(SameAtoms(TypedTupleGetElement(tuple, index).atom, atom))
+			(*nMatching)++;
 		nTuples++;
 	}
 	FreeMixedTypeRelation(relation);
@@ -241,18 +263,18 @@ void testIFactRuleInvalidation(void)
 
 	// The existing IFACT service is removed
 	ASSERT_TRUE(ServiceGetOperator(fixture.ifactService) == 0)
-	// The cached tuple is removed from the TupleStore
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 1)
+	// the cached tuple is kept; normally released by DictionaryRemoveIFactRule()
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 2)
 	// The primitive service from the B-tree provider is marked stale
 	ASSERT_TRUE(ServiceIsStale(fixture.byIdService))
 
 	// A query on the relation still yields the stored fact,
 	// by marking the pritmitive service non-stale
 	Atom query = CStringToTerm("circle x radius r");
-	TypedTuple * lastTuple;
-	ASSERT_UINT32_EQUAL(runQuery(query, &lastTuple), 1)
-	ASSERT_TRUE(SameAtoms(TypedTupleGetElement(lastTuple, fixture.circleIndex).atom, circle))
-	FreeTypedTuple(lastTuple);
+	// CLAUDE: the query also yields the cached tuple
+	size32 nStored;
+	ASSERT_UINT32_EQUAL(runQueryCountAtom(query, fixture.circleIndex, circle, &nStored), 2)
+	ASSERT_UINT32_EQUAL(nStored, 1)
 	ReleaseFormula(query);
 
 	// A relation of the term form created after the rule has stale primitive services
@@ -269,9 +291,254 @@ void testIFactRuleInvalidation(void)
 	DropRelation(intRelation);
 
 	DictionaryRemoveIFactRule(&ifactRule);
+	// CLAUDE: removing the rule releases the cached tuple
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 1)
 	ASSERT_UINT32_EQUAL(TupleStoreRemoveTuple(fixture.store, tuple, 0), TUPLE_REMOVED)
 	IFactRelease(circle);
 	teardownCircleFixture(&fixture);
+}
+
+
+/**
+ * CLAUDE: The term form (circle radius) with the column index of each role, and the
+ * relation (circle ID radius FLOAT), for tests compiling the ifact rule (circle * radius r).
+ */
+typedef struct s_CircleRule {
+	Atom termForm;
+	index8 circleIndex;
+	index8 radiusIndex;
+	Relation relation;
+	FormulaView ifactRule;
+} CircleRule;
+
+
+static void setupCircleRule(CircleRule * circleRule)
+{
+	circleRule->termForm = CreateTermFormFromRoleNames((char const * []) {"circle", "radius"}, 2, true);
+	circleRule->circleIndex = findRoleIndex(circleRule->termForm, "circle");
+	circleRule->radiusIndex = findRoleIndex(circleRule->termForm, "radius");
+	byte atomTypes[2];
+	atomTypes[circleRule->circleIndex] = AT_ID;
+	atomTypes[circleRule->radiusIndex] = AT_FLOAT;
+	circleRule->relation = (Relation) {
+		.form = circleRule->termForm,
+		.typeSignature = CreateTypeSignature(atomTypes, 2)
+	};
+	Atom rule = CStringToTerm("circle * radius r");
+	circleRule->ifactRule = DictionaryAddIFactRule(rule);
+	ReleaseFormula(rule);
+}
+
+
+/**
+ * CLAUDE: Drop the relation and release the term form. The caller must remove the ifact rule
+ * first, which releases the cached ifacts.
+ */
+static void teardownCircleRule(CircleRule * circleRule)
+{
+	if(RelationExists(circleRule->relation))
+		DropRelation(circleRule->relation);
+	IFactRelease(circleRule->termForm);
+}
+
+
+static Service createCircleRuleService(CircleRule const * circleRule, byte circleIO, byte radiusIO)
+{
+	byte parameterIO[2];
+	parameterIO[circleRule->circleIndex] = circleIO;
+	parameterIO[circleRule->radiusIndex] = radiusIO;
+	return (Service) {
+		.relation = circleRule->relation,
+		.ioSignature = CreateIOSignature(parameterIO, 2)
+	};
+}
+
+
+/**
+ * CLAUDE: Count the operators of the given type in an operator graph.
+ */
+static size32 countOperators(Operator const * op, enum OperatorType type)
+{
+	size32 count = (op->type == type) ? 1 : 0;
+	for(index8 i = 0; i < OperatorNChildren(op); i++)
+		count += countOperators(OperatorGetChild(op, i), type);
+	return count;
+}
+
+
+/**
+ * CLAUDE: The query (circle c radius 5.0) compiles to an IFACT operator from the ifact rule
+ * (circle * radius r), creating the relation (circle ID radius FLOAT).
+ */
+void testCompileIFactRule(void)
+{
+	CircleRule circleRule;
+	setupCircleRule(&circleRule);
+	size32 nIFacts = IFactTotalCount();
+	ASSERT_FALSE(RelationExists(circleRule.relation))
+
+	Atom query = CStringToTerm("circle c radius 5.0");
+	TypedTuple * tuple;
+	ASSERT_UINT32_EQUAL(runQuery(query, &tuple), 1)
+	TypedAtom circle = TypedTupleGetElement(tuple, circleRule.circleIndex);
+	ASSERT_UINT32_EQUAL(circle.type, AT_ID)
+	FreeTypedTuple(tuple);
+
+	Service ifactService = createCircleRuleService(&circleRule, PARAMETER_OUT, PARAMETER_IN);
+	ASSERT_UINT32_EQUAL(countOperators(ServiceGetOperator(ifactService), OPERATOR_IFACT), 1)
+	TupleStore * store = RelationGetTupleStore(circleRule.relation);
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 1)
+	ASSERT_UINT32_EQUAL(IFactTotalCount(), nIFacts + 1)
+
+	// A second query yields the same circle
+	ASSERT_UINT32_EQUAL(runQuery(query, &tuple), 1)
+	ASSERT_TRUE(SameTypedAtoms(TypedTupleGetElement(tuple, circleRule.circleIndex), circle))
+	FreeTypedTuple(tuple);
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(circle.atom), 1)
+	ReleaseFormula(query);
+
+	// Query the cached tuple by its ID
+	Atom variablesQuery = CStringToTerm("circle c radius r");
+	FormulaView variablesView = FormulaGetView(variablesQuery);
+	TypedAtom actors[2];
+	for(index8 i = 0; i < 2; i++)
+		actors[i] = TypedTupleGetElement(variablesView.actors, i);
+	actors[circleRule.circleIndex] = circle;
+	Atom byIdQuery = CreateFormulaFromArray(FormulaGetForm(variablesQuery), actors);
+	ASSERT_UINT32_EQUAL(runQuery(byIdQuery, &tuple), 1)
+	ReleaseFormula(byIdQuery);
+	TypedAtom radius = TypedTupleGetElement(tuple, circleRule.radiusIndex);
+	ASSERT_TRUE(radius.atom._float == 5.0)
+	FreeTypedTuple(tuple);
+
+	// A query with the radius as output reads the stored tuples, with no IFACT operator
+	ASSERT_UINT32_EQUAL(runQuery(variablesQuery, &tuple), 1)
+	FreeTypedTuple(tuple);
+	ReleaseFormula(variablesQuery);
+	Service allOutputService = createCircleRuleService(&circleRule, PARAMETER_OUT, PARAMETER_OUT);
+	ASSERT_UINT32_EQUAL(countOperators(ServiceGetOperator(allOutputService), OPERATOR_IFACT), 0)
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 1)
+
+	// Removing the rule removes the IFACT service and the cached ifact
+	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
+	ASSERT_TRUE(ServiceGetOperator(ifactService) == 0)
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 0)
+	ASSERT_UINT32_EQUAL(IFactTotalCount(), nIFacts)
+	teardownCircleRule(&circleRule);
+}
+
+
+/**
+ * CLAUDE: With both the ifact rule (circle * radius r) and the clause
+ * (circle c radius r | ! disk c size r), the query (circle c radius 5.0) compiles to a UNION
+ * of the IFACT operator and the clause, yielding the ifact circle and the disk "d".
+ */
+void testCompileIFactRuleWithClause(void)
+{
+	CircleRule circleRule;
+	setupCircleRule(&circleRule);
+	Atom diskFact = CStringToTerm("disk \"d\" size 5.0");
+	ASSERT_INT32_EQUAL(AssertFormula(diskFact), ASSERT_OK)
+	index8 diskIndex = findRoleIndex(FormulaGetForm(diskFact), "disk");
+	Atom disk = TypedTupleGetElement(FormulaGetView(diskFact).actors, diskIndex).atom;
+	FormulaView clause = DictionaryAddClauseFromCString("circle c radius r | ! disk c size r");
+
+	Atom query = CStringToTerm("circle c radius 5.0");
+	size32 nDisks;
+	ASSERT_UINT32_EQUAL(runQueryCountAtom(query, circleRule.circleIndex, disk, &nDisks), 2)
+	ASSERT_UINT32_EQUAL(nDisks, 1)
+	// A second query yields the same tuples, and caches no new ifact
+	ASSERT_UINT32_EQUAL(runQueryCountAtom(query, circleRule.circleIndex, disk, &nDisks), 2)
+	ASSERT_UINT32_EQUAL(nDisks, 1)
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(RelationGetTupleStore(circleRule.relation)), 1)
+	ReleaseFormula(query);
+
+	DictionaryRemoveClause(&clause);
+	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
+	RetractFact(FormulaGetView(diskFact));
+	DropRelation(RelationFromFact(FormulaGetView(diskFact)));
+	ReleaseFormula(diskFact);
+	teardownCircleRule(&circleRule);
+}
+
+
+/**
+ * CLAUDE: A TupleStore with the ID column last in its index order has a primitive service
+ * (circle >ID radius <FLOAT). The query (circle c radius 5.0) then compiles to a UNION of
+ * the IFACT operator and that service, reading the same TupleStore that the IFACT operator
+ * writes; see unionSetupContext().
+ */
+void testCompileIFactRuleWithSeed(void)
+{
+	CircleRule circleRule;
+	setupCircleRule(&circleRule);
+	index8 indexColumns[2] = {circleRule.radiusIndex, circleRule.circleIndex};
+	TupleStore * store = CreateTupleStore(circleRule.relation, &btreeStorageProvider, 2, indexColumns);
+	Atom circle = CreateStringFromCString("c");
+	Atom tuple[2];
+	tuple[circleRule.circleIndex] = circle;
+	tuple[circleRule.radiusIndex] = (Atom) {._float = 5.0};
+	ASSERT_UINT32_EQUAL(TupleStoreAddTuple(store, tuple, 0), TUPLE_ADDED)
+
+	Atom query = CStringToTerm("circle c radius 5.0");
+	size32 nStored;
+	ASSERT_UINT32_EQUAL(runQueryCountAtom(query, circleRule.circleIndex, circle, &nStored), 2)
+	ASSERT_UINT32_EQUAL(nStored, 1)
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 2)
+	// A second query yields the same tuples, and caches no new ifact
+	ASSERT_UINT32_EQUAL(runQueryCountAtom(query, circleRule.circleIndex, circle, &nStored), 2)
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 2)
+	ReleaseFormula(query);
+
+	// Removing the rule removes the cached tuple, and leaves the stored one
+	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 1)
+	ASSERT_UINT32_EQUAL(TupleStoreRemoveTuple(store, tuple, 0), TUPLE_REMOVED)
+	IFactRelease(circle);
+	teardownCircleRule(&circleRule);
+}
+
+
+/**
+ * CLAUDE: The queries (circle c radius 3.14) and (circle c radius 5) create one relation
+ * each from the ifact rule (circle * radius r). Creating the INT relation invalidates the
+ * IFACT service of the FLOAT relation, but the cached ifact of the FLOAT relation is kept.
+ */
+void testCompileIFactRuleTwoTypes(void)
+{
+	CircleRule circleRule;
+	setupCircleRule(&circleRule);
+	TypedTuple * tuple;
+
+	Atom floatQuery = CStringToTerm("circle c radius 3.14");
+	ASSERT_UINT32_EQUAL(runQuery(floatQuery, &tuple), 1)
+	FreeTypedTuple(tuple);
+	ReleaseFormula(floatQuery);
+	TupleStore * floatStore = RelationGetTupleStore(circleRule.relation);
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(floatStore), 1)
+
+	Atom intQuery = CStringToTerm("circle c radius 5");
+	ASSERT_UINT32_EQUAL(runQuery(intQuery, &tuple), 1)
+	FreeTypedTuple(tuple);
+	ReleaseFormula(intQuery);
+	Relation intRelation = circleRule.relation;
+	intRelation.typeSignature.atomTypes[circleRule.radiusIndex] = AT_INT;
+	TupleStore * intStore = RelationGetTupleStore(intRelation);
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(intStore), 1)
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(floatStore), 1)
+
+	// Both cached circles are found
+	Atom allQuery = CStringToTerm("circle c radius r");
+	ASSERT_UINT32_EQUAL(runQuery(allQuery, &tuple), 2)
+	FreeTypedTuple(tuple);
+	ReleaseFormula(allQuery);
+
+	// Removing the rule releases the cached ifacts of both relations
+	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(floatStore), 0)
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(intStore), 0)
+	DropRelation(intRelation);
+	teardownCircleRule(&circleRule);
 }
 
 
@@ -283,6 +550,10 @@ int main(int argc, char * argv[])
 	ExecuteTest(testIFactOperator);
 	ExecuteTest(testIFactQuery);
 	ExecuteTest(testIFactRuleInvalidation);
+	ExecuteTest(testCompileIFactRule);
+	ExecuteTest(testCompileIFactRuleWithClause);
+	ExecuteTest(testCompileIFactRuleWithSeed);
+	ExecuteTest(testCompileIFactRuleTwoTypes);
 
 	UnloadLibraries();
 	KernelShutdown();

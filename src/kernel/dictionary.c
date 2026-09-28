@@ -2,8 +2,11 @@
 #include "kernel/dictionary.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
+#include "kernel/ifact.h"
 #include "kernel/operator.h"
+#include "kernel/Relation.h"
 #include "kernel/ServiceRegistry.h"
+#include "kernel/TupleStore.h"
 #include "kernel/typedtuple.h"
 #include "lang/formula.h"
 #include "lang/ClauseForm.h"
@@ -41,7 +44,7 @@ static int8 compareEntries(FormulaView const * entry, FormulaView const * entryO
 /**
  * Index of the generator in an actors tuple. A generator must be present.
  */
-static index8 findGeneratorIndex(TypedTuple const * actors)
+index8 IFactRuleFindGeneratorIndex(TypedTuple const * actors)
 {
 	for(index8 i = 0; i < actors->nAtoms; i++) {
 		if(SameTypedAtoms(TypedTupleGetElement(actors, i), generatorAtom))
@@ -64,8 +67,8 @@ static int8 compareIFactRules(FormulaView const * entry, FormulaView const * ent
 		return 1;
 	if(!entryOrKey->actors)
 		return 0;
-	index8 generatorIndex = findGeneratorIndex(entry->actors);
-	index8 keyGeneratorIndex = findGeneratorIndex(entryOrKey->actors);
+	index8 generatorIndex = IFactRuleFindGeneratorIndex(entry->actors);
+	index8 keyGeneratorIndex = IFactRuleFindGeneratorIndex(entryOrKey->actors);
 	if(generatorIndex < keyGeneratorIndex)
 		return -1;
 	if(generatorIndex > keyGeneratorIndex)
@@ -300,9 +303,41 @@ bool IFactRuleExistsForTermForm(Atom termForm)
 }
 
 
+/**
+ * Release the cached ifacts created by IFACT operators compiled from an ifact rule.
+ * These are the cached ifacts in the TupleStore of each relation of the term form of the
+ * rule, with the ID column at the generator of the rule; see IFactReleaseCached().
+ */
+static void releaseIFactRuleCache(FormulaView const * ifactRule)
+{
+	index8 idColumn = IFactRuleFindGeneratorIndex(ifactRule->actors);
+	// Collect the relations first, since releasing an ifact may alter the relation registry
+	ResizingArray relations;
+	CreateResizingArray(&relations, sizeof(Relation), 4);
+	RelationIterator iterator;
+	RelationRegistryIterate(ifactRule->form, &iterator);
+	while(RelationIteratorNext(&iterator)) {
+		Relation relation = RelationIteratorGet(&iterator);
+		ResizingArrayAppend(&relations, &relation);
+	}
+	RelationIteratorEnd(&iterator);
+
+	for(index32 i = 0; i < relations.nElements; i++) {
+		Relation const * relation = ResizingArrayGetElement(&relations, i);
+		TupleStore * store = RelationGetTupleStore(*relation);
+		if(store)
+			IFactReleaseCached(store, idColumn);
+	}
+	FreeResizingArray(&relations);
+}
+
+
 void DictionaryRemoveIFactRule(FormulaView * ifactRule)
 {
-	// CLAUDE: invalidate before the entry goes, since the term form is released with it
+	// We release the cache while the IFACT services still exist, since releasing an
+	// ifact reads its TupleStore by the ID column; see IFactSetupStoreOperator()
+	releaseIFactRuleCache(ifactRule);
+	// Invalidate before the entry is removed, since the term form is released with it
 	InvalidateTermFormServices(ifactRule->form, INVALIDATE_BY_RULE);
 	ASSERT(BTreeDelete(dictionary.ifactRules, ifactRule, 0) == BTREE_DELETED)
 }
@@ -311,6 +346,12 @@ void DictionaryRemoveIFactRule(FormulaView * ifactRule)
 void DictionaryRemoveAll(void)
 {
 	BTreeClear(dictionary.btree);
+	// Release the cached ifacts of each ifact rule; see DictionaryRemoveIFactRule()
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, dictionary.ifactRules);
+	while(BTreeIteratorNext(&iterator))
+		releaseIFactRuleCache(BTreeIteratorPeekItem(&iterator));
+	BTreeIteratorEnd(&iterator);
 	BTreeClear(dictionary.ifactRules);
 	RemoveAllCompiledServices();
 }

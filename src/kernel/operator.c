@@ -836,8 +836,6 @@ static void unionSetupContext(OperatorContext * context)
 	// both child operators write to the arguments tuple
 	unionContext->lookaheadContext = createContext(
 		context, context->op->impl._union.first, context->arguments);
-	unionContext->nextContext = createContext(
-		context, context->op->impl._union.second, context->arguments);
 	// Obtain the lookahead tuple
 	if(OperatorCall(unionContext->lookaheadContext)) {
 		CopyMemory(context->arguments, unionContext->lookahead, context->op->nArguments * sizeof(Atom));
@@ -846,7 +844,13 @@ static void unionSetupContext(OperatorContext * context)
 		// No lookahead
 		OperatorFreeContext(unionContext->lookaheadContext);
 		unionContext->lookaheadContext = 0;
-	}	
+	}
+	// CLAUDE: The second context is created after the first child has been called, so that
+	// an IFACT operator as the first child can add its tuple to a TupleStore before the
+	// second child reads that TupleStore; see OPERATOR_IFACT. Setting up the second context
+	// only reads the input arguments, which the first child leaves unchanged.
+	unionContext->nextContext = createContext(
+		context, context->op->impl._union.second, context->arguments);
 }
 
 
@@ -1594,9 +1598,8 @@ static bool ifactCall(OperatorContext * context)
 static void teardownIFactOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_IFACT)
-	// Release cached ifacts before the child, since IFactRelease() reads the
-	// TupleStore through the child's service
-	IFactReleaseCached(op->impl.ifact.store, op->impl.ifact.idColumn);
+	// CLAUDE: the cached ifacts are kept; they are released with the ifact rule,
+	// see DictionaryRemoveIFactRule()
 	removeParent(op->impl.ifact.childOperator);
 }
 

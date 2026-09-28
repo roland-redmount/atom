@@ -169,14 +169,13 @@ typedef struct s_OperatorContext OperatorContext;
 	 * The caller binds every argument except the ID column, which is the output. If the ifact
 	 * already exists, IFACT yields the existing tuple. See ifact.h.
 	 *
-	 * A tuple stored by IFACT is a cached result, not an asserted fact. IFACT holds one
-	 * reference to each ifact it has created; see IFactMarkCached(). Removing the IFACT
-	 * operator releases those references.
+	 * A tuple stored by IFACT is a cached result, not an asserted fact. IFACT creates one
+	 * reference to each ifact it has created, to ensure the tuple is kept. These references
+	 * are cleared only when the underlying ifact rule is removed; see DictionaryRemoveIFactRule()
 	 *
 	 * The child operator of IFACT reads the TupleStore with the ID column as the only input.
 	 * IFACT does not directly call this child operator, but it is called from ifact.c when
-	 * removing an ifact; see IFactSetupStoreOperator(). Keeping it as a child ensures that
-	 * the service registry removes the IFACT service befire the chid operator.
+	 * removing an ifact; see IFactSetupStoreOperator().
 	 *
 	 * NOTE: creating an ifact adds a tuple to the TupleStore. A query that reads the same
 	 * TupleStore while IFACT creates a new ifact will fail, since the TupleStore's B-tree

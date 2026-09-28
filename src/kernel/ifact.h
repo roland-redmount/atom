@@ -54,7 +54,7 @@ struct s_IFactHeader {
 #define IFACT_NEW		1
 // header reserved by IFactReserve(), defining facts not yet built
 #define IFACT_RESERVED	2
-// indicates one reference to the ifact is held by the IFACT operator; see IFactMarkCached()
+// indicates one reference to the ifact created by the IFACT operator; see IFactMarkCached()
 #define IFACT_CACHED	4
 
 
