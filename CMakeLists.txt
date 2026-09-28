@@ -137,7 +137,6 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
 	src/storage/StorageProvider.c
     src/storage/RelationBTree.c
 
-	src/library/ifactservice.c
 	src/library/library.c
     src/library/MachineService.c
     src/library/string.c
