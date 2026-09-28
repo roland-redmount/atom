@@ -113,21 +113,15 @@ typedef struct s_OperatorContext OperatorContext;
 	OPERATOR_CONSTRAIN = 6,
 
 	/**
-	 * FIXPOINT evaluates a recursive clause. Its child operator must contains a RECURSE
+	 * FIXPOINT evaluates a recursive clause. Its child operator must contain a RECURSE
 	 * operator as a descendant. It repeatedly applies its child operator to the tuples
 	 * derived so far and accumulates the results in a B-tree, until no new tuples are produced.
-	 * 
-	 * until nothing new
-	 * tuple. The tuples are accumulated in a
-	 * B-tree, which the RECURSE operators in the child subtree read.
-	 *
 	 * Recursion is therefore a loop rather than a cycle in the operator graph, and terminates
 	 * whenever the derived relation is finite.
 	 *
-	 * The child derives the whole relation and so runs with every argument unbound.
-	 * The arguments the caller binds restrict the tuples this operator yields, not
-	 * the ones it derives, which is why one derived relation can serve every
-	 * signature over it.
+	 * The child operator has all outputs, and so enumerates its whole relation.
+	 * The FIXPOINT operator's input arguments are used to restrict the tuples from
+	 * its child operator.
 	 *
 	 * NOTE: nothing here guarantees termination. A relation over an infinite domain
 	 * has no finite fixpoint, and needs the recursive rule guarded by a precondition
