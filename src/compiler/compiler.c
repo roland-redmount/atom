@@ -1746,7 +1746,7 @@ static size8 compileClauses(
 
 	// Iterate over all rules (clauses) with this clause form.
 	DictionaryIterator dictIterator;
-	DictionaryIterate(clauseForm, &dictIterator);
+	DictionaryIterateClauses(clauseForm, &dictIterator);
 	TypedTuple * matchedTermActors = CreateTypedTuple(query->arity);
 	TypedTuple * substClauseActors = CreateTypedTuple(ClauseArity(clauseForm));
 	Atom resolvedParameters[query->arity];

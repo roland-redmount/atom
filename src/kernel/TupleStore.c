@@ -56,11 +56,13 @@ TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provide
 	// may now become dependent on the this relation.
 	size32 nInvalidated = InvalidateTermFormServices(relation.form, INVALIDATE_BY_PRIMITIVE);
 
-	// A primitive service of this relation is stale if there exists a a rule
+	// A primitive service of this relation is stale if there exists a rule
 	// containing the term form. We also check (nInvalidated > 0) for cases where
 	// a dependent operator were added through other means than the compiler,
 	// so that no rule exists; this mainly occurs in test cases.
-	bool primitivesStale = (nInvalidated > 0) || ClauseFormExistsForTermForm(relation.form);
+	bool primitivesStale = (nInvalidated > 0) ||
+		ClauseFormExistsForTermForm(relation.form) ||
+		IFactRuleExistsForTermForm(relation.form);
 
 	// Call the storage provider to setup the relation implementation
 	// and determine the number of readers

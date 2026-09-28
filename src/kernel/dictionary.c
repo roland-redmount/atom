@@ -7,30 +7,70 @@
 #include "kernel/typedtuple.h"
 #include "lang/formula.h"
 #include "lang/ClauseForm.h"
+#include "lang/TermForm.h"
+#include "lang/TypedAtom.h"
 #include "memory/allocator.h"
 #include "parser/ClauseBuilder.h"
 #include "util/ResizingArray.h"
 
 
 struct {
-	// We keep a single B-tree for all entries
+	// B-tree for the clause rules
 	BTree * btree;
+	// B-tree for the ifact rules, ordered by compareIFactRules()
+	BTree * ifactRules;
 } dictionary;
 
 
-static int8 compareEntries(DictionaryEntry const * entry, DictionaryEntry const * entryOrKey)
+static int8 compareEntries(FormulaView const * entry, FormulaView const * entryOrKey)
 {
-	if(entry->clauseForm.hash < entryOrKey->clauseForm.hash)
+	if(entry->form.hash < entryOrKey->form.hash)
 		return -1;
-	else if(entry->clauseForm.hash > entryOrKey->clauseForm.hash)
+	else if(entry->form.hash > entryOrKey->form.hash)
 		return 1;
 	else {
-		if(!entryOrKey->tuple) {
+		if(!entryOrKey->actors) {
 			// no tuple provided
 			return 0;
 		}
-		return TypedTupleCompare(entry->tuple, entryOrKey->tuple);
+		return TypedTupleCompare(entry->actors, entryOrKey->actors);
 	}
+}
+
+
+/**
+ * Index of the generator in an actors tuple. A generator must be present.
+ */
+static index8 findGeneratorIndex(TypedTuple const * actors)
+{
+	for(index8 i = 0; i < actors->nAtoms; i++) {
+		if(SameTypedAtoms(TypedTupleGetElement(actors, i), generatorAtom))
+			return i;
+	}
+	ASSERT(false)
+	return 0;
+}
+
+
+/**
+ * Order ifact rules by term form, then by generator index. A key with no
+ * actors matches every ifact rule of its term form.
+ */
+static int8 compareIFactRules(FormulaView const * entry, FormulaView const * entryOrKey)
+{
+	if(entry->form.hash < entryOrKey->form.hash)
+		return -1;
+	if(entry->form.hash > entryOrKey->form.hash)
+		return 1;
+	if(!entryOrKey->actors)
+		return 0;
+	index8 generatorIndex = findGeneratorIndex(entry->actors);
+	index8 keyGeneratorIndex = findGeneratorIndex(entryOrKey->actors);
+	if(generatorIndex < keyGeneratorIndex)
+		return -1;
+	if(generatorIndex > keyGeneratorIndex)
+		return 1;
+	return 0;
 }
 
 
@@ -40,33 +80,45 @@ static int8 btreeCompareItems(void const * item, void const * itemOrKey, size32 
 }
 
 
+static int8 btreeCompareIFactRules(void const * item, void const * itemOrKey, size32 itemSize)
+{
+	return compareIFactRules(item, itemOrKey);
+}
+
+
 static void btreeFreeItem(void const * item, size32 itemSize)
 {
-	DictionaryEntry const * entry = item;
-	IFactRelease(entry->clauseForm);
-	FreeTypedTuple(entry->tuple);
+	FormulaView const * entry = item;
+	IFactRelease(entry->form);
+	FreeTypedTuple(entry->actors);
 }
 
 
 void SetupDictionary(void)
 {
-	dictionary.btree = BTreeCreate(sizeof(DictionaryEntry), &btreeCompareItems, &btreeFreeItem);
+	dictionary.btree = BTreeCreate(sizeof(FormulaView), &btreeCompareItems, &btreeFreeItem);
+	dictionary.ifactRules = BTreeCreate(sizeof(FormulaView), &btreeCompareIFactRules, &btreeFreeItem);
 }
 
 
 void TeardownDictionary(void)
 {
 	BTreeFree(dictionary.btree);
+	BTreeFree(dictionary.ifactRules);
 }
 
-
-static void setupEntry(DictionaryEntry * entry, Atom clauseForm, TypedTuple const * actors)
+/*
+ * Setup a formula to be stored in the dictionary.
+ * NOTE: this adds a reference to the entry's form and keeps a copy of its actors,
+ * unlike a FormulaView obtained from FormulaGetView()
+ */
+static void setupEntry(FormulaView * entry, Atom clauseForm, TypedTuple const * actors)
 {
-	entry->clauseForm = clauseForm;
+	entry->form = clauseForm;
 	IFactAcquire(clauseForm);
 	TypedTuple * tuple = CreateTypedTuple(actors->nAtoms);
 	TypedTupleCopy(actors, tuple);
-	entry->tuple = tuple;
+	entry->actors = tuple;
 }
 
 
@@ -104,17 +156,14 @@ static void invalidateClauseServices(Atom clauseForm)
  * whether the dictionary holds it. The key is the clause's own form and actors, which
  * compareEntries() only reads, so no entry has to be built to look one up.
  */
-static bool findEntry(Atom clause, DictionaryEntry * entry)
+static bool findEntry(Atom clause, FormulaView * entry)
 {
 	ASSERT(FormulaIsClause(clause))
-	FormulaView clauseView = FormulaGetView(clause);
-	DictionaryEntry key = {
-		.clauseForm = clauseView.form,
-		.tuple = clauseView.actors
-	};
+	FormulaView key = FormulaGetView(clause);
 	if(entry)
 		return BTreeGetItem(dictionary.btree, &key, entry);
-	return BTreeContainsItem(dictionary.btree, &key);
+	else
+		return BTreeContainsItem(dictionary.btree, &key);
 }
 
 
@@ -156,57 +205,136 @@ bool ClauseFormExistsForTermForm(Atom termForm)
 }
 
 
-DictionaryEntry DictionaryAddClause(Atom clause)
+FormulaView DictionaryAddClause(Atom clause)
 {
 	// A clause the dictionary already holds is left as it is. Building an entry for it
 	// would acquire a reference per actor that inserting it would then have to give back,
 	// and would leave the entry it replaced with no owner.
-	DictionaryEntry entry;
+	FormulaView entry;
 	if(findEntry(clause, &entry))
 		return entry;
 
 	FormulaView clauseView = FormulaGetView(clause);
 	setupEntry(&entry, clauseView.form, clauseView.actors);
 	ASSERT(BTreeInsert(dictionary.btree, &entry) == BTREE_INSERTED)
-	invalidateClauseServices(entry.clauseForm);
+	invalidateClauseServices(entry.form);
 	return entry;
 }
 
 
-DictionaryEntry DictionaryAddClauseFromCString(const char * clauseString)
+FormulaView DictionaryAddClauseFromCString(const char * clauseString)
 {
 	Atom rule = CStringToClause(clauseString);
-	DictionaryEntry entry = DictionaryAddClause(rule);
+	FormulaView entry = DictionaryAddClause(rule);
 	ReleaseFormula(rule);	
 	return entry;
 }
 
 
-void DictionaryRemoveClause(DictionaryEntry * entry)
+void DictionaryRemoveClause(FormulaView * clause)
 {
 	// Invalidate before the entry goes: the clause form is released with it, and the
 	// compiled services are stale either way
-	invalidateClauseServices(entry->clauseForm);
-	ASSERT(BTreeDelete(dictionary.btree, entry, 0) == BTREE_DELETED)
+	invalidateClauseServices(clause->form);
+	ASSERT(BTreeDelete(dictionary.btree, clause, 0) == BTREE_DELETED)
+}
+
+
+bool IsIFactRule(Atom formula)
+{
+	if(!FormulaIsTerm(formula))
+		return false;
+	FormulaView view = FormulaGetView(formula);
+	if(!TermFormGetSign(view.form))
+		return false;
+	size8 arity = view.actors->nAtoms;
+	if(arity < 2)
+		return false;
+
+	size8 nGenerators = 0;
+	for(index8 i = 0; i < arity; i++) {
+		TypedAtom actor = TypedTupleGetElement(view.actors, i);
+		if(SameTypedAtoms(actor, generatorAtom)) {
+			nGenerators++;
+			continue;
+		}
+		if(actor.type != AT_VARIABLE)
+			return false;
+		// no variable may be repeated
+		for(index8 j = 0; j < i; j++) {
+			if(SameTypedAtoms(actor, TypedTupleGetElement(view.actors, j)))
+				return false;
+		}
+	}
+	return nGenerators == 1;
+}
+
+
+FormulaView DictionaryAddIFactRule(Atom rule)
+{
+	ASSERT(IsIFactRule(rule))
+	FormulaView key = FormulaGetView(rule);
+	FormulaView entry;
+	if(BTreeGetItem(dictionary.ifactRules, &key, &entry))
+		return entry;
+
+	setupEntry(&entry, key.form, key.actors);
+	ASSERT(BTreeInsert(dictionary.ifactRules, &entry) == BTREE_INSERTED)
+	InvalidateTermFormServices(entry.form, INVALIDATE_BY_RULE);
+	return entry;
+}
+
+
+bool DictionaryContainsIFactRule(Atom rule)
+{
+	ASSERT(IsIFactRule(rule))
+	FormulaView key = FormulaGetView(rule);
+	return BTreeContainsItem(dictionary.ifactRules, &key);
+}
+
+
+bool IFactRuleExistsForTermForm(Atom termForm)
+{
+	FormulaView key = {.form = termForm, .actors = 0};
+	return BTreeContainsItem(dictionary.ifactRules, &key);
+}
+
+
+void DictionaryRemoveIFactRule(FormulaView * ifactRule)
+{
+	// CLAUDE: invalidate before the entry goes, since the term form is released with it
+	InvalidateTermFormServices(ifactRule->form, INVALIDATE_BY_RULE);
+	ASSERT(BTreeDelete(dictionary.ifactRules, ifactRule, 0) == BTREE_DELETED)
 }
 
 
 void DictionaryRemoveAll(void)
 {
 	BTreeClear(dictionary.btree);
+	BTreeClear(dictionary.ifactRules);
 	RemoveAllCompiledServices();
 }
 
 
-void DictionaryIterate(Atom clauseForm, DictionaryIterator * iterator)
+void DictionaryIterateClauses(Atom clauseForm, DictionaryIterator * iterator)
 {
 	ASSERT(IsClauseForm(clauseForm))
-	// size8 arity = ClauseArity(clauseForm);
-	iterator->key =  (DictionaryEntry) {
-		.clauseForm = clauseForm,
-		.tuple = 0
+	iterator->key =  (FormulaView) {
+		.form = clauseForm,
+		.actors = 0
 	};
 	BTreeIterate(&(iterator->btreeIterator), dictionary.btree);
+}
+
+
+void DictionaryIterateIFactRules(Atom termForm, DictionaryIterator * iterator)
+{
+	ASSERT(IsTermForm(termForm))
+	iterator->key = (FormulaView) {
+		.form = termForm,
+		.actors = 0
+	};
+	BTreeIterate(&(iterator->btreeIterator), dictionary.ifactRules);
 }
 
 
@@ -221,7 +349,7 @@ bool DictionaryIteratorNext(DictionaryIterator * iterator)
 		foundItem = BTreeIteratorNext(&(iterator->btreeIterator));
 
 	if(foundItem) {
-		DictionaryEntry const * btreeEntry = BTreeIteratorPeekItem(&(iterator->btreeIterator));
+		FormulaView const * btreeEntry = BTreeIteratorPeekItem(&(iterator->btreeIterator));
 		if(compareEntries(btreeEntry, &iterator->key) == 0)
 			return true;
 	}
@@ -231,8 +359,8 @@ bool DictionaryIteratorNext(DictionaryIterator * iterator)
 
 TypedTuple const * DictionaryIteratorPeekActors(DictionaryIterator * iterator)
 {
-	DictionaryEntry * entry = BTreeIteratorPeekItem(&(iterator->btreeIterator));
-	return entry->tuple;
+	FormulaView * entry = BTreeIteratorPeekItem(&(iterator->btreeIterator));
+	return entry->actors;
 }
 
 

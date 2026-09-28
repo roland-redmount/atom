@@ -56,6 +56,7 @@ static void printHelp(void)
 	printLine("  :assert <term>        Assert a fact. The term must not contain variables.");
 	printLine("  :assert <clause>      Assert a rule. The clause must have at least two terms");
 	printLine("                        and contain at least one variable.");
+	printLine("  :assert <term with *> Assert an ifact rule, such as (circle * radius r).");
 	printLine("  :inspect <formula>    Print the service(s) that the formula dispatches to");
 	printLine("  :retract <term>       Retract a fact. The term must not contain variables.");
 	printLine("  :help                 Print this text.");
@@ -173,6 +174,10 @@ static void printAssertResult(int result)
 
 	case ASSERT_NOT_WRITABLE:
 		printLine("The relation is not writable.");
+		break;
+
+	case ASSERT_INVALID_IFACT:
+		printLine("An ifact rule must be a single term with one generator (*) and distinct variables.");
 		break;
 
 	default:

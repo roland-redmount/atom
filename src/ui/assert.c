@@ -115,16 +115,15 @@ int AssertFormula(Atom formula)
 {
 	FormulaView formulaView = FormulaGetView(formula);
 
-	// Any formula that contains a generator (*) is a defining fact
+	// Any formula that contains a generator (*) is added to the dictionary
+	// as an ifact rule; see IsIFactRule()
 	if(TypedTupleContainsAtom(formulaView.actors, generatorAtom)) {
-		Atom idAtom = CreateIFact(formulaView);
-		if(idAtom.hash) {
-			return ASSERT_OK;
-			// TODO: decide how to manage the reference to the new idAtom.
-			// Somehow the UI "owns it" ...
-		}
-		else
+		if(!IsIFactRule(formula))
 			return ASSERT_INVALID_IFACT;
+		if(DictionaryContainsIFactRule(formula))
+			return ASSERT_EXISTED;
+		DictionaryAddIFactRule(formula);
+		return ASSERT_OK;
 	}
 
 	if(FormulaIsTerm(formula)) {

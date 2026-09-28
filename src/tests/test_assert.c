@@ -119,7 +119,7 @@ void testAssertContradictsStoredFact(void)
 void testAssertContradictsDerivedFact(void)
 {
 	// (! even x) follows from (odd x), so (odd 3) entails (! even 3)
-	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
+	FormulaView clause = DictionaryAddClauseFromCString("! even x | ! odd x");
 
 	Atom odd3 = CStringToTerm("odd 3");
 	FormulaView odd3View = FormulaGetView(odd3);
@@ -149,7 +149,7 @@ void testAssertContradictsDerivedFact(void)
 	DropRelation(RelationFromFact(odd3View));
 	ReleaseFormula(odd3);
 
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 }
 
 
@@ -192,9 +192,30 @@ void testAssertFormulaRule(void)
 
 	// Adding a clause already in the dictionary yields the entry already there,
 	// which is what the rule is removed with
-	DictionaryEntry entry = DictionaryAddClause(rule);
-	DictionaryRemoveClause(&entry);
+	FormulaView clause = DictionaryAddClause(rule);
+	DictionaryRemoveClause(&clause);
 	ASSERT_FALSE(DictionaryContainsClause(rule))
+	ReleaseFormula(rule);
+}
+
+
+/**
+ * A term holding a generator is an ifact rule, and asserting it adds the rule
+ * to the dictionary. A formula with a generator that is not an ifact rule is refused.
+ */
+void testAssertFormulaIFactRule(void)
+{
+	Atom rule = CStringToTerm("circle * radius r");
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+	ASSERT_TRUE(DictionaryContainsIFactRule(rule))
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_EXISTED)
+
+	Atom invalidRule = CStringToTerm("circle * radius 5.0");
+	ASSERT_INT32_EQUAL(AssertFormula(invalidRule), ASSERT_INVALID_IFACT)
+	ReleaseFormula(invalidRule);
+
+	FormulaView ifactRule = DictionaryAddIFactRule(rule);
+	DictionaryRemoveIFactRule(&ifactRule);
 	ReleaseFormula(rule);
 }
 
@@ -559,6 +580,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertContradictsDerivedFact);
 	ExecuteTest(testAssertFormulaFact);
 	ExecuteTest(testAssertFormulaRule);
+	ExecuteTest(testAssertFormulaIFactRule);
 	ExecuteTest(testAssertFormulaRejects);
 	ExecuteTest(testCreateIFactTerm);
 	ExecuteTest(testCreateIFactIdColumnNotFirst);

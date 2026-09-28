@@ -1,3 +1,4 @@
+#include "kernel/dictionary.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/MixedTypeRelation.h"
@@ -10,6 +11,7 @@
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
 #include "library/library.h"
+#include "library/string.h"
 #include "parser/TermBuilder.h"
 #include "storage/RelationBTree.h"
 #include "testing/fixtures.h"
@@ -210,6 +212,69 @@ void testIFactQuery(void)
 }
 
 
+/**
+ * Adding an ifact rule invalidates services of its term form, as with adding a clause.
+ * Compiled services are removed, including an IFACT service, and primitive services are
+ * marked stale, also for a relation created after the rule.
+ */
+void testIFactRuleInvalidation(void)
+{
+	// Create a fixture with a B-tree storage and a service using an IFACT operator
+	CircleFixture fixture;
+	setupCircleFixture(&fixture);
+	// Evaluate the IFACT operator, caching a tuple
+	callCircleIFact(&fixture, 5.0);
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 1)
+
+	// Add a stored tuple (circle "c" radios 7.0)
+	Atom circle = CreateStringFromCString("c");
+	Atom tuple[2];
+	tuple[fixture.circleIndex] = circle;
+	tuple[fixture.radiusIndex] = (Atom) {._float = 7.0};
+	ASSERT_UINT32_EQUAL(TupleStoreAddTuple(fixture.store, tuple, 0), TUPLE_ADDED)
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 2)
+
+	// Add the ifact rule (circle * radius r), invalidating existing services
+	Atom rule = CStringToTerm("circle * radius r");
+	FormulaView ifactRule = DictionaryAddIFactRule(rule);
+	ReleaseFormula(rule);
+
+	// The existing IFACT service is removed
+	ASSERT_TRUE(ServiceGetOperator(fixture.ifactService) == 0)
+	// The cached tuple is removed from the TupleStore
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 1)
+	// The primitive service from the B-tree provider is marked stale
+	ASSERT_TRUE(ServiceIsStale(fixture.byIdService))
+
+	// A query on the relation still yields the stored fact,
+	// by marking the pritmitive service non-stale
+	Atom query = CStringToTerm("circle x radius r");
+	TypedTuple * lastTuple;
+	ASSERT_UINT32_EQUAL(runQuery(query, &lastTuple), 1)
+	ASSERT_TRUE(SameAtoms(TypedTupleGetElement(lastTuple, fixture.circleIndex).atom, circle))
+	FreeTypedTuple(lastTuple);
+	ReleaseFormula(query);
+
+	// A relation of the term form created after the rule has stale primitive services
+	Relation intRelation = {
+		.form = fixture.termForm,
+		.typeSignature = fixture.relation.typeSignature
+	};
+	intRelation.typeSignature.atomTypes[fixture.radiusIndex] = AT_INT;
+	TupleStore * intStore = CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
+	byte parameterIO[2] = {PARAMETER_OUT, PARAMETER_OUT};
+	Service intService = {.relation = intRelation, .ioSignature = CreateIOSignature(parameterIO, 2)};
+	ASSERT_TRUE(ServiceIsStale(intService))
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(intStore), 0)
+	DropRelation(intRelation);
+
+	DictionaryRemoveIFactRule(&ifactRule);
+	ASSERT_UINT32_EQUAL(TupleStoreRemoveTuple(fixture.store, tuple, 0), TUPLE_REMOVED)
+	IFactRelease(circle);
+	teardownCircleFixture(&fixture);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -217,6 +282,7 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testIFactOperator);
 	ExecuteTest(testIFactQuery);
+	ExecuteTest(testIFactRuleInvalidation);
 
 	UnloadLibraries();
 	KernelShutdown();
