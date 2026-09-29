@@ -1,11 +1,12 @@
 /**
  * A list stores a sequence of n elements with positions 1, 2, ..., n.
+ * A list is an AT_ID atom defined by an ifacts over the two relations
+ * (list position element) and (list length).
  * 
- * NOTE: this was a "core" class when a formula was implemented a pair
- * of a form and and a list of actors. It was then untyped and stored
- * arbitrary elements. The new version is typed, and so there may be
- * multiple relation tables, one for each element type (esssentially
- * a typed array).
+ * TODO: currently, all elements in a list must be of the same atom type, since
+ * we have a single (list:ID position:INT element:T) relation in the ifact with
+ * a single type T. Generalizing this would require including multiple relations
+ * for various types T.
  */
 
 #ifndef LIST_H
@@ -38,26 +39,11 @@ Atom CreateList(ListElementGenerator generator, void const * data, byte elementT
  */
 Atom CreateListFromArray(Atom const listElements[], byte elementType, size8 nAtoms);
 
-// Atom CreateListFromTuple(TypedTuple const * tuple);
-
 /**
  * Add list ifacts obtained from the generator to an exising IFact draft.
- * TODO: this now assumes the element type is AT_LETTER. We need to take element type
- * as a parameter and use the corresponding (typed) relation table.
  */
 void AddListToIFact(
 	IFactDraft * draft, ListElementGenerator generator, void const * data, byte elementType, size32 nElements);
-
-
-/**
- * Begin a draft list, for stepwise construction.
- */
-void ListBegin(IFactDraft * draft);
-
-/**
- * Finalize a draft list, returning the completed list atom.
- */
-Atom ListEnd(IFactDraft * draft);
 
 /**
  * An atom @a "is a list" if there exists a fact (list @a length _).
@@ -156,8 +142,6 @@ index8 const * GetListLengthRoleIndex(void);
  */
 Relation GetListRelation(byte elementType);
 
-// RelationWriter * GetListRelationTable(byte elementType);
-
 /**
  * The service (list <ID position >INT element >elementType) of the relation
  * returned by GetListRelation()
@@ -165,8 +149,6 @@ Relation GetListRelation(byte elementType);
 Operator * GetListOperator(byte elementType);
 
 Relation GetListLengthRelation(void);
-
-// RelationWriter * GetListLengthRelationTable(void);
 
 /**
  * The service (list <ID length >INT)

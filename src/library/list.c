@@ -142,17 +142,7 @@ Operator * GetListLengthOperator(void)
  * Create an immutable list defined by an ifact,
  * storing the array of characters in a relation table.
  * 
- * TODO: the (list length) fact could be computed rather than explicit?
- * 
- * For lists defined by the below function, the elements must always be completely known
- * as they are identifying facts. They cannot be altered after the list IFact is created,
- * and so (list length) is also fixed.
- * 
- * However, the (list position element) table can also contain
- * list atoms that are not defined by this table. In this case, elements may be unknown
- * and the (list position element) table may be altered over time. We must then take
- * care to keep (list length) valid. This should be handled by logical consistency checks,
- * but those are not workable for "core" tables so we must check explicitly.
+ * QUESTION: the (list length) fact could be computed rather than explicit?
  */
 
 Atom CreateList(ListElementGenerator generator, void const * data, byte elementType, size32 nElements)
@@ -164,7 +154,9 @@ Atom CreateList(ListElementGenerator generator, void const * data, byte elementT
 }
 
 
-// assert (list length) fact
+/**
+ * Create the (list length) ifact
+ */
 static void assertListLength(IFactDraft * draft, size32 nElements)
 {
 	IFactBeginConjunction(draft, listLengthTupleStore, listLengthRoleIndex[0]);
@@ -176,6 +168,9 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 }
 
 
+/**
+ * Add the identifying facts for a list to the given draft ifact.
+ */
 void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void const * data, byte elementType, size32 nElements)
 {
 	if(nElements > 0) {
@@ -192,29 +187,6 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 		IFactEndConjunction(draft);
 	}
 	assertListLength(draft, nElements);
-}
-
-
-void ListBegin(IFactDraft * draft)
-{
-	IFactBegin(draft);
-}
-
-
-Atom ListEnd(IFactDraft * draft)
-{
-	size32 nElements;
-	if(draft->hasBegunConjunction) {
-		// end (ĺist position elements)
-		nElements = IFactEndConjunction(draft);
-	}
-	else {
-		// no elements were added, create the empty list
-		nElements = 0;
-	}
-	assertListLength(draft, nElements);
-
-	return IFactEnd(draft);
 }
 
 
@@ -403,7 +375,7 @@ void ListIteratorEnd(ListIterator * iterator)
 
 void PrintList(Atom list)
 {
-	PrintCString("LIST{");
+	PrintCString("{");
 	Relation relation = findListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 	byte elementType = relation.typeSignature.atomTypes[listRoleIndex[2]];
