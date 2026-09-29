@@ -113,7 +113,7 @@ void CreateRelationBootstrap(Relation relation, Atom predicateForm);
 
 /**
  * Create a relation from a term, whose actors must be parameters, e.g.
- * for example (+ @1<INT + @2<INT = @3>INT)
+ * for example (+ #1<INT + #2<INT = #3>INT)
  * The IO direction of each parameter is ignored.
  */
 Relation CreateRelationFromTerm(Atom term);

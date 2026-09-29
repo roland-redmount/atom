@@ -18,7 +18,6 @@
 
 // NOTE: These are currently needed for printing. See PrintTypedAtom()
 #include "library/list.h"
-#include "library/pair.h"
 #include "library/string.h"
 
 
@@ -162,10 +161,7 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		// string representations, so there is no straightforward switch/case.
 		// Here we somewhat arbitrarily try the "most specific" type predicate first
 		
-		if(IsPair(typedAtom.atom)) {
-			PrintPair(typedAtom.atom);
-		}
-		else if(IsList(typedAtom.atom)) {
+		if(IsList(typedAtom.atom)) {
 			if(IsString(typedAtom.atom))
 				PrintString(typedAtom.atom);
 			else

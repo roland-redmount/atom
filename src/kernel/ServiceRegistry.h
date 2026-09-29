@@ -18,7 +18,7 @@
  * operator of this graph. 
  * The operator takes as many arguments as there are unique parameters, and the EqualitySignature
  * indicates columns that map to the same parameter. For example, the service
- * (edge @1<ID from @2<ID to @2>ID) has 3 parameters but only 2 unique parameters,
+ * (edge #1<ID from #2<ID to #2>ID) has 3 parameters but only 2 unique parameters,
  * and its root operator then takes 2 arguments; its EqualitySignature is {0, 0, 2},
  * where each element is 0 if the parameter occurs for the first time at that position,
  * or else the 1-based position of the first occurence. This format allows us to encode

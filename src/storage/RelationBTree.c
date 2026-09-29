@@ -141,9 +141,9 @@ byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint
  * ignored by the B-tree comparison function.
  * 
  * NOTE: This does not support queries with repeated variables like (a x b y z y) !
- * For this, the operator must identify parameters, e.g. (a @1 b @2 c @2) so that
+ * For this, the operator must identify parameters, e.g. (a #1 b #2 c #2) so that
  * we can check for equality.
- * We might handle this with a permutation, (a @1 b@1) <- (a @1 b @2 c @2) ?
+ * We might handle this with a permutation, (a #1 b#1) <- (a #1 b #2 c #2) ?
  * Not clear to me if there is a value in having operators with repeated parameters
  * (as opposed to rules with repeated variables, which is necessary for joins).
  */

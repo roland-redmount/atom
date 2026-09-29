@@ -1,5 +1,6 @@
 
 #include "kernel/float.h"
+#include "kernel/ifact.h"
 #include "kernel/Int.h"
 #include "lang/Variable.h"
 #include "kernel/kernel.h"
@@ -100,6 +101,19 @@ static void testTokenizer(void)
 		ASSERT_CHAR_EQUAL(LetterToChar(letter, LETTER_LOWERCASE), nameString[i])
 	}
 	ReleaseToken(token);
+
+	// a string holds ASCII letters only, and at least one letter
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '"'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'a'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '1'), TOKENIZER_REJECTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, ' '), TOKENIZER_REJECTED)
+	// the first byte of the UTF-8 character å
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, (char) 0xC3), TOKENIZER_REJECTED)
+
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '"'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '"'), TOKENIZER_REJECTED)
 
 	char const * integerString = "12345";
 	token = tokenizeCString(&tokenizer, integerString, TOKENIZER_ACTOR_STATE);
@@ -273,34 +287,82 @@ static void testTokenizeParameter(void)
 	Tokenizer tokenizer;
 	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
 
-	Token token = tokenizeCString(&tokenizer, "@1<INT", TOKENIZER_ACTOR_STATE);
+	Token token = tokenizeCString(&tokenizer, "#1<INT", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_PARAMETER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_PARAMETER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.number, 1)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.io, PARAMETER_IN)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.atomType, AT_INT)
 
-	token = tokenizeCString(&tokenizer, "@2>ID", TOKENIZER_ACTOR_STATE);
+	token = tokenizeCString(&tokenizer, "#2>ID", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_PARAMETER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.number, 2)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.io, PARAMETER_OUT)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.atomType, AT_ID)
 
 	// a parameter number of more than one digit
-	token = tokenizeCString(&tokenizer, "@12<NAME", TOKENIZER_ACTOR_STATE);
+	token = tokenizeCString(&tokenizer, "#12<NAME", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.number, 12)
 
-	// A parameter number is 1-based, so @0 is not a parameter
+	// A parameter number is 1-based, so #0 is not a parameter
 	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
-	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '@'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '#'), TOKENIZER_ACCEPTED)
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '0'), TOKENIZER_ACCEPTED)
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '<'), TOKENIZER_REJECTED)
 
 	// neither is a parameter without a number
 	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
-	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '@'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '#'), TOKENIZER_ACCEPTED)
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '<'), TOKENIZER_REJECTED)
 
+	TokenizerFree(&tokenizer);
+}
+
+
+/*
+ * CLAUDE: An AT_ID atom is written as @ followed by the ID_HASH_LENGTH hex digits of its hash.
+ */
+static void testTokenizeID(void)
+{
+	Tokenizer tokenizer;
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
+	Atom string = CreateStringFromCString("abc");
+	char idString[ID_HASH_LENGTH + 2];
+	FormatString(idString, sizeof(idString), "@%016llx", (unsigned long long) string.hash);
+
+	// the token holds a reference to the AT_ID atom until the token is released
+	uint32 referenceCount = IFactReferenceCount(string);
+	Token token = tokenizeCString(&tokenizer, idString, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_ID)
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_ID)
+	ASSERT_UINT64_EQUAL(token.typedAtom.atom.hash, string.hash)
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(string), referenceCount + 1)
+	ReleaseToken(token);
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(string), referenceCount)
+
+	// a separator completes the token, and is left for the next token
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	pushCString(&tokenizer, idString);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, ']'), TOKENIZER_ENDED)
+	ReleaseToken(TokenizerGetToken(&tokenizer));
+
+	// a hash with a digit missing
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	for(index32 i = 0; i < ID_HASH_LENGTH; i++)
+		ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, idString[i]), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 0), TOKENIZER_REJECTED)
+
+	// a hash with a digit too many
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	pushCString(&tokenizer, idString);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '0'), TOKENIZER_REJECTED)
+
+	// a hash naming no stored AT_ID atom
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	pushCString(&tokenizer, "@0000000000000000");
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 0), TOKENIZER_REJECTED)
+
+	IFactRelease(string);
 	TokenizerFree(&tokenizer);
 }
 
@@ -314,7 +376,7 @@ static void testCreateTokenFromCString(void)
 
 	// A token running to the end of the string is completed by the terminator.
 	// The atom type of a parameter comes last, so it is what a missing one loses.
-	token = CreateTokenFromCString("@1<INT", TOKENIZER_ACTOR_STATE);
+	token = CreateTokenFromCString("#1<INT", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_PARAMETER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.number, 1)
 	ASSERT_UINT32_EQUAL(token.typedAtom.atom.parameter.io, PARAMETER_IN)
@@ -438,6 +500,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testTokenizerInput);
 	ExecuteTest(testModeFollowsToken);
 	ExecuteTest(testTokenizeParameter);
+	ExecuteTest(testTokenizeID);
 	ExecuteTest(testCreateTokenFromCString);
 	ExecuteTest(testSeparatorTerminatesToken);
 

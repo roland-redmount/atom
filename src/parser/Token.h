@@ -23,6 +23,7 @@ enum TokenType {
 	TOKEN_BEGIN_REFLECT,	// begin a reflection block
 	TOKEN_END_REFLECT,		// end a reflection block
 	TOKEN_GENERATOR,		// the * generator character
+	TOKEN_ID,				// an AT_ID atom written by its hash, as @ and 16 hex digits
 };
 
 typedef struct s_Token {

@@ -300,7 +300,7 @@ static void testClauseBuilder(void)
  */
 static void testCStringToSignature(void)
 {
-	Atom signature = CStringToTerm("+ @1<INT + @2<INT = @3>INT");
+	Atom signature = CStringToTerm("+ #1<INT + #2<INT = #3>INT");
 	ASSERT_UINT32_EQUAL(FormulaGetActors(signature)->nAtoms, 3)
 
 	// every actor is a parameter, and the numbers are a permutation of 1..3
@@ -590,12 +590,20 @@ static void testParseFormula(void)
 	ASSERT_UINT64_EQUAL(ParseFormula("foo \"abc", &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 8)
 
+	// a string is reported at its first character that is not a letter
+	ASSERT_UINT64_EQUAL(ParseFormula("foo \"ab1\"", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 7)
+
+	// an empty string is reported at its closing quote
+	ASSERT_UINT64_EQUAL(ParseFormula("foo \"\"", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 5)
+
 	// an unterminated reflection abandons its nested builder
 	ASSERT_UINT64_EQUAL(ParseFormula("foo [ bar 1", &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 11)
 
 	// a parameter naming no known atom type is rejected, not asserted on
-	ASSERT_UINT64_EQUAL(ParseFormula("foo @1<NOTATYPE", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo #1<NOTATYPE", &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 15)
 
 	// a string holding no formula at all
@@ -605,6 +613,22 @@ static void testParseFormula(void)
 	// A quoted variable is rejected outside of a reflections
 	ASSERT_UINT64_EQUAL(ParseFormula("foo ^x bar 42", &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 4)
+
+	// CLAUDE: an AT_ID atom written by its hash is the actor of the formula
+	Atom string = CreateStringFromCString("abc");
+	char formulaString[32];
+	FormatString(formulaString, sizeof(formulaString), "foo @%016llx", (unsigned long long) string.hash);
+	formula = ParseFormula(formulaString, &errorPosition);
+	ASSERT_TRUE(formula.hash != 0)
+	TypedAtom actor = TypedTupleGetElement(FormulaGetView(formula).actors, 0);
+	ASSERT_UINT32_EQUAL(actor.type, AT_ID)
+	ASSERT_UINT64_EQUAL(actor.atom.hash, string.hash)
+	ReleaseFormula(formula);
+	IFactRelease(string);
+
+	// CLAUDE: a hash naming no stored AT_ID atom is reported where the hash ends
+	ASSERT_UINT64_EQUAL(ParseFormula("foo @0000000000000000", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 21)
 }
 
 

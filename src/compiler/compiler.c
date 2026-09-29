@@ -580,7 +580,7 @@ static size8 findInputArguments(
 /**
  * Test whether the given term of repeats an actor everywhere the head term repeats a parameter.
  * Only such a term is recursive, assuming its form is also the same as the heads term's form.
- * For example, with the head term (before @1 after @1), the term (before @2 after @1) is not
+ * For example, with the head term (before #1 after #1), the term (before #2 after #1) is not
  * recursive, since the head term's service cannot enumerate all tuples matching the term.
  */
 static bool termRepeatsHeadTermParameters(ClauseCompileState const * clauseState, index8 termIndex)

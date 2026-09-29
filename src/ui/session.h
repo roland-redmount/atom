@@ -1,16 +1,13 @@
 /**
- * A session answers the lines a user enters, whatever front end reads them.
- *
- * Each line entered is a query: it is parsed to a term, answered by UserQuery(), and every
- * answer is printed as the query with its variables filled in. A line beginning with ':'
- * is a command instead, which is how everything that is not a query is asked for.
- *
- * The world a session starts with holds the core relations and the math services, and
- * whatever the session states with :assert.
- *
- * A session prints to the output stream and reads nothing, so a front end is left with
- * obtaining a line and deciding when to stop. See ui/repl.c for the command line one.
+ * A session takes text strings (lines) that may be queries or commands,
+ * evaluates them and prints responses to stdout.
+ * A line containing a formula is a query. A line beginning with ':' is a command instead.
+ * 
+ * ID atoms received in query results are printed as @number, and the session lets the user
+ * refer to those ID atoms by @number in following input. This number is kept by the session only,
+ * and is not part of the language; see expandIDNumbers() in ui/session.c.
  */
+
 
 #ifndef SESSION_H
 #define SESSION_H

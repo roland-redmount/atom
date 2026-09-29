@@ -40,27 +40,9 @@ static TupleStore * listLengthTupleStore;
 static Operator * listLengthOperator;
 
 
-Atom GetListRoleName(void)
-{
-	return listRoleName;
-}
-
-
 Atom GetListPredicateForm(void)
 {
 	return listPredicateForm;
-}
-
-
-Atom GetListTermForm(void)
-{
-	return listTermForm;
-}
-
-
-Atom GetListLengthPredicateForm(void)
-{
-	return listLengthPredicateForm;
 }
 
 
@@ -138,33 +120,17 @@ Operator * GetListLengthOperator(void)
 }
 
 
-/**
- * Create an immutable list defined by an ifact,
- * storing the array of characters in a relation table.
- * 
- * TODO: the (list length) fact could be computed rather than explicit?
- * 
- * For lists defined by the below function, the elements must always be completely known
- * as they are identifying facts. They cannot be altered after the list IFact is created,
- * and so (list length) is also fixed.
- * 
- * However, the (list position element) table can also contain
- * list atoms that are not defined by this table. In this case, elements may be unknown
- * and the (list position element) table may be altered over time. We must then take
- * care to keep (list length) valid. This should be handled by logical consistency checks,
- * but those are not workable for "core" tables so we must check explicitly.
- */
-
-Atom CreateList(ListElementGenerator generator, void const * data, byte elementType, size32 nElements)
+Atom CreateListFromArray(Atom const elements[], byte elementType, size8 nElements)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
-	AddListToIFact(&draft, generator, data, elementType, nElements);
+	AddListToIFact(&draft, elements, elementType, nElements);
 	return IFactEnd(&draft);
 }
 
-
-// assert (list length) fact
+/**
+ * Create the (list length) ifact
+ */
 static void assertListLength(IFactDraft * draft, size32 nElements)
 {
 	IFactBeginConjunction(draft, listLengthTupleStore, listLengthRoleIndex[0]);
@@ -176,7 +142,10 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 }
 
 
-void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void const * data, byte elementType, size32 nElements)
+/**
+ * Add the identifying facts for a list to the given draft ifact.
+ */
+void AddListToIFact(IFactDraft * draft, Atom const elements[], byte elementType, size32 nElements)
 {
 	if(nElements > 0) {
 		Relation relation = GetListRelation(elementType);
@@ -185,49 +154,14 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 		Atom listElementTuple[3];
 		for(index32 i = 0; i < nElements; i++) {
 			TupleCopyPermuted(
-				(Atom[]) {(Atom) {0}, (Atom) {._int = i + 1}, generator(i, data)},
-				listElementTuple, listRoleIndex, 3);
+				(Atom[]) {(Atom) {0}, (Atom) {._int = i + 1}, elements[i]},
+				listElementTuple, listRoleIndex, 3
+			);
 			IFactAddTuple(draft, listElementTuple);
 		}
 		IFactEndConjunction(draft);
 	}
 	assertListLength(draft, nElements);
-}
-
-
-void ListBegin(IFactDraft * draft)
-{
-	IFactBegin(draft);
-}
-
-
-Atom ListEnd(IFactDraft * draft)
-{
-	size32 nElements;
-	if(draft->hasBegunConjunction) {
-		// end (ĺist position elements)
-		nElements = IFactEndConjunction(draft);
-	}
-	else {
-		// no elements were added, create the empty list
-		nElements = 0;
-	}
-	assertListLength(draft, nElements);
-
-	return IFactEnd(draft);
-}
-
-
-static Atom arrayElementGenerator(index32 index, void const * data)
-{
-	Atom const * atoms = data;
-	return atoms[index];
-}
-
-
-Atom CreateListFromArray(Atom const atoms[], byte elementType, size8 nAtoms)
-{
-	return CreateList(arrayElementGenerator, atoms, elementType, nAtoms);
 }
 
 
@@ -403,7 +337,7 @@ void ListIteratorEnd(ListIterator * iterator)
 
 void PrintList(Atom list)
 {
-	PrintCString("LIST{");
+	PrintCString("(");
 	Relation relation = findListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 	byte elementType = relation.typeSignature.atomTypes[listRoleIndex[2]];
@@ -418,7 +352,7 @@ void PrintList(Atom list)
 	}
 	ListIteratorEnd(&iterator);
 
-	PrintChar('}');
+	PrintChar(')');
 }
 
 

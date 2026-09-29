@@ -1104,7 +1104,9 @@ bool IsSpaceChar(char c)
 
 bool IsAlpha(char c)
 {
-	return isalpha(c);
+	// We allow ASCII letters only;  isalpha() depends on the locale, and is undefined
+	// for a negative char such as a byte of a UTF-8 character
+	return ((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z'));
 }
 
 
