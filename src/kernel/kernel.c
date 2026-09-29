@@ -346,8 +346,6 @@ TupleStore * GetCoreTupleStore(index32 relationId)
  */
 static void bootstrapTermForm(Atom termForm, Atom predicateForm)
 {
-	Relation relation = kernel.coreRelations[RELATION_TERM_FORM];
-
 	IFactDraft draft;
 	IFactBegin(&draft);
 	IFactBeginConjunction(
