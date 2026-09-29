@@ -152,7 +152,7 @@ Service RegisterMachineServiceWithState(
 	size8 arity = termView.actors->nAtoms;
 	ASSERT(arity <= RELATION_MAX_ARITY)
 
-	// Determine the indexOrder, type signature and IO signature from the parameter numbers
+	// Determine the service indexOrder, type signature and IO signature from the parameter numbers
 	IOSignature ioSignature;
 	EqualitySignature equalitySignature;
 	index8 indexOrder[RELATION_MAX_ARITY];
@@ -167,14 +167,11 @@ Service RegisterMachineServiceWithState(
 	if(RelationExists(relation))
 		store = RelationGetTupleStore(relation);
 	if(store) {
-		// TODO: verify that the store's provider matches ours,
-		// and the index order matches
+		// An existing store must not declare an indexOrder
+		ASSERT(!store->hasIndexOrder)
 	}
 	else {
-		// CLAUDE: With repeated parameters the indexOrder has fewer entries than the
-		// store has columns, and the store takes the identity column order
-		store = CreateTupleStore(
-			relation, &defaultProvider, arity, (nArguments == arity) ? indexOrder : 0);
+		store = CreateTupleStore(relation, &defaultProvider, arity, 0);
 		addModuleRelation(moduleID, relation);
 	}
 	ReleaseFormula(term);

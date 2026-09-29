@@ -1554,6 +1554,7 @@ typedef struct s_IFactOperatorContext {
 
 Operator * CreateIFactOperator(TupleStore * store, index8 idColumn)
 {
+	ASSERT(TupleStoreIsWritable(store))
 	size8 nArguments = store->nColumns;
 	ASSERT(idColumn < nArguments)
 	Operator * op = createOperator(OPERATOR_IFACT, nArguments, sizeof(IFactOperatorContext));
@@ -1561,7 +1562,7 @@ Operator * CreateIFactOperator(TupleStore * store, index8 idColumn)
 	op->impl.ifact.idColumn = idColumn;
 	op->impl.ifact.childOperator = IFactSetupStoreOperator(store, idColumn);
 	addParent(op->impl.ifact.childOperator);
-
+	// The operator indexOrder must be the same as the TupleStore's
 	allocateIndexOrder(op);
 	CopyMemory(store->indexColumns, op->indexOrder, nArguments);
 	return op;
@@ -1740,16 +1741,17 @@ void AttachOperator(Operator * op, Relation signature)
 	op->relation = signature;
 
 #ifdef DEBUG
-	// If the Relation has a TupleStore, the new operator's
+	// If the Relation has a TupleStore with a defined index order, the new operator's
 	// index order must match that of the TupleStore.
 	TupleStore * store = RelationGetTupleStore(signature);
-	// CLAUDE: An operator of a service repeating a parameter takes fewer arguments than
-	// the relation has columns, and is not checked; see EqualitySignature.
-	if(store && (op->nArguments == store->nColumns)) {
-		ASSERT(CompareMemory(op->indexOrder, store->indexColumns, op->nArguments) == 0)
-	}
-	if(store)
+	if(store) {
+		if(store->hasIndexOrder && (op->nArguments == store->nColumns)) 
+			ASSERT(CompareMemory(op->indexOrder, store->indexColumns, op->nArguments) == 0)
+		// NOTE: An operator of a service repeating a parameter takes fewer arguments than
+		// the relation has columns, and is not checked; see EqualitySignature.
 		ASSERT(op->nArguments <= store->nColumns)
+	}
+	
 #endif
 }
 

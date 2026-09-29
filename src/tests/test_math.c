@@ -18,18 +18,20 @@
 #include "testing/testing.h"
 
 
-void testAdd1(void)
+void testAddInt(void)
 {
 	Atom query = CStringToTerm("+ 2 + 3 = _");
 
 	Service service;
 	index8 permutation[3];
-	ASSERT(DispatchQueryFormula(query, &service, permutation))
+	ASSERT_INT32_EQUAL(DispatchQueryFormula(query, &service, permutation), DISPATCH_FOUND)
 
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(query)), arguments, 3);
 	
-	void * context = OperatorCreateContext(ServiceGetOperator(service), arguments);
+	Operator * op = ServiceGetOperator(service);
+	ASSERT_NOT_NULL(op)
+	void * context = OperatorCreateContext(op, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 	
 	Atom equalsRole = CreateNameFromCString("=");
@@ -47,29 +49,29 @@ void testAdd1(void)
 }
 
 
-void testAdd2(void)
+void testSubInt(void)
 {
-	Atom query = CStringToTerm("= 7 + 4 + _");
+	Atom query = CStringToTerm("+ 7 - 4 =  _");
 
 	Service service;
 	index8 permutation[3];
-	ASSERT(DispatchQueryFormula(query, &service, permutation))
+	ASSERT_INT32_EQUAL(DispatchQueryFormula(query, &service, permutation), DISPATCH_FOUND)
 
 	Atom arguments[3];
 	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(query)), arguments, 3);
-	
-	void * context = OperatorCreateContext(ServiceGetOperator(service), arguments);
+
+	Operator * op = ServiceGetOperator(service);
+	ASSERT_NOT_NULL(op)
+	void * context = OperatorCreateContext(op, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
-	Atom plusRole = CreateNameFromCString("+");
-	// Get the index of the second '+' role actor in the canonical form
-	index8 plusRoleIndex = PredicateRoleIndex(
+	Atom equalsRole = CreateNameFromCString("=");
+	index8 equalsRoleIndex = PredicateRoleIndex(
 		TermFormGetPredicateForm(FormulaGetForm(query)),
-		plusRole
-	) + 1;
-	NameRelease(plusRole);
-	// Account for dispatch argument permutation to pick the right actor
-	ASSERT_INT32_EQUAL(arguments[permutation[plusRoleIndex]]._int, 7 - 4);
+		equalsRole
+	);
+	NameRelease(equalsRole);
+	ASSERT_INT32_EQUAL(arguments[equalsRoleIndex]._int, 7 - 4);
 
 	ASSERT_FALSE(OperatorCall(context))
 	
@@ -129,8 +131,8 @@ int main(int argc, char * argv[])
 	KernelInitialize(PERSISTENT_MEMORY);
 	LoadLibraries();
 
-	ExecuteTest(testAdd1);
-	ExecuteTest(testAdd2);
+	ExecuteTest(testAddInt);
+	ExecuteTest(testSubInt);
 	ExecuteTest(testRange);
 
 	UnloadLibraries();

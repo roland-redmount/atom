@@ -41,15 +41,6 @@ TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provide
 	AcquireRelation(relation);
 	RelationAttachTupleStore(relation, store);
 
-	// setup index column array
-	if(indexColumns)
-		CopyMemory(indexColumns, store->indexColumns, store->nColumns);
-	else {
-		// use the identity order
-		for(index8 i = 0; i < nColumns; i++)
-			store->indexColumns[i] = i;
-	}
-
 	// Invalidate compiled services for this term form.
 	// NOTE: it is not sufficient to invalidate only the current relation,
 	// since any service compiled from a rule containing this term form
@@ -64,25 +55,39 @@ TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provide
 		ClauseFormExistsForTermForm(relation.form) ||
 		IFactRuleExistsForTermForm(relation.form);
 
-	// Call the storage provider to setup the relation implementation
-	// and determine the number of readers
-	size32 nReaders;
-	store->storage = provider->setupStorage(nColumns, &nReaders);
-	// Setup readers. Here we call the provider to fill out a readerSpec,
-	// then we hand it over to machine operator.
-	RelationReaderSpec readerSpec;
-	for(index32 i = 0; i < nReaders; i++) {
-		readerSpec = (RelationReaderSpec) {0};
-		provider->setupReader(&readerSpec, i, store->storage);
-		// create the MACHINE operator and primitive service
-		Operator * op = CreateMachineOperator(
-			store->nColumns, store->indexColumns, &readerSpec, store->storage);
-		IOSignature serviceIOSignature = TupleStoreGetCanonicalIOSignature(
-			store, readerSpec.ioSignature);
-		Service service = {.relation = store->relation, .ioSignature = serviceIOSignature};
-		CreateService(service, op);
-		if(primitivesStale)
-			ServiceMarkStale(service);
+	size32 nReaders = 0;
+	if(provider->setupStorage) {
+		// Call the storage provider to setup the relation implementation
+		// and determine the number of readers
+		store->storage = provider->setupStorage(nColumns, &nReaders);
+	}
+	if(nReaders > 0) {
+		// setup index column array
+		if(indexColumns)
+			CopyMemory(indexColumns, store->indexColumns, store->nColumns);
+		else {
+			// use the identity order
+			for(index8 i = 0; i < nColumns; i++)
+				store->indexColumns[i] = i;
+		}
+		store->hasIndexOrder = true;
+
+		// Setup readers. Here we call the provider to fill out a readerSpec,
+		// then we hand it over to machine operator.
+		RelationReaderSpec readerSpec;
+		for(index32 i = 0; i < nReaders; i++) {
+			readerSpec = (RelationReaderSpec) {0};
+			provider->setupReader(&readerSpec, i, store->storage);
+			// create the MACHINE operator and primitive service
+			Operator * op = CreateMachineOperator(
+				store->nColumns, store->indexColumns, &readerSpec, store->storage);
+			IOSignature serviceIOSignature = TupleStoreGetCanonicalIOSignature(
+				store, readerSpec.ioSignature);
+			Service service = {.relation = store->relation, .ioSignature = serviceIOSignature};
+			CreateService(service, op);
+			if(primitivesStale)
+				ServiceMarkStale(service);
+		}
 	}
 	return store;
 }
@@ -94,7 +99,8 @@ void DropTupleStore(TupleStore * store)
 	ASSERT(!TupleStoreIsWritable(store) || (TupleStoreNTuples(store) == 0))
 	RelationDetachTupleStore(store->relation, store);
 	ReleaseRelation(store->relation);
-	store->provider->free(store->storage);
+	if(store->provider->free)
+		store->provider->free(store->storage);
 	PoolFreeItem(storePool, store);
 }
 

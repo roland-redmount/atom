@@ -9,23 +9,31 @@
  * 
  * Addition x + y
  */
-static bool add1Call(void * state, Atom arguments[], void * readerData, void * storage)
+static bool addIntCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	arguments[2]._int = arguments[0]._int + arguments[1]._int;
 	return true;
 }
 
+static bool addFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
+{
+	arguments[2]._float = arguments[0]._float + arguments[1]._float;
+	return true;
+}
+
 
 /**
- * (+ x<INT + y>INT = z<INT)
- * 
- * Solving the additive equation x + y = z for z
- * This cane be use to implement subtraction via the rule
- * z = x + y  <->  y = z - x
+ * Subtraction (+ x<INT - y<INT = z>INT)
  */
-static bool add2Call(void * state, Atom arguments[], void * readerData, void * storage)
+static bool subIntCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
-	arguments[1]._int = arguments[2]._int - arguments[0]._int;
+	arguments[2]._int = arguments[0]._int - arguments[1]._int;
+	return true;
+}
+
+static bool subFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
+{
+	arguments[2]._float = arguments[0]._float - arguments[1]._float;
 	return true;
 }
 
@@ -35,9 +43,15 @@ static bool add2Call(void * state, Atom arguments[], void * readerData, void * s
  * 
  * Multiplication x * y
  */
-static bool mul1Call(void * state, Atom arguments[], void * readerData, void * storage)
+static bool mulIntCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	arguments[2]._int = arguments[0]._int * arguments[1]._int;
+	return true;
+}
+
+static bool mulFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
+{
+	arguments[2]._float = arguments[0]._float * arguments[1]._float;
 	return true;
 }
 
@@ -46,10 +60,16 @@ static bool mul1Call(void * state, Atom arguments[], void * readerData, void * s
  * 
  * Strict inequality test x > y
  */
-static bool strictInequalityCall(void * state, Atom arguments[], void * readerData, void * storage)
+static bool strictInequalityIntCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	return arguments[0]._int > arguments[1]._int;
 }
+
+static bool strictInequalityFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
+{
+	return arguments[0]._float > arguments[1]._float;
+}
+
 
 
 /**
@@ -57,9 +77,14 @@ static bool strictInequalityCall(void * state, Atom arguments[], void * readerDa
  * 
  * Non-strict inequality test x >= y
  */
-static bool nonStrictInequalityCall(void * state, Atom arguments[], void * readerData, void * storage)
+static bool nonStrictInequalityIntCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	return arguments[0]._int >= arguments[1]._int;
+}
+
+static bool nonStrictInequalityFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
+{
+	return arguments[0]._float >= arguments[1]._float;
 }
 
 
@@ -102,11 +127,20 @@ void MathSetup(void)
 {
 	moduleID = RequestModuleID();
 
-	RegisterMachineService(moduleID, "+ #1<INT + #2<INT = #3>INT", add1Call);
+	RegisterMachineService(moduleID, "+ #1<INT + #2<INT = #3>INT", addIntCall);
+	RegisterMachineService(moduleID, "+ #1<FLOAT + #2<FLOAT = #3>FLOAT", addFloatCall);
 
-	RegisterMachineService(moduleID, "+ #1<INT + #2>INT = #3<INT", add2Call);
+	RegisterMachineService(moduleID, "+ #1<INT - #2<INT = #3>INT", subIntCall);
+	RegisterMachineService(moduleID, "+ #1<FLOAT - #2<FLOAT = #3>FLOAT", subFloatCall);
 
-	RegisterMachineService(moduleID, "* #1<INT * #2<INT = #3>INT", mul1Call);
+	RegisterMachineService(moduleID, "* #1<INT * #2<INT = #3>INT", mulIntCall);
+	RegisterMachineService(moduleID, "* #1<FLOAT * #2<FLOAT = #3>FLOAT", mulFloatCall);
+
+	RegisterMachineService(moduleID, "< #1<INT > #2<INT", strictInequalityIntCall);
+	RegisterMachineService(moduleID, "< #1<FLOAT > #2<FLOAT", strictInequalityFloatCall);
+
+	RegisterMachineService(moduleID, "=< #1<INT >= #2<INT", nonStrictInequalityIntCall);
+	RegisterMachineService(moduleID, "=< #1<FLOAT >= #2<FLOAT", nonStrictInequalityFloatCall);
 
 	// The range a =< n =< b is the conjunction (n >= a & b >= n), since
 	// (=< x >= y) reads x >= y. Neither term is a finite relation on its own.
@@ -115,9 +149,6 @@ void MathSetup(void)
 		rangeSetup,	rangeCall, 0
 	);
 
-	RegisterMachineService(moduleID, "< #1<INT > #2<INT", strictInequalityCall);
-
-	RegisterMachineService(moduleID, "=< #1<INT >= #2<INT", nonStrictInequalityCall);
 }
 
 

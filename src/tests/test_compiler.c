@@ -103,23 +103,19 @@ static size32 countQueryTuples(Operator const * op, Atom query)
 }
 
 
-
-
 void testCompilePermute1(void)
 {
 	// This rule compiles to a PERMUTE service with no constants
-	// + z - x = y  <-  + x + y = z
-	FormulaView clause = DictionaryAddClauseFromCString("+ z - x = y | ! + x + y = z");
-	Atom queryTerm = CStringToTerm("+ 7 - 4 = d");
+	// + x + y = z <- + z - x = y
+	FormulaView clause = DictionaryAddClauseFromCString("+ x + y = z | ! + z - x = y");
+	Atom queryTerm = CStringToTerm("+ 4 + d = 7");
 
-	// This will yield a new service from the existing (+ + =) service
+	// This will yield a new service calling the existing (+ - =) service
 	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 	Service service = services[0];
 	Operator * operator = ServiceGetOperator(service);
-
-	// TODO: verify the compiled service atom types are correct
 
 	// Call the service
 	Atom arguments[3];
@@ -127,7 +123,7 @@ void testCompilePermute1(void)
 	void * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
-	Atom d = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "=", 1);
+	Atom d = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "+", 2);
 	ASSERT_UINT64_EQUAL(d._int, 3);
 
 	ASSERT_FALSE(OperatorCall(context))
@@ -489,12 +485,12 @@ void testCompileJoin2(void)
 void testCompileUnion(void)
 {
 	// Two rules resulting in a UNION service
-	// number x neighbor y <- = y + x + 1     (y = x + 1)
-	// number x neighbor y <- = x + y + 1     (x = y - 1 <-> y = x - 1)
+	// number x neighbor y <- + x + 1 = y
+	// number x neighbor y <- + x - 1 = y
 	FormulaView clause1 = DictionaryAddClauseFromCString(
-		"number x neighbor y | ! = y + x + 1");
+		"number x neighbor y | ! + x + 1 = y");
 	FormulaView clause2 = DictionaryAddClauseFromCString(
-		"number x neighbor y | ! = x + y + 1");
+		"number x neighbor y | ! + x - 1 = y");
 	Atom queryTerm = CStringToTerm("number 5 neighbor y");
 
 	Service services[MAX_COMPILED_VARIANTS];
@@ -895,7 +891,7 @@ void testCompileRecursiveJoin2(void)
 {
 	// The recursive rule
 	FormulaView clause = DictionaryAddClauseFromCString(
-		"number n faculty f | ! < n > 0 | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
+		"number n faculty f | ! < n > 0 | ! + n - 1 = m | ! number m faculty e | ! * e * n = f");
 	// Create terminating fact
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
 	Relation relation = RelationFromFact(FormulaGetView(terminatingFact));

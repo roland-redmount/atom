@@ -10,7 +10,9 @@
 typedef struct s_TupleStore {
 	Relation relation;
 	/*
-	 * The order of index columns. The stored tuples will be ordered lexicographically by
+	 * The order of index columns. Only set if the service provider defines readers.
+	 *
+	 * The stored tuples will be ordered lexicographically by
 	 * indexColumns[0], ..., indexColumns[nColumns-1]. Hence, lookup should be fast when
 	 * leading columns are specified in this order, while out-of-order
 	 * columns may lead to table scanning.
@@ -19,11 +21,13 @@ typedef struct s_TupleStore {
 	 * indexColumns = {1, 2, 0} will be ordered first by list, then by position, then by element;
 	 * queries (@list _ _) and (@list @position _) should be fast, but (_ _ @element) may be slow.
 	 * 
-	 * indexOrder is set by CreateTupleStore(). The underlying storage provider is not
-	 * aware of indexOrder, and always works with index order {0, 1, 2, ... }
+	 * The underlying storage provider is not aware of indexOrder, and always works with
+	 * the index order {0, 1, 2, ... }
 	 */
 	index8 indexColumns[RELATION_MAX_ARITY];
 	size8 nColumns;
+	// whether the indexColumns array is set
+	bool hasIndexOrder;
 
 	StorageProvider const * provider;
 	void * storage;
@@ -42,17 +46,6 @@ TupleStore * CreateTupleStore(
  * Does not deallocate readers: they must be removed before calling this function.
  */
 void DropTupleStore(TupleStore * store);
-
-/**
- * Add a RelationReader to the TupleStore and register the corresponding MACHINE operator and Service.
- */
-// Service TupleStoreAddReader(TupleStore * store, RelationReaderSpec const * readerSpec);
-
-/**
- * Generate the canonical IOSignature from the IO signature of a RelationReader
- * acting on this tuple store, by permuting w.r.t. the store's indexOrder.
- */
-// IOSignature TupleStoreGetCanonicalIOSignature(TupleStore * store, IOSignature readerSignature);
 
 /**
  * Return true is the tuple store is writable.
