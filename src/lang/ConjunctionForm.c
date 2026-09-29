@@ -8,13 +8,15 @@
 
 Atom CreateConjunctionForm(Atom const termForms[], size8 nTermForms)
 {
-	return CreateTermMultisetForm(termForms, nTermForms, RELATION_CONJUNCTION_FORM);
+	return CreateTermMultiset(termForms, nTermForms, RELATION_CONJUNCTION_FORM);
 }
 
 
 bool IsConjunctionForm(Atom form)
 {
-	return IsTermMultisetForm(form, RELATION_CONJUNCTION_FORM, ROLE_CONJUNCTION_FORM);
+	Operator * op = GetCoreOperator(SERVICE_CONJUNCTION_FORM);
+	Atom arguments[1] = {form};
+	return OperatorCallOnce(op, arguments);
 }
 
 

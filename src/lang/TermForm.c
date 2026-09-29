@@ -1,7 +1,6 @@
 
 #include "lang/Variable.h"
 #include "kernel/ifact.h"
-#include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
 #include "lang/TermForm.h"
@@ -34,12 +33,14 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 
 bool IsTermForm(Atom atom)
 {
-	return LookupHasEntry(
-		atom,
-		GetCoreRelation(RELATION_TERM_FORM),
-		GetCoreRelation(RELATION_TERM_FORM).form,
-		GetCoreRoleName(ROLE_TERM_FORM)
+	Operator * op = GetCoreOperator(SERVICE_TERM_FORM);
+	Atom arguments[3];
+	CoreFormSetTuple(
+		FORM_TERM_FORM,
+		(Atom[]) {atom, (Atom) {0}, (Atom) {0}},
+		arguments
 	);
+	return OperatorCallOnce(op, arguments);
 }
 
 

@@ -173,6 +173,53 @@ static void findOperatorDescendants(Operator * op, ResizingArray * serviceArray)
 }
 
 
+static ServiceRecord * findServiceRecord(Service service);
+
+
+/**
+ * Remove the services depending on the service of the given operator, recursively.
+ * Returns the number of services removed.
+ */
+static size32 removeAncestorServices(Operator const * op)
+{
+	// Find all ancestor services of the given service (dependents)
+	// and remove them recursively
+	size32 nServicesRemoved = 0;
+	OperatorAncestor key = {.op = op};
+	OperatorAncestor pair;
+	while(BTreeGetItem(operatorAncestors, &key, &pair)) {
+		// remove the service identified by the (relation, operator) pair
+		Service ancestorService;
+		findServiceByOperator(pair.ancestor, &ancestorService);
+		nServicesRemoved += RemoveService(ancestorService);
+	}
+	return nServicesRemoved;
+}
+
+
+/**
+ * Record the given compiled operator as an ancestor of each service it depends on;
+ * see findOperatorDescendants().
+ */
+static void addAncestorRecords(Operator * op)
+{
+	// Find descendants of the given operator with an attached service.
+	// The given service is a dependent of these operators' services.
+	ResizingArray descendantsArray;
+	CreateResizingArray(&descendantsArray, sizeof(Operator *), 10);
+	findOperatorDescendants(op, &descendantsArray);
+	// Add corresponding records to the ancestor table.
+	// NOTE: any duplicates in the array will be rejected by the B-tree
+	Operator ** descendants = ResizingArrayGetMemory(&descendantsArray);
+	for(index32 i = 0; i < descendantsArray.nElements; i++) {
+		ASSERT(descendants[i] != op)
+		OperatorAncestor pair = {.op = descendants[i], .ancestor = op};
+		BTreeInsert(operatorAncestors, &pair);
+	}
+	FreeResizingArray(&descendantsArray);
+}
+
+
 /**
  * Remove a service from the registry, and remove all OperatorAncestor records
  * where this service is the ancestor.
@@ -187,17 +234,7 @@ size32 RemoveService(Service service)
 	if(record.op->type != OPERATOR_MACHINE)
 		nCompiledServices--;
 
-	// Find all ancestor services of the given service (dependents)
-	// and remove them recursively
-	size32 nServicesRemoved = 0;
-	OperatorAncestor key = {.op = record.op};
-	OperatorAncestor pair;
-	while(BTreeGetItem(operatorAncestors, &key, &pair)) {
-		// remove the service identified by the (relation, operator) pair
-		Service ancestorService;
-		findServiceByOperator(pair.ancestor, &ancestorService);
-		nServicesRemoved += RemoveService(ancestorService);
-	}
+	size32 nServicesRemoved = removeAncestorServices(record.op);
 	if(OperatorNChildren(record.op) > 0) {
 		// Remove any records where this service is the ancestor.
 		// This is most efficiently done by following the operator child pointers,
@@ -215,6 +252,16 @@ size32 RemoveService(Service service)
 	// Detach the root operator from the service.
 	// This may cause the operator to be deleted, and possibly its descendants.
 	DetachOperator(record.op);
+	if(record.replacedOperator) {
+		// Restore the primitive service that the compiled service replaced,
+		// and mark it stale so that the next query recompiles it. The ServiceRecord
+		// and its reference to the relation is kept.
+		ServiceRecord * restoredRecord = findServiceRecord(service);
+		restoredRecord->op = record.replacedOperator;
+		restoredRecord->replacedOperator = 0;
+		restoredRecord->isStale = true;
+		return nServicesRemoved + 1;
+	}
 	// RelationMarkStale(service.relation);
 	ReleaseRelation(service.relation);
 	BTreeDeleteResult result = BTreeDelete(serviceRecords, &record, 0);
@@ -229,21 +276,7 @@ void CreateService(Service service, Operator * op)
 		// When registering a compiled service, there must not be an existing service.
 		// The compiler must subsume existing services into a UNION or FIXPOINT operator.
 		ASSERT(!ServiceGetRecord(service))
-		// Find descendants of the given operator with an attached service.
-		// The given service is a dependent of these operators' services.
-		ResizingArray descendantsArray;
-		CreateResizingArray(&descendantsArray, sizeof(Operator *), 10);
-		findOperatorDescendants(op, &descendantsArray);
-		// Add corresponding records to the ancestor table.
-		// NOTE: any duplicates in the array will be rejected by the B-tree
-		Operator ** descendants = ResizingArrayGetMemory(&descendantsArray);
-		for(index32 i = 0; i < descendantsArray.nElements; i++) {
-			ASSERT(descendants[i] != op)
-			OperatorAncestor pair = {.op = descendants[i], .ancestor = op};
-			BTreeInsert(operatorAncestors, &pair);
-		}
-		FreeResizingArray(&descendantsArray);
-
+		addAncestorRecords(op);
 		nCompiledServices++;
 	}
 	// add to the service registry
@@ -261,6 +294,33 @@ static ServiceRecord * findServiceRecord(Service service)
 {
 	ServiceRecord key = {.service = service };
 	return BTreePeekItem(serviceRecords, &key);
+}
+
+
+void ReplacePrimitiveService(Service service, Operator * op)
+{
+	ASSERT(op->type != OPERATOR_MACHINE)
+	ServiceRecord * record = findServiceRecord(service);
+	ASSERT(record)
+	Operator * primitiveOperator = record->op;
+	ASSERT(primitiveOperator->type == OPERATOR_MACHINE)
+	ASSERT(!record->replacedOperator)
+
+	// The primitive operator may have ancestor services that must be
+	// re-compiled so that they read from the replacing operator.
+	// This occurs with FILTER operators: see testFilterServiceOverReplacedPrimitive()
+	// in test_query.c
+	removeAncestorServices(primitiveOperator);
+
+	// The primitive operator is not detached, so that it is kept while replaced.
+	// Removing ancestors may have moved the record, so it is found again.
+	record = findServiceRecord(service);
+	record->replacedOperator = primitiveOperator;
+	record->op = op;
+	record->isStale = false;
+	AttachOperator(op, service.relation);
+	addAncestorRecords(op);
+	nCompiledServices++;
 }
 
 

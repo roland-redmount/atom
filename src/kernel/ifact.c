@@ -4,7 +4,6 @@
 #include "kernel/dispatch.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/lookup.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
 #include "kernel/ServiceRegistry.h"
@@ -227,29 +226,24 @@ static Operator * createSingleInputService(Service service, index8 idColumn)
 }
 
 
-/**
- * The operator of the service enumerating the tuples of a conjunction by its identified
- * atom, which sameIFacts() and removeIFactTuples() read the stored tuples with. Every
- * relation storing ifact tuples must have this service.
- */
-static Operator const * conjunctionOperator(IFactConjunction const * conjunction)
+Operator * IFactSetupStoreOperator(TupleStore const * store, index8 idColumn)
 {
 	// define the needed IOSignature, with a single input parameter
-	byte parameterIO[conjunction->store->nColumns];
-	for(index8 i = 0; i < conjunction->store->nColumns; i++)
-		parameterIO[i] = (i == conjunction->idColumn) ? PARAMETER_IN : PARAMETER_OUT;
-	IOSignature ioSignature = CreateIOSignature(parameterIO, conjunction->store->nColumns);
+	byte parameterIO[store->nColumns];
+	for(index8 i = 0; i < store->nColumns; i++)
+		parameterIO[i] = (i == idColumn) ? PARAMETER_IN : PARAMETER_OUT;
+	IOSignature ioSignature = CreateIOSignature(parameterIO, store->nColumns);
 	Service singleInputService = {
-		.relation = conjunction->store->relation,
+		.relation = store->relation,
 		.ioSignature = ioSignature,
 	};
 	// try to find an exact mathing service
-	Operator const * op = ServiceGetOperator(singleInputService);
+	Operator * op = ServiceGetOperator(singleInputService);
 	if(op)
 		return op;
 	// Else, try to find an all-output service and create the required service using
 	// a FILTER operator
-	op = createSingleInputService(singleInputService, conjunction->idColumn);
+	op = createSingleInputService(singleInputService, idColumn);
 	ASSERT(op)
 	return op;
 }
@@ -275,7 +269,8 @@ void IFactBeginConjunction(IFactDraft * draft, TupleStore * store, index8 idColu
 
 	// Obtain the operator for reading from the relation, keyed on the idColumn.
 	// This operator must exist
-	ASSERT(conjunctionOperator(conjunction))
+	Operator * conjunctionOp = IFactSetupStoreOperator(conjunction->store, conjunction->idColumn);
+	ASSERT(conjunctionOp)
 
 	draft->hasBegunConjunction = true;
 }
@@ -344,11 +339,8 @@ static void sortIFactDraft(IFactDraft * draft)
 
 /**
  * Create the defining facts represented by a draft ifact.
- * The assertFact() function is typically AssertFact()
- * but an alternative version is used during bootstrap.
  */
 static void createFacts(IFactDraft * draft, bool bootstrap)
-	// void (* assertFact)(Atom predicateForm, TypedTuple const * actors, uint8 idPosition))s
 {
 	Atom idAtom = (Atom) {.hash = draft->header.hash};
 
@@ -361,10 +353,6 @@ static void createFacts(IFactDraft * draft, bool bootstrap)
 			tuple[conjunction->idColumn] = idAtom;
 			// store the tuple
 			ASSERT(TupleStoreAddTuple(conjunction->store, tuple, conjunction->idColumn + 1) == TUPLE_ADDED)
-			// add lookup
-			if(!bootstrap) {
-				LookupAddFactRoles(conjunction->store->relation, tuple);
-			}
 			tuple += conjunction->store->nColumns;
 		}
 		conjunction++;
@@ -425,7 +413,8 @@ static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 		// NOTE: The service may return tuples a different order than the tupleStorage array.
 		Atom arguments[nColumns];
 		setupQueryTuple(arguments, nColumns, (Atom) {.hash = draft->header.hash}, conjunction->idColumn);
-		OperatorContext * context = OperatorCreateContext(conjunctionOperator(conjunction), arguments);
+		Operator * conjunctionOp = IFactSetupStoreOperator(conjunction->store, conjunction->idColumn);
+		OperatorContext * context = OperatorCreateContext(conjunctionOp, arguments);
 		while(OperatorCall(context)) {
 			// The id column is still zero in the draft tuple and must not affect the comparison.
 			arguments[conjunction->idColumn] = draftTuples[conjunction->idColumn];
@@ -492,9 +481,6 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash) // , void (* assertFact)
 		ASSERT(BTreeInsert(ifactStorage.btree, &(draft->header)) == BTREE_INSERTED)
 		keepConjunctions = true;
 	}
-	// Release acquired table references
-	// for(index8 i = 0; i < draft->header.nConjunctions; i++)
-	// 	ReleaseRelationTable(draft->header.conjunctions[i].table);
 
 	if(!keepConjunctions)
 		Free(draft->header.conjunctions);
@@ -521,7 +507,8 @@ void removeIFactTuples(IFactConjunction * conjunction, Atom idAtom)
 	CreateResizingArray(&tuplesArray, conjunction->store->nColumns * sizeof(Atom), 10);
 	Atom arguments[conjunction->store->nColumns];
 	setupQueryTuple(arguments, conjunction->store->nColumns, idAtom, conjunction->idColumn);
-	OperatorContext * context = OperatorCreateContext(conjunctionOperator(conjunction), arguments);
+	Operator * conjunctionOp = IFactSetupStoreOperator(conjunction->store, conjunction->idColumn);
+	OperatorContext * context = OperatorCreateContext(conjunctionOp, arguments);
 	while(OperatorCall(context))
 		ResizingArrayAppend(&tuplesArray, arguments);
 	OperatorFreeContext(context);
@@ -551,20 +538,54 @@ void IFactRelease(Atom idAtom)
 		IFactHeader headerCopy = *header;
 
 		// Retract defining facts.
-		// NOTE: can we locate the facts using lookup instead, so that we
-		// don't actually need to store the conjunctions after IFactEnd() ?
-		// We only need to know the predicate form (to identify the relation/service)
-		// and the role in which the AT_ID atom participates.
 		for(index8 i = 0; i < headerCopy.nConjunctions; i++) {
 			IFactConjunction * conjunction = &(headerCopy.conjunctions[i]);
 			removeIFactTuples(conjunction, idAtom);
 		}
-		LookupRemoveAllRoles(idAtom);
-
 		// remove IFact
 		Free(headerCopy.conjunctions);
 		ASSERT(BTreeDelete(ifactStorage.btree, &headerCopy, 0) == BTREE_DELETED);
 	}
+}
+
+
+void IFactMarkCached(Atom ifact)
+{
+	IFactHeader * header = peekIFactHeader(ifact.hash);
+	ASSERT(header)
+	if(header->flags & IFACT_CACHED)
+		IFactRelease(ifact);
+	else
+		header->flags |= IFACT_CACHED;
+}
+
+
+void IFactReleaseCached(TupleStore const * store, index8 idColumn)
+{
+	// Collect the cached ifacts first, since IFactRelease() modifies the B-tree
+	ResizingArray cachedArray;
+	CreateResizingArray(&cachedArray, sizeof(Atom), 10);
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, ifactStorage.btree);
+	while(BTreeIteratorNext(&iterator)) {
+		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
+		if((header->flags & IFACT_CACHED) &&
+			(header->nConjunctions == 1) &&
+			(header->conjunctions[0].store == store) &&
+			(header->conjunctions[0].idColumn == idColumn)) {
+			Atom ifact = {.hash = header->hash};
+			ResizingArrayAppend(&cachedArray, &ifact);
+		}
+	}
+	BTreeIteratorEnd(&iterator);
+
+	for(index32 i = 0; i < cachedArray.nElements; i++) {
+		Atom const * ifact = ResizingArrayGetElement(&cachedArray, i);
+		IFactHeader * header = peekIFactHeader(ifact->hash);
+		header->flags &= ~((data8) IFACT_CACHED);
+		IFactRelease(*ifact);
+	}
+	FreeResizingArray(&cachedArray);
 }
 
 

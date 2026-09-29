@@ -110,7 +110,7 @@ void SetupPrecSuccFixture(RelationFixture * fixture)
 }
 
 
-void AddTransitiveClosureRules(DictionaryEntry * base, DictionaryEntry * recursive)
+void AddTransitiveClosureRules(FormulaView * base, FormulaView * recursive)
 {
 	*base = DictionaryAddClauseFromCString(
 		"before x after y | ! prec x succ y");

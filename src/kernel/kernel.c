@@ -115,14 +115,18 @@ static const index32 coreServiceRelationId[N_CORE_SERVICES + 1] = {
 	0,
 	// (multiset <ID element >NAME multiple >INT)
 	RELATION_MULTISET_NAME,
-	// (predicate-form >ID)
+	// (predicate-form <ID)
 	RELATION_PREDICATE_FORM,
 	// (multiset <ID element >ID multiple >INT)
 	RELATION_MULTISET_ID,
 	// (multiset >ID element >ID multiple >INT)
 	RELATION_MULTISET_ID,
-	// (term-form <ID predicate-form >ID)
+	// (term-form <ID predicate-form >ID sign >INT)
 	RELATION_TERM_FORM,
+	// (clause-form <ID)
+	RELATION_CLAUSE_FORM,
+	// (conjunction-form <ID)
+	RELATION_CONJUNCTION_FORM,
 };
 
 
@@ -134,14 +138,18 @@ static const byte coreServiceParameterIO[N_CORE_SERVICES + 1][CORE_FORMS_MAX_ARI
 	{0},
 	// (multiset <ID element >NAME multiple >INT)
 	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
-	// (predicate-form >ID)
+	// (predicate-form <ID)
 	{PARAMETER_IN},
 	// (multiset <ID element >ID multiple >INT)
-	{PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT},
+	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 	// (multiset >ID element >ID multiple >INT)
 	{PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT},
 	// (term-form <ID predicate-form >ID sign >INT)
 	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
+	// (clause-form <ID)
+	{PARAMETER_IN},
+	// (conjunction-form <ID)
+	{PARAMETER_IN},
 };
 
 
@@ -357,13 +365,29 @@ static void bootstrapTermForm(Atom termForm, Atom predicateForm)
 	IFactAddTuple(&draft, tuple);
 	IFactEndConjunction(&draft);
 	IFactEndBootstrap(&draft, termForm.hash);
-
-	LookupAddRole(termForm, relation, relation.form, GetCoreRoleName(ROLE_TERM_FORM));
-	LookupAddRole(predicateForm, relation, relation.form, GetCoreRoleName(ROLE_PREDICATE_FORM));
 }
 
 
-// ----------------- Core services, moved from ServiceRegistry.c -----------------------
+static void setupCoreOperator(uint32 serviceId)
+{
+	byte parameterIO[CORE_FORMS_MAX_ARITY];
+	uint32 relationId = coreServiceRelationId[serviceId];
+	CoreFormSetByteArray(
+		coreRelationFormId[relationId],
+		coreServiceParameterIO[serviceId],
+		parameterIO
+	);
+	IOSignature ioSignature = CreateIOSignature(
+		parameterIO, corePredicateArity[coreRelationFormId[relationId]]);
+	kernel.coreOperators[serviceId] = ServiceGetOperator(
+		(Service) {
+			.relation = kernel.coreRelations[relationId],
+			.ioSignature = ioSignature
+		}
+	);
+	ASSERT(kernel.coreOperators[serviceId])
+}
+
 
 Operator * GetCoreOperator(index32 serviceId)
 {
@@ -511,21 +535,12 @@ static void setupCoreServices(void)
 	 * This gives us 1 reference to the multisetForm atom.
 	 */
 	IFactEndBootstrap(&multisetDraft, multisetForm.hash);
-
-	// Add lookup
-	LookupAddRole(
-		multisetForm,
-		kernel.coreRelations[RELATION_MULTISET_NAME],
-		kernel.coreRelations[RELATION_MULTISET_NAME].form,
-		GetCoreRoleName(ROLE_MULTISET)
-	);
-	LookupAddRole(
-		multisetForm,
-		kernel.coreRelations[RELATION_PREDICATE_FORM],
-		kernel.coreRelations[RELATION_PREDICATE_FORM].form,
-		GetCoreRoleName(ROLE_PREDICATE_FORM)
-	);
 	
+	kernel.coreOperators[0] = 0;
+	setupCoreOperator(SERVICE_MULTISET_ID);
+	setupCoreOperator(SERVICE_MULTISET_NAME);
+	setupCoreOperator(SERVICE_MULTISET_ID_ALL);
+
 	/*
 	 * Create @predicate-form
 	 */
@@ -553,20 +568,8 @@ static void setupCoreServices(void)
 	// This gives 1 reference to the predicateForm atom
 	IFactEndBootstrap(&predicateFormDraft, predicateForm.hash);
 
-	// add lookup
-	LookupAddRole(
-		predicateForm,
-		kernel.coreRelations[RELATION_MULTISET_NAME],
-		kernel.coreRelations[RELATION_MULTISET_NAME].form,
-		GetCoreRoleName(ROLE_MULTISET)
-	);
-	LookupAddRole(
-		predicateForm,
-		kernel.coreRelations[RELATION_PREDICATE_FORM],
-		kernel.coreRelations[RELATION_PREDICATE_FORM].form,
-		GetCoreRoleName(ROLE_PREDICATE_FORM)
-	);
-
+	setupCoreOperator(SERVICE_PREDICATE_FORM);
+	
 	// We can now use CreatePredicateForm() and AssertFact()
 
 	Atom roles[CORE_FORMS_MAX_ARITY];
@@ -595,6 +598,8 @@ static void setupCoreServices(void)
 	bootstrapTermForm(predicateTermForm, predicateForm);
 	bootstrapTermForm(termFormTermForm, kernel.corePredicateForms[FORM_TERM_FORM]);
 
+	setupCoreOperator(SERVICE_TERM_FORM);
+
 	// We can now use CreateTermForm()
 
 	// Create remaining forms
@@ -620,26 +625,9 @@ static void setupCoreServices(void)
 		IFactRelease(kernel.corePredicateForms[i]);
 		IFactRelease(kernel.coreTermForms[i]);
 	}
-
-	// Lookup core services operators and store in array
-	kernel.coreOperators[0] = 0;
-	byte parameterIO[CORE_FORMS_MAX_ARITY];
-	for(index32 i = 1; i <= N_CORE_SERVICES; i++) {
-		uint8 relationId = coreServiceRelationId[i];
-		CoreFormSetByteArray(
-			coreRelationFormId[relationId],
-			coreServiceParameterIO[i],
-			parameterIO
-		);
-		IOSignature ioSignature = CreateIOSignature(
-			parameterIO, corePredicateArity[coreRelationFormId[relationId]]);
-		kernel.coreOperators[i] = ServiceGetOperator(
-			(Service) {
-				.relation = kernel.coreRelations[relationId],
-				.ioSignature = ioSignature
-			}
-		);
-		ASSERT(kernel.coreOperators[i])
+	// Setup remaining core service operators (none so far)
+	for(index32 i = SERVICE_CLAUSE_FORM; i <= N_CORE_SERVICES; i++) {
+		setupCoreOperator(i);
 	}
 }
 

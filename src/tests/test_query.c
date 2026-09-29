@@ -89,9 +89,9 @@ void testQueryIntegerLiteral(void)
 void testQueryCompilesOnce(void)
 {
 	SetupPrecSuccFixture(&precSuccFixture);
-	DictionaryEntry entry1;
-	DictionaryEntry entry2;
-	AddTransitiveClosureRules(&entry1, &entry2);
+	FormulaView baseClause;
+	FormulaView recursiveClause;
+	AddTransitiveClosureRules(&baseClause, &recursiveClause);
 	size32 nServices = NumberOfServices();
 
 	// The first query compiles the service deriving the closure
@@ -102,8 +102,8 @@ void testQueryCompilesOnce(void)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 1)
 
-	DictionaryRemoveClause(&entry2);
-	DictionaryRemoveClause(&entry1);
+	DictionaryRemoveClause(&recursiveClause);
+	DictionaryRemoveClause(&baseClause);
 	TeardownRelationFixture(&precSuccFixture);
 }
 
@@ -117,9 +117,9 @@ void testQueryCompilesOnce(void)
 void testQueryParameterIO(void)
 {
 	SetupPrecSuccFixture(&precSuccFixture);
-	DictionaryEntry entry1;
-	DictionaryEntry entry2;
-	AddTransitiveClosureRules(&entry1, &entry2);
+	FormulaView baseClause;
+	FormulaView recursiveClause;
+	AddTransitiveClosureRules(&baseClause, &recursiveClause);
 	size32 nServices = NumberOfServices();
 
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
@@ -131,8 +131,8 @@ void testQueryParameterIO(void)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("before \"a\" after y"), 3)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 2)
 
-	DictionaryRemoveClause(&entry2);
-	DictionaryRemoveClause(&entry1);
+	DictionaryRemoveClause(&recursiveClause);
+	DictionaryRemoveClause(&baseClause);
 	TeardownRelationFixture(&precSuccFixture);
 }
 
@@ -143,9 +143,9 @@ void testQueryParameterIO(void)
 void testQueryRepeatedVariable(void)
 {
 	SetupPrecSuccFixture(&precSuccFixture);
-	DictionaryEntry entry1;
-	DictionaryEntry entry2;
-	AddTransitiveClosureRules(&entry1, &entry2);
+	FormulaView baseClause;
+	FormulaView recursiveClause;
+	AddTransitiveClosureRules(&baseClause, &recursiveClause);
 	size32 nServices = NumberOfServices();
 
 	// b and c lie on a cycle, and so come after themselves
@@ -161,8 +161,8 @@ void testQueryRepeatedVariable(void)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("list \"ab\" position x element x"), 0)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 2)
 
-	DictionaryRemoveClause(&entry2);
-	DictionaryRemoveClause(&entry1);
+	DictionaryRemoveClause(&recursiveClause);
+	DictionaryRemoveClause(&baseClause);
 	TeardownRelationFixture(&precSuccFixture);
 }
 
@@ -175,7 +175,7 @@ void testQueryRepeatedVariable(void)
  */
 void testQueryCompileIgnoresRepeatedVariable(void)
 {
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"item e index p | ! list \"ab\" position p element e");
 	size32 nServices = NumberOfServices();
 
@@ -193,7 +193,7 @@ void testQueryCompileIgnoresRepeatedVariable(void)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("item z index z"), 0)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 2)
 
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices)
 }
 
@@ -221,9 +221,9 @@ void testQueryWithoutAnswer(void)
 void testInvalidateServiceByNewRelation(void)
 {
 	SetupPrecSuccFixture(&precSuccFixture);
-	DictionaryEntry entry1;
-	DictionaryEntry entry2;
-	AddTransitiveClosureRules(&entry1, &entry2);
+	FormulaView baseClause;
+	FormulaView recursiveClause;
+	AddTransitiveClosureRules(&baseClause, &recursiveClause);
 
 	// compile and run (before x after y)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
@@ -248,8 +248,8 @@ void testInvalidateServiceByNewRelation(void)
 	RemoveAllCompiledServices();
 	DropRelation(intRelation);
 	TeardownRelationFixture(&precSuccFixture);
-	DictionaryRemoveClause(&entry2);
-	DictionaryRemoveClause(&entry1);
+	DictionaryRemoveClause(&recursiveClause);
+	DictionaryRemoveClause(&baseClause);
 }
 
 
@@ -260,7 +260,7 @@ void testInvalidateServiceByNewRelation(void)
 void testInvalidateServiceByRule(void)
 {
 	SetupPrecSuccFixture(&precSuccFixture);
-	DictionaryEntry rule1 = DictionaryAddClauseFromCString(
+	FormulaView rule1 = DictionaryAddClauseFromCString(
 		"before x after y | ! prec x succ y");
 	size32 nServicesInitial = NumberOfServices();
 
@@ -269,7 +269,7 @@ void testInvalidateServiceByRule(void)
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 1)
 
 	// Add a transitive rule
-	DictionaryEntry rule2 = DictionaryAddClauseFromCString(
+	FormulaView rule2 = DictionaryAddClauseFromCString(
 		"before x after y | ! prec x succ z | ! before z after y");
 	// The previously compiled service is now invalidated
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)
@@ -320,7 +320,7 @@ void testInvalidateRelationByRule(void)
 	NameRelease(faculty);
 
 	// Adding the recursive rule should mark the service as stale
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"number n faculty f | ! < n > 0 | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
 	ASSERT_INT32_EQUAL(numberOfStaleServices(relation), 3)
 
@@ -335,7 +335,7 @@ void testInvalidateRelationByRule(void)
 
 	ReleaseFormula(queryTerm);
 	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 	DropRelation(relation);
 	ReleaseFormula(terminatingFact);
 }
@@ -378,7 +378,7 @@ void testStaleClearedAfterRuleRemoved(void)
 	SetupPrecSuccFixture(&precSuccFixture);
 
 	// Add a rule matching the stored (prec succ) relation
-	DictionaryEntry rule = DictionaryAddClauseFromCString("prec x succ y | ! before x after y");
+	FormulaView rule = DictionaryAddClauseFromCString("prec x succ y | ! before x after y");
 	ASSERT_UINT32_EQUAL(numberOfStaleServices(precSuccFixture.relation), 3)
 	// Running the query triggers compilation of the (prec >ID succ >ID) service
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("prec x succ y"), PREC_SUCC_N_EDGES)
@@ -415,11 +415,11 @@ void testStaleBodyTermUsesPrimitiveOnly(void)
 
 	// Add rule giving (alpha beta) the tuples of (gamma delta), rendering all
 	// primitive services of the (alpha beta) relation stale.
-	DictionaryEntry aRule = DictionaryAddClauseFromCString("alpha x beta y | ! gamma x delta y");
+	FormulaView aRule = DictionaryAddClauseFromCString("alpha x beta y | ! gamma x delta y");
 	ASSERT_INT32_EQUAL(numberOfStaleServices(alphaBetaRelation), 3)
 
 	// Add rule deriving relation (mu nu) from (alpha beta)
-	DictionaryEntry gRule = DictionaryAddClauseFromCString("mu x nu y | ! alpha x beta y");
+	FormulaView gRule = DictionaryAddClauseFromCString("mu x nu y | ! alpha x beta y");
 	ASSERT_INT32_EQUAL(numberOfStaleServices(alphaBetaRelation), 3)
 
 	// Query (mu nu) while (alpha beta) is still stale. This should recompile the
@@ -463,7 +463,7 @@ void testSelfJoinOverUnionRelation(void)
 	// (alpha A beta B)
 	// (alpha B beta C)
 	// (alpha C beta D)
-	DictionaryEntry alphaRule = DictionaryAddClauseFromCString("alpha x beta y | ! gamma x delta y");
+	FormulaView alphaRule = DictionaryAddClauseFromCString("alpha x beta y | ! gamma x delta y");
 	// Adding the rule invalidates all 3 (alpha beta) services
 	ASSERT_INT32_EQUAL(numberOfStaleServices(alphaBetaRelation), 3)
 	// Running this query restores the (alpha >LETTER beta >LETTER) service
@@ -475,7 +475,7 @@ void testSelfJoinOverUnionRelation(void)
 	// We expect a JOIN operator generating the tuples
 	// (mu A nu C)
 	// (mu B nu C)
-	DictionaryEntry muRule = DictionaryAddClauseFromCString(
+	FormulaView muRule = DictionaryAddClauseFromCString(
 		"mu x nu y | ! alpha x beta z | ! alpha z beta y");
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("mu x nu y"), 2)
 	ASSERT_INT32_EQUAL(numberOfStaleServices(alphaBetaRelation), 1)
@@ -508,7 +508,7 @@ void testStorePrimitiveStaleWhenRuleExists(void)
 
 	// A rule deriving (alpha beta) from (gamma delta), added before any (alpha beta) relation
 	// exists and before (alpha beta) is queried, so nothing is compiled or invalidated.
-	DictionaryEntry alphaRule = DictionaryAddClauseFromCString("alpha x beta y | ! gamma x delta y");
+	FormulaView alphaRule = DictionaryAddClauseFromCString("alpha x beta y | ! gamma x delta y");
 
 	// Creating the (alpha beta) store with the edge (A, B). Its primitives must be stale
 	// because the rule already derives the term form, although nothing was invalidated.
@@ -575,7 +575,7 @@ void testQueryConjunction(void)
 void testQueryConjunctionRule(void)
 {
 	SetupEdgeFixture(&edgeFixture);
-	DictionaryEntry entry = DictionaryAddClauseFromCString("reach x to y | ! edge e from x to y");
+	FormulaView clause = DictionaryAddClauseFromCString("reach x to y | ! edge e from x to y");
 	size32 nServices = NumberOfServices();
 
 	// reach has the pairs a-b, a-a, b-b and b-c, followed by an edge from b, a, b and c
@@ -585,10 +585,58 @@ void testQueryConjunctionRule(void)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 3)
 
 	// The FILTER service reads only the edge relation, and remains
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices + 1)
 
 	TeardownRelationFixture(&edgeFixture);
+}
+
+
+/**
+ * This test demonstrate that a FILTER service might read a stale primitive service directly,
+ * since compileFilterVariants() finds its child service with DispatchIterate(), which does not
+ * skip stale services. When a compiled service later replaces that primitive service,
+ * the dependent FILTER service must be removed; see ReplacePrimitiveService().
+ *
+ * The rule (sym x with y | ! sym y with x) is recursive only. A query binding the second
+ * column of the store has no primitive service of its signature to use as a base case, so
+ * the rule compiles nothing for the query. The query is answered by a FILTER service over
+ * the stale all-output primitive service, which misses the derived tuple. The all-output
+ * query then compiles the rule with the primitive service as base case, and replaces the
+ * primitive service. The FILTER service is removed, and recompiling the first query
+ * reads the replacing service, which yields the derived tuple.
+ */
+void testFilterServiceOverReplacedPrimitive(void)
+{
+	Atom fact = CStringToTerm("sym \"a\" with \"b\"");
+	Relation relation = RelationFromFact(FormulaGetView(fact));
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+	FormulaView clause = DictionaryAddClauseFromCString("sym x with y | ! sym y with x");
+
+	// The query binding the second column; its only answer is the derived (sym "b" with "a")
+	Atom withRole = CreateNameFromCString("with");
+	index8 withIndex = PredicateRoleIndex(TermFormGetPredicateForm(relation.form), withRole);
+	NameRelease(withRole);
+	char const * secondColumnQuery = (withIndex == 1) ? "sym x with \"a\"" : "sym \"b\" with y";
+	byte parameterIO[2] = {PARAMETER_OUT, PARAMETER_IN};
+	Service filterService = {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 2)};
+
+	// The FILTER service reads the stale primitive service, and misses the derived tuple
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples(secondColumnQuery), 0)
+	ASSERT_UINT32_EQUAL(ServiceGetOperator(filterService)->type, OPERATOR_FILTER)
+
+	// The all-output query replaces the primitive service, and removes the FILTER service
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("sym x with y"), 2)
+	ASSERT_TRUE(ServiceGetOperator(filterService) == 0)
+
+	// The recompiled FILTER service reads the replacing service
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples(secondColumnQuery), 1)
+
+	DictionaryRemoveClause(&clause);
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+	DropRelation(relation);
+	ReleaseFormula(fact);
 }
 
 
@@ -614,6 +662,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testStorePrimitiveStaleWhenRuleExists);
 	ExecuteTest(testQueryConjunction);
 	ExecuteTest(testQueryConjunctionRule);
+	ExecuteTest(testFilterServiceOverReplacedPrimitive);
 
 	UnloadLibraries();
 	KernelShutdown();

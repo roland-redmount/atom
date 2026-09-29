@@ -21,8 +21,8 @@ int AssertFact(FormulaView fact, StorageProvider const * provider);
 
 /**
  * High level method to assert any formula.
- * 1) any formula that contains a generator (*) is an ifact,
- *    sent to CreateIFact()
+ * 1) a formula containing a generator (*) is an ifact rule, sent to
+ *    DictionaryAddIFactRule().
  * 1) a single term without variables is a (ground) fact,
  *    sent to AssertFact()
  * 2) a clause with at least two terms and at least one variable is a rule,

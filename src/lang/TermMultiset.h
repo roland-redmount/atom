@@ -1,7 +1,7 @@
 /**
  * A term multiset is a multiset of term forms (see TermForm.h) stored in a
- * core relation. Both a clause form and a conjunction form are term multisets;
- * they differ only in the relation that holds them, and the separator printed.
+ * core relation. Both a clause form and a conjunction form are term multisets,
+ * and differ only in the type predicate, (clause-form) or (conjunction-form).
  * See ClauseForm.h and ConjunctionForm.h.
  */
 
@@ -14,12 +14,7 @@
  * Create a term multiset from a list of term forms, possibly containing
  * duplicates, stored in the given core relation.
  */
-Atom CreateTermMultisetForm(Atom const termForms[], size8 nTermForms, index32 relationIds);
-
-/**
- * True if the form is a term multiset held by the given relation and role.
- */
-bool IsTermMultisetForm(Atom form, index32 relation, index32 roleName);
+Atom CreateTermMultiset(Atom const termForms[], size8 nTermForms, index32 relationIds);
 
 /**
  * Number of unique term forms, discounting multiplicities.

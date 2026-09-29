@@ -30,6 +30,7 @@
 #include "lang/Variable.h"
 #include "lang/unification.h"
 #include "memory/allocator.h"
+#include "storage/RelationBTree.h"
 #include "util/combinations.h"
 #include "util/ResizingArray.h"
 
@@ -1676,15 +1677,21 @@ static void findMatchingClauseForms(Atom queryTermForm, ResizingArray * queryCla
 }
 
 
+// CLAUDE: Values of the unionOrder argument of addCompiledVariant()
+#define UNION_OPERATOR_LAST		1
+#define UNION_OPERATOR_FIRST	2
+
 /**
  * CLAUDE: Add a compiled operator with the given resolved parameters to the variants array.
  * An operator whose signature matches an existing variant is combined with that variant by
  * a UNION operator. Otherwise a new variant is appended, and *nVariants is incremented.
+ * The unionOrder argument is UNION_OPERATOR_FIRST or UNION_OPERATOR_LAST, and places the
+ * given operator as the first or second child of the UNION operator.
  * Returns the variant the operator was added to.
  */
 static CompiledVariant * addCompiledVariant(
 	CompiledVariant variants[], size8 * nVariants, Atom resolvedParameters[], size8 arity,
-	Operator * conjunctionOp)
+	Operator * conjunctionOp, int unionOrder)
 {
 	// Check for previously compiled service with the same signature
 	CompiledVariant * variant = FindCompiledVariant(
@@ -1696,7 +1703,10 @@ static CompiledVariant * addCompiledVariant(
 			variant->op = sortOperatorToIdentityOrder(variant->op);
 			conjunctionOp = sortOperatorToIdentityOrder(conjunctionOp);
 		}
-		variant->op = CreateUnionOperator(variant->op, conjunctionOp);
+		if(unionOrder == UNION_OPERATOR_FIRST)
+			variant->op = CreateUnionOperator(conjunctionOp, variant->op);
+		else
+			variant->op = CreateUnionOperator(variant->op, conjunctionOp);
 		// check if we replaced a seed variant
 		if(variant->isSeed) {
 			variant->isSeed = false;
@@ -1746,7 +1756,7 @@ static size8 compileClauses(
 
 	// Iterate over all rules (clauses) with this clause form.
 	DictionaryIterator dictIterator;
-	DictionaryIterate(clauseForm, &dictIterator);
+	DictionaryIterateClauses(clauseForm, &dictIterator);
 	TypedTuple * matchedTermActors = CreateTypedTuple(query->arity);
 	TypedTuple * substClauseActors = CreateTypedTuple(ClauseArity(clauseForm));
 	Atom resolvedParameters[query->arity];
@@ -1798,7 +1808,8 @@ static size8 compileClauses(
 					copyTypedTupleToArray(
 						substClauseActors, matchedTermActorsOffset, resolvedParameters, query->arity);
 					CompiledVariant * variant = addCompiledVariant(
-						variants, &nVariants, resolvedParameters, query->arity, conjunctionOp);
+						variants, &nVariants, resolvedParameters, query->arity, conjunctionOp,
+						UNION_OPERATOR_LAST);
 					// Mark recursive variants; FIXPOINT operator is added by completeRecursiveVariant()
 					variant->isRecursive = variant->isRecursive || hasRecurseOperator;
 				} while(ChoiceTreeNextBranch(&choiceTree));
@@ -1854,7 +1865,8 @@ static size8 compileConjunctionQuery(
 				TypedTupleGetAtom(conjunctionActors, i).parameter.atomType;
 			ASSERT(resolvedParameters[i].parameter.atomType)
 		}
-		addCompiledVariant(variants, &nVariants, resolvedParameters, query->arity, conjunctionOp);
+		addCompiledVariant(
+			variants, &nVariants, resolvedParameters, query->arity, conjunctionOp, UNION_OPERATOR_LAST);
 	} while(ChoiceTreeNextBranch(&choiceTree));
 
 	FreeTypedTuple(conjunctionActors);
@@ -2101,12 +2113,128 @@ static size8 compileFilterVariants(ParameterizedQuery const * query, CompiledVar
 
 
 /**
+ * Test if an IFACT operator with the ID atom at idColumn can answer the given query.
+ * Return true if the query has an output at idColumn, and a typed input at every other role.
+ */
+static bool queryMatchesIFactRule(ParameterizedQuery const * query, index8 idColumn)
+{
+	for(index8 i = 0; i < query->arity; i++) {
+		Atom parameter = query->parameters[i];
+		if(i == idColumn) {
+			if(parameter.parameter.io != PARAMETER_OUT)
+				return false;
+			if(parameter.parameter.atomType && (parameter.parameter.atomType != AT_ID))
+				return false;
+		}
+		else {
+			if(parameter.parameter.io != PARAMETER_IN)
+				return false;
+			if(!parameter.parameter.atomType)
+				return false;
+		}
+	}
+	return true;
+}
+
+
+/**
+ * Find the ifact rule matching a term query, and return the TupleStore that an
+ * IFACT operator for the query reads and writes; see OPERATOR_IFACT and IsIFactRule().
+ * The TupleStore belongs to the relation with AT_ID at the generator of the ifact rule, and
+ * the query types elsewhere. If this relation does not exist, it is created with a B-tree.
+ * The index of the ID column is written to *idColumn. Returns 0 if no ifact rule matches,
+ * or if the relation exist but has no writable TupleStore.
+ *
+ * This function must be called before seedVariantsFromServices(), so that the primitive
+ * services of a created TupleStore are seeded.
+ */
+static TupleStore * setupIFactRuleStore(ParameterizedQuery const * query, index8 * idColumn)
+{
+	EqualitySignature equalitySignature =
+		ParametersGetEqualitySignature(query->parameters, query->arity);
+	for(index8 i = 0; i < query->arity; i++) {
+		if(equalitySignature.repeatOf[i])
+			return 0;
+	}
+
+	// Find the ifact rule matching the query. Ifact rules of one term form differ in
+	// the generator index, so at most one ifact rule can match.
+	bool foundRule = false;
+	DictionaryIterator iterator;
+	DictionaryIterateIFactRules(query->form, &iterator);
+	while(!foundRule && DictionaryIteratorNext(&iterator)) {
+		*idColumn = IFactRuleFindGeneratorIndex(DictionaryIteratorPeekActors(&iterator));
+		foundRule = queryMatchesIFactRule(query, *idColumn);
+	}
+	DictionaryIteratorEnd(&iterator);
+	if(!foundRule)
+		return 0;
+
+	// The relation corresponding to the query
+	byte atomTypes[query->arity];
+	for(index8 i = 0; i < query->arity; i++)
+		atomTypes[i] = (i == *idColumn) ? AT_ID : query->parameters[i].parameter.atomType;
+	Relation relation = {
+		.form = query->form,
+		.typeSignature = CreateTypeSignature(atomTypes, query->arity)
+	};
+	if(!RelationExists(relation)) {
+		// Create a new TupleStore, with identity index order, as in AssertFact().
+		// A compiled service of the relation must have the index order of the store;
+		// see AttachOperator().
+		return CreateTupleStore(relation, &btreeStorageProvider, query->arity, 0);
+	}
+	TupleStore * store = RelationGetTupleStore(relation);
+	if(!store || !TupleStoreIsWritable(store)) {
+		// A relation without a writable TupleStore cannot store ifacts
+		return 0;
+	}
+	return store;
+}
+
+
+/**
+ * Creat an IFACT operator for a term query, which reads and writes the given TupleStore,
+ * and add it to the compiled variants.
+ *
+ * The IFACT operator is always the first child of a UNION with an existing variant,
+ * so that the IFACT operator adds its tuple before the other child reads the
+ * TupleStore, to prevent write lock violations; see unionSetupContext().
+ * This function must be called after completeRecursiveVariant(), since an IFACT operator
+ * cannot run within a FIXPOINT operator, whose child operator has no input arguments.
+ *
+ * NOTE: a fact added to the TupleStore by AssertFact() is only yielded if the TupleStore
+ * provides a primitive service of the query signature, which is then a seed variant.
+ *
+ * Returns the new number of variants.
+ */
+static size8 compileIFactRule(
+	ParameterizedQuery const * query, TupleStore * store, index8 idColumn,
+	CompiledVariant variants[], size8 nVariants)
+{
+	Atom resolvedParameters[query->arity];
+	TupleCopy(query->parameters, resolvedParameters, query->arity);
+	resolvedParameters[idColumn].parameter.atomType = AT_ID;
+	Operator * ifactOperator = CreateIFactOperator(store, idColumn);
+	addCompiledVariant(
+		variants, &nVariants, resolvedParameters, query->arity, ifactOperator, UNION_OPERATOR_FIRST);
+	return nVariants;
+}
+
+
+/**
  * Attempt to compile a query into one or more services (variants).
  * Returns the number of variants written to the variants array.
  */
 static size8 compileQueryVariants(
 	CompileStack * compileStack, ParameterizedQuery const * query, CompiledVariant variants[])
 {
+	// Find a matching ifact and setup its TupleSTore before seeding;
+	// see setupIFactRuleStore()
+	index8 ifactIdColumn = 0;
+	TupleStore * ifactStore = IsConjunctionForm(query->form) ?
+		0 : setupIFactRuleStore(query, &ifactIdColumn);
+
 	// Initialize the set of variants with known primitive services as variants
 	size8 nVariants = seedVariantsFromServices(query, variants);
 
@@ -2125,6 +2253,10 @@ static size8 compileQueryVariants(
 		if(variants[i].isRecursive)
 			completeRecursiveVariant(&variants[i], query->arity);
 	}
+
+	// Compile an IFACT variant after the FIXPOINT operators are added; see compileIFactRule()
+	if(ifactStore)
+		nVariants = compileIFactRule(query, ifactStore, ifactIdColumn, variants, nVariants);
 
 	// CLAUDE: A query the rules do not answer may still be answered by filtering a service that
 	// produces what the query binds; see compileFilterVariants(). The rules are tried
@@ -2187,16 +2319,18 @@ static size8 compileParameterizedQuery(
 			ServiceMarkNotStale(service);
 			continue;
 		}
-		if(variants[i].isReplaced)
-			RemoveService(service);
+		if(variants[i].isReplaced) {
+			// CLAUDE: the primitive service is restored when the compiled service is removed
+			ReplacePrimitiveService(service, variants[i].op);
+		}
 		else {
 			// If a variant re-uses operator of an existing service, wrap it in an IDENTITY operator
 			// so that we can attach a service (an operator can only attach to one Service).
 			if(!IsNullRelation(variants[i].op->relation)) {
 				variants[i].op = CreateIdentityOperator(variants[i].op);
 			}
+			CreateService(service, variants[i].op);
 		}
-		CreateService(service, variants[i].op);
 		nRegisteredServices++;
 
 #ifdef DEBUG_COMPILER

@@ -3,12 +3,11 @@
 #include "lang/TermForm.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/lookup.h"
 #include "kernel/multiset.h"
 #include "kernel/Relation.h"
 
 
-Atom CreateTermMultisetForm(Atom const termForms[], size8 nTermForms, index32 relationId)
+Atom CreateTermMultiset(Atom const termForms[], size8 nTermForms, index32 relationId)
 {
 	// reduce to unique terms
 	Atom uniqueTermForms[nTermForms];
@@ -21,18 +20,13 @@ Atom CreateTermMultisetForm(Atom const termForms[], size8 nTermForms, index32 re
 
 	AddMultisetToIFactFromArrays(&draft, uniqueTermForms, multiplicities, nUniqueTermForms, AT_ID);
 
+	// add the (clause-form) or (conjunction-form) tuple, depending on relationId
 	TupleStore * store = GetCoreTupleStore(relationId);
 	IFactBeginConjunction(&draft, store, 0);
 	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
 	IFactEndConjunction(&draft);
 
 	return IFactEnd(&draft);
-}
-
-
-bool IsTermMultisetForm(Atom form, index32 relation, index32 roleName)
-{
-	return LookupHasEntry(form, GetCoreRelation(relation), GetCoreRelation(relation).form, GetCoreRoleName(roleName));
 }
 
 

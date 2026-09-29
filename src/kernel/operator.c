@@ -1,5 +1,6 @@
 
 #include "btree/btree.h"
+#include "kernel/ifact.h"
 #include "kernel/operator.h"
 #include "kernel/Relation.h"
 #include "kernel/tuple.h"
@@ -835,8 +836,6 @@ static void unionSetupContext(OperatorContext * context)
 	// both child operators write to the arguments tuple
 	unionContext->lookaheadContext = createContext(
 		context, context->op->impl._union.first, context->arguments);
-	unionContext->nextContext = createContext(
-		context, context->op->impl._union.second, context->arguments);
 	// Obtain the lookahead tuple
 	if(OperatorCall(unionContext->lookaheadContext)) {
 		CopyMemory(context->arguments, unionContext->lookahead, context->op->nArguments * sizeof(Atom));
@@ -845,7 +844,13 @@ static void unionSetupContext(OperatorContext * context)
 		// No lookahead
 		OperatorFreeContext(unionContext->lookaheadContext);
 		unionContext->lookaheadContext = 0;
-	}	
+	}
+	// CLAUDE: The second context is created after the first child has been called, so that
+	// an IFACT operator as the first child can add its tuple to a TupleStore before the
+	// second child reads that TupleStore; see OPERATOR_IFACT. Setting up the second context
+	// only reads the input arguments, which the first child leaves unchanged.
+	unionContext->nextContext = createContext(
+		context, context->op->impl._union.second, context->arguments);
 }
 
 
@@ -1540,6 +1545,71 @@ static void teardownMachineOperator(Operator * op)
 }
 
 
+//------------------------------------- OPERATOR_IFACT -----------------------------------------
+
+typedef struct s_IFactOperatorContext {
+	bool isExhausted;
+} IFactOperatorContext;
+
+
+Operator * CreateIFactOperator(TupleStore * store, index8 idColumn)
+{
+	size8 nArguments = store->nColumns;
+	ASSERT(idColumn < nArguments)
+	Operator * op = createOperator(OPERATOR_IFACT, nArguments, sizeof(IFactOperatorContext));
+	op->impl.ifact.store = store;
+	op->impl.ifact.idColumn = idColumn;
+	op->impl.ifact.childOperator = IFactSetupStoreOperator(store, idColumn);
+	addParent(op->impl.ifact.childOperator);
+
+	allocateIndexOrder(op);
+	CopyMemory(store->indexColumns, op->indexOrder, nArguments);
+	return op;
+}
+
+
+static void ifactSetupContext(OperatorContext * context)
+{
+	// nothing to do, the context data is zeroed
+}
+
+
+static bool ifactCall(OperatorContext * context)
+{
+	IFactOperatorContext * ifactContext = (IFactOperatorContext *) &context->data;
+	if(ifactContext->isExhausted)
+		return false;
+	ifactContext->isExhausted = true;
+
+	Operator const * op = context->op;
+	IFactDraft draft;
+	IFactBegin(&draft);
+	IFactBeginConjunction(&draft, op->impl.ifact.store, op->impl.ifact.idColumn);
+	IFactAddTuple(&draft, context->arguments);
+	IFactEndConjunction(&draft);
+	Atom idAtom = IFactEnd(&draft);
+	IFactMarkCached(idAtom);
+
+	context->arguments[op->impl.ifact.idColumn] = idAtom;
+	return true;
+}
+
+
+static void teardownIFactOperator(Operator * op)
+{
+	ASSERT(op->type == OPERATOR_IFACT)
+	// CLAUDE: the cached ifacts are kept; they are released with the ifact rule,
+	// see DictionaryRemoveIFactRule()
+	removeParent(op->impl.ifact.childOperator);
+}
+
+
+static void ifactFinalizeContext(OperatorContext * context)
+{
+	// nothing to do
+}
+
+
 //------------------------------------- Generic Operator -----------------------------------------
 
 
@@ -1556,6 +1626,7 @@ size8 OperatorNChildren(Operator const * op)
 	case OPERATOR_CONSTRAIN:
 	case OPERATOR_FIXPOINT:
 	case OPERATOR_FILTER:
+	case OPERATOR_IFACT:
 		return 1;
 
 	case OPERATOR_MACHINE:
@@ -1596,6 +1667,9 @@ Operator * OperatorGetChild(Operator const * op, index8 index)
 
 	case OPERATOR_FILTER:
 		return op->impl.filter.childOperator;
+
+	case OPERATOR_IFACT:
+		return op->impl.ifact.childOperator;
 
 	default:
 		ASSERT(false)
@@ -1646,6 +1720,10 @@ static void teardownOperator(Operator * op)
 	case OPERATOR_MACHINE:
 		teardownMachineOperator(op);
 		break;
+
+	case OPERATOR_IFACT:
+		teardownIFactOperator(op);
+		break;
 	
 	default:
 		ASSERT(false)
@@ -1679,10 +1757,6 @@ void AttachOperator(Operator * op, Relation signature)
 void DetachOperator(Operator * op)
 {
 	ASSERT(!IsNullRelation(op->relation))
-	// TODO: any descendant MACHINE operator that is detached
-	// has been subsumed into a UNION, and must be restored to
-	// the op->relation service
-
 	op->relation = (Relation) {0};
 	CheckOperator(op);
 }
@@ -1746,6 +1820,10 @@ static OperatorContext * createContext(
 
 	case OPERATOR_MACHINE:
 		machineSetupContext(context);
+		break;
+
+	case OPERATOR_IFACT:
+		ifactSetupContext(context);
 		break;
 	
 	default:
@@ -1829,6 +1907,10 @@ bool OperatorCall(OperatorContext * context)
 		success = machineCall(context);
 		break;
 
+	case OPERATOR_IFACT:
+		success = ifactCall(context);
+		break;
+
 	default:
 		ASSERT(false)
 		success = false;
@@ -1884,6 +1966,10 @@ void OperatorFreeContext(OperatorContext * context)
 	case OPERATOR_MACHINE:
 		machineFinalizeContext(context);
 		break;
+
+	case OPERATOR_IFACT:
+		ifactFinalizeContext(context);
+		break;
 	
 	default:
 		ASSERT(false)
@@ -1916,7 +2002,8 @@ static const char * operatorNames[N_OPERATOR_TYPES + 1] = {
 	"FIXPOINT",
 	"RECURSE",
 	"FILTER",
-	"MACHINE"
+	"MACHINE",
+	"IFACT"
 };
 
 /**
@@ -2096,6 +2183,10 @@ static void printOperatorRecursive(
 
 	case OPERATOR_MACHINE:
 		// nothing to print
+		break;
+
+	case OPERATOR_IFACT:
+		// CLAUDE: the child operator is not called by IFACT, and is not printed
 		break;
 
 	default:

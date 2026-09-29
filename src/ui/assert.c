@@ -115,16 +115,15 @@ int AssertFormula(Atom formula)
 {
 	FormulaView formulaView = FormulaGetView(formula);
 
-	// Any formula that contains a generator (*) is a defining fact
+	// Any formula that contains a generator (*) is added to the dictionary
+	// as an ifact rule; see IsIFactRule()
 	if(TypedTupleContainsAtom(formulaView.actors, generatorAtom)) {
-		Atom idAtom = CreateIFact(formulaView);
-		if(idAtom.hash) {
-			return ASSERT_OK;
-			// TODO: decide how to manage the reference to the new idAtom.
-			// Somehow the UI "owns it" ...
-		}
-		else
+		if(!IsIFactRule(formula))
 			return ASSERT_INVALID_IFACT;
+		if(DictionaryContainsIFactRule(formula))
+			return ASSERT_EXISTED;
+		DictionaryAddIFactRule(formula);
+		return ASSERT_OK;
 	}
 
 	if(FormulaIsTerm(formula)) {
@@ -159,12 +158,14 @@ void RetractFact(FormulaView fact)
 		return;
 	}
 	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
-	// Remove the lookup entries before the tuple: removing the tuple releases the
-	// relation's reference to each of its atoms, and releasing the last reference
-	// to an atom takes all of its lookup entries with it.
-	LookupRemoveFactRoles(relation, actorsArray);
+
 	// Remove the tuple. This will not remove defining facts
-	TupleStoreRemoveTuple(store, actorsArray, 0);
+	byte removeResult = TupleStoreRemoveTuple(store, actorsArray, 0) ;
+	if(removeResult == TUPLE_REMOVED)
+		LookupRemoveFactRoles(relation, actorsArray);
+	else {
+		ASSERT(removeResult == TUPLE_PROTECTED)
+	}
 }
 
 

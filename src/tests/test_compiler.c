@@ -109,7 +109,7 @@ void testCompilePermute1(void)
 {
 	// This rule compiles to a PERMUTE service with no constants
 	// + z - x = y  <-  + x + y = z
-	DictionaryEntry entry = DictionaryAddClauseFromCString("+ z - x = y | ! + x + y = z");
+	FormulaView clause = DictionaryAddClauseFromCString("+ z - x = y | ! + x + y = z");
 	Atom queryTerm = CStringToTerm("+ 7 - 4 = d");
 
 	// This will yield a new service from the existing (+ + =) service
@@ -135,7 +135,7 @@ void testCompilePermute1(void)
 
 	RemoveService(service);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 }
 
 
@@ -145,7 +145,7 @@ void testCompilePermute2(void)
 	// The constant restricts an argument of the child service and cannot
 	// introduce duplicate tuples, so no PROJECT service is needed.
 	// number x addtwo y <- + x + 2 = y
-	DictionaryEntry entry = DictionaryAddClauseFromCString("number x addtwo y | ! + x + 2 = y");
+	FormulaView clause = DictionaryAddClauseFromCString("number x addtwo y | ! + x + 2 = y");
 	Atom queryTerm = CStringToTerm("number 3 addtwo z");
 
 	Service services[MAX_COMPILED_VARIANTS];
@@ -172,7 +172,7 @@ void testCompilePermute2(void)
 
 	RemoveService(service);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 }
 
 
@@ -182,7 +182,7 @@ void testCompileProject(void)
 	// an argument of its own, which is then dropped again by a PROJECT service:
 	// the rule compiles to PROJECT(PERMUTE(...)).
 	// set s element e <- list s position p element e
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"set s element e | ! list s position p element e");
 	Atom queryTerm = CStringToTerm("set \"alibaba\" element e");
 
@@ -224,7 +224,7 @@ void testCompileProject(void)
 		RemoveService(services[i]);
 	}
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 }
 
 
@@ -278,7 +278,7 @@ void testCompileChoicePointAfterFailedTerm(void)
 	setupRowRelations(&rows);
 
 	// result n square s <- row n amount v & * v * v = s
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"result n square s | ! row n amount v | ! * v * v = s");
 	Atom queryTerm = CStringToTerm("result n square s");
 	Service services[MAX_COMPILED_VARIANTS];
@@ -296,7 +296,7 @@ void testCompileChoicePointAfterFailedTerm(void)
 
 	RemoveService(services[0]);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 	teardownRowRelations(&rows);
 }
 
@@ -312,7 +312,7 @@ void testCompileTwoChoicePoints(void)
 	setupRowRelations(&rows);
 
 	// pair a with b <- row n amount a & row m amount b
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"pair a with b | ! row n amount a | ! row m amount b");
 	Atom queryTerm = CStringToTerm("pair a with b");
 	Service services[MAX_COMPILED_VARIANTS];
@@ -333,7 +333,7 @@ void testCompileTwoChoicePoints(void)
 	for(index8 i = 0; i < nServices; i++)
 		RemoveService(services[i]);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 	teardownRowRelations(&rows);
 }
 
@@ -357,7 +357,7 @@ void testCompileChoicePointOverConjunctionService(void)
 	ASSERT_UINT32_EQUAL(nConjunctionServices, 4)
 
 	// The rule: pair a with b <- row n amount a & row m amount b
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"pair a with b | ! row n amount a | ! row m amount b");
 	Atom queryTerm = CStringToTerm("pair a with b");
 	Service services[MAX_COMPILED_VARIANTS];
@@ -383,7 +383,7 @@ void testCompileChoicePointOverConjunctionService(void)
 	for(index8 i = 0; i < nServices; i++)
 		RemoveService(services[i]);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 	for(index8 i = 0; i < nConjunctionServices; i++)
 		RemoveService(conjunctionServices[i]);
 	ReleaseFormula(conjunctionQuery);
@@ -399,7 +399,7 @@ void testCompileChoicePointOverConjunctionService(void)
 void testCompileUnconstrainedHeadVariable(void)
 {
 	// set s element e size n <- list s position p element e
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"set s element e size n | ! list s position p element e");
 	Atom queryTerm = CStringToTerm("set \"ab\" element e size z");
 
@@ -411,7 +411,7 @@ void testCompileUnconstrainedHeadVariable(void)
 		RemoveService(services[i]);
 	}
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 }
 
 
@@ -419,7 +419,7 @@ void testCompileJoin1(void)
 {
 	// This rule compiles to a JOIN service
 	// first x second y third z  <-  + x + 1 = y & + y + 1 = z
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"first x second y third z | ! + x + 1 = y | ! + y + 1 = z");
 	Atom queryTerm = CStringToTerm("first 3 second s third t");
 
@@ -446,7 +446,7 @@ void testCompileJoin1(void)
 
 	RemoveService(service);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 }
 
 
@@ -458,7 +458,7 @@ void testCompileJoin2(void)
 	// is dropped again by a PROJECT service:
 	// PROJECT(JOIN(+ x + 1 = y, + y + 1 = z), 2)
 	// first x third z  <-  + x + 1 = y & + y + 1 = z
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"first x third z | ! + x + 1 = y | ! + y + 1 = z");
 	Atom queryTerm = CStringToTerm("first 3 third t");
 
@@ -482,7 +482,7 @@ void testCompileJoin2(void)
 
 	RemoveService(service);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 }
 
 
@@ -491,9 +491,9 @@ void testCompileUnion(void)
 	// Two rules resulting in a UNION service
 	// number x neighbor y <- = y + x + 1     (y = x + 1)
 	// number x neighbor y <- = x + y + 1     (x = y - 1 <-> y = x - 1)
-	DictionaryEntry entry1 = DictionaryAddClauseFromCString(
+	FormulaView clause1 = DictionaryAddClauseFromCString(
 		"number x neighbor y | ! = y + x + 1");
-	DictionaryEntry entry2 = DictionaryAddClauseFromCString(
+	FormulaView clause2 = DictionaryAddClauseFromCString(
 		"number x neighbor y | ! = x + y + 1");
 	Atom queryTerm = CStringToTerm("number 5 neighbor y");
 
@@ -527,8 +527,8 @@ void testCompileUnion(void)
 
 	RemoveService(service);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry1);
-	DictionaryRemoveClause(&entry2);
+	DictionaryRemoveClause(&clause1);
+	DictionaryRemoveClause(&clause2);
 }
 
 
@@ -546,7 +546,7 @@ void testCompileConstrain(void)
 	SetupEdgeFixture(&edgeFixture);
 
 	// self x <- edge e from x to x
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"self x | ! edge e from x to x");
 	Atom queryTerm = CStringToTerm("self y");
 
@@ -579,7 +579,7 @@ void testCompileConstrain(void)
 	IFactRelease(nodeB);
 	RemoveService(services[0]);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 	TeardownRelationFixture(&edgeFixture);
 }
 
@@ -635,7 +635,7 @@ void testCompileRepeatedQueryParameter(void)
 void testCompileRepeatedQueryParameterRule(void)
 {
 	SetupEdgeFixture(&edgeFixture);
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"twostep x to z | ! edge d from x to y | ! edge f from y to z");
 	Atom queryTerm = CStringToTerm("twostep x to x");
 
@@ -667,7 +667,7 @@ void testCompileRepeatedQueryParameterRule(void)
 	IFactRelease(nodeA);
 	IFactRelease(nodeB);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 	TeardownRelationFixture(&edgeFixture);
 }
 
@@ -691,7 +691,7 @@ void testCompileRepeatedQueryParameterRecursive(void)
 		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
 		ReleaseFormula(fact);
 	}
-	DictionaryEntry entry = DictionaryAddClauseFromCString("sym x with y | ! sym y with x");
+	FormulaView clause = DictionaryAddClauseFromCString("sym x with y | ! sym y with x");
 	size32 nServicesBefore = NumberOfServices();
 
 	Atom queryTerm = CStringToTerm("sym x with x");
@@ -712,7 +712,7 @@ void testCompileRepeatedQueryParameterRecursive(void)
 
 	RemoveService(services[0]);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 	for(index8 i = 0; i < 3; i++) {
 		Atom fact = CStringToTerm(storedFacts[i]);
 		RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
@@ -769,7 +769,7 @@ void testCompileRuleOverConjunctionService(void)
 	Operator * conjunctionOperator = ServiceGetOperator(conjunctionServices[0]);
 
 	// CLAUDE: walk x to z <- edge d from x to y & edge f from y to z
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"walk x to z | ! edge d from x to y | ! edge f from y to z");
 	Atom queryTerm = CStringToTerm("walk x to z");
 	Service services[MAX_COMPILED_VARIANTS];
@@ -783,7 +783,7 @@ void testCompileRuleOverConjunctionService(void)
 
 	RemoveService(services[0]);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 	RemoveService(conjunctionServices[0]);
 	ReleaseFormula(conjunctionQuery);
 	TeardownRelationFixture(&edgeFixture);
@@ -804,7 +804,7 @@ void testCompileRuleOverConjunctionServiceAndTerm(void)
 	Operator * conjunctionOperator = ServiceGetOperator(conjunctionServices[0]);
 
 	// CLAUDE: trip x to z start u end v <- edge d from x to y & edge f from y to z & edge g from u to v
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"trip x to z start u end v | ! edge d from x to y | ! edge f from y to z | ! edge g from u to v");
 	Atom queryTerm = CStringToTerm("trip x to z start u end v");
 	Service services[MAX_COMPILED_VARIANTS];
@@ -819,7 +819,7 @@ void testCompileRuleOverConjunctionServiceAndTerm(void)
 
 	RemoveService(services[0]);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 	RemoveService(conjunctionServices[0]);
 	ReleaseFormula(conjunctionQuery);
 	TeardownRelationFixture(&edgeFixture);
@@ -841,7 +841,7 @@ void testCompileSeedPermutation(void)
 	Relation relation = RelationFromFact(FormulaGetView(storedFact));
 	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 3, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
-	DictionaryEntry entry = DictionaryAddClauseFromCString("+ x + y = z | ! plus x and y is z");
+	FormulaView clause = DictionaryAddClauseFromCString("+ x + y = z | ! plus x and y is z");
 
 	// Dispatch finds the stale primitive service, under a permutation
 	Atom queryTerm = CStringToTerm("+ x + 3 = 5");
@@ -872,7 +872,7 @@ void testCompileSeedPermutation(void)
 	ASSERT_TRUE(found7)
 
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 	DropRelation(relation);
 	ReleaseFormula(storedFact);
@@ -894,7 +894,7 @@ void testCompileSeedPermutation(void)
 void testCompileRecursiveJoin2(void)
 {
 	// The recursive rule
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"number n faculty f | ! < n > 0 | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
 	// Create terminating fact
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
@@ -941,14 +941,18 @@ void testCompileRecursiveJoin2(void)
 
 	// Removing the service also drops the primitive operator.
 	// NOTE: in normal usage, we would not remove the service, but invalidate the rule.
+	// The primitive service that was replaced by the compiled service is restored, marked
+	// stale; see ReplaceService()
 	RemoveService(service);
-	ASSERT_NULL(ServiceGetOperator(service))
+	ASSERT_PTR_EQUAL(ServiceGetOperator(service), storeOperator)
+	ASSERT_TRUE(ServiceIsStale(service))
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 
 	ReleaseFormula(queryTerm);
 	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	DropRelation(relation);
 	ReleaseFormula(terminatingFact);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 }
 
 /**
@@ -957,7 +961,7 @@ void testCompileRecursiveJoin2(void)
  */
 void testCompileRecursiveQueryAllOutput(void)
 {
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"number n faculty f | ! < n > 0 | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");
 	Relation relation = RelationFromFact(FormulaGetView(terminatingFact));
@@ -980,7 +984,7 @@ void testCompileRecursiveQueryAllOutput(void)
 	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	DropRelation(relation);
 	ReleaseFormula(terminatingFact);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 }
 
 
@@ -1003,7 +1007,7 @@ void testCompileStoredFactsAndRule(void)
 
 	// Create a rule to compile against
 	// NOTE: this doesn't invalidate primitive services.
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"root n square s | ! * n * n = s");
 	// Compile a query
 	Atom queryTerm = CStringToTerm("root 5 square s");
@@ -1048,7 +1052,7 @@ void testCompileStoredFactsAndRule(void)
 	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 	DropRelation(relation);
 	ReleaseFormula(storedFact);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 }
 
 
@@ -1093,7 +1097,7 @@ void testCompileQueryNoMatchingRules(void)
  */
 void testCompileQueryWithUselessRule(void)
 {
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"tone n level v | ! nosuch n thing v");
 
 	// Add a stored fact
@@ -1125,7 +1129,7 @@ void testCompileQueryWithUselessRule(void)
 	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 	DropRelation(relation);
 	ReleaseFormula(storedFact);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 }
 
 
@@ -1149,9 +1153,9 @@ static RelationFixture precSuccFixture;
 void testCompileRecursiveJoin1(void)
 {
 	SetupPrecSuccFixture(&precSuccFixture);
-	DictionaryEntry entry1;
-	DictionaryEntry entry2;
-	AddTransitiveClosureRules(&entry1, &entry2);
+	FormulaView baseClause;
+	FormulaView recursiveClause;
+	AddTransitiveClosureRules(&baseClause, &recursiveClause);
 
 	Atom queryTerm = CStringToTerm("before \"a\" after \"d\"");
 	Service services[MAX_COMPILED_VARIANTS];
@@ -1181,8 +1185,8 @@ void testCompileRecursiveJoin1(void)
 
 	RemoveService(service);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry2);
-	DictionaryRemoveClause(&entry1);
+	DictionaryRemoveClause(&recursiveClause);
+	DictionaryRemoveClause(&baseClause);
 	TeardownRelationFixture(&precSuccFixture);
 }
 
@@ -1195,9 +1199,9 @@ void testCompileRecursiveJoin1(void)
 void testCompileRecursiveReachable(void)
 {
 	SetupPrecSuccFixture(&precSuccFixture);
-	DictionaryEntry entry1;
-	DictionaryEntry entry2;
-	AddTransitiveClosureRules(&entry1, &entry2);
+	FormulaView baseClause;
+	FormulaView recursiveClause;
+	AddTransitiveClosureRules(&baseClause, &recursiveClause);
 
 	Atom queryTerm = CStringToTerm("before \"a\" after y");
 	Service services[MAX_COMPILED_VARIANTS];
@@ -1231,8 +1235,8 @@ void testCompileRecursiveReachable(void)
 
 	RemoveService(service);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry2);
-	DictionaryRemoveClause(&entry1);
+	DictionaryRemoveClause(&recursiveClause);
+	DictionaryRemoveClause(&baseClause);
 	TeardownRelationFixture(&precSuccFixture);
 }
 
@@ -1257,9 +1261,9 @@ void testCompileRecursiveReachable(void)
 void testCompileRecursiveTermUnboundInput(void)
 {
 	SetupPrecSuccFixture(&precSuccFixture);
-	DictionaryEntry baseEntry = DictionaryAddClauseFromCString(
+	FormulaView baseClause = DictionaryAddClauseFromCString(
 		"reach a hop b | ! prec a succ b");
-	DictionaryEntry recursiveEntry = DictionaryAddClauseFromCString(
+	FormulaView recursiveClause = DictionaryAddClauseFromCString(
 		"reach a hop b | ! reach c hop b | ! prec c succ a");
 
 	Atom queryTerm = CStringToTerm("reach \"a\" hop y");
@@ -1284,8 +1288,8 @@ void testCompileRecursiveTermUnboundInput(void)
 	IFactRelease(nodeB);
 	RemoveService(services[0]);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&recursiveEntry);
-	DictionaryRemoveClause(&baseEntry);
+	DictionaryRemoveClause(&recursiveClause);
+	DictionaryRemoveClause(&baseClause);
 	TeardownRelationFixture(&precSuccFixture);
 	// The above leaves behind a (succ <ID prec >ID) compiled service generated as part
 	// of the process of compiling (reach "a" hop y) query, which is not invalidated
@@ -1304,9 +1308,9 @@ void testCompileRecursiveTermUnboundInput(void)
 void testCompileRecursiveClosure(void)
 {
 	SetupPrecSuccFixture(&precSuccFixture);
-	DictionaryEntry entry1;
-	DictionaryEntry entry2;
-	AddTransitiveClosureRules(&entry1, &entry2);
+	FormulaView baseClause;
+	FormulaView recursiveClause;
+	AddTransitiveClosureRules(&baseClause, &recursiveClause);
 
 	Atom queryTerm = CStringToTerm("before x after y");
 	Service services[MAX_COMPILED_VARIANTS];
@@ -1347,8 +1351,8 @@ void testCompileRecursiveClosure(void)
 
 	RemoveService(service);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry2);
-	DictionaryRemoveClause(&entry1);
+	DictionaryRemoveClause(&recursiveClause);
+	DictionaryRemoveClause(&baseClause);
 	TeardownRelationFixture(&precSuccFixture);
 }
 
@@ -1364,8 +1368,8 @@ void testCompileRecursiveVariants(void)
 {
 	// The (prec succ) fixture with types {AT_ID, AT_ID}
 	SetupPrecSuccFixture(&precSuccFixture);
-	DictionaryEntry baseRule;
-	DictionaryEntry recursiveRule;
+	FormulaView baseRule;
+	FormulaView recursiveRule;
 	AddTransitiveClosureRules(&baseRule, &recursiveRule);
 
 	// Add a second (prec succ) relation with types {AT_INT, AT_INT},
@@ -1459,7 +1463,7 @@ void testCompileNegatedTerm(void)
 	TupleStore * oddStore = CreateTupleStore(oddRelation, &btreeStorageProvider, 1, 0);
 	TupleStoreAddTuple(oddStore, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	// setup the rule
-	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
+	FormulaView clause = DictionaryAddClauseFromCString("! even x | ! odd x");
 	Atom queryTerm = CStringToTerm("! even 3");
 
 	// compile the query
@@ -1486,7 +1490,7 @@ void testCompileNegatedTerm(void)
 	RemoveService(service);
 	ReleaseFormula(queryTerm);
 	
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 
 	RelationRemoveTuple(oddRelation, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	DropRelation(oddRelation);
@@ -1511,7 +1515,7 @@ void testCompiledServiceReadsFactsLive(void)
 	TupleStore * store = CreateTupleStore(oddRelation, &btreeStorageProvider, 1, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	// Add the rule (odd x -> ! even x)
-	DictionaryEntry entry = DictionaryAddClauseFromCString("! even x | ! odd x");
+	FormulaView clause = DictionaryAddClauseFromCString("! even x | ! odd x");
 
 	Atom queryTerm = CStringToTerm("! even 3");
 	Service services[MAX_COMPILED_VARIANTS];
@@ -1546,7 +1550,7 @@ void testCompiledServiceReadsFactsLive(void)
 
 	RemoveService(service);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 	RelationRemoveTuple(oddRelation, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	DropRelation(oddRelation);
 	ReleaseFormula(odd3term);
@@ -1566,7 +1570,7 @@ void testCompiledServiceReadsFactsLive(void)
  */
 void testCompileSquares(void)
 {
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"number n square s | ! =< n >= 1 | ! >= n =< 4 | ! * n * n = s");
 	Atom queryTerm = CStringToTerm("number n square s");
 
@@ -1592,7 +1596,7 @@ void testCompileSquares(void)
 
 	RemoveService(service);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 }
 
 
@@ -1615,10 +1619,10 @@ void testCompileChainedRules(void)
 	RelationFixtureAddTuple(&fatherFixture, (char const * []) {"b", "c"});
 
 	// parent p offspring c <- father p child c
-	DictionaryEntry parentEntry = DictionaryAddClauseFromCString(
+	FormulaView parentClause = DictionaryAddClauseFromCString(
 		"parent p offspring c | ! father p child c");
 	// grandparent x grandchild z <- parent x offspring y & parent y offspring z
-	DictionaryEntry grandparentEntry = DictionaryAddClauseFromCString(
+	FormulaView grandparentClause = DictionaryAddClauseFromCString(
 		"grandparent x grandchild z | ! parent x offspring y | ! parent y offspring z");
 
 	size32 nCompiledBefore = NumberOfCompiledServices();
@@ -1649,8 +1653,8 @@ void testCompileChainedRules(void)
 	IFactRelease(nodeC);
 	RemoveService(services[0]);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&grandparentEntry);
-	DictionaryRemoveClause(&parentEntry);
+	DictionaryRemoveClause(&grandparentClause);
+	DictionaryRemoveClause(&parentClause);
 	// Dropping the stored relation invalidates the compiled (parent offspring) services
 	TeardownRelationFixture(&fatherFixture);
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
@@ -1680,10 +1684,10 @@ void testCompileChainedRuleOrder(void)
 	RelationFixtureAddTuple(&startFixture, (char const * []) {"sa", "na"});
 
 	// alias k as l <- node k label l
-	DictionaryEntry aliasEntry = DictionaryAddClauseFromCString(
+	FormulaView aliasClause = DictionaryAddClauseFromCString(
 		"alias k as l | ! node k label l");
 	// pick p give g <- start p point k & alias k as g
-	DictionaryEntry pickEntry = DictionaryAddClauseFromCString(
+	FormulaView pickClause = DictionaryAddClauseFromCString(
 		"pick p give g | ! start p point k | ! alias k as g");
 
 	ASSERT_INT32_EQUAL(NumberOfCompiledServices(), 0);
@@ -1724,8 +1728,8 @@ void testCompileChainedRuleOrder(void)
 
 	RemoveService(services[0]);
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&pickEntry);
-	DictionaryRemoveClause(&aliasEntry);
+	DictionaryRemoveClause(&pickClause);
+	DictionaryRemoveClause(&aliasClause);
 	TeardownRelationFixture(&startFixture);
 	TeardownRelationFixture(&nodeFixture);
 }
@@ -1739,8 +1743,8 @@ void testCompileChainedRuleOrder(void)
  */
 void testCompileMutualRecursion(void)
 {
-	DictionaryEntry pEntry = DictionaryAddClauseFromCString("p x | ! q x");
-	DictionaryEntry qEntry = DictionaryAddClauseFromCString("q x | ! p x");
+	FormulaView pClause = DictionaryAddClauseFromCString("p x | ! q x");
+	FormulaView qClause = DictionaryAddClauseFromCString("q x | ! p x");
 
 	Atom queryTerm = CStringToTerm("p n");
 	Service services[MAX_COMPILED_VARIANTS];
@@ -1748,8 +1752,8 @@ void testCompileMutualRecursion(void)
 	ASSERT_UINT32_EQUAL(nServices, 0)
 
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&qEntry);
-	DictionaryRemoveClause(&pEntry);
+	DictionaryRemoveClause(&qClause);
+	DictionaryRemoveClause(&pClause);
 }
 
 
@@ -1821,7 +1825,7 @@ void testCompileNewIOPatternRepeated(void)
 void testCompileFilterInRuleBody(void)
 {
 	size32 nCompiledBefore = NumberOfCompiledServices();
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"at s position p letter e | ! list s position p element e");
 	Atom queryTerm = CStringToTerm("at \"abracadabra\" position q letter 'a");
 
@@ -1851,7 +1855,7 @@ void testCompileFilterInRuleBody(void)
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 
 	ReleaseFormula(queryTerm);
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 }
 
 
@@ -1868,11 +1872,11 @@ void testFilterServiceInvalidatedByRule(void)
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore + 1)
 
 	// A rule of the query's term form invalidates what was compiled for that form
-	DictionaryEntry entry = DictionaryAddClauseFromCString(
+	FormulaView clause = DictionaryAddClauseFromCString(
 		"list s position p element e | ! at s index p letter e");
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 
-	DictionaryRemoveClause(&entry);
+	DictionaryRemoveClause(&clause);
 	ReleaseFormula(queryTerm);
 }
 

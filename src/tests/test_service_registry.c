@@ -210,6 +210,37 @@ void testDropRelatonWithCompiledService(void)
 }
 
 
+/**
+ * Test that aprimitive service replaced by a compiled service with ReplaceService() is
+ * restored, and marked stale, when the compiled service is removed.
+ */
+void testReplaceService(void)
+{
+	setupFixture();
+	Service machineService = addDummyMachineOperator(fixture.relation);
+	Operator * machineOp = ServiceGetOperator(machineService);
+	size32 nServices = NumberOfServices();
+	size32 nCompiledServices = NumberOfCompiledServices();
+
+	Operator * identityOp = CreateIdentityOperator(machineOp);
+	ReplacePrimitiveService(machineService, identityOp);
+	ASSERT_PTR_EQUAL(ServiceGetOperator(machineService), identityOp)
+	ASSERT_PTR_EQUAL(ServiceGetRecord(machineService)->replacedOperator, machineOp)
+	ASSERT_FALSE(ServiceIsStale(machineService))
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledServices + 1)
+
+	RemoveService(machineService);
+	ASSERT_PTR_EQUAL(ServiceGetOperator(machineService), machineOp)
+	ASSERT_PTR_EQUAL(ServiceGetRecord(machineService)->replacedOperator, 0)
+	ASSERT_TRUE(ServiceIsStale(machineService))
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices)
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledServices)
+
+	teardownFixture();
+}
+
+
 int main(void)
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -220,6 +251,7 @@ int main(void)
 	ExecuteTest(testInvalidateDependentServices);
 	ExecuteTest(testInvalidateOnPrimitiveService);
 	ExecuteTest(testDropRelatonWithCompiledService);
+	ExecuteTest(testReplaceService);
 
 	UnloadLibraries();
 	KernelShutdown();

@@ -92,7 +92,7 @@ void SetupPrecSuccFixture(RelationFixture * fixture);
  * The rules defining (before after) as the transitive closure of (prec succ). The caller
  * removes both clauses with DictionaryRemoveClause().
  */
-void AddTransitiveClosureRules(DictionaryEntry * base, DictionaryEntry * recursive);
+void AddTransitiveClosureRules(FormulaView * base, FormulaView * recursive);
 
 
 /**

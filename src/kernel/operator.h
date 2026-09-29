@@ -7,6 +7,7 @@
 
 
 struct s_RelationReader;
+struct s_TupleStore;
 
 typedef struct s_Operator Operator;
 typedef struct s_OperatorContext OperatorContext;
@@ -112,21 +113,15 @@ typedef struct s_OperatorContext OperatorContext;
 	OPERATOR_CONSTRAIN = 6,
 
 	/**
-	 * FIXPOINT evaluates a recursive clause. Its child operator must contains a RECURSE
+	 * FIXPOINT evaluates a recursive clause. Its child operator must contain a RECURSE
 	 * operator as a descendant. It repeatedly applies its child operator to the tuples
 	 * derived so far and accumulates the results in a B-tree, until no new tuples are produced.
-	 * 
-	 * until nothing new
-	 * tuple. The tuples are accumulated in a
-	 * B-tree, which the RECURSE operators in the child subtree read.
-	 *
 	 * Recursion is therefore a loop rather than a cycle in the operator graph, and terminates
 	 * whenever the derived relation is finite.
 	 *
-	 * The child derives the whole relation and so runs with every argument unbound.
-	 * The arguments the caller binds restrict the tuples this operator yields, not
-	 * the ones it derives, which is why one derived relation can serve every
-	 * signature over it.
+	 * The child operator has all outputs, and so enumerates its whole relation.
+	 * The FIXPOINT operator's input arguments are used to restrict the tuples from
+	 * its child operator.
 	 *
 	 * NOTE: nothing here guarantees termination. A relation over an infinite domain
 	 * has no finite fixpoint, and needs the recursive rule guarded by a precondition
@@ -167,9 +162,29 @@ typedef struct s_OperatorContext OperatorContext;
 	 * TODO: rename -> OPERATOR_READER ?
 	 */
 	OPERATOR_MACHINE = 10,
+
+	/**
+	 * IFACT creates an single-tuple ifact and yields that tuple. The ifact tuple is
+	 * stoered in the relation's TupleStore, with the identified atom in the ID column.
+	 * The caller binds every argument except the ID column, which is the output. If the ifact
+	 * already exists, IFACT yields the existing tuple. See ifact.h.
+	 *
+	 * A tuple stored by IFACT is a cached result, not an asserted fact. IFACT creates one
+	 * reference to each ifact it has created, to ensure the tuple is kept. These references
+	 * are cleared only when the underlying ifact rule is removed; see DictionaryRemoveIFactRule()
+	 *
+	 * The child operator of IFACT reads the TupleStore with the ID column as the only input.
+	 * IFACT does not directly call this child operator, but it is called from ifact.c when
+	 * removing an ifact; see IFactSetupStoreOperator().
+	 *
+	 * NOTE: creating an ifact adds a tuple to the TupleStore. A query that reads the same
+	 * TupleStore while IFACT creates a new ifact will fail, since the TupleStore's B-tree
+	 * is write-locked while it is read.
+	 */
+	OPERATOR_IFACT = 11,
 };
 
-#define N_OPERATOR_TYPES 10
+#define N_OPERATOR_TYPES 11
 
 
 struct s_Operator {
@@ -259,6 +274,12 @@ struct s_Operator {
 			RelationReaderSpec readerSpec;
 			void * storage;
 		} machine;
+		// for OPERATOR_IFACT
+		struct {
+			Operator * childOperator;
+			struct s_TupleStore * store;
+			index8 idColumn;
+		} ifact;
 	} impl;
 };
 
@@ -381,6 +402,14 @@ Operator * CreateFilterOperator(
  */
 Operator * CreateProjectOperator(
 	Operator * childOperator, size8 nArguments, index8 const argumentMap[]);
+
+/**
+ * Create an IFACT operator creating ifacts in the given TupleStore, with the
+ * identified atom in idColumn; see OPERATOR_IFACT. The operator takes one argument
+ * per column of the TupleStore, and has the index order of the TupleStore.
+ * This function may register a new Service via IFactSetupStoreOperator().
+ */
+Operator * CreateIFactOperator(struct s_TupleStore * store, index8 idColumn);
 
 /**
  * Create a FIXPOINT operator deriving a recursive relation from the given child
