@@ -1,4 +1,5 @@
 #include "kernel/float.h"
+#include "kernel/ifact.h"
 #include "kernel/Int.h"
 #include "kernel/letter.h"
 #include "kernel/Parameter.h"
@@ -52,6 +53,31 @@ static bool finishParameter(Tokenizer * tokenizer)
 	else
 		tokenizer->data.parameter.atomType = 0;
 
+	tokenizerSetFull(tokenizer);
+	return true;
+}
+
+
+/*
+ * Read the hash of an AT_ID atom from the hex digits accumulated in the buffer,
+ * and mark the token complete. Returns false, leaving the token incomplete, unless the
+ * buffer holds exactly ID_HASH_LENGTH digits naming a stored AT_ID atom; see IFactExists().
+ */
+static bool finishID(Tokenizer * tokenizer)
+{
+	if(tokenizer->buffer.stringLength != ID_HASH_LENGTH)
+		return false;
+
+	data64 hash = 0;
+	for(index32 i = 0; i < ID_HASH_LENGTH; i++) {
+		char c = tokenizer->buffer.buffer[i];
+		hash = (hash << 4) | (IsDigitChar(c) ? (c - '0') : (c - 'a' + 10));
+	}
+	if(!IFactExists((Atom) {.hash = hash}))
+		return false;
+
+	tokenizer->data.id.hash = hash;
+	tokenizer->isValid = true;
 	tokenizerSetFull(tokenizer);
 	return true;
 }
@@ -133,9 +159,14 @@ static enum TokenizerResult actorStateBeginToken(Tokenizer * tokenizer, char c)
 		tokenizer->isValid = false;
 		return TOKENIZER_ACCEPTED;
 
-	case '@':
+	case '#':
 		tokenizer->type = TOKEN_PARAMETER;
 		tokenizer->isValid = true;
+		return TOKENIZER_ACCEPTED;
+
+	case '@':
+		tokenizer->type = TOKEN_ID;
+		tokenizer->isValid = false;
 		return TOKENIZER_ACCEPTED;
 
 	case '*':
@@ -328,6 +359,19 @@ enum TokenizerResult TokenizerPush(Tokenizer * tokenizer, char c)
 		}
 		return TOKENIZER_REJECTED;
 
+	case TOKEN_ID:
+		if(IsHexDigitChar(c)) {
+			if(tokenizer->buffer.stringLength == ID_HASH_LENGTH)
+				return TOKENIZER_REJECTED;
+			StringBufferPush(&(tokenizer->buffer), c);
+			return TOKENIZER_ACCEPTED;
+		}
+		if(IsWhiteSpace(c) || (c == 0))
+			return finishID(tokenizer) ? TOKENIZER_ACCEPTED : TOKENIZER_REJECTED;
+		if(IsSeparatorChar(c))
+			return finishID(tokenizer) ? TOKENIZER_ENDED : TOKENIZER_REJECTED;
+		return TOKENIZER_REJECTED;
+
 	default:
 		// should never occur
 		ASSERT(false);
@@ -461,6 +505,12 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 
 	case TOKEN_GENERATOR:
 		token.typedAtom = generatorAtom;
+		break;
+
+	case TOKEN_ID:
+		// CLAUDE: the token holds a reference, as for TOKEN_STRING; see ReleaseToken()
+		token.typedAtom = CreateTypedAtom(AT_ID, (Atom) {.hash = tokenizer->data.id.hash});
+		IFactAcquire(token.typedAtom.atom);
 		break;
 
 	default:

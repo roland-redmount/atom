@@ -78,7 +78,7 @@ static void addModuleRelation(uint32 moduleID, Relation relation)
 /**
  * Read the given parameters (in canonical order), and write the corresponding
  * IOSignature and the indexOrder that orders parameters as 1, 2, ... nArguments.
- * A parameter may be repeated, as in (foo @2>INT bar @1<INT & bar @2>INT baz @3<INT).
+ * A parameter may be repeated, as in (foo #2>INT bar #1<INT & bar #2>INT baz #3<INT).
  * Repeated parameters are written to *equalitySignature.
  * The service operator then takes one argument per distinct parameter,
  * and the indexOrder has one entry per distinct parameter: indexOrder[number - 1] is the

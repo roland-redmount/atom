@@ -149,7 +149,7 @@ void testQueryRepeatedVariable(void)
 	size32 nServices = NumberOfServices();
 
 	// b and c lie on a cycle, and so come after themselves
-	// CLAUDE: This compiles the service (before @1 after @1) repeating a parameter. Its
+	// CLAUDE: This compiles the service (before #1 after #1) repeating a parameter. Its
 	// recursive clause reads the distinct service (before >ID after <ID), which is
 	// compiled as well; see termRepeatsQueryParameters() in compiler.c.
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("before x after x"), 2)

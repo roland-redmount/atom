@@ -35,6 +35,9 @@ bool IsSeparatorChar(char c);
 
 bool IsWhiteSpace(char c);
 
+// A digit 0-9 or a lowercase letter a-f, as in the hash of an AT_ID atom
+bool IsHexDigitChar(char c);
+
 /**
  * Test if a string is a valid name
  */

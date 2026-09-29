@@ -8,6 +8,12 @@ bool IsWhiteSpace(char c)
 }
 
 
+bool IsHexDigitChar(char c)
+{
+	return IsDigitChar(c) || ((c >= 'a') && (c <= 'f'));
+}
+
+
 // these characters cannot occur in syntax
 static char const * reservedChars = (char const *) "():;.,`";
 

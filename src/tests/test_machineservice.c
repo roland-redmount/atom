@@ -21,7 +21,7 @@
 static uint32 moduleID;		// for creating machine operators 
 
 /**
- * A service (first @1<INT second @2<INT result @3>INT)
+ * A service (first #1<INT second #2<INT result #3>INT)
  * combining the two inputs with distinct weights, so that reading an argument from the
  * wrong column gives a different result rather than a coincidentally equal one.
  */
@@ -51,7 +51,7 @@ static index8 roleIndex(Atom termForm, char const * roleName)
 static void testMachineServiceArgumentOrder(void)
 {
 	Service service = RegisterMachineService(
-		moduleID, "first @1<INT second @2<INT result @3>INT", weighCall);
+		moduleID, "first #1<INT second #2<INT result #3>INT", weighCall);
 	Operator * operator = ServiceGetOperator(service);
 
 	index8 firstIndex = roleIndex(service.relation.form, "first");
@@ -97,7 +97,7 @@ static bool evenCall(void * state, Atom arguments[], void * readerData, void * s
 static void testMachineServiceTestPredicate(void)
 {
 	Service service = RegisterMachineService(
-		moduleID, "even @1<INT", evenCall);
+		moduleID, "even #1<INT", evenCall);
 	Operator * operator = ServiceGetOperator(service);
 
 	Atom arguments[1] = {(Atom) {._int = 4}};
@@ -116,8 +116,8 @@ static void testMachineServiceTestPredicate(void)
 
 
 /**
- * An stateful operator (from @1<INT count @2>INT to @3<INT)
- * This counts from @1 to @3 ascending, so the tuples are ordered as the signature says.
+ * An stateful operator (from #1<INT count #2>INT to #3<INT)
+ * This counts from #1 to #3 ascending, so the tuples are ordered as the signature says.
  */
 typedef struct {
 	int64 next;
@@ -143,7 +143,7 @@ static bool countCall(void * state, Atom arguments[], void * readerData, void * 
 static void testMachineServiceIterator(void)
 {
 	Service service = RegisterMachineServiceWithState(
-		moduleID, "from @1<INT count @2>INT to @3<INT",
+		moduleID, "from #1<INT count #2>INT to #3<INT",
 		sizeof(CountState), countSetup, countCall, 0);
 
 	index8 fromIndex = roleIndex(service.relation.form, "from");
@@ -189,7 +189,7 @@ static void testMachineServiceIterator(void)
 static void testMachineServiceIteratorState(void)
 {
 	Service service = RegisterMachineServiceWithState(
-		moduleID, "from @1<INT count @2>INT to @3<INT",
+		moduleID, "from #1<INT count #2>INT to #3<INT",
 		sizeof(CountState), countSetup, countCall, 0);
 
 	index8 fromIndex = roleIndex(service.relation.form, "from");
@@ -250,11 +250,11 @@ static void testMachineServiceSharedRelation(void)
 
 	// Registering the first service for a new relation creates the relation
 	Service sumService = RegisterMachineService(
-		moduleID, "term @1<INT term @2<INT sum @3>INT", sumCall);
+		moduleID, "term #1<INT term #2<INT sum #3>INT", sumCall);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 
 	Service subtractService = RegisterMachineService(
-		moduleID, "term @1<INT term @2>INT sum @3<INT", subtractCall);
+		moduleID, "term #1<INT term #2>INT sum #3<INT", subtractCall);
 	// the second service shares the relation of the first
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 	ASSERT_TRUE(SameRelations(subtractService.relation, sumService.relation))

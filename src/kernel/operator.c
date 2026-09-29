@@ -2007,7 +2007,7 @@ static const char * operatorNames[N_OPERATOR_TYPES + 1] = {
 };
 
 /**
- * CLAUDE: Print the arguments tuple of an operator call, as "(@1< @2> 5)". A parameter is
+ * CLAUDE: Print the arguments tuple of an operator call, as "(#1< #2> 5)". A parameter is
  * printed by PrintParameter(); see PrintOperator() for why no type is printed. A constant
  * is printed by its value.
  */
@@ -2051,7 +2051,7 @@ static void printOperatorRecursive(
 	if((depth > 0) && !IsNullRelation(op->relation)) {
 		// The operator is the head of another service; print its term form and end recursion
 		// An operator taking one argument per column is printed as a formula,
-		// such as (+ <@1 + 1 = @2>).
+		// such as (+ <#1 + 1 = #2>).
 		size8 arity = FormArity(op->relation.form);
 		if(op->nArguments == arity) {
 			TypedTuple * actors = CreateTypedTuple(arity);

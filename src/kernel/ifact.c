@@ -156,6 +156,13 @@ static void setupQueryTuple(Atom tuple[], size8 nColumns, Atom ifact, index8 idC
 	tuple[idColumn] = ifact;
 }
 
+bool IFactExists(Atom ifact)
+{
+	IFactHeader const * header = peekIFactHeader(ifact.hash);
+	return header && !(header->flags & IFACT_RESERVED);
+}
+
+
 uint32 IFactReferenceCount(Atom ifact)
 {
 	IFactHeader * header = peekIFactHeader(ifact.hash);
@@ -589,11 +596,24 @@ void IFactReleaseCached(TupleStore const * store, index8 idColumn)
 }
 
 
+// CLAUDE: see IFactSetPrinter()
+static IFactPrinter ifactPrinter = 0;
+
+
+void IFactSetPrinter(IFactPrinter printer)
+{
+	ifactPrinter = printer;
+}
+
+
 void IFactPrint(Atom atom)
 {
 	IFactHeader * header = peekIFactHeader(atom.hash);
 	ASSERT(header)
-	PrintF("ID(..%x)", atom.hash & 0xFFFF);
+	if(ifactPrinter)
+		ifactPrinter(atom);
+	else
+		PrintF("ID(..%x)", atom.hash & 0xFFFF);
 }
 
 

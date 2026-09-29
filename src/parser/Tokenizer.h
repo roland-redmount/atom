@@ -101,11 +101,17 @@ struct s_Tokenizer {
 		struct {
 			bool isQuoted;
 		} variable;
+		struct {
+			data64 hash;
+		} id;
 		data64 value;	// used only to clear the union
 	} data;
 };
 
 typedef struct s_Tokenizer Tokenizer;
+
+// The number of hex digits in the hash of an AT_ID atom written as TOKEN_ID
+#define ID_HASH_LENGTH	(sizeof(Atom) * 2)
 
 
 /**

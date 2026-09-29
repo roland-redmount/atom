@@ -185,7 +185,7 @@ size8 FindInputArguments(IOSignature ioSignature, size8 arity, index8 inputArgum
 
 void PrintParameter(Atom atom)
 {
-	PrintF("@%u", atom.parameter.number);
+	PrintF("#%u", atom.parameter.number);
 	switch(atom.parameter.io) {
 	case PARAMETER_IN:
 		PrintChar('<');

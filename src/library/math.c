@@ -65,11 +65,11 @@ static bool nonStrictInequalityCall(void * state, Atom arguments[], void * reade
 
 /**
  * A "co-routine" machine function, returning multiple values.
- * This implements a range iterator (=< @2>INT >= @1<INT & >= @2>INT =< @3<INT)
- * which returns all values @2 between the lower and upper bound, inclusive.
+ * This implements a range iterator (=< #2>INT >= #1<INT & >= #2>INT =< #3<INT)
+ * which returns all values #2 between the lower and upper bound, inclusive.
  * The state holds the value returned by the previous call.
  *
- * Successive tuples differ only in @2, which ascends, so the tuples are ordered
+ * Successive tuples differ only in #2, which ascends, so the tuples are ordered
  * as RegisterMachineService() requires.
  * 
  */
@@ -102,22 +102,22 @@ void MathSetup(void)
 {
 	moduleID = RequestModuleID();
 
-	RegisterMachineService(moduleID, "+ @1<INT + @2<INT = @3>INT", add1Call);
+	RegisterMachineService(moduleID, "+ #1<INT + #2<INT = #3>INT", add1Call);
 
-	RegisterMachineService(moduleID, "+ @1<INT + @2>INT = @3<INT", add2Call);
+	RegisterMachineService(moduleID, "+ #1<INT + #2>INT = #3<INT", add2Call);
 
-	RegisterMachineService(moduleID, "* @1<INT * @2<INT = @3>INT", mul1Call);
+	RegisterMachineService(moduleID, "* #1<INT * #2<INT = #3>INT", mul1Call);
 
 	// The range a =< n =< b is the conjunction (n >= a & b >= n), since
 	// (=< x >= y) reads x >= y. Neither term is a finite relation on its own.
 	RegisterMachineServiceWithState(
-		moduleID, "=< @2>INT >= @1<INT & >= @2>INT =< @3<INT", sizeof(RangeState),
+		moduleID, "=< #2>INT >= #1<INT & >= #2>INT =< #3<INT", sizeof(RangeState),
 		rangeSetup,	rangeCall, 0
 	);
 
-	RegisterMachineService(moduleID, "< @1<INT > @2<INT", strictInequalityCall);
+	RegisterMachineService(moduleID, "< #1<INT > #2<INT", strictInequalityCall);
 
-	RegisterMachineService(moduleID, "=< @1<INT >= @2<INT", nonStrictInequalityCall);
+	RegisterMachineService(moduleID, "=< #1<INT >= #2<INT", nonStrictInequalityCall);
 }
 
 

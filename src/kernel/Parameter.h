@@ -52,8 +52,8 @@ IOSignature CreateIOSignature(byte const parameterIO[], size8 nParameters);
  * An equality signature of a service records which parameters are identical,
  * expressing an equality constaint. repeatOf[i] is the position (1-based) of the first
  * parameter that is identical to parameter i, or 0 if the parameter occurs for the first time.
- * For example, the service (foo @1 bar @2 baz @1) has repeatOf = {0, 0, 1}, since the
- * third parameter @1 is identical to the first. A zero signature therefore means no repeated
+ * For example, the service (foo #1 bar #2 baz #1) has repeatOf = {0, 0, 1}, since the
+ * third parameter #1 is identical to the first. A zero signature therefore means no repeated
  * parameters, which is the case for every primitive service.
  */
 typedef struct s_EqualitySignature {
@@ -73,7 +73,7 @@ bool HasRepeatedParameters(EqualitySignature equalitySignature);
 /**
  * Compute an argument map from an equality signature over nParameters, such that argumentMap[i]
  * is the index of the argument corresponding to parameter i, where the arguments are numbered in
- * order of first occurrence. The service (foo @1 bar @2 baz @1) has argumentMap = {0, 1, 0}.
+ * order of first occurrence. The service (foo #1 bar #2 baz #1) has argumentMap = {0, 1, 0}.
  * The argument map format is used by the CONSTRAIN operator; see CreateConstrainOperator().
  * Returns the number of arguments, which is the same as the number of unique parameters.
  * 

@@ -828,7 +828,7 @@ void testCompileRuleOverConjunctionServiceAndTerm(void)
 
 /**
  * CLAUDE: A query may match a primitive service only under a permutation of the roles of
- * its form. The query (+ x + 3 = 5) matches the service (+ @1<INT + @2>INT = @3<INT) only
+ * its form. The query (+ x + 3 = 5) matches the service (+ #1<INT + #2>INT = #3<INT) only
  * with its two + roles swapped. The rule (+ x + y = z <- plus x and y is z) makes the
  * primitive services of the (+ + =) form stale, so the query is compiled, and
  * seedVariantsFromServices() seeds a variant from the service under that permutation;

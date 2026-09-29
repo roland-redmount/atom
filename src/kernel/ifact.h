@@ -181,6 +181,11 @@ void IFactAcquire(Atom ifact);
 void IFactRelease(Atom ifact);
 
 /**
+ * CLAUDE: Test if an AT_ID atom with the hash of the given atom is stored.
+ */
+bool IFactExists(Atom ifact);
+
+/**
  * Reference counts
  */
 uint32 IFactReferenceCount(Atom ifact);
@@ -196,6 +201,17 @@ uint32 IFactTotalCount(void);
  * Print an AT_ID atom
  */
 void IFactPrint(Atom ifact);
+
+/**
+ * CLAUDE: A function printing an AT_ID atom in place of the default output of IFactPrint().
+ */
+typedef void (*IFactPrinter)(Atom ifact);
+
+/**
+ * CLAUDE: Set the function that IFactPrint() hands each AT_ID atom to. A zero printer
+ * restores the default output of IFactPrint().
+ */
+void IFactSetPrinter(IFactPrinter printer);
 
 /**
  * Dump all created IFacts, for debugging.

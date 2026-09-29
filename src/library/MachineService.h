@@ -51,9 +51,9 @@ uint32 RequestModuleID(void);
  * based on the signature syntax string. The signature is a term whose actors
  * are all parameters. For example, the service that adds two integers has signature
  *
- *   "+ @1<INT + @2<INT = @3>INT"
+ *   "+ #1<INT + #2<INT = #3>INT"
  *
- * The signature must number its parameter @1, ... , @n in the order the MachineFunction
+ * The signature must number its parameter #1, ... , @n in the order the MachineFunction
  * expects its arguments.
  * If the corresponding Relation does not exist, it is created, with the default provider (no storage).
  * Returns the registered service.
