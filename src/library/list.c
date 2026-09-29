@@ -337,7 +337,7 @@ void ListIteratorEnd(ListIterator * iterator)
 
 void PrintList(Atom list)
 {
-	PrintCString("{");
+	PrintCString("(");
 	Relation relation = findListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 	byte elementType = relation.typeSignature.atomTypes[listRoleIndex[2]];
@@ -352,7 +352,7 @@ void PrintList(Atom list)
 	}
 	ListIteratorEnd(&iterator);
 
-	PrintChar('}');
+	PrintChar(')');
 }
 
 
