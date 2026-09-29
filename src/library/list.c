@@ -40,27 +40,9 @@ static TupleStore * listLengthTupleStore;
 static Operator * listLengthOperator;
 
 
-Atom GetListRoleName(void)
-{
-	return listRoleName;
-}
-
-
 Atom GetListPredicateForm(void)
 {
 	return listPredicateForm;
-}
-
-
-Atom GetListTermForm(void)
-{
-	return listTermForm;
-}
-
-
-Atom GetListLengthPredicateForm(void)
-{
-	return listLengthPredicateForm;
 }
 
 
@@ -138,21 +120,13 @@ Operator * GetListLengthOperator(void)
 }
 
 
-/**
- * Create an immutable list defined by an ifact,
- * storing the array of characters in a relation table.
- * 
- * QUESTION: the (list length) fact could be computed rather than explicit?
- */
-
-Atom CreateList(ListElementGenerator generator, void const * data, byte elementType, size32 nElements)
+Atom CreateListFromArray(Atom const elements[], byte elementType, size8 nElements)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
-	AddListToIFact(&draft, generator, data, elementType, nElements);
+	AddListToIFact(&draft, elements, elementType, nElements);
 	return IFactEnd(&draft);
 }
-
 
 /**
  * Create the (list length) ifact
@@ -171,7 +145,7 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 /**
  * Add the identifying facts for a list to the given draft ifact.
  */
-void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void const * data, byte elementType, size32 nElements)
+void AddListToIFact(IFactDraft * draft, Atom const elements[], byte elementType, size32 nElements)
 {
 	if(nElements > 0) {
 		Relation relation = GetListRelation(elementType);
@@ -180,26 +154,14 @@ void AddListToIFact(IFactDraft * draft, ListElementGenerator generator, void con
 		Atom listElementTuple[3];
 		for(index32 i = 0; i < nElements; i++) {
 			TupleCopyPermuted(
-				(Atom[]) {(Atom) {0}, (Atom) {._int = i + 1}, generator(i, data)},
-				listElementTuple, listRoleIndex, 3);
+				(Atom[]) {(Atom) {0}, (Atom) {._int = i + 1}, elements[i]},
+				listElementTuple, listRoleIndex, 3
+			);
 			IFactAddTuple(draft, listElementTuple);
 		}
 		IFactEndConjunction(draft);
 	}
 	assertListLength(draft, nElements);
-}
-
-
-static Atom arrayElementGenerator(index32 index, void const * data)
-{
-	Atom const * atoms = data;
-	return atoms[index];
-}
-
-
-Atom CreateListFromArray(Atom const atoms[], byte elementType, size8 nAtoms)
-{
-	return CreateList(arrayElementGenerator, atoms, elementType, nAtoms);
 }
 
 

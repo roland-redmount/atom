@@ -25,25 +25,15 @@ void ListSetup(void);
 
 void ListShutdown(void);
 
-
-/**
- * Create a list from a callback function generating list element atoms.
- * The ListElementGenerator will be called with a 0-based index into the list.
- */
-typedef Atom (*ListElementGenerator)(index32 index, void const * data);
-
-Atom CreateList(ListElementGenerator generator, void const * data, byte elementType, size32 nElements);
-
 /**
  * Create a list from an array of typed atoms
  */
-Atom CreateListFromArray(Atom const listElements[], byte elementType, size8 nAtoms);
+Atom CreateListFromArray(Atom const elements[], byte elementType, size8 nElements);
 
 /**
- * Add list ifacts obtained from the generator to an exising IFact draft.
+ * Add list ifacts obtained from the generator to an existing IFact draft.
  */
-void AddListToIFact(
-	IFactDraft * draft, ListElementGenerator generator, void const * data, byte elementType, size32 nElements);
+void AddListToIFact(IFactDraft * draft, Atom const elements[], byte elementType, size32 nElements);
 
 /**
  * An atom @a "is a list" if there exists a fact (list @a length _).
@@ -102,14 +92,9 @@ int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(Atom, Atom));
 #define LIST_LENGTH_ROLE_LENGTH	1
 
 /**
- * The role name "list", an AT_NAME atom.
+ * Convenience functions to access forms defined by list.c
  */
-Atom GetListRoleName(void);
-
 Atom GetListPredicateForm(void);
-Atom GetListTermForm(void);
-
-Atom GetListLengthPredicateForm(void);
 Atom GetListLengthTermForm(void);
 
 /**

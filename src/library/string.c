@@ -42,19 +42,16 @@ Relation GetStringRelation(void)
 }
 
 
-Atom stringElementGenerator(index32 index, void const * data)
-{
-	char const * string = (char const *) data;
-	return GetAlphabetLetter(string[index]);
-}
-
-
 Atom CreateString(char const * chars, size32 length)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	AddListToIFact(&draft, stringElementGenerator, chars, AT_LETTER, length);
+	// add the (list position element) ifacts
+	Atom listElements[length];
+	for(index32 i = 0; i < length; i++)
+		listElements[i] = GetAlphabetLetter(chars[i]);
+	AddListToIFact(&draft, listElements, AT_LETTER, length);
 
 	// add (string @string) to ifact
 	IFactBeginConjunction(&draft, stringTupleStore, 0);
