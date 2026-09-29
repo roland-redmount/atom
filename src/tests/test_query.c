@@ -321,7 +321,7 @@ void testInvalidateRelationByRule(void)
 
 	// Adding the recursive rule should mark the service as stale
 	FormulaView clause = DictionaryAddClauseFromCString(
-		"number n faculty f | ! < n > 0 | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
+		"number n faculty f | ! < n > 0 | ! + n - 1 = m | ! number m faculty e | ! * e * n = f");
 	ASSERT_INT32_EQUAL(numberOfStaleServices(relation), 3)
 
 	// Run a query to trigger re-compilation

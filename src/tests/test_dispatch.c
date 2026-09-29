@@ -35,13 +35,14 @@ void testDispatchToService(void)
 	ReleaseFormula(query);
 
 	// one the following two queries requires form permutation to match
-	query = CStringToTerm("+ 3 + _ = 7");
-	ASSERT_INT32_EQUAL(DispatchQueryFormula(query, &service, permutation), DISPATCH_FOUND)
-	ReleaseFormula(query);
+	// TODO: (+ 3 + _ = 7) is now a compiled service; don't have a primitive service to test on
+	// query = CStringToTerm("+ 3 + _ = 7");
+	// ASSERT_INT32_EQUAL(DispatchQueryFormula(query, &service, permutation), DISPATCH_FOUND)
+	// ReleaseFormula(query);
 
-	query = CStringToTerm("+ _ + 3 = 7");
-	ASSERT_INT32_EQUAL(DispatchQueryFormula(query, &service, permutation), DISPATCH_FOUND)
-	ReleaseFormula(query);
+	// query = CStringToTerm("+ _ + 3 = 7");
+	// ASSERT_INT32_EQUAL(DispatchQueryFormula(query, &service, permutation), DISPATCH_FOUND)
+	// ReleaseFormula(query);
 }
 
 
