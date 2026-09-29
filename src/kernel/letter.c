@@ -1,6 +1,3 @@
-
-#include <ctype.h>
-
 #include "lang/Variable.h"
 #include "kernel/letter.h"
 #include "kernel/ifact.h"
@@ -21,10 +18,9 @@
 
 static uint8 charToLetterCode(char c)
 {
+	ASSERT(IsAlpha(c));
 	// we use 1,2, ... 26 for A, B, ..., Z
-	uint8 letterCode = toupper(c) - 'A' + 1;
-	ASSERT((letterCode >= 1) && (letterCode <= 26));
-	return letterCode;	
+	return ToUpper(c) - 'A' + 1;
 }
 
 

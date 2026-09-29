@@ -276,12 +276,15 @@ enum TokenizerResult TokenizerPush(Tokenizer * tokenizer, char c)
 	case TOKEN_STRING:
 		// string token is incomplete until closing "
 		if(c == '"') {
+			// a string holds at least one letter; see CreateString()
+			if(tokenizer->buffer.stringLength == 0)
+				return TOKENIZER_REJECTED;
 			tokenizer->isValid = true;
 			tokenizerSetFull(tokenizer);
 			return TOKENIZER_ACCEPTED;
 		}
 		// valid string characters
-		if(IsPrintableChar(c)) {
+		if(IsAlpha(c)) {
 			StringBufferPush(&(tokenizer->buffer), c);
 			return TOKENIZER_ACCEPTED;
 		}

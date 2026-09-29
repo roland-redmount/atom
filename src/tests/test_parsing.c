@@ -590,6 +590,14 @@ static void testParseFormula(void)
 	ASSERT_UINT64_EQUAL(ParseFormula("foo \"abc", &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 8)
 
+	// a string is reported at its first character that is not a letter
+	ASSERT_UINT64_EQUAL(ParseFormula("foo \"ab1\"", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 7)
+
+	// an empty string is reported at its closing quote
+	ASSERT_UINT64_EQUAL(ParseFormula("foo \"\"", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 5)
+
 	// an unterminated reflection abandons its nested builder
 	ASSERT_UINT64_EQUAL(ParseFormula("foo [ bar 1", &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 11)

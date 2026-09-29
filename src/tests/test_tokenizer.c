@@ -102,6 +102,19 @@ static void testTokenizer(void)
 	}
 	ReleaseToken(token);
 
+	// a string holds ASCII letters only, and at least one letter
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '"'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'a'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '1'), TOKENIZER_REJECTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, ' '), TOKENIZER_REJECTED)
+	// the first byte of the UTF-8 character å
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, (char) 0xC3), TOKENIZER_REJECTED)
+
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '"'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '"'), TOKENIZER_REJECTED)
+
 	char const * integerString = "12345";
 	token = tokenizeCString(&tokenizer, integerString, TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
