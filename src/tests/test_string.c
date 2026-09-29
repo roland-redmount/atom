@@ -13,6 +13,7 @@ void testString(void)
 	char const * cString1 = "foobar";
 	Atom string1 = CreateStringFromCString(cString1);
 	ASSERT_UINT32_EQUAL(CStringLength(cString1), ListLength(string1))
+	ASSERT_TRUE(IsString(string1))
 
 	// TODO: reference handling is now different: creating a string
 	// includes creating a "type predicate" fact (string @string)
@@ -47,6 +48,26 @@ void testString(void)
 }
 
 
+/*
+ * A list of letters is a string only if created by CreateString(), which adds
+ * the (string) fact; see IsString().
+ */
+void testIsString(void)
+{
+	Atom letters[2] = {GetAlphabetLetter('a'), GetAlphabetLetter('b')};
+	Atom list = CreateListFromArray(letters, AT_LETTER, 2);
+	ASSERT_TRUE(IsList(list))
+	ASSERT_FALSE(IsString(list))
+
+	Atom string = CreateStringFromCString("ab");
+	ASSERT_TRUE(IsString(string))
+	ASSERT_FALSE(string.hash == list.hash)
+
+	IFactRelease(string);
+	IFactRelease(list);
+}
+
+
 void fuzzTestString(void)
 {
 	char const * cString = "foobar";
@@ -67,6 +88,7 @@ int main(int argc, char * argv[])
 	LoadLibraries();
 
 	ExecuteTest(testString);
+	ExecuteTest(testIsString);
 	ExecuteTest(fuzzTestString);
 	
 	UnloadLibraries();

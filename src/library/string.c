@@ -2,7 +2,6 @@
 #include "lang/Variable.h"
 #include "kernel/ifact.h"
 #include "kernel/letter.h"
-#include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "lang/name.h"
 #include "lang/TermForm.h"
@@ -75,7 +74,9 @@ Atom CreateStringFromCString(char const * cString)
 
 bool IsString(Atom atom)
 {
-	return LookupHasEntry(atom, stringRelation, stringTermForm, stringRoleName);
+	// an AT_ID atom @a is a string if the (string @a) fact exists
+	Atom arguments[1] = {atom};
+	return OperatorCallOnce(stringOperator, arguments);
 }
 
 
