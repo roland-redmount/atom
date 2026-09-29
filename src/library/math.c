@@ -23,23 +23,17 @@ static bool addFloatCall(void * state, Atom arguments[], void * readerData, void
 
 
 /**
- * (+ x<INT + y>INT = z<INT)
- * 
- * Solving the additive equation x + y = z for z
- * This can be use to implement subtraction via the rule
- * z = x + y  <->  y = z - x
- * 
- * TODO: this is kind of backwards, as the primitive does subtraction.
+ * Subtraction (+ x<INT - y<INT = z>INT)
  */
-static bool addSolveIntCall(void * state, Atom arguments[], void * readerData, void * storage)
+static bool subIntCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
-	arguments[1]._int = arguments[2]._int - arguments[0]._int;
+	arguments[2]._int = arguments[0]._int - arguments[1]._int;
 	return true;
 }
 
-static bool addSolveFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
+static bool subFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
-	arguments[1]._float = arguments[2]._float - arguments[0]._float;
+	arguments[2]._float = arguments[0]._float - arguments[1]._float;
 	return true;
 }
 
@@ -136,8 +130,8 @@ void MathSetup(void)
 	RegisterMachineService(moduleID, "+ #1<INT + #2<INT = #3>INT", addIntCall);
 	RegisterMachineService(moduleID, "+ #1<FLOAT + #2<FLOAT = #3>FLOAT", addFloatCall);
 
-	RegisterMachineService(moduleID, "+ #1<INT + #2>INT = #3<INT", addSolveIntCall);
-	RegisterMachineService(moduleID, "+ #1<FLOAT + #2>FLOAT = #3<FLOAT", addSolveFloatCall);
+	RegisterMachineService(moduleID, "+ #1<INT - #2<INT = #3>INT", subIntCall);
+	RegisterMachineService(moduleID, "+ #1<FLOAT - #2<FLOAT = #3>FLOAT", subFloatCall);
 
 	RegisterMachineService(moduleID, "* #1<INT * #2<INT = #3>INT", mulIntCall);
 	RegisterMachineService(moduleID, "* #1<FLOAT * #2<FLOAT = #3>FLOAT", mulFloatCall);
