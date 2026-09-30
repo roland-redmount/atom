@@ -18,7 +18,7 @@ void testSubstitution(void)
 	// Substitution {x -> y}
 	Substitution subst;
 	SetupSubstitution(&subst, 10);
-	SubstitutionSetValue(&subst, x, y);
+	SubstitutionAdd(&subst, x, y);
 
 	TypedTuple * tuple = CreateTypedTupleFromArray(
 		(TypedAtom[]) {	one, x, two, y }, 4
@@ -60,16 +60,17 @@ void testSubstituteReflection(void)
 	// Substitution {x -> y, z -> 2}
 	Substitution subst;
 	SetupSubstitution(&subst, 10);
-	SubstitutionSetValue(&subst, x, y);
-	SubstitutionSetValue(&subst, z, two);
+	SubstitutionAdd(&subst, x, y);
+	SubstitutionAdd(&subst, z, two);
 
+	// The tuple (1 x 2 [foo ^x bar x baz y barf ^z])
 	TypedTuple * tuple = CreateTypedTupleFromArray(
 		(TypedAtom[]) {	one, x, two, formula }, 4
 	);
 	TypedTuple * result = CreateTypedTuple(4);
 	SubstituteTuple(&subst, tuple, result);
 
-	// The result should be (1 y 2 [foo ^y bar x baz y barf 42])
+	// The result should be (1 y 2 [foo ^y barx  baz y barf 2])
 	TermBuilderReset(&builder);
 	TokenizeCString("foo ^y bar x baz y barf 2", TermBuilderTokenHandler, &builder);
 	ASSERT_TRUE(TermBuilderIsValid(&builder))

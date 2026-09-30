@@ -125,6 +125,12 @@ IOSignature ParametersGetIOSignature(Atom const parameters[], size8 nParameters)
 void ActorsToParameters(TypedTuple const * actors, Atom parameters[]);
 
 /**
+ * Two parameters are the same (equivalent) if their type and direction is the same;
+ * parameter numbers are ignored.
+ */
+bool SameParameters(Atom parameter1, Atom parameter2);
+
+/**
  * Two parameter tuples denote the same service signature if they agree on
  * the type and direction of every parameter; parameter numbers are ignored here.
  */

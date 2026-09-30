@@ -84,12 +84,17 @@ IOSignature ParametersGetIOSignature(Atom const parameters[], size8 nParameters)
 }
 
 
+bool SameParameters(Atom parameter1, Atom parameter2)
+{
+	return (parameter1.parameter.atomType == parameter2.parameter.atomType) &&
+		(parameter1.parameter.io == parameter2.parameter.io);
+}
+
+
 bool SameParameterSignature(Atom const first[], Atom const second[], size8 nParameters)
 {
 	for(index8 i = 0; i < nParameters; i++) {
-		if(first[i].parameter.atomType != second[i].parameter.atomType)
-			return false;
-		if(first[i].parameter.io != second[i].parameter.io)
+		if(!SameParameters(first[i], second[i]))
 			return false;
 	}
 	return true;

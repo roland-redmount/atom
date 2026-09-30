@@ -172,6 +172,143 @@ void testCompilePermute2(void)
 }
 
 
+/**
+ * CLAUDE: A rule with the constant "one" in its head term compiles to a service over
+ * the query parameter facing the constant. Bound to "one", the service yields the tuple
+ * of the rule body. Bound to any other string, the service yields no tuples.
+ */
+void testCompileHeadConstantInput(void)
+{
+	FormulaView clause = DictionaryAddClauseFromCString("number x unit \"one\" plusone y | ! + x + 1 = y");
+	Atom queryTerm = CStringToTerm("number 3 unit \"one\" plusone y");
+
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Operator * operator = ServiceGetOperator(services[0]);
+
+	Atom arguments[3];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 3);
+	void * context = OperatorCreateContext(operator, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	Atom y = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "plusone", 1);
+	ASSERT_UINT64_EQUAL(y._int, 4);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	// The query with unit "two" has the same parameters, and the same service answers it
+	Atom otherQueryTerm = CStringToTerm("number 3 unit \"two\" plusone y");
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(otherQueryTerm)), arguments, 3);
+	context = OperatorCreateContext(operator, arguments);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	RemoveService(services[0]);
+	ReleaseFormula(otherQueryTerm);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&clause);
+}
+
+
+/**
+ * CLAUDE: A query variable facing a constant in the head term of a rule is given the constant.
+ */
+void testCompileHeadConstantOutput(void)
+{
+	FormulaView clause = DictionaryAddClauseFromCString("number x unit \"one\" plusone y | ! + x + 1 = y");
+	Atom queryTerm = CStringToTerm("number 3 unit u plusone y");
+	Atom expectedTerm = CStringToTerm("number 3 unit \"one\" plusone 4");
+
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Operator * operator = ServiceGetOperator(services[0]);
+
+	Atom arguments[3];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 3);
+	void * context = OperatorCreateContext(operator, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	Atom const * expectedArguments = TypedTuplePeekAtoms(FormulaGetActors(expectedTerm));
+	for(index8 i = 0; i < 3; i++)
+		ASSERT_TRUE(SameAtoms(arguments[i], expectedArguments[i]))
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	RemoveService(services[0]);
+	ReleaseFormula(expectedTerm);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&clause);
+}
+
+
+/**
+ * CLAUDE: A query atom of a different type than the constant in the head term
+ * does not match the rule, so no service is compiled.
+ */
+void testCompileHeadConstantTypeMismatch(void)
+{
+	FormulaView clause = DictionaryAddClauseFromCString("number x unit \"one\" plusone y | ! + x + 1 = y");
+	Atom queryTerm = CStringToTerm("number 3 unit 7 plusone y");
+
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 0)
+
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&clause);
+}
+
+
+/**
+ * CLAUDE: The query (from n to n twice y) repeats the variable n. Unifying with the head term
+ * (from 1 to x twice y) binds n to 1, and so also x, which the rule body reads.
+ * The body is then (+ 1 + 1 = y), giving the single tuple n = 1, y = 2.
+ */
+void testCompileHeadConstantRepeatedParameter(void)
+{
+	FormulaView clause = DictionaryAddClauseFromCString("from 1 to x twice y | ! + x + x = y");
+	Atom queryTerm = CStringToTerm("from n to n twice y");
+
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	ASSERT_TRUE(HasRepeatedParameters(services[0].equalitySignature))
+	Operator * operator = ServiceGetOperator(services[0]);
+	ASSERT_UINT32_EQUAL(operator->nArguments, 2)
+
+	// The operator takes n and y, in the order the query first mentions them
+	Atom arguments[2] = {(Atom) {0}, (Atom) {0}};
+	void * context = OperatorCreateContext(operator, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	ASSERT_TRUE(
+		((arguments[0]._int == 1) && (arguments[1]._int == 2))
+		|| ((arguments[0]._int == 2) && (arguments[1]._int == 1)))
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	RemoveService(services[0]);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&clause);
+}
+
+/**
+ * CLAUDE: The head term (twin x of x plus y) repeats the variable x, which unifies the two
+ * query parameters of (twin 3 of 4 plus y). The compiler cannot constrain two query
+ * arguments to be equal, so the rule does not match and no service is compiled.
+ */
+void testCompileHeadVariableJoiningQueryParameters(void)
+{
+	FormulaView clause = DictionaryAddClauseFromCString("twin x of x plus y | ! + x + 1 = y");
+	Atom queryTerm = CStringToTerm("twin 3 of 4 plus y");
+
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 0)
+
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&clause);
+}
+
 void testCompileProject(void)
 {
 	// The variable p occurs in the clause but not in the query, so it obtains
@@ -1884,6 +2021,11 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testCompilePermute1);
 	ExecuteTest(testCompilePermute2);
+	ExecuteTest(testCompileHeadConstantInput);
+	ExecuteTest(testCompileHeadConstantOutput);
+	ExecuteTest(testCompileHeadConstantTypeMismatch);
+	ExecuteTest(testCompileHeadConstantRepeatedParameter);
+	ExecuteTest(testCompileHeadVariableJoiningQueryParameters);
 	ExecuteTest(testCompileProject);
 	ExecuteTest(testCompileChoicePointAfterFailedTerm);
 	ExecuteTest(testCompileTwoChoicePoints);

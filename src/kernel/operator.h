@@ -60,6 +60,8 @@ typedef struct s_OperatorContext OperatorContext;
  * so yields a valid relation. An operator can therefore be applied to any other
  * without regard for how that one was composed.
  */
+/* CLAUDE: CONSTANT is the product of the child relation with a relation holding a single
+ * tuple of constants (x), restricted on the constant arguments the caller binds (sigma). */
  enum OperatorType {
 
 	/**
@@ -182,9 +184,19 @@ typedef struct s_OperatorContext OperatorContext;
 	 * is write-locked while it is read.
 	 */
 	OPERATOR_IFACT = 11,
+
+	/**
+	 * CLAUDE: CONSTANT adds arguments holding constants to the tuples of its child
+	 * operator. It is the opposite of PERMUTE, which copies constants into the child
+	 * arguments. The child operator takes the leading arguments, and each constant
+	 * takes one of the arguments following them. A constant argument the caller binds
+	 * is compared with the constant, and on a mismatch the operator yields no tuples.
+	 * This expresses a constant in the head term of a rule; see compileConjunction().
+	 */
+	OPERATOR_CONSTANT = 12,
 };
 
-#define N_OPERATOR_TYPES 11
+#define N_OPERATOR_TYPES 12
 
 
 struct s_Operator {
@@ -280,6 +292,18 @@ struct s_Operator {
 			struct s_TupleStore * store;
 			index8 idColumn;
 		} ifact;
+		// for OPERATOR_CONSTANT
+		struct {
+			Operator * childOperator;
+			// Constant i is held by argument childOperator->nArguments + i
+			Atom * constants;
+			byte * constantTypes;
+			size8 nConstants;
+			// Indices of the constant arguments the caller binds, which are
+			// compared with the constant rather than written
+			index8 * inputArguments;
+			size8 nInputs;
+		} constant;
 	} impl;
 };
 
@@ -386,6 +410,22 @@ Operator * CreateConstrainOperator(
  */
 Operator * CreateFilterOperator(
 	Operator * childOperator, index8 const inputArguments[], size8 nInputs);
+
+/**
+ * CLAUDE: Create a CONSTANT operator over the given child operator; see OPERATOR_CONSTANT.
+ * The operator takes childOperator->nArguments + nConstants arguments, where argument
+ * childOperator->nArguments + i holds constants[i]. The constants and constantTypes arrays
+ * have length nConstants, and the operator acquires a reference to each constant.
+ *
+ * The inputArguments array holds the indices of the nInputs arguments the caller binds,
+ * each of which must be a constant argument. inputArguments may be 0 if nInputs = 0.
+ *
+ * The index order is the child's, followed by the constant arguments, which are equal
+ * in every tuple.
+ */
+Operator * CreateConstantOperator(
+	Operator * childOperator, Atom const constants[], byte const constantTypes[], size8 nConstants,
+	index8 const inputArguments[], size8 nInputs);
 
 /**
  * Create a PROJECT operator with the given number of arguments, which may not exceed the

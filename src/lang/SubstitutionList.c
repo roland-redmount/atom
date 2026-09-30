@@ -19,14 +19,15 @@ enum SubstituteMode {
 	SUBSTITUTE_QUOTED = 2
 };
 
-TypedAtom findValue(Substitution const * subst, TypedAtom variable, enum SubstituteMode mode)
+TypedAtom findValue(Substitution const * subst, TypedAtom key, enum SubstituteMode mode)
 {
-	ASSERT(variable.type == AT_VARIABLE)
+	// A key must be a variable or a parameter
+	ASSERT((key.type == AT_VARIABLE) || (key.type == AT_PARAMETER))
 	if(mode == SUBSTITUTE_QUOTED) {
-		if(VariableIsQuoted(variable.atom)) {
+		if(VariableIsQuoted(key.atom)) {
 			// A quoted variable ^x should be matched to an unquoted variable x
-			// in the substitution list, so unquote if and recurse
-			TypedAtom unquotedVariable = CreateTypedAtom(AT_VARIABLE, UnquoteVariable(variable.atom));
+			// in the substitution list, so unquote it and recurse
+			TypedAtom unquotedVariable = CreateTypedAtom(AT_VARIABLE, UnquoteVariable(key.atom));
 			TypedAtom substValue = findValue(subst, unquotedVariable, SUBSTITUTE_NORMAL);
 			if(substValue.type == AT_VARIABLE) {
 				// The substitution list can't yield a quoted variable. I think.
@@ -41,7 +42,7 @@ TypedAtom findValue(Substitution const * subst, TypedAtom variable, enum Substit
 	}
 	else {
 		for(index8 i = 0; i < subst->nPairs; i++) {
-			if(SameTypedAtoms(subst->keys[i], variable))
+			if(SameTypedAtoms(subst->keys[i], key))
 				return subst->values[i];
 		}
 	}
@@ -50,29 +51,37 @@ TypedAtom findValue(Substitution const * subst, TypedAtom variable, enum Substit
 }
 
 
-TypedAtom SubstitutionFindValue(Substitution const * subst, TypedAtom variable)
+TypedAtom SubstitutionFindValue(Substitution const * subst, TypedAtom key)
 {
-	return findValue(subst, variable, SUBSTITUTE_NORMAL);
+	return findValue(subst, key, SUBSTITUTE_NORMAL);
 }
 
 
-void SubstitutionSetValue(Substitution * subst, TypedAtom variable, TypedAtom value)
+void SubstitutionAdd(Substitution * subst, TypedAtom key, TypedAtom value)
 {
-	ASSERT(variable.type == AT_VARIABLE)
-	index8 i = 0;
-	while(i < subst->nPairs) {
-		if(SameTypedAtoms(subst->keys[i], variable)) {
-			// variable found, set its value
+	ASSERT((key.type == AT_VARIABLE) || (key.type == AT_PARAMETER))
+	bool found = false;
+	for(index32 i = 0; i < subst->nPairs; i++) {
+		if(SameTypedAtoms(subst->values[i], key)) {
+			// Replace any x -> key with key -> value
+			// NOTE: this may lead to duplicated pairs in the Substitution,
+			// but this has no effect on SubstituteTuple()
 			subst->values[i] = value;
-			return;
+		}
+		if(SameTypedAtoms(subst->keys[i], key)) {
+			// key found, set its value
+			subst->values[i] = value;
+			found = true;
  		}
-		i++;
 	}
-	// else add new variable-value pair
-	ASSERT(i < subst->capacity)
-	subst->keys[i] = variable;
-	subst->values[i] = value;
-	subst->nPairs++;
+	if(!found) {
+		// else add new key-value pair
+		index32 i = subst->nPairs;
+		ASSERT(i < subst->capacity)
+		subst->keys[i] = key;
+		subst->values[i] = value;
+		subst->nPairs++;
+	}
 }
 
 
@@ -99,7 +108,8 @@ void substituteTuple(
 			FreeTypedTuple(substReflectionTuple);
 			substValueIsOwned = true;
 		}
-		else if(sourceValue.type == AT_VARIABLE)
+		else if((sourceValue.type == AT_VARIABLE)
+			|| ((sourceValue.type == AT_PARAMETER) && (mode == SUBSTITUTE_NORMAL)))
 			substValue = findValue(subst, sourceValue, mode);
 
 		if(!substValue.type)

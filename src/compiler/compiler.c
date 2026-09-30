@@ -408,6 +408,21 @@ static size8 setupJoinArgumentMaps(
 }
 
 
+/*
+ * CLAUDE: The query parameters that the head term of a clause binds to constants. For example,
+ * the query (kelvin #1< value #2> unit #3<) and the head term (kelvin t value k unit "Kelvin")
+ * bind #3 to "Kelvin". Bound parameter i takes clause argument arguments[i], and its value is
+ * constants[i]. See findHeadConstants().
+ */
+typedef struct s_HeadConstants {
+	size8 nConstants;
+	index8 arguments[RELATION_MAX_ARITY];
+	Atom constants[RELATION_MAX_ARITY];
+	byte constantTypes[RELATION_MAX_ARITY];
+	byte parameterIO[RELATION_MAX_ARITY];
+} HeadConstants;
+
+
 /**
  * The state of compiling a conjunction, shared by the recursion over its terms.
  * The term actors and the termExcluded flags are updated as terms compile:
@@ -452,6 +467,9 @@ typedef struct s_ClauseCompileState {
 	ChoiceTree * choiceTree;
 	// Set when a recursive term has compiled to a RECURSE operator
 	bool hasRecurseOperator;
+
+	// CLAUDE: The query parameters the head term binds to constants, or 0 if there are none
+	HeadConstants const * headConstants;
 } ClauseCompileState;
 
 
@@ -1556,6 +1574,27 @@ static void freeClauseCompileState(ClauseCompileState * clauseState)
 }
 
 
+/*
+ * CLAUDE: Wrap a compiled conjunction in a CONSTANT operator providing the arguments of the
+ * given head constants. The clauseMap array gives the clause argument of each argument of op,
+ * and is extended with the clause arguments of the constants.
+ */
+static Operator * addHeadConstants(Operator * op, HeadConstants const * headConstants, index8 clauseMap[])
+{
+	size8 nChildArguments = op->nArguments;
+	index8 inputArguments[headConstants->nConstants];
+	size8 nInputs = 0;
+	for(index8 i = 0; i < headConstants->nConstants; i++) {
+		clauseMap[nChildArguments + i] = headConstants->arguments[i];
+		if(headConstants->parameterIO[i] == PARAMETER_IN)
+			inputArguments[nInputs++] = nChildArguments + i;
+	}
+	return CreateConstantOperator(
+		op, headConstants->constants, headConstants->constantTypes, headConstants->nConstants,
+		inputArguments, nInputs);
+}
+
+
 /**
  * Compile a conjunction described by clauseState to a JOIN operator.
  * The clauseState is setup by setupClauseCompileState() or setupConjunctionCompileState().
@@ -1567,6 +1606,10 @@ static Operator * compileConjunction(CompileStack * compileStack, ClauseCompileS
 	// Compile the conjunction recursively, joining one term at a time
 	index8 clauseMap[clauseState->indexedFormula->actors->nAtoms];
 	Operator * op = compileConjunctionRecursive(compileStack, clauseState, clauseMap);
+
+	// CLAUDE: No term provides the arguments of the query parameters bound to constants
+	if(op && clauseState->headConstants)
+		op = addHeadConstants(op, clauseState->headConstants, clauseMap);
 
 	if(op) {	
 		// The compiled terms provide the clause arguments in their own order
@@ -1731,6 +1774,71 @@ static void copyTypedTupleToArray(TypedTuple * sourceTuple, index8 startOffset, 
 }
 
 
+/*
+ * Test whether the given substitution replaces a query parameter by another parameter.
+ * This occurs when a repeated variable in a head term unifies with two distinct query parameters,
+ * as in the query (a #1 b #2) unified with the head term (a x b x) which gives the unifying
+ * substitution {x -> #1, #2 -> #1}
+ */
+static bool substitutesQueryParameterByParameter(ParameterizedQuery const * query, Substitution const * subst)
+{
+	for(index8 i = 0; i < query->arity; i++) {
+		TypedAtom value = SubstitutionFindValue(subst, CreateTypedAtom(AT_PARAMETER, query->parameters[i]));
+		if(value.type == AT_PARAMETER)
+			return true;
+	}
+	return false;
+}
+
+
+/*
+ * Collect the query parameters that the substitution replaces by constants into
+ * headConstants. A parameter occurring several times in the query is collected once.
+ */
+static void findHeadConstants(
+	ParameterizedQuery const * query, Substitution const * subst, HeadConstants * headConstants)
+{
+	headConstants->nConstants = 0;
+	for(index8 i = 0; i < query->arity; i++) {
+		Atom parameter = query->parameters[i];
+		TypedAtom value = SubstitutionFindValue(subst, CreateTypedAtom(AT_PARAMETER, parameter));
+		if(!value.type)
+			continue;
+		ASSERT((value.type != AT_VARIABLE) && (value.type != AT_PARAMETER))
+		index8 argument = parameter.parameter.number - 1;
+		bool isCollected = false;
+		for(index8 j = 0; j < headConstants->nConstants; j++)
+			isCollected = isCollected || (headConstants->arguments[j] == argument);
+		if(isCollected)
+			continue;
+		index8 k = headConstants->nConstants++;
+		headConstants->arguments[k] = argument;
+		headConstants->constants[k] = value.atom;
+		headConstants->constantTypes[k] = value.type;
+		headConstants->parameterIO[k] = parameter.parameter.io;
+	}
+}
+
+
+/*
+ * Write the query parameters into the actors tuple, starting at actorsOffset.
+ * A parameter that the substitution replaces by a constant is given the atom type of
+ * the constant, unless the parameter has a type already.
+ */
+static void writeQueryParameters(
+	ParameterizedQuery const * query, Substitution const * subst,
+	TypedTuple * actors, index8 actorsOffset)
+{
+	for(index8 i = 0; i < query->arity; i++) {
+		Atom parameter = query->parameters[i];
+		TypedAtom value = SubstitutionFindValue(subst, CreateTypedAtom(AT_PARAMETER, parameter));
+		if(value.type && !parameter.parameter.atomType)
+			parameter.parameter.atomType = value.type;
+		TypedTupleSetElement(actors, actorsOffset + i, CreateTypedAtom(AT_PARAMETER, parameter));
+	}
+}
+
+
 /**
  * Compile every rule (clause) of the matched clause form that unifies with the query.
  * 
@@ -1776,12 +1884,16 @@ static size8 compileClauses(
 			// extract actors for the matching term in the clause
 			TypedTupleCopyAt(clauseActors, matchedTermActorsOffset, matchedTermActors);
 			// unify the query with the matched term
-			Substitution querySubst;
-			Substitution matchedTermSubst;
+			Substitution subst;
 			TypedTuple * queryParameters = CreateTypedTupleFromTuple(AT_PARAMETER, query->parameters, query->arity);
-			foundTerm = UnifyTuples(queryParameters, matchedTermActors, &querySubst, &matchedTermSubst);
+			foundTerm = UnifyTuples(queryParameters, matchedTermActors, &subst);
+			// CLAUDE: The compiler cannot constrain two query arguments to be equal
+			if(foundTerm && substitutesQueryParameterByParameter(query, &subst))
+				foundTerm = false;
 			if(foundTerm) {
 				index8 matchedTermIndex = ClauseGetTermIndex(clauseForm, query->form, m);
+				HeadConstants headConstants;
+				findHeadConstants(query, &subst, &headConstants);
 				// Compile the conjunction once per combination of choices. A term that leaves
 				// an output parameter untyped may match several services, each
 				// yielding a differently typed variant of the query service.
@@ -1790,7 +1902,9 @@ static size8 compileClauses(
 				do {
 					// compileConjunction() updates parameter types in the clause
 					// actors, so re-derive them for each branch.
-					SubstituteTuple(&matchedTermSubst, clauseActors, substClauseActors);
+					SubstituteTuple(&subst, clauseActors, substClauseActors);
+					// CLAUDE: The head term holds the query parameters, also those bound to constants
+					writeQueryParameters(query, &subst, substClauseActors, matchedTermActorsOffset);
 #ifdef DEBUG_COMPILER
 					PrintCString("Unified rule: ");
 					PrintFormActorsAsFormula(clauseForm, substClauseActors);
@@ -1799,6 +1913,7 @@ static size8 compileClauses(
 					ClauseCompileState clauseState;
 					setupClauseCompileState(
 						&clauseState, clauseForm, substClauseActors, matchedTermIndex, &choiceTree);
+					clauseState.headConstants = (headConstants.nConstants > 0) ? &headConstants : 0;
 					Operator * conjunctionOp = compileConjunction(compileStack, &clauseState);
 					bool hasRecurseOperator = clauseState.hasRecurseOperator;
 					freeClauseCompileState(&clauseState);
@@ -1814,8 +1929,7 @@ static size8 compileClauses(
 					variant->isRecursive = variant->isRecursive || hasRecurseOperator;
 				} while(ChoiceTreeNextBranch(&choiceTree));
 			}
-			FreeSubstitution(&querySubst);
-			FreeSubstitution(&matchedTermSubst);
+			FreeSubstitution(&subst);
 			FreeTypedTuple(queryParameters);
 			matchedTermActorsOffset += query->arity;
 		}
