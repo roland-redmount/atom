@@ -127,7 +127,7 @@ typedef struct s_OperatorContext OperatorContext;
 	 *
 	 * NOTE: nothing here guarantees termination. A relation over an infinite domain
 	 * has no finite fixpoint, and needs the recursive rule guarded by a precondition
-	 * to terminate; see the notes on termination in compiler.md.
+	 * to terminate.
 	 * 
 	 * NOTE: this is a naive iteration scheme, which typically re-evaluates the same call
 	 * many times over. Semi-naive iteration is an optimization used in Datalog that

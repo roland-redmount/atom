@@ -3,8 +3,6 @@
  * in the dictionary. The new service is implemented by a graph over Operator nodes.
  * CompileQuery() is the entry point.
  *
- * See compiler.md for additional documentation.
- *
  * Build with DEBUG_COMPILER to makes the compiler trace each query it compiles.
  */
 
@@ -112,7 +110,7 @@ static bool dispatchOrCompileTerm(
 	// CLAUDE: Repeated parameters keep sharing a number, so the compiled service repeats them
 	ParameterizedQuery queryRenumbered = *query;
 	RenumberParameters(queryRenumbered.parameters, query->arity);
-	compileParameterizedQuery(compileStack, &queryRenumbered,	0);
+	compileParameterizedQuery(compileStack, &queryRenumbered, 0);
 
 	// Re-dispatch, even if no new service was registered. Compilation may have only
 	// cleared the stale flag of a primitive service, which dispatch can now accept.
@@ -794,10 +792,11 @@ static Operator * compileTermSet(
 	index8 const termIndices[], size8 nTerms, int dispatchMode, ChoicePoint * choicePoint,
 	index8 termClauseMap[])
 {
+	// Copy the actors for the term set from the clause to a new actors tuple
 	index8 actorIndices[RELATION_MAX_ARITY];
 	size8 nActors = getTermSetActorIndices(clauseState, termIndices, nTerms, actorIndices);
-	TypedTuple * termActors = CreateTypedTuple(nActors);
-	TypedTupleCopySubset(clauseState->indexedFormula->actors, actorIndices, nActors, termActors);
+	TypedTuple * termSetActors = CreateTypedTuple(nActors);
+	TypedTupleCopySubset(clauseState->indexedFormula->actors, actorIndices, nActors, termSetActors);
 #ifdef DEBUG_COMPILER
 	PrintF("Mode = %d, term set: ", dispatchMode);
 	printTermSet(clauseState, termIndices, nTerms);
@@ -807,8 +806,8 @@ static Operator * compileTermSet(
 	Operator * op = 0;
 	// attempt to locate a service for the term
 	if(dispatchOrCompileAtNewChoicePoint(
-		compileStack, (FormulaView) {.form = form, .actors = termActors}, dispatchMode, choicePoint))
-		op = buildOperatorFromChoicePoint(termActors, choicePoint, serviceParameters, termClauseMap);
+		compileStack, (FormulaView) {.form = form, .actors = termSetActors}, dispatchMode, choicePoint))
+		op = buildOperatorFromChoicePoint(termSetActors, choicePoint, serviceParameters, termClauseMap);
 	if(op)
 		acceptCompiledTerms(clauseState, termIndices, nTerms, actorIndices, serviceParameters);
 #ifdef DEBUG_COMPILER
@@ -816,7 +815,7 @@ static Operator * compileTermSet(
 		PrintCString(" => no match.\n");
 #endif
 	FreeTypedTuple(serviceParameters);
-	FreeTypedTuple(termActors);
+	FreeTypedTuple(termSetActors);
 	return op;
 }
 
@@ -1661,9 +1660,9 @@ static Operator * sortOperatorToIdentityOrder(Operator * op)
 
 /**
  * Test whether a clause is recursive with respect to the query. This occurs when the
- * clause contains the a term of the same form as the query term but with the opposite sign,
- * but not necessarily negated. For example, given the query (! even x), the clause
- * (odd x | even x) is recursive since it contains the term (even x).
+ * clause contains the a term of the same form as the query term but with the opposite sign.
+ * For example, given the query (! even x), the clause (odd x | even x) is recursive since
+ * it contains the term (even x).
  */
 static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
 {
@@ -1821,9 +1820,10 @@ static void findHeadConstants(
 
 
 /*
- * Write the query parameters into the actors tuple, starting at actorsOffset.
- * A parameter that the substitution replaces by a constant is given the atom type of
- * the constant, unless the parameter has a type already.
+ * Apply the given substitution to the query parameters to determine their types,
+ * and write the result into the actors tuple, starting at actorsOffset.
+ * For each parameter that the substitution maps to a constant, we set the
+ * parameters atom type to that  constant's atom type, unless the parameter has a type already.
  */
 static void writeQueryParameters(
 	ParameterizedQuery const * query, Substitution const * subst,
@@ -1894,14 +1894,13 @@ static size8 compileClauses(
 				index8 matchedTermIndex = ClauseGetTermIndex(clauseForm, query->form, m);
 				HeadConstants headConstants;
 				findHeadConstants(query, &subst, &headConstants);
-				// Compile the conjunction once per combination of choices. A term that leaves
-				// an output parameter untyped may match several services, each
-				// yielding a differently typed variant of the query service.
+				// Compile the conjunction once per combination of choices. An untyped parameter
+				// in the query may match several services, each yielding a different compiled variant
 				ChoiceTree choiceTree;
 				ChoiceTreeReset(&choiceTree);
 				do {
-					// compileConjunction() updates parameter types in the clause
-					// actors, so re-derive them for each branch.
+					// The compileConjunction() call below updates parameter types in the clause
+					// actors, so we must re-compute them for each branch of the ChoiceTree.
 					SubstituteTuple(&subst, clauseActors, substClauseActors);
 					// CLAUDE: The head term holds the query parameters, also those bound to constants
 					writeQueryParameters(query, &subst, substClauseActors, matchedTermActorsOffset);
@@ -2386,7 +2385,6 @@ static size8 compileQueryVariants(
 
 /**
  * Compile a parameterized query into services, registering each one.
- * The queryParameters tuple must hold AT_PARAMETER atoms numbered 1, 2, ...
  * If the services array is not 0, a copy of each compiled service is written to it.
  * Returns the number of services registered. If the is already being compiled,
  * this function does nothing and returns 0.

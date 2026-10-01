@@ -11,10 +11,6 @@ The Atom system is written in C99. All sources are under src/, divided into subd
 
 We have a few code conventions, some of which are a bit non-standard: see code-conventions.md. DO NOT MODIFY THIS FILE.
 
-## Other documentaion
-
-The compiler (`kernel/compiler.c`) is quite complex and has dedicated documentation in `compiler.md`. DO NOT MODIFY THIS FILE.
-
 ## Writing comments
 
 Be restrictive with writing comments: too many or too long comments rarely get read, and so serve no purpose.

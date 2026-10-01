@@ -1635,7 +1635,7 @@ void testCompileNegatedTerm(void)
  * A compiled service reads its stored relations live through their MACHINE operators, so
  * asserting or retracting a fact of a relation that already exists needs no invalidation:
  * the service compiled before the change answers correctly after it. Only structural
- * change is invalidated; see the notes on invalidation in compiler.md.
+ * change is invalidated.
  */
 void testCompiledServiceReadsFactsLive(void)
 {
@@ -1872,7 +1872,7 @@ void testCompileChainedRuleOrder(void)
  * Two rules recursive through one another have no base case: compiling (p) reaches (q),
  * which reaches (p) again. A parameterized query already being compiled yields no service,
  * so the clause fails to compile and the compilation terminates, which is what this test
- * is here to show. Mutual recursion is a gap; see compiler.md.
+ * is here to show. Mutual recursion is a known gap.
  */
 void testCompileMutualRecursion(void)
 {
