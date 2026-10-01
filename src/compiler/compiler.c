@@ -2023,21 +2023,36 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
 	SetMemory(variants, sizeof(CompiledVariant) * MAX_COMPILED_VARIANTS, 0);
 	size8 nVariants = 0;
 
-	// CLAUDE: A service not repeating every parameter the query repeats is constrained
-	// to the query; the variant is then a compiled variant rather than a seed.
-
-	// Dispatch the query, allowing services that will require a CONSTRAIN operator. 
+	// Dispatch the query, allowing services that require a CONSTRAIN operator, a FILTER
+	// operator, or both. The dispatch iterator yields the best matching service of each relation.
+	// Exact matches are preferred over repeated parameters, and fewer repeated parameters
+	// is preferred over fewer outputs.
+	// NOTE: this is a heuristic, and might change.
 	EqualitySignature queryEqualitySignature =
 		ParametersGetEqualitySignature(query->parameters, query->arity);
 	index8 permutation[query->arity];
 	DispatchIterator iterator;
-	DispatchIterate(query, DISPATCH_RELAX_EQUALITY, permutation, &iterator);
+	DispatchIterate(query, DISPATCH_RELAX_EQUALITY | DISPATCH_RELAX_IO, permutation, &iterator);
 	while(DispatchIteratorNext(&iterator)) {
 		ASSERT(nVariants < MAX_COMPILED_VARIANTS)
 		ServiceRecord const * serviceRecord = DispatchIteratorPeekServiceRecord(&iterator);
-		bool isSeed = CompareMemory(
-			&(serviceRecord->service.equalitySignature), &queryEqualitySignature,
-			sizeof(EqualitySignature)) == 0;
+		EqualitySignature serviceEqualitySignature = serviceRecord->service.equalitySignature;
+		index8 serviceArgumentMap[query->arity];
+		EqualitySignatureGetArgumentMap(serviceEqualitySignature, query->arity, serviceArgumentMap);
+
+		// The query arguments to filter are the ones that correspond to query inputs
+		// but service outputs.
+		// CLAUDE: The filtered arguments are indices into the service operator arguments
+		index8 filteredArguments[query->arity];
+		size8 nFiltered = 0;
+		for(index8 i = 0; i < query->arity; i++) {
+			if(!serviceEqualitySignature.repeatOf[i]
+				&& (query->parameters[permutation[i]].parameter.io == PARAMETER_IN)
+				&& (serviceRecord->service.ioSignature.parameterIO[i] == PARAMETER_OUT))
+				filteredArguments[nFiltered++] = serviceArgumentMap[i];
+		}
+		bool isSeed = (nFiltered == 0) && (CompareMemory(
+			&serviceEqualitySignature, &queryEqualitySignature, sizeof(EqualitySignature)) == 0);
 
 #ifdef DEBUG
 		// The service must be primitive, since compilation should never run
@@ -2052,13 +2067,21 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
 	   // in general is not aware of role multiplicity: for (+ + =), the tuples
 	   // (2 3 5) and (3 2 5) correspond to the same fact, and should be considered
 	   // duplicates in the relation. No operator should produce such duplicates.
-	   ASSERT(IsIdentityPermutation(permutation, query->arity))
+	   // CLAUDE: A FILTER variant places its arguments in query order; see setupConstrainedVariant()
+	   if(nFiltered == 0)
+		   ASSERT(IsIdentityPermutation(permutation, query->arity))
 
 		CompiledVariant * variant = &(variants[nVariants++]);
 		if(isSeed)
 			SetupCompiledVariantFromServiceRecord(variant, serviceRecord);
-		else
-			setupConstrainedVariant(variant, serviceRecord, serviceRecord->op, query, permutation);
+		else {
+			// The FILTER service type signature is the same as that of the child,
+			// while its IO direction is the same as that of the query.
+			Operator * childOperator = serviceRecord->op;
+			Operator * op = (nFiltered > 0) ?
+				CreateFilterOperator(childOperator, filteredArguments, nFiltered) : childOperator;
+			setupConstrainedVariant(variant, serviceRecord, op, query, permutation);
+		}
 
 #ifdef DEBUG_COMPILER
 		PrintCString("Seeded variant from service: ");
@@ -2149,75 +2172,6 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
 	Operator * fixpointOperator = CreateFixpointOperator(
 		variant->op, inputArguments, nInputs);
 	variant->op = fixpointOperator;
-}
-
-
-/**
- * Compile a FILTER operator based on a child service matching the query using "relaxed" dispatch.
- * Inputs to the FILTER operator that map to outputs in the child service are handled by
- * filtering tuples for equality. See OPERATOR_FILTER in operator.h.
- *
- * One variant is emitted per matching relation. Returns the new number of variants.
- */
-static size8 compileFilterVariants(ParameterizedQuery const * query, CompiledVariant variants[], size8 nVariants)
-{
-	// Perform "relaxed" dispatch to search for services whose IO pattern
-	// has an output everywhere the query has an output, and as few outputs as possible.
-	index8 permutation[query->arity];
-	DispatchIterator iterator;
-	// CLAUDE: The child service may also repeat fewer parameters than the query
-	DispatchIterate(query, DISPATCH_RELAX_IO | DISPATCH_RELAX_EQUALITY, permutation, &iterator);
-	index8 queryArgumentMap[query->arity];
-	size8 nQueryArguments = ParametersGetArgumentMap(query->parameters, query->arity, queryArgumentMap);
-
-	while(DispatchIteratorNext(&iterator)) {
-		ASSERT(nVariants < MAX_COMPILED_VARIANTS)
-		ServiceRecord const * childServiceRecord = DispatchIteratorPeekServiceRecord(&iterator);
-		EqualitySignature childEqualitySignature = childServiceRecord->service.equalitySignature;
-		index8 childArgumentMap[query->arity];
-		size8 nChildArguments = EqualitySignatureGetArgumentMap(
-			childEqualitySignature, query->arity, childArgumentMap);
-
-		// The query arguments to filter are the ones that correspond to query inputs
-		// but child service outputs.
-		// CLAUDE: The filtered arguments are indices into the child operator arguments
-		index8 filteredArguments[query->arity];
-		size8 nFiltered = 0;
-		for(index8 i = 0; i < query->arity; i++) {
-			if(!childEqualitySignature.repeatOf[i]
-				&& (query->parameters[permutation[i]].parameter.io == PARAMETER_IN)
-				&& (childServiceRecord->service.ioSignature.parameterIO[i] == PARAMETER_OUT))
-				filteredArguments[nFiltered++] = childArgumentMap[i];
-		}
-		// If there are no argument to filter, the child service is an exact match.
-		// CLAUDE: unless the query repeats parameters that the child service does not
-		if((nFiltered == 0) && (nChildArguments == nQueryArguments)) {
-			// NOTE: This case happens when seedVariantsFromServices() finds a primitive service
-			// but no compiled rule is generated; the variant is the discarded and we 
-			// land here with nothing left to compile.
-			continue;
-		}
-
-		// Create a new compiled variant
-
-		// The FILTER service type signature is the same as that of the child,
-		// while its IO direction is the same as that of the query.
-
-		// The filter operator takes the arguments of the service it reads, so a form whose
-		// roles repeat needs a permute operator to place them in query argument order
-
-		// CLAUDE: The repeated parameters of the variant are those of the query. A query
-		// repeating a parameter the child does not repeat needs a CONSTRAIN operator instead
-		// of the permute operator; see setupConstrainedVariant().
-		Operator * childOperator = childServiceRecord->op;
-		Operator * filterOperator = (nFiltered > 0) ?
-			CreateFilterOperator(childOperator, filteredArguments, nFiltered) : childOperator;
-		CompiledVariant * variant = &(variants[nVariants++]);
-		setupConstrainedVariant(variant, childServiceRecord, filterOperator, query, permutation);
-		ASSERT(variant->op)
-	}
-	DispatchIteratorEnd(&iterator);
-	return nVariants;
 }
 
 
@@ -2366,14 +2320,6 @@ static size8 compileQueryVariants(
 	// Compile an IFACT variant after the FIXPOINT operators are added; see compileIFactRule()
 	if(ifactStore)
 		nVariants = compileIFactRule(query, ifactStore, ifactIdColumn, variants, nVariants);
-
-	// CLAUDE: A query the rules do not answer may still be answered by filtering a service that
-	// produces what the query binds; see compileFilterVariants(). The rules are tried
-	// first, so a rule answering the query wins over reading a relation and filtering.
-	// NOTE: what if we don't currently have a service to be filtered, but one could
-	// have been compiled from rules?
-	if(nVariants == 0)
-		nVariants = compileFilterVariants(query, variants, nVariants);
 
 	return nVariants;
 }

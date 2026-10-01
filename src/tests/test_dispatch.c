@@ -198,7 +198,7 @@ void testDispatchNegatedTerm(void)
 
 /**
  * A query binding a column the B-tree cannot seek on has no service, but under
- * DISPATCH_MATCH_RELAXED it matches a service that produces that column instead,
+ * DISPATCH_RELAX_IO it matches a service that produces that column instead,
  *
  * The query (list <ID position >INT element <LETTER) binds the "element" role without binding the
  * position. Of the two services that can produce the element, the one that also binds the
@@ -344,6 +344,100 @@ void testDispatchIterator(void)
 }
 
 
+/**
+ * CLAUDE: Of several services of one relation matching a query, dispatch returns the one with
+ * the fewest outputs. The edge fixture is indexed on (edge from to), so its B-tree serves
+ * the patterns binding a prefix of those roles. The query binding every role matches all of
+ * them under DISPATCH_RELAX_IO, and the all-input service is returned.
+ */
+void testDispatchFewestOutputs(void)
+{
+	RelationFixture edgeFixture;
+	SetupEdgeFixture(&edgeFixture);
+	Atom query = CStringToTerm("edge \"ab\" from \"a\" to \"b\"");
+	ParameterizedQuery parameterizedQuery;
+	ParameterizeQuery(FormulaGetView(query), &parameterizedQuery);
+	Service service;
+	index8 permutation[parameterizedQuery.arity];
+
+	ASSERT_INT32_EQUAL(
+		DispatchParameterizedQuery(
+			&parameterizedQuery, DISPATCH_RELAX_IO, &service, permutation, 0, 0, 0),
+		DISPATCH_FOUND
+	)
+	for(index8 i = 0; i < parameterizedQuery.arity; i++)
+		ASSERT_UINT32_EQUAL(service.ioSignature.parameterIO[i], PARAMETER_IN)
+
+	// Binding the edge and the target, the service binding the edge is the best match
+	Atom targetQuery = CStringToTerm("edge \"ab\" from x to \"b\"");
+	ParameterizeQuery(FormulaGetView(targetQuery), &parameterizedQuery);
+	ASSERT_INT32_EQUAL(
+		DispatchParameterizedQuery(
+			&parameterizedQuery, DISPATCH_RELAX_IO, &service, permutation, 0, 0, 0),
+		DISPATCH_FOUND
+	)
+	ASSERT_UINT32_EQUAL(
+		service.ioSignature.parameterIO[RelationFixtureRoleIndex(&edgeFixture, "edge")], PARAMETER_IN)
+	ASSERT_UINT32_EQUAL(
+		service.ioSignature.parameterIO[RelationFixtureRoleIndex(&edgeFixture, "from")], PARAMETER_OUT)
+	ASSERT_UINT32_EQUAL(
+		service.ioSignature.parameterIO[RelationFixtureRoleIndex(&edgeFixture, "to")], PARAMETER_OUT)
+
+	ReleaseFormula(targetQuery);
+	ReleaseFormula(query);
+	TeardownRelationFixture(&edgeFixture);
+}
+
+
+/**
+ * CLAUDE: Of two services matching a query repeating a variable, dispatch returns the one
+ * repeating the parameter, which needs no equality constraint. The query (edge e from x to x)
+ * matches the all-output primitive service under DISPATCH_RELAX_EQUALITY, and also a service
+ * repeating the from and to parameters, registered here over a CONSTRAIN operator.
+ */
+void testDispatchFewestConstraints(void)
+{
+	RelationFixture edgeFixture;
+	SetupEdgeFixture(&edgeFixture);
+	index8 fromIndex = RelationFixtureRoleIndex(&edgeFixture, "from");
+	index8 toIndex = RelationFixtureRoleIndex(&edgeFixture, "to");
+
+	// The service (edge #1> from #2> to #2>), constraining the all-output primitive service
+	byte allOutputs[3] = {PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT};
+	Service primitiveService = {
+		.relation = edgeFixture.relation, .ioSignature = CreateIOSignature(allOutputs, 3)};
+	Atom repeatedParameters[3];
+	index8 argumentMap[3];
+	for(index8 i = 0; i < 3; i++) {
+		uint8 number = (i == toIndex) ? (fromIndex + 1) : (i + 1);
+		repeatedParameters[i] = (Atom) {.parameter = {.number = number, .io = PARAMETER_OUT, .atomType = AT_ID}};
+	}
+	EqualitySignature equalitySignature = ParametersGetEqualitySignature(repeatedParameters, 3);
+	size8 nArguments = EqualitySignatureGetArgumentMap(equalitySignature, 3, argumentMap);
+	Operator * constrainOperator = CreateConstrainOperator(
+		nArguments, argumentMap, ServiceGetOperator(primitiveService));
+	Service repeatingService = primitiveService;
+	repeatingService.equalitySignature = equalitySignature;
+	CreateService(repeatingService, constrainOperator);
+
+	Atom query = CStringToTerm("edge e from x to x");
+	ParameterizedQuery parameterizedQuery;
+	ParameterizeQuery(FormulaGetView(query), &parameterizedQuery);
+	Service service;
+	index8 permutation[parameterizedQuery.arity];
+	ASSERT_INT32_EQUAL(
+		DispatchParameterizedQuery(
+			&parameterizedQuery, DISPATCH_RELAX_EQUALITY, &service, permutation, 0, 0, 0),
+		DISPATCH_FOUND
+	)
+	ASSERT_TRUE(HasRepeatedParameters(service.equalitySignature))
+
+	RemoveService(repeatingService);
+	ReleaseFormula(query);
+	TeardownRelationFixture(&edgeFixture);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -356,6 +450,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testDispatchNegatedTerm);
 	ExecuteTest(testDispatchIterator);
 	ExecuteTest(testDispatchFilterable);
+	ExecuteTest(testDispatchFewestOutputs);
+	ExecuteTest(testDispatchFewestConstraints);
 
 	UnloadLibraries();
 	KernelShutdown();

@@ -40,6 +40,50 @@ static void setupBinaryRelationIndexColumns(
 }
 
 
+/*
+ * CLAUDE: Create a relation with a B-tree in identity index order, holding the given fact.
+ */
+static Relation createStoredRelation(Atom fact)
+{
+	FormulaView view = FormulaGetView(fact);
+	size8 arity = view.actors->nAtoms;
+	Relation relation = RelationFromFact(view);
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, arity, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(view.actors), 0);
+	return relation;
+}
+
+
+/*
+ * CLAUDE: Remove the given fact and drop its relation; see createStoredRelation().
+ */
+static void dropStoredRelation(Relation relation, Atom fact)
+{
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+	DropRelation(relation);
+}
+
+
+/*
+ * CLAUDE: Call an operator with the actors of the given query term, and return the number
+ * of tuples. The value of the given role in the last tuple is written to *value.
+ */
+static size32 callWithQueryActors(Operator const * op, Atom queryTerm, char const * role, Atom * value)
+{
+	size8 arity = FormulaGetActors(queryTerm)->nAtoms;
+	Atom arguments[arity];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, arity);
+	void * context = OperatorCreateContext(op, arguments);
+	size32 nTuples = 0;
+	while(OperatorCall(context)) {
+		nTuples++;
+		*value = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, role, 1);
+	}
+	OperatorFreeContext(context);
+	return nTuples;
+}
+
+
 /**
  * The IO signature a query dispatches with: an input where the query binds an
  * actor, an output where it holds a variable. See ActorsToParameters().
@@ -307,6 +351,84 @@ void testCompileHeadVariableJoiningQueryParameters(void)
 
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&clause);
+}
+
+/**
+ * Test that services generated via a FILTER operator can be a base case for a recursive rule.
+ * Here the query (quantity "x" value v unit "Kelvin") requires a FILTER operator.
+ * TODO: this particular query should not be recursive in the future.
+ */
+void testCompileFilterAsRecursiveBaseCase(void)
+{
+	Atom fact = CStringToTerm("quantity \"x\" value 20.0 unit \"Celsius\"");
+	Relation relation = createStoredRelation(fact);
+	FormulaView clause = DictionaryAddClauseFromCString(
+		"quantity t value k unit \"Kelvin\" | ! + c + 273.15 = k | ! quantity t value c unit \"Celsius\"");
+	size32 nCompiledBefore = NumberOfCompiledServices();
+
+	Atom kelvinQuery = CStringToTerm("quantity \"x\" value v unit \"Kelvin\"");
+	Service services[MAX_COMPILED_VARIANTS];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(kelvinQuery), services), 1)
+	Operator * op = ServiceGetOperator(services[0]);
+	ASSERT_UINT32_EQUAL(op->type, OPERATOR_FIXPOINT)
+
+	Atom value;
+	ASSERT_UINT32_EQUAL(callWithQueryActors(op, kelvinQuery, "value", &value), 1)
+	ASSERT_DOUBLE_EQUAL(value._float, 293.15)
+	Atom celsiusQuery = CStringToTerm("quantity \"x\" value v unit \"Celsius\"");
+	ASSERT_UINT32_EQUAL(callWithQueryActors(op, celsiusQuery, "value", &value), 1)
+	ASSERT_DOUBLE_EQUAL(value._float, 20.0)
+
+	RemoveService(services[0]);
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
+	ReleaseFormula(celsiusQuery);
+	ReleaseFormula(kelvinQuery);
+	DictionaryRemoveClause(&clause);
+	dropStoredRelation(relation, fact);
+	ReleaseFormula(fact);
+}
+
+
+/**
+ * Test that primitive services and FILTER operator work correctly with the UNION operator.
+ */
+void testCompileFilterAndRule(void)
+{
+	// Stored fact (quantity "x" value 20.0 unit "Celsius")
+	Atom tempFact = CStringToTerm("quantity \"x\" value 20.0 unit \"Celsius\"");
+	Relation tempRelation = createStoredRelation(tempFact);
+	// A rule computing facts of the same form
+	Atom kelvinFact = CStringToTerm("kelvin \"y\" value 300.0");
+	Relation kelvinRelation = createStoredRelation(kelvinFact);
+	FormulaView clause = DictionaryAddClauseFromCString(
+		"quantity t value k unit \"Kelvin\" | ! kelvin t value k");
+	size32 nCompiledBefore = NumberOfCompiledServices();
+
+	// This query should form a UNION between the primitive and FILTER services
+	Atom kelvinQuery = CStringToTerm("quantity \"y\" value v unit \"Kelvin\"");
+	Service services[MAX_COMPILED_VARIANTS];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(kelvinQuery), services), 1)
+	Operator * op = ServiceGetOperator(services[0]);
+	ASSERT_UINT32_EQUAL(op->type, OPERATOR_UNION)
+
+	// The rule answers the Kelvin query, and the stored fact the Celsius query
+	Atom value;
+	ASSERT_UINT32_EQUAL(callWithQueryActors(op, kelvinQuery, "value", &value), 1)
+	ASSERT_DOUBLE_EQUAL(value._float, 300.0)
+	Atom celsiusQuery = CStringToTerm("quantity \"x\" value v unit \"Celsius\"");
+	ASSERT_UINT32_EQUAL(callWithQueryActors(op, celsiusQuery, "value", &value), 1)
+	ASSERT_DOUBLE_EQUAL(value._float, 20.0)
+
+	RemoveService(services[0]);
+	RemoveAllCompiledServices();
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
+	ReleaseFormula(celsiusQuery);
+	ReleaseFormula(kelvinQuery);
+	DictionaryRemoveClause(&clause);
+	dropStoredRelation(kelvinRelation, kelvinFact);
+	dropStoredRelation(tempRelation, tempFact);
+	ReleaseFormula(kelvinFact);
+	ReleaseFormula(tempFact);
 }
 
 void testCompileProject(void)
@@ -1894,7 +2016,7 @@ void testCompileMutualRecursion(void)
  * Compile a service for an IO pattern no service provides. The B-tree registers a service
  * per prefix of its index column order, so binding the element without binding the position
  * has none, and the query compiles to a FILTER operator over the service that produces the
- * element; see compileFilterVariants().
+ * element; see seedVariantsFromServices().
  */
 void testCompileNewIOPattern(void)
 {
@@ -2026,6 +2148,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileHeadConstantTypeMismatch);
 	ExecuteTest(testCompileHeadConstantRepeatedParameter);
 	ExecuteTest(testCompileHeadVariableJoiningQueryParameters);
+	ExecuteTest(testCompileFilterAsRecursiveBaseCase);
+	ExecuteTest(testCompileFilterAndRule);
 	ExecuteTest(testCompileProject);
 	ExecuteTest(testCompileChoicePointAfterFailedTerm);
 	ExecuteTest(testCompileTwoChoicePoints);

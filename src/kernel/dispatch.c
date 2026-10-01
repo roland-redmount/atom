@@ -55,7 +55,7 @@ bool DispatchParameterIOMatch(byte queryIO, byte serviceIO, int matchMode)
  *
  * 1) Query parameter atom types in must equal the typeSignature, or be absent.
  * 2) With matchMode = DISPATCH_MATCH_EXACT the IO direction of each query parameter
- *    must agree with ioSignature; with matchMode = DISPATCH_MATCH_RELAXED, only
+ *    must agree with ioSignature; with matchMode = DISPATCH_RELAX_IO, only
  *    output parameters must match ioSignature outputs.
  * 3) A parameter (identified by its number) occurring at several positions must match
  *    the same type in typeSignature at all positions.
@@ -149,6 +149,43 @@ void DispatchIterate(
 	RelationRegistryIterate(query->form, &(iterator->relationIterator));
 }
 
+/*
+ * Count the distinct output parameters of a service.
+ */
+static size8 countDistinctOutputs(Service service, size8 arity)
+{
+	size8 nOutputs = 0;
+	for(index8 i = 0; i < arity; i++) {
+		if(!service.equalitySignature.repeatOf[i] && (service.ioSignature.parameterIO[i] == PARAMETER_OUT))
+			nOutputs++;
+	}
+	return nOutputs;
+}
+
+
+/**
+ * Compare two services by the heuristic that (1) fewer distinct parameters is better,
+ * and (2) fewer outputs is better. Returns -1 if service1 is better, +1 if service is better,
+ * or 0 if there is no difference.
+ */
+static int8 compareServicesHeuristic(Service service1, Service service2)
+{
+	size8 arity = FormArity(service1.relation.form);
+	ASSERT(arity == FormArity(service2.relation.form))
+	// Compare the number of distinct arguments
+	index8 argumentMap[arity];
+	size8 nArguments1 = EqualitySignatureGetArgumentMap(service1.equalitySignature, arity, argumentMap);
+	size8 nArguments2 = EqualitySignatureGetArgumentMap(service2.equalitySignature, arity, argumentMap);
+	if(nArguments1 != nArguments2)
+		return (nArguments1 < nArguments2) ? -1 : 1;
+	// Compare the number of distinct outputs parameters
+	size8 nOutputs1 = countDistinctOutputs(service1, arity);
+	size8 nOutputs2 = countDistinctOutputs(service2, arity);
+	if(nOutputs1 != nOutputs2)
+		return (nOutputs1 < nOutputs2) ? -1 : 1;
+	return 0;
+}
+
 
 bool DispatchIteratorNext(DispatchIterator * iterator)
 {
@@ -165,23 +202,30 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 		}
 
 		// Iterate over candidate services for the current relation
+		iterator->serviceRecord = 0;
+		// A scratch permutation, so that only the permutation of the best
+		// candidate is copied to the iterator
+		index8 candidatePermutation[iterator->nParameters];
 		while(ServiceIteratorNext(&(iterator->serviceIterator))) {
-			iterator->serviceRecord = ServiceIteratorPeekRecord(&(iterator->serviceIterator));
+			ServiceRecord const * candidate = ServiceIteratorPeekRecord(&(iterator->serviceIterator));
 			if(permutationMatch(
-				iterator->serviceRecord->service,
-				iterator->queryParameters, iterator->nParameters, iterator->matchMode,
-				iterator->permutation))
+				candidate->service,	iterator->queryParameters, iterator->nParameters,
+				iterator->matchMode, candidatePermutation))
 			{
-				// For DISPATCH_MATCH_EXACT, there can be only one match per relation,
-				// since we cannot have two services with the same IO signagure.
-				// For DISPATCH_MATCH_RELAXED, we arbitrarily pick the first match for each relation.
-				ServiceIteratorEnd(&(iterator->serviceIterator));
-				iterator->inRelation = false;
-				return true;
+				// Compare the candidate to the one already found, and keep the best match
+				// We prefer services with fewer distinct arguments, which need fewer equality constraints,
+				if(!iterator->serviceRecord
+					|| (compareServicesHeuristic(iterator->serviceRecord->service, candidate->service) > 0))
+				{
+					iterator->serviceRecord = candidate;
+					CopyMemory(candidatePermutation, iterator->permutation, iterator->nParameters * sizeof(index8));
+				}
 			}
 		}
 		ServiceIteratorEnd(&(iterator->serviceIterator));
 		iterator->inRelation = false;
+		if(iterator->serviceRecord)
+			return true;
 	}
 }
 

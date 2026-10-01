@@ -70,7 +70,7 @@ bool SameParameterizedQueries(ParameterizedQuery const * query1, ParameterizedQu
  * Dispatch a parameterized query. A query parameter occurring at several positions
  * must match a service parameter of the same type at each position.
  *
- * Several services may match when a query output parameter type is NONE (untyped).
+ * Several services may match when a query output parameter type is 0 (untyped).
  * There can be at most one matching service for each relation, so each service is
  * identified by the type signature of the corresponding relation.
  * 
@@ -109,7 +109,7 @@ DispatchResult DispatchParameterizedQuery(
 
 /**
  * Test if a service parameter IO direction matches a query parameter IO direction.
- * With matchMode = DISPATCH_MATCH_EXACT, the two must agree; with DISPATCH_MATCH_RELAXED
+ * With matchMode = DISPATCH_MATCH_EXACT, the two must agree; with DISPATCH_RELAX_IO
  * a service output also serves a query input.
  */
 bool DispatchParameterIOMatch(byte queryIO, byte serviceIO, int matchMode);
@@ -140,15 +140,16 @@ typedef struct {
 } DispatchIterator;
 
 /**
- * Create an iterator over the services matching the given query.
+ * Create an iterator over the services matching the given query. Each service returned
+ * by the iterator has a distinct type signature, belonging to a distinct relation.
  * The queryParameters array must contain AT_PARAMETER atoms only must remain valid until
- * the iterator is ended. 
+ * DispatchIteratorEnd() is called.
  * The iterator is positioned before the first matching service, so
  * DispatchIteratorNext() must be called before DispatchIteratorPeekService().
  * The permutation array must hold at least nParameters elements,
  * and receives the argument permutation of the current match; see DispatchQuery().
  * The caller must call DispatchIteratorEnd() when done.
- * matchMode is the same as in DispatchParameterizedQuery()
+ * matchMode is the same as in DispatchParameterizedQuery().
  */
 void DispatchIterate(
 	ParameterizedQuery const * query, int matchMode, index8 permutation[], DispatchIterator * iterator);

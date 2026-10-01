@@ -593,8 +593,8 @@ void testQueryConjunctionRule(void)
 
 
 /**
- * This test demonstrate that a FILTER service might read a stale primitive service directly,
- * since compileFilterVariants() finds its child service with DispatchIterate(), which does not
+ * This test demonstrates that a FILTER service might read a stale primitive service directly,
+ * since seedVariantsFromServices() finds its child service with DispatchIterate(), which does not
  * skip stale services. When a compiled service later replaces that primitive service,
  * the dependent FILTER service must be removed; see ReplacePrimitiveService().
  *
@@ -606,6 +606,9 @@ void testQueryConjunctionRule(void)
  * primitive service. The FILTER service is removed, and recompiling the first query
  * reads the replacing service, which yields the derived tuple.
  */
+/* CLAUDE: The FILTER service is a base variant for the first query, but the rule still compiles
+ * nothing for it: the recursive term (sym #2< with #1>) has an output where the head term
+ * (sym #1> with #2<) has an input; see compileRecursiveTerm(). */
 void testFilterServiceOverReplacedPrimitive(void)
 {
 	Atom fact = CStringToTerm("sym \"a\" with \"b\"");

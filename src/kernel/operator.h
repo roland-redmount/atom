@@ -153,7 +153,7 @@ typedef struct s_OperatorContext OperatorContext;
 	 * This is how a service is built for an IO pattern no service provides. A relation is
 	 * read by the services its storage registered, and a B-tree registers one per prefix
 	 * of its index column order, so a pattern binding a column out of that order has no
-	 * service; see compileFilterVariants() in compiler.c.
+	 * service; see seedVariantsFromServices() in compiler.c.
 	 */
 	OPERATOR_FILTER = 9,
 
