@@ -578,12 +578,11 @@ void OperatorFreeContext(OperatorContext * context);
 bool OperatorCallOnce(Operator const * op, Atom arguments[]);
 
 /**
- * Print operator information.
- * The parameters array holds one AT_PARAMETER atom per operator argument. Each
- * operator of the tree is printed with the arguments it is called with, as in
- * "JOIN(#1> #2> #3<)", mapped from the given parameters as when the operators are called.
+ * Print operator information. The parameters tuple holds the operator argument. Each
+ * operator of the tree is printed with the arguments it is called with, such as
+ * "JOIN(x "foo" 42)", mapped from the given parameters as when the operators are called.
  */
-void PrintOperator(Operator const * op, Atom const parameters[]);
+void PrintOperator(Operator const * op, TypedTuple * const arguments);
 
 
 #endif	// OPERATOR_H

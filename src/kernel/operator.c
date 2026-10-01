@@ -2335,21 +2335,18 @@ static void printOperatorRecursive(
 }
 
 
-void PrintOperator(Operator const * op, Atom const parameters[])
+void PrintOperator(Operator const * op, TypedTuple * const arguments)
 {
 	// Local parameters, for arguments dropped by a PROJECT operator, are numbered
-	// after the given parameters, so we must determine the number of unique parameters.
+	// after the highest parameter number in the given arguments
 	uint8 nextParameterNumber = 1;
-	TypedAtom arguments[op->nArguments];
+	TypedAtom argumentsArray[op->nArguments];
 	for(index8 i = 0; i < op->nArguments; i++) {
-		arguments[i] = CreateTypedAtom(AT_PARAMETER, parameters[i]);
-		// We erase the parameter types, as they clutter up the printout,
-		// and we cannot determine types for local variables when traversing the
-		// operator graph top-down.
-		arguments[i].atom.parameter.atomType = 0;
-		if(parameters[i].parameter.number >= nextParameterNumber)
-			nextParameterNumber = parameters[i].parameter.number + 1;
+		TypedAtom argument = TypedTupleGetElement(arguments, i);
+		if(argument.type == AT_PARAMETER && argument.atom.parameter.number >= nextParameterNumber)
+			nextParameterNumber = argument.atom.parameter.number + 1;
+		argumentsArray[i] = argument;
 	}
-	printOperatorRecursive(op, arguments, &nextParameterNumber, 0);
+	printOperatorRecursive(op, argumentsArray, &nextParameterNumber, 0);
 	PrintChar('\n');
 }

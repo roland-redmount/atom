@@ -174,6 +174,8 @@ ServiceRecord const * ServiceGetRecord(Service service);
  */
 void PrintService(Service service);
 
+void PrintServiceWithActors(Service service, TypedTuple const * actors);
+
 /**
  * Dump all tuples of the given relation.
  * Requires an associated service for enumerating all tuples.
