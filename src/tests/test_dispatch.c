@@ -224,7 +224,7 @@ void testDispatchFilterable(void)
 	// Filtering finds one, which binds the list and produces the position and the element
 	ASSERT_INT32_EQUAL(
 		DispatchParameterizedQuery(
-			&parameterizedQuery, DISPATCH_MATCH_RELAXED, &service, permutation, 0, 0, 0),
+			&parameterizedQuery, DISPATCH_RELAX_IO, &service, permutation, 0, 0, 0),
 		DISPATCH_FOUND
 	)
 	index8 const * listRoleIndex = GetListRoleIndex();

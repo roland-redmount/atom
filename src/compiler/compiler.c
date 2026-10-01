@@ -104,10 +104,7 @@ static bool dispatchOrCompileTerm(
 	// Else attempt to compile new services for the term
 	ASSERT(mode == TERM_DISPATCH_OR_COMPILE)
 	
-	// Renumber parameters 1, 2, ..., termArity since compileParameterizedQuery() expects this format. 
-	// TODO: this is inconsistent -- DispatchParameterizedQuery() respects repeated
-	// parameter numbers, but compileParameterizedQuery() does not. 
-	// CLAUDE: Repeated parameters keep sharing a number, so the compiled service repeats them
+	// Renumber parameters in increasing order
 	ParameterizedQuery queryRenumbered = *query;
 	RenumberParameters(queryRenumbered.parameters, query->arity);
 	compileParameterizedQuery(compileStack, &queryRenumbered, 0);
@@ -2028,6 +2025,8 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
 
 	// CLAUDE: A service not repeating every parameter the query repeats is constrained
 	// to the query; the variant is then a compiled variant rather than a seed.
+
+	// Dispatch the query, allowing services that will require a CONSTRAIN operator. 
 	EqualitySignature queryEqualitySignature =
 		ParametersGetEqualitySignature(query->parameters, query->arity);
 	index8 permutation[query->arity];
@@ -2046,9 +2045,6 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
 		if(isSeed)
 			ASSERT(serviceRecord->op->type == OPERATOR_MACHINE)
 #endif
-
-	//    if(!IsIdentityPermutation(permutation, arity))
-	// 		continue;
 
 	   // TODO: I think this case must be handled rather than left alone.
 	   // For example (+ <INT + >INT = <INT) matching against (+ x + 3 = 5).
@@ -2170,7 +2166,7 @@ static size8 compileFilterVariants(ParameterizedQuery const * query, CompiledVar
 	index8 permutation[query->arity];
 	DispatchIterator iterator;
 	// CLAUDE: The child service may also repeat fewer parameters than the query
-	DispatchIterate(query, DISPATCH_MATCH_RELAXED | DISPATCH_RELAX_EQUALITY, permutation, &iterator);
+	DispatchIterate(query, DISPATCH_RELAX_IO | DISPATCH_RELAX_EQUALITY, permutation, &iterator);
 	index8 queryArgumentMap[query->arity];
 	size8 nQueryArguments = ParametersGetArgumentMap(query->parameters, query->arity, queryArgumentMap);
 

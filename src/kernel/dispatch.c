@@ -45,7 +45,7 @@ bool DispatchParameterIOMatch(byte queryIO, byte serviceIO, int matchMode)
 {
 	if(queryIO == serviceIO)
 		return true;
-	return (matchMode & DISPATCH_MATCH_RELAXED) && (serviceIO == PARAMETER_OUT);
+	return (matchMode & DISPATCH_RELAX_IO) && (serviceIO == PARAMETER_OUT);
 }
 
 
@@ -89,7 +89,7 @@ static bool signatureQueryTupleMatch(
 				&& (typeSignature.atomTypes[j] != serviceParameterType))
 				return false;
 		}
-		// CLAUDE: A service repeating a parameter the query does not repeat never matches.
+		// A service repeating a parameter the query does not repeat never matches.
 		// A query repeating a parameter the service does not repeat matches only with
 		// DISPATCH_RELAX_EQUALITY.
 		for(index8 j = 0; j < i; j++) {

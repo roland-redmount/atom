@@ -81,21 +81,26 @@ bool SameParameterizedQueries(ParameterizedQuery const * query1, ParameterizedQu
  * returned. Caller can pass hasNextMatch = 0 if only one match is required.
  * TODO: can't we solve this "lookahead" problem more cleanly with DispatchIterate()
  *
- * matchMode is a combination of these flags:
- * DISPATCH_MATCH_RELAXED: return a service that matches all input parameters
- *   and has as few output parameters as possible.
- * DISPATCH_RELAX_EQUALITY accepts a service that repeats a parameter
- * only where the query repeats it, but not necessarily everywhere the query repeats it.
- * The caller must then constrain the remaining repeated query parameters to be equal.
- *
- * With no flag, dispatch returns a service with exact matching signature.
- 
+ * matchMode is a combination of the flags below.
  */
-/* CLAUDE: . DISPATCH_MATCH_EXACT (no flags) also
- * requires the service to repeat parameters at exactly the positions where the query
- * repeats parameters. . */
+
+// Return only services whose parameters exactly match the parameterized query.
 #define DISPATCH_MATCH_EXACT		0
-#define DISPATCH_MATCH_RELAXED		1
+
+// Return a service whose input parameters all match an input parameter of the query,
+// and that has as few output parameters as possible. For example, the parameterized query
+// (#1<INT #2<INT #3>ID) will match service (#1<INT #2>INT #3>ID) with this flag set,
+// but service (#1<INT #2>INT #3<ID) will not match.
+// Services returned will generate additional tuples where the extra outputs do not match
+// the query input, which must be removed using a FILTER operator.
+#define DISPATCH_RELAX_IO			1
+
+// Return a service that repeats a parameter where the query repeats it,
+// but not necessarily everywhere the query repeats it.
+// For example, service (#1 #2 #2) matches the parameterized query (#1 #1 #2)
+// using DISPATCH_RELAX_EQUALITY
+// Services returned will generate additional tuples whole columns differ where the query
+// requires equality; these must be remove using a CONSTRAIN operator.
 #define DISPATCH_RELAX_EQUALITY		2
 
 DispatchResult DispatchParameterizedQuery(
