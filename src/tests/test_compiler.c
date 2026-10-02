@@ -354,9 +354,9 @@ void testCompileHeadVariableJoiningQueryParameters(void)
 }
 
 /**
- * Test that services generated via a FILTER operator can be a base case for a recursive rule.
- * Here the query (quantity "x" value v unit "Kelvin") requires a FILTER operator.
- * TODO: this particular query should not be recursive in the future.
+ * In this test, the term (quantity t value c unit "Celsius") has the same form as the
+ * head term but does not unify, so the clause is not recursive.
+ * See findRecursiveClauses() in compiler.c
  */
 void testCompileFilterAsRecursiveBaseCase(void)
 {
@@ -370,7 +370,7 @@ void testCompileFilterAsRecursiveBaseCase(void)
 	Service services[MAX_COMPILED_VARIANTS];
 	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(kelvinQuery), services), 1)
 	Operator * op = ServiceGetOperator(services[0]);
-	ASSERT_UINT32_EQUAL(op->type, OPERATOR_FIXPOINT)
+	ASSERT_UINT32_EQUAL(op->type, OPERATOR_UNION)
 
 	Atom value;
 	ASSERT_UINT32_EQUAL(callWithQueryActors(op, kelvinQuery, "value", &value), 1)
@@ -388,6 +388,70 @@ void testCompileFilterAsRecursiveBaseCase(void)
 	ReleaseFormula(fact);
 }
 
+
+/*
+ * CLAUDE: Rules deriving Kelvin from Celsius, Celsius from Offset, and, if withCycle is set,
+ * Offset from Celsius. A stored Offset reading of 30.0 then gives 20.0 Celsius and 293.15 Kelvin.
+ * Compile the Kelvin query, check its answer, and return the type of the compiled operator.
+ */
+static enum OperatorType compileKelvinFromOffset(bool withCycle)
+{
+	Atom fact = CStringToTerm("quantity \"x\" value 30.0 unit \"Offset\"");
+	Relation relation = createStoredRelation(fact);
+	FormulaView kelvinClause = DictionaryAddClauseFromCString(
+		"quantity t value k unit \"Kelvin\" | ! + c + 273.15 = k | ! quantity t value c unit \"Celsius\"");
+	FormulaView celsiusClause = DictionaryAddClauseFromCString(
+		"quantity t value c unit \"Celsius\" | ! + f - 10.0 = c | ! quantity t value f unit \"Offset\"");
+	FormulaView offsetClause;
+	if(withCycle) {
+		offsetClause = DictionaryAddClauseFromCString(
+			"quantity t value f unit \"Offset\" | ! + c + 10.0 = f | ! quantity t value c unit \"Celsius\"");
+	}
+	size32 nCompiledBefore = NumberOfCompiledServices();
+
+	Atom kelvinQuery = CStringToTerm("quantity \"x\" value v unit \"Kelvin\"");
+	Service services[MAX_COMPILED_VARIANTS];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(kelvinQuery), services), 1)
+	Operator * op = ServiceGetOperator(services[0]);
+	enum OperatorType operatorType = op->type;
+	Atom value;
+	ASSERT_UINT32_EQUAL(callWithQueryActors(op, kelvinQuery, "value", &value), 1)
+	ASSERT_DOUBLE_EQUAL(value._float, 293.15)
+
+	RemoveService(services[0]);
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
+	ReleaseFormula(kelvinQuery);
+	if(withCycle)
+		DictionaryRemoveClause(&offsetClause);
+	DictionaryRemoveClause(&celsiusClause);
+	DictionaryRemoveClause(&kelvinClause);
+	dropStoredRelation(relation, fact);
+	ReleaseFormula(fact);
+	return operatorType;
+}
+
+
+/**
+ * CLAUDE: The recursive term of the Kelvin rule unifies with the head term of the Celsius rule,
+ * whose recursive term unifies with no head term. Both rules are therefore non-recursive:
+ * the Celsius rule reads the stored facts, and the Kelvin rule reads the Celsius rule.
+ * No FIXPOINT operator is needed.
+ */
+void testCompileNonRecursiveChain(void)
+{
+	ASSERT_UINT32_EQUAL(compileKelvinFromOffset(false), OPERATOR_UNION)
+}
+
+
+/**
+ * CLAUDE: With a rule deriving Offset from Celsius, the Celsius and Offset rules read each
+ * other, and the Kelvin rule reads the Celsius rule. All three rules are recursive, and the
+ * service is a FIXPOINT operator.
+ */
+void testCompileRecursiveCycle(void)
+{
+	ASSERT_UINT32_EQUAL(compileKelvinFromOffset(true), OPERATOR_FIXPOINT)
+}
 
 /**
  * Test that primitive services and FILTER operator work correctly with the UNION operator.
@@ -2149,6 +2213,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileHeadConstantRepeatedParameter);
 	ExecuteTest(testCompileHeadVariableJoiningQueryParameters);
 	ExecuteTest(testCompileFilterAsRecursiveBaseCase);
+	ExecuteTest(testCompileNonRecursiveChain);
+	ExecuteTest(testCompileRecursiveCycle);
 	ExecuteTest(testCompileFilterAndRule);
 	ExecuteTest(testCompileProject);
 	ExecuteTest(testCompileChoicePointAfterFailedTerm);

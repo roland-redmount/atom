@@ -179,7 +179,7 @@ bool DictionaryContainsClause(Atom clause)
 bool ClauseFormExistsForTermForm(Atom termForm)
 {
 	// CLAUDE: Scan every (multiset element multiple) tuple for a clause form holding the
-	// given term form. This is the existence-only counterpart of findMatchingClauseForms()
+	// given term form. This is the existence-only counterpart of findMatchingClauses()
 	// in compiler.c, and is likewise a full scan for want of an element index; see the
 	// TODO there.
 
