@@ -1,7 +1,8 @@
 /**
- * Variables are used in queries to indicate "any" atom.
- * They are identified by a single letter, case-insensitive.
- * When a variable occurs only once in a formula so that its
+ * Variables are used in formulas to indicate "any" atom.
+ * A variables is identified by a single letter, case-insensitive,
+ * or by a number for temporary variables (used by the compiler only).
+ * If a variable occurs only once in a formula so that its
  * identity is irrelevant, an "anonymous" variable _ can be used.
  */
 
@@ -21,6 +22,14 @@
 Atom CreateVariable(char name);
 
 /**
+ * Create a temporary variable, distinct from every variable a--z and from the
+ * anonymous variable. The compiler uses temporary variables to rename  variables.
+ * Temporary variables with the same number are the same variable.
+ * The number must be at least 1, and at most 229.
+ */
+Atom CreateTempVariable(uint8 number);
+
+/**
  * The anonymous variable _
  * This is a bit of a hack.
  * Each occurence _ is interpreted as a distinct variable.
@@ -38,6 +47,7 @@ bool SameVariable(Atom variable1, Atom variable2);
 
 /**
  * Get the variable name, or '_' for the anonymous variable.
+ * The variable must not be a temporary variable
  */
 char GetVariableName(Atom variable);
 

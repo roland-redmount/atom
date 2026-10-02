@@ -79,6 +79,21 @@ static void testSameQuotedVariable(void)
 }
 
 
+/**
+ * A temporary variable is distinct from the variables a--z and from _, and two
+ * temporary variables are the same variable if they have the same number.
+ */
+static void testSameTempVariable(void)
+{
+	Atom temp1 = CreateTempVariable(1);
+	ASSERT_TRUE(SameVariable(temp1, CreateTempVariable(1)))
+	ASSERT_FALSE(SameVariable(temp1, CreateTempVariable(2)))
+	for(char name = 'a'; name <= 'z'; name++)
+		ASSERT_FALSE(SameVariable(temp1, CreateVariable(name)))
+	ASSERT_FALSE(SameVariable(temp1, anonymousVariable.atom))
+	ASSERT_CHAR_EQUAL(GetVariableName(CreateVariable('z')), 'z')
+}
+
 int main(int argc, char * argv[])
 {
 	SetupMemory(PERSISTENT_MEMORY);
@@ -87,6 +102,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testSameNamedVariable);
 	ExecuteTest(testSameAnonymousVariable);
 	ExecuteTest(testSameQuotedVariable);
+	ExecuteTest(testSameTempVariable);
 
 	CleanupMemory();
 

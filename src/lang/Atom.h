@@ -19,8 +19,10 @@ typedef union u_Atom {
 		uint8 code;
 	} letter;
 	// AT_VARIABLE
+	// CLAUDE: The number is 0 for the anonymous variable, 1--26 for the variables a--z,
+	// and higher for the temporary variables of the compiler; see Variable.h
 	struct {
-		char name;
+		uint8 number;
 		bool quoted;
 	} variable;
 	// AT_PARAMETER

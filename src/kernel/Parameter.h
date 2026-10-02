@@ -125,14 +125,6 @@ IOSignature ParametersGetIOSignature(Atom const parameters[], size8 nParameters)
 void ActorsToParameters(TypedTuple const * actors, Atom parameters[]);
 
 /**
- * CLAUDE: Copy the actors tuple to the parameters tuple, replacing each variable with an
- * untyped output parameter. A repeated variable is replaced by the same parameter, numbered
- * 1, 2, ... in order of first occurrence. Other atoms are copied unchanged, unlike in
- * ActorsToParameters(). Both tuples must have the same length.
- */
-void VariablesToParameters(TypedTuple const * actors, TypedTuple * parameters);
-
-/**
  * Two parameters are the same (equivalent) if their type and direction is the same;
  * parameter numbers are ignored.
  */

@@ -66,26 +66,6 @@ void ActorsToParameters(TypedTuple const * actors, Atom parameters[])
 }
 
 
-void VariablesToParameters(TypedTuple const * actors, TypedTuple * parameters)
-{
-	ASSERT(actors->nAtoms == parameters->nAtoms)
-	uint8 nextNumber = 1;
-	for(index8 i = 0; i < actors->nAtoms; i++) {
-		TypedAtom actor = TypedTupleGetElement(actors, i);
-		if(actor.type == AT_VARIABLE) {
-			index8 first = findFirstVariableOccurrence(actors, i);
-			if(first < i)
-				actor = TypedTupleGetElement(parameters, first);
-			else
-				actor = CreateTypedAtom(AT_PARAMETER, (Atom) {
-					.parameter = {.number = nextNumber++, .io = PARAMETER_OUT, .atomType = 0}
-				});
-		}
-		TypedTupleSetElement(parameters, i, actor);
-	}
-}
-
-
 TypeSignature ParametersGetTypeSignature(Atom const parameters[], size8 nParameters)
 {
 	byte atomTypes[nParameters];

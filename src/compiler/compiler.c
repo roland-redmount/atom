@@ -1917,6 +1917,27 @@ static void findMatchingClauses(ParameterizedQuery const * query, ResizingArray 
 
 
 /*
+ * Copy the actors tuple to the renamed tuple, replacing variable a--z by 
+ * temporary variable numbered 1--26. Only the compiler uses temporary variables,
+ * so the renamed tuple shares no variable with any clause from the dictionary.
+ * Both tuples must have the same length.
+ */
+static void renameVariablesApart(TypedTuple const * actors, TypedTuple * renamed)
+{
+	ASSERT(actors->nAtoms == renamed->nAtoms)
+	for(index8 i = 0; i < actors->nAtoms; i++) {
+		TypedAtom actor = TypedTupleGetElement(actors, i);
+		// The anonymous variable (number 0) is distinct from every variable already
+		if((actor.type == AT_VARIABLE) && actor.atom.variable.number) {
+			ASSERT(!actor.atom.variable.quoted)
+			actor = CreateTypedAtom(AT_VARIABLE, CreateTempVariable(actor.atom.variable.number));
+		}
+		TypedTupleSetElement(renamed, i, actor);
+	}
+}
+
+
+/*
  * Test whether a given recursive term unifies with the head term of any clause 
  * in clauseMatches[] marked as recursive. The recursive term is given by its actors,
  * assumed to be distinct from those of any head term.
@@ -1925,16 +1946,16 @@ static void findMatchingClauses(ParameterizedQuery const * query, ResizingArray 
  * instance of a clause, even when the clause is the one holding the recursive term.
  */
 static bool termUnifiesWithRecursiveHead(
-	TypedTuple const * termParameters, QueryClauseMatch const clauseMatches[], size32 nClauseMatches)
+	TypedTuple const * termActors, QueryClauseMatch const clauseMatches[], size32 nClauseMatches)
 {
-	TypedTuple * headActors = CreateTypedTuple(termParameters->nAtoms);
+	TypedTuple * headActors = CreateTypedTuple(termActors->nAtoms);
 	bool unifies = false;
 	for(index32 j = 0; !unifies && (j < nClauseMatches); j++) {
 		if(!clauseMatches[j].recursive)
 			continue;
 		TypedTupleCopyAt(clauseMatches[j].actors, clauseMatches[j].headActorsOffset, headActors);
 		Substitution subst;
-		unifies = UnifyTuples(termParameters, headActors, &subst);
+		unifies = UnifyTuples(termActors, headActors, &subst);
 		FreeSubstitution(&subst);
 	}
 	FreeTypedTuple(headActors);
@@ -1955,22 +1976,19 @@ static bool clauseMayBeRecursive(
 	size8 m = MultisetGetElementMultiple(clauseMatch->clauseForm, recursiveTermForm);
 	size8 arity = FormArity(queryTermForm);
 	TypedTuple * termActors = CreateTypedTuple(arity);
-	TypedTuple * termParameters = CreateTypedTuple(arity);
+	TypedTuple * renamedTermActors = CreateTypedTuple(arity);
 	bool mayBeRecursive = false;
 	for(index8 k = 1; k <= m; k++) {
 		TypedTupleCopyAt(
 			clauseMatch->actors, ClauseGetTermActorsIndex(clauseMatch->clauseForm, recursiveTermForm, k),
 			termActors);
-		// NOTE: this "renames" variables by converting them into parameters.
-		// We should change variable names instead. We could generalize variables
-		// to numbers, printing numbers 1--26 as a, b, c, ..., z and then _27, _28, ...
-		VariablesToParameters(termActors, termParameters);
-		if(termUnifiesWithRecursiveHead(termParameters, clauseMatches, nClauseMatches)) {
+		renameVariablesApart(termActors, renamedTermActors);
+		if(termUnifiesWithRecursiveHead(renamedTermActors, clauseMatches, nClauseMatches)) {
 			mayBeRecursive = true;
 			break;
 		}
 	}
-	FreeTypedTuple(termParameters);
+	FreeTypedTuple(renamedTermActors);
 	FreeTypedTuple(termActors);
 	IFactRelease(recursiveTermForm);
 	return mayBeRecursive;
