@@ -458,7 +458,7 @@ typedef struct s_ClauseCompileState {
 
 	// Choice points taken during the compilation of the clause
 	ChoiceTree * choiceTree;
-	// Set when a recursive term has compiled to a RECURSE operator
+	// Set when a term in the clause has compiled to a RECURSE operator
 	bool hasRecurseOperator;
 
 	// CLAUDE: The query parameters the head term binds to constants, or 0 if there are none
@@ -637,19 +637,12 @@ static Operator * skipIdentityOperator(Operator * op)
 
 
 /**
- * Compile the a "self" term in state->indexedClause given by termIndex, which has the same
- * form as the head term.
- * 
- * The term must be known to be recursive, and the head parameters in state->indexedClause
- * must be fully determined.
+ * Attempt to compile the a "self" term in state->indexedClause given by termIndex,
+ * which has the same form as the head term of the clause.
+ * The head term parameters must be fully determined when calling this function.
  *
- * Returns 0 if (1) the recursive term's parameter types disagrees with the head term,
- * or (2) the recursive term has an output where the head has an input.
- * the column it reads, and when the term leaves an argument free that the query binds.
- * 
- * CLAUDE: The derivation is keyed on what the query binds, so a term asking for less has no call
- * binding to name it; assertCallBindingIsNamed() in operator.c is the same condition where
- * the operators meet. See testCompileRecursiveTermUnboundInput().
+ * Returns 0 if the self term's parameter types disagrees with the head term, or if
+ * the self term has an output where the head has an input.
  */
 static Operator * compileSelfTerm(
 	ClauseCompileState * state, index8 termIndex, TypedTuple * serviceParameters, index8 clauseMap[])
@@ -1703,7 +1696,7 @@ static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
 
 
 /**
- * CLAUDE: A record of a clause whose head term unifies with the query, as collected by
+ * A record of a clause whose head term unifies with the query, as collected by
  * findMatchingClauses(). The head term is the first term of the query term form that
  * unifies with the query.
  */
@@ -1729,13 +1722,12 @@ typedef struct QueryClauseMatch {
  * Add a compiled operator with the given resolved parameters to the variants array.
  * An operator whose signature matches an existing variant is combined with that variant by
  * a UNION operator. Otherwise a new variant is appended, and *nVariants is incremented.
- * The unionOrder argument is UNION_OPERATOR_FIRST or UNION_OPERATOR_LAST, and places the
- * given operator as the first or second child of the UNION operator.
+ * unionOrder determines if the given operator is placed first or last in the UNION operator.
  * Returns the variant the operator was added to.
  */
 static CompiledVariant * addCompiledVariant(
 	CompiledVariant variants[], size8 * nVariants, Atom resolvedParameters[], size8 arity,
-	Operator * conjunctionOp, int unionOrder)
+	Operator * op, int unionOrder)
 {
 	// Check for previously compiled service with the same signature
 	CompiledVariant * variant = FindCompiledVariant(
@@ -1743,20 +1735,18 @@ static CompiledVariant * addCompiledVariant(
 	if(variant) {
 		// We already have a compiled variant with the same signature, so create a UNION.
 		// If the two operators have different indexOrder, they are sorted first.
-		// CLAUDE: See CompiledVariant.op
 		bool isSeed = (variant->op->type == OPERATOR_MACHINE);
-		// CLAUDE: The UNION operator can attach to a service, so the UNION operator reads
-		// the child of an IDENTITY operator, and the IDENTITY operator is deallocated
+		// If the 
 		Operator * previousOp = variant->op;
 		Operator * variantOp = skipIdentityOperator(previousOp);
-		if(!sameIndexOrder(variantOp, conjunctionOp)) {
+		if(!sameIndexOrder(variantOp, op)) {
 			variantOp = sortOperatorToIdentityOrder(variantOp);
-			conjunctionOp = sortOperatorToIdentityOrder(conjunctionOp);
+			op = sortOperatorToIdentityOrder(op);
 		}
 		if(unionOrder == UNION_OPERATOR_FIRST)
-			variant->op = CreateUnionOperator(conjunctionOp, variantOp);
+			variant->op = CreateUnionOperator(op, variantOp);
 		else
-			variant->op = CreateUnionOperator(variantOp, conjunctionOp);
+			variant->op = CreateUnionOperator(variantOp, op);
 		CheckOperator(previousOp);
 		// check if we replaced a seed variant
 		if(isSeed)
@@ -1770,9 +1760,9 @@ static CompiledVariant * addCompiledVariant(
 		TupleCopy(resolvedParameters, variant->parameters, arity);
 		// If a variant re-uses an operator of an existing service, wrap it in an IDENTITY operator
 		// so that we can attach a service (an operator can only attach to one Service).
-		if(!IsNullRelation(conjunctionOp->relation))
-			conjunctionOp = CreateIdentityOperator(conjunctionOp);
-		variant->op = conjunctionOp;
+		if(!IsNullRelation(op->relation))
+			op = CreateIdentityOperator(op);
+		variant->op = op;
 	}
 	return variant;
 }
