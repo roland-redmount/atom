@@ -302,6 +302,52 @@ static void testPredicatePermutation(void)
 }
 
 
+/* A bootstrapped form has a fixed hash, which CreatePredicateForm() and CreateTermForm()
+   must return rather than the hash of the defining fact; see setupCoreServices() in kernel.c. */
+static void testBootstrapForms(void)
+{
+	Atom multiset = CreateNameFromCString("multiset");
+	Atom element = CreateNameFromCString("element");
+	Atom multiple = CreateNameFromCString("multiple");
+	Atom predicateFormRole = CreateNameFromCString("predicate-form");
+
+	// the roles of (multiset element multiple) in any order
+	Atom multisetForm = CreatePredicateForm((Atom[]) {multiple, multiset, element}, 3);
+	ASSERT_DATA64_EQUAL(
+		multisetForm.hash, GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE).hash)
+	Atom predicateForm = CreatePredicateForm((Atom[]) {predicateFormRole}, 1);
+	ASSERT_DATA64_EQUAL(predicateForm.hash, GetCorePredicateForm(FORM_PREDICATE_FORM).hash)
+
+	// a subset of the roles, or a repeated role, is some other predicate form
+	Atom otherForm = CreatePredicateForm((Atom[]) {multiset, element}, 2);
+	ASSERT_FALSE(SameAtoms(otherForm, multisetForm))
+	IFactRelease(otherForm);
+	otherForm = CreatePredicateForm((Atom[]) {multiset, multiset, element, multiple}, 4);
+	ASSERT_FALSE(SameAtoms(otherForm, multisetForm))
+	IFactRelease(otherForm);
+
+	// the positive term form of each bootstrapped predicate form
+	index32 formIds[] = {FORM_MULTISET_ELEMENT_MULTIPLE, FORM_PREDICATE_FORM, FORM_TERM_FORM};
+	for(index8 i = 0; i < 3; i++) {
+		Atom termForm = CreateTermForm(GetCorePredicateForm(formIds[i]), true);
+		ASSERT_DATA64_EQUAL(termForm.hash, GetCoreTermForm(formIds[i]).hash)
+		IFactRelease(termForm);
+	}
+	// a negated term form is not bootstrapped
+	Atom negatedForm = CreateTermForm(multisetForm, false);
+	ASSERT_FALSE(SameAtoms(negatedForm, GetCoreTermForm(FORM_MULTISET_ELEMENT_MULTIPLE)))
+	ASSERT_TRUE(IsTermForm(negatedForm))
+	IFactRelease(negatedForm);
+
+	IFactRelease(multisetForm);
+	IFactRelease(predicateForm);
+	NameRelease(multiset);
+	NameRelease(element);
+	NameRelease(multiple);
+	NameRelease(predicateFormRole);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -313,6 +359,7 @@ int main(int argc, char * argv[])
 	ExecuteTestSetupTearDown(testCreateClause, setup, teardown);
 	ExecuteTestSetupTearDown(testFormulaIsUnique, setup, teardown);
 	ExecuteTestSetupTearDown(testPredicatePermutation, setup, teardown);
+	ExecuteTest(testBootstrapForms);
 
 	UnloadLibraries();
 	KernelShutdown();

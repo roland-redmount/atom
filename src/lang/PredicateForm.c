@@ -9,6 +9,46 @@
 #include "util/utilities.h"
 
 
+/**
+ * Returns true if the sorted unique roles are exactly the core roles given by roleIds,
+ * each occurring once.
+ */
+static bool hasCoreRoles(
+	Atom const uniqueRoles[], uint32 const multiplicities[], size8 nUniqueRoles,
+	index32 const roleIds[], size8 nRoleIds)
+{
+	if(nUniqueRoles != nRoleIds)
+		return false;
+	Atom coreRoles[nRoleIds];
+	for(index8 i = 0; i < nRoleIds; i++)
+		coreRoles[i] = GetCoreRoleName(roleIds[i]);
+	SortAtoms(coreRoles, nRoleIds);
+	for(index8 i = 0; i < nRoleIds; i++) {
+		if((multiplicities[i] != 1) || !SameAtoms(uniqueRoles[i], coreRoles[i]))
+			return false;
+	}
+	return true;
+}
+
+
+/**
+ * Return the bootstrapped predicate form with the given sorted unique roles,
+ * or the zero atom if there is none.
+ */
+static Atom findBootstrapPredicateForm(
+	Atom const uniqueRoles[], uint32 const multiplicities[], size8 nUniqueRoles)
+{
+	static index32 const multisetRoleIds[] = {ROLE_MULTISET, ROLE_ELEMENT, ROLE_MULTIPLE};
+	static index32 const predicateFormRoleIds[] = {ROLE_PREDICATE_FORM};
+
+	if(hasCoreRoles(uniqueRoles, multiplicities, nUniqueRoles, multisetRoleIds, 3))
+		return GetCorePredicateForm(FORM_MULTISET_ELEMENT_MULTIPLE);
+	if(hasCoreRoles(uniqueRoles, multiplicities, nUniqueRoles, predicateFormRoleIds, 1))
+		return GetCorePredicateForm(FORM_PREDICATE_FORM);
+	return (Atom) {0};
+}
+
+
 Atom CreatePredicateForm(Atom const roles[], size8 nRoles)
 {
 	// reduce to unique roles, typed for use with multiset
@@ -17,6 +57,13 @@ Atom CreatePredicateForm(Atom const roles[], size8 nRoles)
 	SortAtoms(uniqueRoles, nRoles);
 	uint32 multiplicities[nRoles];
 	size8 nUniqueRoles = ReduceAtomsArray(uniqueRoles, multiplicities, nRoles);
+
+	// Check for a bootstrapped predicate form, which has a fixed hash
+	Atom bootstrapForm = findBootstrapPredicateForm(uniqueRoles, multiplicities, nUniqueRoles);
+	if(bootstrapForm.hash) {
+		IFactAcquire(bootstrapForm);
+		return bootstrapForm;
+	}
 
 	IFactDraft draft;
 	IFactBegin(&draft);
