@@ -47,26 +47,22 @@ void testDispatchToService(void)
 
 
 /**
- * A query is dispatched by its type, in which every actor is a parameter of its own, so a
- * variable occurring at several positions matches as if the occurrences were unrelated.
- * The tuples such a service yields are more than the query asked for, and the caller
- * filters them; see MixedTypeRelation.h.
- */
-/* CLAUDE: A repeated variable now yields a repeated parameter, which only matches a service
+ * A repeated variable yields a repeated parameter, which only matches a service
  * repeating the same parameter; see EqualitySignature. No such service is registered for
- * the (list position element) form, so the query with a repeated variable does not dispatch. */
+ * the (list position element) form, so the query with a repeated variable does not dispatch.
+ */
 void testDispatchRepeatedVariable(void)
 {
 	Service service;
 	index8 permutation[3];
 
-	// A position is never a letter, so no atom satisfies this query, and it dispatches
-	// to the (list <ID position >INT element >LETTER) service all the same
+	// This query does not dispatch to a service, since the service
+	// (list <ID position >INT element >LETTER) has different types at "position" and "element"
 	Atom query = CStringToTerm("list \"ab\" position x element x");
 	ASSERT_INT32_EQUAL(DispatchQueryFormula(query, &service, permutation), DISPATCH_NOT_FOUND)
 	ReleaseFormula(query);
 
-	// Distinct variables at those same positions match the same service
+	// With distinct variables, we match a (list position element) service
 	query = CStringToTerm("list \"ab\" position p element e");
 	ASSERT_INT32_EQUAL(DispatchQueryFormula(query, &service, permutation), DISPATCH_FOUND)
 	ReleaseFormula(query);
