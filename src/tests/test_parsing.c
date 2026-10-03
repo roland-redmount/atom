@@ -907,6 +907,124 @@ static void testRelationPartBuilderReset(void)
 }
 
 
+/* CLAUDE: A reflected name [name] is an AT_NAME actor, also within a reflection. */
+static void testReflectedName(void)
+{
+	Atom bar = CreateNameFromCString("bar");
+
+	Atom expected = createTermWithReflection("foo", AT_NAME, bar, "baz", 1);
+	Atom parsed = CStringToTerm("foo [bar] baz 1");
+	ASSERT_TRUE(SameAtoms(parsed, expected))
+	ReleaseFormula(parsed);
+	parsed = CStringToTerm("foo [ bar ] baz 1");
+	ASSERT_TRUE(SameAtoms(parsed, expected))
+	ReleaseFormula(parsed);
+	ReleaseFormula(expected);
+
+	// a reflected name inside a formula reflection and inside a relation
+	Atom inner = createTermWithReflection("foo", AT_NAME, bar, "baz", 2);
+	expected = createTermWithReflection("term", AT_FORMULA, inner, "arity", 3);
+	parsed = CStringToTerm("term [foo [bar] baz 2] arity 3");
+	ASSERT_TRUE(SameAtoms(parsed, expected))
+	ReleaseFormula(parsed);
+	// the first ] closes the reflected name, the second ] the formula reflection
+	parsed = CStringToTerm("term [baz 2 foo [bar]] arity 3");
+	ASSERT_TRUE(SameAtoms(parsed, expected))
+	ReleaseFormula(parsed);
+	ReleaseFormula(expected);
+
+	expected = createTermWithReflection("term", AT_RELATION, inner, "arity", 3);
+	parsed = CStringToTerm("term [[foo [bar] baz 2]] arity 3");
+	ASSERT_TRUE(SameAtoms(parsed, expected))
+	ReleaseFormula(parsed);
+	ReleaseFormula(expected);
+
+	ReleaseFormula(inner);
+	NameRelease(bar);
+}
+
+
+/* CLAUDE: Invalid reflected name syntax, reported by ParseFormula() at the offending token. */
+static void testReflectedNameRejected(void)
+{
+	index32 errorPosition;
+
+	// a name cannot be reflected inside a relation
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [[bar]]", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 9)
+
+	// a ] after a role name closes nothing but a reflected name
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [bar 1 baz]", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 14)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 bar]", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 9)
+
+	// an unterminated reflected name is reported at the end of the string
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [bar", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 8)
+
+	// a reflected name is an actor, so a role name follows it
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [bar] [baz]", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 10)
+}
+
+
+/* CLAUDE: A part builder holding a name decides at the next token between a reflected name
+   and a formula reflection. Resetting the part builder while the name is held releases it. */
+static void testReflectedNamePartBuilder(void)
+{
+	Token nameToken = (Token) {
+		TOKEN_NAME,
+		CreateTypedAtom(AT_NAME, CreateNameFromCString("foo"))
+	};
+	Token innerNameToken = (Token) {
+		TOKEN_NAME,
+		CreateTypedAtom(AT_NAME, CreateNameFromCString("bar"))
+	};
+	Token numberToken = (Token) {TOKEN_NUMBER, CreateTypedAtom(AT_INT, (Atom) {._int = 1})};
+	Token beginToken = (Token) {TOKEN_BEGIN_REFLECT, invalidAtom};
+	Token endToken = (Token) {TOKEN_END_REFLECT, invalidAtom};
+
+	PartBuilder builder;
+	InitializePartBuilder(&builder, FORMULA_TOP_SCOPE);
+
+	// a ] is never an actor
+	ASSERT_TRUE(PartBuilderPush(&builder, nameToken))
+	ASSERT_FALSE(PartBuilderPush(&builder, endToken))
+	PartBuilderReset(&builder);
+
+	// reset while the name is held
+	ASSERT_TRUE(PartBuilderPush(&builder, nameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, innerNameToken))
+	PartBuilderReset(&builder);
+	ASSERT_TRUE(PartBuilderIsEmpty(&builder))
+
+	// a reflected name
+	ASSERT_TRUE(PartBuilderPush(&builder, nameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, innerNameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, endToken))
+	ASSERT_TRUE(PartBuilderComplete(&builder))
+	ASSERT_TRUE(SameTypedAtoms(PartBuilderGetActor(&builder), innerNameToken.typedAtom))
+	PartBuilderReset(&builder);
+
+	// a formula reflection beginning with the same name
+	ASSERT_TRUE(PartBuilderPush(&builder, nameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, innerNameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, numberToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, endToken))
+	ASSERT_TRUE(PartBuilderComplete(&builder))
+	ASSERT_UINT32_EQUAL(PartBuilderGetActor(&builder).type, AT_FORMULA)
+	PartBuilderReset(&builder);
+	ASSERT_TRUE(PartBuilderIsEmpty(&builder))
+
+	ReleaseTypedAtom(nameToken.typedAtom);
+	ReleaseTypedAtom(innerNameToken.typedAtom);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -936,6 +1054,9 @@ int main(int argc, char * argv[])
 	ExecuteTest(testNestedRelation);
 	ExecuteTest(testRelationRejected);
 	ExecuteTest(testRelationPartBuilderReset);
+	ExecuteTest(testReflectedName);
+	ExecuteTest(testReflectedNameRejected);
+	ExecuteTest(testReflectedNamePartBuilder);
 
 	UnloadLibraries();
 	KernelShutdown();

@@ -234,9 +234,10 @@ static void testTokenizerState(void)
 	TokenizerRestart(&tokenizer, TOKENIZER_ROLE_STATE);
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '4'), TOKENIZER_REJECTED)
 
-	// a reflection opens where an actor stands and closes where a role name does
-	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
-	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, ']'), TOKENIZER_REJECTED)
+	// CLAUDE: a ] closes a reflection where a role name stands, and a reflected name [name]
+	// where an actor stands
+	token = testTokenizeCharacter(&tokenizer, ']', TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_END_REFLECT)
 
 	TokenizerFree(&tokenizer);
 }
@@ -479,6 +480,21 @@ static void testRelationBrackets(void)
 }
 
 
+/* CLAUDE: The ] of a reflected name [foo] is read in TOKENIZER_ACTOR_STATE. */
+static void testReflectedNameBrackets(void)
+{
+	TokenTypeList list = {.nTokens = 0};
+	TokenizeCString("bar [foo] baz 1", tokenTypeHandler, &list);
+
+	enum TokenType expected[] = {
+		TOKEN_NAME, TOKEN_BEGIN_REFLECT, TOKEN_NAME, TOKEN_END_REFLECT, TOKEN_NAME, TOKEN_NUMBER
+	};
+	ASSERT_UINT32_EQUAL(list.nTokens, 6)
+	for(index8 i = 0; i < 6; i++)
+		ASSERT_UINT32_EQUAL(list.types[i], expected[i])
+}
+
+
 /**
  * CLAUDE: A variable ends in a name character, so whether a further name character may
  * follow it depends on where the characters come from; see enum TokenizerInputMode.
@@ -536,6 +552,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCreateTokenFromCString);
 	ExecuteTest(testSeparatorTerminatesToken);
 	ExecuteTest(testRelationBrackets);
+	ExecuteTest(testReflectedNameBrackets);
 
 	UnloadLibraries();
 	KernelShutdown();

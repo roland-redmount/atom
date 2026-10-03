@@ -179,6 +179,10 @@ static enum TokenizerResult actorStateBeginToken(Tokenizer * tokenizer, char c)
 	case '[':
 		return beginSingleCharacterToken(tokenizer, TOKEN_BEGIN_REFLECT);
 
+	case ']':
+		// Closing a reflected name [name]; see PartBuilder
+		return beginSingleCharacterToken(tokenizer, TOKEN_END_REFLECT);
+
 	default:
 		if(IsDigitChar(c)) {
 			tokenizer->type = TOKEN_NUMBER;

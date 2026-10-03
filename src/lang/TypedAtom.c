@@ -136,7 +136,9 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		break;
 
 	case AT_NAME:
+		PrintChar('[');
 		PrintName(typedAtom.atom);
+		PrintChar(']');
 		break;
 
 	case AT_FORMULA:

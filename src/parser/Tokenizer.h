@@ -42,9 +42,9 @@ enum TokenizerState {
 	TOKENIZER_ACTOR_STATE = 2,
 };
 
-/* CLAUDE: TOKEN_BEGIN_REFLECT is the one token that can occur in both states.
-   In TOKENIZER_ROLE_STATE, TOKEN_BEGIN_REFLECT is the second bracket of a relation [[ ... ]];
-   see PartBuilder. */
+/* TOKEN_BEGIN_REFLECT and TOKEN_END_REFLECT can occur in both states; see PartBuilder.
+   In TOKENIZER_ROLE_STATE, TOKEN_BEGIN_REFLECT is the second bracket of a relation [[ ... ]].
+   In TOKENIZER_ACTOR_STATE, TOKEN_END_REFLECT closes a reflected name [name]. */
 
 
 /**
