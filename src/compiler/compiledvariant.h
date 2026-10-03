@@ -15,11 +15,11 @@
 typedef struct s_CompiledVariant {
 	// resolved query parameters
 	Atom parameters[RELATION_MAX_ARITY];
+	// CLAUDE: The operator is a MACHINE operator only for a variant seeded from an existing
+	// primitive service. addCompiledVariant() wraps a re-used operator in an IDENTITY operator.
 	Operator * op;
 	// whether this variant was derived from a recursive clause (and contains a FIXPOINT operator)
 	bool isRecursive;
-	// whether this variant is an existing, primitive service
-	bool isSeed;
 	// whether this variant replaces an existing service
 	bool isReplaced;
 } CompiledVariant;

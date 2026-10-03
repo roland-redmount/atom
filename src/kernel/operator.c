@@ -583,6 +583,108 @@ static void filterFinalizeContext(OperatorContext * context)
 }
 
 
+//------------------------------------- OPERATOR_CONSTANT -----------------------------------------
+
+typedef struct s_ConstantContext {
+	// The child context, which is 0 if a bound argument differs from its constant
+	OperatorContext * childContext;
+} ConstantContext;
+
+
+Operator * CreateConstantOperator(
+	Operator * childOperator, Atom const constants[], byte const constantTypes[], size8 nConstants,
+	index8 const inputArguments[], size8 nInputs)
+{
+	ASSERT(nConstants > 0)
+	size8 nChildArguments = childOperator->nArguments;
+	size8 nArguments = nChildArguments + nConstants;
+	Operator * op = createOperator(OPERATOR_CONSTANT, nArguments, sizeof(ConstantContext));
+	op->impl.constant.childOperator = childOperator;
+	addParent(childOperator);
+
+	op->impl.constant.nConstants = nConstants;
+	op->impl.constant.constants = Allocate(nConstants * sizeof(Atom));
+	CopyMemory(constants, op->impl.constant.constants, nConstants * sizeof(Atom));
+	op->impl.constant.constantTypes = Allocate(nConstants);
+	CopyMemory(constantTypes, op->impl.constant.constantTypes, nConstants);
+	TupleAcquire(constantTypes, constants, nConstants);
+
+#ifdef DEBUG
+	for(index8 i = 0; i < nInputs; i++)
+		ASSERT(inputArguments[i] >= nChildArguments)
+#endif
+	setupInputArguments(
+		&(op->impl.constant.inputArguments), &(op->impl.constant.nInputs),
+		inputArguments, nInputs, nArguments);
+
+	// The constant arguments are equal in every tuple, so they follow the child's order
+	allocateIndexOrder(op);
+	CopyMemory(childOperator->indexOrder, op->indexOrder, nChildArguments);
+	for(index8 i = nChildArguments; i < nArguments; i++)
+		op->indexOrder[i] = i;
+	return op;
+}
+
+
+static void constantSetupContext(OperatorContext * context)
+{
+	ConstantContext * constantContext = (ConstantContext *) &context->data;
+	Operator const * op = context->op;
+	size8 nChildArguments = op->impl.constant.childOperator->nArguments;
+	Atom const * constants = op->impl.constant.constants;
+
+	// A bound argument that differs from its constant leaves no tuples to yield
+	for(index8 i = 0; i < op->impl.constant.nInputs; i++) {
+		index8 argument = op->impl.constant.inputArguments[i];
+		if(CompareAtoms(context->arguments[argument], constants[argument - nChildArguments])) {
+			constantContext->childContext = 0;
+			return;
+		}
+	}
+	// The child writes only the leading arguments, so the constants are written once
+	CopyMemory(
+		constants, context->arguments + nChildArguments, op->impl.constant.nConstants * sizeof(Atom));
+	constantContext->childContext = createContext(
+		context,
+		op->impl.constant.childOperator,
+		context->arguments
+	);
+}
+
+
+static bool constantCall(OperatorContext * context)
+{
+	ConstantContext * constantContext = (ConstantContext *) &context->data;
+	if(!constantContext->childContext)
+		return false;
+	return OperatorCall(constantContext->childContext);
+}
+
+
+static void teardownConstantOperator(Operator * op)
+{
+	ASSERT(op->type == OPERATOR_CONSTANT)
+	removeParent(op->impl.constant.childOperator);
+	TupleRelease(
+		op->impl.constant.constantTypes,
+		op->impl.constant.constants,
+		op->impl.constant.nConstants
+	);
+	Free(op->impl.constant.constants);
+	Free(op->impl.constant.constantTypes);
+	if(op->impl.constant.nInputs)
+		Free(op->impl.constant.inputArguments);
+}
+
+
+static void constantFinalizeContext(OperatorContext * context)
+{
+	ConstantContext * constantContext = (ConstantContext *) &context->data;
+	if(constantContext->childContext)
+		OperatorFreeContext(constantContext->childContext);
+}
+
+
 //------------------------------------- OPERATOR_JOIN -----------------------------------------
 
 typedef struct s_JoinContext {
@@ -1628,6 +1730,7 @@ size8 OperatorNChildren(Operator const * op)
 	case OPERATOR_FIXPOINT:
 	case OPERATOR_FILTER:
 	case OPERATOR_IFACT:
+	case OPERATOR_CONSTANT:
 		return 1;
 
 	case OPERATOR_MACHINE:
@@ -1671,6 +1774,9 @@ Operator * OperatorGetChild(Operator const * op, index8 index)
 
 	case OPERATOR_IFACT:
 		return op->impl.ifact.childOperator;
+
+	case OPERATOR_CONSTANT:
+		return op->impl.constant.childOperator;
 
 	default:
 		ASSERT(false)
@@ -1725,6 +1831,10 @@ static void teardownOperator(Operator * op)
 	case OPERATOR_IFACT:
 		teardownIFactOperator(op);
 		break;
+
+	case OPERATOR_CONSTANT:
+		teardownConstantOperator(op);
+		break;
 	
 	default:
 		ASSERT(false)
@@ -1766,7 +1876,7 @@ void DetachOperator(Operator * op)
 
 void CheckOperator(Operator * op)
 {
-	if(op->nParents == 0) {
+	if((op->nParents == 0) && !op->held) {
 		if(IsNullRelation(op->relation)) {
 			teardownOperator(op);
 		}
@@ -1826,6 +1936,10 @@ static OperatorContext * createContext(
 
 	case OPERATOR_IFACT:
 		ifactSetupContext(context);
+		break;
+
+	case OPERATOR_CONSTANT:
+		constantSetupContext(context);
 		break;
 	
 	default:
@@ -1913,6 +2027,10 @@ bool OperatorCall(OperatorContext * context)
 		success = ifactCall(context);
 		break;
 
+	case OPERATOR_CONSTANT:
+		success = constantCall(context);
+		break;
+
 	default:
 		ASSERT(false)
 		success = false;
@@ -1972,6 +2090,10 @@ void OperatorFreeContext(OperatorContext * context)
 	case OPERATOR_IFACT:
 		ifactFinalizeContext(context);
 		break;
+
+	case OPERATOR_CONSTANT:
+		constantFinalizeContext(context);
+		break;
 	
 	default:
 		ASSERT(false)
@@ -2005,7 +2127,8 @@ static const char * operatorNames[N_OPERATOR_TYPES + 1] = {
 	"RECURSE",
 	"FILTER",
 	"MACHINE",
-	"IFACT"
+	"IFACT",
+	"CONSTANT"
 };
 
 /**
@@ -2191,6 +2314,20 @@ static void printOperatorRecursive(
 		// CLAUDE: the child operator is not called by IFACT, and is not printed
 		break;
 
+	case OPERATOR_CONSTANT: {
+		// CLAUDE: The constants are printed after the arguments, and the child takes the leading arguments
+		size8 nConstants = op->impl.constant.nConstants;
+		TypedAtom constants[nConstants];
+		for(index8 i = 0; i < nConstants; i++)
+			constants[i] = CreateTypedAtom(op->impl.constant.constantTypes[i], op->impl.constant.constants[i]);
+		PrintCString(" = ");
+		printArguments(constants, nConstants);
+		PrintCString(" (");
+		printOperatorRecursive(op->impl.constant.childOperator, arguments, nextParameterNumber, depth + 1);
+		PrintChar(')');
+		break;
+	}
+
 	default:
 		ASSERT(false);
 		break;
@@ -2198,21 +2335,18 @@ static void printOperatorRecursive(
 }
 
 
-void PrintOperator(Operator const * op, Atom const parameters[])
+void PrintOperator(Operator const * op, TypedTuple * const arguments)
 {
 	// Local parameters, for arguments dropped by a PROJECT operator, are numbered
-	// after the given parameters, so we must determine the number of unique parameters.
+	// after the highest parameter number in the given arguments
 	uint8 nextParameterNumber = 1;
-	TypedAtom arguments[op->nArguments];
+	TypedAtom argumentsArray[op->nArguments];
 	for(index8 i = 0; i < op->nArguments; i++) {
-		arguments[i] = CreateTypedAtom(AT_PARAMETER, parameters[i]);
-		// We erase the parameter types, as they clutter up the printout,
-		// and we cannot determine types for local variables when traversing the
-		// operator graph top-down.
-		arguments[i].atom.parameter.atomType = 0;
-		if(parameters[i].parameter.number >= nextParameterNumber)
-			nextParameterNumber = parameters[i].parameter.number + 1;
+		TypedAtom argument = TypedTupleGetElement(arguments, i);
+		if(argument.type == AT_PARAMETER && argument.atom.parameter.number >= nextParameterNumber)
+			nextParameterNumber = argument.atom.parameter.number + 1;
+		argumentsArray[i] = argument;
 	}
-	printOperatorRecursive(op, arguments, &nextParameterNumber, 0);
+	printOperatorRecursive(op, argumentsArray, &nextParameterNumber, 0);
 	PrintChar('\n');
 }

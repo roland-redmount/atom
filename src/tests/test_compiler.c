@@ -40,6 +40,50 @@ static void setupBinaryRelationIndexColumns(
 }
 
 
+/*
+ * CLAUDE: Create a relation with a B-tree in identity index order, holding the given fact.
+ */
+static Relation createStoredRelation(Atom fact)
+{
+	FormulaView view = FormulaGetView(fact);
+	size8 arity = view.actors->nAtoms;
+	Relation relation = RelationFromFact(view);
+	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, arity, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(view.actors), 0);
+	return relation;
+}
+
+
+/*
+ * CLAUDE: Remove the given fact and drop its relation; see createStoredRelation().
+ */
+static void dropStoredRelation(Relation relation, Atom fact)
+{
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+	DropRelation(relation);
+}
+
+
+/*
+ * CLAUDE: Call an operator with the actors of the given query term, and return the number
+ * of tuples. The value of the given role in the last tuple is written to *value.
+ */
+static size32 callWithQueryActors(Operator const * op, Atom queryTerm, char const * role, Atom * value)
+{
+	size8 arity = FormulaGetActors(queryTerm)->nAtoms;
+	Atom arguments[arity];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, arity);
+	void * context = OperatorCreateContext(op, arguments);
+	size32 nTuples = 0;
+	while(OperatorCall(context)) {
+		nTuples++;
+		*value = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, role, 1);
+	}
+	OperatorFreeContext(context);
+	return nTuples;
+}
+
+
 /**
  * The IO signature a query dispatches with: an input where the query binds an
  * actor, an output where it holds a variable. See ActorsToParameters().
@@ -171,6 +215,321 @@ void testCompilePermute2(void)
 	DictionaryRemoveClause(&clause);
 }
 
+
+/**
+ * CLAUDE: A rule with the constant "one" in its head term compiles to a service over
+ * the query parameter facing the constant. Bound to "one", the service yields the tuple
+ * of the rule body. Bound to any other string, the service yields no tuples.
+ */
+void testCompileHeadConstantInput(void)
+{
+	FormulaView clause = DictionaryAddClauseFromCString("number x unit \"one\" plusone y | ! + x + 1 = y");
+	Atom queryTerm = CStringToTerm("number 3 unit \"one\" plusone y");
+
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Operator * operator = ServiceGetOperator(services[0]);
+
+	Atom arguments[3];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 3);
+	void * context = OperatorCreateContext(operator, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	Atom y = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "plusone", 1);
+	ASSERT_UINT64_EQUAL(y._int, 4);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	// The query with unit "two" has the same parameters, and the same service answers it
+	Atom otherQueryTerm = CStringToTerm("number 3 unit \"two\" plusone y");
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(otherQueryTerm)), arguments, 3);
+	context = OperatorCreateContext(operator, arguments);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	RemoveService(services[0]);
+	ReleaseFormula(otherQueryTerm);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&clause);
+}
+
+
+/**
+ * CLAUDE: A query variable facing a constant in the head term of a rule is given the constant.
+ */
+void testCompileHeadConstantOutput(void)
+{
+	FormulaView clause = DictionaryAddClauseFromCString("number x unit \"one\" plusone y | ! + x + 1 = y");
+	Atom queryTerm = CStringToTerm("number 3 unit u plusone y");
+	Atom expectedTerm = CStringToTerm("number 3 unit \"one\" plusone 4");
+
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	Operator * operator = ServiceGetOperator(services[0]);
+
+	Atom arguments[3];
+	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 3);
+	void * context = OperatorCreateContext(operator, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	Atom const * expectedArguments = TypedTuplePeekAtoms(FormulaGetActors(expectedTerm));
+	for(index8 i = 0; i < 3; i++)
+		ASSERT_TRUE(SameAtoms(arguments[i], expectedArguments[i]))
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	RemoveService(services[0]);
+	ReleaseFormula(expectedTerm);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&clause);
+}
+
+
+/**
+ * CLAUDE: A query atom of a different type than the constant in the head term
+ * does not match the rule, so no service is compiled.
+ */
+void testCompileHeadConstantTypeMismatch(void)
+{
+	FormulaView clause = DictionaryAddClauseFromCString("number x unit \"one\" plusone y | ! + x + 1 = y");
+	Atom queryTerm = CStringToTerm("number 3 unit 7 plusone y");
+
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 0)
+
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&clause);
+}
+
+
+/**
+ * CLAUDE: The query (from n to n twice y) repeats the variable n. Unifying with the head term
+ * (from 1 to x twice y) binds n to 1, and so also x, which the rule body reads.
+ * The body is then (+ 1 + 1 = y), giving the single tuple n = 1, y = 2.
+ */
+void testCompileHeadConstantRepeatedParameter(void)
+{
+	FormulaView clause = DictionaryAddClauseFromCString("from 1 to x twice y | ! + x + x = y");
+	Atom queryTerm = CStringToTerm("from n to n twice y");
+
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 1)
+	ASSERT_TRUE(HasRepeatedParameters(services[0].equalitySignature))
+	Operator * operator = ServiceGetOperator(services[0]);
+	ASSERT_UINT32_EQUAL(operator->nArguments, 2)
+
+	// The operator takes n and y, in the order the query first mentions them
+	Atom arguments[2] = {(Atom) {0}, (Atom) {0}};
+	void * context = OperatorCreateContext(operator, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	ASSERT_TRUE(
+		((arguments[0]._int == 1) && (arguments[1]._int == 2))
+		|| ((arguments[0]._int == 2) && (arguments[1]._int == 1)))
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	RemoveService(services[0]);
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&clause);
+}
+
+/**
+ * CLAUDE: The head term (twin x of x plus y) repeats the variable x, which unifies the two
+ * query parameters of (twin 3 of 4 plus y). The compiler cannot constrain two query
+ * arguments to be equal, so the rule does not match and no service is compiled.
+ */
+void testCompileHeadVariableJoiningQueryParameters(void)
+{
+	FormulaView clause = DictionaryAddClauseFromCString("twin x of x plus y | ! + x + 1 = y");
+	Atom queryTerm = CStringToTerm("twin 3 of 4 plus y");
+
+	Service services[MAX_COMPILED_VARIANTS];
+	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
+	ASSERT_UINT32_EQUAL(nServices, 0)
+
+	ReleaseFormula(queryTerm);
+	DictionaryRemoveClause(&clause);
+}
+
+/**
+ * In this test, the term (quantity t value c unit "Celsius") has the same form as the
+ * head term but does not unify, so the clause is not recursive.
+ * See findRecursiveClauses() in compiler.c
+ */
+void testCompileFilterAsRecursiveBaseCase(void)
+{
+	Atom fact = CStringToTerm("quantity \"x\" value 20.0 unit \"Celsius\"");
+	Relation relation = createStoredRelation(fact);
+	FormulaView clause = DictionaryAddClauseFromCString(
+		"quantity t value k unit \"Kelvin\" | ! + c + 273.15 = k | ! quantity t value c unit \"Celsius\"");
+	size32 nCompiledBefore = NumberOfCompiledServices();
+
+	Atom kelvinQuery = CStringToTerm("quantity \"x\" value v unit \"Kelvin\"");
+	Service services[MAX_COMPILED_VARIANTS];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(kelvinQuery), services), 1)
+	Operator * op = ServiceGetOperator(services[0]);
+	ASSERT_UINT32_EQUAL(op->type, OPERATOR_UNION)
+
+	Atom value;
+	ASSERT_UINT32_EQUAL(callWithQueryActors(op, kelvinQuery, "value", &value), 1)
+	ASSERT_DOUBLE_EQUAL(value._float, 293.15)
+	Atom celsiusQuery = CStringToTerm("quantity \"x\" value v unit \"Celsius\"");
+	ASSERT_UINT32_EQUAL(callWithQueryActors(op, celsiusQuery, "value", &value), 1)
+	ASSERT_DOUBLE_EQUAL(value._float, 20.0)
+
+	RemoveService(services[0]);
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
+	ReleaseFormula(celsiusQuery);
+	ReleaseFormula(kelvinQuery);
+	DictionaryRemoveClause(&clause);
+	dropStoredRelation(relation, fact);
+	ReleaseFormula(fact);
+}
+
+
+/*
+ * CLAUDE: As testCompileFilterAsRecursiveBaseCase(), but the stored Celsius value is an
+ * integer. There is no service adding an integer and a float, so the Kelvin rule fails to
+ * compile after its Celsius term has read the FILTER variant. The FILTER operator must
+ * survive the failed rule, and is registered as the only service.
+ */
+void testCompileFilterVariantAfterFailedRule(void)
+{
+	Atom fact = CStringToTerm("quantity \"x\" value 20 unit \"Celsius\"");
+	Relation relation = createStoredRelation(fact);
+	FormulaView clause = DictionaryAddClauseFromCString(
+		"quantity t value k unit \"Kelvin\" | ! + c + 273.15 = k | ! quantity t value c unit \"Celsius\"");
+	size32 nCompiledBefore = NumberOfCompiledServices();
+
+	Atom kelvinQuery = CStringToTerm("quantity \"x\" value v unit \"Kelvin\"");
+	Service services[MAX_COMPILED_VARIANTS];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(kelvinQuery), services), 1)
+	Operator * op = ServiceGetOperator(services[0]);
+	ASSERT_UINT32_EQUAL(op->type, OPERATOR_FILTER)
+
+	Atom value;
+	ASSERT_UINT32_EQUAL(callWithQueryActors(op, kelvinQuery, "value", &value), 0)
+	Atom celsiusQuery = CStringToTerm("quantity \"x\" value v unit \"Celsius\"");
+	ASSERT_UINT32_EQUAL(callWithQueryActors(op, celsiusQuery, "value", &value), 1)
+	ASSERT_INT64_EQUAL(value._int, 20)
+
+	RemoveService(services[0]);
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
+	ReleaseFormula(celsiusQuery);
+	ReleaseFormula(kelvinQuery);
+	DictionaryRemoveClause(&clause);
+	dropStoredRelation(relation, fact);
+	ReleaseFormula(fact);
+}
+
+
+/*
+ * CLAUDE: Rules deriving Kelvin from Celsius, Celsius from Offset, and, if withCycle is set,
+ * Offset from Celsius. A stored Offset reading of 30.0 then gives 20.0 Celsius and 293.15 Kelvin.
+ * Compile the Kelvin query, check its answer, and return the type of the compiled operator.
+ */
+static enum OperatorType compileKelvinFromOffset(bool withCycle)
+{
+	Atom fact = CStringToTerm("quantity \"x\" value 30.0 unit \"Offset\"");
+	Relation relation = createStoredRelation(fact);
+	FormulaView kelvinClause = DictionaryAddClauseFromCString(
+		"quantity t value k unit \"Kelvin\" | ! + c + 273.15 = k | ! quantity t value c unit \"Celsius\"");
+	FormulaView celsiusClause = DictionaryAddClauseFromCString(
+		"quantity t value c unit \"Celsius\" | ! + f - 10.0 = c | ! quantity t value f unit \"Offset\"");
+	FormulaView offsetClause;
+	if(withCycle) {
+		offsetClause = DictionaryAddClauseFromCString(
+			"quantity t value f unit \"Offset\" | ! + c + 10.0 = f | ! quantity t value c unit \"Celsius\"");
+	}
+	size32 nCompiledBefore = NumberOfCompiledServices();
+
+	Atom kelvinQuery = CStringToTerm("quantity \"x\" value v unit \"Kelvin\"");
+	Service services[MAX_COMPILED_VARIANTS];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(kelvinQuery), services), 1)
+	Operator * op = ServiceGetOperator(services[0]);
+	enum OperatorType operatorType = op->type;
+	Atom value;
+	ASSERT_UINT32_EQUAL(callWithQueryActors(op, kelvinQuery, "value", &value), 1)
+	ASSERT_DOUBLE_EQUAL(value._float, 293.15)
+
+	RemoveService(services[0]);
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
+	ReleaseFormula(kelvinQuery);
+	if(withCycle)
+		DictionaryRemoveClause(&offsetClause);
+	DictionaryRemoveClause(&celsiusClause);
+	DictionaryRemoveClause(&kelvinClause);
+	dropStoredRelation(relation, fact);
+	ReleaseFormula(fact);
+	return operatorType;
+}
+
+
+/**
+ * CLAUDE: The recursive term of the Kelvin rule unifies with the head term of the Celsius rule,
+ * whose recursive term unifies with no head term. Both rules are therefore non-recursive:
+ * the Celsius rule reads the stored facts, and the Kelvin rule reads the Celsius rule.
+ * No FIXPOINT operator is needed.
+ */
+void testCompileNonRecursiveChain(void)
+{
+	ASSERT_UINT32_EQUAL(compileKelvinFromOffset(false), OPERATOR_UNION)
+}
+
+
+/**
+ * CLAUDE: With a rule deriving Offset from Celsius, the Celsius and Offset rules read each
+ * other, and the Kelvin rule reads the Celsius rule. All three rules are recursive, and the
+ * service is a FIXPOINT operator.
+ */
+void testCompileRecursiveCycle(void)
+{
+	ASSERT_UINT32_EQUAL(compileKelvinFromOffset(true), OPERATOR_FIXPOINT)
+}
+
+/**
+ * Test that primitive services and FILTER operator work correctly with the UNION operator.
+ */
+void testCompileFilterAndRule(void)
+{
+	// Stored fact (quantity "x" value 20.0 unit "Celsius")
+	Atom tempFact = CStringToTerm("quantity \"x\" value 20.0 unit \"Celsius\"");
+	Relation tempRelation = createStoredRelation(tempFact);
+	// A rule computing facts of the same form
+	Atom kelvinFact = CStringToTerm("kelvin \"y\" value 300.0");
+	Relation kelvinRelation = createStoredRelation(kelvinFact);
+	FormulaView clause = DictionaryAddClauseFromCString(
+		"quantity t value k unit \"Kelvin\" | ! kelvin t value k");
+	size32 nCompiledBefore = NumberOfCompiledServices();
+
+	// This query should form a UNION between the primitive and FILTER services
+	Atom kelvinQuery = CStringToTerm("quantity \"y\" value v unit \"Kelvin\"");
+	Service services[MAX_COMPILED_VARIANTS];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(kelvinQuery), services), 1)
+	Operator * op = ServiceGetOperator(services[0]);
+	ASSERT_UINT32_EQUAL(op->type, OPERATOR_UNION)
+
+	// The rule answers the Kelvin query, and the stored fact the Celsius query
+	Atom value;
+	ASSERT_UINT32_EQUAL(callWithQueryActors(op, kelvinQuery, "value", &value), 1)
+	ASSERT_DOUBLE_EQUAL(value._float, 300.0)
+	Atom celsiusQuery = CStringToTerm("quantity \"x\" value v unit \"Celsius\"");
+	ASSERT_UINT32_EQUAL(callWithQueryActors(op, celsiusQuery, "value", &value), 1)
+	ASSERT_DOUBLE_EQUAL(value._float, 20.0)
+
+	RemoveService(services[0]);
+	RemoveAllCompiledServices();
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
+	ReleaseFormula(celsiusQuery);
+	ReleaseFormula(kelvinQuery);
+	DictionaryRemoveClause(&clause);
+	dropStoredRelation(kelvinRelation, kelvinFact);
+	dropStoredRelation(tempRelation, tempFact);
+	ReleaseFormula(kelvinFact);
+	ReleaseFormula(tempFact);
+}
 
 void testCompileProject(void)
 {
@@ -1247,7 +1606,7 @@ void testCompileRecursiveReachable(void)
  * 
  * The derivation of a recursive relation is keyed on the arguments the query binds, so a
  * recursive term that leaves one of them free has no call binding to name it and the clause
- * is refused; see compileRecursiveTerm(). Here the recursive term of
+ * is refused; see compileSelfTerm(). Here the recursive term of
  *
  *   reach a hop b <- reach c hop b & prec c succ a
  *
@@ -1498,7 +1857,7 @@ void testCompileNegatedTerm(void)
  * A compiled service reads its stored relations live through their MACHINE operators, so
  * asserting or retracting a fact of a relation that already exists needs no invalidation:
  * the service compiled before the change answers correctly after it. Only structural
- * change is invalidated; see the notes on invalidation in compiler.md.
+ * change is invalidated.
  */
 void testCompiledServiceReadsFactsLive(void)
 {
@@ -1735,7 +2094,7 @@ void testCompileChainedRuleOrder(void)
  * Two rules recursive through one another have no base case: compiling (p) reaches (q),
  * which reaches (p) again. A parameterized query already being compiled yields no service,
  * so the clause fails to compile and the compilation terminates, which is what this test
- * is here to show. Mutual recursion is a gap; see compiler.md.
+ * is here to show. Mutual recursion is a known gap.
  */
 void testCompileMutualRecursion(void)
 {
@@ -1757,7 +2116,7 @@ void testCompileMutualRecursion(void)
  * Compile a service for an IO pattern no service provides. The B-tree registers a service
  * per prefix of its index column order, so binding the element without binding the position
  * has none, and the query compiles to a FILTER operator over the service that produces the
- * element; see compileFilterVariants().
+ * element; see seedVariantsFromServices().
  */
 void testCompileNewIOPattern(void)
 {
@@ -1884,6 +2243,16 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testCompilePermute1);
 	ExecuteTest(testCompilePermute2);
+	ExecuteTest(testCompileHeadConstantInput);
+	ExecuteTest(testCompileHeadConstantOutput);
+	ExecuteTest(testCompileHeadConstantTypeMismatch);
+	ExecuteTest(testCompileHeadConstantRepeatedParameter);
+	ExecuteTest(testCompileHeadVariableJoiningQueryParameters);
+	ExecuteTest(testCompileFilterAsRecursiveBaseCase);
+	ExecuteTest(testCompileFilterVariantAfterFailedRule);
+	ExecuteTest(testCompileNonRecursiveChain);
+	ExecuteTest(testCompileRecursiveCycle);
+	ExecuteTest(testCompileFilterAndRule);
 	ExecuteTest(testCompileProject);
 	ExecuteTest(testCompileChoicePointAfterFailedTerm);
 	ExecuteTest(testCompileTwoChoicePoints);

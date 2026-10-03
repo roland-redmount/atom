@@ -70,7 +70,7 @@ bool SameParameterizedQueries(ParameterizedQuery const * query1, ParameterizedQu
  * Dispatch a parameterized query. A query parameter occurring at several positions
  * must match a service parameter of the same type at each position.
  *
- * Several services may match when a query output parameter type is NONE (untyped).
+ * Several services may match when a query output parameter type is 0 (untyped).
  * There can be at most one matching service for each relation, so each service is
  * identified by the type signature of the corresponding relation.
  * 
@@ -81,21 +81,26 @@ bool SameParameterizedQueries(ParameterizedQuery const * query1, ParameterizedQu
  * returned. Caller can pass hasNextMatch = 0 if only one match is required.
  * TODO: can't we solve this "lookahead" problem more cleanly with DispatchIterate()
  *
- * matchMode is a combination of these flags:
- * DISPATCH_MATCH_RELAXED: return a service that matches all input parameters
- *   and has as few output parameters as possible.
- * DISPATCH_RELAX_EQUALITY accepts a service that repeats a parameter
- * only where the query repeats it, but not necessarily everywhere the query repeats it.
- * The caller must then constrain the remaining repeated query parameters to be equal.
- *
- * With no flag, dispatch returns a service with exact matching signature.
- 
+ * matchMode is a combination of the flags below.
  */
-/* CLAUDE: . DISPATCH_MATCH_EXACT (no flags) also
- * requires the service to repeat parameters at exactly the positions where the query
- * repeats parameters. . */
+
+// Return only services whose parameters exactly match the parameterized query.
 #define DISPATCH_MATCH_EXACT		0
-#define DISPATCH_MATCH_RELAXED		1
+
+// Return a service whose input parameters all match an input parameter of the query,
+// and that has as few output parameters as possible. For example, the parameterized query
+// (#1<INT #2<INT #3>ID) will match service (#1<INT #2>INT #3>ID) with this flag set,
+// but service (#1<INT #2>INT #3<ID) will not match.
+// Services returned will generate additional tuples where the extra outputs do not match
+// the query input, which must be removed using a FILTER operator.
+#define DISPATCH_RELAX_IO			1
+
+// Return a service that repeats a parameter where the query repeats it,
+// but not necessarily everywhere the query repeats it.
+// For example, service (#1 #2 #2) matches the parameterized query (#1 #1 #2)
+// using DISPATCH_RELAX_EQUALITY
+// Services returned will generate additional tuples whole columns differ where the query
+// requires equality; these must be remove using a CONSTRAIN operator.
 #define DISPATCH_RELAX_EQUALITY		2
 
 DispatchResult DispatchParameterizedQuery(
@@ -104,7 +109,7 @@ DispatchResult DispatchParameterizedQuery(
 
 /**
  * Test if a service parameter IO direction matches a query parameter IO direction.
- * With matchMode = DISPATCH_MATCH_EXACT, the two must agree; with DISPATCH_MATCH_RELAXED
+ * With matchMode = DISPATCH_MATCH_EXACT, the two must agree; with DISPATCH_RELAX_IO
  * a service output also serves a query input.
  */
 bool DispatchParameterIOMatch(byte queryIO, byte serviceIO, int matchMode);
@@ -135,15 +140,16 @@ typedef struct {
 } DispatchIterator;
 
 /**
- * Create an iterator over the services matching the given query.
+ * Create an iterator over the services matching the given query. Each service returned
+ * by the iterator has a distinct type signature, belonging to a distinct relation.
  * The queryParameters array must contain AT_PARAMETER atoms only must remain valid until
- * the iterator is ended. 
+ * DispatchIteratorEnd() is called.
  * The iterator is positioned before the first matching service, so
  * DispatchIteratorNext() must be called before DispatchIteratorPeekService().
  * The permutation array must hold at least nParameters elements,
  * and receives the argument permutation of the current match; see DispatchQuery().
  * The caller must call DispatchIteratorEnd() when done.
- * matchMode is the same as in DispatchParameterizedQuery()
+ * matchMode is the same as in DispatchParameterizedQuery().
  */
 void DispatchIterate(
 	ParameterizedQuery const * query, int matchMode, index8 permutation[], DispatchIterator * iterator);

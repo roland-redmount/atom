@@ -73,7 +73,7 @@ bool HasRepeatedParameters(EqualitySignature equalitySignature);
 /**
  * Compute an argument map from an equality signature over nParameters, such that argumentMap[i]
  * is the index of the argument corresponding to parameter i, where the arguments are numbered in
- * order of first occurrence. The service (foo #1 bar #2 baz #1) has argumentMap = {0, 1, 0}.
+ * order of first occurrence. For example, the service (foo #1 bar #2 baz #1) has argumentMap = {0, 1, 0}.
  * The argument map format is used by the CONSTRAIN operator; see CreateConstrainOperator().
  * Returns the number of arguments, which is the same as the number of unique parameters.
  * 
@@ -123,6 +123,12 @@ IOSignature ParametersGetIOSignature(Atom const parameters[], size8 nParameters)
  * The service answering the query therefore keeps the equality constraint; see
  * EqualitySignature. */
 void ActorsToParameters(TypedTuple const * actors, Atom parameters[]);
+
+/**
+ * Two parameters are the same (equivalent) if their type and direction is the same;
+ * parameter numbers are ignored.
+ */
+bool SameParameters(Atom parameter1, Atom parameter2);
 
 /**
  * Two parameter tuples denote the same service signature if they agree on

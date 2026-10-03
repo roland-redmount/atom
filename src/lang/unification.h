@@ -5,13 +5,11 @@
 #include "lang/SubstitutionList.h"
 
 /**
- * Find a unifying substitution (unifier) for two tuples of the same length.
- * If a unifier exists, it is always unique. Generates one substitution list
- * for each tuple, such that applying these substitutions results in the same
- * (unified) tuple in both cases.
+ * Find a unifying Substitution (unifier) for two tuples of the same length, such
+ * that applying the Substitution to each tuple yields the same tuple.
  * If the tuples do not unify, returns false.
  */
-bool UnifyTuples(TypedTuple const * tuple1, TypedTuple const * tuple2, Substitution * subst1, Substitution * subst2);
+bool UnifyTuples(TypedTuple const * tuple1, TypedTuple const * tuple2, Substitution * subst);
 
 
 #endif	// UNIFICATION_H

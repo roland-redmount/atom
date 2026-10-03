@@ -2,8 +2,9 @@
  * Unification methods
  */
 
-
+#include "kernel/Parameter.h"
 #include "lang/unification.h"
+#include "memory/allocator.h"
 
 
 // currently the variable index has range 0 .. 255
@@ -16,43 +17,90 @@ enum EdgeSide {
 
 
 /**
- * We represent an undirected graph as an array of 2*n atom pointers
+ * We represent an undirected graph as an array of 2 * capacity TypedAtoms
  * such that the pair {2k, 2k+1} holds edge k.
  */
-static TypedAtom graphGetNode(TypedAtom const * edges, index8 edgeIndex, enum EdgeSide side)
+typedef struct t_UnificationGraph {
+	size32 capacity;
+	size32 nEdges;
+	TypedAtom edges[];
+} UnificationGraph;
+
+
+static TypedAtom graphGetNode(UnificationGraph const * graph, index8 edgeIndex, enum EdgeSide side)
 {
-	return edges[2*edgeIndex + side];
+	return graph->edges[2*edgeIndex + side];
 }
 
 
-static void graphSetNode(TypedAtom * edges, index8 edgeIndex, enum EdgeSide  side, TypedAtom newNode)
+static void graphSetNode(UnificationGraph * graph, index8 edgeIndex, enum EdgeSide  side, TypedAtom newNode)
 {
-	edges[2*edgeIndex + side] = newNode;
+	graph->edges[2*edgeIndex + side] = newNode;
 }
 
 
 /**
- * Replace all occurences of source with dest in the given graph,
- * starting from a given edge
+ * While graph edges are undirected, we order an edge (left, right) by atom type
+ * so that x can be substituted with y. Ordered edges are (variable, parameter),
+ * (variable, constant), and (parameter, constant). 
  */
-static void graphSubstitute(TypedAtom source, TypedAtom dest, TypedAtom edges[], uint8 nEdges, uint8 startEdge)
+static bool edgeIsOrdered(TypedAtom left, TypedAtom right)
 {
-	for(index8 i = startEdge; i < nEdges; i++) {
-		if(SameTypedAtoms(edges[2*i], source))
-			edges[2*i] = dest;
-		if(SameTypedAtoms(edges[2*i + 1], source))
-			edges[2*i + 1] = dest;
+	if(left.type == AT_VARIABLE)
+		return true;
+	if(left.type == AT_PARAMETER && right.type != AT_VARIABLE)
+		return true;
+	return false;
+}
+
+/**
+ * Add an edge to the graph, reversing if necessary to keep it ordered
+ */
+static void graphAddEdge(UnificationGraph * graph, TypedAtom left, TypedAtom right)
+{
+	ASSERT(graph->nEdges < graph->capacity)
+	if(edgeIsOrdered(left, right)) {
+		graphSetNode(graph, graph->nEdges, EDGE_LEFT_NODE, left);
+		graphSetNode(graph, graph->nEdges, EDGE_RIGHT_NODE, right);
+	}
+	else {
+		graphSetNode(graph, graph->nEdges, EDGE_LEFT_NODE, right);
+		graphSetNode(graph, graph->nEdges, EDGE_RIGHT_NODE, left);
+	}
+	graph->nEdges++;
+}
+
+
+/**
+ * Replace all occurences of atom <key> with atom <value> in the given graph,
+ * in either position in each edge, starting from a given edge.
+ */
+static void graphSubstitute(UnificationGraph * graph, TypedAtom key, TypedAtom value, uint8 startEdge)
+{
+	for(index8 i = startEdge; i < graph->nEdges; i++) {
+		TypedAtom * left = &(graph->edges[2*i]);
+		TypedAtom * right = &(graph->edges[2*i + 1]);
+		if(SameTypedAtoms(*left, key))
+			*left = value;
+		if(SameTypedAtoms(*right, key))
+			*right = value;
+		// If substitution caused the edge to become unordered, reverse it
+		if(!edgeIsOrdered(*left, *right)) {
+			TypedAtom temp = *left;
+			*left = *right;
+			*right = temp;
+		}
 	}
 }
 
 /**
  * Check if an undirected edge {a1, a2} exists in the graph given by the edges list.
  */
-static bool findInUGraph(TypedAtom a1, TypedAtom a2, TypedAtom const edges[], uint8 nEdges)
+static bool findInUGraph(UnificationGraph const * graph, TypedAtom a1, TypedAtom a2)
 {
-	for(index8 j = 0; j < nEdges; j++) {
-		TypedAtom left = graphGetNode(edges, j, EDGE_LEFT_NODE);
-		TypedAtom right = graphGetNode(edges, j, EDGE_RIGHT_NODE);
+	for(index8 j = 0; j < graph->nEdges; j++) {
+		TypedAtom left = graphGetNode(graph, j, EDGE_LEFT_NODE);
+		TypedAtom right = graphGetNode(graph, j, EDGE_RIGHT_NODE);
 		// check for match in either direction
 		if(SameTypedAtoms(left, a1) && SameTypedAtoms(right, a2))
 			return true;
@@ -62,79 +110,97 @@ static bool findInUGraph(TypedAtom a1, TypedAtom a2, TypedAtom const edges[], ui
 	return false;
 }
 
+
 /**
- * Given two tuples of length n, create the undirected graph consisting of the
- * *unique* edges {list1[i], list2[i]} for i = 1, ..., n, minus self-edges
- * where list1[i] = list2[i]. Returns the number of edges added
+ * Returns true if atoms (x, y) unify, else false.
  */
-static uint8 setupUnificationGraph(TypedTuple const * tuple1, TypedTuple const * tuple2, TypedAtom * edges)
+static bool atomsUnify(TypedAtom x, TypedAtom y)
 {
-	uint8 nEdges = 0;
-	// traverse tuples
-	// we assume both tuples are of the same length
+	if(x.type == AT_VARIABLE || y.type == AT_VARIABLE) {
+		// A variable unifies with any other atom
+		return true;
+	}
+	if(x.type == AT_PARAMETER && y.type == AT_PARAMETER) {
+		// Two parameters unify if they have the same type and direction
+		return SameParameters(x.atom, y.atom);
+	}
+	if(x.type == AT_PARAMETER && y.type != AT_PARAMETER) {
+		return !x.atom.parameter.atomType || x.atom.parameter.atomType == y.type;
+	}
+	if(x.type != AT_PARAMETER && y.type == AT_PARAMETER) {
+		return !y.atom.parameter.atomType || x.type == y.atom.parameter.atomType;
+	}
+	// Two constants that are neither variables nor parameters must be equal
+	return SameTypedAtoms(x, y);
+}
+
+/**
+ * Given two tuples of length n, create the graph consisting of the unique edges
+ * (tuple1[i], tuple2[i]) for i = 1, ..., n, except for any self-edges where tuple1[i] = tuple2[i].
+ * An edge (x, y) is not added if the graph already contains (y, x).
+ * No edge is added between two constants.
+ * Returns the graph, or 0 if a edge between two distinct constants was found,
+ * in which case unification fails.
+ */
+static UnificationGraph * createUnificationGraph(TypedTuple const * tuple1, TypedTuple const * tuple2)
+{
+	ASSERT(tuple1->nAtoms == tuple2->nAtoms)
+
+	size32 capacity = tuple1->nAtoms;
+	UnificationGraph * graph = Allocate(sizeof(UnificationGraph) + 2 * capacity * sizeof(TypedAtom));
+	graph->capacity = capacity;
+	graph->nEdges = 0;
+	
+	// Traverse tuples
 	for(index8 i = 0; i < tuple1->nAtoms; i++) {
-		TypedAtom a1 = TypedTupleGetElement(tuple1, i);
-		TypedAtom a2 = TypedTupleGetElement(tuple2, i);
-		if(SameTypedAtoms(a1, a2)) {
+		TypedAtom left = TypedTupleGetElement(tuple1, i);
+		TypedAtom right = TypedTupleGetElement(tuple2, i);
+		if(SameTypedAtoms(left, right)) {
 			// Skip self-edge
 			continue;
 		}
-		// check if undirected edge already exists in graph
-		if(!findInUGraph(a1, a2, edges, nEdges)) {
-			// new edge, add
-			graphSetNode(edges, nEdges, EDGE_LEFT_NODE, a1);
-			graphSetNode(edges, nEdges, EDGE_RIGHT_NODE, a2);
-			nEdges++;
+		// If the two atoms of this edge fail to unify, unification to fails.
+		if(!atomsUnify(left ,right)) {
+			Free(graph);
+			return 0;
+		}
+		if(!findInUGraph(graph, left, right)) {
+			graphAddEdge(graph, left, right);
 		}
 	}
-	return nEdges;
+	return graph;
 }
 
 
-bool UnifyTuples(TypedTuple const * tuple1, TypedTuple const * tuple2, Substitution * subst1, Substitution * subst2)
+bool UnifyTuples(TypedTuple const * tuple1, TypedTuple const * tuple2, Substitution * subst)
 {
-	ASSERT(tuple1->nAtoms == tuple2->nAtoms)
-	
-	// setup empty substitution lists
-	SetupSubstitution(subst1, tuple1->nAtoms);
-	SetupSubstitution(subst2, tuple2->nAtoms);
-	
-	// create the initial unification graph
-	TypedAtom edges[2 * tuple1->nAtoms];
-	uint8 nEdges = setupUnificationGraph(tuple1, tuple2, edges);
-	
+	// Setup an empty substitution list
+	SetupSubstitution(subst, tuple1->nAtoms);
+
+	// Create the initial unification graph
+	UnificationGraph * graph = createUnificationGraph(tuple1, tuple2);
+	if(!graph)
+		return false;
+
 	// iterate over graph edges (in arbitrary order) and create substitutions
-	for(index8 i = 0; i < nEdges; i++) {
-		TypedAtom left = graphGetNode(edges, i, EDGE_LEFT_NODE);
-		TypedAtom right = graphGetNode(edges, i, EDGE_RIGHT_NODE);
+	for(index8 i = 0; i < graph->nEdges; i++) {
+		TypedAtom left = graphGetNode(graph, i, EDGE_LEFT_NODE);
+		TypedAtom right = graphGetNode(graph, i, EDGE_RIGHT_NODE);
 		if(SameTypedAtoms(left, right)) {
-			// edge to self, nothing to substitute
-			// (these can be created by substitutions during graph traversal)
+			// Edge to self, nothing to substitute.
+			// Self-edges can be created by substitutions during graph traversal.
+			continue;
 		}
-		else if(left.type == AT_VARIABLE) {
-			/*
-			 * Always replace a variable from list1 with atom *or* variable from list2.
-			 * This ensures only subst1 will substitute with a variable, all of which will derive
-			 * from list 2, while subst1 will only substitute with atoms.
-			 * (This choice is arbitrary)
-			 */
-			graphSubstitute(left, right, edges, nEdges, i+1);
-			// set a1 -> a2 in each substitution list
-			SubstitutionSetValue(subst1, left, right);
-			SubstitutionSetValue(subst2, left, right);
+		if(!atomsUnify(left, right)) {
+			Free(graph);
+			return false;
 		}
-		else {
-			if(right.type == AT_VARIABLE) {
-				// replace variable from t2 with atom from t1
-				graphSubstitute(right, left, edges, nEdges, i+1);
-				SubstitutionSetValue(subst1, right, left);
-				SubstitutionSetValue(subst2, right, left);
-			}
-			else {
-				// two distinct atoms, unification fails
-				return false;
-			}
-		}
+		// Substitute all edge after edge i in the graph
+		graphSubstitute(graph, left, right, i+1);
+		SubstitutionAdd(subst, left, right);
 	}
+	// PrintSubstitution(subst);
+	// PrintChar('\n');
+	Free(graph);
 	return true;
 }

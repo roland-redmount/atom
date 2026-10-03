@@ -289,6 +289,55 @@ void testFilterOperator(void)
 
 
 /**
+ * CLAUDE: Test a CONSTANT operator adding an output constant 42 and an input constant 'q'
+ * to the relation (list <ID position >INT element >LETTER). The operator yields the
+ * tuples of the list "abc" when the caller binds 'q', and no tuples when the caller
+ * binds any other letter.
+ */
+void testConstantOperator(void)
+{
+	Operator * listOperator = GetListOperator(AT_LETTER);
+	index8 positionIndex = GetListRoleIndex()[LIST_ROLE_POSITION];
+	Atom constants[2] = {(Atom) {._int = 42}, GetAlphabetLetter('q')};
+	byte constantTypes[2] = {AT_INT, AT_LETTER};
+	Operator * constantOperator = CreateConstantOperator(
+		listOperator, constants, constantTypes, 2, (index8[]) {4}, 1);
+	ASSERT_UINT32_EQUAL(constantOperator->nArguments, 5)
+
+	// The constant arguments follow the index order of the child
+	for(index8 i = 0; i < 3; i++)
+		ASSERT_UINT32_EQUAL(constantOperator->indexOrder[i], listOperator->indexOrder[i])
+	ASSERT_UINT32_EQUAL(constantOperator->indexOrder[3], 3)
+	ASSERT_UINT32_EQUAL(constantOperator->indexOrder[4], 4)
+
+	Atom string = CreateStringFromCString("abc");
+	Atom arguments[5];
+	ListSetTuple((Atom[]) {string, (Atom) {0}, (Atom) {0}}, arguments);
+	arguments[3] = (Atom) {0};
+	arguments[4] = GetAlphabetLetter('q');
+	OperatorContext * context = OperatorCreateContext(constantOperator, arguments);
+	for(index8 i = 0; i < 3; i++) {
+		ASSERT_TRUE(OperatorCall(context))
+		ASSERT_INT64_EQUAL(arguments[positionIndex]._int, i + 1)
+		ASSERT_INT64_EQUAL(arguments[3]._int, 42)
+		ASSERT_CHAR_EQUAL(LetterToChar(arguments[4], LETTER_LOWERCASE), 'q')
+	}
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	// A bound argument differing from its constant gives no tuples
+	ListSetTuple((Atom[]) {string, (Atom) {0}, (Atom) {0}}, arguments);
+	arguments[4] = GetAlphabetLetter('r');
+	context = OperatorCreateContext(constantOperator, arguments);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	IFactRelease(string);
+	CheckOperator(constantOperator);
+}
+
+
+/**
  * Test a CONSTRAIN operator over the JOIN operator of testJoinOperator2().
  * Constraining the two position arguments of (l p s q e) to be equal gives the
  * letter at position p of the p'th string of a list of strings.
@@ -692,6 +741,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testJoinOperator2);
 	ExecuteTest(testConstrainOperator);
 	ExecuteTest(testFilterOperator);
+	ExecuteTest(testConstantOperator);
 	ExecuteTest(testUnionOperator);
 	ExecuteTest(testUnionDuplicateAtExhaustion);
 	ExecuteTest(testIndexOrder);

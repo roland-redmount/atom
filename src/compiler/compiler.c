@@ -3,8 +3,6 @@
  * in the dictionary. The new service is implemented by a graph over Operator nodes.
  * CompileQuery() is the entry point.
  *
- * See compiler.md for additional documentation.
- *
  * Build with DEBUG_COMPILER to makes the compiler trace each query it compiles.
  */
 
@@ -106,13 +104,10 @@ static bool dispatchOrCompileTerm(
 	// Else attempt to compile new services for the term
 	ASSERT(mode == TERM_DISPATCH_OR_COMPILE)
 	
-	// Renumber parameters 1, 2, ..., termArity since compileParameterizedQuery() expects this format. 
-	// TODO: this is inconsistent -- DispatchParameterizedQuery() respects repeated
-	// parameter numbers, but compileParameterizedQuery() does not. 
-	// CLAUDE: Repeated parameters keep sharing a number, so the compiled service repeats them
+	// Renumber parameters in increasing order
 	ParameterizedQuery queryRenumbered = *query;
 	RenumberParameters(queryRenumbered.parameters, query->arity);
-	compileParameterizedQuery(compileStack, &queryRenumbered,	0);
+	compileParameterizedQuery(compileStack, &queryRenumbered, 0);
 
 	// Re-dispatch, even if no new service was registered. Compilation may have only
 	// cleared the stale flag of a primitive service, which dispatch can now accept.
@@ -243,10 +238,10 @@ static Operator * arrangeServiceArguments(
 
 
 /**
- * Build the operator of a term from its matching service operator, which is given by the column
- * types it reads, its parameter IO and its operator.
+ * Build the operator of a term from the given operator and the type signature, and parameter IO
+ * of the service to which the operator will belong.
  * 
- * Any non-parameter in termActors is a constant, which is provided to the service's operator,
+ * Any non-parameter in termActors is a constant, which is provided to the given operator,
  * by a PERMUTE operator wrapped around it. The permutation needs no operator of its own:
  * it is carried by the clauseMap. (Variables occurring in the clause but not in the query
  * are given parameter numbers of their own by parameterizeLocalVariables() before we get
@@ -262,21 +257,18 @@ static Operator * arrangeServiceArguments(
  *
  * The serviceParameters tuple is set to the service's parameters, permuted to match the
  * term actors order.
- *
- * The caller keeps its own reference to the service operator.
  */
 static Operator * createTermOperator(
 	TypeSignature typeSignature, IOSignature ioSignature, EqualitySignature equalitySignature,
-	Operator * serviceOperator, TypedTuple const * termActors, index8 const permutation[],
+	Operator * op, TypedTuple const * termActors, index8 const permutation[],
 	TypedTuple * serviceParameters, index8 clauseMap[])
 {
 	size8 termArity = termActors->nAtoms;
-	// CLAUDE: The service operator takes one argument per distinct service parameter.
-	// A column repeating an earlier column's parameter has no argument of its own.
+	// The operator takes one argument per distinct service parameter.
 	index8 serviceArgumentMap[termArity];
 	size8 nServiceArguments = EqualitySignatureGetArgumentMap(
 		equalitySignature, termArity, serviceArgumentMap);
-	ASSERT(nServiceArguments == serviceOperator->nArguments)
+	ASSERT(nServiceArguments == op->nArguments)
 
 	// Count the constants first: a permute operator indexes its constants after
 	// its arguments, so we need the number of arguments before we can map them.
@@ -311,10 +303,10 @@ static Operator * createTermOperator(
 			)
 		);
 		if(equalitySignature.repeatOf[i]) {
-			// CLAUDE: The service repeats this parameter, which dispatch only allows
-			// where the term repeats the actor
-			ASSERT(SameTypedAtoms(actor, TypedTupleGetElement(
-				termActors, permutation[equalitySignature.repeatOf[i] - 1])))
+			// Repeating this parameter is only allowed if the term repeats the actor
+			TypedAtom repeatedActor = TypedTupleGetElement(
+				termActors, permutation[equalitySignature.repeatOf[i] - 1]);
+			ASSERT(SameTypedAtoms(actor, repeatedActor))
 			continue;
 		}
 		index8 serviceArgument = serviceArgumentMap[i];
@@ -335,18 +327,19 @@ static Operator * createTermOperator(
 	}
 	ASSERT(nMapped == nArguments)
 
-	Operator * op;
+	Operator * termOp;
 	if(!nConstants) {
-		// Without constants to bind, the service operator is used as it is
-		op = serviceOperator;
+		// Without constants to bind, the given operator is used as it is
+		termOp = op;
 	}
 	else {
-		op = CreatePermuteOperator(
-			nArguments, constants, constantTypes, nConstants, argumentMap, serviceOperator);
+		// TODO: for an identity permutation, we don't need a PERMUTE operator either?
+		termOp = CreatePermuteOperator(
+			nArguments, constants, constantTypes, nConstants, argumentMap, op);
 	}
 	// A variable occurring more than once in the term constrains the arguments
 	// providing it to be equal
-	return constrainRepeatedArguments(op, clauseMap);
+	return constrainRepeatedArguments(termOp, clauseMap);
 }
 
 
@@ -408,6 +401,21 @@ static size8 setupJoinArgumentMaps(
 }
 
 
+/*
+ * CLAUDE: The query parameters that the head term of a clause binds to constants. For example,
+ * the query (kelvin #1< value #2> unit #3<) and the head term (kelvin t value k unit "Kelvin")
+ * bind #3 to "Kelvin". Bound parameter i takes clause argument arguments[i], and its value is
+ * constants[i]. See findHeadConstants().
+ */
+typedef struct s_HeadConstants {
+	size8 nConstants;
+	index8 arguments[RELATION_MAX_ARITY];
+	Atom constants[RELATION_MAX_ARITY];
+	byte constantTypes[RELATION_MAX_ARITY];
+	byte parameterIO[RELATION_MAX_ARITY];
+} HeadConstants;
+
+
 /**
  * The state of compiling a conjunction, shared by the recursion over its terms.
  * The term actors and the termExcluded flags are updated as terms compile:
@@ -450,8 +458,15 @@ typedef struct s_ClauseCompileState {
 
 	// Choice points taken during the compilation of the clause
 	ChoiceTree * choiceTree;
-	// Set when a recursive term has compiled to a RECURSE operator
+	// Set when a term in the clause has compiled to a RECURSE operator
 	bool hasRecurseOperator;
+
+	// CLAUDE: The query parameters the head term binds to constants, or 0 if there are none
+	HeadConstants const * headConstants;
+
+	// CLAUDE: The variant that a recursive term of a non-recursive clause reads instead of a
+	// RECURSE operator, or 0; see classifyClauses() and compileSelfTerm()
+	CompiledVariant const * readVariant;
 } ClauseCompileState;
 
 
@@ -609,22 +624,30 @@ static bool termRepeatsHeadTermParameters(ClauseCompileState const * clauseState
 
 
 /**
- * Compile the term in state->indexedClause given by termIndex to a RECURSE operator.
- * The term must be known to be recursive, and the head parameters in state->indexedClause
- * must be fully determined.
- *
- * Returns 0 if (1) the recursive term's parameter types disagrees with the head term,
- * or (2) the recursive term has an output where the head has an input.
- * the column it reads, and when the term leaves an argument free that the query binds.
- * 
- * CLAUDE: The derivation is keyed on what the query binds, so a term asking for less has no call
- * binding to name it; assertCallBindingIsNamed() in operator.c is the same condition where
- * the operators meet. See testCompileRecursiveTermUnboundInput().
+ * CLAUDE: Return the child operator of an IDENTITY operator, or the given operator if it is
+ * not an IDENTITY operator. The IDENTITY operator is not deallocated.
+ * See CompiledVariant.op for the IDENTITY operator of a compiled variant.
  */
-static Operator * compileRecursiveTerm(
+static Operator * skipIdentityOperator(Operator * op)
+{
+	if(op->type == OPERATOR_IDENTITY)
+		return op->impl.identity.childOperator;
+	return op;
+}
+
+
+/**
+ * Attempt to compile the a "self" term in state->indexedClause given by termIndex,
+ * which has the same form as the head term of the clause.
+ * The head term parameters must be fully determined when calling this function.
+ *
+ * Returns 0 if the self term's parameter types disagrees with the head term, or if
+ * the self term has an output where the head has an input.
+ */
+static Operator * compileSelfTerm(
 	ClauseCompileState * state, index8 termIndex, TypedTuple * serviceParameters, index8 clauseMap[])
 {
-	// Determine parameters of the recursive term
+	// Extract the self term parameters
 	size8 termArity = IndexedFormulaTermArity(state->indexedFormula, termIndex);
 	ASSERT(termArity == state->headTermArity)
 	TypedTuple * termActors = IndexedFormulaGetTermTuple(state->indexedFormula, termIndex);
@@ -634,7 +657,7 @@ static Operator * compileRecursiveTerm(
 	// Extract the head term parameters from the clause actors. Must be fully typed AT_PARAMETER atoms.
 	Atom const * headParametersArray = IndexedFormulaPeekTermAtoms(state->indexedFormula, state->headTermIndex);
 
-	// The recursive term's parameter types are determined by the head term's
+	// The self term's parameter types and equality signature are determined by the head term's
 	byte headAtomTypes[termArity];
 	for(index8 i = 0; i < termArity; i++) {
 		// The term parameter type must agree with the head if it is known
@@ -644,7 +667,9 @@ static Operator * compileRecursiveTerm(
 			return 0;
 		}
 	}
-	// The parameter IO is specified by the recursive term
+	EqualitySignature equalitySignature = ParametersGetEqualitySignature(headParametersArray, termArity);
+
+	// The parameter IO is specified by the self term
 	byte termParameterIO[termArity];
 	for(index8 i = 0; i < termArity; i++) {
 		// The term must have an input parameter where the head term has an input parameter
@@ -654,22 +679,34 @@ static Operator * compileRecursiveTerm(
 			return 0;
 		}
 	}
-
 	IOSignature ioSignature = CreateIOSignature(termParameterIO, termArity);
-	// The RECURSE operator's equality signature (repeated parameters) is determinend by the head term
-	EqualitySignature equalitySignature = ParametersGetEqualitySignature(headParametersArray, termArity);
-	index8 argumentMap[termArity];
-	size8 nArguments = EqualitySignatureGetArgumentMap(equalitySignature, termArity, argumentMap);
-	index8 inputArguments[RELATION_MAX_ARITY];
-	size8 nInputs = findInputArguments(ioSignature, equalitySignature, termArity, inputArguments);
-	Operator * recurseOperator = CreateRecurseOperator(nArguments, inputArguments, nInputs);
+	
+	// The self term of a non-recursive clause reads the variant directly, if the term binds
+	// exactly the parameters the variant binds.
+	bool readsVariant = (state->readVariant != 0);
+	for(index8 i = 0; i < termArity; i++) {
+		if(headParametersArray[i].parameter.io != termParameterIO[i])
+			readsVariant = false;
+	}
+	Operator * childOperator;
+	if(readsVariant)
+		childOperator = skipIdentityOperator(state->readVariant->op);
+	else {
+		// Otherwise create a RECURSE operator.
+		index8 argumentMap[termArity];
+		size8 nArguments = EqualitySignatureGetArgumentMap(equalitySignature, termArity, argumentMap);
+		index8 inputArguments[RELATION_MAX_ARITY];
+		size8 nInputs = findInputArguments(ioSignature, equalitySignature, termArity, inputArguments);
+		childOperator = CreateRecurseOperator(nArguments, inputArguments, nInputs);
+		state->hasRecurseOperator = true;
+	}
 
-	// The RECURSE operator will read from the compiled clause operator, without permutation
+	// Create the term operator, identity permutation
 	index8 permutation[termArity];
 	for(index8 i = 0; i < termArity; i++)
 		permutation[i] = i;
 	Operator * op = createTermOperator(
-		CreateTypeSignature(headAtomTypes, termArity), ioSignature, equalitySignature, recurseOperator,
+		CreateTypeSignature(headAtomTypes, termArity), ioSignature, equalitySignature, childOperator,
 		termActors, permutation, serviceParameters, clauseMap);
 
 	FreeTypedTuple(termActors);
@@ -776,10 +813,11 @@ static Operator * compileTermSet(
 	index8 const termIndices[], size8 nTerms, int dispatchMode, ChoicePoint * choicePoint,
 	index8 termClauseMap[])
 {
+	// Copy the actors for the term set from the clause to a new actors tuple
 	index8 actorIndices[RELATION_MAX_ARITY];
 	size8 nActors = getTermSetActorIndices(clauseState, termIndices, nTerms, actorIndices);
-	TypedTuple * termActors = CreateTypedTuple(nActors);
-	TypedTupleCopySubset(clauseState->indexedFormula->actors, actorIndices, nActors, termActors);
+	TypedTuple * termSetActors = CreateTypedTuple(nActors);
+	TypedTupleCopySubset(clauseState->indexedFormula->actors, actorIndices, nActors, termSetActors);
 #ifdef DEBUG_COMPILER
 	PrintF("Mode = %d, term set: ", dispatchMode);
 	printTermSet(clauseState, termIndices, nTerms);
@@ -789,8 +827,8 @@ static Operator * compileTermSet(
 	Operator * op = 0;
 	// attempt to locate a service for the term
 	if(dispatchOrCompileAtNewChoicePoint(
-		compileStack, (FormulaView) {.form = form, .actors = termActors}, dispatchMode, choicePoint))
-		op = buildOperatorFromChoicePoint(termActors, choicePoint, serviceParameters, termClauseMap);
+		compileStack, (FormulaView) {.form = form, .actors = termSetActors}, dispatchMode, choicePoint))
+		op = buildOperatorFromChoicePoint(termSetActors, choicePoint, serviceParameters, termClauseMap);
 	if(op)
 		acceptCompiledTerms(clauseState, termIndices, nTerms, actorIndices, serviceParameters);
 #ifdef DEBUG_COMPILER
@@ -798,7 +836,7 @@ static Operator * compileTermSet(
 		PrintCString(" => no match.\n");
 #endif
 	FreeTypedTuple(serviceParameters);
-	FreeTypedTuple(termActors);
+	FreeTypedTuple(termSetActors);
 	return op;
 }
 
@@ -949,7 +987,7 @@ static Operator * dispatchNextTerms(
 
 /**
  * Compile the first non-excluded recursive term to a RECURSE operator; see
- * compileRecursiveTerm(). The term is then marked excluded. Returns 0 if no term compiled.
+ * compileSelfTerm(). The term is then marked excluded. Returns 0 if no term compiled.
  */
 static Operator * compileNextRecursiveTerm(ClauseCompileState * clauseState, index8 termClauseMap[])
 {
@@ -969,11 +1007,9 @@ static Operator * compileNextRecursiveTerm(ClauseCompileState * clauseState, ind
 #endif
 		size8 termArity = IndexedFormulaTermArity(clauseState->indexedFormula, termIndex);
 		TypedTuple * serviceParameters = CreateTypedTuple(termArity);
-		op = compileRecursiveTerm(clauseState, termIndex, serviceParameters, termClauseMap);
-		if(op) {
-			clauseState->hasRecurseOperator = true;
+		op = compileSelfTerm(clauseState, termIndex, serviceParameters, termClauseMap);
+		if(op)
 			acceptCompiledTerm(clauseState, termIndex, serviceParameters);
-		}
 #ifdef DEBUG_COMPILER
 		else
 			PrintCString(" => no match.\n");
@@ -987,7 +1023,7 @@ static Operator * compileNextRecursiveTerm(ClauseCompileState * clauseState, ind
 /**
  * Compile the term of the current choice point again, taking the current choice of
  * the choice point, which is a choice point before the branch of the choice tree; see
- * ChoiceTreeNextBranch(). A recursive term is compiled again by compileRecursiveTerm().
+ * ChoiceTreeNextBranch(). A recursive term is compiled again by compileSelfTerm().
  * Returns 0 if the term does not compile.
  */
 static Operator * replayTerm(ClauseCompileState * clauseState, index8 termClauseMap[])
@@ -1008,9 +1044,7 @@ static Operator * replayTerm(ClauseCompileState * clauseState, index8 termClause
 	if(clauseState->termIsRecursive[termIndices[0]]) {
 		// CLAUDE: A recursive term compiles on its own
 		ASSERT(choicePoint->nTerms == 1)
-		op = compileRecursiveTerm(clauseState, termIndices[0], serviceParameters, termClauseMap);
-		if(op)
-			clauseState->hasRecurseOperator = true;
+		op = compileSelfTerm(clauseState, termIndices[0], serviceParameters, termClauseMap);
 	}
 	else
 		op = buildOperatorFromChoicePoint(termActors, choicePoint, serviceParameters, termClauseMap);
@@ -1556,6 +1590,27 @@ static void freeClauseCompileState(ClauseCompileState * clauseState)
 }
 
 
+/*
+ * CLAUDE: Wrap a compiled conjunction in a CONSTANT operator providing the arguments of the
+ * given head constants. The clauseMap array gives the clause argument of each argument of op,
+ * and is extended with the clause arguments of the constants.
+ */
+static Operator * addHeadConstants(Operator * op, HeadConstants const * headConstants, index8 clauseMap[])
+{
+	size8 nChildArguments = op->nArguments;
+	index8 inputArguments[headConstants->nConstants];
+	size8 nInputs = 0;
+	for(index8 i = 0; i < headConstants->nConstants; i++) {
+		clauseMap[nChildArguments + i] = headConstants->arguments[i];
+		if(headConstants->parameterIO[i] == PARAMETER_IN)
+			inputArguments[nInputs++] = nChildArguments + i;
+	}
+	return CreateConstantOperator(
+		op, headConstants->constants, headConstants->constantTypes, headConstants->nConstants,
+		inputArguments, nInputs);
+}
+
+
 /**
  * Compile a conjunction described by clauseState to a JOIN operator.
  * The clauseState is setup by setupClauseCompileState() or setupConjunctionCompileState().
@@ -1567,6 +1622,10 @@ static Operator * compileConjunction(CompileStack * compileStack, ClauseCompileS
 	// Compile the conjunction recursively, joining one term at a time
 	index8 clauseMap[clauseState->indexedFormula->actors->nAtoms];
 	Operator * op = compileConjunctionRecursive(compileStack, clauseState, clauseMap);
+
+	// CLAUDE: No term provides the arguments of the query parameters bound to constants
+	if(op && clauseState->headConstants)
+		op = addHeadConstants(op, clauseState->headConstants, clauseMap);
 
 	if(op) {	
 		// The compiled terms provide the clause arguments in their own order
@@ -1618,10 +1677,12 @@ static Operator * sortOperatorToIdentityOrder(Operator * op)
 
 /**
  * Test whether a clause is recursive with respect to the query. This occurs when the
- * clause contains the a term of the same form as the query term but with the opposite sign,
- * but not necessarily negated. For example, given the query (! even x), the clause
- * (odd x | even x) is recursive since it contains the term (even x).
+ * clause contains the a term of the same form as the query term but with the opposite sign.
+ * For example, given the query (! even x), the clause (odd x | even x) is recursive since
+ * it contains the term (even x).
  */
+/* CLAUDE: Such a term is called a recursive term of the clause. Whether the clause is
+ * recursive is then decided by unification; see classifyClauses(). */
 static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
 {
 	Atom recursiveTermForm = CreateTermForm(
@@ -1635,46 +1696,22 @@ static bool isRecursiveClauseForm(Atom clauseForm, Atom queryTermForm)
 
 
 /**
- * A record of a clause form that the query term form occurs in, as collected by
- * findMatchingClauseForms().
+ * A record of a clause whose head term unifies with the query, as collected by
+ * findMatchingClauses(). The head term is the first term of the query term form that
+ * unifies with the query.
  */
 typedef struct QueryClauseMatch {
-	// The matched clause form
 	Atom clauseForm;
-	// Multiple of the query term form in the clause form
-	size8 termMultiple;
-	// Whether the clause is recursive for the query; see isRecursiveClauseForm()
+	// The clause actors, this tuple is owned by the dictionary
+	TypedTuple const * actors;
+	index8 headTermIndex;
+	// Index of the first head term actor in the clause actors
+	index8 headActorsOffset;
+	// Whether the clause has a recursive term; see isRecursiveClauseForm()
+	bool hasRecursiveTerms;
+	// Whether the clause is recursive; see classifyClauses()
 	bool recursive;
 } QueryClauseMatch;
-
-
-/**
- * Collect every clause form that the given query term form occurs in, appending one
- * QueryClauseMatch for each matched clause to the given array.
- *
- * To find rules (clauses) c that contains a matching term form,
- * we query (multiset c element @term-form multiple m),
- */
-static void findMatchingClauseForms(Atom queryTermForm, ResizingArray * queryClauseMatches)
-{
-	MultisetContainingIterator iterator;
-	MultisetContainingIterate(queryTermForm, &iterator);
-	while(MultisetContainingIteratorNext(&iterator)) {
-		// Found a multiset where the term form occurs
-		Atom clauseForm = MultisetContainingIteratorGetMultiset(&iterator);
-		// Ensure the multiset is a clause form
-		if(!IsClauseForm(clauseForm))
-			continue;
-
-		QueryClauseMatch matchedClauseForm = {
-			.clauseForm = clauseForm,
-			.termMultiple = MultisetContainingIteratorGetMultiple(&iterator),
-			.recursive = isRecursiveClauseForm(clauseForm, queryTermForm)
-		};
-		ResizingArrayAppend(queryClauseMatches, &matchedClauseForm);
-	}
-	MultisetContainingIteratorEnd(&iterator);
-}
 
 
 // CLAUDE: Values of the unionOrder argument of addCompiledVariant()
@@ -1682,16 +1719,15 @@ static void findMatchingClauseForms(Atom queryTermForm, ResizingArray * queryCla
 #define UNION_OPERATOR_FIRST	2
 
 /**
- * CLAUDE: Add a compiled operator with the given resolved parameters to the variants array.
+ * Add a compiled operator with the given resolved parameters to the variants array.
  * An operator whose signature matches an existing variant is combined with that variant by
  * a UNION operator. Otherwise a new variant is appended, and *nVariants is incremented.
- * The unionOrder argument is UNION_OPERATOR_FIRST or UNION_OPERATOR_LAST, and places the
- * given operator as the first or second child of the UNION operator.
+ * unionOrder determines if the given operator is placed first or last in the UNION operator.
  * Returns the variant the operator was added to.
  */
 static CompiledVariant * addCompiledVariant(
 	CompiledVariant variants[], size8 * nVariants, Atom resolvedParameters[], size8 arity,
-	Operator * conjunctionOp, int unionOrder)
+	Operator * op, int unionOrder)
 {
 	// Check for previously compiled service with the same signature
 	CompiledVariant * variant = FindCompiledVariant(
@@ -1699,19 +1735,22 @@ static CompiledVariant * addCompiledVariant(
 	if(variant) {
 		// We already have a compiled variant with the same signature, so create a UNION.
 		// If the two operators have different indexOrder, they are sorted first.
-		if(!sameIndexOrder(variant->op, conjunctionOp)) {
-			variant->op = sortOperatorToIdentityOrder(variant->op);
-			conjunctionOp = sortOperatorToIdentityOrder(conjunctionOp);
+		bool isSeed = (variant->op->type == OPERATOR_MACHINE);
+		// If the 
+		Operator * previousOp = variant->op;
+		Operator * variantOp = skipIdentityOperator(previousOp);
+		if(!sameIndexOrder(variantOp, op)) {
+			variantOp = sortOperatorToIdentityOrder(variantOp);
+			op = sortOperatorToIdentityOrder(op);
 		}
 		if(unionOrder == UNION_OPERATOR_FIRST)
-			variant->op = CreateUnionOperator(conjunctionOp, variant->op);
+			variant->op = CreateUnionOperator(op, variantOp);
 		else
-			variant->op = CreateUnionOperator(variant->op, conjunctionOp);
+			variant->op = CreateUnionOperator(variantOp, op);
+		CheckOperator(previousOp);
 		// check if we replaced a seed variant
-		if(variant->isSeed) {
-			variant->isSeed = false;
+		if(isSeed)
 			variant->isReplaced = true;
-		}
 	}
 	else {
 		// add compiled variant of this clause
@@ -1719,7 +1758,11 @@ static CompiledVariant * addCompiledVariant(
 		variant = &(variants[(*nVariants)++]);
 		SetMemory(variant, sizeof(CompiledVariant), 0);
 		TupleCopy(resolvedParameters, variant->parameters, arity);
-		variant->op = conjunctionOp;
+		// If a variant re-uses an operator of an existing service, wrap it in an IDENTITY operator
+		// so that we can attach a service (an operator can only attach to one Service).
+		if(!IsNullRelation(op->relation))
+			op = CreateIdentityOperator(op);
+		variant->op = op;
 	}
 	return variant;
 }
@@ -1731,8 +1774,273 @@ static void copyTypedTupleToArray(TypedTuple * sourceTuple, index8 startOffset, 
 }
 
 
+/*
+ * Test whether the given substitution replaces a query parameter by another parameter.
+ * This occurs when a repeated variable in a head term unifies with two distinct query parameters,
+ * as in the query (a #1 b #2) unified with the head term (a x b x) which gives the unifying
+ * substitution {x -> #1, #2 -> #1}
+ */
+static bool substitutesQueryParameterByParameter(ParameterizedQuery const * query, Substitution const * subst)
+{
+	for(index8 i = 0; i < query->arity; i++) {
+		TypedAtom value = SubstitutionFindValue(subst, CreateTypedAtom(AT_PARAMETER, query->parameters[i]));
+		if(value.type == AT_PARAMETER)
+			return true;
+	}
+	return false;
+}
+
+
+/*
+ * Collect the query parameters that the substitution replaces by constants into
+ * headConstants. A parameter occurring several times in the query is collected once.
+ */
+static void findHeadConstants(
+	ParameterizedQuery const * query, Substitution const * subst, HeadConstants * headConstants)
+{
+	headConstants->nConstants = 0;
+	for(index8 i = 0; i < query->arity; i++) {
+		Atom parameter = query->parameters[i];
+		TypedAtom value = SubstitutionFindValue(subst, CreateTypedAtom(AT_PARAMETER, parameter));
+		if(!value.type)
+			continue;
+		ASSERT((value.type != AT_VARIABLE) && (value.type != AT_PARAMETER))
+		index8 argument = parameter.parameter.number - 1;
+		bool isCollected = false;
+		for(index8 j = 0; j < headConstants->nConstants; j++)
+			isCollected = isCollected || (headConstants->arguments[j] == argument);
+		if(isCollected)
+			continue;
+		index8 k = headConstants->nConstants++;
+		headConstants->arguments[k] = argument;
+		headConstants->constants[k] = value.atom;
+		headConstants->constantTypes[k] = value.type;
+		headConstants->parameterIO[k] = parameter.parameter.io;
+	}
+}
+
+
+/*
+ * Apply the given substitution to the query parameters to determine their types,
+ * and write the result into the actors tuple, starting at actorsOffset.
+ * For each parameter that the substitution maps to a constant, we set the
+ * parameters atom type to that  constant's atom type, unless the parameter has a type already.
+ */
+static void writeQueryParameters(
+	ParameterizedQuery const * query, Substitution const * subst,
+	TypedTuple * actors, index8 actorsOffset)
+{
+	for(index8 i = 0; i < query->arity; i++) {
+		Atom parameter = query->parameters[i];
+		TypedAtom value = SubstitutionFindValue(subst, CreateTypedAtom(AT_PARAMETER, parameter));
+		if(value.type && !parameter.parameter.atomType)
+			parameter.parameter.atomType = value.type;
+		TypedTupleSetElement(actors, actorsOffset + i, CreateTypedAtom(AT_PARAMETER, parameter));
+	}
+}
+
+
+/*
+ * Unify the query parameters with the term of the clause actors at the given offset,
+ * writing the unifying substitution to *subst. Returns false if the two do not unify, or if
+ * the substitution replaces a query parameter by another parameter. The compiler cannot
+ * constrain two query arguments to be equal. The caller must free *subst in either case.
+ */
+static bool unifyQueryWithTerm(
+	ParameterizedQuery const * query, TypedTuple const * clauseActors, index8 termActorsOffset,
+	Substitution * subst)
+{
+	TypedTuple * termActors = CreateTypedTuple(query->arity);
+	TypedTupleCopyAt(clauseActors, termActorsOffset, termActors);
+	TypedTuple * queryParameters = CreateTypedTupleFromTuple(AT_PARAMETER, query->parameters, query->arity);
+	bool unifies = UnifyTuples(queryParameters, termActors, subst)
+		&& !substitutesQueryParameterByParameter(query, subst);
+	FreeTypedTuple(queryParameters);
+	FreeTypedTuple(termActors);
+	return unifies;
+}
+
+
 /**
- * Compile every rule (clause) of the matched clause form that unifies with the query.
+ * Collect every clause whose head term unifies with the query, appending one
+ * QueryClauseMatch per clause to the given array. A clause with a term of the
+ * same form as the head term is tentatively flagged as recursive; whether such
+ * clauses actually are recursive is later decided afterwards by classifyClauses().
+ *
+ * To find rules (clauses) c that contains a matching term form,
+ * we query (multiset c element @term-form multiple m),
+ */
+static void findMatchingClauses(ParameterizedQuery const * query, ResizingArray * queryClauseMatches)
+{
+	// Collect the clause forms holding the query term form, with the multiple of that term form
+	ResizingArray clauseForms;
+	CreateResizingArray(&clauseForms, sizeof(ElementMultiple), 8);
+	MultisetContainingIterator iterator;
+	MultisetContainingIterate(query->form, &iterator);
+	while(MultisetContainingIteratorNext(&iterator)) {
+		// Found a multiset where the term form occurs
+		Atom clauseForm = MultisetContainingIteratorGetMultiset(&iterator);
+		// Ensure the multiset is a clause form
+		if(!IsClauseForm(clauseForm))
+			continue;
+		ElementMultiple clauseFormMultiple = {
+			.element = clauseForm,
+			.multiple = MultisetContainingIteratorGetMultiple(&iterator)
+		};
+		ResizingArrayAppend(&clauseForms, &clauseFormMultiple);
+	}
+	MultisetContainingIteratorEnd(&iterator);
+
+	// Collect the clauses of each clause form whose head term unifies with the query
+	for(index32 i = 0; i < clauseForms.nElements; i++) {
+		ElementMultiple const * clauseFormMultiple = ResizingArrayGetElement(&clauseForms, i);
+		Atom clauseForm = clauseFormMultiple->element;
+		bool hasRecursiveTerms = isRecursiveClauseForm(clauseForm, query->form);
+		DictionaryIterator dictIterator;
+		DictionaryIterateClauses(clauseForm, &dictIterator);
+		while(DictionaryIteratorNext(&dictIterator)) {
+			TypedTuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
+			// Iterate over all occurences of the query term in the clause, and take the
+			// first one that unifies as the head term.
+			// NOTE: is taking the first term always valid?
+			for(index8 m = 1; m <= clauseFormMultiple->multiple; m++) {
+				index8 headActorsOffset = ClauseGetTermActorsIndex(clauseForm, query->form, m);
+				Substitution subst;
+				bool unifies = unifyQueryWithTerm(query, clauseActors, headActorsOffset, &subst);
+				FreeSubstitution(&subst);
+				if(!unifies)
+					continue;
+				QueryClauseMatch clauseMatch = {
+					.clauseForm = clauseForm,
+					.actors = clauseActors,
+					.headTermIndex = ClauseGetTermIndex(clauseForm, query->form, m),
+					.headActorsOffset = headActorsOffset,
+					.hasRecursiveTerms = hasRecursiveTerms,
+					.recursive = hasRecursiveTerms
+				};
+				ResizingArrayAppend(queryClauseMatches, &clauseMatch);
+				break;
+			}
+		}
+		DictionaryIteratorEnd(&dictIterator);
+	}
+	FreeResizingArray(&clauseForms);
+}
+
+
+/*
+ * Copy the actors tuple to the renamed tuple, replacing variable a--z by 
+ * temporary variable numbered 1--26. Only the compiler uses temporary variables,
+ * so the renamed tuple shares no variable with any clause from the dictionary.
+ * Both tuples must have the same length.
+ */
+static void renameVariablesApart(TypedTuple const * actors, TypedTuple * renamed)
+{
+	ASSERT(actors->nAtoms == renamed->nAtoms)
+	for(index8 i = 0; i < actors->nAtoms; i++) {
+		TypedAtom actor = TypedTupleGetElement(actors, i);
+		// The anonymous variable (number 0) is distinct from every variable already
+		if((actor.type == AT_VARIABLE) && actor.atom.variable.number) {
+			ASSERT(!actor.atom.variable.quoted)
+			actor = CreateTypedAtom(AT_VARIABLE, CreateTempVariable(actor.atom.variable.number));
+		}
+		TypedTupleSetElement(renamed, i, actor);
+	}
+}
+
+
+/*
+ * Test whether a given recursive term unifies with the head term of any clause 
+ * in clauseMatches[] marked as recursive. The recursive term is given by its actors,
+ * assumed to be distinct from those of any head term.
+ * 
+ * CLAUDE: A derived tuple comes from a separate
+ * instance of a clause, even when the clause is the one holding the recursive term.
+ */
+static bool termUnifiesWithRecursiveHead(
+	TypedTuple const * termActors, QueryClauseMatch const clauseMatches[], size32 nClauseMatches)
+{
+	TypedTuple * headActors = CreateTypedTuple(termActors->nAtoms);
+	bool unifies = false;
+	for(index32 j = 0; !unifies && (j < nClauseMatches); j++) {
+		if(!clauseMatches[j].recursive)
+			continue;
+		TypedTupleCopyAt(clauseMatches[j].actors, clauseMatches[j].headActorsOffset, headActors);
+		Substitution subst;
+		unifies = UnifyTuples(termActors, headActors, &subst);
+		FreeSubstitution(&subst);
+	}
+	FreeTypedTuple(headActors);
+	return unifies;
+}
+
+
+/*
+ * Returns true if any recursive term of the given clause unifies with the head term
+ * of _any_ clause still marked recursive, indicating that the clause may be recursive;
+ * else false, indicating that the clause is not recursive.
+ */
+static bool clauseMayBeRecursive(
+	QueryClauseMatch const * clauseMatch, Atom queryTermForm,
+	QueryClauseMatch const clauseMatches[], size32 nClauseMatches)
+{
+	Atom recursiveTermForm = TermFormCreateOppositeForm(queryTermForm);
+	size8 m = MultisetGetElementMultiple(clauseMatch->clauseForm, recursiveTermForm);
+	size8 arity = FormArity(queryTermForm);
+	TypedTuple * termActors = CreateTypedTuple(arity);
+	TypedTuple * renamedTermActors = CreateTypedTuple(arity);
+	bool mayBeRecursive = false;
+	for(index8 k = 1; k <= m; k++) {
+		TypedTupleCopyAt(
+			clauseMatch->actors, ClauseGetTermActorsIndex(clauseMatch->clauseForm, recursiveTermForm, k),
+			termActors);
+		renameVariablesApart(termActors, renamedTermActors);
+		if(termUnifiesWithRecursiveHead(renamedTermActors, clauseMatches, nClauseMatches)) {
+			mayBeRecursive = true;
+			break;
+		}
+	}
+	FreeTypedTuple(renamedTermActors);
+	FreeTypedTuple(termActors);
+	IFactRelease(recursiveTermForm);
+	return mayBeRecursive;
+}
+
+
+/**
+ * Decide which of the matching clauses are recursive, as follows:
+ * (1) A clause without recursive terms is not recursive.
+ * (2) A clause c having recursive terms is marked non-recursive if no recursive term
+ *     of c unifies with the head term of any other clause still marked recursive.
+ * This repeats until we reach a fixpoint. The clauses marked non-recursive are appended
+ * to nonRecursiveOrder, as indices into the clauseMatches array, in the order they were
+ * marked. A clause in that order only depends on the clauses before it, and on the
+ * clauses without recursive terms.
+ */
+static void findRecursiveClauses(Atom queryTermForm, ResizingArray * clauseMatches, ResizingArray * nonRecursiveOrder)
+{
+	QueryClauseMatch * matches = ResizingArrayGetMemory(clauseMatches);
+	size32 nMatches = clauseMatches->nElements;
+	bool changed = true;
+	while(changed) {
+		changed = false;
+		for(index32 i = 0; i < nMatches; i++) {
+			if(!matches[i].recursive)
+				continue;
+			if(!clauseMayBeRecursive(&matches[i], queryTermForm, matches, nMatches)) {
+				matches[i].recursive = false;
+				ResizingArrayAppend(nonRecursiveOrder, &i);
+				changed = true;
+			}
+		}
+	}
+}
+
+
+/**
+ * Compile the clause given by clauseMatch, unifying the query with its head term.
+ * A recursive term of the clause reads the given variant instead of a RECURSE operator;
+ * set readVariant = 0 for a recursive clause, and for a clause without recursive terms.
  * 
  * The query actors must be a series of AT_PARAMETER atoms numbered 1, 2, ...
  * Some query parameter types may be unknown; the resolved parameters are written
@@ -1748,81 +2056,69 @@ static void copyTypedTupleToArray(TypedTuple * sourceTuple, index8 startOffset, 
  * Appends the new compiled variants to the variants array and returns the new
  * number of variants in the array.
  */
-static size8 compileClauses(
-	CompileStack * compileStack, ParameterizedQuery const * query, QueryClauseMatch const * queryClauseMatch,
-	CompiledVariant variants[], size8 nVariants)
+static size8 compileClause(
+	CompileStack * compileStack, ParameterizedQuery const * query, QueryClauseMatch const * clauseMatch,
+	CompiledVariant const * readVariant, CompiledVariant variants[], size8 nVariants)
 {
-	Atom clauseForm = queryClauseMatch->clauseForm;
+	Atom clauseForm = clauseMatch->clauseForm;
+	TypedTuple const * clauseActors = clauseMatch->actors;
+	index8 headActorsOffset = clauseMatch->headActorsOffset;
+#ifdef DEBUG_COMPILER
+	PrintCString("Matched rule: ");
+	PrintFormActorsAsFormula(clauseForm, clauseActors);
+	PrintChar('\n');
+#endif
 
-	// Iterate over all rules (clauses) with this clause form.
-	DictionaryIterator dictIterator;
-	DictionaryIterateClauses(clauseForm, &dictIterator);
-	TypedTuple * matchedTermActors = CreateTypedTuple(query->arity);
+	// Unify the query parameters with the head term actors
+	// The unifying substitution might (1) merge distinct query parameters {#2 -> #1}
+	// or (2) substitute query parameters with constants
+	Substitution subst;
+	if(!unifyQueryWithTerm(query, clauseActors, headActorsOffset, &subst)) {
+		FreeSubstitution(&subst);
+		return nVariants;
+	}
+	// Handle any constants (non-varaiable atoms) in the head term
+	HeadConstants headConstants;
+	findHeadConstants(query, &subst, &headConstants);
 	TypedTuple * substClauseActors = CreateTypedTuple(ClauseArity(clauseForm));
 	Atom resolvedParameters[query->arity];
-	while(DictionaryIteratorNext(&dictIterator)) {
-		TypedTuple const * clauseActors = DictionaryIteratorPeekActors(&dictIterator);
+	// Compile the conjunction once per combination of choices. An untyped parameter
+	// in the query may match several services, each yielding a different compiled variant
+	ChoiceTree choiceTree;
+	ChoiceTreeReset(&choiceTree);
+	do {
+		// The compileConjunction() call below updates parameter types in the clause
+		// actors, so we must re-compute them for each branch of the ChoiceTree.
+		SubstituteTuple(&subst, clauseActors, substClauseActors);
+		// CLAUDE: The head term holds the query parameters, also those bound to constants
+		writeQueryParameters(query, &subst, substClauseActors, headActorsOffset);
 #ifdef DEBUG_COMPILER
-		PrintCString("Matched rule: ");
-		PrintFormActorsAsFormula(clauseForm, clauseActors);
+		PrintCString("Unified rule: ");
+		PrintFormActorsAsFormula(clauseForm, substClauseActors);
 		PrintChar('\n');
 #endif
-
-		// Iterate over all occurences of the query term in the matched clause
-		// and find one that unifies, if any.
-		index8 matchedTermActorsOffset = ClauseGetTermActorsIndex(clauseForm, query->form, 1);
-		bool foundTerm = false;
-		for(index8 m = 1; !foundTerm && (m <= queryClauseMatch->termMultiple); m++) {
-			// extract actors for the matching term in the clause
-			TypedTupleCopyAt(clauseActors, matchedTermActorsOffset, matchedTermActors);
-			// unify the query with the matched term
-			Substitution querySubst;
-			Substitution matchedTermSubst;
-			TypedTuple * queryParameters = CreateTypedTupleFromTuple(AT_PARAMETER, query->parameters, query->arity);
-			foundTerm = UnifyTuples(queryParameters, matchedTermActors, &querySubst, &matchedTermSubst);
-			if(foundTerm) {
-				index8 matchedTermIndex = ClauseGetTermIndex(clauseForm, query->form, m);
-				// Compile the conjunction once per combination of choices. A term that leaves
-				// an output parameter untyped may match several services, each
-				// yielding a differently typed variant of the query service.
-				ChoiceTree choiceTree;
-				ChoiceTreeReset(&choiceTree);
-				do {
-					// compileConjunction() updates parameter types in the clause
-					// actors, so re-derive them for each branch.
-					SubstituteTuple(&matchedTermSubst, clauseActors, substClauseActors);
-#ifdef DEBUG_COMPILER
-					PrintCString("Unified rule: ");
-					PrintFormActorsAsFormula(clauseForm, substClauseActors);
-					PrintChar('\n');
-#endif
-					ClauseCompileState clauseState;
-					setupClauseCompileState(
-						&clauseState, clauseForm, substClauseActors, matchedTermIndex, &choiceTree);
-					Operator * conjunctionOp = compileConjunction(compileStack, &clauseState);
-					bool hasRecurseOperator = clauseState.hasRecurseOperator;
-					freeClauseCompileState(&clauseState);
-					if(!conjunctionOp)
-						continue;
-					// Recover the resolved parameters (with types) from the clause actors
-					copyTypedTupleToArray(
-						substClauseActors, matchedTermActorsOffset, resolvedParameters, query->arity);
-					CompiledVariant * variant = addCompiledVariant(
-						variants, &nVariants, resolvedParameters, query->arity, conjunctionOp,
-						UNION_OPERATOR_LAST);
-					// Mark recursive variants; FIXPOINT operator is added by completeRecursiveVariant()
-					variant->isRecursive = variant->isRecursive || hasRecurseOperator;
-				} while(ChoiceTreeNextBranch(&choiceTree));
-			}
-			FreeSubstitution(&querySubst);
-			FreeSubstitution(&matchedTermSubst);
-			FreeTypedTuple(queryParameters);
-			matchedTermActorsOffset += query->arity;
-		}
-	}
-	DictionaryIteratorEnd(&dictIterator);
+		ClauseCompileState clauseState;
+		setupClauseCompileState(
+			&clauseState, clauseForm, substClauseActors, clauseMatch->headTermIndex, &choiceTree);
+		clauseState.headConstants = (headConstants.nConstants > 0) ? &headConstants : 0;
+		clauseState.readVariant = readVariant;
+		Operator * conjunctionOp = compileConjunction(compileStack, &clauseState);
+		bool hasRecurseOperator = clauseState.hasRecurseOperator;
+		freeClauseCompileState(&clauseState);
+		if(!conjunctionOp)
+			continue;
+		// Recover the resolved parameters (with types) from the clause actors
+		copyTypedTupleToArray(
+			substClauseActors, headActorsOffset, resolvedParameters, query->arity);
+		// Create the compiled variant; if one already exists, we UNION it with the new
+		CompiledVariant * variant = addCompiledVariant(
+			variants, &nVariants, resolvedParameters, query->arity, conjunctionOp,
+			UNION_OPERATOR_LAST);
+		// Mark recursive variants; FIXPOINT operator is added by completeRecursiveVariant()
+		variant->isRecursive = variant->isRecursive || hasRecurseOperator;
+	} while(ChoiceTreeNextBranch(&choiceTree));
+	FreeSubstitution(&subst);
 	FreeTypedTuple(substClauseActors);
-	FreeTypedTuple(matchedTermActors);
 
 	return nVariants;
 }
@@ -1843,7 +2139,7 @@ static size8 compileConjunctionQuery(
 	TypedTuple * conjunctionActors = CreateTypedTuple(query->arity);
 	Atom resolvedParameters[query->arity];
 
-	// Compile the conjunction once per combination of choices; see compileClauses()
+	// Compile the conjunction once per combination of choices; see compileClause()
 	ChoiceTree choiceTree;
 	ChoiceTreeReset(&choiceTree);
 	do {
@@ -1913,19 +2209,36 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
 	SetMemory(variants, sizeof(CompiledVariant) * MAX_COMPILED_VARIANTS, 0);
 	size8 nVariants = 0;
 
-	// CLAUDE: A service not repeating every parameter the query repeats is constrained
-	// to the query; the variant is then a compiled variant rather than a seed.
+	// Dispatch the query, allowing services that require a CONSTRAIN operator, a FILTER
+	// operator, or both. The dispatch iterator yields the best matching service of each relation.
+	// Exact matches are preferred over repeated parameters, and fewer repeated parameters
+	// is preferred over fewer outputs.
+	// NOTE: this is a heuristic, and might change.
 	EqualitySignature queryEqualitySignature =
 		ParametersGetEqualitySignature(query->parameters, query->arity);
 	index8 permutation[query->arity];
 	DispatchIterator iterator;
-	DispatchIterate(query, DISPATCH_RELAX_EQUALITY, permutation, &iterator);
+	DispatchIterate(query, DISPATCH_RELAX_EQUALITY | DISPATCH_RELAX_IO, permutation, &iterator);
 	while(DispatchIteratorNext(&iterator)) {
 		ASSERT(nVariants < MAX_COMPILED_VARIANTS)
 		ServiceRecord const * serviceRecord = DispatchIteratorPeekServiceRecord(&iterator);
-		bool isSeed = CompareMemory(
-			&(serviceRecord->service.equalitySignature), &queryEqualitySignature,
-			sizeof(EqualitySignature)) == 0;
+		EqualitySignature serviceEqualitySignature = serviceRecord->service.equalitySignature;
+		index8 serviceArgumentMap[query->arity];
+		EqualitySignatureGetArgumentMap(serviceEqualitySignature, query->arity, serviceArgumentMap);
+
+		// The query arguments to filter are the ones that correspond to query inputs
+		// but service outputs.
+		// CLAUDE: The filtered arguments are indices into the service operator arguments
+		index8 filteredArguments[query->arity];
+		size8 nFiltered = 0;
+		for(index8 i = 0; i < query->arity; i++) {
+			if(!serviceEqualitySignature.repeatOf[i]
+				&& (query->parameters[permutation[i]].parameter.io == PARAMETER_IN)
+				&& (serviceRecord->service.ioSignature.parameterIO[i] == PARAMETER_OUT))
+				filteredArguments[nFiltered++] = serviceArgumentMap[i];
+		}
+		bool isSeed = (nFiltered == 0) && (CompareMemory(
+			&serviceEqualitySignature, &queryEqualitySignature, sizeof(EqualitySignature)) == 0);
 
 #ifdef DEBUG
 		// The service must be primitive, since compilation should never run
@@ -1934,22 +2247,27 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
 			ASSERT(serviceRecord->op->type == OPERATOR_MACHINE)
 #endif
 
-	//    if(!IsIdentityPermutation(permutation, arity))
-	// 		continue;
-
 	   // TODO: I think this case must be handled rather than left alone.
 	   // For example (+ <INT + >INT = <INT) matching against (+ x + 3 = 5).
 	   // The fundamental problem here is that operator indexOrder and tuple ordering
 	   // in general is not aware of role multiplicity: for (+ + =), the tuples
 	   // (2 3 5) and (3 2 5) correspond to the same fact, and should be considered
 	   // duplicates in the relation. No operator should produce such duplicates.
-	   ASSERT(IsIdentityPermutation(permutation, query->arity))
+	   // CLAUDE: A FILTER variant places its arguments in query order; see setupConstrainedVariant()
+	   if(nFiltered == 0)
+		   ASSERT(IsIdentityPermutation(permutation, query->arity))
 
 		CompiledVariant * variant = &(variants[nVariants++]);
 		if(isSeed)
 			SetupCompiledVariantFromServiceRecord(variant, serviceRecord);
-		else
-			setupConstrainedVariant(variant, serviceRecord, serviceRecord->op, query, permutation);
+		else {
+			// The FILTER service type signature is the same as that of the child,
+			// while its IO direction is the same as that of the query.
+			Operator * childOperator = serviceRecord->op;
+			Operator * op = (nFiltered > 0) ?
+				CreateFilterOperator(childOperator, filteredArguments, nFiltered) : childOperator;
+			setupConstrainedVariant(variant, serviceRecord, op, query, permutation);
+		}
 
 #ifdef DEBUG_COMPILER
 		PrintCString("Seeded variant from service: ");
@@ -1963,8 +2281,8 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
 
 
 /**
- * Find all clause forms matching the given query and compile each to variants. Seed variants
- * must have been added to the variants[] array before this call.
+ * Find all clauses in the dictionary that matchthe given query and compile each to variants.
+ * Seed variants must have been added to the variants[] array before this call.
  * 
  * Matched rules are processed in two passes. Non-recursive clauses compile first, and determine
  * the possible query type signatures. for each compiled variant. The recursive clauses then
@@ -1972,34 +2290,38 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
  * at least one non-recursive clause of the same signature.
  * 
  * Returns the new number of variants in the variants[] array.
- * 
- * NOTE: this does not work when the base case of recursion is a single term, such as a
- * stored tuple with a primitive service.
  */
-static size8 compileQueryClauseForms(
+static size8 compileQueryClauses(
 	CompileStack * compileStack, ParameterizedQuery const * query,
 	CompiledVariant variants[], size8 nVariants)
 {
 	// Collect all clauses matching the query term
-	ResizingArray matchedClauseForms;
-	CreateResizingArray(&matchedClauseForms, sizeof(QueryClauseMatch), 8);
-	findMatchingClauseForms(query->form, &matchedClauseForms);
-	size32 nMatchedClauseForms = matchedClauseForms.nElements;
-	if(nMatchedClauseForms == 0) {
-		FreeResizingArray(&matchedClauseForms);
+	ResizingArray clauseMatches;
+	CreateResizingArray(&clauseMatches, sizeof(QueryClauseMatch), 8);
+	findMatchingClauses(query, &clauseMatches);
+	size32 nClauseMatches = clauseMatches.nElements;
+	if(nClauseMatches == 0) {
+		FreeResizingArray(&clauseMatches);
 		return nVariants;
 	}
+	ResizingArray nonRecursiveOrder;
+	CreateResizingArray(&nonRecursiveOrder, sizeof(index32), 8);
+	findRecursiveClauses(query->form, &clauseMatches, &nonRecursiveOrder);
+	QueryClauseMatch const * matches = ResizingArrayGetMemory(&clauseMatches);
+	index32 const * order = ResizingArrayGetMemory(&nonRecursiveOrder);
 
-	// The non-recursive clauses compile first, settling the query parameters of each variant
-	for(index32 i = 0; i < nMatchedClauseForms; i++) {
-		QueryClauseMatch const * clauseMatch = ResizingArrayGetElement(&matchedClauseForms, i);
-		if(!clauseMatch->recursive)
-			nVariants = compileClauses(compileStack, query, clauseMatch, variants, nVariants);
+	// Pass 1 compiles the clauses without recursive terms, generating variants that the
+	// recursive clauses read
+	for(index32 i = 0; i < nClauseMatches; i++) {
+		if(!matches[i].hasRecursiveTerms)
+			nVariants = compileClause(compileStack, query, &matches[i], 0, variants, nVariants);
 	}
 
-	// To compile a recursive clause, the query type signature must be known.
-	// The possible options are the type signatures of the non-recursive variants compiled above.
-	// We try all possible such type such type signatures for each recursive clause.
+	// Pass 2 compiles first the non-recursive clauses with recursive terms, in the order
+	// determined by findRecursiveClauses(), and then the recursive clauses. A recursive term
+	// of a non-recursive clause reads the already compiled variant, while that of a recursive clause
+	// compiles to a RECURSE operator.
+	// TODO: the naming here is confusing now: recursive terms in non-recursive clauses &c
 	size8 nNonRecursiveVariants = nVariants;
 	for(index8 v = 0; v < nNonRecursiveVariants; v++) {
 		ParameterizedQuery variantQuery = {
@@ -2007,18 +2329,31 @@ static size8 compileQueryClauseForms(
 			.arity = query->arity
 		};
 		TupleCopy(variants[v].parameters, variantQuery.parameters, query->arity);
-		for(index32 i = 0; i < nMatchedClauseForms; i++) {
-			QueryClauseMatch const * clause = ResizingArrayGetElement(&matchedClauseForms, i);
-			if(clause->recursive) {
-				nVariants = compileClauses(compileStack, &variantQuery, clause, variants, nVariants);
-			}
+		// Set the Operator.held flag to prevent the operator from being deallocated,
+		// which could otherwise happen if compileClause() constructs a parent operator,
+		// fails to complete compilation, and deallocates that operator again.
+		Operator * variantOp = variants[v].op;
+		variantOp->held = true;
+		for(index32 k = 0; k < nonRecursiveOrder.nElements; k++) {
+			nVariants = compileClause(
+				compileStack, &variantQuery, &matches[order[k]], &variants[v], variants, nVariants);
 		}
+		for(index32 i = 0; i < nClauseMatches; i++) {
+			if(matches[i].recursive)
+				nVariants = compileClause(compileStack, &variantQuery, &matches[i], 0, variants, nVariants);
+		}
+		variantOp->held = false;
+		// CLAUDE: An IDENTITY operator held while addCompiledVariant() removed it from
+		// variant v is deallocated here
+		if(variantOp != variants[v].op)
+			CheckOperator(variantOp);
 	}
 	// If compilaton succeeds, a recursive clause yields a UNION with the non-recursive variant,
 	// so no new variants are added
 	ASSERT(nVariants == nNonRecursiveVariants)
 
-	FreeResizingArray(&matchedClauseForms);
+	FreeResizingArray(&nonRecursiveOrder);
+	FreeResizingArray(&clauseMatches);
 	return nVariants;
 }
 
@@ -2040,75 +2375,6 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
 	Operator * fixpointOperator = CreateFixpointOperator(
 		variant->op, inputArguments, nInputs);
 	variant->op = fixpointOperator;
-}
-
-
-/**
- * Compile a FILTER operator based on a child service matching the query using "relaxed" dispatch.
- * Inputs to the FILTER operator that map to outputs in the child service are handled by
- * filtering tuples for equality. See OPERATOR_FILTER in operator.h.
- *
- * One variant is emitted per matching relation. Returns the new number of variants.
- */
-static size8 compileFilterVariants(ParameterizedQuery const * query, CompiledVariant variants[], size8 nVariants)
-{
-	// Perform "relaxed" dispatch to search for services whose IO pattern
-	// has an output everywhere the query has an output, and as few outputs as possible.
-	index8 permutation[query->arity];
-	DispatchIterator iterator;
-	// CLAUDE: The child service may also repeat fewer parameters than the query
-	DispatchIterate(query, DISPATCH_MATCH_RELAXED | DISPATCH_RELAX_EQUALITY, permutation, &iterator);
-	index8 queryArgumentMap[query->arity];
-	size8 nQueryArguments = ParametersGetArgumentMap(query->parameters, query->arity, queryArgumentMap);
-
-	while(DispatchIteratorNext(&iterator)) {
-		ASSERT(nVariants < MAX_COMPILED_VARIANTS)
-		ServiceRecord const * childServiceRecord = DispatchIteratorPeekServiceRecord(&iterator);
-		EqualitySignature childEqualitySignature = childServiceRecord->service.equalitySignature;
-		index8 childArgumentMap[query->arity];
-		size8 nChildArguments = EqualitySignatureGetArgumentMap(
-			childEqualitySignature, query->arity, childArgumentMap);
-
-		// The query arguments to filter are the ones that correspond to query inputs
-		// but child service outputs.
-		// CLAUDE: The filtered arguments are indices into the child operator arguments
-		index8 filteredArguments[query->arity];
-		size8 nFiltered = 0;
-		for(index8 i = 0; i < query->arity; i++) {
-			if(!childEqualitySignature.repeatOf[i]
-				&& (query->parameters[permutation[i]].parameter.io == PARAMETER_IN)
-				&& (childServiceRecord->service.ioSignature.parameterIO[i] == PARAMETER_OUT))
-				filteredArguments[nFiltered++] = childArgumentMap[i];
-		}
-		// If there are no argument to filter, the child service is an exact match.
-		// CLAUDE: unless the query repeats parameters that the child service does not
-		if((nFiltered == 0) && (nChildArguments == nQueryArguments)) {
-			// NOTE: This case happens when seedVariantsFromServices() finds a primitive service
-			// but no compiled rule is generated; the variant is the discarded and we 
-			// land here with nothing left to compile.
-			continue;
-		}
-
-		// Create a new compiled variant
-
-		// The FILTER service type signature is the same as that of the child,
-		// while its IO direction is the same as that of the query.
-
-		// The filter operator takes the arguments of the service it reads, so a form whose
-		// roles repeat needs a permute operator to place them in query argument order
-
-		// CLAUDE: The repeated parameters of the variant are those of the query. A query
-		// repeating a parameter the child does not repeat needs a CONSTRAIN operator instead
-		// of the permute operator; see setupConstrainedVariant().
-		Operator * childOperator = childServiceRecord->op;
-		Operator * filterOperator = (nFiltered > 0) ?
-			CreateFilterOperator(childOperator, filteredArguments, nFiltered) : childOperator;
-		CompiledVariant * variant = &(variants[nVariants++]);
-		setupConstrainedVariant(variant, childServiceRecord, filterOperator, query, permutation);
-		ASSERT(variant->op)
-	}
-	DispatchIteratorEnd(&iterator);
-	return nVariants;
 }
 
 
@@ -2245,7 +2511,7 @@ static size8 compileQueryVariants(
 	else {
 		// Every matching clause compiles here, the recursive ones into the variants the
 		// non-recursive ones settled
-		nVariants = compileQueryClauseForms(compileStack, query, variants, nVariants);
+		nVariants = compileQueryClauses(compileStack, query, variants, nVariants);
 	}
 
 	// Any recursive variant must be completed by wrapping with a FIXPOINT operator
@@ -2258,21 +2524,12 @@ static size8 compileQueryVariants(
 	if(ifactStore)
 		nVariants = compileIFactRule(query, ifactStore, ifactIdColumn, variants, nVariants);
 
-	// CLAUDE: A query the rules do not answer may still be answered by filtering a service that
-	// produces what the query binds; see compileFilterVariants(). The rules are tried
-	// first, so a rule answering the query wins over reading a relation and filtering.
-	// NOTE: what if we don't currently have a service to be filtered, but one could
-	// have been compiled from rules?
-	if(nVariants == 0)
-		nVariants = compileFilterVariants(query, variants, nVariants);
-
 	return nVariants;
 }
 
 
 /**
  * Compile a parameterized query into services, registering each one.
- * The queryParameters tuple must hold AT_PARAMETER atoms numbered 1, 2, ...
  * If the services array is not 0, a copy of each compiled service is written to it.
  * Returns the number of services registered. If the is already being compiled,
  * this function does nothing and returns 0.
@@ -2315,7 +2572,7 @@ static size8 compileParameterizedQuery(
 			.ioSignature = ioSignature,
 			.equalitySignature = CompiledVariantGetEqualitySignature(&variants[i], query->arity)
 		};
-		if(variants[i].isSeed) {
+		if(variants[i].op->type == OPERATOR_MACHINE) {
 			ServiceMarkNotStale(service);
 			continue;
 		}
@@ -2323,14 +2580,8 @@ static size8 compileParameterizedQuery(
 			// CLAUDE: the primitive service is restored when the compiled service is removed
 			ReplacePrimitiveService(service, variants[i].op);
 		}
-		else {
-			// If a variant re-uses operator of an existing service, wrap it in an IDENTITY operator
-			// so that we can attach a service (an operator can only attach to one Service).
-			if(!IsNullRelation(variants[i].op->relation)) {
-				variants[i].op = CreateIdentityOperator(variants[i].op);
-			}
+		else
 			CreateService(service, variants[i].op);
-		}
 		nRegisteredServices++;
 
 #ifdef DEBUG_COMPILER

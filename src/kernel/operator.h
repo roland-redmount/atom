@@ -60,6 +60,8 @@ typedef struct s_OperatorContext OperatorContext;
  * so yields a valid relation. An operator can therefore be applied to any other
  * without regard for how that one was composed.
  */
+/* CLAUDE: CONSTANT is the product of the child relation with a relation holding a single
+ * tuple of constants (x), restricted on the constant arguments the caller binds (sigma). */
  enum OperatorType {
 
 	/**
@@ -125,7 +127,7 @@ typedef struct s_OperatorContext OperatorContext;
 	 *
 	 * NOTE: nothing here guarantees termination. A relation over an infinite domain
 	 * has no finite fixpoint, and needs the recursive rule guarded by a precondition
-	 * to terminate; see the notes on termination in compiler.md.
+	 * to terminate.
 	 * 
 	 * NOTE: this is a naive iteration scheme, which typically re-evaluates the same call
 	 * many times over. Semi-naive iteration is an optimization used in Datalog that
@@ -151,7 +153,7 @@ typedef struct s_OperatorContext OperatorContext;
 	 * This is how a service is built for an IO pattern no service provides. A relation is
 	 * read by the services its storage registered, and a B-tree registers one per prefix
 	 * of its index column order, so a pattern binding a column out of that order has no
-	 * service; see compileFilterVariants() in compiler.c.
+	 * service; see seedVariantsFromServices() in compiler.c.
 	 */
 	OPERATOR_FILTER = 9,
 
@@ -182,9 +184,19 @@ typedef struct s_OperatorContext OperatorContext;
 	 * is write-locked while it is read.
 	 */
 	OPERATOR_IFACT = 11,
+
+	/**
+	 * CLAUDE: CONSTANT adds arguments holding constants to the tuples of its child
+	 * operator. It is the opposite of PERMUTE, which copies constants into the child
+	 * arguments. The child operator takes the leading arguments, and each constant
+	 * takes one of the arguments following them. A constant argument the caller binds
+	 * is compared with the constant, and on a mismatch the operator yields no tuples.
+	 * This expresses a constant in the head term of a rule; see compileConjunction().
+	 */
+	OPERATOR_CONSTANT = 12,
 };
 
-#define N_OPERATOR_TYPES 11
+#define N_OPERATOR_TYPES 12
 
 
 struct s_Operator {
@@ -197,6 +209,9 @@ struct s_Operator {
 	// Context size, in addition to sizeof(Context)
 	size32 contextSize;
 	size32 nParents;		// number of parent operators
+	// Setting this flag prevents CheckOperator() from deallocating the operator.
+	// This is only used by the compiler while constructing operator graphs.
+	bool held;
 	// The relation is set iff the operator is a root operator for a service,
 	// and can be used to locate that service. For a MACHINE operator, this must be 0.
 	Relation relation;
@@ -280,6 +295,18 @@ struct s_Operator {
 			struct s_TupleStore * store;
 			index8 idColumn;
 		} ifact;
+		// for OPERATOR_CONSTANT
+		struct {
+			Operator * childOperator;
+			// Constant i is held by argument childOperator->nArguments + i
+			Atom * constants;
+			byte * constantTypes;
+			size8 nConstants;
+			// Indices of the constant arguments the caller binds, which are
+			// compared with the constant rather than written
+			index8 * inputArguments;
+			size8 nInputs;
+		} constant;
 	} impl;
 };
 
@@ -388,6 +415,22 @@ Operator * CreateFilterOperator(
 	Operator * childOperator, index8 const inputArguments[], size8 nInputs);
 
 /**
+ * CLAUDE: Create a CONSTANT operator over the given child operator; see OPERATOR_CONSTANT.
+ * The operator takes childOperator->nArguments + nConstants arguments, where argument
+ * childOperator->nArguments + i holds constants[i]. The constants and constantTypes arrays
+ * have length nConstants, and the operator acquires a reference to each constant.
+ *
+ * The inputArguments array holds the indices of the nInputs arguments the caller binds,
+ * each of which must be a constant argument. inputArguments may be 0 if nInputs = 0.
+ *
+ * The index order is the child's, followed by the constant arguments, which are equal
+ * in every tuple.
+ */
+Operator * CreateConstantOperator(
+	Operator * childOperator, Atom const constants[], byte const constantTypes[], size8 nConstants,
+	index8 const inputArguments[], size8 nInputs);
+
+/**
  * Create a PROJECT operator with the given number of arguments, which may not exceed the
  * number of arguments of the child operator. The argumentMap array has length nArguments,
  * and argument i of the returned PROJECT operator will map to argumentMap[i] of childOperator. 
@@ -442,7 +485,7 @@ Operator * CreateFixpointOperator(
  * it belongs to.
  *
  * NOTE: inputArguments is here written as a pointer rather than as an array since
- * compileRecursiveTerm() passes a variable length array, and array syntax causes an optimized
+ * compileSelfTerm() passes a variable length array, and array syntax causes an optimized
  * build to read that as a zero length region; see -Wstringop-overread.
  */
 Operator * CreateRecurseOperator(
@@ -538,12 +581,11 @@ void OperatorFreeContext(OperatorContext * context);
 bool OperatorCallOnce(Operator const * op, Atom arguments[]);
 
 /**
- * Print operator information.
- * The parameters array holds one AT_PARAMETER atom per operator argument. Each
- * operator of the tree is printed with the arguments it is called with, as in
- * "JOIN(#1> #2> #3<)", mapped from the given parameters as when the operators are called.
+ * Print operator information. The parameters tuple holds the operator argument. Each
+ * operator of the tree is printed with the arguments it is called with, such as
+ * "JOIN(x "foo" 42)", mapped from the given parameters as when the operators are called.
  */
-void PrintOperator(Operator const * op, Atom const parameters[]);
+void PrintOperator(Operator const * op, TypedTuple * const arguments);
 
 
 #endif	// OPERATOR_H

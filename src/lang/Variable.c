@@ -5,20 +5,33 @@
 
 TypedAtom anonymousVariable = {.type = AT_VARIABLE, .atom = {0}};
 
+// Number of variables a--z; temporary variables are numbered after these
+#define N_NAMED_VARIABLES	26
+
 
 Atom CreateVariable(char name)
 {
 	ASSERT(IsAlpha(name));
 	return (Atom) {
-		.variable = {.name = ToLower(name)}
+		.variable = {.number = ToLower(name) - 'a' + 1}
+	};
+}
+
+
+Atom CreateTempVariable(uint8 number)
+{
+	ASSERT((number >= 1) && (number <= 255 - N_NAMED_VARIABLES))
+	return (Atom) {
+		.variable = {.number = N_NAMED_VARIABLES + number}
 	};
 }
 
 
 char GetVariableName(Atom variable)
 {
-	if(variable.variable.name)
-		return variable.variable.name;
+	ASSERT(variable.variable.number <= N_NAMED_VARIABLES)
+	if(variable.variable.number)
+		return 'a' + variable.variable.number - 1;
 	else
 		return '_';
 }
@@ -26,7 +39,7 @@ char GetVariableName(Atom variable)
 
 bool SameVariable(Atom variable1, Atom variable2)
 {
-	if(variable1.variable.name || variable2.variable.name)
+	if(variable1.variable.number || variable2.variable.number)
 		return SameAtoms(variable1, variable2);
 	else {
 		// both variables are _, which compares unequal to itself
@@ -47,7 +60,7 @@ Atom QuoteVariable(Atom variable)
 	ASSERT(!variable.variable.quoted);
 	return (Atom) {
 		.variable = {
-			.name = variable.variable.name,
+			.number = variable.variable.number,
 			.quoted = true
 		}
 	};
@@ -59,7 +72,7 @@ Atom UnquoteVariable(Atom variable)
 	ASSERT(variable.variable.quoted);
 	return (Atom) {
 		.variable = {
-			.name = variable.variable.name,
+			.number = variable.variable.number,
 			.quoted = false
 		}
 	};
@@ -81,9 +94,10 @@ void PrintVariable(Atom variable)
 {
 	if(variable.variable.quoted)
 		PrintChar('^');
-	if(variable.variable.name)
-		PrintChar(variable.variable.name);
+	// A temporary variable is printed with its number, as _27
+	if(variable.variable.number > N_NAMED_VARIABLES)
+		PrintF("_%u", (unsigned) variable.variable.number);
 	else
-		PrintChar('_');
+		PrintChar(GetVariableName(variable));
 }
 

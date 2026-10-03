@@ -16,7 +16,7 @@ static void createServiceContext(MixedTypeRelation * mixedRelation)
 	ServiceRecord const * serviceRecord = DispatchIteratorPeekServiceRecord(
 		&(mixedRelation->impl.concat.dispatchIterator));
 
-	// CLAUDE: The service takes one argument per distinct parameter; a repeated query
+	// The service's operator takes one argument per distinct parameter; a repeated query
 	// variable is copied once per column, to the same argument
 	index8 * argumentMap = mixedRelation->impl.concat.argumentMap;
 	EqualitySignatureGetArgumentMap(

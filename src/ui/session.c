@@ -426,28 +426,31 @@ static void executeInspect(char const * queryText, index32 linePosition)
 		return;
 	}
 
-	// CLAUDE: The query is parameterized as it is for an ordinary query, so that the services
-	// listed here are the ones asking the query would read; see CreateConcatRelation()
+	size8 arity = queryView.actors->nAtoms;
 	ParameterizedQuery parameterizedQuery = {
 		.form = queryView.form,
-		.arity  = queryView.actors->nAtoms
+		.arity = arity
 	};
 	ActorsToParameters(queryView.actors, parameterizedQuery.parameters);
-	index8 permutation[parameterizedQuery.arity];
+	index8 permutation[arity];
 	
 	DispatchIterator iterator;
 	DispatchIterate(&parameterizedQuery, DISPATCH_MATCH_EXACT, permutation, &iterator);
 
 	size32 nServices = 0;
+	TypedTuple * permutedActors = CreateTypedTuple(arity);
 	while(DispatchIteratorNext(&iterator)) {
 		SessionPrintMargin();
-		PrintService(DispatchIteratorPeekServiceRecord(&iterator)->service);
+		TypedTupleCopySubset(queryView.actors, permutation, arity, permutedActors);
+		PrintServiceWithActors(
+			DispatchIteratorPeekServiceRecord(&iterator)->service, permutedActors);
 		PrintChar('\n');
 		nServices++;
 	}
 	DispatchIteratorEnd(&iterator);
 
 	printInspectSummary(nServices);
+	FreeTypedTuple(permutedActors);
 	ReleaseFormula(query);
 }
 

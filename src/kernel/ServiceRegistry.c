@@ -539,24 +539,44 @@ Operator * ServiceGetOperator(Service service)
 }
 
 
-void PrintService(Service service)
+void PrintServiceWithActors(Service service, TypedTuple const * actors)
 {
+	// Print the service signature
+	PrintFormActorsAsFormula(service.relation.form, actors);
+	
+	// Print the operator
 	Operator * op  = ServiceGetOperator(service);
 	ASSERT(op)
+	// The operator takes one argument per distinct service parameter
+	size8 arity = FormArity(service.relation.form);
+	ASSERT(arity == actors->nAtoms)
+	index8 argumentMap[arity];
+	EqualitySignatureGetArgumentMap(service.equalitySignature, arity, argumentMap);
+	TypedTuple * operatorArguments = CreateTypedTuple(op->nArguments);
+	for(index8 i = 0; i < arity; i++)
+		TypedTupleSetElement(operatorArguments, argumentMap[i], TypedTupleGetElement(actors, i));
+	PrintCString(" => ");
+	PrintOperator(op, operatorArguments);
+	FreeTypedTuple(operatorArguments);
+}
 
+
+void PrintService(Service service)
+{
 	// Reconstruct a parameter tuple from the IO signature
 	// NOTE: could be moved to Parameter.c
-	// CLAUDE: The tuple has one parameter per column, numbered by the argument it takes
-	size8 nColumns = FormArity(service.relation.form);
-	index8 argumentMap[nColumns];
-	EqualitySignatureGetArgumentMap(service.equalitySignature, nColumns, argumentMap);
-	TypedTuple * parameters = CreateTypedTuple(nColumns);
-	for(index8 i = 0; i < nColumns; i++) {
+	size8 arity = FormArity(service.relation.form);
+	index8 argumentMap[arity];
+	EqualitySignatureGetArgumentMap(service.equalitySignature, arity, argumentMap);
+	TypedTuple * parameters = CreateTypedTuple(arity);
+	for(index8 i = 0; i < arity; i++) {
 		TypedAtom parameter = CreateTypedAtom(
 			AT_PARAMETER,
 			(Atom) {
 				.parameter = {
+					// Repeated parameters have the same number
 					.number = argumentMap[i] + 1,
+					// NOTE: set this to zero if atom types clutter the printout
 					.atomType =	service.relation.typeSignature.atomTypes[i],
 					.io = service.ioSignature.parameterIO[i]
 				}
@@ -564,14 +584,8 @@ void PrintService(Service service)
 		);
 		TypedTupleSetElement(parameters, i, parameter);
 	}
-	PrintFormActorsAsFormula(service.relation.form, parameters);
-	// CLAUDE: The operator takes one argument per distinct parameter
-	Atom operatorParameters[op->nArguments];
-	for(index8 i = 0; i < nColumns; i++)
-		operatorParameters[argumentMap[i]] = TypedTupleGetAtom(parameters, i);
+	PrintServiceWithActors(service, parameters);
 	FreeTypedTuple(parameters);
-	PrintCString(" => ");
-	PrintOperator(op, operatorParameters);
 }
 
 

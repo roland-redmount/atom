@@ -23,14 +23,16 @@ typedef struct s_Substitution {
 void SetupSubstitution(Substitution * subst, size8 capacity);
 
 /**
- * Find the value for a given variable in a substitution list
+ * Find the value for a given key in a substitution list.
+ * A key must be a variable or a parameter.
  */
-TypedAtom SubstitutionFindValue(Substitution const * subst, TypedAtom variable);
+TypedAtom SubstitutionFindValue(Substitution const * subst, TypedAtom key);
 
 /**
- * Replace the value for a variable, if it exists
+ * Add the (key -> value) to the substitution, and replace any (x -> key) currently
+ * in the substitution with (x -> value). A key must be a variable or a parameter.
  */
-void SubstitutionSetValue(Substitution * subst, TypedAtom variable, TypedAtom value); 
+void SubstitutionAdd(Substitution * subst, TypedAtom key, TypedAtom value); 
 
 /**
  * Substitute variables in the source tuple according to the given substitution list
