@@ -1,16 +1,9 @@
 /**
- * A mixed type relation is a transient relation answering one query, whose tuples may
- * have different atom types. A relation table fixes the atom type of every column, so a
- * query leaving an output untyped is answered by one service per type; see dispatch.h.
- * This type gathers those answers into one sequence of tuples, and drops the tuples the
- * query did not ask for.
- *
- * The tuples are yielded as TypedTuple, in the actor order of the query, each carrying
- * the column types of the service it came from. Two tuples of one mixed type relation
- * may therefore differ in their atom types, which is what the type is named for.
- *
- * A mixed type relation is its own iterator: it is created for one query, read once and
- * freed. It is not registered anywhere, unlike a Service.
+ * A MixedTypeRelation is a view of the result of a query, whose tuples may have different
+ * atom types. It iterates over results from one or more services, each with a distinct
+ * type signature.
+ * 
+ * TODO: represent a MixedTypeRelation is in-language by the reflection [[ ]]
  */
 
 #ifndef MIXED_TYPE_RELATION_H

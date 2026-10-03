@@ -142,6 +142,7 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
     src/library/string.c
     src/library/list.c
     src/library/math.c
+	src/library/reflect.c
 
     src/memory/allocator.c
     src/memory/paging.c
