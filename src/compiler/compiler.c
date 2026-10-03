@@ -238,10 +238,10 @@ static Operator * arrangeServiceArguments(
 
 
 /**
- * Build the operator of a term from its matching service operator, which is given by the column
- * types it reads, its parameter IO and its operator.
+ * Build the operator of a term from the given operator and the type signature, and parameter IO
+ * of the service to which the operator will belong.
  * 
- * Any non-parameter in termActors is a constant, which is provided to the service's operator,
+ * Any non-parameter in termActors is a constant, which is provided to the given operator,
  * by a PERMUTE operator wrapped around it. The permutation needs no operator of its own:
  * it is carried by the clauseMap. (Variables occurring in the clause but not in the query
  * are given parameter numbers of their own by parameterizeLocalVariables() before we get
@@ -257,21 +257,18 @@ static Operator * arrangeServiceArguments(
  *
  * The serviceParameters tuple is set to the service's parameters, permuted to match the
  * term actors order.
- *
- * The caller keeps its own reference to the service operator.
  */
 static Operator * createTermOperator(
 	TypeSignature typeSignature, IOSignature ioSignature, EqualitySignature equalitySignature,
-	Operator * serviceOperator, TypedTuple const * termActors, index8 const permutation[],
+	Operator * op, TypedTuple const * termActors, index8 const permutation[],
 	TypedTuple * serviceParameters, index8 clauseMap[])
 {
 	size8 termArity = termActors->nAtoms;
-	// CLAUDE: The service operator takes one argument per distinct service parameter.
-	// A column repeating an earlier column's parameter has no argument of its own.
+	// The operator takes one argument per distinct service parameter.
 	index8 serviceArgumentMap[termArity];
 	size8 nServiceArguments = EqualitySignatureGetArgumentMap(
 		equalitySignature, termArity, serviceArgumentMap);
-	ASSERT(nServiceArguments == serviceOperator->nArguments)
+	ASSERT(nServiceArguments == op->nArguments)
 
 	// Count the constants first: a permute operator indexes its constants after
 	// its arguments, so we need the number of arguments before we can map them.
@@ -306,10 +303,10 @@ static Operator * createTermOperator(
 			)
 		);
 		if(equalitySignature.repeatOf[i]) {
-			// CLAUDE: The service repeats this parameter, which dispatch only allows
-			// where the term repeats the actor
-			ASSERT(SameTypedAtoms(actor, TypedTupleGetElement(
-				termActors, permutation[equalitySignature.repeatOf[i] - 1])))
+			// Repeating this parameter is only allowed if the term repeats the actor
+			TypedAtom repeatedActor = TypedTupleGetElement(
+				termActors, permutation[equalitySignature.repeatOf[i] - 1]);
+			ASSERT(SameTypedAtoms(actor, repeatedActor))
 			continue;
 		}
 		index8 serviceArgument = serviceArgumentMap[i];
@@ -330,18 +327,19 @@ static Operator * createTermOperator(
 	}
 	ASSERT(nMapped == nArguments)
 
-	Operator * op;
+	Operator * termOp;
 	if(!nConstants) {
-		// Without constants to bind, the service operator is used as it is
-		op = serviceOperator;
+		// Without constants to bind, the given operator is used as it is
+		termOp = op;
 	}
 	else {
-		op = CreatePermuteOperator(
-			nArguments, constants, constantTypes, nConstants, argumentMap, serviceOperator);
+		// TODO: for an identity permutation, we don't need a PERMUTE operator either?
+		termOp = CreatePermuteOperator(
+			nArguments, constants, constantTypes, nConstants, argumentMap, op);
 	}
 	// A variable occurring more than once in the term constrains the arguments
 	// providing it to be equal
-	return constrainRepeatedArguments(op, clauseMap);
+	return constrainRepeatedArguments(termOp, clauseMap);
 }
 
 
@@ -626,7 +624,22 @@ static bool termRepeatsHeadTermParameters(ClauseCompileState const * clauseState
 
 
 /**
- * Compile the term in state->indexedClause given by termIndex to a RECURSE operator.
+ * CLAUDE: Return the child operator of an IDENTITY operator, or the given operator if it is
+ * not an IDENTITY operator. The IDENTITY operator is not deallocated.
+ * See CompiledVariant.op for the IDENTITY operator of a compiled variant.
+ */
+static Operator * skipIdentityOperator(Operator * op)
+{
+	if(op->type == OPERATOR_IDENTITY)
+		return op->impl.identity.childOperator;
+	return op;
+}
+
+
+/**
+ * Compile the a "self" term in state->indexedClause given by termIndex, which has the same
+ * form as the head term.
+ * 
  * The term must be known to be recursive, and the head parameters in state->indexedClause
  * must be fully determined.
  *
@@ -638,10 +651,10 @@ static bool termRepeatsHeadTermParameters(ClauseCompileState const * clauseState
  * binding to name it; assertCallBindingIsNamed() in operator.c is the same condition where
  * the operators meet. See testCompileRecursiveTermUnboundInput().
  */
-static Operator * compileRecursiveTerm(
+static Operator * compileSelfTerm(
 	ClauseCompileState * state, index8 termIndex, TypedTuple * serviceParameters, index8 clauseMap[])
 {
-	// Determine parameters of the recursive term
+	// Extract the self term parameters
 	size8 termArity = IndexedFormulaTermArity(state->indexedFormula, termIndex);
 	ASSERT(termArity == state->headTermArity)
 	TypedTuple * termActors = IndexedFormulaGetTermTuple(state->indexedFormula, termIndex);
@@ -651,7 +664,7 @@ static Operator * compileRecursiveTerm(
 	// Extract the head term parameters from the clause actors. Must be fully typed AT_PARAMETER atoms.
 	Atom const * headParametersArray = IndexedFormulaPeekTermAtoms(state->indexedFormula, state->headTermIndex);
 
-	// The recursive term's parameter types are determined by the head term's
+	// The self term's parameter types and equality signature are determined by the head term's
 	byte headAtomTypes[termArity];
 	for(index8 i = 0; i < termArity; i++) {
 		// The term parameter type must agree with the head if it is known
@@ -661,7 +674,9 @@ static Operator * compileRecursiveTerm(
 			return 0;
 		}
 	}
-	// The parameter IO is specified by the recursive term
+	EqualitySignature equalitySignature = ParametersGetEqualitySignature(headParametersArray, termArity);
+
+	// The parameter IO is specified by the self term
 	byte termParameterIO[termArity];
 	for(index8 i = 0; i < termArity; i++) {
 		// The term must have an input parameter where the head term has an input parameter
@@ -671,13 +686,10 @@ static Operator * compileRecursiveTerm(
 			return 0;
 		}
 	}
-
 	IOSignature ioSignature = CreateIOSignature(termParameterIO, termArity);
-	// The RECURSE operator's equality signature (repeated parameters) is determinend by the head term
-	EqualitySignature equalitySignature = ParametersGetEqualitySignature(headParametersArray, termArity);
-
-	// CLAUDE: The term of a non-recursive clause reads the variant directly, if the term binds
-	// exactly the parameters the variant binds. Otherwise the term reads a RECURSE operator.
+	
+	// The self term of a non-recursive clause reads the variant directly, if the term binds
+	// exactly the parameters the variant binds.
 	bool readsVariant = (state->readVariant != 0);
 	for(index8 i = 0; i < termArity; i++) {
 		if(headParametersArray[i].parameter.io != termParameterIO[i])
@@ -685,8 +697,9 @@ static Operator * compileRecursiveTerm(
 	}
 	Operator * childOperator;
 	if(readsVariant)
-		childOperator = state->readVariant->op;
+		childOperator = skipIdentityOperator(state->readVariant->op);
 	else {
+		// Otherwise create a RECURSE operator.
 		index8 argumentMap[termArity];
 		size8 nArguments = EqualitySignatureGetArgumentMap(equalitySignature, termArity, argumentMap);
 		index8 inputArguments[RELATION_MAX_ARITY];
@@ -695,7 +708,7 @@ static Operator * compileRecursiveTerm(
 		state->hasRecurseOperator = true;
 	}
 
-	// The RECURSE operator will read from the compiled clause operator, without permutation
+	// Create the term operator, identity permutation
 	index8 permutation[termArity];
 	for(index8 i = 0; i < termArity; i++)
 		permutation[i] = i;
@@ -1001,7 +1014,7 @@ static Operator * compileNextRecursiveTerm(ClauseCompileState * clauseState, ind
 #endif
 		size8 termArity = IndexedFormulaTermArity(clauseState->indexedFormula, termIndex);
 		TypedTuple * serviceParameters = CreateTypedTuple(termArity);
-		op = compileRecursiveTerm(clauseState, termIndex, serviceParameters, termClauseMap);
+		op = compileSelfTerm(clauseState, termIndex, serviceParameters, termClauseMap);
 		if(op)
 			acceptCompiledTerm(clauseState, termIndex, serviceParameters);
 #ifdef DEBUG_COMPILER
@@ -1038,7 +1051,7 @@ static Operator * replayTerm(ClauseCompileState * clauseState, index8 termClause
 	if(clauseState->termIsRecursive[termIndices[0]]) {
 		// CLAUDE: A recursive term compiles on its own
 		ASSERT(choicePoint->nTerms == 1)
-		op = compileRecursiveTerm(clauseState, termIndices[0], serviceParameters, termClauseMap);
+		op = compileSelfTerm(clauseState, termIndices[0], serviceParameters, termClauseMap);
 	}
 	else
 		op = buildOperatorFromChoicePoint(termActors, choicePoint, serviceParameters, termClauseMap);
@@ -1730,19 +1743,24 @@ static CompiledVariant * addCompiledVariant(
 	if(variant) {
 		// We already have a compiled variant with the same signature, so create a UNION.
 		// If the two operators have different indexOrder, they are sorted first.
-		if(!sameIndexOrder(variant->op, conjunctionOp)) {
-			variant->op = sortOperatorToIdentityOrder(variant->op);
+		// CLAUDE: See CompiledVariant.op
+		bool isSeed = (variant->op->type == OPERATOR_MACHINE);
+		// CLAUDE: The UNION operator can attach to a service, so the UNION operator reads
+		// the child of an IDENTITY operator, and the IDENTITY operator is deallocated
+		Operator * previousOp = variant->op;
+		Operator * variantOp = skipIdentityOperator(previousOp);
+		if(!sameIndexOrder(variantOp, conjunctionOp)) {
+			variantOp = sortOperatorToIdentityOrder(variantOp);
 			conjunctionOp = sortOperatorToIdentityOrder(conjunctionOp);
 		}
 		if(unionOrder == UNION_OPERATOR_FIRST)
-			variant->op = CreateUnionOperator(conjunctionOp, variant->op);
+			variant->op = CreateUnionOperator(conjunctionOp, variantOp);
 		else
-			variant->op = CreateUnionOperator(variant->op, conjunctionOp);
+			variant->op = CreateUnionOperator(variantOp, conjunctionOp);
+		CheckOperator(previousOp);
 		// check if we replaced a seed variant
-		if(variant->isSeed) {
-			variant->isSeed = false;
+		if(isSeed)
 			variant->isReplaced = true;
-		}
 	}
 	else {
 		// add compiled variant of this clause
@@ -1750,6 +1768,10 @@ static CompiledVariant * addCompiledVariant(
 		variant = &(variants[(*nVariants)++]);
 		SetMemory(variant, sizeof(CompiledVariant), 0);
 		TupleCopy(resolvedParameters, variant->parameters, arity);
+		// If a variant re-uses an operator of an existing service, wrap it in an IDENTITY operator
+		// so that we can attach a service (an operator can only attach to one Service).
+		if(!IsNullRelation(conjunctionOp->relation))
+			conjunctionOp = CreateIdentityOperator(conjunctionOp);
 		variant->op = conjunctionOp;
 	}
 	return variant;
@@ -2331,6 +2353,10 @@ static size8 compileQueryClauses(
 				nVariants = compileClause(compileStack, &variantQuery, &matches[i], 0, variants, nVariants);
 		}
 		variantOp->held = false;
+		// CLAUDE: An IDENTITY operator held while addCompiledVariant() removed it from
+		// variant v is deallocated here
+		if(variantOp != variants[v].op)
+			CheckOperator(variantOp);
 	}
 	// If compilaton succeeds, a recursive clause yields a UNION with the non-recursive variant,
 	// so no new variants are added
@@ -2556,7 +2582,7 @@ static size8 compileParameterizedQuery(
 			.ioSignature = ioSignature,
 			.equalitySignature = CompiledVariantGetEqualitySignature(&variants[i], query->arity)
 		};
-		if(variants[i].isSeed) {
+		if(variants[i].op->type == OPERATOR_MACHINE) {
 			ServiceMarkNotStale(service);
 			continue;
 		}
@@ -2564,14 +2590,8 @@ static size8 compileParameterizedQuery(
 			// CLAUDE: the primitive service is restored when the compiled service is removed
 			ReplacePrimitiveService(service, variants[i].op);
 		}
-		else {
-			// If a variant re-uses operator of an existing service, wrap it in an IDENTITY operator
-			// so that we can attach a service (an operator can only attach to one Service).
-			if(!IsNullRelation(variants[i].op->relation)) {
-				variants[i].op = CreateIdentityOperator(variants[i].op);
-			}
+		else
 			CreateService(service, variants[i].op);
-		}
 		nRegisteredServices++;
 
 #ifdef DEBUG_COMPILER

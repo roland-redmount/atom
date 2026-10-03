@@ -38,7 +38,6 @@ void SetupCompiledVariantFromServiceRecord(CompiledVariant * variant, ServiceRec
 {
 	variant->op = serviceRecord->op;
 	ASSERT(variant->op->type == OPERATOR_MACHINE)
-	variant->isSeed = true;
 
 	TypeSignature typeSignature = serviceRecord->service.relation.typeSignature;
 	size8 arity = FormArity(serviceRecord->service.relation.form);
