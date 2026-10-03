@@ -1606,7 +1606,7 @@ void testCompileRecursiveReachable(void)
  * 
  * The derivation of a recursive relation is keyed on the arguments the query binds, so a
  * recursive term that leaves one of them free has no call binding to name it and the clause
- * is refused; see compileRecursiveTerm(). Here the recursive term of
+ * is refused; see compileSelfTerm(). Here the recursive term of
  *
  *   reach a hop b <- reach c hop b & prec c succ a
  *

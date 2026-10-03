@@ -465,7 +465,7 @@ typedef struct s_ClauseCompileState {
 	HeadConstants const * headConstants;
 
 	// CLAUDE: The variant that a recursive term of a non-recursive clause reads instead of a
-	// RECURSE operator, or 0; see classifyClauses() and compileRecursiveTerm()
+	// RECURSE operator, or 0; see classifyClauses() and compileSelfTerm()
 	CompiledVariant const * readVariant;
 } ClauseCompileState;
 
@@ -994,7 +994,7 @@ static Operator * dispatchNextTerms(
 
 /**
  * Compile the first non-excluded recursive term to a RECURSE operator; see
- * compileRecursiveTerm(). The term is then marked excluded. Returns 0 if no term compiled.
+ * compileSelfTerm(). The term is then marked excluded. Returns 0 if no term compiled.
  */
 static Operator * compileNextRecursiveTerm(ClauseCompileState * clauseState, index8 termClauseMap[])
 {
@@ -1030,7 +1030,7 @@ static Operator * compileNextRecursiveTerm(ClauseCompileState * clauseState, ind
 /**
  * Compile the term of the current choice point again, taking the current choice of
  * the choice point, which is a choice point before the branch of the choice tree; see
- * ChoiceTreeNextBranch(). A recursive term is compiled again by compileRecursiveTerm().
+ * ChoiceTreeNextBranch(). A recursive term is compiled again by compileSelfTerm().
  * Returns 0 if the term does not compile.
  */
 static Operator * replayTerm(ClauseCompileState * clauseState, index8 termClauseMap[])

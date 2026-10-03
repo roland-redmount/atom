@@ -485,7 +485,7 @@ Operator * CreateFixpointOperator(
  * it belongs to.
  *
  * NOTE: inputArguments is here written as a pointer rather than as an array since
- * compileRecursiveTerm() passes a variable length array, and array syntax causes an optimized
+ * compileSelfTerm() passes a variable length array, and array syntax causes an optimized
  * build to read that as a zero length region; see -Wstringop-overread.
  */
 Operator * CreateRecurseOperator(

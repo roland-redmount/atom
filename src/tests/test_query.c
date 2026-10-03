@@ -608,7 +608,7 @@ void testQueryConjunctionRule(void)
  */
 /* CLAUDE: The FILTER service is a base variant for the first query, but the rule still compiles
  * nothing for it: the recursive term (sym #2< with #1>) has an output where the head term
- * (sym #1> with #2<) has an input; see compileRecursiveTerm(). */
+ * (sym #1> with #2<) has an input; see compileSelfTerm(). */
 void testFilterServiceOverReplacedPrimitive(void)
 {
 	Atom fact = CStringToTerm("sym \"a\" with \"b\"");
