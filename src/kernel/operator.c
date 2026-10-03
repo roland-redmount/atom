@@ -1876,7 +1876,7 @@ void DetachOperator(Operator * op)
 
 void CheckOperator(Operator * op)
 {
-	if(op->nParents == 0) {
+	if((op->nParents == 0) && !op->held) {
 		if(IsNullRelation(op->relation)) {
 			teardownOperator(op);
 		}

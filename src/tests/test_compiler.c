@@ -390,6 +390,42 @@ void testCompileFilterAsRecursiveBaseCase(void)
 
 
 /*
+ * CLAUDE: As testCompileFilterAsRecursiveBaseCase(), but the stored Celsius value is an
+ * integer. There is no service adding an integer and a float, so the Kelvin rule fails to
+ * compile after its Celsius term has read the FILTER variant. The FILTER operator must
+ * survive the failed rule, and is registered as the only service.
+ */
+void testCompileFilterVariantAfterFailedRule(void)
+{
+	Atom fact = CStringToTerm("quantity \"x\" value 20 unit \"Celsius\"");
+	Relation relation = createStoredRelation(fact);
+	FormulaView clause = DictionaryAddClauseFromCString(
+		"quantity t value k unit \"Kelvin\" | ! + c + 273.15 = k | ! quantity t value c unit \"Celsius\"");
+	size32 nCompiledBefore = NumberOfCompiledServices();
+
+	Atom kelvinQuery = CStringToTerm("quantity \"x\" value v unit \"Kelvin\"");
+	Service services[MAX_COMPILED_VARIANTS];
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(kelvinQuery), services), 1)
+	Operator * op = ServiceGetOperator(services[0]);
+	ASSERT_UINT32_EQUAL(op->type, OPERATOR_FILTER)
+
+	Atom value;
+	ASSERT_UINT32_EQUAL(callWithQueryActors(op, kelvinQuery, "value", &value), 0)
+	Atom celsiusQuery = CStringToTerm("quantity \"x\" value v unit \"Celsius\"");
+	ASSERT_UINT32_EQUAL(callWithQueryActors(op, celsiusQuery, "value", &value), 1)
+	ASSERT_INT64_EQUAL(value._int, 20)
+
+	RemoveService(services[0]);
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
+	ReleaseFormula(celsiusQuery);
+	ReleaseFormula(kelvinQuery);
+	DictionaryRemoveClause(&clause);
+	dropStoredRelation(relation, fact);
+	ReleaseFormula(fact);
+}
+
+
+/*
  * CLAUDE: Rules deriving Kelvin from Celsius, Celsius from Offset, and, if withCycle is set,
  * Offset from Celsius. A stored Offset reading of 30.0 then gives 20.0 Celsius and 293.15 Kelvin.
  * Compile the Kelvin query, check its answer, and return the type of the compiled operator.
@@ -2213,6 +2249,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileHeadConstantRepeatedParameter);
 	ExecuteTest(testCompileHeadVariableJoiningQueryParameters);
 	ExecuteTest(testCompileFilterAsRecursiveBaseCase);
+	ExecuteTest(testCompileFilterVariantAfterFailedRule);
 	ExecuteTest(testCompileNonRecursiveChain);
 	ExecuteTest(testCompileRecursiveCycle);
 	ExecuteTest(testCompileFilterAndRule);

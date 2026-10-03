@@ -2317,6 +2317,11 @@ static size8 compileQueryClauses(
 			.arity = query->arity
 		};
 		TupleCopy(variants[v].parameters, variantQuery.parameters, query->arity);
+		// Set the Operator.held flag to prevent the operator from being deallocated,
+		// which could otherwise happen if compileClause() constructs a parent operator,
+		// fails to complete compilation, and deallocates that operator again.
+		Operator * variantOp = variants[v].op;
+		variantOp->held = true;
 		for(index32 k = 0; k < nonRecursiveOrder.nElements; k++) {
 			nVariants = compileClause(
 				compileStack, &variantQuery, &matches[order[k]], &variants[v], variants, nVariants);
@@ -2325,6 +2330,7 @@ static size8 compileQueryClauses(
 			if(matches[i].recursive)
 				nVariants = compileClause(compileStack, &variantQuery, &matches[i], 0, variants, nVariants);
 		}
+		variantOp->held = false;
 	}
 	// If compilaton succeeds, a recursive clause yields a UNION with the non-recursive variant,
 	// so no new variants are added

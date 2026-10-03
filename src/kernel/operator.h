@@ -209,6 +209,9 @@ struct s_Operator {
 	// Context size, in addition to sizeof(Context)
 	size32 contextSize;
 	size32 nParents;		// number of parent operators
+	// Setting this flag prevents CheckOperator() from deallocating the operator.
+	// This is only used by the compiler while constructing operator graphs.
+	bool held;
 	// The relation is set iff the operator is a root operator for a service,
 	// and can be used to locate that service. For a MACHINE operator, this must be 0.
 	Relation relation;
