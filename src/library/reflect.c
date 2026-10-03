@@ -97,6 +97,33 @@ static void relationRoleActorFinalize(void * _state, void * readerData, void * s
 		FreeMixedTypeRelation(state->relation);
 }
 
+/**
+ * (relation #1<RELATION role #2<NAME sum #3>FLOAT)
+ * 
+ * Compute the sum of the actors in the given role of the given relation.
+ * This is a special-purpose method, as a stop-gap in absence of a generic
+ * aggregation method.
+ */
+static bool relationRoleSumCall(void * state, Atom arguments[], void * readerData, void * storage)
+{
+	RelationRoleActorState ownState;
+	SetMemory(&ownState, sizeof(RelationRoleActorState), 0);
+	relationRoleActorSetup(&ownState, arguments, readerData, storage);
+	if(!ownState.relation)
+		return false;
+	// Iterate over the relation and compute the sum
+	float sum = 0;
+	while(MixedTypeRelationNext(ownState.relation)) {
+		TypedTuple const * tuple = MixedTypeRelationPeekTuple(ownState.relation);
+		TypedAtom actor = TypedTupleGetElement(tuple, ownState.actorIndex);
+		if(actor.type == AT_FLOAT)
+			sum += actor.atom._float;
+	}
+	FreeMixedTypeRelation(ownState.relation);
+	arguments[2]._float = sum;
+	return true;
+}
+
 
 static uint32 moduleID;
 
@@ -115,6 +142,8 @@ void ReflectionSetup(void)
 		sizeof(RelationRoleActorState),
 		relationRoleActorSetup, relationRoleActorCall, relationRoleActorFinalize
 	);
+
+	RegisterMachineService(moduleID, "relation #1<RELATION role #2<NAME sum #3>FLOAT", relationRoleSumCall);
 }
 
 
