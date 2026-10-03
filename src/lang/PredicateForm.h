@@ -51,6 +51,12 @@ size8 PredicateArity(Atom predicateForm);
  */
 index8 PredicateRoleIndex(Atom predicateForm, Atom roleName);
 
+/**
+ * Like PredicateRoleIndex() but returns the 1-based position of the role
+ * in the actors tuple, or 0 if the role does not exist.
+ */
+uint8 PredicateFindRolePosition(Atom predicateForm, Atom roleName);
+
 void PrintPredicateForm(Atom predicateForm);
 
 

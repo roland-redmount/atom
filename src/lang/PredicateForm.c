@@ -104,13 +104,13 @@ size8 PredicateArity(Atom predicateForm)
 }
 
 
-index8 PredicateRoleIndex(Atom predicateForm, Atom roleName)
+static bool predicateRoleIndex(Atom predicateForm, Atom roleName, index8 * index)
 {
 	ASSERT(IsPredicateForm(predicateForm));
 	MultisetIterator iterator;
 	MultisetIterate(predicateForm, AT_NAME, &iterator);
 
-	index8 index = 0;
+	*index = 0;
 	bool found = false;
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
@@ -118,11 +118,29 @@ index8 PredicateRoleIndex(Atom predicateForm, Atom roleName)
 			found = true;
 			break;
 		}
-		index += elementMultiple.multiple;
+		*index += elementMultiple.multiple;
 	}
 	MultisetIteratorEnd(&iterator);
-	ASSERT(found);
+	return found;
+}
+
+index8 PredicateRoleIndex(Atom predicateForm, Atom roleName)
+{
+	index8 index;
+	ASSERT(predicateRoleIndex(predicateForm, roleName, &index));
 	return index;
+}
+
+
+uint8 PredicateFindRolePosition(Atom predicateForm, Atom roleName)
+{
+	index8 index;
+	if(!predicateRoleIndex(predicateForm, roleName, &index))
+		return 0;
+	else {
+		ASSERT(index < 255)
+		return index + 1;
+	}
 }
 
 
