@@ -42,6 +42,10 @@ enum TokenizerState {
 	TOKENIZER_ACTOR_STATE = 2,
 };
 
+/* CLAUDE: TOKEN_BEGIN_REFLECT is the one token that can occur in both states.
+   In TOKENIZER_ROLE_STATE, TOKEN_BEGIN_REFLECT is the second bracket of a relation [[ ... ]];
+   see PartBuilder. */
+
 
 /**
  * The tokenizer's input mode determines whether one token must be separated

@@ -435,9 +435,10 @@ static void testCStringToFormula(void)
 /**
  * Build the term (<reflectionRole> [<formula>] <numberRole> <number>),
  * with the given formula as the actor of the reflection role.
+ * reflectionType is AT_FORMULA for [<formula>], or AT_RELATION for [[<formula>]]
  */
 static Atom createTermWithReflection(
-	char const * reflectionRole, Atom reflectedFormula,
+	char const * reflectionRole, byte reflectionType, Atom reflectedFormula,
 	char const * numberRole, int64 number)
 {
 	Atom roles[2] = {
@@ -445,7 +446,7 @@ static Atom createTermWithReflection(
 		CreateNameFromCString(numberRole)
 	};
 	TypedAtom actors[2] = {
-		CreateTypedAtom(AT_FORMULA, reflectedFormula),
+		CreateTypedAtom(reflectionType, reflectedFormula),
 		CreateTypedAtom(AT_INT, (Atom) {._int = number})
 	};
 	Atom predicate = CreatePredicate(roles, actors, 2);
@@ -468,13 +469,10 @@ static bool formulaBuilderTokenHandler(void * context, Token token)
 }
 
 
-/**
- * Parse the string "term [<formulaString>] arity 2" where the given
- * formulaString is inserted, and compare it against the term
- * (term <reflectedFormula>) arity 2) constructed independently.
- * This tests whether the reflection [] syntax is working correctly.
- */
-static void testReflection(char const * formulaString)
+/* CLAUDE: Same as testReflection(), for either reflection syntax. A reflectionType
+   AT_FORMULA parses "term [<formulaString>] arity 2", and a reflectionType AT_RELATION parses
+   "term [[<formulaString>]] arity 2". */
+static void testReflectionOfType(char const * formulaString, byte reflectionType)
 {
 	// Create the expected formula, parsing only the formula inside the reflection.
 	// This avoids running the same code path being tested.
@@ -484,14 +482,15 @@ static void testReflection(char const * formulaString)
 	ASSERT(FormulaBuilderFinish(&formulaBuilder))
 	Atom reflectedFormula = FormulaBuilderCreateFormula(&formulaBuilder);
 	CleanupFormulaBuilder(&formulaBuilder);
-	Atom expectedTerm = createTermWithReflection("term", reflectedFormula, "arity", 2);
+	Atom expectedTerm = createTermWithReflection("term", reflectionType, reflectedFormula, "arity", 2);
 
 	// Parse the corresponding syntax string
 	TermBuilder builder;
 	InitializeTermBuilder(&builder, FORMULA_TOP_SCOPE);
-	TokenizeCString("term [", TermBuilderTokenHandler, &builder);
+	bool isRelation = (reflectionType == AT_RELATION);
+	TokenizeCString(isRelation ? "term [[" : "term [", TermBuilderTokenHandler, &builder);
 	TokenizeCString(formulaString, TermBuilderTokenHandler, &builder);
-	TokenizeCString("] arity 2", TermBuilderTokenHandler, &builder);
+	TokenizeCString(isRelation ? "]] arity 2" : "] arity 2", TermBuilderTokenHandler, &builder);
 	ASSERT(TermBuilderIsValid(&builder))
 	Atom parsedTerm = TermBuilderCreateFormula(&builder);
 	TermBuilderFree(&builder);
@@ -502,6 +501,18 @@ static void testReflection(char const * formulaString)
 	ReleaseFormula(parsedTerm);
 	ReleaseFormula(expectedTerm);
 	ReleaseFormula(reflectedFormula);
+}
+
+
+/**
+ * Parse the string "term [<formulaString>] arity 2" where the given
+ * formulaString is inserted, and compare it against the term
+ * (term <reflectedFormula>) arity 2) constructed independently.
+ * This tests whether the reflection [] syntax is working correctly.
+ */
+static void testReflection(char const * formulaString)
+{
+	testReflectionOfType(formulaString, AT_FORMULA);
 }
 
 
@@ -720,8 +731,8 @@ static void testNestedReflection(void)
 	// the expected term is built from the inside out, so that it does not
 	// depend on the reflection parsing being tested
 	Atom innermost = CStringToTerm("bar 1");
-	Atom inner = createTermWithReflection("foo", innermost, "baz", 2);
-	Atom expectedTerm = createTermWithReflection("term", inner, "arity", 3);
+	Atom inner = createTermWithReflection("foo", AT_FORMULA, innermost, "baz", 2);
+	Atom expectedTerm = createTermWithReflection("term", AT_FORMULA, inner, "arity", 3);
 
 	Atom parsed = CStringToTerm("term [foo [bar 1] baz 2] arity 3");
 	ASSERT_TRUE(SameAtoms(parsed, expectedTerm))
@@ -762,6 +773,140 @@ static void testReflectionRejected(void)
 }
 
 
+/* CLAUDE: A relation [[ ... ]] holds any formula a reflection [ ... ] holds. */
+static void testReflectedRelation(void)
+{
+	testReflectionOfType("foo \"a\" bar b", AT_RELATION);
+	testReflectionOfType("! foo 42", AT_RELATION);
+	testReflectionOfType("foo \"a\" bar ^b", AT_RELATION);
+	testReflectionOfType("foo 1 | bar 2", AT_RELATION);
+	testReflectionOfType("foo 1 & bar 2", AT_RELATION);
+}
+
+
+/* CLAUDE: Parse a term with a reflection inside a reflection, where the outer reflection
+   has type outerType and the inner reflection has type innerType. Compare the parsed term
+   with the term built by createTermWithReflection(). */
+static void testNestedReflectionOfType(char const * termString, byte outerType, byte innerType)
+{
+	Atom innermost = CStringToTerm("bar 1");
+	Atom inner = createTermWithReflection("foo", innerType, innermost, "baz", 2);
+	Atom expectedTerm = createTermWithReflection("term", outerType, inner, "arity", 3);
+
+	Atom parsed = CStringToTerm(termString);
+	ASSERT_TRUE(SameAtoms(parsed, expectedTerm))
+
+	ReleaseFormula(parsed);
+	ReleaseFormula(expectedTerm);
+	ReleaseFormula(inner);
+	ReleaseFormula(innermost);
+}
+
+
+/* CLAUDE: A relation nests within a formula reflection, and the other way around. Three
+   closing brackets in a row close one reflection and one relation. */
+static void testNestedRelation(void)
+{
+	testNestedReflectionOfType("term [[foo [bar 1] baz 2]] arity 3", AT_RELATION, AT_FORMULA);
+	testNestedReflectionOfType("term [foo [[bar 1]] baz 2] arity 3", AT_FORMULA, AT_RELATION);
+	testNestedReflectionOfType("term [[foo [[bar 1]] baz 2]] arity 3", AT_RELATION, AT_RELATION);
+	testNestedReflectionOfType("term [[baz 2 foo [bar 1]]] arity 3", AT_RELATION, AT_FORMULA);
+}
+
+
+/* CLAUDE: Invalid relation syntax, reported by ParseFormula() at the offending token. */
+static void testRelationRejected(void)
+{
+	index32 errorPosition;
+
+	// a relation is closed by two brackets, so a name after one bracket is rejected
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [[bar 1] baz 2", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 13)
+
+	// a relation missing the second closing bracket is reported at the end of the string
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [[bar 1]", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 12)
+
+	// a relation holding no formula
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [[]]", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 6)
+
+	// a third opening bracket stands where a role name is expected
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [[[bar 1]]]", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 6)
+
+	// an opening bracket after an actor stands where a role name is expected
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [bar 1 [baz 2]]", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 11)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 [bar 2]", &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 6)
+
+	// whitespace between the brackets is allowed; see PartBuilder
+	Atom spaced = ParseFormula("foo [ [bar 1] ]", &errorPosition);
+	Atom expected = CStringToFormula("foo [[bar 1]]");
+	ASSERT_TRUE(SameAtoms(spaced, expected))
+	ASSERT_UINT32_EQUAL(FormulaGetActors(spaced)->nAtoms, 1)
+	ASSERT_UINT32_EQUAL(TypedTupleGetElement(FormulaGetActors(spaced), 0).type, AT_RELATION)
+	ReleaseFormula(spaced);
+	ReleaseFormula(expected);
+}
+
+
+/* CLAUDE: Resetting a part builder releases a relation at each stage of parsing the relation. */
+static void testRelationPartBuilderReset(void)
+{
+	Token nameToken = (Token) {
+		TOKEN_NAME,
+		CreateTypedAtom(AT_NAME, CreateNameFromCString("foo"))
+	};
+	Token innerNameToken = (Token) {
+		TOKEN_NAME,
+		CreateTypedAtom(AT_NAME, CreateNameFromCString("bar"))
+	};
+	Token numberToken = (Token) {TOKEN_NUMBER, CreateTypedAtom(AT_INT, (Atom) {._int = 1})};
+	Token beginToken = (Token) {TOKEN_BEGIN_REFLECT, invalidAtom};
+	Token endToken = (Token) {TOKEN_END_REFLECT, invalidAtom};
+
+	PartBuilder builder;
+	InitializePartBuilder(&builder, FORMULA_TOP_SCOPE);
+
+	// reset after the first opening bracket
+	ASSERT_TRUE(PartBuilderPush(&builder, nameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
+	PartBuilderReset(&builder);
+	ASSERT_TRUE(PartBuilderIsEmpty(&builder))
+
+	// reset after the first closing bracket of a relation
+	ASSERT_TRUE(PartBuilderPush(&builder, nameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, innerNameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, numberToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, endToken))
+	ASSERT_FALSE(PartBuilderComplete(&builder))
+	ASSERT_FALSE(PartBuilderPush(&builder, innerNameToken))
+	PartBuilderReset(&builder);
+	ASSERT_TRUE(PartBuilderIsEmpty(&builder))
+
+	// a complete relation
+	ASSERT_TRUE(PartBuilderPush(&builder, nameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, innerNameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, numberToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, endToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, endToken))
+	ASSERT_TRUE(PartBuilderComplete(&builder))
+	ASSERT_UINT32_EQUAL(PartBuilderGetActor(&builder).type, AT_RELATION)
+	ASSERT_FALSE(PartBuilderPush(&builder, endToken))
+	PartBuilderReset(&builder);
+	ASSERT_TRUE(PartBuilderIsEmpty(&builder))
+
+	ReleaseTypedAtom(nameToken.typedAtom);
+	ReleaseTypedAtom(innerNameToken.typedAtom);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -787,6 +932,10 @@ int main(int argc, char * argv[])
 	ExecuteTest(testReflectedConjunction);
 	ExecuteTest(testNestedReflection);
 	ExecuteTest(testReflectionRejected);
+	ExecuteTest(testReflectedRelation);
+	ExecuteTest(testNestedRelation);
+	ExecuteTest(testRelationRejected);
+	ExecuteTest(testRelationPartBuilderReset);
 
 	UnloadLibraries();
 	KernelShutdown();

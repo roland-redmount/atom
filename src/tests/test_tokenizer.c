@@ -235,8 +235,6 @@ static void testTokenizerState(void)
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '4'), TOKENIZER_REJECTED)
 
 	// a reflection opens where an actor stands and closes where a role name does
-	TokenizerRestart(&tokenizer, TOKENIZER_ROLE_STATE);
-	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '['), TOKENIZER_REJECTED)
 	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, ']'), TOKENIZER_REJECTED)
 
@@ -447,6 +445,40 @@ static void testSeparatorTerminatesToken(void)
 }
 
 
+/* CLAUDE: Store the type of each token TokenizeCString() reads, for testRelationBrackets(). */
+typedef struct {
+	enum TokenType types[8];
+	size8 nTokens;
+} TokenTypeList;
+
+static bool tokenTypeHandler(void * context, Token token)
+{
+	TokenTypeList * list = (TokenTypeList *) context;
+	ASSERT(list->nTokens < 8)
+	list->types[list->nTokens++] = token.type;
+	return true;
+}
+
+
+/**
+ * CLAUDE: A relation [[foo 1]] is read as two TOKEN_BEGIN_REFLECT and two TOKEN_END_REFLECT.
+ * The second [ is read in TOKENIZER_ROLE_STATE.
+ */
+static void testRelationBrackets(void)
+{
+	TokenTypeList list = {.nTokens = 0};
+	TokenizeCString("bar [[foo 1]]", tokenTypeHandler, &list);
+
+	enum TokenType expected[] = {
+		TOKEN_NAME, TOKEN_BEGIN_REFLECT, TOKEN_BEGIN_REFLECT,
+		TOKEN_NAME, TOKEN_NUMBER, TOKEN_END_REFLECT, TOKEN_END_REFLECT
+	};
+	ASSERT_UINT32_EQUAL(list.nTokens, 7)
+	for(index8 i = 0; i < 7; i++)
+		ASSERT_UINT32_EQUAL(list.types[i], expected[i])
+}
+
+
 /**
  * CLAUDE: A variable ends in a name character, so whether a further name character may
  * follow it depends on where the characters come from; see enum TokenizerInputMode.
@@ -503,6 +535,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testTokenizeID);
 	ExecuteTest(testCreateTokenFromCString);
 	ExecuteTest(testSeparatorTerminatesToken);
+	ExecuteTest(testRelationBrackets);
 
 	UnloadLibraries();
 	KernelShutdown();

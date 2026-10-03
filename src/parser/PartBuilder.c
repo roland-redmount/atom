@@ -50,7 +50,8 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 			builder->formulaBuilder = Allocate(sizeof(FormulaBuilder));
 			// a reflection within a reflection is still a reflection
 			InitializeFormulaBuilder(builder->formulaBuilder, FORMULA_REFLECTED_SCOPE);
-			builder->state = STATE_REFLECTION;
+			builder->reflectionType = AT_FORMULA;
+			builder->state = STATE_REFLECTION_START;
 			return true;
 		}
 		// A quoted variable cannot occur outside a reflection; see enum FormulaScope.
@@ -61,6 +62,16 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 		AcquireTypedAtom(builder->actor);
 		builder->state = STATE_COMPLETE;
 		return true;
+
+	case STATE_REFLECTION_START:
+		// A second [ directly after the first makes the reflection a relation [[ ... ]]
+		builder->state = STATE_REFLECTION;
+		if(token.type == TOKEN_BEGIN_REFLECT) {
+			builder->reflectionType = AT_RELATION;
+			return true;
+		}
+		// any other token begins the formula of the reflection
+		// fall through
 
 	case STATE_REFLECTION:
 		// The nested builder is offered the token first. A reflection within this
@@ -78,15 +89,23 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 			Atom formula = FormulaBuilderCreateFormula(builder->formulaBuilder);
 			// the reference from FormulaBuilderCreateFormula() belongs to the actor,
 			// so it is not acquired here
-			builder->actor = CreateTypedAtom(AT_FORMULA, formula);
+			builder->actor = CreateTypedAtom(builder->reflectionType, formula);
 			releaseFormulaBuilder(builder);
-			builder->state = STATE_COMPLETE;
+			// CLAUDE: a relation [[ ... ]] still needs its second ]
+			builder->state = (builder->reflectionType == AT_RELATION) ?
+				STATE_RELATION_END : STATE_COMPLETE;
 			return true;
 		}
 		else {
 			// Any other rejected token means error in the reflection formula
 			return false;
 		}
+
+	case STATE_RELATION_END:
+		if(token.type != TOKEN_END_REFLECT)
+			return false;
+		builder->state = STATE_COMPLETE;
+		return true;
 
 	case STATE_COMPLETE:
 		// cannot accept more tokens
@@ -128,12 +147,12 @@ void PartBuilderReset(PartBuilder * builder)
 	if(builder->state == STATE_HAS_NAME) {
 		NameRelease(builder->role);
 	}
-	else if(builder->state == STATE_REFLECTION) {
+	else if((builder->state == STATE_REFLECTION_START) || (builder->state == STATE_REFLECTION)) {
 		// an unterminated reflection, abandoned with its nested builder
 		NameRelease(builder->role);
 		releaseFormulaBuilder(builder);
 	}
-	else if(builder->state == STATE_COMPLETE) {
+	else if((builder->state == STATE_RELATION_END) || (builder->state == STATE_COMPLETE)) {
 		NameRelease(builder->role);
 		ReleaseTypedAtom(builder->actor);
 	}
