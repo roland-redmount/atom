@@ -9,6 +9,7 @@
 #include "kernel/Parameter.h"
 #include "lang/formula.h"
 #include "ui/assert.h"
+#include "ui/load.h"
 #include "lang/TermForm.h"
 #include "library/string.h"
 #include "parser/Characters.h"
@@ -99,6 +100,8 @@ static void printHelp(void)
 	printLine("                        and contain at least one variable.");
 	printLine("  :assert <term with *> Assert an ifact rule, such as (circle * radius r).");
 	printLine("  :inspect <formula>    Print the service(s) that the formula dispatches to");
+	printLine("  :load <file>          Assert the facts in a text file. The first line lists the");
+	printLine("                        role names, and each following line the actors of one fact.");
 	printLine("  :retract <term>       Retract a fact. The term must not contain variables.");
 	printLine("  :help                 Print this text.");
 	printLine("  :quit, ctrl-D         End the session.");
@@ -402,6 +405,84 @@ static void executeRetract(char const * factText, index32 linePosition)
 
 
 /*
+ * CLAUDE: Report where a load stopped and why; see LoadReport.
+ */
+static void printLoadError(char const * filePath, LoadReport const * report)
+{
+	SessionPrintMargin();
+	if(report->result == LOAD_CANNOT_READ) {
+		PrintF("Cannot read %s\n", filePath);
+		return;
+	}
+	if(report->result == LOAD_NO_FORM) {
+		PrintF("%s has no line of role names.\n", filePath);
+		return;
+	}
+
+	PrintF("%s line %u: ", filePath, report->lineNumber);
+	switch(report->result) {
+	case LOAD_LINE_TOO_LONG:
+		PrintF("a line may hold at most %u characters.\n", LOAD_MAX_LINE_LENGTH);
+		break;
+
+	case LOAD_SYNTAX_ERROR:
+		PrintF("syntax error at column %u.\n", report->errorIndex + 1);
+		break;
+
+	case LOAD_WRONG_ARITY:
+		PrintF("%u actors, but the form has %u roles.\n",
+			report->nActors, TermFormArity(report->form));
+		break;
+
+	case LOAD_ASSERT_FAILED:
+		PrintChar('\n');
+		printAssertResult(report->assertResult);
+		break;
+
+	default:
+		ASSERT(false)
+		break;
+	}
+}
+
+
+/*
+ * CLAUDE: Assert the facts of the text file named by the text following the :load
+ * command; see LoadRelationFile().
+ */
+static void executeLoad(char const * pathText)
+{
+	size32 pathLength = CStringLength(pathText);
+	while((pathLength > 0) && IsSpaceChar(pathText[pathLength - 1]))
+		pathLength--;
+	if(pathLength == 0) {
+		printLine(":load requires a file name.");
+		return;
+	}
+	char filePath[pathLength + 1];
+	CopyMemory(pathText, filePath, pathLength);
+	filePath[pathLength] = 0;
+
+	LoadReport report;
+	LoadRelationFile(filePath, &report);
+	if(report.result != LOAD_OK)
+		printLoadError(filePath, &report);
+
+	if(report.form.hash) {
+		SessionPrintMargin();
+		PrintF("Asserted %u facts of the form ", report.nAsserted);
+		PrintTermForm(report.form);
+		PrintCString(".\n");
+		if(report.nExisting > 0) {
+			SessionPrintMargin();
+			PrintF("%u facts were already known.\n", report.nExisting);
+		}
+		IFactRelease(report.form);
+	}
+}
+
+
+/*
  * Print the services the query dispatches to, which is the text following the :inspect
  * command. The query is not executed, and no service is compiled for it, so a query that
  * does not dispatch to an existing service gives no output. See dispatch.h.
@@ -502,6 +583,12 @@ static int executeCommand(char const * line, char const * commandText)
 	char const * queryText = matchCommand(commandText, ":inspect");
 	if(queryText) {
 		executeInspect(queryText, queryText - line);
+		return SESSION_CONTINUE;
+	}
+
+	char const * pathText = matchCommand(commandText, ":load");
+	if(pathText) {
+		executeLoad(pathText);
 		return SESSION_CONTINUE;
 	}
 

@@ -15,6 +15,7 @@
 #include "library/string.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/ConjunctionBuilder.h"
+#include "parser/FormTupleParsers.h"
 #include "parser/FormulaBuilder.h"
 #include "parser/PredicateBuilder.h"
 #include "parser/PartBuilder.h"
@@ -644,6 +645,90 @@ static void testParseFormula(void)
 
 
 /**
+ * CLAUDE: ParseTermForm() yields the form of a term with the same role names,
+ * and the order of the role names in the form.
+ */
+static void testParseTermForm(void)
+{
+	index8 roleOrder[RELATION_MAX_ARITY];
+	index32 errorIndex;
+
+	Atom form = ParseTermForm("parent child", roleOrder, &errorIndex);
+	Atom term = CStringToTerm("parent 1 child 2");
+	ASSERT_TRUE(SameAtoms(form, FormulaGetForm(term)))
+	Atom roleNames[2] = {CreateNameFromCString("parent"), CreateNameFromCString("child")};
+	Atom predicateForm = TermFormGetPredicateForm(form);
+	for(index8 i = 0; i < 2; i++)
+		ASSERT_UINT32_EQUAL(PredicateRoleIndex(predicateForm, roleNames[roleOrder[i]]), i)
+	NameRelease(roleNames[0]);
+	NameRelease(roleNames[1]);
+	ReleaseFormula(term);
+	IFactRelease(form);
+
+	form = ParseTermForm("! parent child", roleOrder, &errorIndex);
+	term = CStringToTerm("! parent 1 child 2");
+	ASSERT_TRUE(SameAtoms(form, FormulaGetForm(term)))
+	ReleaseFormula(term);
+	IFactRelease(form);
+
+	form = ParseTermForm("+ + =", roleOrder, &errorIndex);
+	term = CStringToTerm("+ 1 + 2 = 3");
+	ASSERT_TRUE(SameAtoms(form, FormulaGetForm(term)))
+	ReleaseFormula(term);
+	IFactRelease(form);
+
+	ASSERT_UINT64_EQUAL(ParseTermForm("", roleOrder, &errorIndex).hash, 0)
+	ASSERT_UINT32_EQUAL(errorIndex, 0)
+	ASSERT_UINT64_EQUAL(ParseTermForm("!", roleOrder, &errorIndex).hash, 0)
+	ASSERT_UINT32_EQUAL(errorIndex, 1)
+	ASSERT_UINT64_EQUAL(ParseTermForm("foo 1", roleOrder, &errorIndex).hash, 0)
+	ASSERT_UINT32_EQUAL(errorIndex, 4)
+	ASSERT_UINT64_EQUAL(ParseTermForm("foo ! bar", roleOrder, &errorIndex).hash, 0)
+	ASSERT_UINT32_EQUAL(errorIndex, 4)
+	ASSERT_UINT64_EQUAL(ParseTermForm("foo \"bar\"", roleOrder, &errorIndex).hash, 0)
+	ASSERT_UINT32_EQUAL(errorIndex, 4)
+	// CLAUDE: one role name more than RELATION_MAX_ARITY
+	ASSERT_UINT64_EQUAL(ParseTermForm("a b c d e f g h i", roleOrder, &errorIndex).hash, 0)
+	ASSERT_UINT32_EQUAL(errorIndex, 16)
+}
+
+
+/**
+ * CLAUDE: ParseActors() reads constant actors only, up to the given number of actors.
+ */
+static void testParseActors(void)
+{
+	TypedAtom actors[4];
+	size8 nActors;
+	index32 errorIndex;
+
+	ASSERT_TRUE(ParseActors("\"abc\" 42 'A 1.5", actors, 4, &nActors, &errorIndex))
+	ASSERT_UINT32_EQUAL(nActors, 4)
+	ASSERT_UINT32_EQUAL(actors[0].type, AT_ID)
+	ASSERT_UINT32_EQUAL(actors[1].type, AT_INT)
+	ASSERT_INT64_EQUAL(actors[1].atom._int, 42)
+	ASSERT_UINT32_EQUAL(actors[2].type, AT_LETTER)
+	ASSERT_UINT32_EQUAL(actors[3].type, AT_FLOAT)
+	for(index8 i = 0; i < nActors; i++)
+		ReleaseTypedAtom(actors[i]);
+
+	ASSERT_TRUE(ParseActors("", actors, 4, &nActors, &errorIndex))
+	ASSERT_UINT32_EQUAL(nActors, 0)
+
+	// CLAUDE: a fact has no variables
+	ASSERT_FALSE(ParseActors("\"abc\" x", actors, 4, &nActors, &errorIndex))
+	ASSERT_UINT32_EQUAL(errorIndex, 6)
+	ASSERT_FALSE(ParseActors("1 2 3", actors, 2, &nActors, &errorIndex))
+	ASSERT_UINT32_EQUAL(errorIndex, 4)
+	ASSERT_FALSE(ParseActors("\"ab1\"", actors, 4, &nActors, &errorIndex))
+	ASSERT_UINT32_EQUAL(errorIndex, 3)
+	// CLAUDE: a letter must be followed by a separator; see enum TokenizerInputMode
+	ASSERT_FALSE(ParseActors("'A1", actors, 4, &nActors, &errorIndex))
+	ASSERT_UINT32_EQUAL(errorIndex, 2)
+}
+
+
+/**
  * A clause states each of its terms once, and a conjunction each of its clauses once,
  * so a formula repeating one of them is not a formula. Repeating a term *form* is fine:
  * two terms of one form differ by their actors.
@@ -1042,6 +1127,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testLetterActor);
 	ExecuteTest(testGeneratorActor);
 	ExecuteTest(testParseFormula);
+	ExecuteTest(testParseTermForm);
+	ExecuteTest(testParseActors);
 	ExecuteTest(testRepeatedTermRejected);
 	ExecuteTest(testReflectedTerm);
 	ExecuteTest(testReflectedNegatedTerm);

@@ -16,6 +16,7 @@
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
 #include "ui/assert.h"
+#include "ui/load.h"
 
 
 /**
@@ -569,6 +570,68 @@ void testCreateIFactRejects(void)
 }
 
 
+/**
+ * CLAUDE: LoadRelationText() asserts one fact per line, with the actors of each line
+ * in the order of the role names of the first line.
+ */
+void testLoadRelationText(void)
+{
+	LoadReport report;
+	// CLAUDE: the role names are not listed in the order of the form, (child parent)
+	LoadRelationText("parent child\n\"Al\" \"Bob\"\n\n\"Al\" \"Cy\"", &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_OK)
+	ASSERT_UINT32_EQUAL(report.lineNumber, 4)
+	ASSERT_UINT32_EQUAL(report.nAsserted, 2)
+	ASSERT_UINT32_EQUAL(report.nExisting, 0)
+	IFactRelease(report.form);
+
+	Atom fact1 = CStringToTerm("parent \"Al\" child \"Bob\"");
+	Atom fact2 = CStringToTerm("parent \"Al\" child \"Cy\"");
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact1), 0), ASSERT_EXISTED)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact2), 0), ASSERT_EXISTED)
+
+	// CLAUDE: tabs and "\r\n" line endings are accepted
+	LoadRelationText("child\tparent\r\n\"Bob\"\t\"Al\"\r\n", &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_OK)
+	ASSERT_UINT32_EQUAL(report.nAsserted, 0)
+	ASSERT_UINT32_EQUAL(report.nExisting, 1)
+	IFactRelease(report.form);
+
+	LoadRelationText("parent child\n\"Al\" x\n", &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_SYNTAX_ERROR)
+	ASSERT_UINT32_EQUAL(report.lineNumber, 2)
+	ASSERT_UINT32_EQUAL(report.errorIndex, 5)
+	IFactRelease(report.form);
+
+	LoadRelationText("parent child\n\"Al\"\n", &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_WRONG_ARITY)
+	ASSERT_UINT32_EQUAL(report.lineNumber, 2)
+	ASSERT_UINT32_EQUAL(report.nActors, 1)
+	IFactRelease(report.form);
+
+	LoadRelationText("\nparent 1\n", &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_SYNTAX_ERROR)
+	ASSERT_UINT32_EQUAL(report.lineNumber, 2)
+	ASSERT_UINT32_EQUAL(report.errorIndex, 7)
+	ASSERT_UINT64_EQUAL(report.form.hash, 0)
+
+	LoadRelationText("\n \n", &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_NO_FORM)
+
+	LoadRelationText("! parent child\n\"Al\" \"Bob\"\n", &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_ASSERT_FAILED)
+	ASSERT_INT32_EQUAL(report.assertResult, ASSERT_CONTRADICTION)
+	IFactRelease(report.form);
+
+	Relation relation = RelationFromFact(FormulaGetView(fact1));
+	RetractFact(FormulaGetView(fact1));
+	RetractFact(FormulaGetView(fact2));
+	DropRelation(relation);
+	ReleaseFormula(fact2);
+	ReleaseFormula(fact1);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -591,6 +654,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCreateIFactExisting);
 	ExecuteTest(testCreateIFactDefiningFactsProtected);
 	ExecuteTest(testCreateIFactRejects);
+	ExecuteTest(testLoadRelationText);
 
 	UnloadLibraries();
 	KernelShutdown();
