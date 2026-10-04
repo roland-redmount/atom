@@ -2,8 +2,6 @@
  * A MixedTypeRelation is a view of the result of a query, whose tuples may have different
  * atom types. It iterates over results from one or more services, each with a distinct
  * type signature.
- * 
- * TODO: represent a MixedTypeRelation is in-language by the reflection [[ ]]
  */
 
 #ifndef MIXED_TYPE_RELATION_H
