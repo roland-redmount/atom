@@ -776,7 +776,7 @@ static void printTermSet(ClauseCompileState const * clauseState, index8 const te
 		if(i > 0)
 			PrintCString(" & ");
 		TypedTuple * actors = IndexedFormulaGetTermTuple(clauseState->indexedFormula, termIndices[i]);
-		PrintFormActorsAsFormula(clauseState->termForms[termIndices[i]], actors);
+		PrintFormActorsAsFormula(clauseState->termForms[termIndices[i]], actors, 0);
 		FreeTypedTuple(actors);
 	}
 }
@@ -1001,7 +1001,7 @@ static Operator * compileNextRecursiveTerm(ClauseCompileState * clauseState, ind
 #ifdef DEBUG_COMPILER
 		PrintCString("Pass = 3, recursive term: ");
 		TypedTuple * termActors = IndexedFormulaGetTermTuple(clauseState->indexedFormula, termIndex);
-		PrintFormActorsAsFormula(clauseState->termForms[termIndex], termActors);
+		PrintFormActorsAsFormula(clauseState->termForms[termIndex], termActors, 0);
 		FreeTypedTuple(termActors);
 		PrintChar('\n');
 #endif
@@ -2065,7 +2065,7 @@ static size8 compileClause(
 	index8 headActorsOffset = clauseMatch->headActorsOffset;
 #ifdef DEBUG_COMPILER
 	PrintCString("Matched rule: ");
-	PrintFormActorsAsFormula(clauseForm, clauseActors);
+	PrintFormActorsAsFormula(clauseForm, clauseActors, 0);
 	PrintChar('\n');
 #endif
 
@@ -2094,7 +2094,7 @@ static size8 compileClause(
 		writeQueryParameters(query, &subst, substClauseActors, headActorsOffset);
 #ifdef DEBUG_COMPILER
 		PrintCString("Unified rule: ");
-		PrintFormActorsAsFormula(clauseForm, substClauseActors);
+		PrintFormActorsAsFormula(clauseForm, substClauseActors, 0);
 		PrintChar('\n');
 #endif
 		ClauseCompileState clauseState;

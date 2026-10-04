@@ -43,7 +43,7 @@ static bool clauseHasTerm(ClauseBuilder const * builder, Atom term)
 static bool addCurrentTerm(ClauseBuilder * builder)
 {
 	// add current term to array
-	Atom term = TermBuilderCreateFormula(&(builder->termBuilder));
+	Atom term = TermBuilderCreateFormula(&(builder->termBuilder), 0);
 	if(clauseHasTerm(builder, term)) {
 		ReleaseFormula(term);
 		return false;
@@ -117,7 +117,7 @@ Atom ClauseBuilderCreateFormula(ClauseBuilder * builder)
 
 	size8 nTerms = builder->terms.nElements;
 	Atom const * terms = ResizingArrayGetMemory(&(builder->terms));
-	return CreateClause(terms, nTerms);
+	return CreateClause(terms, nTerms, 0);
 }
 
 

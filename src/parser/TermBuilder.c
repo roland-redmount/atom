@@ -51,10 +51,10 @@ bool TermBuilderIsEmpty(TermBuilder const * builder)
 }
 
 
-Atom TermBuilderCreateFormula(TermBuilder const * builder)
+Atom TermBuilderCreateFormula(TermBuilder const * builder, index8 roleOrder[])
 {
 	ASSERT(builder->isValid);
-	Atom predicate = PredicateBuilderCreateFormula(&(builder->predicateBuilder));
+	Atom predicate = PredicateBuilderCreateFormula(&(builder->predicateBuilder), roleOrder);
 	Atom term = CreateTerm(predicate, builder->sign);
 	// CreateTerm() copies the actors, so the intermediate predicate formula
 	// is no longer needed here.
@@ -90,7 +90,7 @@ Atom CStringToTerm(char const * cString)
 	TokenizeCString(cString, TermBuilderTokenHandler, &builder);
 
 	ASSERT(TermBuilderIsValid(&builder))
-	Atom term = TermBuilderCreateFormula(&builder);
+	Atom term = TermBuilderCreateFormula(&builder, 0);
 	TermBuilderFree(&builder);
 	return term;
 }

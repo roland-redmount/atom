@@ -26,7 +26,7 @@ void PrintParameterizedQuery(ParameterizedQuery const * parameterizedQuery)
 {
 	TypedTuple * tuple = CreateTypedTupleFromTuple(
 		AT_PARAMETER, parameterizedQuery->parameters, parameterizedQuery->arity);
-	PrintFormActorsAsFormula(parameterizedQuery->form, tuple);
+	PrintFormActorsAsFormula(parameterizedQuery->form, tuple, 0);
 	FreeTypedTuple(tuple);
 }
 

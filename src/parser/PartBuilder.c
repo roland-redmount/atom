@@ -50,7 +50,7 @@ static bool pushReflectionToken(PartBuilder * builder, Token token)
 		if(!FormulaBuilderFinish(builder->formulaBuilder))
 			return false;
 		// Create the reflected formula
-		Atom formula = FormulaBuilderCreateFormula(builder->formulaBuilder);
+		Atom formula = FormulaBuilderCreateFormula(builder->formulaBuilder, 0);
 		// the reference from FormulaBuilderCreateFormula() belongs to the actor,
 		// so it is not acquired here
 		builder->actor = CreateTypedAtom(builder->reflectionType, formula);

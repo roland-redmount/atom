@@ -272,7 +272,8 @@ static void printInspectSummary(size32 nServices)
 static void executeQuery(char const * line)
 {
 	index32 errorPosition;
-	Atom query = ParseFormula(line, &errorPosition);
+	FormOrdering ordering;
+	Atom query = ParseFormula(line, &ordering, &errorPosition);
 	if(!query.hash) {
 		printParseError(errorPosition);
 		return;
@@ -288,7 +289,7 @@ static void executeQuery(char const * line)
 	size32 nTuples = 0;
 	while(MixedTypeRelationNext(resultRelations)) {
 		SessionPrintMargin();
-		PrintFormActorsAsFormula(queryView.form, MixedTypeRelationPeekTuple(resultRelations));
+		PrintFormActorsAsFormula(queryView.form, MixedTypeRelationPeekTuple(resultRelations), &ordering);
 		PrintChar('\n');
 		nTuples++;
 	}
@@ -362,7 +363,7 @@ static void executeAssert(char const * formulaText, index32 linePosition)
 	}
 
 	index32 errorPosition;
-	Atom formula = ParseFormula(formulaText, &errorPosition);
+	Atom formula = ParseFormula(formulaText, 0, &errorPosition);
 	if(!formula.hash) {
 		printParseError(linePosition + errorPosition);
 		return;
@@ -385,7 +386,7 @@ static void executeRetract(char const * factText, index32 linePosition)
 	}
 
 	index32 errorPosition;
-	Atom fact = ParseFormula(factText, &errorPosition);
+	Atom fact = ParseFormula(factText, 0, &errorPosition);
 	if(!fact.hash) {
 		printParseError(linePosition + errorPosition);
 		return;
@@ -495,7 +496,7 @@ static void executeInspect(char const * queryText, index32 linePosition)
 	}
 
 	index32 errorPosition;
-	Atom query = ParseFormula(queryText, &errorPosition);
+	Atom query = ParseFormula(queryText, 0, &errorPosition);
 	if(!query.hash) {
 		printParseError(linePosition + errorPosition);
 		return;

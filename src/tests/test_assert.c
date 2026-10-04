@@ -240,7 +240,7 @@ void testAssertFormulaRejects(void)
 	// A clause of one term says no more than that term. The parser never builds one,
 	// yielding the term itself instead, so it is built here.
 	Atom term = CStringToTerm("foo x bar 1");
-	Atom singleTermClause = CreateClause(&term, 1);
+	Atom singleTermClause = CreateClause(&term, 1, 0);
 	ASSERT_INT32_EQUAL(AssertFormula(singleTermClause), ASSERT_CLAUSE_ONE_TERM)
 	ReleaseFormula(singleTermClause);
 	ReleaseFormula(term);

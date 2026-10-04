@@ -2183,7 +2183,7 @@ static void printOperatorRecursive(
 			for(index8 i = 0; i < arity; i++) {
 				TypedTupleSetElement(actors, i, arguments[i]);
 			}
-			PrintFormActorsAsFormula(op->relation.form, actors);
+			PrintFormActorsAsFormula(op->relation.form, actors, 0);
 			FreeTypedTuple(actors);
 		}
 		else {

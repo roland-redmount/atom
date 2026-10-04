@@ -542,7 +542,7 @@ Operator * ServiceGetOperator(Service service)
 void PrintServiceWithActors(Service service, TypedTuple const * actors)
 {
 	// Print the service signature
-	PrintFormActorsAsFormula(service.relation.form, actors);
+	PrintFormActorsAsFormula(service.relation.form, actors, 0);
 	
 	// Print the operator
 	Operator * op  = ServiceGetOperator(service);

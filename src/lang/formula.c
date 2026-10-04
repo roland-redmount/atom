@@ -128,9 +128,9 @@ static Atom internFormula(Atom form, TypedTuple * actors)
 		// Check for hash collision
 		if(!sameFormula(existingRecord, form, actors)) {
 			PrintCString("Hash collision between formulas ");
-			PrintFormActorsAsFormula(form, actors);
+			PrintFormActorsAsFormula(form, actors, 0);
 			PrintCString(" and ");
-			PrintFormActorsAsFormula(existingRecord->form, existingRecord->actors);
+			PrintFormActorsAsFormula(existingRecord->form, existingRecord->actors, 0);
 			PrintChar('\n');
 			Panic("Hash collision for formulas, hash = %llx", hash);
 		}
@@ -229,7 +229,7 @@ void FormulaDump(void)
 	while(BTreeIteratorNext(&iterator)) {
 		FormulaRecord const * record = BTreeIteratorPeekItem(&iterator);
 		PrintF("%llx (%llu) ", record->hash, record->hash);
-		PrintFormActorsAsFormula(record->form, record->actors);
+		PrintFormActorsAsFormula(record->form, record->actors, 0);
 		PrintF(" %u references\n", record->nReferences);
 	}
 	BTreeIteratorEnd(&iterator);
@@ -311,7 +311,8 @@ Atom TermGetRoleActor(Atom termForm, Atom const termActors[], const char * role,
 /* CLAUDE: Create a clause or a conjunction from its terms. The two differ only
    in the form they build, so createForm is CreateClauseForm or CreateConjunctionForm. */
 static Atom createTermMultiset(
-	Atom const terms[], size8 nTerms, Atom (* createForm)(Atom const termForms[], size8 nTermForms))
+	Atom const terms[], size8 nTerms, Atom (* createForm)(Atom const termForms[], size8 nTermForms),
+	index8 termOrder[])
 {
 	// a term multiset without terms is meaningless, and would give zero length arrays below
 	ASSERT(nTerms > 0);
@@ -344,14 +345,16 @@ static Atom createTermMultiset(
 	}
 
 	// reorder actors to match the name order of the form
-	index8 termOrder[nTerms];
+	index8 order[nTerms];
 	// find ordering
-	MultisetIterationOrder(form, AT_ID, termForms, termOrder, nTerms);
+	MultisetIterationOrder(form, AT_ID, termForms, order, nTerms);
 	// reorder actors
 	size32 blockSizes[nTerms];
 	for(index8 i = 0; i < nTerms; i++)
 		blockSizes[i] = termArities[i] * sizeof(TypedAtom);
-	ReorderRaggedArray(actors, termOrder, blockSizes, nTerms);
+	ReorderRaggedArray(actors, order, blockSizes, nTerms);
+	if(termOrder)
+		CopyMemory(order, termOrder, nTerms * sizeof(index8));
 
 	Atom formula = CreateFormulaFromArray(form, actors);
 	IFactRelease(form);
@@ -359,15 +362,15 @@ static Atom createTermMultiset(
 }
 
 
-Atom CreateClause(Atom const terms[], size8 nTerms)
+Atom CreateClause(Atom const terms[], size8 nTerms, index8 termOrder[])
 {
-	return createTermMultiset(terms, nTerms, CreateClauseForm);
+	return createTermMultiset(terms, nTerms, CreateClauseForm, termOrder);
 }
 
 
-Atom CreateConjunction(Atom const terms[], size8 nTerms)
+Atom CreateConjunction(Atom const terms[], size8 nTerms, index8 termOrder[])
 {
-	return createTermMultiset(terms, nTerms, CreateConjunctionForm);
+	return createTermMultiset(terms, nTerms, CreateConjunctionForm, termOrder);
 }
 
 
@@ -434,76 +437,90 @@ uint8 FormulaArity(Atom formula)
 
 
 /**
- * Print a predicate with actors in the order given by atomIndex
+ * Print a predicate.
+ * The actors of the predicate begin at index actorsOffset of the actors tuple.
+ * Unless roleOrder is 0, the roles are printed in that order; see FormOrdering.
  */
-static void printPredicate(Atom predicateForm, TypedTuple const * actors, index8 * atomIndex)
-{	
+static void printPredicate(
+	Atom predicateForm, TypedTuple const * actors, index8 actorsOffset, index8 const roleOrder[])
+{
+	// CLAUDE: collect the role names, so that a role can be read by its index in the form
+	size8 arity = PredicateArity(predicateForm);
+	Atom roleNames[arity];
 	MultisetIterator iterator;
 	MultisetIterate(predicateForm, AT_NAME, &iterator);
-
-	size8 nRoles = PredicateNRoles(predicateForm);
-	for(index8 i = 0; i < nRoles; i++) {	
-		ASSERT(MultisetIteratorNext(&iterator))
+	index8 roleIndex = 0;
+	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
-		for(index8 j = 0; j < em.multiple; j++) {
-			PrintName(em.element);
-			PrintChar(' ');
-			PrintTypedAtom(TypedTupleGetElement(actors, *atomIndex));
-			if((i < nRoles - 1) || (j < em.multiple - 1))
-				PrintChar(' ');
-			(*atomIndex)++;
-		}
+		for(index8 j = 0; j < em.multiple; j++)
+			roleNames[roleIndex++] = em.element;
 	}
 	MultisetIteratorEnd(&iterator);
+
+	index8 enteredOrder[arity];
+	if(roleOrder)
+		InvertPermutation(roleOrder, enteredOrder, arity);
+	for(index8 i = 0; i < arity; i++) {
+		index8 k = roleOrder ? enteredOrder[i] : i;
+		PrintName(roleNames[k]);
+		PrintChar(' ');
+		PrintTypedAtom(TypedTupleGetElement(actors, actorsOffset + k));
+		if(i < arity - 1)
+			PrintChar(' ');
+	}
 }
 
 
-static void printTerm(Atom termForm, TypedTuple const * actors, index8 * atomIndex)
+static void printTerm(
+	Atom termForm, TypedTuple const * actors, index8 actorsOffset, index8 const roleOrder[])
 {
 	bool sign = TermFormGetSign(termForm);
 	if(!sign) {
 		PrintChar('!');
 		PrintChar(' ');
 	}
-	printPredicate(TermFormGetPredicateForm(termForm), actors, atomIndex);
+	printPredicate(TermFormGetPredicateForm(termForm), actors, actorsOffset, roleOrder);
 }
 
 
-static void printClause(Atom clauseForm, TypedTuple const * actors, index8 * atomIndex)
-{	
-	MultisetIterator iterator;
-	MultisetIterate(clauseForm, AT_ID, &iterator);
-
-	size8 nTermForms = ClauseFormNTermForms(clauseForm);
-	for(index8 i = 0; i < nTermForms; i++) {	
-		ASSERT(MultisetIteratorNext(&iterator))
-		ElementMultiple em = MultisetIteratorGetElement(&iterator);
-		for(index8 j = 0; j < em.multiple; j++) {
-			printTerm(em.element, actors, atomIndex);
-			if((j < em.multiple - 1) || (i < nTermForms - 1))
-				PrintCString(" | ");
-		}
-	}
-	MultisetIteratorEnd(&iterator);
-}
-
-
-static void printConjunction(Atom conjunctionForm, TypedTuple const * actors, index8* atomIndex)
+/*
+ * Print the terms of a clause or conjunction form, separated by the connective.
+ * Unless ordering is 0, the terms and roles are printed in that order.
+ */
+static void printTerms(
+	Atom form, TypedTuple const * actors, FormOrdering const * ordering, char const * connective)
 {
+	// CLAUDE: collect the term forms and the index of the first actor of each term,
+	// so that a term can be read by its index in the form
+	size8 nTerms = 0;
+	Atom termForms[FormArity(form)];
+	index8 actorsOffsets[FormArity(form)];
+	index8 actorsOffset = 0;
 	MultisetIterator iterator;
-	MultisetIterate(conjunctionForm, AT_ID, &iterator);
-
-	size8 nTermForms = ConjunctionFormNUniqueTermForms(conjunctionForm);
-	for(index8 i = 0; i < nTermForms; i++) {
-		ASSERT(MultisetIteratorNext(&iterator))
+	MultisetIterate(form, AT_ID, &iterator);
+	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple em = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < em.multiple; j++) {
-			printTerm(em.element, actors, atomIndex);
-			if((j < em.multiple - 1) || (i < nTermForms - 1))
-				PrintCString(" & ");
+			termForms[nTerms] = em.element;
+			actorsOffsets[nTerms] = actorsOffset;
+			actorsOffset += TermFormArity(em.element);
+			nTerms++;
 		}
 	}
 	MultisetIteratorEnd(&iterator);
+
+	index8 enteredOrder[nTerms];
+	if(ordering) {
+		ASSERT(ordering->nTerms == nTerms)
+		InvertPermutation(ordering->termOrder, enteredOrder, nTerms);
+	}
+	for(index8 i = 0; i < nTerms; i++) {
+		index8 k = ordering ? enteredOrder[i] : i;
+		index8 const * roleOrder = ordering ? ordering->roleOrder + actorsOffsets[k] : 0;
+		printTerm(termForms[k], actors, actorsOffsets[k], roleOrder);
+		if(i < nTerms - 1)
+			PrintCString(connective);
+	}
 }
 
 
@@ -518,21 +535,21 @@ void PrintFormula(Atom formula)
 
 void PrintFormulaView(FormulaView formulaView)
 {
-	PrintFormActorsAsFormula(formulaView.form, formulaView.actors);
+	PrintFormActorsAsFormula(formulaView.form, formulaView.actors, 0);
 }
 
 
-void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors)
+void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors, FormOrdering const * ordering)
 {
-	index8 atomIndex = 0;
+	index8 const * roleOrder = ordering ? ordering->roleOrder : 0;
 	if(IsPredicateForm(form))
-		printPredicate(form, actors, &atomIndex);
+		printPredicate(form, actors, 0, roleOrder);
 	else if(IsTermForm(form))
-		printTerm(form, actors, &atomIndex);
+		printTerm(form, actors, 0, roleOrder);
 	else if(IsClauseForm(form))
-		printClause(form, actors, &atomIndex);
+		printTerms(form, actors, ordering, " | ");
 	else if(IsConjunctionForm(form))
-		printConjunction(form, actors, &atomIndex);
+		printTerms(form, actors, ordering, " & ");
 	else
 		ASSERT(false);
 }

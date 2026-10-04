@@ -22,6 +22,8 @@
 typedef struct s_FormulaBuilder {
 	TermBuilder termBuilder;
 	ResizingArray terms;			// array of AT_ID atoms
+	// CLAUDE: the role order of each term in terms, one after the other; see FormOrdering
+	ResizingArray termRoleOrders;
 	size8 arity;
 	uint8 connective;				// the connective accepted so far; see FormulaBuilder.c
 	bool isValid;
@@ -44,7 +46,11 @@ bool FormulaBuilderIsValid(FormulaBuilder const * builder);
  */
 bool FormulaBuilderFinish(FormulaBuilder * builder);
 
-Atom FormulaBuilderCreateFormula(FormulaBuilder * builder);
+/**
+ * CLAUDE: Create the formula. Unless ordering is 0, the order in which the terms and
+ * roles were pushed is written to ordering.
+ */
+Atom FormulaBuilderCreateFormula(FormulaBuilder * builder, FormOrdering * ordering);
 
 void FormulaBuilderReset(FormulaBuilder * builder);
 
@@ -65,8 +71,11 @@ Atom CStringToFormula(char const * cString);
  * errorPosition. That index is the length of
  * the string when the string ends in the middle of a formula, which is also what an
  * empty string yields.
+ *
+ * CLAUDE: Unless ordering is 0, the order in which the terms and roles of the formula
+ * were written is written to ordering; see FormOrdering.
  */
-Atom ParseFormula(char const * cString, index32 * errorPosition);
+Atom ParseFormula(char const * cString, FormOrdering * ordering, index32 * errorPosition);
 
 
 #endif	// FORMULABUILDER_H

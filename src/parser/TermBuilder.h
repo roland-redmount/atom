@@ -28,7 +28,11 @@ bool TermBuilderIsValid(TermBuilder const * builder);
  */
 bool TermBuilderIsEmpty(TermBuilder const * builder);
 
-Atom TermBuilderCreateFormula(TermBuilder const * builder);
+/**
+ * CLAUDE: Create the term formula. Unless roleOrder is 0, the order of the roles is
+ * written to roleOrder; see PredicateBuilderCreateFormula().
+ */
+Atom TermBuilderCreateFormula(TermBuilder const * builder, index8 roleOrder[]);
 
 void TermBuilderReset(TermBuilder * builder);
 

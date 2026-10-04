@@ -34,7 +34,7 @@ static bool conjunctionHasTerm(ConjunctionBuilder const * builder, Atom term)
    Returns false if the conjunction already contains that term. */
 static bool addCurrentTerm(ConjunctionBuilder * builder)
 {
-	Atom term = TermBuilderCreateFormula(&(builder->termBuilder));
+	Atom term = TermBuilderCreateFormula(&(builder->termBuilder), 0);
 	if(conjunctionHasTerm(builder, term)) {
 		ReleaseFormula(term);
 		return false;
@@ -106,7 +106,7 @@ Atom ConjunctionBuilderCreateFormula(ConjunctionBuilder * builder)
 
 	size8 nTerms = builder->terms.nElements;
 	Atom const * terms = ResizingArrayGetMemory(&(builder->terms));
-	return CreateConjunction(terms, nTerms);
+	return CreateConjunction(terms, nTerms, 0);
 }
 
 
