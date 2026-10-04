@@ -20,22 +20,31 @@ enum FormulaScope {
 
 /**
  * A part is a role name followed by an actor. The actor may be written as a
- * reflection [ ... ], in which case the part builder collects the tokens of
+ * reflection [ ... ], which may be either a reflected name or formula.
+ * For a reflected formula,  the part builder collects the tokens of
  * the reflection in a nested formula builder while in STATE_REFLECTION, and
  * the formula atom it yields becomes the actor.
+ * A reflected name [name] yields an AT_NAME actor.
+ * 
+ * A relation is written [[ ... ]] and yields an AT_RELATION actor. The tokenizer
+ * reads the double brackets as two TOKEN_BEGIN_REFLECT and two TOKEN_END_REFLECT.
  *
  * A part builder holds the same alternation as the tokenizer, which reads an actor after
  * a role name; see enum TokenizerState. It therefore takes the token following a role name
  * to be the actor, without testing what kind of token it is.
+ * The one exception is TOKEN_END_REFLECT, which closes a reflected name [name].
  */
 typedef struct s_PartBuilder {
 	enum BuilderState {
-		STATE_EMPTY, STATE_HAS_NAME, STATE_REFLECTION, STATE_COMPLETE
+		STATE_EMPTY, STATE_HAS_NAME, STATE_REFLECTION_START, STATE_REFLECTED_NAME,
+		STATE_REFLECTION, STATE_RELATION_END, STATE_COMPLETE
 	} state;
 	Atom role;
 	TypedAtom actor;
 	// whether this part is inside a reflected formula
 	enum FormulaScope scope;
+	// either AT_FORMULA or AT_RELATION
+	byte reflectionType;
 	// Keep a pointer to the nested builder, allocated only in STATE_REFLECTION.
 	struct s_FormulaBuilder * formulaBuilder;
 } PartBuilder;

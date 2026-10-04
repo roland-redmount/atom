@@ -643,6 +643,21 @@ void testFilterServiceOverReplacedPrimitive(void)
 }
 
 
+/* CLAUDE: A query on a bootstrapped core relation is answered by the services the kernel
+   registered for that relation, with no compilation. The bootstrapped predicate form @1 is
+   (multiset element multiple), and @3 is the positive term form of @1. */
+static void testQueryBootstrapRelations(void)
+{
+	size32 nServices = NumberOfServices();
+	ASSERT_UINT32_EQUAL(
+		runUserQueryAndCountTuples("multiset @0000000000000001 element e multiple m"), 3)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("predicate-form @0000000000000001"), 1)
+	ASSERT_UINT32_EQUAL(
+		runUserQueryAndCountTuples("term-form @0000000000000003 predicate-form p sign s"), 1)
+	ASSERT_UINT32_EQUAL(NumberOfServices(), nServices)
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -666,6 +681,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testQueryConjunction);
 	ExecuteTest(testQueryConjunctionRule);
 	ExecuteTest(testFilterServiceOverReplacedPrimitive);
+	ExecuteTest(testQueryBootstrapRelations);
 
 	UnloadLibraries();
 	KernelShutdown();

@@ -78,6 +78,7 @@ void AcquireAtom(Atom atom, byte atomType)
 		break;
 
 		case AT_FORMULA:
+		case AT_RELATION:
 		AcquireFormula(atom);
 		break;
 
@@ -98,6 +99,7 @@ void ReleaseAtom(Atom atom, byte atomType)
 		break;
 
 		case AT_FORMULA:
+		case AT_RELATION:
 		ReleaseFormula(atom);
 		break;
 	}

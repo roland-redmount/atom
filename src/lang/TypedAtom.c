@@ -136,12 +136,12 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		break;
 
 	case AT_NAME:
+		PrintChar('[');
 		PrintName(typedAtom.atom);
+		PrintChar(']');
 		break;
 
 	case AT_FORMULA:
-		// a formula actor is a reflection, and is printed in brackets so that
-		// it reads back as one formula rather than as parts of the enclosing one
 		PrintChar('[');
 		PrintFormula(typedAtom.atom);
 		PrintChar(']');
@@ -181,9 +181,14 @@ void PrintTypedAtom(TypedAtom typedAtom)
 			IFactPrint(typedAtom.atom);
 		break;
 
+	case AT_RELATION:
+		PrintCString("[[");
+		PrintFormula(typedAtom.atom);
+		PrintCString("]]");
+		break;
+
 	default:
 		PrintF("ERROR: No Print method for atom type %u\n", typedAtom.type);
 		ASSERT(false);
 	}
-	// PrintChar(']');
 }

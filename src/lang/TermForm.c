@@ -14,8 +14,34 @@ static void termFormSetTuple(Atom * tuple, Atom termForm, Atom predicateForm, At
 }
 
 
+/* CLAUDE: The positive term forms of (multiset element multiple), (predicate-form) and
+   (term-form predicate-form sign) are created during bootstrap with a fixed hash, as for
+   findBootstrapPredicateForm() in PredicateForm.c. Return the bootstrapped term form for the
+   predicate form and sign, or the zero atom if there is none. */
+static Atom findBootstrapTermForm(Atom predicateForm, bool sign)
+{
+	static index32 const bootstrapFormIds[] = {
+		FORM_MULTISET_ELEMENT_MULTIPLE, FORM_PREDICATE_FORM, FORM_TERM_FORM
+	};
+	if(!sign)
+		return (Atom) {0};
+	for(index8 i = 0; i < 3; i++) {
+		if(SameAtoms(predicateForm, GetCorePredicateForm(bootstrapFormIds[i])))
+			return GetCoreTermForm(bootstrapFormIds[i]);
+	}
+	return (Atom) {0};
+}
+
+
 Atom CreateTermForm(Atom predicateForm, bool sign)
 {
+	// CLAUDE: a bootstrapped term form has a fixed hash; see findBootstrapTermForm()
+	Atom bootstrapForm = findBootstrapTermForm(predicateForm, sign);
+	if(bootstrapForm.hash) {
+		IFactAcquire(bootstrapForm);
+		return bootstrapForm;
+	}
+
 	IFactDraft draft;
 	IFactBegin(&draft);
 

@@ -115,6 +115,10 @@ static enum TokenizerResult roleStateBeginToken(Tokenizer * tokenizer, char c)
 		// closing a reflection, whose formula ended with an actor
 		return beginSingleCharacterToken(tokenizer, TOKEN_END_REFLECT);
 
+	case '[':
+		// CLAUDE: the second bracket of [[, which opens a relation; see PartBuilder
+		return beginSingleCharacterToken(tokenizer, TOKEN_BEGIN_REFLECT);
+
 	default:
 		if(IsNameInitialChar(c)) {
 			tokenizer->type = TOKEN_NAME;
@@ -174,6 +178,10 @@ static enum TokenizerResult actorStateBeginToken(Tokenizer * tokenizer, char c)
 
 	case '[':
 		return beginSingleCharacterToken(tokenizer, TOKEN_BEGIN_REFLECT);
+
+	case ']':
+		// Closing a reflected name [name]; see PartBuilder
+		return beginSingleCharacterToken(tokenizer, TOKEN_END_REFLECT);
 
 	default:
 		if(IsDigitChar(c)) {
