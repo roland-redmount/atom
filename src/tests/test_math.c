@@ -10,6 +10,7 @@
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
+#include "lang/Variable.h"
 #include "library/library.h"
 #include "library/MachineService.h"
 #include "library/string.h"
@@ -174,6 +175,58 @@ void testIntDivision(void)
 }
 
 
+/*
+ * CLAUDE: Query (value x rounded y) for the given x, and return the number of tuples.
+ * The rounded value of the last tuple is written to rounded.
+ */
+static size32 queryRounded(float64 x, int64 * rounded)
+{
+	Atom roles[2] = {CreateNameFromCString("value"), CreateNameFromCString("rounded")};
+	TypedAtom actors[2] = {
+		CreateTypedAtom(AT_FLOAT, (Atom) {._float = x}),
+		CreateTypedAtom(AT_VARIABLE, CreateVariable('y'))
+	};
+	Atom predicate = CreatePredicate(roles, actors, 2);
+	Atom query = CreateTerm(predicate, true);
+	FormulaView queryView = FormulaGetView(query);
+	index8 roundedIndex = PredicateRoleIndex(TermFormGetPredicateForm(queryView.form), roles[1]);
+
+	size32 nTuples = 0;
+	MixedTypeRelation * relation = UserQuery(queryView);
+	while(MixedTypeRelationNext(relation)) {
+		*rounded = TypedTupleGetAtom(MixedTypeRelationPeekTuple(relation), roundedIndex)._int;
+		nTuples++;
+	}
+	FreeMixedTypeRelation(relation);
+	ReleaseFormula(query);
+	ReleaseFormula(predicate);
+	NameRelease(roles[0]);
+	NameRelease(roles[1]);
+	return nTuples;
+}
+
+
+/**
+ * CLAUDE: Rounding gives the nearest integer, with a halfway case rounded away from
+ * zero. A value with no nearest INT gives no tuple.
+ */
+void testValueRounded(void)
+{
+	float64 values[] = {1.4, 2.5, -2.5, 0.0, 0.49999999999999994, -0.49999999999999994, 4503599627370497.0};
+	int64 expected[] = {1, 3, -3, 0, 0, 0, 4503599627370497};
+	for(index8 i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
+		int64 rounded;
+		ASSERT_UINT32_EQUAL(queryRounded(values[i], &rounded), 1)
+		ASSERT_INT64_EQUAL(rounded, expected[i])
+	}
+
+	int64 rounded;
+	ASSERT_UINT32_EQUAL(queryRounded(1e19, &rounded), 0)
+	ASSERT_UINT32_EQUAL(queryRounded(-1e19, &rounded), 0)
+	ASSERT_UINT32_EQUAL(queryRounded(0.0 / 0.0, &rounded), 0)
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -183,6 +236,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testSubInt);
 	ExecuteTest(testRange);
 	ExecuteTest(testIntDivision);
+	ExecuteTest(testValueRounded);
 
 	UnloadLibraries();
 	KernelShutdown();

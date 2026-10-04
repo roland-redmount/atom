@@ -189,6 +189,12 @@ int64 StringToInt64(char const * string, size32 length);
 float64 StringToFloat64(char const * string, size32 length);
 
 /**
+ * CLAUDE: Round to the nearest integer, rounding halfway cases away from zero,
+ * as in 2.5 -> 3.0 and -2.5 -> -3.0. The result is a float64 holding an integer.
+ */
+float64 RoundFloat64(float64 x);
+
+/**
  * Character classes
  */
 bool IsPrintableChar(char c);

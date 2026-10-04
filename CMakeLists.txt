@@ -191,6 +191,9 @@ target_compile_definitions(atom PUBLIC
 
 if(WIN32)
     target_link_libraries(atom PRIVATE mingw32 ws2_32)
+else()
+    # CLAUDE: the C math library, for round() in platform_posix.c
+    target_link_libraries(atom PUBLIC m)
 endif()
 
 # ---------------------------------------------------------------------------

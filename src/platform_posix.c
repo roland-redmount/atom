@@ -6,6 +6,7 @@
 
 // C standard library includes
 #include <ctype.h>
+#include <math.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -111,6 +112,12 @@ float64 StringToFloat64(char const * string, size32 length)
 	CopyMemory(string, floatString, length);
 	floatString[length] = '\0';
 	return atof(floatString);
+}
+
+
+float64 RoundFloat64(float64 x)
+{
+	return round(x);
 }
 
 

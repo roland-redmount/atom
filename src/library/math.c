@@ -131,6 +131,39 @@ static bool mulFloatCall(void * state, Atom arguments[], void * readerData, void
 }
 
 /**
+ * (* x<FLOAT / y<FLOAT = z>FLOAT)
+ * 
+ * Floating point division. Returns no tuple if y = 0
+ */
+static bool divFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
+{
+	float64 x = arguments[0]._float;
+	float64 y = arguments[1]._float;
+	if(y == 0)
+		return false;
+	arguments[2]._float = x / y;
+	return true;
+}
+
+/**
+ * (value x<FLOAT rounded y>INT)
+ * 
+ * Round a floating point value to the nearest integer.
+ * A halfway value (0.5, -0.5, etc) rounds away from zero; see RoundFloat64().
+ * A value whose nearest integer is outside the range of an INT gives no tuple, and so does NaN.
+ */
+static bool valueRoundedCall(void * state, Atom arguments[], void * readerData, void * storage)
+{
+	float64 x = arguments[0]._float;
+	// CLAUDE: 0x1p63 is 2^63. NaN fails both comparisons.
+	if(!((x >= -0x1p63) && (x < 0x1p63)))
+		return false;
+	arguments[1]._int = (int64) RoundFloat64(x);
+	return true;
+}
+
+
+/**
  * (value x<FLOAT scale k<INT scaled y>FLOAT)
  * 
  * Scalar multiplication of a FLOAT x by an INT k. This cannot use symmetric roles (* * =)
@@ -252,7 +285,10 @@ void MathSetup(void)
 	RegisterMachineService(moduleID, "+ #1<FLOAT + #2<FLOAT = #3>FLOAT", addFloatCall);
 	RegisterMachineService(moduleID, "+ #1<FLOAT - #2<FLOAT = #3>FLOAT", subFloatCall);
 	RegisterMachineService(moduleID, "* #1<FLOAT * #2<FLOAT = #3>FLOAT", mulFloatCall);
+	RegisterMachineService(moduleID, "* #1<FLOAT / #2<FLOAT = #3>FLOAT", divFloatCall);
 
+	RegisterMachineService(moduleID, "value #1<FLOAT rounded #2>INT", valueRoundedCall);
+	
 	// float-by-integer scaling
 	RegisterMachineService(moduleID, "value #1<FLOAT scale #2<INT scaled #3>FLOAT", valueScaleScaledCall);
 	RegisterMachineService(moduleID, "value #1<FLOAT invscale #2<INT scaled #3>FLOAT", valueInvscaleScaledCall);
