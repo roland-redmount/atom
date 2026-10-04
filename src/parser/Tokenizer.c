@@ -191,7 +191,7 @@ static enum TokenizerResult actorStateBeginToken(Tokenizer * tokenizer, char c)
 			return TOKENIZER_ACCEPTED;
 		}
 		// A variable is named by a single letter.
-		if(IsAlpha(c)) {
+		if(IsLetterChar(c)) {
 			tokenizer->type = TOKEN_VARIABLE;
 			tokenizer->data.variable.isQuoted = false;
 			StringBufferPush(&(tokenizer->buffer), c);
@@ -292,7 +292,7 @@ enum TokenizerResult TokenizerPush(Tokenizer * tokenizer, char c)
 			return TOKENIZER_ACCEPTED;
 		}
 		// valid string characters
-		if(IsAlpha(c)) {
+		if(IsLetterChar(c)) {
 			StringBufferPush(&(tokenizer->buffer), c);
 			return TOKENIZER_ACCEPTED;
 		}
@@ -301,7 +301,7 @@ enum TokenizerResult TokenizerPush(Tokenizer * tokenizer, char c)
 	case TOKEN_LETTER:
 		// CLAUDE: the letter itself, which the opening quote is still waiting for. A letter
 		// is one character, so the token is full once the letter has been read.
-		if(!IsAlpha(c))
+		if(!IsLetterChar(c))
 			return TOKENIZER_REJECTED;
 		StringBufferPush(&(tokenizer->buffer), c);
 		tokenizer->isValid = true;
@@ -312,7 +312,7 @@ enum TokenizerResult TokenizerPush(Tokenizer * tokenizer, char c)
 		// CLAUDE: A variable named by a letter alone is full at that letter, so the quote
 		// character (^) waiting for its variable name is the only state left here.
 		ASSERT(tokenizer->data.variable.isQuoted)
-		if(!IsAlpha(c))
+		if(!IsLetterChar(c))
 			return TOKENIZER_REJECTED;
 		StringBufferPush(&(tokenizer->buffer), c);
 		tokenizer->isValid = true;
@@ -482,7 +482,7 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 		break;
 
 	case TOKEN_LETTER:
-		token.typedAtom = CreateTypedAtom(AT_LETTER, GetAlphabetLetter(string[0]));
+		token.typedAtom = CreateTypedAtom(AT_LETTER, CreateLetter(string[0]));
 		break;
 
 	case TOKEN_VARIABLE:

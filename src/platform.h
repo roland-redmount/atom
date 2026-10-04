@@ -203,7 +203,11 @@ bool IsSpaceChar(char c);
 /**
  * Test if c is an alphabet letter
  */
-bool IsAlpha(char c);
+bool IsLetterChar(char c);
+
+bool IsUpperCaseLetterChar(char c);
+
+bool IsLowerCaseLetterChar(char c);
 
 
 /**

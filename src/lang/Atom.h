@@ -16,7 +16,8 @@ typedef union u_Atom {
 	float64 _float;
 	// AT_LETTER
 	struct {
-		uint8 code;
+		byte letterCase;
+		uint8 code;	// 1,2, ... 26 for A, B, ..., Z
 	} letter;
 	// AT_VARIABLE
 	// CLAUDE: The number is 0 for the anonymous variable, 1--26 for the variables a--z,

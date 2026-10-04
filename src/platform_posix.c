@@ -1102,22 +1102,39 @@ bool IsSpaceChar(char c)
 	return isspace(c);
 }
 
-bool IsAlpha(char c)
+bool IsLetterChar(char c)
 {
 	// We allow ASCII letters only;  isalpha() depends on the locale, and is undefined
 	// for a negative char such as a byte of a UTF-8 character
-	return ((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z'));
+	return IsUpperCaseLetterChar(c) || IsLowerCaseLetterChar(c);
+}
+
+bool IsUpperCaseLetterChar(char c)
+{
+	return (c >= 'A') && (c <= 'Z');
+}
+
+
+bool IsLowerCaseLetterChar(char c)
+{
+	return(c >= 'a') && (c <= 'z');
 }
 
 
 char ToLower(char c)
 {
-	ASSERT(IsAlpha(c));
-	return tolower(c);
+	ASSERT(IsLetterChar(c));
+	if(IsUpperCaseLetterChar(c))
+		return c - 'A' + 'a';
+	else
+		return c;
 }
 
 char ToUpper(char c)
 {
-	ASSERT(IsAlpha(c));
-	return toupper(c);
+	ASSERT(IsLetterChar(c));
+	if(IsLowerCaseLetterChar(c))
+		return c - 'a' + 'A';
+	else
+		return c;
 }

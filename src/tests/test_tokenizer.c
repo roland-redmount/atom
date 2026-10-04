@@ -98,7 +98,7 @@ static void testTokenizer(void)
 	ASSERT_UINT32_EQUAL(ListLength(tokenString), 6)
 	for(index32 i = 0; i < 6; i++) {
 		Atom letter = ListGetElement(tokenString, i+1);
-		ASSERT_CHAR_EQUAL(LetterToChar(letter, LETTER_LOWERCASE), nameString[i])
+		ASSERT_CHAR_EQUAL(LetterToChar(letter), nameString[i])
 	}
 	ReleaseToken(token);
 
@@ -176,11 +176,11 @@ static void testTokenizeLetter(void)
 	Token token = tokenizeCString(&tokenizer, "'A", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_LETTER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_LETTER)
-	ASSERT_CHAR_EQUAL(LetterToChar(token.typedAtom.atom, LETTER_UPPERCASE), 'A')
+	ASSERT_CHAR_EQUAL(LetterToChar(token.typedAtom.atom), 'A')
 
-	// a letter is case-insensitive, so 'a is the same atom as 'A
+	// Letters are now case-sensitive
 	Token lowerToken = tokenizeCString(&tokenizer, "'a", TOKENIZER_ACTOR_STATE);
-	ASSERT_TRUE(SameTypedAtoms(lowerToken.typedAtom, token.typedAtom))
+	ASSERT_FALSE(SameTypedAtoms(lowerToken.typedAtom, token.typedAtom))
 
 	// A letter is one character, so a second one is an error rather than the start of
 	// the next token; see TOKEN_VARIABLE for the same rule on a variable name.

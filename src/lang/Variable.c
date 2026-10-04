@@ -11,7 +11,7 @@ TypedAtom anonymousVariable = {.type = AT_VARIABLE, .atom = {0}};
 
 Atom CreateVariable(char name)
 {
-	ASSERT(IsAlpha(name));
+	ASSERT(IsLetterChar(name));
 	return (Atom) {
 		.variable = {.number = ToLower(name) - 'a' + 1}
 	};

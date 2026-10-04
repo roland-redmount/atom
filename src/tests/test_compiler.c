@@ -566,7 +566,7 @@ void testCompileProject(void)
 		TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
 		void * context = OperatorCreateContext(operator, arguments);
 		while(OperatorCall(context)) {
-			char c = LetterToChar(arguments[elementRoleIndex], LETTER_LOWERCASE);
+			char c = LetterToChar(arguments[elementRoleIndex]);
 			ASSERT(k < 4)
 			ASSERT_CHAR_EQUAL(c, uniqueLetters[k])
 			k++;

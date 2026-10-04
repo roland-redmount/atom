@@ -24,9 +24,9 @@ static void testCreateList(void)
 	
 	// create list
 	Atom listAtoms[EXAMPLE_LIST_N_ELEMENTS] = {
-		GetAlphabetLetter('X'),
-		GetAlphabetLetter('Y'),
-		GetAlphabetLetter('Z')
+		CreateLetter('X'),
+		CreateLetter('Y'),
+		CreateLetter('Z')
 	};	
 	Atom list = CreateListFromArray(listAtoms, AT_LETTER, EXAMPLE_LIST_N_ELEMENTS);
 
@@ -69,9 +69,9 @@ static void testCreateList(void)
 static void testNestedList(void)
 {
 	Atom innerListAtoms[EXAMPLE_LIST_N_ELEMENTS] = {
-		GetAlphabetLetter('X'),
-		GetAlphabetLetter('Y'),
-		GetAlphabetLetter('Z')
+		CreateLetter('X'),
+		CreateLetter('Y'),
+		CreateLetter('Z')
 	};
 	Atom innerList = CreateListFromArray(innerListAtoms, AT_LETTER, EXAMPLE_LIST_N_ELEMENTS);
 

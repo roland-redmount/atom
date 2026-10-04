@@ -3,53 +3,29 @@
 #include "kernel/ifact.h"
 
 
-/**
- * TODO: Letters are fundamental atoms since they are required to create 
- * role names and named variables. We need to hardcode the
- * (letter code) relation since any table query would require a variable,
- * which in turn requires a (letter code) lookup.
- * 
- * In principle, letters should be a AT_ID identified by the letter code,
- * but for bootstrapping purposes we're now using a separate atom type AT_LETTER,
- * to avoid having to generate hash values for each letter. 
- * 
- * TODO: queries to the (letter code) relation must dispatch to these functions
- */
-
-static uint8 charToLetterCode(char c)
+Atom CreateLetter(char c)
 {
-	ASSERT(IsAlpha(c));
-	// we use 1,2, ... 26 for A, B, ..., Z
-	return ToUpper(c) - 'A' + 1;
-}
-
-
-static char letterCodeToChar(uint8 letterCode, uint8 letterCase)
-{
-	ASSERT((letterCode >= 1) && (letterCode <= 26));
-	if(letterCase == LETTER_UPPERCASE)
-		return 'A' + letterCode - 1;
+	ASSERT(IsLetterChar(c));
+	if(IsUpperCaseLetterChar(c))
+		 return (Atom) {.letter = {.code = c - 'A' + 1, .letterCase = LETTER_UPPERCASE}};
 	else
-		return 'a' + letterCode - 1;
-
+		 return (Atom) {.letter = {.code = c - 'a' + 1, .letterCase = LETTER_LOWERCASE}};
 }
 
 
-Atom GetAlphabetLetter(char c)
+char LetterToChar(Atom letter)
 {
-	return (Atom) {.letter.code = charToLetterCode(c)};
+	ASSERT((letter.letter.code >= 1) && (letter.letter.code <= 26));
+	if(letter.letter.letterCase == LETTER_UPPERCASE)
+		return 'A' + letter.letter.code - 1;
+	else
+		return 'a' + letter.letter.code - 1;
 }
 
 
-char LetterToChar(Atom letter, uint8 letterCase)
+void PrintLetter(Atom letter)
 {
-	return letterCodeToChar(letter.letter.code, letterCase);
-}
-
-
-void PrintLetter(Atom letter, uint8 letterCase)
-{
-	char c = LetterToChar(letter, letterCase);
+	char c = LetterToChar(letter);
 	PrintChar('\'');
 	PrintChar(c);
 }

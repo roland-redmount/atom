@@ -33,14 +33,14 @@ static void testLetter(void)
 {
 	index8 i = 1;
 	for(char c = 'A'; c <= 'Z'; c++) {
-		Atom letter = GetAlphabetLetter(c);
+		Atom letter = CreateLetter(c);
 		ASSERT_DATA64_EQUAL(letter.letter.code, i)
 		i++;
 	}
 
 	i = 1;
 	for(char c = 'a'; c <= 'z'; c++) {
-		Atom letter = GetAlphabetLetter(c);
+		Atom letter = CreateLetter(c);
 		ASSERT_DATA64_EQUAL(letter.letter.code, i)
 		i++;
 	}

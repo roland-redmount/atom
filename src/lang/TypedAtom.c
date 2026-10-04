@@ -128,7 +128,7 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		break;
 
 	case AT_LETTER:
-		PrintLetter(typedAtom.atom, LETTER_UPPERCASE);
+		PrintLetter(typedAtom.atom);
 		break;
 
 	case AT_VARIABLE:

@@ -54,7 +54,7 @@ void testString(void)
  */
 void testIsString(void)
 {
-	Atom letters[2] = {GetAlphabetLetter('a'), GetAlphabetLetter('b')};
+	Atom letters[2] = {CreateLetter('a'), CreateLetter('b')};
 	Atom list = CreateListFromArray(letters, AT_LETTER, 2);
 	ASSERT_TRUE(IsList(list))
 	ASSERT_FALSE(IsString(list))
