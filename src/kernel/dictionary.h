@@ -50,6 +50,8 @@ FormulaView DictionaryAddClauseFromCString(const char * clauseString);
 /**
  * Remove a single clause from the dictionary
  * This invalidates compiled services involving any term in the clause.
+ * 
+ * TODO: we probably need some ownership system for rules.
  */
 void DictionaryRemoveClause(FormulaView * clause);
 

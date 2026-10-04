@@ -2602,13 +2602,11 @@ bool DispatchOrCompileQuery(FormulaView query, Service * service, index8 permuta
 	// Attempt to dispatch to an existing service
 	if(DispatchQuery(query, service, permutation) == DISPATCH_FOUND)
 		return true;
-	// Else attempt to compile a service
-	if(CompileQuery(query, 0) > 0) {
-		// Attempt to dispatch again to the newly compiled services
-		return DispatchQuery(query, service, permutation) == DISPATCH_FOUND;
-	}
-	else
-		return false;
+	// Else attempt to compile a service. This returns 0 if no services were compiled,
+	// but stale primitive services may still have been been marked non-stale.
+	CompileQuery(query, 0);
+	// Attempt to dispatch again
+	return DispatchQuery(query, service, permutation) == DISPATCH_FOUND;
 }
 
 

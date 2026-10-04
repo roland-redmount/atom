@@ -1,4 +1,5 @@
 
+#include "kernel/dictionary.h"
 #include "library/MachineService.h"
 #include "library/math.h"
 #include "parser/TermBuilder.h"
@@ -123,6 +124,9 @@ static bool rangeCall(void * state, Atom arguments[], void * readerData, void * 
 
 static uint32 moduleID;
 
+FormulaView addSubRule;
+
+
 void MathSetup(void)
 {
 	moduleID = RequestModuleID();
@@ -149,10 +153,15 @@ void MathSetup(void)
 		rangeSetup,	rangeCall, 0
 	);
 
+	// Let the compiler create (+ #1<INT + #2>INT = #3>INT) from ()"+ #1<INT - #2<INT = #3>INT")
+	// NOTE: this leaves the (+ + =) primitive service stale, needs compilation
+	addSubRule = DictionaryAddClauseFromCString("+ x + y = z | ! + z - x = y");
 }
 
 
 void MathShutdown(void)
 {
+	DictionaryRemoveClause(&addSubRule);
+
 	FreeModuleRelations(moduleID);
 }

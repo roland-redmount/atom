@@ -150,9 +150,10 @@ static size32 countQueryTuples(Operator const * op, Atom query)
 void testCompilePermute1(void)
 {
 	// This rule compiles to a PERMUTE service with no constants
-	// + x + y = z <- + z - x = y
-	FormulaView clause = DictionaryAddClauseFromCString("+ x + y = z | ! + z - x = y");
-	Atom queryTerm = CStringToTerm("+ 4 + d = 7");
+	// term x term y sum z <- + z - x = y
+	// NOTE: using the relation (term term sum) to be distinct from (+ + =) in math.c
+	FormulaView clause = DictionaryAddClauseFromCString("term x term y sum z | ! + z - x = y");
+	Atom queryTerm = CStringToTerm("term 4 term d sum 7");
 
 	// This will yield a new service calling the existing (+ - =) service
 	Service services[MAX_COMPILED_VARIANTS];
@@ -167,7 +168,7 @@ void testCompilePermute1(void)
 	void * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
-	Atom d = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "+", 2);
+	Atom d = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "term", 2);
 	ASSERT_UINT64_EQUAL(d._int, 3);
 
 	ASSERT_FALSE(OperatorCall(context))

@@ -1,9 +1,8 @@
+#include "compiler/compiler.h"
 #include "kernel/dispatch.h"
-#include "kernel/operator.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "library/library.h"
-#include "library/string.h"
+#include "kernel/operator.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
@@ -11,7 +10,9 @@
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
+#include "library/library.h"
 #include "library/MachineService.h"
+#include "library/string.h"
 #include "parser/FormulaBuilder.h"
 #include "parser/TermBuilder.h"
 #include "ui/query.h"
@@ -21,13 +22,15 @@
 void testAddInt(void)
 {
 	Atom query = CStringToTerm("+ 2 + 3 = _");
+	FormulaView queryView = FormulaGetView(query);
 
 	Service service;
 	index8 permutation[3];
-	ASSERT_INT32_EQUAL(DispatchQueryFormula(query, &service, permutation), DISPATCH_FOUND)
+	// This service may need compilation
+	ASSERT_TRUE(DispatchOrCompileQuery(queryView, &service, permutation))
 
 	Atom arguments[3];
-	TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(query)), arguments, 3);
+	TupleCopy(TypedTuplePeekAtoms(queryView.actors), arguments, 3);
 	
 	Operator * op = ServiceGetOperator(service);
 	ASSERT_NOT_NULL(op)
@@ -36,7 +39,7 @@ void testAddInt(void)
 	
 	Atom equalsRole = CreateNameFromCString("=");
 	index8 equalsRoleIndex = PredicateRoleIndex(
-		TermFormGetPredicateForm(FormulaGetForm(query)),
+		TermFormGetPredicateForm(queryView.form),
 		equalsRole
 	);
 	NameRelease(equalsRole);
