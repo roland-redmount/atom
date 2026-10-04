@@ -173,6 +173,13 @@ static enum TokenizerResult actorStateBeginToken(Tokenizer * tokenizer, char c)
 		tokenizer->isValid = false;
 		return TOKENIZER_ACCEPTED;
 
+	case '-':
+		// the sign of a negative number, which is not a number until a digit follows
+		tokenizer->type = TOKEN_NUMBER;
+		StringBufferPush(&(tokenizer->buffer), c);
+		tokenizer->isValid = false;
+		return TOKENIZER_ACCEPTED;
+
 	case '*':
 		return beginSingleCharacterToken(tokenizer, TOKEN_GENERATOR);
 
@@ -253,8 +260,14 @@ enum TokenizerResult TokenizerPush(Tokenizer * tokenizer, char c)
 		return TOKENIZER_REJECTED;
 
 	case TOKEN_NUMBER:
-		// TODO: handle minus sign
-		// NOTE: do the number conversion here?
+		// A minus sign must be followed directly by a digit
+		if(!tokenizer->isValid) {
+			if(!IsDigitChar(c))
+				return TOKENIZER_REJECTED;
+			StringBufferPush(&(tokenizer->buffer), c);
+			tokenizer->isValid = true;
+			return TOKENIZER_ACCEPTED;
+		}
 		if(IsDigitChar(c)) {
 			StringBufferPush(&(tokenizer->buffer), c);
 			return TOKENIZER_ACCEPTED;

@@ -583,6 +583,26 @@ static void testParseFormula(void)
 	ReleaseFormula(expectedFormula);
 	ReleaseFormula(formula);
 
+	// CLAUDE: the first - is a role name and the second the sign of the actor -2
+	formula = ParseFormula("+ 3 - -2 = z", 0, &errorPosition);
+	ASSERT_TRUE(formula.hash != 0)
+	Atom minusRole = CreateNameFromCString("-");
+	index8 minusIndex = PredicateRoleIndex(
+		TermFormGetPredicateForm(FormulaGetForm(formula)), minusRole);
+	NameRelease(minusRole);
+	TypedAtom minusActor = TypedTupleGetElement(FormulaGetActors(formula), minusIndex);
+	ASSERT_UINT32_EQUAL(minusActor.type, AT_INT)
+	ASSERT_INT64_EQUAL(minusActor.atom._int, -2)
+	ReleaseFormula(formula);
+
+	// CLAUDE: a minus sign not followed directly by a digit is reported where the digit should be
+	ASSERT_UINT64_EQUAL(ParseFormula("foo - 2", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 5)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo -", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 5)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo -.5", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 5)
+
 	// a character belonging to no token is reported where it stands
 	ASSERT_UINT64_EQUAL(ParseFormula("foo x bar %", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 10)

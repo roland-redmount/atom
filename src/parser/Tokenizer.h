@@ -39,6 +39,9 @@ enum TokenizerState {
 	// When reading an actor, these tokens are allowed:
 	// TOKEN_NUMBER, TOKEN_STRING, TOKEN_LETTER, TOKEN_VARIABLE, TOKEN_PARAMETER, TOKEN_BEGIN_REFLECT,
 	// TOKEN_GENERATOR
+
+	// CLAUDE: A TOKEN_NUMBER may begin with a minus sign, as in -7. In TOKENIZER_ROLE_STATE,
+	// the - character begins a TOKEN_NAME instead, as in (+ x - y = z).
 	TOKENIZER_ACTOR_STATE = 2,
 };
 

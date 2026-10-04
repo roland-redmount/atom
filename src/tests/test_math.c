@@ -129,6 +129,51 @@ void testRange(void)
 }
 
 
+/*
+ * CLAUDE: Query (* x / y = q rem r) and check the single resulting tuple.
+ */
+static void assertIntDivision(char const * queryString, int64 expectedQuotient, int64 expectedRemainder)
+{
+	Atom query = CStringToTerm(queryString);
+	FormulaView queryView = FormulaGetView(query);
+	Atom predicateForm = TermFormGetPredicateForm(queryView.form);
+	Atom equalsRole = CreateNameFromCString("=");
+	Atom remainderRole = CreateNameFromCString("rem");
+	index8 quotientIndex = PredicateRoleIndex(predicateForm, equalsRole);
+	index8 remainderIndex = PredicateRoleIndex(predicateForm, remainderRole);
+	NameRelease(equalsRole);
+	NameRelease(remainderRole);
+
+	MixedTypeRelation * relation = UserQuery(queryView);
+	ASSERT_TRUE(MixedTypeRelationNext(relation))
+	TypedTuple const * tuple = MixedTypeRelationPeekTuple(relation);
+	ASSERT_INT64_EQUAL(TypedTupleGetAtom(tuple, quotientIndex)._int, expectedQuotient)
+	ASSERT_INT64_EQUAL(TypedTupleGetAtom(tuple, remainderIndex)._int, expectedRemainder)
+	ASSERT_FALSE(MixedTypeRelationNext(relation))
+	FreeMixedTypeRelation(relation);
+	ReleaseFormula(query);
+}
+
+
+/**
+ * CLAUDE: Integer division gives the remainder 0 <= r < |y| whatever the signs of x and y.
+ */
+void testIntDivision(void)
+{
+	assertIntDivision("* 7 / 2 = q rem r", 3, 1);
+	assertIntDivision("* -7 / 2 = q rem r", -4, 1);
+	assertIntDivision("* 7 / -2 = q rem r", -3, 1);
+	assertIntDivision("* -7 / -2 = q rem r", 4, 1);
+
+	// CLAUDE: division by zero gives no tuple
+	Atom query = CStringToTerm("* 7 / 0 = q rem r");
+	MixedTypeRelation * relation = UserQuery(FormulaGetView(query));
+	ASSERT_FALSE(MixedTypeRelationNext(relation))
+	FreeMixedTypeRelation(relation);
+	ReleaseFormula(query);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -137,6 +182,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAddInt);
 	ExecuteTest(testSubInt);
 	ExecuteTest(testRange);
+	ExecuteTest(testIntDivision);
 
 	UnloadLibraries();
 	KernelShutdown();
