@@ -154,6 +154,7 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
     src/parser/Characters.c
     src/parser/ClauseBuilder.c
     src/parser/ConjunctionBuilder.c
+    src/parser/FormTupleParsers.c
     src/parser/FormulaBuilder.c
     src/parser/PartBuilder.c
     src/parser/PredicateBuilder.c
@@ -163,6 +164,7 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
     src/parser/Tokenizer.c
 
     src/ui/assert.c
+    src/ui/load.c
     src/ui/query.c
     src/ui/session.c
 
