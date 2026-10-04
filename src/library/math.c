@@ -4,11 +4,14 @@
 #include "library/math.h"
 #include "parser/TermBuilder.h"
 
+
+//------------------------------- Integer arithmetic ------------------------------------------
+
 /**
- * Type predicate (integer #1>INT)
+ * Type predicate (integer #1<INT)
  * 
  * NOTE: a FLOAT atom with zero decimals like 42.0 is not considered an integer.
- * Floating points numbers are not considred rational numbers, but approximate values.
+ * Floating points numbers are not considered rational numbers, but approximate values.
  * We would need a different type for rational arithmetic.
  */
 static bool integerCall(void * state, Atom arguments[], void * readerData, void * storage)
@@ -21,7 +24,7 @@ static bool integerCall(void * state, Atom arguments[], void * readerData, void 
 /**
  * (+ x<INT + y<INT = z>INT)
  * 
- * Addition x + y
+ * Addition x + y = z
  */
 static bool addIntCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
@@ -29,15 +32,10 @@ static bool addIntCall(void * state, Atom arguments[], void * readerData, void *
 	return true;
 }
 
-static bool addFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
-{
-	arguments[2]._float = arguments[0]._float + arguments[1]._float;
-	return true;
-}
-
-
 /**
- * Subtraction (+ x<INT - y<INT = z>INT)
+ * (+ x<INT - y<INT = z>INT)
+ * 
+ * Subtraction x - y = z
  */
 static bool subIntCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
@@ -45,17 +43,10 @@ static bool subIntCall(void * state, Atom arguments[], void * readerData, void *
 	return true;
 }
 
-static bool subFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
-{
-	arguments[2]._float = arguments[0]._float - arguments[1]._float;
-	return true;
-}
-
-
 /**
  * (* x<INT * y<INT = z>INT)
  * 
- * Multiplication x * y
+ * Multiplication x * y = z
  */
 static bool mulIntCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
@@ -63,6 +54,76 @@ static bool mulIntCall(void * state, Atom arguments[], void * readerData, void *
 	return true;
 }
 
+/**
+ * (* x<INT / y<INT = q>INT rem r>INT)
+ * 
+ * Integer division x / y = q with remainder r. We use Euclidean division, which
+ * constrains 0 <= r < |y|. Setting y = 0 yields no tuple.
+ * 
+ * NOTE: an alternative name is (dividend x<INT divisor y<INT quotient q>INT remainder r>INT)
+ */
+static bool intDivisionCall(void * state, Atom arguments[], void * readerData, void * storage)
+{
+	int64 x = arguments[0]._int;
+	int64 y = arguments[1]._int;
+	if(y == 0)
+		return false;
+	if(x == INT64_MIN && y == -1) {
+		// the division would overflow
+		return false;
+	}
+	int64 q = x / y;
+	int64 r = x % y;
+
+	if(r < 0) {
+		// C99 rounds the quotient towards zero, which can give negative remainder,
+		// e.g. -7 / 2 yields q = -3, r = -1 instead of q = -4, r = 1
+		// Correct for this.
+		if(y > 0) {
+			q--;
+			r += y;
+		}
+		else {
+			q++;
+			r -= y;
+		}
+	}
+	arguments[2]._int = q;
+	arguments[3]._int = r;
+	return true;
+}
+
+
+/**
+ * (* x<INT * y>INT = z<INT)
+ * 
+ * Solving the equation x * y = z for y. For x != 0 this holds iff y = z / x with remainder 0.
+ */
+
+
+//------------------------------- Floating point arithmetic ------------------------------------
+
+/**
+ * (+ x<FLOAT + y<FLOAT = z>FLOAT)
+ */
+static bool addFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
+{
+	arguments[2]._float = arguments[0]._float + arguments[1]._float;
+	return true;
+}
+
+/**
+ * (+ x<FLOAT - y<FLOAT = z>FLOAT)
+ */
+static bool subFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
+{
+	arguments[2]._float = arguments[0]._float - arguments[1]._float;
+	return true;
+}
+
+/**
+ * (* x<FLOAT * y<FLOAT = z>FLOAT)
+ */
 static bool mulFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	arguments[2]._float = arguments[0]._float * arguments[1]._float;
@@ -70,11 +131,11 @@ static bool mulFloatCall(void * state, Atom arguments[], void * readerData, void
 }
 
 /**
- * (value #1<FLOAT scale #2<INT scaled #3>FLOAT)
+ * (value x<FLOAT scale k<INT scaled y>FLOAT)
  * 
- * Scalar multiplication of a FLOAT x by an INT y. This cannot use symmetric roles (* * =)
+ * Scalar multiplication of a FLOAT x by an INT k. This cannot use symmetric roles (* * =)
  * since the type of the two * roles differ: this is not the * operator of a field, but
- * rather scalar multiplication of x by k (which it outside the field) to obtain y.
+ * rather scalar multiplication of x by k (which is outside the field) to obtain y.
  * See https://en.wikipedia.org/wiki/Field_(mathematics)
  */
 static bool valueScaleScaledCall(void * state, Atom arguments[], void * readerData, void * storage)
@@ -84,21 +145,27 @@ static bool valueScaleScaledCall(void * state, Atom arguments[], void * readerDa
 }
 
 /**
- * (value #1<FLOAT invscale #2<INT scaled #3>FLOAT)
+ * (value x<FLOAT invscale k<INT scaled y>FLOAT)
  * 
- * The inverse scalar operation. Note that, since floating point arithmetic is inexact,
- * is may not hold that (value x scale k scaled y) <-> (value y invscale k scaled x),
- * and so the join relation (value x scale k scaled y & value y inscale k scaled x)
+ * The inverse scalar operation y = x / k, for k != 0.
+ * Note that, since floating point arithmetic is inexact, it may not hold that
+ * (value x scale k scaled y) <-> (value y invscale k scaled x),
+ * and so the join relation (value x scale k scaled y & value y invscale k scaled x)
  * may be empty. An example for 64-bit floats is x = 0.003 and k = 3.
  * Therefore, we cannot use (value #1>FLOAT scale #2<INT scaled #3<FLOAT) to express
  * the inverse scaling.
  */
 static bool valueInvscaleScaledCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
-	arguments[2]._float = arguments[0]._float / arguments[1]._int;
+	float64 x = arguments[0]._float;
+	int64 k = arguments[1]._int;
+	if(k == 0)
+		return false;
+	arguments[2]._float = x / k;
 	return true;
 }
 
+//------------------------------------- Inequalities ------------------------------------------
 
 /**
  * (< x<INT > y>INT)
@@ -114,7 +181,6 @@ static bool strictInequalityFloatCall(void * state, Atom arguments[], void * rea
 {
 	return arguments[0]._float > arguments[1]._float;
 }
-
 
 
 /**
@@ -175,20 +241,23 @@ void MathSetup(void)
 {
 	moduleID = RequestModuleID();
 
+	// Integer arithmetic
 	RegisterMachineService(moduleID, "integer #1<INT", integerCall);
-
 	RegisterMachineService(moduleID, "+ #1<INT + #2<INT = #3>INT", addIntCall);
-	RegisterMachineService(moduleID, "+ #1<FLOAT + #2<FLOAT = #3>FLOAT", addFloatCall);
-
 	RegisterMachineService(moduleID, "+ #1<INT - #2<INT = #3>INT", subIntCall);
-	RegisterMachineService(moduleID, "+ #1<FLOAT - #2<FLOAT = #3>FLOAT", subFloatCall);
-
 	RegisterMachineService(moduleID, "* #1<INT * #2<INT = #3>INT", mulIntCall);
+	RegisterMachineService(moduleID, "* #1<INT / #2<INT = #3>INT rem #4>INT", intDivisionCall);
+
+	// Floating point arithmetic
+	RegisterMachineService(moduleID, "+ #1<FLOAT + #2<FLOAT = #3>FLOAT", addFloatCall);
+	RegisterMachineService(moduleID, "+ #1<FLOAT - #2<FLOAT = #3>FLOAT", subFloatCall);
 	RegisterMachineService(moduleID, "* #1<FLOAT * #2<FLOAT = #3>FLOAT", mulFloatCall);
 
+	// float-by-integer scaling
 	RegisterMachineService(moduleID, "value #1<FLOAT scale #2<INT scaled #3>FLOAT", valueScaleScaledCall);
 	RegisterMachineService(moduleID, "value #1<FLOAT invscale #2<INT scaled #3>FLOAT", valueInvscaleScaledCall);
 
+	// inequalities
 	RegisterMachineService(moduleID, "< #1<INT > #2<INT", strictInequalityIntCall);
 	RegisterMachineService(moduleID, "< #1<FLOAT > #2<FLOAT", strictInequalityFloatCall);
 
@@ -202,7 +271,7 @@ void MathSetup(void)
 		rangeSetup,	rangeCall, 0
 	);
 
-	// Let the compiler create (+ #1<INT + #2>INT = #3>INT) from ()"+ #1<INT - #2<INT = #3>INT")
+	// Let the compiler create (+ #1<INT + #2>INT = #3>INT) from (+ #1<INT - #2<INT = #3>INT)
 	// NOTE: this leaves the (+ + =) primitive service stale, needs compilation
 	addSubRule = DictionaryAddClauseFromCString("+ x + y = z | ! + z - x = y");
 }
