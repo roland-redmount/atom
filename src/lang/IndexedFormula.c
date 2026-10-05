@@ -82,7 +82,7 @@ TypedTuple * IndexedFormulaGetTermTuple(IndexedFormula const * indexedFormula, i
 
 void PrintIndexedFormula(IndexedFormula const * indexedFormula)
 {
-	PrintFormActorsAsFormula(indexedFormula->form, indexedFormula->actors);
+	PrintFormActorsAsFormula(indexedFormula->form, indexedFormula->actors, 0);
 }
 
 

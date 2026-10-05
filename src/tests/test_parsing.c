@@ -3,6 +3,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
+#include "kernel/multiset.h"
 #include "kernel/Parameter.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"
@@ -151,7 +152,7 @@ static void testPredicateBuilder(void)
 		ASSERT_TRUE(PredicateBuilderPush(&builder, tokensFixture->actorTokens[i]))
 		ASSERT_TRUE(PredicateBuilderIsValid(&builder))
 	}
-	Atom predicate = PredicateBuilderCreateFormula(&builder);
+	Atom predicate = PredicateBuilderCreateFormula(&builder, 0);
 
 	ASSERT_TRUE(SameAtoms(predicate, fixture.predicate))
 
@@ -207,7 +208,7 @@ static void testTermBuilder(void)
 			ASSERT_TRUE(TermBuilderPush(&builder, tokensFixture->actorTokens[i]))
 			ASSERT_TRUE(TermBuilderIsValid(&builder))
 		}
-		Atom term = TermBuilderCreateFormula(&builder);
+		Atom term = TermBuilderCreateFormula(&builder, 0);
 
 		Atom fixtureTerm = sign ? fixture.term : fixture.negatedTerm;
 		ASSERT_TRUE(SameAtoms(term, fixtureTerm))
@@ -238,7 +239,7 @@ void setupClauseFixture(ClauseFixture * fixture)
 	setupTermFixture(&(fixture->termFixture));
 	fixture->terms[0] = fixture->termFixture.negatedTerm;
 	fixture->terms[1] = fixture->termFixture.term;
-	fixture->clause = CreateClause(fixture->terms, EXAMPLE_CLAUSE_N_TERMS);
+	fixture->clause = CreateClause(fixture->terms, EXAMPLE_CLAUSE_N_TERMS, 0);
 }
 
 static void teardownClauseFixture(ClauseFixture * fixture)
@@ -481,7 +482,7 @@ static void testReflectionOfType(char const * formulaString, byte reflectionType
 	InitializeFormulaBuilder(&formulaBuilder, FORMULA_REFLECTED_SCOPE);
 	TokenizeCString(formulaString, formulaBuilderTokenHandler, &formulaBuilder);
 	ASSERT(FormulaBuilderFinish(&formulaBuilder))
-	Atom reflectedFormula = FormulaBuilderCreateFormula(&formulaBuilder);
+	Atom reflectedFormula = FormulaBuilderCreateFormula(&formulaBuilder, 0);
 	CleanupFormulaBuilder(&formulaBuilder);
 	Atom expectedTerm = createTermWithReflection("term", reflectionType, reflectedFormula, "arity", 2);
 
@@ -493,7 +494,7 @@ static void testReflectionOfType(char const * formulaString, byte reflectionType
 	TokenizeCString(formulaString, TermBuilderTokenHandler, &builder);
 	TokenizeCString(isRelation ? "]] arity 2" : "] arity 2", TermBuilderTokenHandler, &builder);
 	ASSERT(TermBuilderIsValid(&builder))
-	Atom parsedTerm = TermBuilderCreateFormula(&builder);
+	Atom parsedTerm = TermBuilderCreateFormula(&builder, 0);
 	TermBuilderFree(&builder);
 
 	ASSERT_TRUE(FormulaIsTerm(parsedTerm))
@@ -523,6 +524,7 @@ static void testReflection(char const * formulaString)
  */
 static void testLetterActor(void)
 {
+	// Parse a formula with a string and a leter
 	Atom term = CStringToTerm("list \"ab\" position 1 element 'A");
 	TypedTuple const * actors = FormulaGetActors(term);
 	ASSERT_UINT32_EQUAL(actors->nAtoms, 3)
@@ -534,11 +536,12 @@ static void testLetterActor(void)
 
 	TypedAtom element = TypedTupleGetElement(actors, elementIndex);
 	ASSERT_UINT32_EQUAL(element.type, AT_LETTER)
-	ASSERT_TRUE(SameAtoms(element.atom, GetAlphabetLetter('A')))
+	ASSERT_TRUE(SameAtoms(element.atom, CreateLetter('A')))
 
-	// a letter is case-insensitive, so the same term is written either way
+	// NOTE: letters are currently case-sensitive. The letter representation
+	// may change in the future,
 	Atom lowerTerm = CStringToTerm("list \"ab\" position 1 element 'a");
-	ASSERT_TRUE(SameAtoms(term, lowerTerm))
+	ASSERT_FALSE(SameAtoms(term, lowerTerm))
 	ReleaseFormula(lowerTerm);
 	ReleaseFormula(term);
 }
@@ -573,64 +576,84 @@ static void testParseFormula(void)
 	index32 errorPosition;
 
 	// a valid string parses to the formula CStringToFormula() yields for it
-	Atom formula = ParseFormula("foo x bar 123.45", &errorPosition);
+	Atom formula = ParseFormula("foo x bar 123.45", 0, &errorPosition);
 	ASSERT_TRUE(formula.hash != 0)
 	Atom expectedFormula = CStringToFormula("foo x bar 123.45");
 	ASSERT_TRUE(SameAtoms(formula, expectedFormula))
 	ReleaseFormula(expectedFormula);
 	ReleaseFormula(formula);
 
+	// CLAUDE: the first - is a role name and the second the sign of the actor -2
+	formula = ParseFormula("+ 3 - -2 = z", 0, &errorPosition);
+	ASSERT_TRUE(formula.hash != 0)
+	Atom minusRole = CreateNameFromCString("-");
+	index8 minusIndex = PredicateRoleIndex(
+		TermFormGetPredicateForm(FormulaGetForm(formula)), minusRole);
+	NameRelease(minusRole);
+	TypedAtom minusActor = TypedTupleGetElement(FormulaGetActors(formula), minusIndex);
+	ASSERT_UINT32_EQUAL(minusActor.type, AT_INT)
+	ASSERT_INT64_EQUAL(minusActor.atom._int, -2)
+	ReleaseFormula(formula);
+
+	// CLAUDE: a minus sign not followed directly by a digit is reported where the digit should be
+	ASSERT_UINT64_EQUAL(ParseFormula("foo - 2", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 5)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo -", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 5)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo -.5", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 5)
+
 	// a character belonging to no token is reported where it stands
-	ASSERT_UINT64_EQUAL(ParseFormula("foo x bar %", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x bar %", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 10)
 
 	// a number stands where an actor does and not where a role name does, so it is
 	// reported at its first character rather than at the whitespace before it
-	ASSERT_UINT64_EQUAL(ParseFormula("foo x 42 bar 1", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x 42 bar 1", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 6)
 
 	// a variable is named by a single letter, so a word too long to be one is reported
 	// at the letter that makes it too long; see enum TokenizerState
-	ASSERT_UINT64_EQUAL(ParseFormula("foo xy bar 1", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo xy bar 1", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 5)
 
 	// a string ending in the middle of a formula is reported at its end
-	ASSERT_UINT64_EQUAL(ParseFormula("foo x bar", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x bar", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 9)
 
 	// an unterminated string is read to the end of the line
-	ASSERT_UINT64_EQUAL(ParseFormula("foo \"abc", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo \"abc", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 8)
 
 	// a string is reported at its first character that is not a letter
-	ASSERT_UINT64_EQUAL(ParseFormula("foo \"ab1\"", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo \"ab1\"", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 7)
 
 	// an empty string is reported at its closing quote
-	ASSERT_UINT64_EQUAL(ParseFormula("foo \"\"", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo \"\"", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 5)
 
 	// an unterminated reflection abandons its nested builder
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [ bar 1", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [ bar 1", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 11)
 
 	// a parameter naming no known atom type is rejected, not asserted on
-	ASSERT_UINT64_EQUAL(ParseFormula("foo #1<NOTATYPE", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo #1<NOTATYPE", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 15)
 
 	// a string holding no formula at all
-	ASSERT_UINT64_EQUAL(ParseFormula("", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 0)
 
 	// A quoted variable is rejected outside of a reflections
-	ASSERT_UINT64_EQUAL(ParseFormula("foo ^x bar 42", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo ^x bar 42", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 4)
 
 	// CLAUDE: an AT_ID atom written by its hash is the actor of the formula
 	Atom string = CreateStringFromCString("abc");
 	char formulaString[32];
 	FormatString(formulaString, sizeof(formulaString), "foo @%016llx", (unsigned long long) string.hash);
-	formula = ParseFormula(formulaString, &errorPosition);
+	formula = ParseFormula(formulaString, 0, &errorPosition);
 	ASSERT_TRUE(formula.hash != 0)
 	TypedAtom actor = TypedTupleGetElement(FormulaGetView(formula).actors, 0);
 	ASSERT_UINT32_EQUAL(actor.type, AT_ID)
@@ -639,7 +662,7 @@ static void testParseFormula(void)
 	IFactRelease(string);
 
 	// CLAUDE: a hash naming no stored AT_ID atom is reported where the hash ends
-	ASSERT_UINT64_EQUAL(ParseFormula("foo @0000000000000000", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo @0000000000000000", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 21)
 }
 
@@ -728,6 +751,88 @@ static void testParseActors(void)
 }
 
 
+/*
+ * CLAUDE: Collect the term forms of a clause or conjunction form in order, as the
+ * terms of a formula of that form are ordered. A term form is its own single term.
+ */
+static size8 collectTermForms(Atom form, Atom termForms[])
+{
+	if(IsTermForm(form)) {
+		termForms[0] = form;
+		return 1;
+	}
+	size8 nTerms = 0;
+	MultisetIterator iterator;
+	MultisetIterate(form, AT_ID, &iterator);
+	while(MultisetIteratorNext(&iterator)) {
+		ElementMultiple em = MultisetIteratorGetElement(&iterator);
+		for(index8 j = 0; j < em.multiple; j++)
+			termForms[nTerms++] = em.element;
+	}
+	MultisetIteratorEnd(&iterator);
+	return nTerms;
+}
+
+
+/*
+ * CLAUDE: Parse a formula whose actors are the numbers 1, 2, 3 ... in the order written.
+ * Each actor of the formula is then the number of its position as written, which the
+ * FormOrdering written by ParseFormula() must give.
+ */
+static void testFormOrderingOf(char const * formulaString)
+{
+	FormOrdering ordering;
+	index32 errorPosition;
+	Atom formula = ParseFormula(formulaString, &ordering, &errorPosition);
+	ASSERT_TRUE(formula.hash != 0)
+	FormulaView view = FormulaGetView(formula);
+
+	Atom termForms[FORMULA_MAX_ARITY];
+	size8 nTerms = collectTermForms(view.form, termForms);
+	ASSERT_UINT32_EQUAL(ordering.nTerms, nTerms)
+
+	// CLAUDE: the actor index where each term begins, with terms in the order written
+	size8 enteredArities[nTerms];
+	for(index8 i = 0; i < nTerms; i++)
+		enteredArities[ordering.termOrder[i]] = TermFormArity(termForms[i]);
+	index8 enteredOffsets[nTerms];
+	index8 offset = 0;
+	for(index8 i = 0; i < nTerms; i++) {
+		enteredOffsets[i] = offset;
+		offset += enteredArities[i];
+	}
+
+	index8 actorsOffset = 0;
+	for(index8 i = 0; i < nTerms; i++) {
+		index8 enteredOffset = enteredOffsets[ordering.termOrder[i]];
+		size8 termArity = TermFormArity(termForms[i]);
+		for(index8 j = 0; j < termArity; j++) {
+			index8 actorIndex = actorsOffset + j;
+			TypedAtom actor = TypedTupleGetElement(view.actors, actorIndex);
+			ASSERT_INT64_EQUAL(actor.atom._int, enteredOffset + ordering.roleOrder[actorIndex] + 1)
+		}
+		actorsOffset += termArity;
+	}
+	ReleaseFormula(formula);
+}
+
+
+/**
+ * CLAUDE: ParseFormula() records the order in which terms and roles were written.
+ */
+static void testFormOrdering(void)
+{
+	testFormOrderingOf("zed 1 alpha 2 mid 3");
+	testFormOrderingOf("alpha 1 mid 2 zed 3");
+	testFormOrderingOf("= 1 + 2 + 3");
+	testFormOrderingOf("! zed 1 alpha 2");
+	testFormOrderingOf("zed 1 alpha 2 & beta 3 gamma 4 & alpha 5");
+	testFormOrderingOf("beta 1 gamma 2 & zed 3 alpha 4 & alpha 5");
+	testFormOrderingOf("zed 1 alpha 2 & alpha 3 zed 4");
+	testFormOrderingOf("zed 1 alpha 2 | ! beta 3 gamma 4");
+}
+
+
 /**
  * A clause states each of its terms once, and a conjunction each of its clauses once,
  * so a formula repeating one of them is not a formula. Repeating a term *form* is fine:
@@ -738,34 +843,34 @@ static void testRepeatedTermRejected(void)
 	index32 errorPosition;
 
 	// A repeat with more formula after it is reported at the separator that completed it
-	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 | foo 1 | bar 2", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 | foo 1 | bar 2", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 14)
-	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 & foo 1 & baz 3", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 & foo 1 & baz 3", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 14)
 
 	// CLAUDE: Mixing | and & is not a formula; the second connective is rejected where it appears
-	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 | foo 1 & bar 2", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 | foo 1 & bar 2", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 14)
 
 	// The last term of a formula is only completed once the string has ended,
 	// so a repeat there is reported at the end
-	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 | foo 1", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 | foo 1", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 13)
-	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 bar 2 & foo 1 bar 2", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 bar 2 & foo 1 bar 2", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 25)
 
 	// A reflection holds a formula, and is rejected at its closing bracket
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [ bar 1 | bar 1 ]", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [ bar 1 | bar 1 ]", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 20)
 
 	// Two terms of one term form are distinct terms, and so are two such clauses
-	Atom clause = ParseFormula("foo 1 | foo 2", &errorPosition);
+	Atom clause = ParseFormula("foo 1 | foo 2", 0, &errorPosition);
 	ASSERT_TRUE(clause.hash != 0)
 	ASSERT_UINT32_EQUAL(ClauseFormNTerms(FormulaGetForm(clause)), 2)
 	ASSERT_UINT32_EQUAL(ClauseFormNTermForms(FormulaGetForm(clause)), 1)
 	ReleaseFormula(clause);
 
-	Atom conjunction = ParseFormula("foo 1 & foo 2", &errorPosition);
+	Atom conjunction = ParseFormula("foo 1 & foo 2", 0, &errorPosition);
 	ASSERT_TRUE(conjunction.hash != 0)
 	ASSERT_UINT32_EQUAL(ConjunctionFormNTermsTotal(FormulaGetForm(conjunction)), 2)
 	ASSERT_UINT32_EQUAL(ConjunctionFormNUniqueTermForms(FormulaGetForm(conjunction)), 1)
@@ -905,29 +1010,29 @@ static void testRelationRejected(void)
 	index32 errorPosition;
 
 	// a relation is closed by two brackets, so a name after one bracket is rejected
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [[bar 1] baz 2", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [[bar 1] baz 2", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 13)
 
 	// a relation missing the second closing bracket is reported at the end of the string
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [[bar 1]", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [[bar 1]", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 12)
 
 	// a relation holding no formula
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [[]]", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [[]]", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 6)
 
 	// a third opening bracket stands where a role name is expected
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [[[bar 1]]]", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [[[bar 1]]]", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 6)
 
 	// an opening bracket after an actor stands where a role name is expected
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [bar 1 [baz 2]]", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [bar 1 [baz 2]]", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 11)
-	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 [bar 2]", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 [bar 2]", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 6)
 
 	// whitespace between the brackets is allowed; see PartBuilder
-	Atom spaced = ParseFormula("foo [ [bar 1] ]", &errorPosition);
+	Atom spaced = ParseFormula("foo [ [bar 1] ]", 0, &errorPosition);
 	Atom expected = CStringToFormula("foo [[bar 1]]");
 	ASSERT_TRUE(SameAtoms(spaced, expected))
 	ASSERT_UINT32_EQUAL(FormulaGetActors(spaced)->nAtoms, 1)
@@ -1035,21 +1140,21 @@ static void testReflectedNameRejected(void)
 	index32 errorPosition;
 
 	// a name cannot be reflected inside a relation
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [[bar]]", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [[bar]]", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 9)
 
 	// a ] after a role name closes nothing but a reflected name
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [bar 1 baz]", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [bar 1 baz]", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 14)
-	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 bar]", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 bar]", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 9)
 
 	// an unterminated reflected name is reported at the end of the string
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [bar", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [bar", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 8)
 
 	// a reflected name is an actor, so a role name follows it
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [bar] [baz]", &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [bar] [baz]", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 10)
 }
 
@@ -1127,6 +1232,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testLetterActor);
 	ExecuteTest(testGeneratorActor);
 	ExecuteTest(testParseFormula);
+	ExecuteTest(testFormOrdering);
 	ExecuteTest(testParseTermForm);
 	ExecuteTest(testParseActors);
 	ExecuteTest(testRepeatedTermRejected);

@@ -16,6 +16,7 @@ void InitializeFormulaBuilder(FormulaBuilder * builder, enum FormulaScope scope)
 {
 	InitializeTermBuilder(&(builder->termBuilder), scope);
 	CreateResizingArray(&(builder->terms), sizeof(Atom), INITIAL_N_TERMS);
+	CreateResizingArray(&(builder->termRoleOrders), sizeof(index8), INITIAL_N_TERMS);
 	builder->arity = 0;
 	builder->connective = CONNECTIVE_NONE;
 	builder->isValid = false;
@@ -38,7 +39,8 @@ static bool formulaHasTerm(FormulaBuilder const * builder, Atom term)
    Returns false if the formula already contains that term. */
 static bool addCurrentTerm(FormulaBuilder * builder)
 {
-	Atom term = TermBuilderCreateFormula(&(builder->termBuilder));
+	index8 roleOrder[FORMULA_MAX_ARITY];
+	Atom term = TermBuilderCreateFormula(&(builder->termBuilder), roleOrder);
 	if(formulaHasTerm(builder, term)) {
 		ReleaseFormula(term);
 		return false;
@@ -49,6 +51,8 @@ static bool addCurrentTerm(FormulaBuilder * builder)
 	ASSERT(builder->arity <= 255 - termArity);
 	builder->arity += termArity;
 	ResizingArrayAppend(&(builder->terms), &term);
+	for(index8 i = 0; i < termArity; i++)
+		ResizingArrayAppend(&(builder->termRoleOrders), &roleOrder[i]);
 	return true;
 }
 
@@ -112,17 +116,61 @@ bool FormulaBuilderFinish(FormulaBuilder * builder)
  * no connective is created as that term, and only a formula with a connective is
  * flattened into a clause or a conjunction.
  */
-Atom FormulaBuilderCreateFormula(FormulaBuilder * builder)
+/*
+ * CLAUDE: Write the role order of each term, as collected by addCurrentTerm(), and the
+ * order of the terms in the formula to a FormOrdering. termOrder is written by
+ * CreateClause() or CreateConjunction().
+ */
+static void writeFormOrdering(
+	FormulaBuilder const * builder, index8 const termOrder[], FormOrdering * ordering)
+{
+	size8 nTerms = builder->terms.nElements;
+	Atom const * terms = ResizingArrayGetMemory(&(builder->terms));
+	index8 const * termRoleOrders = ResizingArrayGetMemory(&(builder->termRoleOrders));
+
+	// CLAUDE: the index in termRoleOrders where the role order of each term begins
+	index8 termRoleOrderIndices[nTerms];
+	index8 roleOrderIndex = 0;
+	for(index8 i = 0; i < nTerms; i++) {
+		termRoleOrderIndices[i] = roleOrderIndex;
+		roleOrderIndex += FormulaArity(terms[i]);
+	}
+
+	ordering->nTerms = nTerms;
+	CopyMemory(termOrder, ordering->termOrder, nTerms * sizeof(index8));
+	index8 actorsOffset = 0;
+	for(index8 i = 0; i < nTerms; i++) {
+		index8 term = termOrder[i];
+		size8 termArity = FormulaArity(terms[term]);
+		CopyMemory(
+			termRoleOrders + termRoleOrderIndices[term],
+			ordering->roleOrder + actorsOffset,
+			termArity * sizeof(index8));
+		actorsOffset += termArity;
+	}
+}
+
+
+Atom FormulaBuilderCreateFormula(FormulaBuilder * builder, FormOrdering * ordering)
 {
 	ASSERT(FormulaBuilderIsValid(builder))
-	if(builder->connective == CONNECTIVE_NONE)
-		return TermBuilderCreateFormula(&(builder->termBuilder));
+	if(builder->connective == CONNECTIVE_NONE) {
+		if(ordering) {
+			ordering->nTerms = 1;
+			ordering->termOrder[0] = 0;
+		}
+		return TermBuilderCreateFormula(&(builder->termBuilder), ordering ? ordering->roleOrder : 0);
+	}
 
 	size8 nTerms = builder->terms.nElements;
 	Atom const * terms = ResizingArrayGetMemory(&(builder->terms));
-	if(builder->connective == CONNECTIVE_AND)
-		return CreateConjunction(terms, nTerms);
-	return CreateClause(terms, nTerms);
+	index8 termOrder[nTerms];
+	Atom formula = (builder->connective == CONNECTIVE_AND) ?
+		CreateConjunction(terms, nTerms, termOrder) :
+		CreateClause(terms, nTerms, termOrder);
+	if(ordering)
+		writeFormOrdering(builder, termOrder, ordering);
+	return formula;
 }
 
 
@@ -135,6 +183,7 @@ void FormulaBuilderReset(FormulaBuilder * builder)
 		ReleaseFormula(term);
 	}
 	ResizingArrayReset(&(builder->terms));
+	ResizingArrayReset(&(builder->termRoleOrders));
 	builder->arity = 0;
 	builder->connective = CONNECTIVE_NONE;
 	builder->isValid = false;
@@ -146,6 +195,7 @@ void CleanupFormulaBuilder(FormulaBuilder * builder)
 	FormulaBuilderReset(builder);
 	TermBuilderFree(&(builder->termBuilder));
 	FreeResizingArray(&(builder->terms));
+	FreeResizingArray(&(builder->termRoleOrders));
 }
 
 
@@ -221,7 +271,7 @@ static bool tokenizeToFormulaBuilder(
 }
 
 
-Atom ParseFormula(char const * cString, index32 * errorPosition)
+Atom ParseFormula(char const * cString, FormOrdering * ordering, index32 * errorPosition)
 {
 	FormulaBuilder builder;
 	InitializeFormulaBuilder(&builder, FORMULA_TOP_SCOPE);
@@ -229,7 +279,7 @@ Atom ParseFormula(char const * cString, index32 * errorPosition)
 	Atom formula = (Atom) {0};
 	if(tokenizeToFormulaBuilder(cString, &builder, errorPosition)) {
 		if(FormulaBuilderIsValid(&builder) && FormulaBuilderFinish(&builder))
-			formula = FormulaBuilderCreateFormula(&builder);
+			formula = FormulaBuilderCreateFormula(&builder, ordering);
 		else
 			// Either every token was accepted but they do not add up to a formula, or
 			// the last term repeats one before it, which is only known once
@@ -247,7 +297,7 @@ Atom ParseFormula(char const * cString, index32 * errorPosition)
 Atom CStringToFormula(char const * cString)
 {
 	index32 errorPosition;
-	Atom formula = ParseFormula(cString, &errorPosition);
+	Atom formula = ParseFormula(cString, 0, &errorPosition);
 	ASSERT(formula.hash)
 	return formula;
 }

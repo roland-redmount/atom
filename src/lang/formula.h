@@ -14,6 +14,10 @@
 #include "kernel/typedtuple.h"
 #include "lang/TypedAtom.h"
 
+
+// CLAUDE: the arity of a formula is a size8
+#define FORMULA_MAX_ARITY	255
+
 /**
  * A view of the form and actors of a formula, as returned by FormulaGetView().
  * A view owns nothing, and is only valid while the caller holds a reference
@@ -106,8 +110,12 @@ Atom TermGetRoleActor(Atom termForm, Atom const termActors[], const char * role,
 /**
  * Create a clause from a list of term formulas, in any order.
  * No term may be repeated.
+ *
+ * CLAUDE: Unless termOrder is 0, the order of the terms in the clause is written to
+ * termOrder, which must have room for nTerms elements: term termOrder[i] of the list
+ * is the term at index i of the clause. See MultisetIterationOrder().
  */
-Atom CreateClause(Atom const terms[], size8 nTerms);
+Atom CreateClause(Atom const terms[], size8 nTerms, index8 termOrder[]);
 
 /**
  * Find the index into the list of terms corresponding the given clause form
@@ -124,8 +132,11 @@ index8 ClauseGetTermActorsIndex(Atom clauseForm, Atom termForm, uint8 m);
 /**
  * Create a conjunction from a list of terms, in any order.
  * No term may be repeated.
+ *
+ * CLAUDE: Unless termOrder is 0, the order of the terms is written to termOrder,
+ * as for CreateClause().
  */
-Atom CreateConjunction(Atom const terms[], size8 nTerms);
+Atom CreateConjunction(Atom const terms[], size8 nTerms, index8 termOrder[]);
 
 
 /**
@@ -153,7 +164,29 @@ void PrintFormula(Atom formula);
 
 void PrintFormulaView(FormulaView formulaView);
 
-void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors);
+/**
+ * CLAUDE: The order in which the terms and the roles of a formula were entered, as
+ * written by ParseFormula(). A formula stores its terms, roles and actors in the
+ * order of its form instead; see MultisetIterationOrder().
+ *
+ * termOrder[i] is the entered index of the term at index i of the form. A predicate
+ * or term form has a single term. The role order of each term is stored in roleOrder
+ * at the same indices as the actors of the term in the actors tuple. So for a term whose
+ * first actor has index a, roleOrder[a + i] is the entered index (within the term) of
+ * the role at index i of the term.
+ */
+typedef struct s_FormOrdering {
+	size8 nTerms;
+	index8 termOrder[FORMULA_MAX_ARITY];
+	index8 roleOrder[FORMULA_MAX_ARITY];
+} FormOrdering;
+
+/**
+ * CLAUDE: Print the actors of a form as a formula. Unless ordering is 0, the terms
+ * and roles are printed in the order given by the FormOrdering, rather than in
+ * the order of the form.
+ */
+void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors, FormOrdering const * ordering);
 
 /**
  * CLAUDE: The number of actors of a predicate, term, clause or conjunction form.

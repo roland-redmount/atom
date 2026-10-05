@@ -36,7 +36,7 @@ static void setupFixture(void)
 		(Atom[]) {
 			(Atom) {._int = 13},
 			(Atom) {._float = 123.456},
-			GetAlphabetLetter('A'),
+			CreateLetter('A'),
 		},
 		fixture.tuple1,
 		sizeof(fixture.tuple1)
@@ -45,7 +45,7 @@ static void setupFixture(void)
 		(Atom[]) {
 			(Atom) {._int = 13},
 			(Atom) {._float = 123.456},
-			GetAlphabetLetter('B'),
+			CreateLetter('B'),
 		},
 		fixture.tuple2,
 		sizeof(fixture.tuple2)
@@ -54,7 +54,7 @@ static void setupFixture(void)
 		(Atom[]) {
 			(Atom) {._int = 14},
 			(Atom) {._float = 456.789},
-			GetAlphabetLetter('C'),
+			CreateLetter('C'),
 		},
 		fixture.tuple3,
 		sizeof(fixture.tuple3)
@@ -162,7 +162,7 @@ void testFindTuple(void)
 		Atom queryTuple[3] = {
 			(Atom) {._int = 31},
 			(Atom) {._float = 123.456},
-			GetAlphabetLetter('X'),
+			CreateLetter('X'),
 		};
 		RelationBTreeIterate(fixture.relation, queryTuple, TEST_N_COLUMNS, &iterator);
 		ASSERT_FALSE(RelationBTreeIteratorNext(&iterator))

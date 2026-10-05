@@ -27,7 +27,12 @@ bool PredicateBuilderIsEmpty(PredicateBuilder const * builder);
 
 bool PredicateBuilderIsValid(PredicateBuilder const * builder);
 
-Atom PredicateBuilderCreateFormula(PredicateBuilder const * builder);
+/**
+ * CLAUDE: Create the predicate formula. Unless roleOrder is 0, the order in which the
+ * roles were pushed is written to roleOrder, which must have room for one element per
+ * actor; see FormOrdering.
+ */
+Atom PredicateBuilderCreateFormula(PredicateBuilder const * builder, index8 roleOrder[]);
 
 void PredicateBuilderReset(PredicateBuilder * builder);
 

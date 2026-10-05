@@ -55,7 +55,7 @@ void testSubstituteReflection(void)
 	InitializeTermBuilder(&builder, FORMULA_REFLECTED_SCOPE);
 	TokenizeCString("foo ^x bar x baz y barf ^z", TermBuilderTokenHandler, &builder);
 	ASSERT_TRUE(TermBuilderIsValid(&builder))
-	TypedAtom formula = CreateTypedAtom(AT_FORMULA, TermBuilderCreateFormula(&builder));
+	TypedAtom formula = CreateTypedAtom(AT_FORMULA, TermBuilderCreateFormula(&builder, 0));
 
 	// Substitution {x -> y, z -> 2}
 	Substitution subst;
@@ -74,7 +74,7 @@ void testSubstituteReflection(void)
 	TermBuilderReset(&builder);
 	TokenizeCString("foo ^y bar x baz y barf 2", TermBuilderTokenHandler, &builder);
 	ASSERT_TRUE(TermBuilderIsValid(&builder))
-	TypedAtom substitutedFormula = CreateTypedAtom(AT_FORMULA, TermBuilderCreateFormula(&builder));
+	TypedAtom substitutedFormula = CreateTypedAtom(AT_FORMULA, TermBuilderCreateFormula(&builder, 0));
 	TermBuilderFree(&builder);
 
 	TypedTuple * expectedResult = CreateTypedTupleFromArray(

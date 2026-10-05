@@ -98,7 +98,7 @@ static void testTokenizer(void)
 	ASSERT_UINT32_EQUAL(ListLength(tokenString), 6)
 	for(index32 i = 0; i < 6; i++) {
 		Atom letter = ListGetElement(tokenString, i+1);
-		ASSERT_CHAR_EQUAL(LetterToChar(letter, LETTER_LOWERCASE), nameString[i])
+		ASSERT_CHAR_EQUAL(LetterToChar(letter), nameString[i])
 	}
 	ReleaseToken(token);
 
@@ -132,6 +132,34 @@ static void testTokenizer(void)
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_FLOAT)
 	ASSERT_FLOAT_EQUAL(token.typedAtom.atom._float, 123.45)
+
+	// CLAUDE: a negative number begins with a minus sign
+	token = tokenizeCString(&tokenizer, "-42", TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_INT)
+	ASSERT_INT64_EQUAL(token.typedAtom.atom._int, -42);
+
+	token = tokenizeCString(&tokenizer, "-1.5", TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_NUMBER)
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_FLOAT)
+	ASSERT_FLOAT_EQUAL(token.typedAtom.atom._float, -1.5)
+
+	token = tokenizeCString(&tokenizer, "-0", TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_INT)
+	ASSERT_INT64_EQUAL(token.typedAtom.atom._int, 0);
+
+	// CLAUDE: the minus sign must be followed directly by a digit
+	char const notDigits[] = {' ', 0, '.', '-'};
+	for(index8 i = 0; i < sizeof(notDigits); i++) {
+		TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+		ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '-'), TOKENIZER_ACCEPTED)
+		ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, notDigits[i]), TOKENIZER_REJECTED)
+	}
+
+	// CLAUDE: where a role name stands, the minus sign is a name, as in (+ x - y = z)
+	token = tokenizeCString(&tokenizer, "-", TOKENIZER_ROLE_STATE);
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_NAME)
+	ReleaseToken(token);
 
 	// the string "123.45." is not a legal number. The tokenizer stays incomplete,
 	// which is what tells a syntax error from a token ended by a separator.
@@ -176,11 +204,11 @@ static void testTokenizeLetter(void)
 	Token token = tokenizeCString(&tokenizer, "'A", TOKENIZER_ACTOR_STATE);
 	ASSERT_UINT32_EQUAL(token.type, TOKEN_LETTER)
 	ASSERT_UINT32_EQUAL(token.typedAtom.type, AT_LETTER)
-	ASSERT_CHAR_EQUAL(LetterToChar(token.typedAtom.atom, LETTER_UPPERCASE), 'A')
+	ASSERT_CHAR_EQUAL(LetterToChar(token.typedAtom.atom), 'A')
 
-	// a letter is case-insensitive, so 'a is the same atom as 'A
+	// Letters are now case-sensitive
 	Token lowerToken = tokenizeCString(&tokenizer, "'a", TOKENIZER_ACTOR_STATE);
-	ASSERT_TRUE(SameTypedAtoms(lowerToken.typedAtom, token.typedAtom))
+	ASSERT_FALSE(SameTypedAtoms(lowerToken.typedAtom, token.typedAtom))
 
 	// A letter is one character, so a second one is an error rather than the start of
 	// the next token; see TOKEN_VARIABLE for the same rule on a variable name.

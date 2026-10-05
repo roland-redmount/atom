@@ -50,7 +50,7 @@ Atom CreateString(char const * chars, size32 length)
 	// add the (list position element) ifacts
 	Atom listElements[length];
 	for(index32 i = 0; i < length; i++)
-		listElements[i] = GetAlphabetLetter(chars[i]);
+		listElements[i] = CreateLetter(chars[i]);
 	AddListToIFact(&draft, listElements, AT_LETTER, length);
 
 	// add (string @string) to ifact
@@ -84,7 +84,7 @@ void PrintString(Atom string)
 	ListIterate(string, &iterator);
 	while(ListIteratorNext(&iterator)) {
 		Atom letter = ListIteratorGetElement(&iterator);
-		PrintChar(LetterToChar(letter, LETTER_UPPERCASE));
+		PrintChar(LetterToChar(letter));
 	}
 	ListIteratorEnd(&iterator);
 	PrintChar('"');

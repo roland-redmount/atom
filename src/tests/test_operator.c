@@ -80,7 +80,7 @@ void testPermuteOperator(void)
 	OperatorContext * context = OperatorCreateContext(permuteOperator, arguments);
 	size32 nElements = 0;
 	while(OperatorCall(context)) {
-		// PrintChar(LetterToChar(arguments[1], LETTER_LOWERCASE));
+		// PrintChar(LetterToChar(arguments[1]));
 		// PrintChar('\n');
 		nElements++;
 	}
@@ -113,7 +113,7 @@ void testProjectOperator(void)
 	char uniqueLetters[] = "abil";
 	for(index8 i = 0; i < 4; i++) {
 		ASSERT_TRUE(OperatorCall(context))
-		ASSERT_CHAR_EQUAL(LetterToChar(arguments[1], LETTER_LOWERCASE), uniqueLetters[i])
+		ASSERT_CHAR_EQUAL(LetterToChar(arguments[1]), uniqueLetters[i])
 	}
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
@@ -265,7 +265,7 @@ void testFilterOperator(void)
 	Atom string = CreateStringFromCString("alibaba");
 	Atom arguments[3];
 	ListSetTuple(
-		(Atom[]) {string, (Atom) {0}, GetAlphabetLetter('a')},
+		(Atom[]) {string, (Atom) {0}, CreateLetter('a')},
 		arguments
 	);
 	OperatorContext * context = OperatorCreateContext(filterOperator, arguments);
@@ -273,7 +273,7 @@ void testFilterOperator(void)
 	for(index8 i = 0; i < 3; i++) {
 		ASSERT_TRUE(OperatorCall(context))
 		ASSERT_INT64_EQUAL(arguments[positionIndex]._int, expectedPositions[i])
-		ASSERT_CHAR_EQUAL(LetterToChar(arguments[elementIndex], LETTER_LOWERCASE), 'a')
+		ASSERT_CHAR_EQUAL(LetterToChar(arguments[elementIndex]), 'a')
 	}
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
@@ -298,7 +298,7 @@ void testConstantOperator(void)
 {
 	Operator * listOperator = GetListOperator(AT_LETTER);
 	index8 positionIndex = GetListRoleIndex()[LIST_ROLE_POSITION];
-	Atom constants[2] = {(Atom) {._int = 42}, GetAlphabetLetter('q')};
+	Atom constants[2] = {(Atom) {._int = 42}, CreateLetter('q')};
 	byte constantTypes[2] = {AT_INT, AT_LETTER};
 	Operator * constantOperator = CreateConstantOperator(
 		listOperator, constants, constantTypes, 2, (index8[]) {4}, 1);
@@ -314,20 +314,20 @@ void testConstantOperator(void)
 	Atom arguments[5];
 	ListSetTuple((Atom[]) {string, (Atom) {0}, (Atom) {0}}, arguments);
 	arguments[3] = (Atom) {0};
-	arguments[4] = GetAlphabetLetter('q');
+	arguments[4] = CreateLetter('q');
 	OperatorContext * context = OperatorCreateContext(constantOperator, arguments);
 	for(index8 i = 0; i < 3; i++) {
 		ASSERT_TRUE(OperatorCall(context))
 		ASSERT_INT64_EQUAL(arguments[positionIndex]._int, i + 1)
 		ASSERT_INT64_EQUAL(arguments[3]._int, 42)
-		ASSERT_CHAR_EQUAL(LetterToChar(arguments[4], LETTER_LOWERCASE), 'q')
+		ASSERT_CHAR_EQUAL(LetterToChar(arguments[4]), 'q')
 	}
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
 
 	// A bound argument differing from its constant gives no tuples
 	ListSetTuple((Atom[]) {string, (Atom) {0}, (Atom) {0}}, arguments);
-	arguments[4] = GetAlphabetLetter('r');
+	arguments[4] = CreateLetter('r');
 	context = OperatorCreateContext(constantOperator, arguments);
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
@@ -385,7 +385,7 @@ void testConstrainOperator(void)
 	for(index8 i = 0; i < 2; i++) {
 		ASSERT_TRUE(OperatorCall(context))
 		ASSERT_UINT64_EQUAL(arguments[1]._int, i + 1)
-		ASSERT_CHAR_EQUAL(LetterToChar(arguments[3], LETTER_LOWERCASE), expectedLetters[i])
+		ASSERT_CHAR_EQUAL(LetterToChar(arguments[3]), expectedLetters[i])
 	}
 	ASSERT_FALSE(OperatorCall(context))
 	OperatorFreeContext(context);
@@ -431,7 +431,7 @@ void testUnionOperator(void)
 		ASSERT_TRUE(OperatorCall(context))
 		ASSERT_INT32_EQUAL(arguments[0]._int, expectedPositions[i])
 		ASSERT_CHAR_EQUAL(
-			LetterToChar(arguments[1], LETTER_LOWERCASE),
+			LetterToChar(arguments[1]),
 			expectedCharacters[i]
 		)
 	}
@@ -479,7 +479,7 @@ void testUnionDuplicateAtExhaustion(void)
 		ASSERT_TRUE(OperatorCall(context))
 		ASSERT_INT32_EQUAL(arguments[0]._int, expectedPositions[i])
 		ASSERT_CHAR_EQUAL(
-			LetterToChar(arguments[1], LETTER_LOWERCASE),
+			LetterToChar(arguments[1]),
 			expectedCharacters[i]
 		)
 	}

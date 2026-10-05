@@ -240,7 +240,7 @@ void testAssertFormulaRejects(void)
 	// A clause of one term says no more than that term. The parser never builds one,
 	// yielding the term itself instead, so it is built here.
 	Atom term = CStringToTerm("foo x bar 1");
-	Atom singleTermClause = CreateClause(&term, 1);
+	Atom singleTermClause = CreateClause(&term, 1, 0);
 	ASSERT_INT32_EQUAL(AssertFormula(singleTermClause), ASSERT_CLAUSE_ONE_TERM)
 	ReleaseFormula(singleTermClause);
 	ReleaseFormula(term);
@@ -274,12 +274,12 @@ void testCreateIFactList(void)
 
 	// The defining facts are those of the list ('A 'B), so the atom is that list
 	ASSERT_UINT32_EQUAL(ListLength(ifact), 2)
-	ASSERT_DATA64_EQUAL(ListGetElement(ifact, 1).hash, GetAlphabetLetter('A').hash)
-	ASSERT_DATA64_EQUAL(ListGetElement(ifact, 2).hash, GetAlphabetLetter('B').hash)
+	ASSERT_DATA64_EQUAL(ListGetElement(ifact, 1).hash, CreateLetter('A').hash)
+	ASSERT_DATA64_EQUAL(ListGetElement(ifact, 2).hash, CreateLetter('B').hash)
 
 	// Creating that list finds the atom already there, and adds no facts
 	Atom list = CreateListFromArray(
-		(Atom[]) {GetAlphabetLetter('A'), GetAlphabetLetter('B')}, AT_LETTER, 2);
+		(Atom[]) {CreateLetter('A'), CreateLetter('B')}, AT_LETTER, 2);
 	ASSERT_DATA64_EQUAL(list.hash, ifact.hash)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 2)
 	ASSERT_UINT32_EQUAL(RelationNRows(listLetter), listLetterNRows + 2)

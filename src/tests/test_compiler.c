@@ -150,9 +150,10 @@ static size32 countQueryTuples(Operator const * op, Atom query)
 void testCompilePermute1(void)
 {
 	// This rule compiles to a PERMUTE service with no constants
-	// + x + y = z <- + z - x = y
-	FormulaView clause = DictionaryAddClauseFromCString("+ x + y = z | ! + z - x = y");
-	Atom queryTerm = CStringToTerm("+ 4 + d = 7");
+	// term x term y sum z <- + z - x = y
+	// NOTE: using the relation (term term sum) to be distinct from (+ + =) in math.c
+	FormulaView clause = DictionaryAddClauseFromCString("term x term y sum z | ! + z - x = y");
+	Atom queryTerm = CStringToTerm("term 4 term d sum 7");
 
 	// This will yield a new service calling the existing (+ - =) service
 	Service services[MAX_COMPILED_VARIANTS];
@@ -167,7 +168,7 @@ void testCompilePermute1(void)
 	void * context = OperatorCreateContext(operator, arguments);
 	ASSERT_TRUE(OperatorCall(context))
 
-	Atom d = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "+", 2);
+	Atom d = TermGetRoleActor(FormulaGetForm(queryTerm), arguments, "term", 2);
 	ASSERT_UINT64_EQUAL(d._int, 3);
 
 	ASSERT_FALSE(OperatorCall(context))
@@ -566,7 +567,7 @@ void testCompileProject(void)
 		TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, 2);
 		void * context = OperatorCreateContext(operator, arguments);
 		while(OperatorCall(context)) {
-			char c = LetterToChar(arguments[elementRoleIndex], LETTER_LOWERCASE);
+			char c = LetterToChar(arguments[elementRoleIndex]);
 			ASSERT(k < 4)
 			ASSERT_CHAR_EQUAL(c, uniqueLetters[k])
 			k++;
@@ -2032,6 +2033,8 @@ static RelationFixture startFixture;
 
 void testCompileChainedRuleOrder(void)
 {
+	size32 initialNCompiled = NumberOfCompiledServices();
+
 	SetupRelationFixture(&nodeFixture, (char const * []) {"node", "label"}, 2);
 	RelationFixtureAddTuple(&nodeFixture, (char const * []) {"na", "la"});
 	RelationFixtureAddTuple(&nodeFixture, (char const * []) {"nb", "lb"});
@@ -2045,14 +2048,14 @@ void testCompileChainedRuleOrder(void)
 	FormulaView pickClause = DictionaryAddClauseFromCString(
 		"pick p give g | ! start p point k | ! alias k as g");
 
-	ASSERT_INT32_EQUAL(NumberOfCompiledServices(), 0);
+	ASSERT_INT32_EQUAL(NumberOfCompiledServices(), initialNCompiled);
 	
 	// Compiling this query registers 2 services: one for (alias k as l)
 	// and one for (pick p give g), depending on the former.
 	Atom queryTerm = CStringToTerm("pick \"sa\" give g");
 	Service services[MAX_COMPILED_VARIANTS];
 	size8 nServices = CompileQuery(FormulaGetView(queryTerm), services);
-	ASSERT_INT32_EQUAL(NumberOfCompiledServices(), 2);
+	ASSERT_INT32_EQUAL(NumberOfCompiledServices(), initialNCompiled + 2);
 	ASSERT_UINT32_EQUAL(nServices, 1)
 
 	// Evaluating the query (pick "sa" give g) yields (pick "sa" give "la")
@@ -2206,7 +2209,16 @@ void testCompileFilterInRuleBody(void)
 	// Compiling the query also compiled a service for its body term, which is a cache
 	// over the list relation and outlives the rule; remove both
 	RemoveService(service);
-	RemoveAllCompiledServices();
+
+	// CLAUDE: Other compiled services may exist before this test, so the body term
+	// service is found by dispatch and removed alone.
+	Atom bodyTerm = CStringToTerm("list \"abracadabra\" position q element 'a");
+	Service bodyService;
+	index8 permutation[3];
+	ASSERT_INT32_EQUAL(DispatchQueryFormula(bodyTerm, &bodyService, permutation), DISPATCH_FOUND)
+	ASSERT_TRUE(ServiceGetOperator(bodyService)->type != OPERATOR_MACHINE)
+	RemoveService(bodyService);
+	ReleaseFormula(bodyTerm);
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 
 	ReleaseFormula(queryTerm);
