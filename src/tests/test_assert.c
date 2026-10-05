@@ -72,7 +72,6 @@ void testAssertOverlapsService(void)
 	// NOTE: this requires compiling a FILTER service
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(knownFact), 0), ASSERT_EXISTED)
 	
-	RemoveAllCompiledServices();
 	ReleaseFormula(knownFact);
 }
 

@@ -2,6 +2,7 @@
 
 #include "testing/testing.h"
 #include "kernel/ifact.h"
+#include "kernel/ServiceRegistry.h"
 #include "lang/formula.h"
 #include "memory/allocator.h"
 
@@ -274,8 +275,17 @@ void ExecuteTest(void (*test)(void))
 typedef enum {CHECK_SETUP = 0, CHECK_TEST = 1, CHECK_TEARDOWN = 2} CheckType;
 const char * checkTypeNames[3] = {"Setup", "Test", "Teardown"};
 
+
 static void executeCheckReferences(void (*function)(void), CheckType checkType)
 {
+	/*
+	* Compiled services are a cache, which may be removed at any time. If the service registry
+	* is present, we remove services before and after executing the function. so that cached services
+	* are not counted as allocation made by the function tested.
+	*/
+	if(ServiceRegistryInitialized())
+		RemoveAllCompiledServices();
+
 	// NOTE: the function may initialize IFacts, so we can only compare against
 	// a baseline we actually took before calling it
 	uint32 initialRefCount = 0;
@@ -294,6 +304,9 @@ static void executeCheckReferences(void (*function)(void), CheckType checkType)
 	uint32 initialBytesAllocated = AllocatorNBytesAllocated();
 
 	function();
+
+	if(ServiceRegistryInitialized())
+		RemoveAllCompiledServices();
 
 	if(ifactsInitialized) {
 		int32 refCountDiff = IFactTotalReferenceCount() - initialRefCount;

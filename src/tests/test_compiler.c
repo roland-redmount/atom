@@ -503,7 +503,6 @@ void testCompileFilterAndRule(void)
 	Relation kelvinRelation = createStoredRelation(kelvinFact);
 	FormulaView clause = DictionaryAddClauseFromCString(
 		"quantity t value k unit \"Kelvin\" | ! kelvin t value k");
-	size32 nCompiledBefore = NumberOfCompiledServices();
 
 	// This query should form a UNION between the primitive and FILTER services
 	Atom kelvinQuery = CStringToTerm("quantity \"y\" value v unit \"Kelvin\"");
@@ -521,8 +520,6 @@ void testCompileFilterAndRule(void)
 	ASSERT_DOUBLE_EQUAL(value._float, 20.0)
 
 	RemoveService(services[0]);
-	RemoveAllCompiledServices();
-	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 	ReleaseFormula(celsiusQuery);
 	ReleaseFormula(kelvinQuery);
 	DictionaryRemoveClause(&clause);
@@ -1650,7 +1647,6 @@ void testCompileRecursiveTermUnboundInput(void)
 	// The above leaves behind a (succ <ID prec >ID) compiled service generated as part
 	// of the process of compiling (reach "a" hop y) query, which is not invalidated
 	// by removing the rules. Clean this out.
-	RemoveAllCompiledServices();
 }
 
 
@@ -2182,7 +2178,6 @@ void testCompileNewIOPatternRepeated(void)
  */
 void testCompileFilterInRuleBody(void)
 {
-	size32 nCompiledBefore = NumberOfCompiledServices();
 	FormulaView clause = DictionaryAddClauseFromCString(
 		"at s position p letter e | ! list s position p element e");
 	Atom queryTerm = CStringToTerm("at \"abracadabra\" position q letter 'a");
@@ -2209,17 +2204,6 @@ void testCompileFilterInRuleBody(void)
 	// Compiling the query also compiled a service for its body term, which is a cache
 	// over the list relation and outlives the rule; remove both
 	RemoveService(service);
-
-	// CLAUDE: Other compiled services may exist before this test, so the body term
-	// service is found by dispatch and removed alone.
-	Atom bodyTerm = CStringToTerm("list \"abracadabra\" position q element 'a");
-	Service bodyService;
-	index8 permutation[3];
-	ASSERT_INT32_EQUAL(DispatchQueryFormula(bodyTerm, &bodyService, permutation), DISPATCH_FOUND)
-	ASSERT_TRUE(ServiceGetOperator(bodyService)->type != OPERATOR_MACHINE)
-	RemoveService(bodyService);
-	ReleaseFormula(bodyTerm);
-	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&clause);

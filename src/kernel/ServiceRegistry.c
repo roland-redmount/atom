@@ -123,6 +123,14 @@ void FreeServiceRegistry(void)
 {
 	BTreeFree(serviceRecords);
 	BTreeFree(operatorAncestors);
+	serviceRecords = 0;
+	operatorAncestors = 0;
+}
+
+
+bool ServiceRegistryInitialized(void)
+{
+	return serviceRecords != 0;
 }
 
 

@@ -92,6 +92,11 @@ void ServiceRegistryRemoveAll(Relation relation);
 void FreeServiceRegistry(void);
 
 /**
+ * True if the service registry has been set up; see SetupServiceRegistry().
+ */
+bool ServiceRegistryInitialized(void);
+
+/**
  * Total number of registered services.
  */
 size32 NumberOfServices(void);

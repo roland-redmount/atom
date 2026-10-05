@@ -245,7 +245,6 @@ void testInvalidateServiceByNewRelation(void)
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 2)
 	
 	// Cleanup
-	RemoveAllCompiledServices();
 	DropRelation(intRelation);
 	TeardownRelationFixture(&precSuccFixture);
 	DictionaryRemoveClause(&recursiveClause);
