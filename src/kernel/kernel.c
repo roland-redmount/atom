@@ -251,6 +251,7 @@ void CleanupMemory(void)
 	ASSERT(AllocatorIsEmpty())
 	CloseAllocator();
 	FreePages(kernel.allocatorArea, ALLOCATOR_N_PAGES);
+	ShutdownPaging();
 }
 
 
@@ -635,6 +636,7 @@ void KernelInitialize(uint32 memoryPersistence)
 	SetupMemory(memoryPersistence);
 	SetupRelationRegistry();
 	SetupServiceRegistry();
+	InitializeTupleStores();
 	InitializeLookup();
 	InitializeIFacts();
 	SetupDictionary();
@@ -764,6 +766,7 @@ void KernelShutdown(void)
 	FreeIFacts();
 	FreeLookup();
 	FreeServiceRegistry();
+	FreeTupleStores();
 	FreeRelationRegistry();
 	FreeNameStorage();
 	CleanupMemory();

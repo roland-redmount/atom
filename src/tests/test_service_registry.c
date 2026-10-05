@@ -243,7 +243,7 @@ void testReplaceService(void)
 
 int main(void)
 {
-	KernelInitialize(PERSISTENT_MEMORY);
+	KernelInitialize(TRANSIENT_MEMORY);
 	LoadLibraries();
 	initialNServices = NumberOfServices();
 

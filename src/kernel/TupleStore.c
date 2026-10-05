@@ -12,12 +12,26 @@ void RelationDetachTupleStore(Relation relation, TupleStore * store);
 /**
  * Pool allocation for structures
  */
-void * storePool = 0;
+static void * storePool = 0;
+
+
+void InitializeTupleStores(void)
+{
+	ASSERT(!storePool)
+	storePool = CreatePool(sizeof(TupleStore));
+}
+
+
+void FreeTupleStores(void)
+{
+	ASSERT(PoolNItems(storePool) == 0)
+	FreePool(storePool);
+	storePool = 0;
+}
+
 
 static TupleStore * allocateTupleStore(void)
 {
-	if(!storePool)
-		storePool = CreatePool(sizeof(TupleStore));
 	return PoolAllocate(storePool);
 }
 

@@ -404,7 +404,7 @@ void testBTreeSeekPrefixKey(void)
 
 int main(int argc, char **argv)
 {
-	SetupMemory(PERSISTENT_MEMORY);
+	SetupMemory(TRANSIENT_MEMORY);
 
 	uint32 randomSeed = GenerateRandomSeed();
 	// PrintF("seed = %u\n", randomSeed);

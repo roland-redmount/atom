@@ -306,7 +306,7 @@ void testRemoveIdentifiedTuple(void)
 int main(void)
 {
 	// NOTE: this does not use the kernel, only memory allocation
-	SetupMemory(PERSISTENT_MEMORY);
+	SetupMemory(TRANSIENT_MEMORY);
 
 	ExecuteTest(testCreateRelationTable);
 	ExecuteTest(testAddTuple);

@@ -49,7 +49,7 @@ static void testLetter(void)
 
 int main(int argc, char * argv[])
 {
-	SetupMemory(PERSISTENT_MEMORY);
+	SetupMemory(TRANSIENT_MEMORY);
 
 	ExecuteTest(testGetAtomTypeName);
 	ExecuteTest(testAtomTypeFromString);

@@ -36,6 +36,12 @@ extern byte * pageTable;
 
  void InitializePaging(uint32 memoryPersistence);
 
+/**
+ * Release the paging area set up by InitializePaging(). Every pointer
+ * into the paging area is invalid afterwards.
+ */
+void ShutdownPaging(void);
+
 
 /**
  * Allocate single pages

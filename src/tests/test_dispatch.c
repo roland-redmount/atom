@@ -437,7 +437,7 @@ void testDispatchFewestConstraints(void)
 
 int main(int argc, char * argv[])
 {
-	KernelInitialize(PERSISTENT_MEMORY);
+	KernelInitialize(TRANSIENT_MEMORY);
 	LoadLibraries();
 
 	ExecuteTest(testDispatchToService);

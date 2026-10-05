@@ -141,6 +141,15 @@ void InitializePaging(uint32 memoryPersistence)
 }
 
 
+void ShutdownPaging(void)
+{
+	ReleaseMemory(&(paging.globalFileMap));
+	paging.globalFileMap = (MemoryDescriptor) {0};
+	paging.firstFreePage = 0;
+	pageTable = 0;
+}
+
+
 /**
  * Return a pointer to a page
  */

@@ -20,7 +20,7 @@ static size32 memoryAreaNPages;
 
 static void setupMemoryAllocator(void)
 {
-	InitializePaging(PERSISTENT_MEMORY);
+	InitializePaging(TRANSIENT_MEMORY);
 	memoryAreaNPages = PagesToFit(TEST_AREA_SIZE);
 	memoryArea = AllocatePages(memoryAreaNPages);
 	ASSERT(memoryArea);
@@ -32,6 +32,7 @@ static void teardownMemoryAllocator(void)
 {
 	CloseAllocator();
 	FreePages(memoryArea, memoryAreaNPages);
+	ShutdownPaging();
 }
 
 
@@ -208,10 +209,9 @@ int main(int argc, char * argv[])
 	testAllocate2();
 	testFuzzAllocate();
 	testReallocate();
-	
-	teardownMemoryAllocator();
-
 	testPoolAllocate();
+
+	teardownMemoryAllocator();
 
 	TestSummary();
 }

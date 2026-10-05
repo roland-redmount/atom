@@ -96,7 +96,7 @@ static void testSameTempVariable(void)
 
 int main(int argc, char * argv[])
 {
-	SetupMemory(PERSISTENT_MEMORY);
+	SetupMemory(TRANSIENT_MEMORY);
 
 	ExecuteTest(testVariable);
 	ExecuteTest(testSameNamedVariable);

@@ -35,6 +35,14 @@ typedef struct s_TupleStore {
 } TupleStore;
 
 /**
+ * Create and free the memory pool holding every TupleStore.
+ * FreeTupleStores() requires every TupleStore to be dropped first.
+ */
+void InitializeTupleStores(void);
+
+void FreeTupleStores(void);
+
+/**
  * Create a TupleStore using the given storage provider. Creates storage and/or services
  * as specified by the provider. The relation must not already exist.
  */

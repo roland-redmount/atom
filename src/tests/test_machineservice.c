@@ -282,7 +282,7 @@ static void testMachineServiceSharedRelation(void)
 
 int main(int argc, char * argv[])
 {
-	KernelInitialize(PERSISTENT_MEMORY);
+	KernelInitialize(TRANSIENT_MEMORY);
 
 	moduleID = RequestModuleID();
 
