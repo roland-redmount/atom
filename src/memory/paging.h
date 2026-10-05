@@ -43,6 +43,35 @@ extern byte * pageTable;
 void ShutdownPaging(void);
 
 
+/* CLAUDE: Each module that keeps state in the paging area stores a pointer to
+   that state in the persistent root, under its PersistentModule number. This is how
+   a module finds its state again when a paging file is restored. The numbers are
+   part of the paging file format, so a new module goes at the end. */
+typedef enum e_PersistentModule {
+	MODULE_ALLOCATOR = 0,
+	MODULE_KERNEL,
+	MODULE_REFERENCES,
+	MODULE_NAMES,
+	MODULE_FORMULAS,
+	MODULE_IFACTS,
+	MODULE_LOOKUP,
+	MODULE_DICTIONARY,
+	MODULE_RELATIONS,
+	MODULE_SERVICES,
+	MODULE_TUPLE_STORES,
+	MODULE_MACHINE_SERVICES,
+	MODULE_LIST,
+	MODULE_STRING,
+	MODULE_MATH,
+	MODULE_REFLECT,
+	MODULE_SESSION,
+	N_PERSISTENT_MODULES
+} PersistentModule;
+
+void * GetModuleState(PersistentModule module);
+void SetModuleState(PersistentModule module, void * state);
+
+
 /**
  * Allocate single pages
  */

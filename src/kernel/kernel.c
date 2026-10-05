@@ -155,8 +155,6 @@ static const byte coreServiceParameterIO[N_CORE_SERVICES + 1][CORE_FORMS_MAX_ARI
 
 // TODO: this structure must be persistent
 static struct s_Kernel {
-	void * allocatorArea;
-
 	// Core predicate forms and roles, defined during bootstrapping
 	Atom corePredicateForms[N_CORE_FORMS + 1];
 	// The positive (non-negated) term form of each core predicate form.
@@ -228,10 +226,11 @@ void SetupMemory(uint32 memoryPersistence)
 
 	// setup allocator
 	// running out of pages is not a bug on our part, so we cannot assume it away
-	kernel.allocatorArea = AllocatePages(ALLOCATOR_N_PAGES);
-	if(kernel.allocatorArea == 0)
+	void * allocatorArea = AllocatePages(ALLOCATOR_N_PAGES);
+	if(allocatorArea == 0)
 		Panic("cannot reserve %u pages for the allocator\n", ALLOCATOR_N_PAGES);
-	CreateAllocator(kernel.allocatorArea, LOG_ALLOCATOR_AREA_SIZE);
+	SetModuleState(MODULE_ALLOCATOR, allocatorArea);
+	CreateAllocator(allocatorArea, LOG_ALLOCATOR_AREA_SIZE);
 }
 
 
@@ -250,7 +249,7 @@ void CleanupMemory(void)
 	}
 	ASSERT(AllocatorIsEmpty())
 	CloseAllocator();
-	FreePages(kernel.allocatorArea, ALLOCATOR_N_PAGES);
+	FreePages(GetModuleState(MODULE_ALLOCATOR), ALLOCATOR_N_PAGES);
 	ShutdownPaging();
 }
 

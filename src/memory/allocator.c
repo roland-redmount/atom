@@ -37,13 +37,10 @@ bool logAllocations = false;
 
 #endif
 
-struct {
+static struct {
 	// The virtual memory area to be used for allocation
 	// (We may have several of these in the future)
 	byte * memoryArea;
-
-	size32 initialNBytesFree;		// initial free memory, excluding header block
-	size32 nBytesFree; 				// current total free memory
 } allocator;
 
 
@@ -117,6 +114,9 @@ typedef struct FreeHeader {
 
 #define ALLOCATOR_STRUCT_SIZE (FREE_HEADER_SIZE + 4)
 
+/* CLAUDE: A size32 nBytesFree, the current total free memory, follows freeLists[]
+   in the header block. See getNBytesFree(). */
+
 
 static size8 logSizeToLevel(size8 logBlockSize, size8 logAreaSize)
 {
@@ -133,9 +133,14 @@ static size8 maxLevel(size8 logAreaSize)
 	return logAreaSize - MIN_LOG_BLOCK_SIZE;
 }
 
+static size32 freeListsSize(size8 logAreaSize)
+{
+	return (maxLevel(logAreaSize) + 1)*sizeof(BlockOffset);
+}
+
 static size32 headerSize(size8 logAreaSize)
 {
-	return ALLOCATOR_STRUCT_SIZE + (maxLevel(logAreaSize) + 1)*sizeof(BlockOffset);
+	return ALLOCATOR_STRUCT_SIZE + freeListsSize(logAreaSize) + sizeof(size32);
 }
 
 static size8 getLogAreaSize(void)
@@ -151,6 +156,21 @@ static void setLogAreaSize(size8 logAreaSize)
 static BlockOffset * getFreeLists(void)
 {
 	return (BlockOffset *) (allocator.memoryArea + ALLOCATOR_STRUCT_SIZE);
+}
+
+static size32 * getNBytesFreePointer(void)
+{
+	return (size32 *) (allocator.memoryArea + ALLOCATOR_STRUCT_SIZE + freeListsSize(getLogAreaSize()));
+}
+
+static size32 getNBytesFree(void)
+{
+	return *getNBytesFreePointer();
+}
+
+static void setNBytesFree(size32 nBytesFree)
+{
+	*getNBytesFreePointer() = nBytesFree;
 }
 
 // TODO: could we simplify by expressing these as functions of logBlockSize,
@@ -237,6 +257,14 @@ static size8 requiredBlockLogSize(size32 allocSize)
 	return (logSize >= MIN_LOG_BLOCK_SIZE) ? logSize : MIN_LOG_BLOCK_SIZE;
 }
 
+// CLAUDE: the free memory of a new allocator, which is the area minus the header block
+static size32 getInitialNBytesFree(void)
+{
+	size8 logAreaSize = getLogAreaSize();
+	size8 headerBlockLogSize = requiredBlockLogSize(headerSize(logAreaSize) - ALLOC_HEADER_SIZE);
+	return (1 << logAreaSize) - (1 << headerBlockLogSize);
+}
+
 
 void PrintFreeLists(void)
 {
@@ -254,8 +282,8 @@ void PrintFreeLists(void)
 			}
 		PrintF(" (END)\n");
 	}
-	ASSERT(allocator.nBytesFree == nBytesFree)
-	PrintF("Total %u bytes free, %u allocated.\n\n", nBytesFree, allocator.initialNBytesFree - nBytesFree);
+	ASSERT(getNBytesFree() == nBytesFree)
+	PrintF("Total %u bytes free, %u allocated.\n\n", nBytesFree, getInitialNBytesFree() - nBytesFree);
 }
 
 /**
@@ -330,7 +358,7 @@ void DumpAllocatedBlocks(void)
 	// dump allocated memory starting after the header block
 	BlockOffset maxOffset = 1 << getLogAreaSize();
 	size32 nBytesAllocated = dumpBlocksRecursive(0, 0, maxOffset, maxLevel(getLogAreaSize()));
-	ASSERT(nBytesAllocated == allocator.initialNBytesFree - allocator.nBytesFree);
+	ASSERT(nBytesAllocated == getInitialNBytesFree() - getNBytesFree());
 	PrintF("Total %u bytes allocated.\n", nBytesAllocated);
 }
 
@@ -458,8 +486,7 @@ void CreateAllocator(void * address, size8 logAreaSize)
 	// and then recursively splitting lower blocks, until we reach
 	// the level that fits the header block size.
 	allocateBlock(headerBlockLogSize);
-	allocator.nBytesFree = (1 << logAreaSize) - (1 << headerBlockLogSize);
-	allocator.initialNBytesFree = allocator.nBytesFree;
+	setNBytesFree(getInitialNBytesFree());
 	
 #ifdef DEBUG_ALLOCATE
 	allocateLog = BTreeCreate(sizeof(AllocateRecord), &compareRecords, 0);
@@ -515,19 +542,19 @@ bool AllocatorIsEmpty(void)
 
 size32 AllocatorNBytesFree(void)
 {
-	return allocator.nBytesFree;
+	return getNBytesFree();
 }
 
 
 size32 AllocatorNBytesAllocated(void)
 {
-	return allocator.initialNBytesFree - allocator.nBytesFree;
+	return getInitialNBytesFree() - getNBytesFree();
 }
 
 
 size32 AllocatorMaxNBytes(void)
 {
-	return allocator.initialNBytesFree;
+	return getInitialNBytesFree();
 }
 
 
@@ -564,7 +591,7 @@ void * Allocate(size32 allocSize)
 	BlockOffset block = allocateBlock(requiredLogSize);
 	ASSERT(block != NULL_OFFSET)
 	size32 blockSizeBytes = 1 << requiredLogSize;
-	allocator.nBytesFree -= blockSizeBytes;
+	setNBytesFree(getNBytesFree() - blockSizeBytes);
 
 	void * memory = offsetToAllocPointer(block);
 	// Clear the memory block, except for the block header
@@ -628,7 +655,7 @@ void Free(void const * memory)
 	// printf("Free 0x%x\n", block);
 	size8 logSize = getLogBlockSize(block);
 	freeBlock(block);
-	allocator.nBytesFree += (1 << logSize);
+	setNBytesFree(getNBytesFree() + (1 << logSize));
 }
 
 #ifdef DEBUG_ALLOCATE

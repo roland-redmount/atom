@@ -9,9 +9,20 @@
 
 byte * pageTable = 0;
 
+/**
+ * The persistent root sits on the page following the bit field pages,
+ * at ROOT_PAGE. It holds the paging state, and the state of every PersistentModule.
+ */
+#define ROOT_PAGE				BITFIELD_N_PAGES
+
+typedef struct s_PersistentRoot {
+	index32 firstFreePage;
+	void * moduleStates[N_PERSISTENT_MODULES];
+} PersistentRoot;
+
 static struct {
 	MemoryDescriptor globalFileMap;
-	uint32 firstFreePage;
+	PersistentRoot * root;
 } paging;
 
 
@@ -136,8 +147,13 @@ void InitializePaging(uint32 memoryPersistence)
 	SetMemory(pageTable, BITFIELD_SIZE_BYTES, 0);
 	for(index32 page = 0; page < BITFIELD_N_PAGES; page++)
 		setPageBit(page);
-	// initial first free page follows bitfield pages
-	paging.firstFreePage = BITFIELD_N_PAGES;
+
+	// Allocate the persistent root page.
+	setPageBit(ROOT_PAGE);
+	paging.root = (PersistentRoot *) (pageTable + ROOT_PAGE * MEMORY_PAGE_SIZE);
+	SetMemory(paging.root, sizeof(PersistentRoot), 0);
+	// The first free page follows the root page
+	paging.root->firstFreePage = ROOT_PAGE + 1;
 }
 
 
@@ -145,8 +161,22 @@ void ShutdownPaging(void)
 {
 	ReleaseMemory(&(paging.globalFileMap));
 	paging.globalFileMap = (MemoryDescriptor) {0};
-	paging.firstFreePage = 0;
+	paging.root = 0;
 	pageTable = 0;
+}
+
+
+void * GetModuleState(PersistentModule module)
+{
+	ASSERT(module < N_PERSISTENT_MODULES)
+	return paging.root->moduleStates[module];
+}
+
+
+void SetModuleState(PersistentModule module, void * state)
+{
+	ASSERT(module < N_PERSISTENT_MODULES)
+	paging.root->moduleStates[module] = state;
 }
 
 
@@ -190,15 +220,15 @@ void * GetPageOfAddress(void const * address)
 
 void * AllocatePage(void)
 {
-	ASSERT(paging.firstFreePage);
-	uint32 page = paging.firstFreePage;
+	ASSERT(paging.root->firstFreePage);
+	uint32 page = paging.root->firstFreePage;
 	setPageBit(page);
 	// clear page
 	void * pageAddress = pageToAddress(page);
 	SetMemory(pageAddress, MEMORY_PAGE_SIZE, 0);
 
 	// find next free page
-	paging.firstFreePage = findFirstFreePage(paging.firstFreePage);
+	paging.root->firstFreePage = findFirstFreePage(paging.root->firstFreePage);
 
 	return pageAddress;
 }
@@ -208,8 +238,8 @@ void FreePage(void const * pageAddress)
 {
 	index32 page = pageAlignedPointerToPage(pageAddress);
 	clearPageBit(page);
-	if(page < paging.firstFreePage)
-		paging.firstFreePage = page;
+	if(page < paging.root->firstFreePage)
+		paging.root->firstFreePage = page;
 }
 
 
@@ -217,14 +247,14 @@ void * AllocatePages(size32 nPages)
 {
 	ASSERT(nPages > 0);
 	// find the first consecutive free pages
-	ASSERT(paging.firstFreePage);
-	index32 firstPage = findFirstFreePages(paging.firstFreePage, nPages);
+	ASSERT(paging.root->firstFreePage);
+	index32 firstPage = findFirstFreePages(paging.root->firstFreePage, nPages);
 	ASSERT(firstPage);
 	// allocate pages
 	for(index32 page = firstPage; page < firstPage + nPages; page++)
 		setPageBit(page);
-	if(paging.firstFreePage == firstPage)
-		paging.firstFreePage += nPages;
+	if(paging.root->firstFreePage == firstPage)
+		paging.root->firstFreePage = findFirstFreePage(firstPage + nPages);
 	// clear pages
 	void * firstPageAddress = pageToAddress(firstPage);
 	SetMemory(firstPageAddress, MEMORY_PAGE_SIZE * nPages, 0);
@@ -237,8 +267,8 @@ void FreePages(void const * firstPageAddress, size32 nPages)
 	index32 firstPage = pageAlignedPointerToPage(firstPageAddress);
 	for(index32 page = firstPage; page < firstPage + nPages; page++)
 		clearPageBit(page);
-	if(firstPage < paging.firstFreePage)
-		paging.firstFreePage = firstPage;
+	if(firstPage < paging.root->firstFreePage)
+		paging.root->firstFreePage = firstPage;
 }
 
 
