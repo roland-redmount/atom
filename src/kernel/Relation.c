@@ -5,6 +5,7 @@
 #include "lang/ConjunctionForm.h"
 #include "lang/TermForm.h"
 #include "memory/allocator.h"
+#include "memory/paging.h"
 #include "util/hashing.h"
 #include "util/ResizingArray.h"
 
@@ -48,6 +49,7 @@ typedef struct s_RelationRecord {
 
 /**
  * B-tree for lookup of relations by form, stores RelationRecord items.
+ * This is also the module state MODULE_RELATIONS
  */
 static BTree * relationRegistry;
 
@@ -357,12 +359,15 @@ void SetupRelationRegistry(void)
 		btreeCompareRelationRecords,
 		0 // freeItem
 	);
+	SetModuleState(MODULE_RELATIONS, relationRegistry);
 }
 
 
 void FreeRelationRegistry(void)
 {
 	BTreeFree(relationRegistry);
+	SetModuleState(MODULE_RELATIONS, 0);
+	relationRegistry = 0;
 }
 
 

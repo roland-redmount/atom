@@ -11,6 +11,7 @@
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
 #include "memory/allocator.h"
+#include "memory/paging.h"
 #include "util/hashing.h"
 #include "util/sort.h"
 
@@ -34,10 +35,13 @@ typedef struct s_FormulaRecord {
 } FormulaRecord;
 
 
-static struct {
+typedef struct s_FormulaStorage {
 	BTree * tree;
 	uint32 nReferencesTotal;
-} formulaStorage;
+} FormulaStorage;
+
+// pointer to the module state MODULE_FORMULAS
+static FormulaStorage * formulaStorage = 0;
 
 
 size8 FormArity(Atom form)
@@ -76,36 +80,41 @@ static FormulaRecord * peekFormulaRecord(data64 hash)
 {
 	FormulaRecord keyRecord;
 	keyRecord.hash = hash;
-	return (FormulaRecord *) BTreePeekItem(formulaStorage.tree, &keyRecord);
+	return (FormulaRecord *) BTreePeekItem(formulaStorage->tree, &keyRecord);
 }
 
 
 void InitializeFormulaStorage(void)
 {
+	formulaStorage = Allocate(sizeof(FormulaStorage));
+	SetModuleState(MODULE_FORMULAS, formulaStorage);
 	// Create the B-tree. No freeItem() callback used here; a FormulaRecord is taken apart by
 	// ReleaseFormula() before it is deleted; see ReleaseFormula().
-	formulaStorage.tree = BTreeCreate(sizeof(FormulaRecord), btreeCompareFormulaRecords, 0);
-	formulaStorage.nReferencesTotal = 0;
+	formulaStorage->tree = BTreeCreate(sizeof(FormulaRecord), btreeCompareFormulaRecords, 0);
+	formulaStorage->nReferencesTotal = 0;
 }
 
 
 void FreeFormulaStorage(void)
 {
 	ASSERT(NumberOfFormulas() == 0)
-	ASSERT(formulaStorage.nReferencesTotal == 0)
-	BTreeFree(formulaStorage.tree);
+	ASSERT(formulaStorage->nReferencesTotal == 0)
+	BTreeFree(formulaStorage->tree);
+	Free(formulaStorage);
+	SetModuleState(MODULE_FORMULAS, 0);
+	formulaStorage = 0;
 }
 
 
 size32 NumberOfFormulas(void)
 {
-	return BTreeNItems(formulaStorage.tree);
+	return BTreeNItems(formulaStorage->tree);
 }
 
 
 uint32 FormulaTotalReferenceCount(void)
 {
-	return formulaStorage.nReferencesTotal;
+	return formulaStorage->nReferencesTotal;
 }
 
 
@@ -145,9 +154,9 @@ static Atom internFormula(Atom form, TypedTuple * actors)
 		record.form = form;
 		record.actors = actors;
 		IFactAcquire(form);
-		ASSERT(BTreeInsert(formulaStorage.tree, &record) == BTREE_INSERTED)
+		ASSERT(BTreeInsert(formulaStorage->tree, &record) == BTREE_INSERTED)
 	}
-	formulaStorage.nReferencesTotal++;
+	formulaStorage->nReferencesTotal++;
 	return (Atom) {.hash = hash};
 }
 
@@ -169,7 +178,7 @@ void AcquireFormula(Atom formula)
 	FormulaRecord * record = peekFormulaRecord(formula.hash);
 	ASSERT(record)
 	record->nReferences++;
-	formulaStorage.nReferencesTotal++;
+	formulaStorage->nReferencesTotal++;
 }
 
 
@@ -178,10 +187,10 @@ void ReleaseFormula(Atom formula)
 	FormulaRecord * record = peekFormulaRecord(formula.hash);
 	ASSERT(record)
 	ASSERT(record->nReferences > 0)
-	ASSERT(formulaStorage.nReferencesTotal > 0)
+	ASSERT(formulaStorage->nReferencesTotal > 0)
 
 	record->nReferences--;
-	formulaStorage.nReferencesTotal--;
+	formulaStorage->nReferencesTotal--;
 
 	if(record->nReferences == 0) {
 		// Copy the record and remove it from the registry before taking it apart.
@@ -189,7 +198,7 @@ void ReleaseFormula(Atom formula)
 		// that is itself a formula re-enters this function, so neither may find
 		// the formula being released still in the B-tree.
 		FormulaRecord recordCopy = *record;
-		ASSERT(BTreeDelete(formulaStorage.tree, &recordCopy, 0) == BTREE_DELETED)
+		ASSERT(BTreeDelete(formulaStorage->tree, &recordCopy, 0) == BTREE_DELETED)
 		IFactRelease(recordCopy.form);
 		FreeTypedTuple(recordCopy.actors);
 	}
@@ -225,7 +234,7 @@ void FormulaDump(void)
 	PrintF("Formula table %u formulas:\n", NumberOfFormulas());
 
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, formulaStorage.tree);
+	BTreeIterate(&iterator, formulaStorage->tree);
 	while(BTreeIteratorNext(&iterator)) {
 		FormulaRecord const * record = BTreeIteratorPeekItem(&iterator);
 		PrintF("%llx (%llu) ", record->hash, record->hash);

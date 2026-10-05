@@ -3,6 +3,8 @@
 #include "lang/TermForm.h"
 #include "library/MachineService.h"
 #include "library/reflect.h"
+#include "memory/allocator.h"
+#include "memory/paging.h"
 
 /**
  * (formula #1<FORMULA arity #2>INT)
@@ -125,29 +127,41 @@ static bool relationRoleSumCall(void * state, Atom arguments[], void * readerDat
 }
 
 
-static uint32 moduleID;
+typedef struct s_ReflectLibrary {
+	uint32 moduleID;
+} ReflectLibrary;
+
+// pointer to the module state MODULE_REFLECT
+static ReflectLibrary * reflectLibrary = 0;
 
 void ReflectionSetup(void)
 {
-	moduleID = RequestModuleID();
+	reflectLibrary = Allocate(sizeof(ReflectLibrary));
+	SetModuleState(MODULE_REFLECT, reflectLibrary);
 
-	RegisterMachineService(moduleID, "formula #1<FORMULA arity #2>INT", formulaArityCall);
+	reflectLibrary->moduleID = RequestModuleID();
 
-	RegisterMachineService(moduleID, "query #1<FORMULA relation #2>RELATION", queryRelationCall);
+	RegisterMachineService(reflectLibrary->moduleID, "formula #1<FORMULA arity #2>INT", formulaArityCall);
 
-	RegisterMachineService(moduleID, "relation #1<RELATION size #2>INT", relationSizeCall);
+	RegisterMachineService(reflectLibrary->moduleID, "query #1<FORMULA relation #2>RELATION", queryRelationCall);
+
+	RegisterMachineService(reflectLibrary->moduleID, "relation #1<RELATION size #2>INT", relationSizeCall);
 
 	RegisterMachineServiceWithState(
-		moduleID, "relation #1<RELATION role #2<NAME actor #3>FLOAT",
+		reflectLibrary->moduleID, "relation #1<RELATION role #2<NAME actor #3>FLOAT",
 		sizeof(RelationRoleActorState),
 		relationRoleActorSetup, relationRoleActorCall, relationRoleActorFinalize
 	);
 
-	RegisterMachineService(moduleID, "relation #1<RELATION role #2<NAME sum #3>FLOAT", relationRoleSumCall);
+	RegisterMachineService(reflectLibrary->moduleID, "relation #1<RELATION role #2<NAME sum #3>FLOAT", relationRoleSumCall);
 }
 
 
 void ReflectionShutdown(void)
 {
-	FreeModuleRelations(moduleID);
+	FreeModuleRelations(reflectLibrary->moduleID);
+
+	Free(reflectLibrary);
+	SetModuleState(MODULE_REFLECT, 0);
+	reflectLibrary = 0;
 }

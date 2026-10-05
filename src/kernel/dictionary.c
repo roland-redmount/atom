@@ -13,16 +13,20 @@
 #include "lang/TermForm.h"
 #include "lang/TypedAtom.h"
 #include "memory/allocator.h"
+#include "memory/paging.h"
 #include "parser/ClauseBuilder.h"
 #include "util/ResizingArray.h"
 
 
-struct {
+typedef struct s_Dictionary {
 	// B-tree for the clause rules
 	BTree * btree;
 	// B-tree for the ifact rules, ordered by compareIFactRules()
 	BTree * ifactRules;
-} dictionary;
+} Dictionary;
+
+// pointer to the module state MODULE_DICTIONARY
+static Dictionary * dictionary = 0;
 
 
 static int8 compareEntries(FormulaView const * entry, FormulaView const * entryOrKey)
@@ -99,15 +103,20 @@ static void btreeFreeItem(void const * item, size32 itemSize)
 
 void SetupDictionary(void)
 {
-	dictionary.btree = BTreeCreate(sizeof(FormulaView), &btreeCompareItems, &btreeFreeItem);
-	dictionary.ifactRules = BTreeCreate(sizeof(FormulaView), &btreeCompareIFactRules, &btreeFreeItem);
+	dictionary = Allocate(sizeof(Dictionary));
+	SetModuleState(MODULE_DICTIONARY, dictionary);
+	dictionary->btree = BTreeCreate(sizeof(FormulaView), &btreeCompareItems, &btreeFreeItem);
+	dictionary->ifactRules = BTreeCreate(sizeof(FormulaView), &btreeCompareIFactRules, &btreeFreeItem);
 }
 
 
 void TeardownDictionary(void)
 {
-	BTreeFree(dictionary.btree);
-	BTreeFree(dictionary.ifactRules);
+	BTreeFree(dictionary->btree);
+	BTreeFree(dictionary->ifactRules);
+	Free(dictionary);
+	SetModuleState(MODULE_DICTIONARY, 0);
+	dictionary = 0;
 }
 
 /*
@@ -164,9 +173,9 @@ static bool findEntry(Atom clause, FormulaView * entry)
 	ASSERT(FormulaIsClause(clause))
 	FormulaView key = FormulaGetView(clause);
 	if(entry)
-		return BTreeGetItem(dictionary.btree, &key, entry);
+		return BTreeGetItem(dictionary->btree, &key, entry);
 	else
-		return BTreeContainsItem(dictionary.btree, &key);
+		return BTreeContainsItem(dictionary->btree, &key);
 }
 
 
@@ -219,7 +228,7 @@ FormulaView DictionaryAddClause(Atom clause)
 
 	FormulaView clauseView = FormulaGetView(clause);
 	setupEntry(&entry, clauseView.form, clauseView.actors);
-	ASSERT(BTreeInsert(dictionary.btree, &entry) == BTREE_INSERTED)
+	ASSERT(BTreeInsert(dictionary->btree, &entry) == BTREE_INSERTED)
 	invalidateClauseServices(entry.form);
 	return entry;
 }
@@ -239,7 +248,7 @@ void DictionaryRemoveClause(FormulaView * clause)
 	// Invalidate before the entry goes: the clause form is released with it, and the
 	// compiled services are stale either way
 	invalidateClauseServices(clause->form);
-	ASSERT(BTreeDelete(dictionary.btree, clause, 0) == BTREE_DELETED)
+	ASSERT(BTreeDelete(dictionary->btree, clause, 0) == BTREE_DELETED)
 }
 
 
@@ -278,11 +287,11 @@ FormulaView DictionaryAddIFactRule(Atom rule)
 	ASSERT(IsIFactRule(rule))
 	FormulaView key = FormulaGetView(rule);
 	FormulaView entry;
-	if(BTreeGetItem(dictionary.ifactRules, &key, &entry))
+	if(BTreeGetItem(dictionary->ifactRules, &key, &entry))
 		return entry;
 
 	setupEntry(&entry, key.form, key.actors);
-	ASSERT(BTreeInsert(dictionary.ifactRules, &entry) == BTREE_INSERTED)
+	ASSERT(BTreeInsert(dictionary->ifactRules, &entry) == BTREE_INSERTED)
 	InvalidateTermFormServices(entry.form, INVALIDATE_BY_RULE);
 	return entry;
 }
@@ -292,14 +301,14 @@ bool DictionaryContainsIFactRule(Atom rule)
 {
 	ASSERT(IsIFactRule(rule))
 	FormulaView key = FormulaGetView(rule);
-	return BTreeContainsItem(dictionary.ifactRules, &key);
+	return BTreeContainsItem(dictionary->ifactRules, &key);
 }
 
 
 bool IFactRuleExistsForTermForm(Atom termForm)
 {
 	FormulaView key = {.form = termForm, .actors = 0};
-	return BTreeContainsItem(dictionary.ifactRules, &key);
+	return BTreeContainsItem(dictionary->ifactRules, &key);
 }
 
 
@@ -339,20 +348,20 @@ void DictionaryRemoveIFactRule(FormulaView * ifactRule)
 	releaseIFactRuleCache(ifactRule);
 	// Invalidate before the entry is removed, since the term form is released with it
 	InvalidateTermFormServices(ifactRule->form, INVALIDATE_BY_RULE);
-	ASSERT(BTreeDelete(dictionary.ifactRules, ifactRule, 0) == BTREE_DELETED)
+	ASSERT(BTreeDelete(dictionary->ifactRules, ifactRule, 0) == BTREE_DELETED)
 }
 
 
 void DictionaryRemoveAll(void)
 {
-	BTreeClear(dictionary.btree);
+	BTreeClear(dictionary->btree);
 	// Release the cached ifacts of each ifact rule; see DictionaryRemoveIFactRule()
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, dictionary.ifactRules);
+	BTreeIterate(&iterator, dictionary->ifactRules);
 	while(BTreeIteratorNext(&iterator))
 		releaseIFactRuleCache(BTreeIteratorPeekItem(&iterator));
 	BTreeIteratorEnd(&iterator);
-	BTreeClear(dictionary.ifactRules);
+	BTreeClear(dictionary->ifactRules);
 	RemoveAllCompiledServices();
 }
 
@@ -364,7 +373,7 @@ void DictionaryIterateClauses(Atom clauseForm, DictionaryIterator * iterator)
 		.form = clauseForm,
 		.actors = 0
 	};
-	BTreeIterate(&(iterator->btreeIterator), dictionary.btree);
+	BTreeIterate(&(iterator->btreeIterator), dictionary->btree);
 }
 
 
@@ -375,7 +384,7 @@ void DictionaryIterateIFactRules(Atom termForm, DictionaryIterator * iterator)
 		.form = termForm,
 		.actors = 0
 	};
-	BTreeIterate(&(iterator->btreeIterator), dictionary.ifactRules);
+	BTreeIterate(&(iterator->btreeIterator), dictionary->ifactRules);
 }
 
 

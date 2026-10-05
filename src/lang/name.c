@@ -3,6 +3,7 @@
 #include "lang/name.h"
 #include "kernel/kernel.h"
 #include "memory/allocator.h"
+#include "memory/paging.h"
 #include "util/hashing.h"
 
 
@@ -16,10 +17,13 @@ typedef struct s_NameRecord {
 } NameRecord;
 
 
-static struct {
+typedef struct s_NameStorage {
 	BTree * tree;
 	uint32 nReferencesTotal;
-} nameStorage;
+} NameStorage;
+
+// pointer to the module state MODULE_NAMES
+static NameStorage * nameStorage = 0;
 
 
 static data64 nameHash(char const * string, size32 length, data64 initialHash)
@@ -51,36 +55,41 @@ static NameRecord * peekNameRecord(data64 hash)
 {
 	NameRecord keyRecord;
 	keyRecord.hash = hash;
-	return (NameRecord *) BTreePeekItem(nameStorage.tree, &keyRecord);
+	return (NameRecord *) BTreePeekItem(nameStorage->tree, &keyRecord);
 }
 
 
 static bool addNameRecord(NameRecord const * record)
 {
-	return BTreeInsert(nameStorage.tree, record);
+	return BTreeInsert(nameStorage->tree, record);
 }
 
 
 void InitializeNameStorage(void)
 {
-	nameStorage.tree = BTreeCreate(
+	nameStorage = Allocate(sizeof(NameStorage));
+	SetModuleState(MODULE_NAMES, nameStorage);
+	nameStorage->tree = BTreeCreate(
 	    sizeof(NameRecord),
 	    btreeCompareNameRecords,
 	    btreeFreeNameRecord
 	);
-	nameStorage.nReferencesTotal = 0;
+	nameStorage->nReferencesTotal = 0;
 }
 
 
 void FreeNameStorage(void)
 {
-	BTreeFree(nameStorage.tree);
+	BTreeFree(nameStorage->tree);
+	Free(nameStorage);
+	SetModuleState(MODULE_NAMES, 0);
+	nameStorage = 0;
 }
 
 
 size32 NumberOfNames(void)
 {
-	return BTreeNItems(nameStorage.tree);
+	return BTreeNItems(nameStorage->tree);
 }
 
 
@@ -109,7 +118,7 @@ Atom CreateName(char const * cString, size32 length)
 		CopyMemory(cString, record.string, length);
 		ASSERT(addNameRecord(&record));
 	}
-	nameStorage.nReferencesTotal++;
+	nameStorage->nReferencesTotal++;
 	return (Atom) {.hash = hash};
 }
 
@@ -126,7 +135,7 @@ void NameAcquire(Atom name)
 	NameRecord * nameRecord = peekNameRecord(name.hash);
 	ASSERT(nameRecord)
 	nameRecord->nReferences++;
-	nameStorage.nReferencesTotal++;
+	nameStorage->nReferencesTotal++;
 }
 
 
@@ -136,15 +145,15 @@ void NameRelease(Atom name)
 	ASSERT(nameRecord->nReferences > 0);
 	nameRecord->nReferences--;
 	if(nameRecord->nReferences == 0) {
-		ASSERT(BTreeDelete(nameStorage.tree, nameRecord, 0) == BTREE_DELETED);
+		ASSERT(BTreeDelete(nameStorage->tree, nameRecord, 0) == BTREE_DELETED);
 	}
-	nameStorage.nReferencesTotal--;
+	nameStorage->nReferencesTotal--;
 }
 
 
 uint32 NameTotalReferenceCount(void)
 {
-	return nameStorage.nReferencesTotal;
+	return nameStorage->nReferencesTotal;
 }
 
 
@@ -172,7 +181,7 @@ void NameDump(void)
 	PrintF("Name table %u names:\n", NumberOfNames());
 
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, nameStorage.tree);
+	BTreeIterate(&iterator, nameStorage->tree);
 	while(BTreeIteratorNext(&iterator)) {
 		NameRecord const * nameRecord = BTreeIteratorPeekItem(&iterator);
 		PrintF("%llx (%llu) ", nameRecord->hash, nameRecord->hash);

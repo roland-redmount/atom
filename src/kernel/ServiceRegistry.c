@@ -8,18 +8,32 @@
 #include "lang/TypedAtom.h"
 #include "lang/formula.h"
 #include "memory/allocator.h"
+#include "memory/paging.h"
 #include "util/ResizingArray.h"
 
 
-/**
- * The registry of services, as a B-tree storing ServiceRecords.
- * This provides lookup of Services by Relation and IOSignature;
- * see compareServices().
- */
-static BTree * serviceRecords;
+typedef struct s_ServiceRegistry {
+	/**
+	 * The registry of services, as a B-tree storing ServiceRecords.
+	 * This provides lookup of Services by Relation and IOSignature;
+	 * see compareServices().
+	 */
+	BTree * serviceRecords;
 
-// Number of registered compiled (non-primitive) services
-static size32 nCompiledServices;
+	// Number of registered compiled (non-primitive) services
+	size32 nCompiledServices;
+
+	/**
+	 * B-tree mapping each service-associated operator <op> to its *immediate* dependents.
+	 * An immediate dependent is a service of an operator that is an ancestor of <op>, but
+	 * not an ancestor of any other dependent of <op>.
+	 * NOTE: this might belong in operator.c
+	 */
+	BTree * operatorAncestors;
+} ServiceRegistry;
+
+// pointer to the module state MODULE_SERVICES
+static ServiceRegistry * serviceRegistry = 0;
 
 
 /**
@@ -65,13 +79,6 @@ static int8 btreeCompareServiceRecords(void const * item, void const * itemOrKey
 	return compareServices(&(record->service), &(recordOrKey->service));
 }
 
-/**
- * B-tree mapping each service-associated operator <op> to its *immediate* dependents.
- * An immediate dependent is a service of an operator that is an ancestor of <op>, but
- * not an ancestor of any other dependent of <op>.
- * NOTE: this might belong in operator.c
- */
-static BTree * operatorAncestors;
 
 typedef struct {
 	Operator const * op;
@@ -103,34 +110,37 @@ static int8 btreeCompareOperatorAncestors(void const * item, void const * itemOr
 
 void SetupServiceRegistry(void)
 {
+	serviceRegistry = Allocate(sizeof(ServiceRegistry));
+	SetModuleState(MODULE_SERVICES, serviceRegistry);
 	// B-tree of Services, mapping Relation, IOSignature -> Service
-	serviceRecords = BTreeCreate(
+	serviceRegistry->serviceRecords = BTreeCreate(
 		sizeof(ServiceRecord),
 		btreeCompareServiceRecords,
 		0	// nothing to deallocate
 	);
 
-	operatorAncestors = BTreeCreate(
+	serviceRegistry->operatorAncestors = BTreeCreate(
 		sizeof(OperatorAncestor),
 		btreeCompareOperatorAncestors,
 		0	// nothing to deallocate
 	);
-	nCompiledServices = 0;
+	serviceRegistry->nCompiledServices = 0;
 }
 
 
 void FreeServiceRegistry(void)
 {
-	BTreeFree(serviceRecords);
-	BTreeFree(operatorAncestors);
-	serviceRecords = 0;
-	operatorAncestors = 0;
+	BTreeFree(serviceRegistry->serviceRecords);
+	BTreeFree(serviceRegistry->operatorAncestors);
+	Free(serviceRegistry);
+	SetModuleState(MODULE_SERVICES, 0);
+	serviceRegistry = 0;
 }
 
 
 bool ServiceRegistryInitialized(void)
 {
-	return serviceRecords != 0;
+	return serviceRegistry != 0;
 }
 
 
@@ -195,7 +205,7 @@ static size32 removeAncestorServices(Operator const * op)
 	size32 nServicesRemoved = 0;
 	OperatorAncestor key = {.op = op};
 	OperatorAncestor pair;
-	while(BTreeGetItem(operatorAncestors, &key, &pair)) {
+	while(BTreeGetItem(serviceRegistry->operatorAncestors, &key, &pair)) {
 		// remove the service identified by the (relation, operator) pair
 		Service ancestorService;
 		findServiceByOperator(pair.ancestor, &ancestorService);
@@ -222,7 +232,7 @@ static void addAncestorRecords(Operator * op)
 	for(index32 i = 0; i < descendantsArray.nElements; i++) {
 		ASSERT(descendants[i] != op)
 		OperatorAncestor pair = {.op = descendants[i], .ancestor = op};
-		BTreeInsert(operatorAncestors, &pair);
+		BTreeInsert(serviceRegistry->operatorAncestors, &pair);
 	}
 	FreeResizingArray(&descendantsArray);
 }
@@ -237,10 +247,10 @@ size32 RemoveService(Service service)
 	// Get a copy of the service record, as changes to the registry
 	// may invalidate pointers
 	ServiceRecord record;
-	ASSERT(BTreeGetItem(serviceRecords, &service, &record));
+	ASSERT(BTreeGetItem(serviceRegistry->serviceRecords, &service, &record));
 
 	if(record.op->type != OPERATOR_MACHINE)
-		nCompiledServices--;
+		serviceRegistry->nCompiledServices--;
 
 	size32 nServicesRemoved = removeAncestorServices(record.op);
 	if(OperatorNChildren(record.op) > 0) {
@@ -253,7 +263,7 @@ size32 RemoveService(Service service)
 		Operator ** descendants = ResizingArrayGetMemory(&descendantsArray);
 		for(index32 i = 0; i < descendantsArray.nElements; i++) {
 			OperatorAncestor pair = {.op = descendants[i], .ancestor = record.op};
-			ASSERT(BTreeDelete(operatorAncestors, &pair, 0) == BTREE_DELETED)
+			ASSERT(BTreeDelete(serviceRegistry->operatorAncestors, &pair, 0) == BTREE_DELETED)
 		}
 		FreeResizingArray(&descendantsArray);
 	}
@@ -272,7 +282,7 @@ size32 RemoveService(Service service)
 	}
 	// RelationMarkStale(service.relation);
 	ReleaseRelation(service.relation);
-	BTreeDeleteResult result = BTreeDelete(serviceRecords, &record, 0);
+	BTreeDeleteResult result = BTreeDelete(serviceRegistry->serviceRecords, &record, 0);
 	ASSERT(result == BTREE_DELETED)
 	return nServicesRemoved + 1;
 }
@@ -285,7 +295,7 @@ void CreateService(Service service, Operator * op)
 		// The compiler must subsume existing services into a UNION or FIXPOINT operator.
 		ASSERT(!ServiceGetRecord(service))
 		addAncestorRecords(op);
-		nCompiledServices++;
+		serviceRegistry->nCompiledServices++;
 	}
 	// add to the service registry
 	ServiceRecord record = {
@@ -294,14 +304,14 @@ void CreateService(Service service, Operator * op)
 	};
 	AcquireRelation(service.relation);
 	AttachOperator(op, service.relation);
-	ASSERT(BTreeInsert(serviceRecords, &record) == BTREE_INSERTED)
+	ASSERT(BTreeInsert(serviceRegistry->serviceRecords, &record) == BTREE_INSERTED)
 }
 
 
 static ServiceRecord * findServiceRecord(Service service)
 {
 	ServiceRecord key = {.service = service };
-	return BTreePeekItem(serviceRecords, &key);
+	return BTreePeekItem(serviceRegistry->serviceRecords, &key);
 }
 
 
@@ -328,7 +338,7 @@ void ReplacePrimitiveService(Service service, Operator * op)
 	record->isStale = false;
 	AttachOperator(op, service.relation);
 	addAncestorRecords(op);
-	nCompiledServices++;
+	serviceRegistry->nCompiledServices++;
 }
 
 
@@ -363,7 +373,7 @@ void ServiceRegistryRemoveAll(Relation relation)
 	// Add all services for the given relation to 
 	ServiceRecord key = {.service = (Service) {.relation = relation } };
 	ServiceRecord record;
-	while(BTreeGetItem(serviceRecords, &key, &record)) {
+	while(BTreeGetItem(serviceRegistry->serviceRecords, &key, &record)) {
 		RemoveService(record.service);
 	}
 }
@@ -376,7 +386,7 @@ static void collectParentServices(Operator const * op, ResizingArray * ancestorS
 {
 	OperatorAncestor key = {.op = op};
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, operatorAncestors);
+	BTreeIterate(&iterator, serviceRegistry->operatorAncestors);
 	if(BTreeIteratorSeek(&iterator, &key)) {
 		do {
 			OperatorAncestor const * pair = BTreeIteratorPeekItem(&iterator);
@@ -419,7 +429,7 @@ static size32 invalidateRelationServices(Relation relation, InvalidationUseCase 
 	size32 nServicesRemoved = 0;
 	for(index32 i = 0; i < staleServices.nElements; i++) {
 		Service * service = ResizingArrayGetElement(&staleServices, i);
-		if(!BTreeContainsItem(serviceRecords, service))
+		if(!BTreeContainsItem(serviceRegistry->serviceRecords, service))
 			continue;	// service already removed in a previous removeService() call
 		RemoveService(*service);
 		nServicesRemoved++;
@@ -455,10 +465,10 @@ size32 InvalidateTermFormServices(Atom termForm, InvalidationUseCase useCase)
 
 void RemoveAllCompiledServices(void)
 {
-	while(nCompiledServices > 0) {
+	while(serviceRegistry->nCompiledServices > 0) {
 		// Find the next compiled service
 		BTreeIterator iterator;
-		BTreeIterate(&iterator, serviceRecords);
+		BTreeIterate(&iterator, serviceRegistry->serviceRecords);
 		Service service;
 		bool found = false;
 		while(BTreeIteratorNext(&iterator)) {
@@ -479,20 +489,20 @@ void RemoveAllCompiledServices(void)
 
 size32 NumberOfServices(void)
 {
-	return BTreeNItems(serviceRecords);
+	return BTreeNItems(serviceRegistry->serviceRecords);
 }
 
 
 size32 NumberOfCompiledServices(void)
 {
-	return nCompiledServices;
+	return serviceRegistry->nCompiledServices;
 }
 
 
 void ServiceRegistryIterate(Relation relation, ServiceIterator * iterator)
 {
 	iterator->relation = relation;
-	BTreeIterate(&(iterator->btreeIterator), serviceRecords);
+	BTreeIterate(&(iterator->btreeIterator), serviceRegistry->serviceRecords);
 }
 
 
@@ -536,7 +546,7 @@ void ServiceIteratorEnd(ServiceIterator * iterator)
 ServiceRecord const * ServiceGetRecord(Service service)
 {
 	ServiceRecord key = {.service = service};
-	return BTreePeekItem(serviceRecords, &key);
+	return BTreePeekItem(serviceRegistry->serviceRecords, &key);
 }
 
 
@@ -660,6 +670,6 @@ static void btreePrintCallback(void const * item)
 
 void ServiceRegistryDump(void)
 {
-	BTreeTraversal(serviceRecords, &btreePrintCallback);
+	BTreeTraversal(serviceRegistry->serviceRecords, &btreePrintCallback);
 }
 

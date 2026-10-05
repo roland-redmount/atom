@@ -9,14 +9,34 @@
 #include "lang/formula.h"
 #include "library/MachineService.h"
 #include "memory/allocator.h"
+#include "memory/paging.h"
 #include "parser/FormulaBuilder.h"
 
 
-static uint32 nextModuleID = 1;
+/* CLAUDE: The module state MODULE_MACHINE_SERVICES. The state is created by the first
+   RequestModuleID() or RegisterMachineService(), and freed by FreeModuleRelations() once
+   no module has a relation left. The module ID numbering then starts over at 1. */
+typedef struct s_MachineServices {
+	uint32 nextModuleID;
+	BTree * moduleRelations;
+} MachineServices;
+
+
+static MachineServices * getMachineServices(void)
+{
+	MachineServices * machineServices = GetModuleState(MODULE_MACHINE_SERVICES);
+	if(!machineServices) {
+		machineServices = Allocate(sizeof(MachineServices));
+		machineServices->nextModuleID = 1;
+		SetModuleState(MODULE_MACHINE_SERVICES, machineServices);
+	}
+	return machineServices;
+}
+
 
 uint32 RequestModuleID(void)
 {
-	return nextModuleID++;
+	return getMachineServices()->nextModuleID++;
 }
 
 
@@ -28,7 +48,6 @@ typedef struct s_ModuleRelation {
 	Relation relation;
 } ModuleRelation;
 
-static BTree * moduleRelations;
 
 
 /**
@@ -62,8 +81,9 @@ static int8 btreeCompareModuleRelations(void const * item, void const * itemOrKe
 static void addModuleRelation(uint32 moduleID, Relation relation)
 {
 	// Create B-tree on first call
-	if(!moduleRelations) {
-		moduleRelations = BTreeCreate(
+	MachineServices * machineServices = getMachineServices();
+	if(!machineServices->moduleRelations) {
+		machineServices->moduleRelations = BTreeCreate(
 			sizeof(ModuleRelation),
 			btreeCompareModuleRelations,
 			0	// nothing to deallocate
@@ -71,7 +91,7 @@ static void addModuleRelation(uint32 moduleID, Relation relation)
 	}
 	// Add the module-relation pair
 	ModuleRelation entry = {.moduleID = moduleID, .relation = relation};
-	ASSERT(BTreeInsert(moduleRelations, &entry) == BTREE_INSERTED)
+	ASSERT(BTreeInsert(machineServices->moduleRelations, &entry) == BTREE_INSERTED)
 }
 
 
@@ -197,19 +217,27 @@ Service RegisterMachineServiceWithState(
 
 void FreeModuleRelations(uint32 moduleID)
 {
-	if(!moduleRelations)
+	MachineServices * machineServices = GetModuleState(MODULE_MACHINE_SERVICES);
+	if(!machineServices)
 		return;
 
-	ModuleRelation key = {.moduleID = moduleID};
-	ModuleRelation entry;
-	while(BTreeGetItem(moduleRelations, &key, &entry)) {
-		ASSERT(BTreeDelete(moduleRelations, &entry, 0) == BTREE_DELETED)
-		DropRelation(entry.relation);
-	}
+	BTree * moduleRelations = machineServices->moduleRelations;
+	if(moduleRelations) {
+		ModuleRelation key = {.moduleID = moduleID};
+		ModuleRelation entry;
+		while(BTreeGetItem(moduleRelations, &key, &entry)) {
+			ASSERT(BTreeDelete(moduleRelations, &entry, 0) == BTREE_DELETED)
+			DropRelation(entry.relation);
+		}
 
-	// the index is created on demand, so free it when it becomes empty
-	if(BTreeNItems(moduleRelations) == 0) {
-		BTreeFree(moduleRelations);
-		moduleRelations = 0;
+		// the index is created on demand, so free it when it becomes empty
+		if(BTreeNItems(moduleRelations) == 0) {
+			BTreeFree(moduleRelations);
+			machineServices->moduleRelations = 0;
+		}
+	}
+	if(!machineServices->moduleRelations) {
+		Free(machineServices);
+		SetModuleState(MODULE_MACHINE_SERVICES, 0);
 	}
 }

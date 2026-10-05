@@ -153,8 +153,7 @@ static const byte coreServiceParameterIO[N_CORE_SERVICES + 1][CORE_FORMS_MAX_ARI
 };
 
 
-// TODO: this structure must be persistent
-static struct s_Kernel {
+typedef struct s_Kernel {
 	// Core predicate forms and roles, defined during bootstrapping
 	Atom corePredicateForms[N_CORE_FORMS + 1];
 	// The positive (non-negated) term form of each core predicate form.
@@ -178,27 +177,30 @@ static struct s_Kernel {
 	size32 nCoreNameRefs;
 	size32 nCoreLookupEntries;
 
-} kernel = {0};
+} Kernel;
+
+// pointer to the module state MODULE_KERNEL
+static Kernel * kernel = 0;
 
 
 Atom GetCorePredicateForm(index32 formId)
 {
 	ASSERT((formId >= 1) && (formId <= N_CORE_FORMS))
-	return kernel.corePredicateForms[formId];
+	return kernel->corePredicateForms[formId];
 }
 
 
 Atom GetCoreTermForm(index32 formId)
 {
 	ASSERT((formId >= 1) && (formId <= N_CORE_FORMS))
-	return kernel.coreTermForms[formId];
+	return kernel->coreTermForms[formId];
 }
 
 
 Atom GetCoreRoleName(index32 roleId)
 {
 	ASSERT((roleId >= 1) && (roleId <= N_CORE_ROLES))
-	return kernel.coreRoleNames[roleId];
+	return kernel->coreRoleNames[roleId];
 }
 
 
@@ -206,7 +208,7 @@ index8 CorePredicateRoleIndex(index32 formId, index32 roleId)
 {
 	for(index8 i = 0; i < corePredicateArity[formId]; i++) {
 		if(coreFormRoleIds[formId][i] == roleId)
-			return kernel.corePredicateRoleIndex[formId][i];
+			return kernel->corePredicateRoleIndex[formId][i];
 	}
 	ASSERT(false)
 	return 0;
@@ -257,17 +259,17 @@ void CleanupMemory(void)
 static void setupCoreRoleNames(void)
 {
 	InitializeNameStorage();
-	kernel.coreRoleNames[0] = (Atom) {.hash = 0};
-	kernel.coreRoleNames[ROLE_MULTISET] = CreateNameFromCString("multiset");
-	kernel.coreRoleNames[ROLE_ELEMENT] = CreateNameFromCString("element");
-	kernel.coreRoleNames[ROLE_MULTIPLE] = CreateNameFromCString("multiple");
-	kernel.coreRoleNames[ROLE_PREDICATE_FORM] = CreateNameFromCString("predicate-form");
-	kernel.coreRoleNames[ROLE_TERM_FORM] = CreateNameFromCString("term-form");
-	kernel.coreRoleNames[ROLE_CLAUSE_FORM] = CreateNameFromCString("clause-form");
-	kernel.coreRoleNames[ROLE_CONJUNCTION_FORM] = CreateNameFromCString("conjunction-form");
-	kernel.coreRoleNames[ROLE_SIGN] = CreateNameFromCString("sign");
-	kernel.coreRoleNames[ROLE_QUOTE] = CreateNameFromCString("quote");
-	kernel.coreRoleNames[ROLE_QUOTED] = CreateNameFromCString("quoted");
+	kernel->coreRoleNames[0] = (Atom) {.hash = 0};
+	kernel->coreRoleNames[ROLE_MULTISET] = CreateNameFromCString("multiset");
+	kernel->coreRoleNames[ROLE_ELEMENT] = CreateNameFromCString("element");
+	kernel->coreRoleNames[ROLE_MULTIPLE] = CreateNameFromCString("multiple");
+	kernel->coreRoleNames[ROLE_PREDICATE_FORM] = CreateNameFromCString("predicate-form");
+	kernel->coreRoleNames[ROLE_TERM_FORM] = CreateNameFromCString("term-form");
+	kernel->coreRoleNames[ROLE_CLAUSE_FORM] = CreateNameFromCString("clause-form");
+	kernel->coreRoleNames[ROLE_CONJUNCTION_FORM] = CreateNameFromCString("conjunction-form");
+	kernel->coreRoleNames[ROLE_SIGN] = CreateNameFromCString("sign");
+	kernel->coreRoleNames[ROLE_QUOTE] = CreateNameFromCString("quote");
+	kernel->coreRoleNames[ROLE_QUOTED] = CreateNameFromCString("quoted");
 }
 
 
@@ -287,14 +289,14 @@ static void setupCoreRoleNames(void)
 void CoreFormSetTuple(index32 formId, Atom const inputTuple[], Atom tuple[])
 {
 	TupleCopyPermuted(
-		inputTuple, tuple, kernel.corePredicateRoleIndex[formId], corePredicateArity[formId]);
+		inputTuple, tuple, kernel->corePredicateRoleIndex[formId], corePredicateArity[formId]);
 }
 
 
 void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
 {
 	CopyBytesPermuted(
-		inputArray, array, kernel.corePredicateRoleIndex[formId], corePredicateArity[formId]);
+		inputArray, array, kernel->corePredicateRoleIndex[formId], corePredicateArity[formId]);
 }
 
 
@@ -309,29 +311,29 @@ static void createCoreRelation(uint32 relationId)
 	CoreFormSetByteArray(formId, coreRelationAtomTypes[relationId], atomTypes);
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, corePredicateArity[formId]);
 
-	kernel.coreRelations[relationId] = (Relation) {
-		.form = kernel.coreTermForms[formId],
+	kernel->coreRelations[relationId] = (Relation) {
+		.form = kernel->coreTermForms[formId],
 		.typeSignature = typeSignature
 	};
-	CreateRelationBootstrap(kernel.coreRelations[relationId], kernel.corePredicateForms[formId]);
-	kernel.coreTupleStores[relationId] = CreateTupleStore(
-		kernel.coreRelations[relationId],
-		&btreeStorageProvider, corePredicateArity[formId], kernel.corePredicateRoleIndex[formId]);
+	CreateRelationBootstrap(kernel->coreRelations[relationId], kernel->corePredicateForms[formId]);
+	kernel->coreTupleStores[relationId] = CreateTupleStore(
+		kernel->coreRelations[relationId],
+		&btreeStorageProvider, corePredicateArity[formId], kernel->corePredicateRoleIndex[formId]);
 	// Release the reference obtained from CreateRelationBootstrap(),
 	// since TupleStore and associated operators now hold references
-	ReleaseRelation(kernel.coreRelations[relationId]);
+	ReleaseRelation(kernel->coreRelations[relationId]);
 }
 
 
 Relation GetCoreRelation(index32 relationId)
 {
-	return kernel.coreRelations[relationId];
+	return kernel->coreRelations[relationId];
 }
 
 
 TupleStore * GetCoreTupleStore(index32 relationId)
 {
-	return kernel.coreTupleStores[relationId];
+	return kernel->coreTupleStores[relationId];
 }
 
 
@@ -350,7 +352,7 @@ static void bootstrapTermForm(Atom termForm, Atom predicateForm)
 	IFactBegin(&draft);
 	IFactBeginConjunction(
 		&draft,
-		kernel.coreTupleStores[RELATION_TERM_FORM],
+		kernel->coreTupleStores[RELATION_TERM_FORM],
 		CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM)
 	);
 	Atom tuple[3];
@@ -377,19 +379,19 @@ static void setupCoreOperator(uint32 serviceId)
 	);
 	IOSignature ioSignature = CreateIOSignature(
 		parameterIO, corePredicateArity[coreRelationFormId[relationId]]);
-	kernel.coreOperators[serviceId] = ServiceGetOperator(
+	kernel->coreOperators[serviceId] = ServiceGetOperator(
 		(Service) {
-			.relation = kernel.coreRelations[relationId],
+			.relation = kernel->coreRelations[relationId],
 			.ioSignature = ioSignature
 		}
 	);
-	ASSERT(kernel.coreOperators[serviceId])
+	ASSERT(kernel->coreOperators[serviceId])
 }
 
 
 Operator * GetCoreOperator(index32 serviceId)
 {
-	return kernel.coreOperators[serviceId];
+	return kernel->coreOperators[serviceId];
 }
 
 /**
@@ -445,9 +447,9 @@ static void setupCoreServices(void)
 
 	// fixed values for @multiset-form and @predicate-form
 	Atom multisetForm = (Atom) {.hash = 1};
-	kernel.corePredicateForms[FORM_MULTISET_ELEMENT_MULTIPLE] = multisetForm;
+	kernel->corePredicateForms[FORM_MULTISET_ELEMENT_MULTIPLE] = multisetForm;
 	Atom predicateForm = (Atom) {.hash = 2};
-	kernel.corePredicateForms[FORM_PREDICATE_FORM] = predicateForm;
+	kernel->corePredicateForms[FORM_PREDICATE_FORM] = predicateForm;
 
 	/*
 	 * Fixed values for the positive term form of each of the three forms whose tables
@@ -455,17 +457,17 @@ static void setupCoreServices(void)
 	 * predicate form created further down, but its term form is circular in the same way.
 	 */
 	Atom multisetTermForm = (Atom) {.hash = 3};
-	kernel.coreTermForms[FORM_MULTISET_ELEMENT_MULTIPLE] = multisetTermForm;
+	kernel->coreTermForms[FORM_MULTISET_ELEMENT_MULTIPLE] = multisetTermForm;
 	Atom predicateTermForm = (Atom) {.hash = 4};
-	kernel.coreTermForms[FORM_PREDICATE_FORM] = predicateTermForm;
+	kernel->coreTermForms[FORM_PREDICATE_FORM] = predicateTermForm;
 	Atom termFormTermForm = (Atom) {.hash = 5};
-	kernel.coreTermForms[FORM_TERM_FORM] = termFormTermForm;
+	kernel->coreTermForms[FORM_TERM_FORM] = termFormTermForm;
 
 	// Set role index arrays
-	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][0] = MULTISET_MULTISET_COLUMN;
-	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][1] = MULTISET_ELEMENT_COLUMN;
-	kernel.corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][2] = MULTISET_MULTIPLE_COLUMN;
-	kernel.corePredicateRoleIndex[FORM_PREDICATE_FORM][0] = 0;
+	kernel->corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][0] = MULTISET_MULTISET_COLUMN;
+	kernel->corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][1] = MULTISET_ELEMENT_COLUMN;
+	kernel->corePredicateRoleIndex[FORM_MULTISET_ELEMENT_MULTIPLE][2] = MULTISET_MULTIPLE_COLUMN;
+	kernel->corePredicateRoleIndex[FORM_PREDICATE_FORM][0] = 0;
 
 	/*
 	 * Reserve the IFact headers for the five forms, so that the relation tables
@@ -495,7 +497,7 @@ static void setupCoreServices(void)
 	// defining facts
 	// (multiset @multiset-form element "multiset" multiple 1)
 	IFactBeginConjunction(
-		&multisetDraft, kernel.coreTupleStores[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
+		&multisetDraft, kernel->coreTupleStores[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
 	Atom multisetTuple[3];
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
@@ -520,7 +522,7 @@ static void setupCoreServices(void)
 	IFactEndConjunction(&multisetDraft);
 
 	// (predicate-form @multiset-form)
-	IFactBeginConjunction(&multisetDraft, kernel.coreTupleStores[RELATION_PREDICATE_FORM], 0);
+	IFactBeginConjunction(&multisetDraft, kernel->coreTupleStores[RELATION_PREDICATE_FORM], 0);
 	IFactAddTuple(&multisetDraft, (Atom[]) {multisetForm});
 	IFactEndConjunction(&multisetDraft);
 
@@ -534,7 +536,7 @@ static void setupCoreServices(void)
 	 */
 	IFactEndBootstrap(&multisetDraft, multisetForm.hash);
 	
-	kernel.coreOperators[0] = 0;
+	kernel->coreOperators[0] = 0;
 	setupCoreOperator(SERVICE_MULTISET_ID);
 	setupCoreOperator(SERVICE_MULTISET_NAME);
 	setupCoreOperator(SERVICE_MULTISET_ID_ALL);
@@ -549,7 +551,7 @@ static void setupCoreServices(void)
 	// defining facts
 	// (multiset @predicate-form element "predicate-form" multiple 1)
 	IFactBeginConjunction(
-		&predicateFormDraft, kernel.coreTupleStores[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
+		&predicateFormDraft, kernel->coreTupleStores[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
 		(Atom []) {predicateForm, GetCoreRoleName(ROLE_PREDICATE_FORM), (Atom) {._int = 1}},
@@ -559,7 +561,7 @@ static void setupCoreServices(void)
 	IFactEndConjunction(&predicateFormDraft);
 
 	// (predicate-form @predicate-form)
-	IFactBeginConjunction(&predicateFormDraft, kernel.coreTupleStores[RELATION_PREDICATE_FORM], 0);
+	IFactBeginConjunction(&predicateFormDraft, kernel->coreTupleStores[RELATION_PREDICATE_FORM], 0);
 	IFactAddTuple(&predicateFormDraft, (Atom[]) {predicateForm});
 	IFactEndConjunction(&predicateFormDraft);
 
@@ -578,12 +580,12 @@ static void setupCoreServices(void)
 	 * now exist.
 	 */
 	for(index8 j = 0; j < corePredicateArity[FORM_TERM_FORM]; j++)
-		roles[j] = kernel.coreRoleNames[coreFormRoleIds[FORM_TERM_FORM][j]];
-	kernel.corePredicateForms[FORM_TERM_FORM] =
+		roles[j] = kernel->coreRoleNames[coreFormRoleIds[FORM_TERM_FORM][j]];
+	kernel->corePredicateForms[FORM_TERM_FORM] =
 		CreatePredicateForm(roles, corePredicateArity[FORM_TERM_FORM]);
 	for(index8 j = 0; j < corePredicateArity[FORM_TERM_FORM]; j++)
-		kernel.corePredicateRoleIndex[FORM_TERM_FORM][j] =
-			PredicateRoleIndex(kernel.corePredicateForms[FORM_TERM_FORM], roles[j]);
+		kernel->corePredicateRoleIndex[FORM_TERM_FORM][j] =
+			PredicateRoleIndex(kernel->corePredicateForms[FORM_TERM_FORM], roles[j]);
 	// Create the corresponding relation table, which CreateTermForm() writes into
 	createCoreRelation(RELATION_TERM_FORM);
 
@@ -594,7 +596,7 @@ static void setupCoreServices(void)
 	 */
 	bootstrapTermForm(multisetTermForm, multisetForm);
 	bootstrapTermForm(predicateTermForm, predicateForm);
-	bootstrapTermForm(termFormTermForm, kernel.corePredicateForms[FORM_TERM_FORM]);
+	bootstrapTermForm(termFormTermForm, kernel->corePredicateForms[FORM_TERM_FORM]);
 
 	setupCoreOperator(SERVICE_TERM_FORM);
 
@@ -603,13 +605,13 @@ static void setupCoreServices(void)
 	// Create remaining forms
 	for(index32 formId = FORM_CLAUSE_FORM; formId <= N_CORE_FORMS; formId++) {
 		for(index8 j = 0; j < corePredicateArity[formId]; j++)
-			roles[j] = kernel.coreRoleNames[coreFormRoleIds[formId][j]];
+			roles[j] = kernel->coreRoleNames[coreFormRoleIds[formId][j]];
 		Atom form = CreatePredicateForm(roles, corePredicateArity[formId]);
-		kernel.corePredicateForms[formId] = form;
-		kernel.coreTermForms[formId] = CreateTermForm(form, true);
+		kernel->corePredicateForms[formId] = form;
+		kernel->coreTermForms[formId] = CreateTermForm(form, true);
 		// precompute role indices (relation columns) for CorePredicateRoleIndex()
 		for(index8 j = 0; j < corePredicateArity[formId]; j++)
-			kernel.corePredicateRoleIndex[formId][j] = PredicateRoleIndex(form, roles[j]);
+			kernel->corePredicateRoleIndex[formId][j] = PredicateRoleIndex(form, roles[j]);
 	}
 	// NOTE: we now hold 1 reference to each of the core predicate forms and term forms.
 
@@ -620,8 +622,8 @@ static void setupCoreServices(void)
 	// The relation table registry now holds references to each core predicate form
 	// and term form, so we can release our references.
 	for(index32 i = 1; i <= N_CORE_FORMS; i++) {
-		IFactRelease(kernel.corePredicateForms[i]);
-		IFactRelease(kernel.coreTermForms[i]);
+		IFactRelease(kernel->corePredicateForms[i]);
+		IFactRelease(kernel->coreTermForms[i]);
 	}
 	// Setup remaining core service operators (none so far)
 	for(index32 i = SERVICE_CLAUSE_FORM; i <= N_CORE_SERVICES; i++) {
@@ -633,6 +635,8 @@ static void setupCoreServices(void)
 void KernelInitialize(uint32 memoryPersistence)
 {
 	SetupMemory(memoryPersistence);
+	kernel = Allocate(sizeof(Kernel));
+	SetModuleState(MODULE_KERNEL, kernel);
 	SetupRelationRegistry();
 	SetupServiceRegistry();
 	InitializeTupleStores();
@@ -644,10 +648,10 @@ void KernelInitialize(uint32 memoryPersistence)
 	setupCoreRoleNames();
 	setupCoreServices();
 
-	kernel.nCoreIFacts = IFactTotalCount();
-	kernel.nCoreIFactRefs = IFactTotalReferenceCount();
-	kernel.nCoreNameRefs = NameTotalReferenceCount();
-	kernel.nCoreLookupEntries = LookupTotalCount();
+	kernel->nCoreIFacts = IFactTotalCount();
+	kernel->nCoreIFactRefs = IFactTotalReferenceCount();
+	kernel->nCoreNameRefs = NameTotalReferenceCount();
+	kernel->nCoreLookupEntries = LookupTotalCount();
 }
 
 
@@ -655,23 +659,23 @@ void KernelShutdown(void)
 {
 	// check for dangling ifacts
 	uint32 ifactCount = IFactTotalCount();
-	ASSERT(ifactCount >= kernel.nCoreIFacts)
-	if(ifactCount > kernel.nCoreIFacts) {
-		PrintF("Failed to remove %u ifacts\n", ifactCount - kernel.nCoreIFacts);
+	ASSERT(ifactCount >= kernel->nCoreIFacts)
+	if(ifactCount > kernel->nCoreIFacts) {
+		PrintF("Failed to remove %u ifacts\n", ifactCount - kernel->nCoreIFacts);
 		// IFactDump();
 		ASSERT(false);
 	}
 	// check for dangling references
 	uint32 nIFactRefs = IFactTotalReferenceCount();
-	ASSERT(nIFactRefs >= kernel.nCoreIFactRefs)
-	if(nIFactRefs > kernel.nCoreIFactRefs) {
-		PrintF("Failed to release %u ifact references\n", nIFactRefs - kernel.nCoreIFactRefs);
+	ASSERT(nIFactRefs >= kernel->nCoreIFactRefs)
+	if(nIFactRefs > kernel->nCoreIFactRefs) {
+		PrintF("Failed to release %u ifact references\n", nIFactRefs - kernel->nCoreIFactRefs);
 		ASSERT(false);
 	}
 	uint32 nNameRefs = NameTotalReferenceCount();
-	ASSERT(nNameRefs >= kernel.nCoreNameRefs)
-	if(nNameRefs > kernel.nCoreNameRefs) {
-		PrintF("Failed to release %u name references\n", 	nNameRefs - kernel.nCoreNameRefs);
+	ASSERT(nNameRefs >= kernel->nCoreNameRefs)
+	if(nNameRefs > kernel->nCoreNameRefs) {
+		PrintF("Failed to release %u name references\n", 	nNameRefs - kernel->nCoreNameRefs);
 		ASSERT(false);
 	}
 
@@ -688,13 +692,13 @@ void KernelShutdown(void)
 	 // the associated predicate form and term form of each.
 	for(index32 relationId = N_CORE_RELATIONS; relationId > RELATION_TERM_FORM; relationId--)
 		// This removes the services, and releases the associated forms
-		DropRelation(kernel.coreRelations[relationId]);
+		DropRelation(kernel->coreRelations[relationId]);
 
 	/*
 	 * RELATION_MULTISET_ID is not circular, but shares the term form of
 	 * RELATION_MULTISET_NAME, so it goes before the three tables handled below.
 	 */
-	DropRelation(kernel.coreRelations[RELATION_MULTISET_ID]);
+	DropRelation(kernel->coreRelations[RELATION_MULTISET_ID]);
 
 	/**
 	 * Remove RELATION_TERM_FORM, RELATION_PREDICATE_FORM and RELATION_MULTISET_NAME.
@@ -735,17 +739,17 @@ void KernelShutdown(void)
 	 * retract their own term form from. Once all three are detached, the tables are empty
 	 * and can be torn down in the usual way.
 	 */
-	RelationReleaseTermForm(kernel.coreRelations[RELATION_TERM_FORM]);
-	RelationReleaseTermForm(kernel.coreRelations[RELATION_MULTISET_NAME]);
-	RelationReleaseTermForm(kernel.coreRelations[RELATION_PREDICATE_FORM]);
+	RelationReleaseTermForm(kernel->coreRelations[RELATION_TERM_FORM]);
+	RelationReleaseTermForm(kernel->coreRelations[RELATION_MULTISET_NAME]);
+	RelationReleaseTermForm(kernel->coreRelations[RELATION_PREDICATE_FORM]);
 
-	ASSERT(RelationNRows(kernel.coreRelations[RELATION_TERM_FORM]) == 0)
-	ASSERT(RelationNRows(kernel.coreRelations[RELATION_PREDICATE_FORM]) == 0)
-	ASSERT(RelationNRows(kernel.coreRelations[RELATION_MULTISET_NAME]) == 0)
+	ASSERT(RelationNRows(kernel->coreRelations[RELATION_TERM_FORM]) == 0)
+	ASSERT(RelationNRows(kernel->coreRelations[RELATION_PREDICATE_FORM]) == 0)
+	ASSERT(RelationNRows(kernel->coreRelations[RELATION_MULTISET_NAME]) == 0)
 
-	DropRelation(kernel.coreRelations[RELATION_TERM_FORM]);
-	DropRelation(kernel.coreRelations[RELATION_PREDICATE_FORM]);
-	DropRelation(kernel.coreRelations[RELATION_MULTISET_NAME]);
+	DropRelation(kernel->coreRelations[RELATION_TERM_FORM]);
+	DropRelation(kernel->coreRelations[RELATION_PREDICATE_FORM]);
+	DropRelation(kernel->coreRelations[RELATION_MULTISET_NAME]);
 
 	// Every formula must have been released before the ifacts, since a formula
 	// holds a reference to its form
@@ -756,8 +760,8 @@ void KernelShutdown(void)
 	ASSERT(IFactTotalReferenceCount() == 0)
 
 	uint32 nLookupEntries = LookupTotalCount();
-	if(nLookupEntries > kernel.nCoreLookupEntries) {
-		PrintF("Failed to remove %u lookup entries\n", 	nLookupEntries - kernel.nCoreLookupEntries);
+	if(nLookupEntries > kernel->nCoreLookupEntries) {
+		PrintF("Failed to remove %u lookup entries\n", 	nLookupEntries - kernel->nCoreLookupEntries);
 		// print methods are not available for LookupDump() at this time
 		ASSERT(false)
 	}
@@ -768,6 +772,9 @@ void KernelShutdown(void)
 	FreeTupleStores();
 	FreeRelationRegistry();
 	FreeNameStorage();
+	Free(kernel);
+	SetModuleState(MODULE_KERNEL, 0);
+	kernel = 0;
 	CleanupMemory();
 }
 
