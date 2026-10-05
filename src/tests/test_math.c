@@ -176,25 +176,23 @@ void testIntDivision(void)
 
 
 /*
- * CLAUDE: Query (value x rounded y) for the given x, and return the number of tuples.
- * The rounded value of the last tuple is written to rounded.
+ * CLAUDE: Query a term of two parts, given as role names and actors, and return the
+ * number of tuples. The actor of role2 in the last tuple is written to result.
  */
-static size32 queryRounded(float64 x, int64 * rounded)
+static size32 queryTwoParts(
+	char const * role1, TypedAtom actor1, char const * role2, TypedAtom actor2, TypedAtom * result)
 {
-	Atom roles[2] = {CreateNameFromCString("value"), CreateNameFromCString("rounded")};
-	TypedAtom actors[2] = {
-		CreateTypedAtom(AT_FLOAT, (Atom) {._float = x}),
-		CreateTypedAtom(AT_VARIABLE, CreateVariable('y'))
-	};
+	Atom roles[2] = {CreateNameFromCString(role1), CreateNameFromCString(role2)};
+	TypedAtom actors[2] = {actor1, actor2};
 	Atom predicate = CreatePredicate(roles, actors, 2);
 	Atom query = CreateTerm(predicate, true);
 	FormulaView queryView = FormulaGetView(query);
-	index8 roundedIndex = PredicateRoleIndex(TermFormGetPredicateForm(queryView.form), roles[1]);
+	index8 resultIndex = PredicateRoleIndex(TermFormGetPredicateForm(queryView.form), roles[1]);
 
 	size32 nTuples = 0;
 	MixedTypeRelation * relation = UserQuery(queryView);
 	while(MixedTypeRelationNext(relation)) {
-		*rounded = TypedTupleGetAtom(MixedTypeRelationPeekTuple(relation), roundedIndex)._int;
+		*result = TypedTupleGetElement(MixedTypeRelationPeekTuple(relation), resultIndex);
 		nTuples++;
 	}
 	FreeMixedTypeRelation(relation);
@@ -202,6 +200,38 @@ static size32 queryRounded(float64 x, int64 * rounded)
 	ReleaseFormula(predicate);
 	NameRelease(roles[0]);
 	NameRelease(roles[1]);
+	return nTuples;
+}
+
+
+static TypedAtom floatAtom(float64 x)
+{
+	return CreateTypedAtom(AT_FLOAT, (Atom) {._float = x});
+}
+
+
+static TypedAtom intAtom(int64 n)
+{
+	return CreateTypedAtom(AT_INT, (Atom) {._int = n});
+}
+
+
+static TypedAtom variableAtom(char name)
+{
+	return CreateTypedAtom(AT_VARIABLE, CreateVariable(name));
+}
+
+
+/*
+ * CLAUDE: Query (value x rounded y) for the given x, and return the number of tuples.
+ * The rounded value of the last tuple is written to rounded.
+ */
+static size32 queryRounded(float64 x, int64 * rounded)
+{
+	TypedAtom result;
+	size32 nTuples = queryTwoParts("value", floatAtom(x), "rounded", variableAtom('y'), &result);
+	if(nTuples > 0)
+		*rounded = result.atom._int;
 	return nTuples;
 }
 
@@ -227,6 +257,61 @@ void testValueRounded(void)
 }
 
 
+/*
+ * CLAUDE: Count the tuples of a query formula.
+ */
+static size32 countTuples(char const * queryString)
+{
+	Atom query = CStringToFormula(queryString);
+	MixedTypeRelation * relation = UserQuery(FormulaGetView(query));
+	size32 nTuples = 0;
+	while(MixedTypeRelationNext(relation))
+		nTuples++;
+	FreeMixedTypeRelation(relation);
+	ReleaseFormula(query);
+	return nTuples;
+}
+
+
+/**
+ * CLAUDE: (integer n float f) holds if n and f are the same number, for |n| < 2^53.
+ */
+void testIntegerFloat(void)
+{
+	int64 const maxExact = ((int64) 1 << 53) - 1;
+	TypedAtom result;
+
+	// CLAUDE: from INT to FLOAT
+	int64 integers[] = {0, 7, -7, maxExact, -maxExact};
+	for(index8 i = 0; i < sizeof(integers) / sizeof(integers[0]); i++) {
+		ASSERT_UINT32_EQUAL(queryTwoParts("integer", intAtom(integers[i]), "float", variableAtom('f'), &result), 1)
+		ASSERT_DOUBLE_EQUAL(result.atom._float, (float64) integers[i])
+	}
+	ASSERT_UINT32_EQUAL(queryTwoParts("integer", intAtom(maxExact + 1), "float", variableAtom('f'), &result), 0)
+	ASSERT_UINT32_EQUAL(queryTwoParts("integer", intAtom(-maxExact - 1), "float", variableAtom('f'), &result), 0)
+
+	// CLAUDE: from FLOAT to INT. The FLOAT -0.0 is the integer 0.
+	float64 floats[] = {7.0, -7.0, -0.0, (float64) maxExact};
+	int64 expected[] = {7, -7, 0, maxExact};
+	for(index8 i = 0; i < sizeof(floats) / sizeof(floats[0]); i++) {
+		ASSERT_UINT32_EQUAL(queryTwoParts("float", floatAtom(floats[i]), "integer", variableAtom('n'), &result), 1)
+		ASSERT_INT64_EQUAL(result.atom._int, expected[i])
+	}
+	float64 notIntegers[] = {2.5, 0x1p53, -0x1p53, 1e19, 1.0 / 0.0, 0.0 / 0.0};
+	for(index8 i = 0; i < sizeof(notIntegers) / sizeof(notIntegers[0]); i++)
+		ASSERT_UINT32_EQUAL(queryTwoParts("float", floatAtom(notIntegers[i]), "integer", variableAtom('n'), &result), 0)
+
+	// CLAUDE: both given
+	ASSERT_UINT32_EQUAL(countTuples("integer 3 float 3.0"), 1)
+	ASSERT_UINT32_EQUAL(countTuples("integer 3 float 3.5"), 0)
+
+	// CLAUDE: arithmetic mixing an INT and a FLOAT
+	ASSERT_UINT32_EQUAL(countTuples("integer 3 float f & * 1.5 * f = 4.5"), 1)
+	ASSERT_UINT32_EQUAL(countTuples("integer 2 float f & * 1.5 / f = 0.75"), 1)
+	ASSERT_UINT32_EQUAL(countTuples("integer 2 float f & + 1.5 + f = 3.5"), 1)
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(PERSISTENT_MEMORY);
@@ -237,6 +322,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testRange);
 	ExecuteTest(testIntDivision);
 	ExecuteTest(testValueRounded);
+	ExecuteTest(testIntegerFloat);
 
 	UnloadLibraries();
 	KernelShutdown();

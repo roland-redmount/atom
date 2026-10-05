@@ -163,38 +163,51 @@ static bool valueRoundedCall(void * state, Atom arguments[], void * readerData, 
 }
 
 
-/**
- * (value x<FLOAT scale k<INT scaled y>FLOAT)
- * 
- * Scalar multiplication of a FLOAT x by an INT k. This cannot use symmetric roles (* * =)
- * since the type of the two * roles differ: this is not the * operator of a field, but
- * rather scalar multiplication of x by k (which is outside the field) to obtain y.
- * See https://en.wikipedia.org/wiki/Field_(mathematics)
+//---------------------------- Integer-float conversion -------------------------------------
+
+/*
+ * 2^53 -1 is the largest integer such that every integer from -n to n is exactly a float64.
+ * For larger integers, a float64 may be the rounded value of a different integer:
+ * 2^53 + 1 rounds to 2^53.
  */
-static bool valueScaleScaledCall(void * state, Atom arguments[], void * readerData, void * storage)
+#define MAX_EXACT_INTEGER	(((int64) 1 << 53) - 1)
+
+/**
+ * (integer n<INT float f>FLOAT)
+ *
+ * The relation (integer n float f) holds if the INT n and the FLOAT f are the same
+ * number, for -MAX_EXACT_INTEGER <= n <= MAX_EXACT_INTEGER. An INT outside that range
+ * gives no tuple.
+ */
+static bool integerFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
-	arguments[2]._float = arguments[0]._float * arguments[1]._int;
+	int64 n = arguments[0]._int;
+	if((n < -MAX_EXACT_INTEGER) || (n > MAX_EXACT_INTEGER))
+		return false;
+	arguments[1]._float = (float64) n;
 	return true;
 }
 
 /**
- * (value x<FLOAT invscale k<INT scaled y>FLOAT)
- * 
- * The inverse scalar operation y = x / k, for k != 0.
- * Note that, since floating point arithmetic is inexact, it may not hold that
- * (value x scale k scaled y) <-> (value y invscale k scaled x),
- * and so the join relation (value x scale k scaled y & value y invscale k scaled x)
- * may be empty. An example for 64-bit floats is x = 0.003 and k = 3.
- * Therefore, we cannot use (value #1>FLOAT scale #2<INT scaled #3<FLOAT) to express
- * the inverse scaling.
+ * (integer n>INT float f<FLOAT)
+ *
+ * The relation (integer n float f) for a given FLOAT f; see integerFloatCall(). A FLOAT
+ * that is not an integer, or is outside the range, gives no tuple. To round a FLOAT to
+ * an INT, use (value x rounded y) instead.
+ *
+ * The FLOAT -0.0 is the integer 0, so it gives n = 0. However, the FLOAT for n = 0 is
+ * 0.0, and atoms are compared by their bits, so -0.0 and 0.0 are different FLOAT atoms.
+ * Hence (integer n float -0.0) gives n = 0, but (integer 0 float -0.0) does not hold.
  */
-static bool valueInvscaleScaledCall(void * state, Atom arguments[], void * readerData, void * storage)
+static bool floatIntegerCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
-	float64 x = arguments[0]._float;
-	int64 k = arguments[1]._int;
-	if(k == 0)
+	float64 f = arguments[1]._float;
+	// CLAUDE: NaN fails both comparisons, and an infinity fails one
+	if(!((f >= -MAX_EXACT_INTEGER) && (f <= MAX_EXACT_INTEGER)))
 		return false;
-	arguments[2]._float = x / k;
+	if(RoundFloat64(f) != f)
+		return false;
+	arguments[0]._int = (int64) f;
 	return true;
 }
 
@@ -267,7 +280,8 @@ static bool rangeCall(void * state, Atom arguments[], void * readerData, void * 
 
 static uint32 moduleID;
 
-FormulaView addSubRule;
+#define N_MATH_RULES	5
+FormulaView mathRules[N_MATH_RULES];
 
 
 void MathSetup(void)
@@ -289,9 +303,9 @@ void MathSetup(void)
 
 	RegisterMachineService(moduleID, "value #1<FLOAT rounded #2>INT", valueRoundedCall);
 	
-	// float-by-integer scaling
-	RegisterMachineService(moduleID, "value #1<FLOAT scale #2<INT scaled #3>FLOAT", valueScaleScaledCall);
-	RegisterMachineService(moduleID, "value #1<FLOAT invscale #2<INT scaled #3>FLOAT", valueInvscaleScaledCall);
+	// integer-float conversion
+	RegisterMachineService(moduleID, "integer #1<INT float #2>FLOAT", integerFloatCall);
+	RegisterMachineService(moduleID, "integer #1>INT float #2<FLOAT", floatIntegerCall);
 
 	// inequalities
 	RegisterMachineService(moduleID, "< #1<INT > #2<INT", strictInequalityIntCall);
@@ -307,15 +321,27 @@ void MathSetup(void)
 		rangeSetup,	rangeCall, 0
 	);
 
-	// Let the compiler create (+ #1<INT + #2>INT = #3>INT) from (+ #1<INT - #2<INT = #3>INT)
-	// NOTE: this leaves the (+ + =) primitive service stale, needs compilation
-	addSubRule = DictionaryAddClauseFromCString("+ x + y = z | ! + z - x = y");
+	// Add rules to let the compiler create derived services.
+	// NOTE: adding these rules leaves various primitive service stale, needs compilation
+	
+	// integer division, with zero remainder
+	mathRules[0] = DictionaryAddClauseFromCString("* x / y = z | ! * x / y = z rem 0");
+
+	// Solving x + y = z for y
+	mathRules[1] = DictionaryAddClauseFromCString("+ x + y = z | ! + z - x = y");
+	// Solving x * y = z for y. For integers, this requires division with zero remainder
+	mathRules[2] = DictionaryAddClauseFromCString("* x * y = z | ! * z / x = y");
+
+	// Mixed float-int arithmetic. These rules will yield services only for FLOAT x and INT i
+	mathRules[3] = DictionaryAddClauseFromCString("+ x + i = y | ! integer i float f | ! + x + f = y");
+	mathRules[4] = DictionaryAddClauseFromCString("* x * i = y | ! integer i float f | ! * x * f = y");
 }
 
 
 void MathShutdown(void)
 {
-	DictionaryRemoveClause(&addSubRule);
+	for(index32 i = 0; i < N_MATH_RULES; i++)
+		DictionaryRemoveClause(&mathRules[i]);
 
 	FreeModuleRelations(moduleID);
 }
