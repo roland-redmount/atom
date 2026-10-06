@@ -3,8 +3,15 @@
 
 #include "platform.h"
 
-
+/**
+ * Initialize a new, empty allocator in the given memory area.
+ */
 void CreateAllocator(void * memoryArea, size8 log2AreaSize);
+
+/**
+ * Open an allocator area previously set up by CreateAllocator()
+ */
+void OpenAllocator(void * memoryArea, size8 log2AreaSize);
 void CloseAllocator(void);
 
 /**

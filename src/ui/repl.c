@@ -29,7 +29,7 @@ static uint32 getMemoryPersistence(int argc, char * argv[])
 	for(int i = 1; i < argc; i++)
 		if(CStringCompare(argv[i], "--transient") == 0)
 			return TRANSIENT_MEMORY;
-	return PERSISTENT_MEMORY;
+	return NEW_PERSISTENT_MEMORY;
 }
 
 

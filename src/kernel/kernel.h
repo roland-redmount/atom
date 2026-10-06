@@ -10,10 +10,11 @@
 
 
 /**
- * Set up a default memory layout, enable paging and allocation.
+ * Set up a memory, enabling paging and creating the allocator.
  * The memory persistence is passed on to InitializePaging().
+ * Return false if InitializePaging() fails.
  */
-void SetupMemory(uint32 memoryPersistence);
+bool SetupMemory(uint32 memoryPersistence);
 
 void CleanupMemory(void);
 
@@ -24,7 +25,7 @@ void CleanupMemory(void);
  * 
  * TODO: we also need methods to load a previously persisted state.
  */
-void KernelInitialize(uint32 memoryPersistence);
+bool KernelInitialize(uint32 memoryPersistence);
 
 /**
  * Shut down a kernel, removing all facts.

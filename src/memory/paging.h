@@ -32,9 +32,14 @@ extern byte * pageTable;
  * TRANSIENT_MEMORY.
  */
 #define TRANSIENT_MEMORY	1
-#define PERSISTENT_MEMORY	2
+#define NEW_PERSISTENT_MEMORY		2
+#define RESTART_PERSISTENT_MEMORY	3
 
- void InitializePaging(uint32 memoryPersistence);
+/* CLAUDE: NEW_PERSISTENT_MEMORY starts a blank paging area in a new paging file,
+   replacing any existing one. RESTART_PERSISTENT_MEMORY restores the paging area from
+   the paging file that ShutdownPaging() closed last. InitializePaging() returns false
+   if no such paging file exists, after printing the reason. */
+bool InitializePaging(uint32 memoryPersistence);
 
 /**
  * Release the paging area set up by InitializePaging(). Every pointer

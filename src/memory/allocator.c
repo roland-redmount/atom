@@ -494,6 +494,16 @@ void CreateAllocator(void * address, size8 logAreaSize)
 }
 
 
+void OpenAllocator(void * address, size8 logAreaSize)
+{
+	allocator.memoryArea = (byte *) address;
+	ASSERT(getLogAreaSize() == logAreaSize)
+#ifdef DEBUG_ALLOCATE
+	allocateLog = BTreeCreateWithCalloc(sizeof(AllocateRecord), &compareRecords, 0);
+#endif
+}
+
+
 void CloseAllocator(void)
 {
 	// nothing to do

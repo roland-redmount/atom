@@ -4,6 +4,9 @@
 #include "util/resources.h"
 #include "testing/testing.h"
 
+#include <unistd.h>
+#include <sys/wait.h>
+
 
 void testRestoreMapping(void)
 {
@@ -49,10 +52,76 @@ void testCreateMapping(void)
 }
 
 
+/* CLAUDE: Pages, page contents and module state written in one session are
+   there again after restarting from the paging file. */
+void testRestartPaging(void)
+{
+	ASSERT_TRUE(InitializePaging(NEW_PERSISTENT_MEMORY))
+	byte * page = AllocatePage();
+	CopyMemory("abcdefghij", page, 10);
+	SetModuleState(MODULE_KERNEL, page);
+	ShutdownPaging();
+
+	ASSERT_TRUE(InitializePaging(RESTART_PERSISTENT_MEMORY))
+	ASSERT_PTR_EQUAL(GetModuleState(MODULE_KERNEL), page)
+	ASSERT_MEMORY_EQUAL(page, "abcdefghij", 10)
+	// the page table is restored, so the page is not handed out again
+	byte * nextPage = AllocatePage();
+	ASSERT_PTR_NOT_EQUAL(nextPage, page)
+	FreePage(nextPage);
+	FreePage(page);
+	ShutdownPaging();
+}
+
+
+/* CLAUDE: A restart is refused when there is no paging file, when the file is
+   not a paging file, and when the file was not closed by ShutdownPaging(). */
+void testRestartRefused(void)
+{
+	char pageFilePath[maxPathLength + 1];
+	ASSERT_TRUE(GetDataFilePath(PAGING_FILE_NAME, pageFilePath, maxPathLength + 1))
+
+	DeleteFile(pageFilePath);
+	ASSERT_FALSE(InitializePaging(RESTART_PERSISTENT_MEMORY))
+
+	// a file of the wrong size
+	MemoryDescriptor fileMapping;
+	ASSERT_TRUE(CreateMappedMemory(0, MEMORY_PAGE_SIZE, pageFilePath, &fileMapping))
+	ReleaseMemory(&fileMapping);
+	ASSERT_FALSE(InitializePaging(RESTART_PERSISTENT_MEMORY))
+
+	// a file of the right size, with no paging area in it
+	ASSERT_TRUE(CreateMappedMemory(0, MEMORY_SIZE, pageFilePath, &fileMapping))
+	ReleaseMemory(&fileMapping);
+	ASSERT_FALSE(InitializePaging(RESTART_PERSISTENT_MEMORY))
+
+	// a child process ends without closing its paging file, as after a crash
+	pid_t child = fork();
+	if(child == 0) {
+		InitializePaging(NEW_PERSISTENT_MEMORY);
+		_exit(0);
+	}
+	waitpid(child, 0, 0);
+	ASSERT_FALSE(InitializePaging(RESTART_PERSISTENT_MEMORY))
+
+	// a refused restart leaves the file open, so it is refused again
+	ASSERT_FALSE(InitializePaging(RESTART_PERSISTENT_MEMORY))
+
+	DeleteFile(pageFilePath);
+}
+
+
 int main(int argc, char * argv[])
 {
+	// CLAUDE: the tests delete the paging file, so they must not run in the user's data directory
+	char const * dataDirectory = GetEnvironmentVariable("ATOM_DATA_DIR");
+	if(!dataDirectory || !dataDirectory[0])
+		Panic("test_persistence requires ATOM_DATA_DIR to be set; run it with ctest\n");
+
 	testRestoreMapping();
 	testCreateMapping();
+	testRestartPaging();
+	testRestartRefused();
 
 	TestSummary();
 }

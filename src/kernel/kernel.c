@@ -240,20 +240,27 @@ static void registerKernelFunctions(void)
 }
 
 
-void SetupMemory(uint32 memoryPersistence)
+bool SetupMemory(uint32 memoryPersistence)
 {
 	checkTypeSizes();
 	registerKernelFunctions();
-	InitializePaging(memoryPersistence);
+	if(!InitializePaging(memoryPersistence))
+		return false;
 
-	// setup allocator
-	// running out of pages is not a bug on our part, so we cannot assume it away
-	void * allocatorArea = AllocatePages(ALLOCATOR_N_PAGES);
-	if(allocatorArea == 0)
-		Panic("cannot reserve %u pages for the allocator\n", ALLOCATOR_N_PAGES);
-	SetModuleState(MODULE_ALLOCATOR, allocatorArea);
-	CreateAllocator(allocatorArea, LOG_ALLOCATOR_AREA_SIZE);
-	InitializeReferences();
+	if(memoryPersistence == RESTART_PERSISTENT_MEMORY) {
+		// A restored paging area already holds the allocator and the reference table
+		OpenAllocator(GetModuleState(MODULE_ALLOCATOR), LOG_ALLOCATOR_AREA_SIZE);
+	}
+	else {
+		// Setup a new allocator.
+		void * allocatorArea = AllocatePages(ALLOCATOR_N_PAGES);
+		if(allocatorArea == 0)
+			Panic("cannot reserve %u pages for the allocator\n", ALLOCATOR_N_PAGES);
+		SetModuleState(MODULE_ALLOCATOR, allocatorArea);
+		CreateAllocator(allocatorArea, LOG_ALLOCATOR_AREA_SIZE);
+		InitializeReferences();
+	}
+	return true;
 }
 
 
@@ -654,9 +661,12 @@ static void setupCoreServices(void)
 }
 
 
-void KernelInitialize(uint32 memoryPersistence)
+bool KernelInitialize(uint32 memoryPersistence)
 {
-	SetupMemory(memoryPersistence);
+	// CLAUDE: restarting the kernel modules from a restored paging area is not implemented yet
+	ASSERT(memoryPersistence != RESTART_PERSISTENT_MEMORY)
+	if(!SetupMemory(memoryPersistence))
+		return false;
 	kernel = Allocate(sizeof(Kernel));
 	SetModuleState(MODULE_KERNEL, kernel);
 	SetupStorageProviders();
@@ -675,6 +685,7 @@ void KernelInitialize(uint32 memoryPersistence)
 	kernel->nCoreIFactRefs = IFactTotalReferenceCount();
 	kernel->nCoreNameRefs = NameTotalReferenceCount();
 	kernel->nCoreLookupEntries = LookupTotalCount();
+	return true;
 }
 
 
