@@ -200,6 +200,11 @@ void RelationReleaseTermForm(Relation relation);
 void SetupRelationRegistry(void);
 
 /**
+ * Restore the relation registry from the paging area upon restart.
+ */
+void RestoreRelationRegistry(void);
+
+/**
  * Deallocate the registry. Before calling this function,
  * all relations must have been released.
  */

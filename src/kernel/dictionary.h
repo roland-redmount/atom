@@ -16,6 +16,11 @@
  */
 void SetupDictionary(void);
 
+/**
+ * Restore the dictionary from the paging area upon restart.
+ */
+void RestoreDictionary(void);
+
 void TeardownDictionary(void);
 
 /**

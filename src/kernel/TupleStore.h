@@ -40,6 +40,11 @@ typedef struct s_TupleStore {
  */
 void InitializeTupleStores(void);
 
+/**
+ * Restore tuple stores from the paging area upon restart
+ */
+void RestoreTupleStores(void);
+
 void FreeTupleStores(void);
 
 /**

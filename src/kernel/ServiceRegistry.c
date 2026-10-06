@@ -141,6 +141,13 @@ void SetupServiceRegistry(void)
 }
 
 
+void RestoreServiceRegistry(void)
+{
+	serviceRegistry = GetModuleState(MODULE_SERVICES);
+	ASSERT(serviceRegistry)
+}
+
+
 void FreeServiceRegistry(void)
 {
 	BTreeFree(serviceRegistry->serviceRecords);

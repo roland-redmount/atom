@@ -36,6 +36,11 @@
 
 
 void InitializeLookup(void);
+
+/**
+ * Restore lookup storage from the paging area upon restart.
+ */
+void RestoreLookup(void);
 void FreeLookup(void);
 
 size32 LookupTotalCount(void);

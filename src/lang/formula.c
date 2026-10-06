@@ -107,6 +107,13 @@ void InitializeFormulaStorage(void)
 }
 
 
+void RestoreFormulaStorage(void)
+{
+	formulaStorage = GetModuleState(MODULE_FORMULAS);
+	ASSERT(formulaStorage)
+}
+
+
 void FreeFormulaStorage(void)
 {
 	ASSERT(NumberOfFormulas() == 0)

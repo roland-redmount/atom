@@ -446,6 +446,13 @@ void ListSetup(void)
 }
 
 
+void ListRestore(void)
+{
+	listLibrary = GetModuleState(MODULE_LIST);
+	ASSERT(listLibrary)
+}
+
+
 void ListShutdown(void)
 {
 	DropRelation(listLibrary->listLengthRelation);

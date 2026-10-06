@@ -130,6 +130,13 @@ void InitializeIFacts(void)
 }
 
 
+void RestoreIFacts(void)
+{
+	ifactStorage = GetModuleState(MODULE_IFACTS);
+	ASSERT(ifactStorage)
+}
+
+
 bool IFactsInitialized(void)
 {
 	return (ifactStorage != 0) && (ifactStorage->btree != 0);

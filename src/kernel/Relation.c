@@ -375,6 +375,13 @@ void SetupRelationRegistry(void)
 }
 
 
+void RestoreRelationRegistry(void)
+{
+	relationRegistry = GetModuleState(MODULE_RELATIONS);
+	ASSERT(relationRegistry)
+}
+
+
 void FreeRelationRegistry(void)
 {
 	BTreeFree(relationRegistry);

@@ -19,9 +19,16 @@ static void * storePool = 0;
 
 void InitializeTupleStores(void)
 {
-	ASSERT(!storePool)
+	ASSERT(GetModuleState(MODULE_TUPLE_STORES) == 0)
 	storePool = CreatePool(sizeof(TupleStore));
 	SetModuleState(MODULE_TUPLE_STORES, storePool);
+}
+
+
+void RestoreTupleStores(void)
+{
+	storePool = GetModuleState(MODULE_TUPLE_STORES);
+	ASSERT(storePool)
 }
 
 

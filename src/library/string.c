@@ -142,6 +142,13 @@ void StringSetup(void)
 }
 
 
+void StringRestore(void)
+{
+	stringLibrary = GetModuleState(MODULE_STRING);
+	ASSERT(stringLibrary)
+}
+
+
 void StringShutdown(void)
 {
 	DropRelation(stringLibrary->stringRelation);

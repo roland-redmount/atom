@@ -92,6 +92,13 @@ void InitializeLookup(void)
 }
 
 
+void RestoreLookup(void)
+{
+	lookup = GetModuleState(MODULE_LOOKUP);
+	ASSERT(lookup)
+}
+
+
 void FreeLookup(void)
 {
 	ASSERT(BTreeNItems(lookup->btree) == 0)

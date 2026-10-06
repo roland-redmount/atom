@@ -12,6 +12,11 @@
 #include "lang/TypedAtom.h"
 
 void InitializeNameStorage(void);
+
+/**
+ * Restore name storage from the paging area upon restart.
+ */
+void RestoreNameStorage(void);
 void FreeNameStorage(void);
 
 size32 NumberOfNames(void);

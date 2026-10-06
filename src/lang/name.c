@@ -91,6 +91,13 @@ void InitializeNameStorage(void)
 }
 
 
+void RestoreNameStorage(void)
+{
+	nameStorage = GetModuleState(MODULE_NAMES);
+	ASSERT(nameStorage)
+}
+
+
 void FreeNameStorage(void)
 {
 	BTreeFree(nameStorage->tree);

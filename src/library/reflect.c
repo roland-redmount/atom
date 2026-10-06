@@ -175,6 +175,13 @@ void ReflectionSetup(void)
 }
 
 
+void ReflectionRestore(void)
+{
+	reflectLibrary = GetModuleState(MODULE_REFLECT);
+	ASSERT(reflectLibrary)
+}
+
+
 void ReflectionShutdown(void)
 {
 	FreeModuleRelations(reflectLibrary->moduleID);

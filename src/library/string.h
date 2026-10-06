@@ -19,6 +19,11 @@
  */
 void StringSetup(void);
 
+/**
+ * Restore the (string) relation and its service from the paging area upon restart.
+ */
+void StringRestore(void);
+
 void StringShutdown(void);
 
 /**

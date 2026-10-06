@@ -377,6 +377,13 @@ void MathSetup(void)
 }
 
 
+void MathRestore(void)
+{
+	mathLibrary = GetModuleState(MODULE_MATH);
+	ASSERT(mathLibrary)
+}
+
+
 void MathShutdown(void)
 {
 	for(index32 i = 0; i < N_MATH_RULES; i++)

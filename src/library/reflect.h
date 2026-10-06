@@ -10,6 +10,11 @@
  */
 void ReflectionSetup(void);
 
+/**
+ * Restore the reflection services from the paging area upon restart.
+ */
+void ReflectionRestore(void);
+
 void ReflectionShutdown(void);
 
 

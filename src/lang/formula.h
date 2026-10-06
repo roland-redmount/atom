@@ -35,6 +35,11 @@ typedef struct s_FormulaView {
  */
 void InitializeFormulaStorage(void);
 
+/**
+ * Restore the formula registry from the paging area upon restart.
+ */
+void RestoreFormulaStorage(void);
+
 void FreeFormulaStorage(void);
 
 /**

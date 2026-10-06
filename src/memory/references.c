@@ -116,6 +116,18 @@ void RegisterFunctions(NamedFunction const functions[], size32 nFunctions)
 
 
 /**
+ * Return the function registered under the name hash, or 0 if there is none.
+ */
+static AnyFunction findFunctionByHash(data64 nameHash)
+{
+	index32 index = findHashIndex(nameHash);
+	if((index < registry.nFunctions) && (registry.functionsByHash[index].nameHash == nameHash))
+		return registry.functionsByHash[index].function;
+	return 0;
+}
+
+
+/**
  * Return the registered function, or 0 if the function is not registered.
  */
 static RegisteredFunction const * findRegisteredFunction(AnyFunction function)
@@ -175,7 +187,7 @@ static NamedFunction const referenceFunctions[] = {
 
 
 /*
- * The reference table is a B-tree of Reference items, ordered by slot.
+ * The reference table is a persisten B-tree of Reference items, ordered by slot.
  * It is always looked up from the module state, which is 0 when no table exists.
  */
 static BTree * getReferenceTable(void)
@@ -212,6 +224,36 @@ void FreeReferences(void)
 }
 
 
+bool ResolveReferences(void)
+{
+	BTree * table = getReferenceTable();
+	ASSERT(table)
+	// the table's own comparator is not recorded; see InitializeReferences()
+	table->compareItems = btreeCompareReferences;
+
+	bool resolved = true;
+	data64 missingHash = 0;
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, table);
+	while(BTreeIteratorNext(&iterator)) {
+		Reference const * reference = BTreeIteratorPeekItem(&iterator);
+		AnyFunction function = findFunctionByHash(reference->nameHash);
+		if(!function) {
+			resolved = false;
+			missingHash = reference->nameHash;
+			break;
+		}
+		CopyMemory(&function, (void *) reference->slot, sizeof(AnyFunction));
+	}
+	BTreeIteratorEnd(&iterator);
+	if(!resolved) {
+		PrintF("The paging file refers to a function that this version of atom does not have,"
+			" with name hash %llx.\n", missingHash);
+	}
+	return resolved;
+}
+
+
 size32 NumberOfReferences(void)
 {
 	BTree * table = getReferenceTable();
@@ -235,6 +277,7 @@ void SetReference(void * slot, AnyFunction function)
 
 	BTree * table = getReferenceTable();
 	if(!table) {
+		// A missing reference table only occurs while creating the table
 		ASSERT(isCreatingTable)
 		return;
 	}

@@ -22,10 +22,14 @@ void CleanupMemory(void);
  * Initialize a new kernel, creating a blank "world"
  * with only the core predicates defined.
  * The memory persistence is passed on to SetupMemory().
- * 
- * TODO: we also need methods to load a previously persisted state.
  */
 bool KernelInitialize(uint32 memoryPersistence);
+
+/**
+ * Close the kernel, keeping the world as it is. If persistence is enabled,
+ * the next session can restart from the paging file; see RESTART_PERSISTENT_MEMORY.
+ */
+void KernelClose(void);
 
 /**
  * Shut down a kernel, removing all facts.

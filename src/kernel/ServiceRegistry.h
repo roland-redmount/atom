@@ -51,6 +51,11 @@ typedef struct s_ServiceRecord {
 void SetupServiceRegistry(void);
 
 /**
+ * Restore the service registry from the paging area upon restart.
+ */
+void RestoreServiceRegistry(void);
+
+/**
  * Register a new Service with the given Operator. Attaches the services' Relation
  * to the Operator and acquires the Relation.
  * If the service is compiled, there must not exist a service already.

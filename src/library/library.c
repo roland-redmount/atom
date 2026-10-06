@@ -5,6 +5,7 @@
 #include "library/MachineService.h"
 #include "library/reflect.h"
 #include "library/string.h"
+#include "memory/paging.h"
 
 
 void RegisterLibraryFunctions(void)
@@ -18,6 +19,14 @@ void RegisterLibraryFunctions(void)
 void LoadLibraries(void)
 {
 	RegisterLibraryFunctions();
+	// CLAUDE: in a restored paging area, the libraries are already loaded
+	if(GetModuleState(MODULE_MACHINE_SERVICES)) {
+		ListRestore();
+		MathRestore();
+		StringRestore();
+		ReflectionRestore();
+		return;
+	}
 	SetupMachineServices();
 	ListSetup();
 	MathSetup();

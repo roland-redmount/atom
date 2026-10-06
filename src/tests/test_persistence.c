@@ -1,5 +1,10 @@
 
 #include "platform.h"
+#include "kernel/kernel.h"
+#include "library/library.h"
+#include "parser/FormulaBuilder.h"
+#include "ui/assert.h"
+#include "ui/query.h"
 #include "memory/paging.h"
 #include "util/resources.h"
 #include "testing/testing.h"
@@ -111,17 +116,107 @@ void testRestartRefused(void)
 }
 
 
+/* CLAUDE: Return the number of answers to the query, a term or a conjunction */
+static size32 countAnswers(char const * query)
+{
+	Atom formula = CStringToFormula(query);
+	MixedTypeRelation * answers = UserQuery(FormulaGetView(formula));
+	size32 nAnswers = 0;
+	while(MixedTypeRelationNext(answers))
+		nAnswers++;
+	FreeMixedTypeRelation(answers);
+	ReleaseFormula(formula);
+	return nAnswers;
+}
+
+
+static void assertFormula(char const * formulaString)
+{
+	Atom formula = CStringToFormula(formulaString);
+	ASSERT_INT32_EQUAL(AssertFormula(formula), ASSERT_OK)
+	ReleaseFormula(formula);
+}
+
+
+/* CLAUDE: The queries of a session, answered the same before and after a restart.
+   They use facts, a rule, a string, and the math and list libraries. */
+static void checkSessionAnswers(void)
+{
+	ASSERT_UINT32_EQUAL(countAnswers("parent x child y"), 2)
+	ASSERT_UINT32_EQUAL(countAnswers("grandparent 1 grandchild 3"), 1)
+	ASSERT_UINT32_EQUAL(countAnswers("grandparent x grandchild y"), 1)
+	ASSERT_UINT32_EQUAL(countAnswers("name \"ann\" age 3"), 1)
+	ASSERT_UINT32_EQUAL(countAnswers("+ 2 + 3 = 5"), 1)
+	ASSERT_UINT32_EQUAL(countAnswers("+ 2 + 3 = 6"), 0)
+}
+
+
+/**
+ * Create some facts, write the session to a new paging file and close it.
+ * See testRestartKernel().
+ * */
+static void writeSessionToPageFile(void)
+{
+	ASSERT_TRUE(KernelInitialize(NEW_PERSISTENT_MEMORY))
+	LoadLibraries();
+	assertFormula("parent 1 child 2");
+	assertFormula("parent 2 child 3");
+	assertFormula("grandparent x grandchild z | ! parent x child y | ! parent y child z");
+	assertFormula("name \"ann\" age 3");
+	checkSessionAnswers();
+	KernelClose();
+}
+
+
+/**
+ * Let a child process create new a paging file, then test restoring it.
+ * The child process loads the atom library at another address, so every function pointer
+ * in the paging area must be resolved; see ResolveReferences().
+ */
+void testRestartKernel(void)
+{
+	pid_t child = fork();
+	if(child == 0) {
+		char * childArguments[] = {"test_persistence", "--write-session", 0};
+		execv("/proc/self/exe", childArguments);
+		_exit(1);
+	}
+	int childStatus;
+	waitpid(child, &childStatus, 0);
+	ASSERT_TRUE(WIFEXITED(childStatus) && (WEXITSTATUS(childStatus) == 0))
+
+	// the library functions are not registered yet, so the restart is refused
+	ASSERT_FALSE(KernelInitialize(RESTART_PERSISTENT_MEMORY))
+
+	RegisterLibraryFunctions();
+	ASSERT_TRUE(KernelInitialize(RESTART_PERSISTENT_MEMORY))
+	LoadLibraries();
+	checkSessionAnswers();
+	KernelClose();
+
+	char pageFilePath[maxPathLength + 1];
+	ASSERT_TRUE(GetDataFilePath(PAGING_FILE_NAME, pageFilePath, maxPathLength + 1))
+	DeleteFile(pageFilePath);
+}
+
+
 int main(int argc, char * argv[])
 {
-	// CLAUDE: the tests delete the paging file, so they must not run in the user's data directory
+	// The tests delete the paging file, so they must not run in the user's data directory
 	char const * dataDirectory = GetEnvironmentVariable("ATOM_DATA_DIR");
 	if(!dataDirectory || !dataDirectory[0])
 		Panic("test_persistence requires ATOM_DATA_DIR to be set; run it with ctest\n");
+
+	if((argc > 1) && (CStringCompare(argv[1], "--write-session") == 0)) {
+		writeSessionToPageFile();
+		return 0;
+	}
 
 	testRestoreMapping();
 	testCreateMapping();
 	testRestartPaging();
 	testRestartRefused();
+	testRestartKernel();
 
 	TestSummary();
 }

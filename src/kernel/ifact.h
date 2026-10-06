@@ -74,6 +74,11 @@ typedef struct s_IFactDraft {
 void InitializeIFacts(void);
 
 /**
+ * Restore ifact storage from the paging area upon restart.
+ */
+void RestoreIFacts(void);
+
+/**
  * Check if ifact storage has been initialized.
  */
 bool IFactsInitialized(void);

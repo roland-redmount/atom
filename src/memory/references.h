@@ -49,6 +49,13 @@ void FreeReferences(void);
 
 size32 NumberOfReferences(void);
 
+/**
+ * Write the current address of each registered function into its slot in the  paging area.
+ * Every function must have been registered first.
+ * Returns false if some recorded function is not registered, after printing a message.
+ */
+bool ResolveReferences(void);
+
 
 /**
  * Write the function pointer to the given slot in page-allocated memory,

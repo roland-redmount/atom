@@ -11,6 +11,11 @@
  */
 void MathSetup(void);
 
+/**
+ * Restore the math services from the paging area upon restart.
+ */
+void MathRestore(void);
+
 void MathShutdown(void);
 
 

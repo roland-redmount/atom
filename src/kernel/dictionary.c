@@ -124,6 +124,13 @@ void SetupDictionary(void)
 }
 
 
+void RestoreDictionary(void)
+{
+	dictionary = GetModuleState(MODULE_DICTIONARY);
+	ASSERT(dictionary)
+}
+
+
 void TeardownDictionary(void)
 {
 	BTreeFree(dictionary->btree);

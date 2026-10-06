@@ -224,7 +224,7 @@ index8 CorePredicateRoleIndex(index32 formId, index32 roleId)
 
 /**
  * Add kernel function pointers to the global function table.
- * See 
+ * See RegisterFunctions() in registry.c
  */
 static void registerKernelFunctions(void)
 {
@@ -250,6 +250,10 @@ bool SetupMemory(uint32 memoryPersistence)
 	if(memoryPersistence == RESTART_PERSISTENT_MEMORY) {
 		// A restored paging area already holds the allocator and the reference table
 		OpenAllocator(GetModuleState(MODULE_ALLOCATOR), LOG_ALLOCATOR_AREA_SIZE);
+		if(!ResolveReferences()) {
+			ShutdownPaging();
+			return false;
+		}
 	}
 	else {
 		// Setup a new allocator.
@@ -661,31 +665,58 @@ static void setupCoreServices(void)
 }
 
 
+/**
+ * Retstor the state of each kernel module from the paging area
+ */
+static void restoreKernel(void)
+{
+	kernel = GetModuleState(MODULE_KERNEL);
+	ASSERT(kernel)
+	RestoreRelationRegistry();
+	RestoreServiceRegistry();
+	RestoreTupleStores();
+	RestoreLookup();
+	RestoreIFacts();
+	RestoreDictionary();
+	RestoreFormulaStorage();
+	RestoreNameStorage();
+}
+
+
 bool KernelInitialize(uint32 memoryPersistence)
 {
-	// CLAUDE: restarting the kernel modules from a restored paging area is not implemented yet
-	ASSERT(memoryPersistence != RESTART_PERSISTENT_MEMORY)
 	if(!SetupMemory(memoryPersistence))
 		return false;
-	kernel = Allocate(sizeof(Kernel));
-	SetModuleState(MODULE_KERNEL, kernel);
-	SetupStorageProviders();
-	SetupRelationRegistry();
-	SetupServiceRegistry();
-	InitializeTupleStores();
-	InitializeLookup();
-	InitializeIFacts();
-	SetupDictionary();
-	InitializeFormulaStorage();
+	if(memoryPersistence == RESTART_PERSISTENT_MEMORY) {
+		restoreKernel();
+	}
+	else {
+		kernel = Allocate(sizeof(Kernel));
+		SetModuleState(MODULE_KERNEL, kernel);
+		SetupStorageProviders();
+		SetupRelationRegistry();
+		SetupServiceRegistry();
+		InitializeTupleStores();
+		InitializeLookup();
+		InitializeIFacts();
+		SetupDictionary();
+		InitializeFormulaStorage();
 
-	setupCoreRoleNames();
-	setupCoreServices();
+		setupCoreRoleNames();
+		setupCoreServices();
 
-	kernel->nCoreIFacts = IFactTotalCount();
-	kernel->nCoreIFactRefs = IFactTotalReferenceCount();
-	kernel->nCoreNameRefs = NameTotalReferenceCount();
-	kernel->nCoreLookupEntries = LookupTotalCount();
+		kernel->nCoreIFacts = IFactTotalCount();
+		kernel->nCoreIFactRefs = IFactTotalReferenceCount();
+		kernel->nCoreNameRefs = NameTotalReferenceCount();
+		kernel->nCoreLookupEntries = LookupTotalCount();
+	}
 	return true;
+}
+
+
+void KernelClose(void)
+{
+	ShutdownPaging();
 }
 
 
