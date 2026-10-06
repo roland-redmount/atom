@@ -119,7 +119,7 @@ void CopyMemory(void const * source, void * destination, size32 size);
 
 /**
  * Copy the source memory block to the destination.
- * The 
+ * Allows source and destination blocks to overlap.
  */
 void MoveMemory(void const * source, void * destination, size32 size);	
 

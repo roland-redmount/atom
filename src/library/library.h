@@ -7,6 +7,11 @@
 #ifndef LIBRARY_H
 #define LIBRARY_H
 
+/**
+ * Register functions referred to from persistent memory.
+ */
+void RegisterLibraryFunctions(void);
+
 void LoadLibraries(void);
 
 void UnloadLibraries(void);

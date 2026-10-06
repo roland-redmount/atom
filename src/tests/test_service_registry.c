@@ -30,7 +30,7 @@ static void setupFixture(void)
 {
 	Atom formula = CStringToTerm("foo 0 bar 0");
 	fixture.relation = RelationFromFact(FormulaGetView(formula));
-	fixture.store = CreateTupleStore(fixture.relation, &defaultProvider, 2, 0);
+	fixture.store = CreateTupleStore(fixture.relation, GetStorageProvider(PROVIDER_DEFAULT), 2, 0);
 	ReleaseFormula(formula);
 }
 
@@ -152,7 +152,7 @@ void testInvalidateOnPrimitiveService(void)
 
 	// Create a TupleStore to the relation, adding a new service whose signature
 	// is the same as compiledService
-	CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 
 	// The compiled operator should now be detached, and the service should
 	// point to the machine operator from the tuples store, marked stale
@@ -243,7 +243,7 @@ void testReplaceService(void)
 
 int main(void)
 {
-	KernelInitialize(PERSISTENT_MEMORY);
+	KernelInitialize(TRANSIENT_MEMORY);
 	LoadLibraries();
 	initialNServices = NumberOfServices();
 

@@ -19,23 +19,36 @@
 
 
 /*
- * Read the command line for --transient, which keeps the session's memory to
- * itself rather than mirroring it to a paging file. That is what a WebAssembly
- * build needs, having no disk to mirror to, and it also leaves a command line
- * session with nothing to clean up afterwards.
+ * Read command line options:
+ *
+ *   --transient runs with TRANSIENT_MEMORY
+ *   --new runs with NEW_PERSISTENT_MEMORY
+ *   --restart runs with RESTART_PERSISTENT_MEMORY
  */
 static uint32 getMemoryPersistence(int argc, char * argv[])
 {
-	for(int i = 1; i < argc; i++)
+	uint32 memoryPersistence = RESTART_PERSISTENT_MEMORY;
+	for(int i = 1; i < argc; i++) {
 		if(CStringCompare(argv[i], "--transient") == 0)
-			return TRANSIENT_MEMORY;
-	return PERSISTENT_MEMORY;
+			memoryPersistence = TRANSIENT_MEMORY;
+		else if(CStringCompare(argv[i], "--new") == 0)
+			memoryPersistence = NEW_PERSISTENT_MEMORY;
+		else if(CStringCompare(argv[i], "--restart") == 0)
+			memoryPersistence = RESTART_PERSISTENT_MEMORY;
+	}
+	return memoryPersistence;
 }
 
 
 int main(int argc, char * argv[])
 {
-	KernelInitialize(getMemoryPersistence(argc, argv));
+	// A restored world holds library functions, which must be known before the restart
+	RegisterLibraryFunctions();
+	if(!KernelInitialize(getMemoryPersistence(argc, argv))) {
+		// only a restart can fail, and the reason is printed already
+		PrintF("Use --new to start a new session.\n");
+		return 1;
+	}
 	LoadLibraries();
 	SessionPrintBanner();
 
@@ -61,9 +74,7 @@ int main(int argc, char * argv[])
 		}
 	}
 
-	// The world a session built is not emptied again, and KernelShutdown() is not called:
-	// it requires every fact and rule above the core set to have been removed first, which
-	// is a thing to do for a test rather than for a session. Nothing here outlives the
-	// process; see KernelInitialize(), which starts each session with a blank world.
+	// Close, and write the current world to the page file if persistence is enabled.
+	KernelClose();
 	return 0;
 }

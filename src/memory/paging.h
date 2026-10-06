@@ -11,11 +11,14 @@
 
 #define MEMORY_PAGE_SIZE	0x1000					// 4096 bytes
 
-/* The address to use for the paging area for PERSISTENT_MEMORY.
-   CLAUDE: an address space too small to hold the address is left with 0, which
-   is the "no address preference" that CreateMappedMemory() takes. Such a build
-   has nowhere to keep a paging file anyway, so it never asks for one. */
-#define FIXED_PAGING_ADDRESS	((void *) (uintptr_t) (1 * TB))	// 1024^4 = 0x400^4 = (0x10000)^2 = 0x10_000_000_000
+/**
+ * The address to use for the paging area for persistent memory.
+ * 1 * TB = 1024^4 = 0x400^4 = (0x10000)^2 = 0x10_000_000_000
+ * 
+ * NOTE: this is not a valid address in 32-bit builds such as Emscripten.
+ * Therefore, 32-bit builds must run with TRANSIENT_MEMORY.
+ */
+#define FIXED_PAGING_ADDRESS	((void *) (uintptr_t) (1 * TB))
 
 extern byte * pageTable;
 
@@ -26,15 +29,63 @@ extern byte * pageTable;
 
 #define PAGING_FILE_NAME   "atom_page_file"
 
-/**
- * Initialize new, blank paging memory. The paging area is mirrored to a file
- * in the data directory for PERSISTENT_MEMORY, and is memory alone for
- * TRANSIENT_MEMORY.
- */
-#define TRANSIENT_MEMORY	1
-#define PERSISTENT_MEMORY	2
+ // Initialize new paging area; don't use a page file
+#define TRANSIENT_MEMORY			1
 
- void InitializePaging(uint32 memoryPersistence);
+// Initialize new paging area, and write it to a page file
+#define NEW_PERSISTENT_MEMORY		2
+
+// Read the paging area back from an existing a page file
+#define RESTART_PERSISTENT_MEMORY	3
+
+
+/**
+ * Initialize paged memory, or restore from the page file.
+ * 
+ * If memoryPersistence != TRANSIENT_MEMORY, this returns false
+ * if the page file does not exists.
+ */
+bool InitializePaging(uint32 memoryPersistence);
+
+/**
+ * Release the paging area set up by InitializePaging(). Every pointer
+ * into the paging area is invalid afterwards.
+ */
+void ShutdownPaging(void);
+
+// Persistent data version number. Must be increased whenever the layout of
+// a persistent structure, a PersistentStateKey or a registered function name changes,
+// since a paging file written by an earlier version can then not be restored.
+#define PERSISTENCE_VERSION	1
+
+/**
+ * Keys for the array of persistent state slots stored in the paging area.
+ * Each slot stores a pointer to an allocated data structure.
+ */
+typedef enum e_PersistentStateKey {
+	STATE_KEY_ALLOCATOR = 0,
+	STATE_KEY_KERNEL,
+	STATE_KEY_REFERENCES,
+	STATE_KEY_NAMES,
+	STATE_KEY_FORMULAS,
+	STATE_KEY_IFACTS,
+	STATE_KEY_LOOKUP,
+	STATE_KEY_DICTIONARY,
+	STATE_KEY_RELATIONS,
+	STATE_KEY_SERVICES,
+	STATE_KEY_TUPLE_STORES,
+	STATE_KEY_STORAGE_PROVIDERS,
+	STATE_KEY_MACHINE_SERVICES,
+	STATE_KEY_LIST,
+	STATE_KEY_STRING,
+	STATE_KEY_MATH,
+	STATE_KEY_REFLECT,
+	STATE_KEY_SESSION,
+	N_STATE_KEYS
+} PersistentStateKey;
+
+void * GetPersistentState(PersistentStateKey key);
+void SetPersistentState(PersistentStateKey key, void * state);
 
 
 /**
@@ -49,6 +100,12 @@ void FreePage(void const * page);
  */
 void * AllocatePages(size32 nPages);
 void FreePages(void const * firstPage, size32 nPages);
+
+
+/**
+ * Return true if the address lies in the paging area
+ */
+bool IsPagedMemoryAddress(void const * address);
 
 
 /**

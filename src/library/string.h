@@ -19,6 +19,11 @@
  */
 void StringSetup(void);
 
+/**
+ * Restore the (string) relation and its service from the paging area upon restart.
+ */
+void StringRestore(void);
+
 void StringShutdown(void);
 
 /**
@@ -27,14 +32,13 @@ void StringShutdown(void);
 Atom GetStringRoleName(void);
 
 Atom GetStringPredicateForm(void);
+
 Atom GetStringTermForm(void);
 
 Relation GetStringRelation(void);
 
-// RelationWriter * GetStringRelationTable(void);
-
-
 Atom CreateString(char const * chars, size32 length);
+
 Atom CreateStringFromCString(char const * cString);
 
 bool IsString(Atom atom);

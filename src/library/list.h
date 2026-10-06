@@ -23,6 +23,11 @@
  */
 void ListSetup(void);
 
+/**
+ * Restore the list relations and their services from the paging area upon restart.
+ */
+void ListRestore(void);
+
 void ListShutdown(void);
 
 /**

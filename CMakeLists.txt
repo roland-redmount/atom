@@ -147,6 +147,7 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
     src/memory/allocator.c
     src/memory/paging.c
     src/memory/pool.c
+    src/memory/references.c
 
     src/network/Connection.c
     src/network/Network.c

@@ -1,6 +1,7 @@
 
 #include "memory/pool.h"
 #include "memory/paging.h"
+#include "memory/references.h"
 
 
 typedef struct s_FreeItem FreeItem;
@@ -109,6 +110,10 @@ void * PoolAllocate(void * pool)
 void PoolFreeItem(void * pool, void const * item)
 {
 	PoolPage * firstPage = pool;
+#ifdef DEBUG
+	// CLAUDE: a slot recorded by SetReference() must be cleared before its memory is freed
+	ASSERT(!HasReferences(item, firstPage->itemSize))
+#endif
 
 	PoolPage * itemPage = GetPageOfAddress(item);
 	if(itemPage->pageNItems == 1) {

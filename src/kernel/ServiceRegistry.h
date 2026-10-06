@@ -51,6 +51,11 @@ typedef struct s_ServiceRecord {
 void SetupServiceRegistry(void);
 
 /**
+ * Restore the service registry from the paging area upon restart.
+ */
+void RestoreServiceRegistry(void);
+
+/**
  * Register a new Service with the given Operator. Attaches the services' Relation
  * to the Operator and acquires the Relation.
  * If the service is compiled, there must not exist a service already.
@@ -90,6 +95,11 @@ void ServiceRegistryRemoveAll(Relation relation);
  * all services must have been removed.
  */
 void FreeServiceRegistry(void);
+
+/**
+ * True if the service registry has been set up; see SetupServiceRegistry().
+ */
+bool ServiceRegistryInitialized(void);
 
 /**
  * Total number of registered services.
@@ -186,6 +196,11 @@ void RelationDump(Relation relation);
  * Print a list of all registered services
  */
 void ServiceRegistryDump(void);
+
+/**
+ * Register functions referred to from persistent memory.
+ */
+void RegisterServiceRegistryFunctions(void);
 
 
 #endif  // SERVICE_REGISTRY_H

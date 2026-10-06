@@ -2448,7 +2448,7 @@ static TupleStore * setupIFactRuleStore(ParameterizedQuery const * query, index8
 		// Create a new TupleStore, with identity index order, as in AssertFact().
 		// A compiled service of the relation must have the index order of the store;
 		// see AttachOperator().
-		return CreateTupleStore(relation, &btreeStorageProvider, query->arity, 0);
+		return CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), query->arity, 0);
 	}
 	TupleStore * store = RelationGetTupleStore(relation);
 	if(!store || !TupleStoreIsWritable(store)) {

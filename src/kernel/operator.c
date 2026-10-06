@@ -10,6 +10,7 @@
 #include "lang/TermForm.h"			// for PrintTermForm()
 #include "lang/TypedAtom.h"
 #include "memory/allocator.h"
+#include "memory/references.h"
 #include "util/ResizingArray.h"
 #include "util/utilities.h"
 
@@ -1087,6 +1088,17 @@ int8 btreeCompareTuples(void const * item1, void const * item2, size32 itemSize)
 }
 
 
+static NamedFunction const operatorFunctions[] = {
+	{"operator.btreeCompareTuples", (AnyFunction) btreeCompareTuples},
+};
+
+
+void RegisterOperatorFunctions(void)
+{
+	RegisterFunctions(operatorFunctions, sizeof(operatorFunctions) / sizeof(NamedFunction));
+}
+
+
 static void projectSetupContext(OperatorContext * context)
 {
 	ProjectContext * projectContext = (ProjectContext *) &context->data;
@@ -1624,7 +1636,14 @@ Operator * CreateMachineOperator(
 	Operator * op = createOperator(
 		OPERATOR_MACHINE, nArguments, sizeof(MachineOperatorContext) + readerSpec->stateSize);
 	op->impl.machine.storage = storage;
-	op->impl.machine.readerSpec = *readerSpec;
+	RelationReaderSpec * spec = &(op->impl.machine.readerSpec);
+	spec->ioSignature = readerSpec->ioSignature;
+	spec->readerData = readerSpec->readerData;
+	spec->stateSize = readerSpec->stateSize;
+	SetReference(&(spec->setupState), (AnyFunction) readerSpec->setupState);
+	SetReference(&(spec->call), (AnyFunction) readerSpec->call);
+	SetReference(&(spec->finalizeState), (AnyFunction) readerSpec->finalizeState);
+	SetReference(&(spec->finalizeReader), (AnyFunction) readerSpec->finalizeReader);
 	if(indexOrder) {
 		allocateIndexOrder(op);
 		CopyMemory(indexOrder, op->indexOrder, nArguments);
@@ -1644,6 +1663,7 @@ static void teardownMachineOperator(Operator * op)
 	RelationReaderSpec * readerSpec = &(op->impl.machine.readerSpec);
 	if(readerSpec->finalizeReader)
 		readerSpec->finalizeReader(readerSpec->readerData, op->impl.machine.storage);
+	ClearReferences(readerSpec, sizeof(RelationReaderSpec));
 }
 
 

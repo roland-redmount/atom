@@ -59,8 +59,7 @@ typedef struct s_Relation {
 } Relation;
 
 /**
- * CLAUDE: Test whether a form can be the form of a relation, which is a term form or a
- * conjunction form.
+ * Returns true if the given form is a term form or a conjunction form.
  */
 bool IsRelationForm(Atom form);
 
@@ -200,6 +199,11 @@ void RelationReleaseTermForm(Relation relation);
 void SetupRelationRegistry(void);
 
 /**
+ * Restore the relation registry from the paging area upon restart.
+ */
+void RestoreRelationRegistry(void);
+
+/**
  * Deallocate the registry. Before calling this function,
  * all relations must have been released.
  */
@@ -241,6 +245,11 @@ Relation RelationIteratorGet(RelationIterator const * iterator);
 
 
 void RelationIteratorEnd(RelationIterator * iterator);
+
+/**
+ * Register functions referred to from persistent memory.
+ */
+void RegisterRelationFunctions(void);
 
 
 #endif	// RELATION_H

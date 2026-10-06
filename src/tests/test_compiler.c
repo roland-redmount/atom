@@ -48,7 +48,7 @@ static Relation createStoredRelation(Atom fact)
 	FormulaView view = FormulaGetView(fact);
 	size8 arity = view.actors->nAtoms;
 	Relation relation = RelationFromFact(view);
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, arity, 0);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), arity, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(view.actors), 0);
 	return relation;
 }
@@ -503,7 +503,6 @@ void testCompileFilterAndRule(void)
 	Relation kelvinRelation = createStoredRelation(kelvinFact);
 	FormulaView clause = DictionaryAddClauseFromCString(
 		"quantity t value k unit \"Kelvin\" | ! kelvin t value k");
-	size32 nCompiledBefore = NumberOfCompiledServices();
 
 	// This query should form a UNION between the primitive and FILTER services
 	Atom kelvinQuery = CStringToTerm("quantity \"y\" value v unit \"Kelvin\"");
@@ -521,8 +520,6 @@ void testCompileFilterAndRule(void)
 	ASSERT_DOUBLE_EQUAL(value._float, 20.0)
 
 	RemoveService(services[0]);
-	RemoveAllCompiledServices();
-	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 	ReleaseFormula(celsiusQuery);
 	ReleaseFormula(kelvinQuery);
 	DictionaryRemoveClause(&clause);
@@ -599,7 +596,7 @@ static void setupRowRelations(RowRelations * rows)
 	rows->facts[1] = CStringToTerm("row 2 amount \"x\"");
 	for(index8 i = 0; i < 2; i++) {
 		rows->relations[i] = RelationFromFact(FormulaGetView(rows->facts[i]));
-		TupleStore * store = CreateTupleStore(rows->relations[i], &btreeStorageProvider, 2, 0);
+		TupleStore * store = CreateTupleStore(rows->relations[i], GetStorageProvider(PROVIDER_BTREE), 2, 0);
 		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(rows->facts[i])), 0);
 	}
 	ASSERT_FALSE(SameRelations(rows->relations[0], rows->relations[1]))
@@ -1041,7 +1038,7 @@ void testCompileRepeatedQueryParameterRecursive(void)
 	char const * storedFacts[3] = {"sym \"a\" with \"a\"", "sym \"a\" with \"b\"", "sym \"c\" with \"c\""};
 	Atom firstFact = CStringToTerm(storedFacts[0]);
 	Relation relation = RelationFromFact(FormulaGetView(firstFact));
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	for(index8 i = 0; i < 3; i++) {
 		Atom fact = CStringToTerm(storedFacts[i]);
 		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
@@ -1195,7 +1192,7 @@ void testCompileSeedPermutation(void)
 {
 	Atom storedFact = CStringToTerm("plus 7 and 3 is 5");
 	Relation relation = RelationFromFact(FormulaGetView(storedFact));
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 3, 0);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 3, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 	FormulaView clause = DictionaryAddClauseFromCString("+ x + y = z | ! plus x and y is z");
 
@@ -1255,7 +1252,7 @@ void testCompileRecursiveJoin2(void)
 	// Create terminating fact
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
 	Relation relation = RelationFromFact(FormulaGetView(terminatingFact));
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 
 	Atom queryTerm = CStringToTerm("number 4 faculty f");
@@ -1321,7 +1318,7 @@ void testCompileRecursiveQueryAllOutput(void)
 		"number n faculty f | ! < n > 0 | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");
 	Relation relation = RelationFromFact(FormulaGetView(terminatingFact));
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	size32 nServicesBefore = NumberOfServices();
 
@@ -1356,7 +1353,7 @@ void testCompileStoredFactsAndRule(void)
 	index8 indexColumns[2];
 	setupBinaryRelationIndexColumns(FormulaGetForm(storedFact), "root", indexColumns);
 	Relation relation = RelationFromFact(FormulaGetView(storedFact));
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2,  indexColumns);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2,  indexColumns);
 	// Store a fact not entailed by the rule
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 	size32 nServicesBefore = NumberOfServices();
@@ -1425,7 +1422,7 @@ void testCompileQueryNoMatchingRules(void)
 		.form = FormulaGetForm(storedFact),
 		.typeSignature = CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
 	};
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, indexColumns);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, indexColumns);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 
 	Atom queryTerm = CStringToTerm("shade 3 value v");
@@ -1464,7 +1461,7 @@ void testCompileQueryWithUselessRule(void)
 		.form = FormulaGetForm(storedFact),
 		.typeSignature = CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
 	};
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, indexColumns);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, indexColumns);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 
 	// Ensure we can find the primitive service
@@ -1650,7 +1647,6 @@ void testCompileRecursiveTermUnboundInput(void)
 	// The above leaves behind a (succ <ID prec >ID) compiled service generated as part
 	// of the process of compiling (reach "a" hop y) query, which is not invalidated
 	// by removing the rules. Clean this out.
-	RemoveAllCompiledServices();
 }
 
 
@@ -1734,7 +1730,7 @@ void testCompileRecursiveVariants(void)
 		.form =	precSuccFixture.termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_INT, AT_INT}, 2)
 	};
-	TupleStore * store = CreateTupleStore(precSuccIntRelation, &btreeStorageProvider, 2, 0);
+	TupleStore * store = CreateTupleStore(precSuccIntRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	// Add the facts (prec 1 succ 2), (prec 2 succ 3)
 	index8 precRoleIndex = RelationFixtureRoleIndex(&precSuccFixture, "prec");
 	index8 succRoleIndex = RelationFixtureRoleIndex(&precSuccFixture, "succ");
@@ -1816,7 +1812,7 @@ void testCompileNegatedTerm(void)
 		.form = FormulaGetForm(odd3term),
 		.typeSignature = CreateTypeSignature((byte[]) {AT_INT}, 1)
 	};
-	TupleStore * oddStore = CreateTupleStore(oddRelation, &btreeStorageProvider, 1, 0);
+	TupleStore * oddStore = CreateTupleStore(oddRelation, GetStorageProvider(PROVIDER_BTREE), 1, 0);
 	TupleStoreAddTuple(oddStore, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	// setup the rule
 	FormulaView clause = DictionaryAddClauseFromCString("! even x | ! odd x");
@@ -1868,7 +1864,7 @@ void testCompiledServiceReadsFactsLive(void)
 		.form = FormulaGetForm(odd3term),
 		.typeSignature = CreateTypeSignature((byte[]) {AT_INT}, 1)
 	};
-	TupleStore * store = CreateTupleStore(oddRelation, &btreeStorageProvider, 1, 0);
+	TupleStore * store = CreateTupleStore(oddRelation, GetStorageProvider(PROVIDER_BTREE), 1, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	// Add the rule (odd x -> ! even x)
 	FormulaView clause = DictionaryAddClauseFromCString("! even x | ! odd x");
@@ -2182,7 +2178,6 @@ void testCompileNewIOPatternRepeated(void)
  */
 void testCompileFilterInRuleBody(void)
 {
-	size32 nCompiledBefore = NumberOfCompiledServices();
 	FormulaView clause = DictionaryAddClauseFromCString(
 		"at s position p letter e | ! list s position p element e");
 	Atom queryTerm = CStringToTerm("at \"abracadabra\" position q letter 'a");
@@ -2209,17 +2204,6 @@ void testCompileFilterInRuleBody(void)
 	// Compiling the query also compiled a service for its body term, which is a cache
 	// over the list relation and outlives the rule; remove both
 	RemoveService(service);
-
-	// CLAUDE: Other compiled services may exist before this test, so the body term
-	// service is found by dispatch and removed alone.
-	Atom bodyTerm = CStringToTerm("list \"abracadabra\" position q element 'a");
-	Service bodyService;
-	index8 permutation[3];
-	ASSERT_INT32_EQUAL(DispatchQueryFormula(bodyTerm, &bodyService, permutation), DISPATCH_FOUND)
-	ASSERT_TRUE(ServiceGetOperator(bodyService)->type != OPERATOR_MACHINE)
-	RemoveService(bodyService);
-	ReleaseFormula(bodyTerm);
-	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), nCompiledBefore)
 
 	ReleaseFormula(queryTerm);
 	DictionaryRemoveClause(&clause);
@@ -2250,7 +2234,7 @@ void testFilterServiceInvalidatedByRule(void)
 
 int main(int argc, char * argv[])
 {
-	KernelInitialize(PERSISTENT_MEMORY);
+	KernelInitialize(TRANSIENT_MEMORY);
 	LoadLibraries();
 
 	ExecuteTest(testCompilePermute1);

@@ -12,6 +12,7 @@
 #include "lang/PredicateForm.h"
 #include "memory/paging.h"
 #include "memory/allocator.h"
+#include "memory/references.h"
 #include "util/hashing.h"
 #include "util/ResizingArray.h"
 #include "util/sort.h"
@@ -77,11 +78,14 @@ static IFactConjunction * lastConjunction(IFactHeader * header)
  * We store all IFactHeaders in a BTree and perform lookup by their
  * hash value. IFactConjunctions are allocated with Allocate().
  */
-static struct {
+typedef struct s_IFactStorage {
 	BTree * btree;					// B-tree storing IFactHeader structs
 	uint32 totalReferenceCount;
 	bool flagCreatedIFacts;
-} ifactStorage = {0};
+} IFactStorage;
+
+
+static IFactStorage * ifactStorage = 0;
 
 
 static int8 btreeCompareHeaders(void const * item1, void const * item2, size32 itemSize)
@@ -96,27 +100,46 @@ static int8 btreeCompareHeaders(void const * item1, void const * item2, size32 i
 }
 
 
+static NamedFunction const ifactFunctions[] = {
+	{"ifact.btreeCompareHeaders", (AnyFunction) btreeCompareHeaders},
+};
+
+
+void RegisterIFactFunctions(void)
+{
+	RegisterFunctions(ifactFunctions, sizeof(ifactFunctions) / sizeof(NamedFunction));
+}
+
+
 void InitializeIFacts(void)
 {
 	// Verify that struct packing left no padding.
 	ASSERT(sizeof(IFactConjunction) == sizeof(TupleStore *) + 4);
 	ASSERT(sizeof(IFactHeader) == 16 + sizeof(IFactConjunction *));
 
-	SetMemory(&ifactStorage, sizeof ifactStorage, 0);
+	ifactStorage = Allocate(sizeof(IFactStorage));
+	SetPersistentState(STATE_KEY_IFACTS, ifactStorage);
 
-	ifactStorage.btree = BTreeCreate(
+	ifactStorage->btree = BTreeCreate(
 	    sizeof(IFactHeader),
 	    btreeCompareHeaders,
 	    0
 	);
-	ifactStorage.totalReferenceCount = 0;
-	ifactStorage.flagCreatedIFacts = false;
+	ifactStorage->totalReferenceCount = 0;
+	ifactStorage->flagCreatedIFacts = false;
+}
+
+
+void RestoreIFacts(void)
+{
+	ifactStorage = GetPersistentState(STATE_KEY_IFACTS);
+	ASSERT(ifactStorage)
 }
 
 
 bool IFactsInitialized(void)
 {
-	return ifactStorage.btree != 0;
+	return (ifactStorage != 0) && (ifactStorage->btree != 0);
 }
 
 
@@ -128,14 +151,14 @@ static IFactHeader * peekIFactHeader(data64 hash)
 {
 	IFactHeader query;
 	query.hash = hash;
-	return BTreePeekItem(ifactStorage.btree, &query);
+	return BTreePeekItem(ifactStorage->btree, &query);
 }
 
 
 static void acquireIFact(IFactHeader * header)
 {
 	header->refCount++;
-	ifactStorage.totalReferenceCount++;
+	ifactStorage->totalReferenceCount++;
 }
 
 
@@ -174,19 +197,22 @@ uint32 IFactReferenceCount(Atom ifact)
 
 uint32 IFactTotalReferenceCount(void)
 {
-	return ifactStorage.totalReferenceCount;
+	return ifactStorage->totalReferenceCount;
 }
 
 
 uint32 IFactTotalCount(void)
 {
-	return BTreeNItems(ifactStorage.btree);
+	return BTreeNItems(ifactStorage->btree);
 }
 
 void FreeIFacts(void)
 {
 	ASSERT(IFactTotalCount() == 0);
-	BTreeFree(ifactStorage.btree);
+	BTreeFree(ifactStorage->btree);
+	Free(ifactStorage);
+	SetPersistentState(STATE_KEY_IFACTS, 0);
+	ifactStorage = 0;
 }
 
 
@@ -208,7 +234,7 @@ void IFactReserve(data64 hash)
 	SetMemory(&header, sizeof(IFactHeader), 0);
 	header.hash = hash;
 	header.flags = IFACT_RESERVED;
-	ASSERT(BTreeInsert(ifactStorage.btree, &header) == BTREE_INSERTED)
+	ASSERT(BTreeInsert(ifactStorage->btree, &header) == BTREE_INSERTED)
 }
 
 
@@ -462,7 +488,7 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash) // , void (* assertFact)
 			existingHeader->flags &= ~((data8) IFACT_RESERVED);	// no longer reserved
 			createFacts(draft, hash != 0);
 			acquireIFact(existingHeader);
-			if(ifactStorage.flagCreatedIFacts)
+			if(ifactStorage->flagCreatedIFacts)
 				existingHeader->flags |= IFACT_NEW;
 			keepConjunctions = true;
 		}
@@ -483,9 +509,9 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash) // , void (* assertFact)
 		// new ifact
 		createFacts(draft, hash != 0);
 		acquireIFact(&(draft->header));
-		if(ifactStorage.flagCreatedIFacts)
+		if(ifactStorage->flagCreatedIFacts)
 			draft->header.flags |= IFACT_NEW;
-		ASSERT(BTreeInsert(ifactStorage.btree, &(draft->header)) == BTREE_INSERTED)
+		ASSERT(BTreeInsert(ifactStorage->btree, &(draft->header)) == BTREE_INSERTED)
 		keepConjunctions = true;
 	}
 
@@ -534,10 +560,10 @@ void IFactRelease(Atom idAtom)
 	IFactHeader * header = peekIFactHeader(idAtom.hash);
 	ASSERT(header);
 	ASSERT(header->refCount > 0);
-	ASSERT(ifactStorage.totalReferenceCount > 0);
+	ASSERT(ifactStorage->totalReferenceCount > 0);
 
 	header->refCount--;
-	ifactStorage.totalReferenceCount--;
+	ifactStorage->totalReferenceCount--;
 
 	if(header->refCount == 0) {
 		// We make a copy of the IFactHeader since the below operations
@@ -551,7 +577,7 @@ void IFactRelease(Atom idAtom)
 		}
 		// remove IFact
 		Free(headerCopy.conjunctions);
-		ASSERT(BTreeDelete(ifactStorage.btree, &headerCopy, 0) == BTREE_DELETED);
+		ASSERT(BTreeDelete(ifactStorage->btree, &headerCopy, 0) == BTREE_DELETED);
 	}
 }
 
@@ -573,7 +599,7 @@ void IFactReleaseCached(TupleStore const * store, index8 idColumn)
 	ResizingArray cachedArray;
 	CreateResizingArray(&cachedArray, sizeof(Atom), 10);
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, ifactStorage.btree);
+	BTreeIterate(&iterator, ifactStorage->btree);
 	while(BTreeIteratorNext(&iterator)) {
 		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
 		if((header->flags & IFACT_CACHED) &&
@@ -620,7 +646,7 @@ void IFactPrint(Atom atom)
 void IFactDump(void)
 {
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, ifactStorage.btree);
+	BTreeIterate(&iterator, ifactStorage->btree);
 	while(BTreeIteratorNext(&iterator)) {
 		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
 		IFactPrint((Atom) {.hash = header->hash});
@@ -632,13 +658,13 @@ void IFactDump(void)
 
 void IFactsEnableFlagging(void)
 {
-	ifactStorage.flagCreatedIFacts = true;
+	ifactStorage->flagCreatedIFacts = true;
 }
 
 void IFactDumpFlagged(void)
 {
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, ifactStorage.btree);
+	BTreeIterate(&iterator, ifactStorage->btree);
 	while(BTreeIteratorNext(&iterator)) {
 		IFactHeader const * header = BTreeIteratorPeekItem(&iterator);
 		if(header->flags & IFACT_NEW) {
@@ -651,11 +677,11 @@ void IFactDumpFlagged(void)
 
 void IFactDisableFlagging(void)
 {
-	ifactStorage.flagCreatedIFacts = false;
+	ifactStorage->flagCreatedIFacts = false;
 	// clear all flags
 	byte mask = ~((byte) IFACT_NEW);
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, ifactStorage.btree);
+	BTreeIterate(&iterator, ifactStorage->btree);
 	while(BTreeIteratorNext(&iterator)) {
 		IFactHeader * header = BTreeIteratorPeekItem(&iterator);
 		header->flags &= mask;

@@ -14,6 +14,7 @@
 #include "library/library.h"
 #include "library/MachineService.h"
 #include "library/string.h"
+#include "memory/references.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
 
@@ -280,9 +281,23 @@ static void testMachineServiceSharedRelation(void)
 }
 
 
+// CLAUDE: functions stored in machine services must be registered; see memory/references.h
+static NamedFunction const testFunctions[] = {
+	{"test_machineservice.weighCall", (AnyFunction) weighCall},
+	{"test_machineservice.evenCall", (AnyFunction) evenCall},
+	{"test_machineservice.countSetup", (AnyFunction) countSetup},
+	{"test_machineservice.countCall", (AnyFunction) countCall},
+	{"test_machineservice.sumCall", (AnyFunction) sumCall},
+	{"test_machineservice.subtractCall", (AnyFunction) subtractCall},
+};
+
+
 int main(int argc, char * argv[])
 {
-	KernelInitialize(PERSISTENT_MEMORY);
+	RegisterFunctions(testFunctions, sizeof(testFunctions) / sizeof(NamedFunction));
+	RegisterLibraryFunctions();
+	KernelInitialize(TRANSIENT_MEMORY);
+	SetupMachineServices();
 
 	moduleID = RequestModuleID();
 
@@ -292,6 +307,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testMachineServiceIteratorState);
 	ExecuteTest(testMachineServiceSharedRelation);
 
+	FreeMachineServices();
 	KernelShutdown();
 
 	TestSummary();

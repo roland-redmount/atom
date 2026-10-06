@@ -154,13 +154,13 @@ void testConcatAcrossRelations(void)
 		.form = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2)
 	};
-	TupleStore * idStore = CreateTupleStore(idRelation, &btreeStorageProvider, 2, 0);
+	TupleStore * idStore = CreateTupleStore(idRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	
 	Relation intRelation = {
 		.form = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
 	};
-	TupleStore * intStore = CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
+	TupleStore * intStore = CreateTupleStore(intRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	
 	TypedAtom idActors[2] = {
 		CreateTypedAtom(AT_ID, CreateStringFromCString("a")),
@@ -283,7 +283,7 @@ void testConcatAbandonedIteration(void)
 
 int main(int argc, char * argv[])
 {
-	KernelInitialize(PERSISTENT_MEMORY);
+	KernelInitialize(TRANSIENT_MEMORY);
 	LoadLibraries();
 
 	ExecuteTest(testConcatEveryTuple);

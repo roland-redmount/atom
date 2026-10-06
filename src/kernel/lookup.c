@@ -8,14 +8,19 @@
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
+#include "memory/allocator.h"
+#include "memory/paging.h"
+#include "memory/references.h"
 #include "util/ResizingArray.h"
 
 
-// TODO: move this to persistent memory
-struct s_Lookup {
+typedef struct s_Lookup {
 	BTree * btree;
 	size32 nRolesTotal;
-} lookup;
+} Lookup;
+
+
+static Lookup * lookup = 0;
 
 
 /**
@@ -60,30 +65,53 @@ static int8 btreeCompareRecords(void const * item, void const * itemOrKey, size3
 }
 
 
+static NamedFunction const lookupFunctions[] = {
+	{"lookup.btreeCompareRecords", (AnyFunction) btreeCompareRecords},
+};
+
+
+void RegisterLookupFunctions(void)
+{
+	RegisterFunctions(lookupFunctions, sizeof(lookupFunctions) / sizeof(NamedFunction));
+}
+
+
 /**
  * Initialize storage for lookup
  */
 void InitializeLookup(void)
 {
-	lookup.btree = BTreeCreate(
+	lookup = Allocate(sizeof(Lookup));
+	SetPersistentState(STATE_KEY_LOOKUP, lookup);
+	lookup->btree = BTreeCreate(
 	    sizeof(LookupRecord),
 	    btreeCompareRecords,
 	    0	// free
 	);
-	lookup.nRolesTotal = 0;
+	lookup->nRolesTotal = 0;
+}
+
+
+void RestoreLookup(void)
+{
+	lookup = GetPersistentState(STATE_KEY_LOOKUP);
+	ASSERT(lookup)
 }
 
 
 void FreeLookup(void)
 {
-	ASSERT(BTreeNItems(lookup.btree) == 0)
-	BTreeFree(lookup.btree);
+	ASSERT(BTreeNItems(lookup->btree) == 0)
+	BTreeFree(lookup->btree);
+	Free(lookup);
+	SetPersistentState(STATE_KEY_LOOKUP, 0);
+	lookup = 0;
 }
 
 
 size32 LookupTotalCount(void)
 {
-	return lookup.nRolesTotal;
+	return lookup->nRolesTotal;
 }
 
 
@@ -98,20 +126,20 @@ bool LookupHasEntry(Atom atom, Relation relation, Atom termForm, Atom role)
 		.termForm = termForm,
 		.role = role
 	};
-	return BTreeContainsItem(lookup.btree, &record);
+	return BTreeContainsItem(lookup->btree, &record);
 }
 
 
 static void addRecord(LookupRecord * record)
 {
-	LookupRecord * existingRecord = BTreePeekItem(lookup.btree, record);
+	LookupRecord * existingRecord = BTreePeekItem(lookup->btree, record);
 	if(existingRecord)
 		existingRecord->nFacts++;
 	else {
 		record->nFacts = 1;
-		ASSERT(BTreeInsert(lookup.btree, record) == BTREE_INSERTED)
+		ASSERT(BTreeInsert(lookup->btree, record) == BTREE_INSERTED)
 	}
-	lookup.nRolesTotal++;
+	lookup->nRolesTotal++;
 }
 
 
@@ -130,14 +158,14 @@ void LookupAddRole(Atom atom, Relation relation, Atom termForm, Atom role)
 
 static void removeRecord(LookupRecord * record)
 {
-	LookupRecord * existingRecord = BTreePeekItem(lookup.btree, record);
+	LookupRecord * existingRecord = BTreePeekItem(lookup->btree, record);
 	ASSERT(existingRecord)
 	if(existingRecord->nFacts > 1)
 		existingRecord->nFacts--;
 	else {
-		ASSERT(BTreeDelete(lookup.btree, record, 0) == BTREE_DELETED)
+		ASSERT(BTreeDelete(lookup->btree, record, 0) == BTREE_DELETED)
 	}
-	lookup.nRolesTotal--;
+	lookup->nRolesTotal--;
 }
 
 
@@ -232,7 +260,7 @@ void LookupRemoveFactRoles(Relation relation, Atom const actors[])
 void LookupIterate(Atom atom, LookupIterator * iterator)
 {
 	iterator->query = (LookupRecord) { .atom = atom };
-	BTreeIterate(&(iterator->treeIterator), lookup.btree);
+	BTreeIterate(&(iterator->treeIterator), lookup->btree);
 }
 
 
@@ -306,9 +334,9 @@ Relation LookupFindRelation(Atom atom, Atom termForm, Atom role)
 
 void LookupDump(void)
 {
-	PrintF("Lookup table %u records:\n", BTreeNItems(lookup.btree));
+	PrintF("Lookup table %u records:\n", BTreeNItems(lookup->btree));
 	BTreeIterator iterator;
-	BTreeIterate(&iterator, lookup.btree);
+	BTreeIterate(&iterator, lookup->btree);
 	while(BTreeIteratorNext(&iterator)) {
 		LookupRecord const * record = BTreeIteratorPeekItem(&iterator);
 		IFactPrint(record->atom);

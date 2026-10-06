@@ -5,6 +5,8 @@
 #include "lang/ConjunctionForm.h"
 #include "lang/TermForm.h"
 #include "memory/allocator.h"
+#include "memory/paging.h"
+#include "memory/references.h"
 #include "util/hashing.h"
 #include "util/ResizingArray.h"
 
@@ -48,6 +50,7 @@ typedef struct s_RelationRecord {
 
 /**
  * B-tree for lookup of relations by form, stores RelationRecord items.
+ * Stored in persistent state STATE_KEY_RELATIONS
  */
 static BTree * relationRegistry;
 
@@ -57,6 +60,17 @@ static int8 btreeCompareRelationRecords(void const * item, void const * itemOrKe
 	RelationRecord const * record =  item;
 	RelationRecord const * recordOrKey = itemOrKey;
 	return CompareRelations(record->relation, recordOrKey->relation);
+}
+
+
+static NamedFunction const relationFunctions[] = {
+	{"relation.btreeCompareRelationRecords", (AnyFunction) btreeCompareRelationRecords},
+};
+
+
+void RegisterRelationFunctions(void)
+{
+	RegisterFunctions(relationFunctions, sizeof(relationFunctions) / sizeof(NamedFunction));
 }
 
 
@@ -357,12 +371,22 @@ void SetupRelationRegistry(void)
 		btreeCompareRelationRecords,
 		0 // freeItem
 	);
+	SetPersistentState(STATE_KEY_RELATIONS, relationRegistry);
+}
+
+
+void RestoreRelationRegistry(void)
+{
+	relationRegistry = GetPersistentState(STATE_KEY_RELATIONS);
+	ASSERT(relationRegistry)
 }
 
 
 void FreeRelationRegistry(void)
 {
 	BTreeFree(relationRegistry);
+	SetPersistentState(STATE_KEY_RELATIONS, 0);
+	relationRegistry = 0;
 }
 
 

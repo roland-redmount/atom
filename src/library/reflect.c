@@ -3,6 +3,9 @@
 #include "lang/TermForm.h"
 #include "library/MachineService.h"
 #include "library/reflect.h"
+#include "memory/allocator.h"
+#include "memory/paging.h"
+#include "memory/references.h"
 
 /**
  * (formula #1<FORMULA arity #2>INT)
@@ -125,29 +128,65 @@ static bool relationRoleSumCall(void * state, Atom arguments[], void * readerDat
 }
 
 
-static uint32 moduleID;
+static NamedFunction const reflectFunctions[] = {
+	{"reflect.formulaArityCall", (AnyFunction) formulaArityCall},
+	{"reflect.queryRelationCall", (AnyFunction) queryRelationCall},
+	{"reflect.relationSizeCall", (AnyFunction) relationSizeCall},
+	{"reflect.relationRoleActorSetup", (AnyFunction) relationRoleActorSetup},
+	{"reflect.relationRoleActorCall", (AnyFunction) relationRoleActorCall},
+	{"reflect.relationRoleActorFinalize", (AnyFunction) relationRoleActorFinalize},
+	{"reflect.relationRoleSumCall", (AnyFunction) relationRoleSumCall},
+};
+
+
+void RegisterReflectFunctions(void)
+{
+	RegisterFunctions(reflectFunctions, sizeof(reflectFunctions) / sizeof(NamedFunction));
+}
+
+
+typedef struct s_ReflectLibrary {
+	uint32 moduleID;
+} ReflectLibrary;
+
+
+static ReflectLibrary * reflectLibrary = 0;
 
 void ReflectionSetup(void)
 {
-	moduleID = RequestModuleID();
+	reflectLibrary = Allocate(sizeof(ReflectLibrary));
+	SetPersistentState(STATE_KEY_REFLECT, reflectLibrary);
 
-	RegisterMachineService(moduleID, "formula #1<FORMULA arity #2>INT", formulaArityCall);
+	reflectLibrary->moduleID = RequestModuleID();
 
-	RegisterMachineService(moduleID, "query #1<FORMULA relation #2>RELATION", queryRelationCall);
+	RegisterMachineService(reflectLibrary->moduleID, "formula #1<FORMULA arity #2>INT", formulaArityCall);
 
-	RegisterMachineService(moduleID, "relation #1<RELATION size #2>INT", relationSizeCall);
+	RegisterMachineService(reflectLibrary->moduleID, "query #1<FORMULA relation #2>RELATION", queryRelationCall);
+
+	RegisterMachineService(reflectLibrary->moduleID, "relation #1<RELATION size #2>INT", relationSizeCall);
 
 	RegisterMachineServiceWithState(
-		moduleID, "relation #1<RELATION role #2<NAME actor #3>FLOAT",
+		reflectLibrary->moduleID, "relation #1<RELATION role #2<NAME actor #3>FLOAT",
 		sizeof(RelationRoleActorState),
 		relationRoleActorSetup, relationRoleActorCall, relationRoleActorFinalize
 	);
 
-	RegisterMachineService(moduleID, "relation #1<RELATION role #2<NAME sum #3>FLOAT", relationRoleSumCall);
+	RegisterMachineService(reflectLibrary->moduleID, "relation #1<RELATION role #2<NAME sum #3>FLOAT", relationRoleSumCall);
+}
+
+
+void ReflectionRestore(void)
+{
+	reflectLibrary = GetPersistentState(STATE_KEY_REFLECT);
+	ASSERT(reflectLibrary)
 }
 
 
 void ReflectionShutdown(void)
 {
-	FreeModuleRelations(moduleID);
+	FreeModuleRelations(reflectLibrary->moduleID);
+
+	Free(reflectLibrary);
+	SetPersistentState(STATE_KEY_REFLECT, 0);
+	reflectLibrary = 0;
 }

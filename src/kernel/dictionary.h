@@ -16,6 +16,11 @@
  */
 void SetupDictionary(void);
 
+/**
+ * Restore the dictionary from the paging area upon restart.
+ */
+void RestoreDictionary(void);
+
 void TeardownDictionary(void);
 
 /**
@@ -121,6 +126,10 @@ TypedTuple const * DictionaryIteratorPeekActors(DictionaryIterator * iterator);
 
 void DictionaryIteratorEnd(DictionaryIterator * iterator);
 
+/**
+ * Register functions referred to from persistent memory.
+ */
+void RegisterDictionaryFunctions(void);
 
 
 #endif	// DICTIONARY_H

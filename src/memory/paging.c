@@ -9,9 +9,29 @@
 
 byte * pageTable = 0;
 
+/**
+ * The persistent root page, located on the page following the bit field pages.
+ * It holds the paging state, and the state of kernel modules.
+ */
+#define ROOT_PAGE				BITFIELD_N_PAGES
+
+// Magic number marking the root of a paging file; the bytes read "ATOMPAGE".
+#define PAGING_FILE_MAGIC		0x41544F4D50414745
+
+
+typedef struct s_PersistentRoot {
+	data64 magic;
+	uint32 formatVersion;
+	size32 memorySize;
+	// true while a process has the paging area in use; see ShutdownPaging()
+	bool isOpen;
+	index32 firstFreePage;
+	void * states[N_STATE_KEYS];
+} PersistentRoot;
+
 static struct {
 	MemoryDescriptor globalFileMap;
-	uint32 firstFreePage;
+	PersistentRoot * root;
 } paging;
 
 
@@ -108,36 +128,136 @@ static bool getPageFilePath(char * buffer, size32 bufferSize)
 	return GetDataFilePath(PAGING_FILE_NAME, buffer, bufferSize);
 }
 
-void InitializePaging(uint32 memoryPersistence)
+// CLAUDE: Release the memory mapping, leaving the paging file as it is
+static void releasePaging(void)
+{
+	ReleaseMemory(&(paging.globalFileMap));
+	paging.globalFileMap = (MemoryDescriptor) {0};
+	paging.root = 0;
+	pageTable = 0;
+}
+
+
+/**
+ * CLAUDE: Set up the page table and the persistent root of a new, blank paging area.
+ */
+static void formatPaging(void)
+{
+	// allocate bit field on first page(s)
+	SetMemory(pageTable, BITFIELD_SIZE_BYTES, 0);
+	for(index32 page = 0; page < BITFIELD_N_PAGES; page++)
+		setPageBit(page);
+
+	// Allocate the persistent root page.
+	setPageBit(ROOT_PAGE);
+	SetMemory(paging.root, sizeof(PersistentRoot), 0);
+	paging.root->magic = PAGING_FILE_MAGIC;
+	paging.root->formatVersion = PERSISTENCE_VERSION;
+	paging.root->memorySize = MEMORY_SIZE;
+	// The first free page follows the root page
+	paging.root->firstFreePage = ROOT_PAGE + 1;
+}
+
+
+/**
+ * Check that the the paging area is valid.
+ * If not, returns false and prints the reason.
+ * The pageFilePath is only used for printing.
+ */
+static bool validatePageArea(char const * pageFilePath)
+{
+	if(paging.globalFileMap.size != MEMORY_SIZE) {
+		PrintF("The paging file %s has the wrong size.\n", pageFilePath);
+		return false;
+	}
+	if(paging.root->magic != PAGING_FILE_MAGIC) {
+		PrintF("The file %s is not a paging file.\n", pageFilePath);
+		return false;
+	}
+	if((paging.root->formatVersion != PERSISTENCE_VERSION) ||
+		(paging.root->memorySize != MEMORY_SIZE)) {
+		PrintF("The paging file %s was written by a different version of atom.\n", pageFilePath);
+		return false;
+	}
+	if(paging.root->isOpen) {
+		PrintF("The paging file %s is in use, or was not closed properly.\n", pageFilePath);
+		return false;
+	}
+	return true;
+}
+
+
+bool InitializePaging(uint32 memoryPersistence)
 {
 	ASSERT((memoryPersistence == TRANSIENT_MEMORY)
-		| (memoryPersistence == PERSISTENT_MEMORY));
+		| (memoryPersistence == NEW_PERSISTENT_MEMORY)
+		| (memoryPersistence == RESTART_PERSISTENT_MEMORY));
 	// verify we defined constants correctly
 	ASSERT(MEMORY_SIZE == MEMORY_N_PAGES * MEMORY_PAGE_SIZE);
 	// number of pages must be divisible by 8 for the bit field to use even number of bytes
 	ASSERT((MEMORY_N_PAGES & 7) == 0);
 	
 	// create memory mapping
-	bool mappingSuccess;
-	if(memoryPersistence == TRANSIENT_MEMORY)
-		mappingSuccess = CreateTransientMemory(MEMORY_SIZE, &(paging.globalFileMap));
+	char pageFilePath[maxPathLength + 1];
+	if(memoryPersistence == TRANSIENT_MEMORY) {
+		if(!CreateTransientMemory(MEMORY_SIZE, &(paging.globalFileMap)))
+			Panic("InitializePaging() failed");
+	}
 	else {
-		char pageFilePath[maxPathLength + 1];
 		bool pathFound = getPageFilePath(pageFilePath, maxPathLength + 1);
 		ASSERT(pathFound);
-		mappingSuccess = CreateOrRestoreMappedMemory(
-			FIXED_PAGING_ADDRESS, MEMORY_SIZE, pageFilePath, &(paging.globalFileMap));
+		if(memoryPersistence == NEW_PERSISTENT_MEMORY) {
+			if(!CreateMappedMemory(
+				FIXED_PAGING_ADDRESS, MEMORY_SIZE, pageFilePath, &(paging.globalFileMap)))
+				Panic("InitializePaging() failed");
+		}
+		else {
+			if(!FileExists(pageFilePath)) {
+				PrintF("There is no paging file %s to restart from.\n", pageFilePath);
+				return false;
+			}
+			if(!RestoreMappedMemory(FIXED_PAGING_ADDRESS, pageFilePath, &(paging.globalFileMap))) {
+				PrintF("The paging file %s could not be restored.\n", pageFilePath);
+				return false;
+			}
+		}
 	}
-	if(!mappingSuccess)
-		Panic("InitializePaging() failed");
 	pageTable = paging.globalFileMap.address;
+	paging.root = (PersistentRoot *) (pageTable + ROOT_PAGE * MEMORY_PAGE_SIZE);
 
-	// allocate bit field on first page(s)
-	SetMemory(pageTable, BITFIELD_SIZE_BYTES, 0);
-	for(index32 page = 0; page < BITFIELD_N_PAGES; page++)
-		setPageBit(page);
-	// initial first free page follows bitfield pages
-	paging.firstFreePage = BITFIELD_N_PAGES;
+	if(memoryPersistence == RESTART_PERSISTENT_MEMORY) {
+		if(!validatePageArea(pageFilePath)) {
+			// the root is left untouched, since the paging file may be in use by another process
+			releasePaging();
+			return false;
+		}
+	}
+	else
+		formatPaging();
+	paging.root->isOpen = true;
+	return true;
+}
+
+
+void ShutdownPaging(void)
+{
+	paging.root->isOpen = false;
+	releasePaging();
+}
+
+
+
+void * GetPersistentState(PersistentStateKey key)
+{
+	ASSERT(key < N_STATE_KEYS)
+	return paging.root->states[key];
+}
+
+
+void SetPersistentState(PersistentStateKey key, void * state)
+{
+	ASSERT(key < N_STATE_KEYS)
+	paging.root->states[key] = state;
 }
 
 
@@ -173,6 +293,14 @@ static index32 pageAlignedPointerToPage(void const * ptr)
 	return pointerToPage(ptr);
 }
 
+bool IsPagedMemoryAddress(void const * address)
+{
+	addr64 baseAddress = (addr64) pageTable;
+	return (pageTable != 0) &&
+		((addr64) address >= baseAddress) && ((addr64) address < baseAddress + MEMORY_SIZE);
+}
+
+
 void * GetPageOfAddress(void const * address)
 {
 	return pageToAddress(pointerToPage(address));
@@ -181,15 +309,15 @@ void * GetPageOfAddress(void const * address)
 
 void * AllocatePage(void)
 {
-	ASSERT(paging.firstFreePage);
-	uint32 page = paging.firstFreePage;
+	ASSERT(paging.root->firstFreePage);
+	uint32 page = paging.root->firstFreePage;
 	setPageBit(page);
 	// clear page
 	void * pageAddress = pageToAddress(page);
 	SetMemory(pageAddress, MEMORY_PAGE_SIZE, 0);
 
 	// find next free page
-	paging.firstFreePage = findFirstFreePage(paging.firstFreePage);
+	paging.root->firstFreePage = findFirstFreePage(paging.root->firstFreePage);
 
 	return pageAddress;
 }
@@ -199,8 +327,8 @@ void FreePage(void const * pageAddress)
 {
 	index32 page = pageAlignedPointerToPage(pageAddress);
 	clearPageBit(page);
-	if(page < paging.firstFreePage)
-		paging.firstFreePage = page;
+	if(page < paging.root->firstFreePage)
+		paging.root->firstFreePage = page;
 }
 
 
@@ -208,14 +336,14 @@ void * AllocatePages(size32 nPages)
 {
 	ASSERT(nPages > 0);
 	// find the first consecutive free pages
-	ASSERT(paging.firstFreePage);
-	index32 firstPage = findFirstFreePages(paging.firstFreePage, nPages);
+	ASSERT(paging.root->firstFreePage);
+	index32 firstPage = findFirstFreePages(paging.root->firstFreePage, nPages);
 	ASSERT(firstPage);
 	// allocate pages
 	for(index32 page = firstPage; page < firstPage + nPages; page++)
 		setPageBit(page);
-	if(paging.firstFreePage == firstPage)
-		paging.firstFreePage += nPages;
+	if(paging.root->firstFreePage == firstPage)
+		paging.root->firstFreePage = findFirstFreePage(firstPage + nPages);
 	// clear pages
 	void * firstPageAddress = pageToAddress(firstPage);
 	SetMemory(firstPageAddress, MEMORY_PAGE_SIZE * nPages, 0);
@@ -228,8 +356,8 @@ void FreePages(void const * firstPageAddress, size32 nPages)
 	index32 firstPage = pageAlignedPointerToPage(firstPageAddress);
 	for(index32 page = firstPage; page < firstPage + nPages; page++)
 		clearPageBit(page);
-	if(firstPage < paging.firstFreePage)
-		paging.firstFreePage = firstPage;
+	if(firstPage < paging.root->firstFreePage)
+		paging.root->firstFreePage = firstPage;
 }
 
 

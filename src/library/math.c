@@ -3,6 +3,9 @@
 #include "library/MachineService.h"
 #include "library/math.h"
 #include "parser/TermBuilder.h"
+#include "memory/allocator.h"
+#include "memory/paging.h"
+#include "memory/references.h"
 
 
 //------------------------------- Integer arithmetic ------------------------------------------
@@ -278,46 +281,82 @@ static bool rangeCall(void * state, Atom arguments[], void * readerData, void * 
 }
 
 
-static uint32 moduleID;
+static NamedFunction const mathFunctions[] = {
+	{"math.integerCall", (AnyFunction) integerCall},
+	{"math.addIntCall", (AnyFunction) addIntCall},
+	{"math.subIntCall", (AnyFunction) subIntCall},
+	{"math.mulIntCall", (AnyFunction) mulIntCall},
+	{"math.intDivisionCall", (AnyFunction) intDivisionCall},
+	{"math.addFloatCall", (AnyFunction) addFloatCall},
+	{"math.subFloatCall", (AnyFunction) subFloatCall},
+	{"math.mulFloatCall", (AnyFunction) mulFloatCall},
+	{"math.divFloatCall", (AnyFunction) divFloatCall},
+	{"math.valueRoundedCall", (AnyFunction) valueRoundedCall},
+	{"math.integerFloatCall", (AnyFunction) integerFloatCall},
+	{"math.floatIntegerCall", (AnyFunction) floatIntegerCall},
+	{"math.strictInequalityIntCall", (AnyFunction) strictInequalityIntCall},
+	{"math.strictInequalityFloatCall", (AnyFunction) strictInequalityFloatCall},
+	{"math.nonStrictInequalityIntCall", (AnyFunction) nonStrictInequalityIntCall},
+	{"math.nonStrictInequalityFloatCall", (AnyFunction) nonStrictInequalityFloatCall},
+	{"math.rangeSetup", (AnyFunction) rangeSetup},
+	{"math.rangeCall", (AnyFunction) rangeCall},
+};
+
+
+void RegisterMathFunctions(void)
+{
+	RegisterFunctions(mathFunctions, sizeof(mathFunctions) / sizeof(NamedFunction));
+}
+
 
 #define N_MATH_RULES	5
-FormulaView mathRules[N_MATH_RULES];
+
+typedef struct s_MathLibrary {
+	uint32 moduleID;
+	FormulaView mathRules[N_MATH_RULES];
+} MathLibrary;
+
+
+static MathLibrary * mathLibrary = 0;
 
 
 void MathSetup(void)
 {
-	moduleID = RequestModuleID();
+	mathLibrary = Allocate(sizeof(MathLibrary));
+	SetPersistentState(STATE_KEY_MATH, mathLibrary);
+
+	mathLibrary->moduleID = RequestModuleID();
 
 	// Integer arithmetic
-	RegisterMachineService(moduleID, "integer #1<INT", integerCall);
-	RegisterMachineService(moduleID, "+ #1<INT + #2<INT = #3>INT", addIntCall);
-	RegisterMachineService(moduleID, "+ #1<INT - #2<INT = #3>INT", subIntCall);
-	RegisterMachineService(moduleID, "* #1<INT * #2<INT = #3>INT", mulIntCall);
-	RegisterMachineService(moduleID, "* #1<INT / #2<INT = #3>INT rem #4>INT", intDivisionCall);
+	RegisterMachineService(mathLibrary->moduleID, "integer #1<INT", integerCall);
+	RegisterMachineService(mathLibrary->moduleID, "+ #1<INT + #2<INT = #3>INT", addIntCall);
+	RegisterMachineService(mathLibrary->moduleID, "+ #1<INT - #2<INT = #3>INT", subIntCall);
+	RegisterMachineService(mathLibrary->moduleID, "* #1<INT * #2<INT = #3>INT", mulIntCall);
+	RegisterMachineService(mathLibrary->moduleID, "* #1<INT / #2<INT = #3>INT rem #4>INT", intDivisionCall);
 
 	// Floating point arithmetic
-	RegisterMachineService(moduleID, "+ #1<FLOAT + #2<FLOAT = #3>FLOAT", addFloatCall);
-	RegisterMachineService(moduleID, "+ #1<FLOAT - #2<FLOAT = #3>FLOAT", subFloatCall);
-	RegisterMachineService(moduleID, "* #1<FLOAT * #2<FLOAT = #3>FLOAT", mulFloatCall);
-	RegisterMachineService(moduleID, "* #1<FLOAT / #2<FLOAT = #3>FLOAT", divFloatCall);
+	RegisterMachineService(mathLibrary->moduleID, "+ #1<FLOAT + #2<FLOAT = #3>FLOAT", addFloatCall);
+	RegisterMachineService(mathLibrary->moduleID, "+ #1<FLOAT - #2<FLOAT = #3>FLOAT", subFloatCall);
+	RegisterMachineService(mathLibrary->moduleID, "* #1<FLOAT * #2<FLOAT = #3>FLOAT", mulFloatCall);
+	RegisterMachineService(mathLibrary->moduleID, "* #1<FLOAT / #2<FLOAT = #3>FLOAT", divFloatCall);
 
-	RegisterMachineService(moduleID, "value #1<FLOAT rounded #2>INT", valueRoundedCall);
+	RegisterMachineService(mathLibrary->moduleID, "value #1<FLOAT rounded #2>INT", valueRoundedCall);
 	
 	// integer-float conversion
-	RegisterMachineService(moduleID, "integer #1<INT float #2>FLOAT", integerFloatCall);
-	RegisterMachineService(moduleID, "integer #1>INT float #2<FLOAT", floatIntegerCall);
+	RegisterMachineService(mathLibrary->moduleID, "integer #1<INT float #2>FLOAT", integerFloatCall);
+	RegisterMachineService(mathLibrary->moduleID, "integer #1>INT float #2<FLOAT", floatIntegerCall);
 
 	// inequalities
-	RegisterMachineService(moduleID, "< #1<INT > #2<INT", strictInequalityIntCall);
-	RegisterMachineService(moduleID, "< #1<FLOAT > #2<FLOAT", strictInequalityFloatCall);
+	RegisterMachineService(mathLibrary->moduleID, "< #1<INT > #2<INT", strictInequalityIntCall);
+	RegisterMachineService(mathLibrary->moduleID, "< #1<FLOAT > #2<FLOAT", strictInequalityFloatCall);
 
-	RegisterMachineService(moduleID, "=< #1<INT >= #2<INT", nonStrictInequalityIntCall);
-	RegisterMachineService(moduleID, "=< #1<FLOAT >= #2<FLOAT", nonStrictInequalityFloatCall);
+	RegisterMachineService(mathLibrary->moduleID, "=< #1<INT >= #2<INT", nonStrictInequalityIntCall);
+	RegisterMachineService(mathLibrary->moduleID, "=< #1<FLOAT >= #2<FLOAT", nonStrictInequalityFloatCall);
 
 	// The range a =< n =< b is the conjunction (n >= a & b >= n), since
 	// (=< x >= y) reads x >= y. Neither term is a finite relation on its own.
 	RegisterMachineServiceWithState(
-		moduleID, "=< #2>INT >= #1<INT & >= #2>INT =< #3<INT", sizeof(RangeState),
+		mathLibrary->moduleID, "=< #2>INT >= #1<INT & >= #2>INT =< #3<INT", sizeof(RangeState),
 		rangeSetup,	rangeCall, 0
 	);
 
@@ -325,23 +364,34 @@ void MathSetup(void)
 	// NOTE: adding these rules leaves various primitive service stale, needs compilation
 	
 	// integer division, with zero remainder
-	mathRules[0] = DictionaryAddClauseFromCString("* x / y = z | ! * x / y = z rem 0");
+	mathLibrary->mathRules[0] = DictionaryAddClauseFromCString("* x / y = z | ! * x / y = z rem 0");
 
 	// Solving x + y = z for y
-	mathRules[1] = DictionaryAddClauseFromCString("+ x + y = z | ! + z - x = y");
+	mathLibrary->mathRules[1] = DictionaryAddClauseFromCString("+ x + y = z | ! + z - x = y");
 	// Solving x * y = z for y. For integers, this requires division with zero remainder
-	mathRules[2] = DictionaryAddClauseFromCString("* x * y = z | ! * z / x = y");
+	mathLibrary->mathRules[2] = DictionaryAddClauseFromCString("* x * y = z | ! * z / x = y");
 
 	// Mixed float-int arithmetic. These rules will yield services only for FLOAT x and INT i
-	mathRules[3] = DictionaryAddClauseFromCString("+ x + i = y | ! integer i float f | ! + x + f = y");
-	mathRules[4] = DictionaryAddClauseFromCString("* x * i = y | ! integer i float f | ! * x * f = y");
+	mathLibrary->mathRules[3] = DictionaryAddClauseFromCString("+ x + i = y | ! integer i float f | ! + x + f = y");
+	mathLibrary->mathRules[4] = DictionaryAddClauseFromCString("* x * i = y | ! integer i float f | ! * x * f = y");
+}
+
+
+void MathRestore(void)
+{
+	mathLibrary = GetPersistentState(STATE_KEY_MATH);
+	ASSERT(mathLibrary)
 }
 
 
 void MathShutdown(void)
 {
 	for(index32 i = 0; i < N_MATH_RULES; i++)
-		DictionaryRemoveClause(&mathRules[i]);
+		DictionaryRemoveClause(&mathLibrary->mathRules[i]);
 
-	FreeModuleRelations(moduleID);
+	FreeModuleRelations(mathLibrary->moduleID);
+
+	Free(mathLibrary);
+	SetPersistentState(STATE_KEY_MATH, 0);
+	mathLibrary = 0;
 }

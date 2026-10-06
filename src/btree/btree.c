@@ -1,20 +1,42 @@
 
 #include "btree/btree.h"
+#include "memory/allocator.h"
 #include "memory/paging.h"
+#include "memory/references.h"
+
+#ifdef DEBUG_ALLOCATE
+// When debugging Allocate() we may allocate B-tree structures with calloc()
+#include <stdlib.h>
+#endif
+
+
+static void * btreeAllocate(size32 size, bool useCalloc)
+{
+#ifdef DEBUG_ALLOCATE
+	if(useCalloc)
+		return calloc(1, size);
+	else
+		return Allocate(size);
+#else
+	return Allocate(size);
+#endif
+}
+
+static void btreeFree(void * memory, bool useCalloc)
+{
+#ifdef DEBUG_ALLOCATE
+	if(useCalloc)
+		free(memory);
+	else
+		Free(memory);
+#else
+	Free(memory);
+#endif
+}
+
 
 #define BTREE_NODE_SIZE		MEMORY_PAGE_SIZE
 
-#ifdef DEBUG_ALLOCATE
-// When debugging Allocate() we need a different allocator for B-tree memory
-#include <stdlib.h>
-// We use calloc() rather than malloc() so that memory is cleared
-#define btreeAllocate(size) calloc(1, size)
-#define btreeFree free
-#else
-#include "memory/allocator.h"
-#define btreeAllocate Allocate
-#define btreeFree Free
-#endif
 
 static BTreeNode * createNode(void)
 {
@@ -28,18 +50,26 @@ static void freeNode(BTreeNode * node)
 	FreePage(node);
 }
 
-BTree * BTreeCreate(
-	size32 itemSize,
-	ItemComparator compareItems,
-	void (*freeItem)(void const * item, size32 itemSize))
+
+static BTree * btreeCreate(
+	size32 itemSize, ItemComparator compareItems,
+	void (*freeItem)(void const * item, size32 itemSize),
+	bool useCalloc)
 {
-	BTree * btree = btreeAllocate(sizeof(BTree));
+	BTree * btree = btreeAllocate(sizeof(BTree), useCalloc);
+	btree->useCalloc = useCalloc;
 
 	btree->itemSize = itemSize;
-	btree->spareItem = btreeAllocate(itemSize);
-	btree->compareItems = compareItems;
-	btree->freeItem = freeItem;
-
+	btree->spareItem = btreeAllocate(itemSize, useCalloc);
+	if(useCalloc) {
+		btree->compareItems = compareItems;
+		btree->freeItem = freeItem;
+	}
+	else {
+		// B-tree is allocated in paging memory, so use function references
+		SetReference(&(btree->compareItems), (AnyFunction) compareItems);
+		SetReference(&(btree->freeItem), (AnyFunction) freeItem);
+	}
 	/**
 	 * BTREE_NODE_SIZE = sizeof(BTreeNode) + maxItems * itemSize + (maxItems+1) * sizeof(BTreeNode *)
 	 * maxItems = 2*degree - 1
@@ -57,6 +87,23 @@ BTree * BTreeCreate(
 	
 	return btree;
 }
+
+#ifdef DEBUG_ALLOCATE
+BTree * BTreeCreateWithCalloc(
+	size32 itemSize, ItemComparator compareItems,
+	void (*freeItem)(void const * item, size32 itemSize))
+{
+	return btreeCreate(itemSize, compareItems, freeItem, true);
+}
+#endif
+
+BTree * BTreeCreate(
+	size32 itemSize, ItemComparator compareItems,
+	void (*freeItem)(void const * item, size32 itemSize))
+{
+	return btreeCreate(itemSize, compareItems, freeItem, false);
+}
+
 
 /**
  * Some pointer arithmetic on the variable-size item array.
@@ -109,8 +156,10 @@ void BTreeFree(BTree * btree)
 {
 	ASSERT(!BTreeIsWriteLocked(btree))
 	freeNodeRecursive(btree, btree->root);
-	btreeFree(btree->spareItem);
-	btreeFree(btree);
+	btreeFree(btree->spareItem, btree->useCalloc);
+	if(!btree->useCalloc)
+		ClearReferences(btree, sizeof(BTree));
+	btreeFree(btree, btree->useCalloc);
 }
 
 
@@ -218,7 +267,7 @@ static bool descendToLowerBound(
 }
 
 
-void * BTreePeekItem(BTree * btree, void const * keyItem)
+void * BTreePeekLowerBound(BTree * btree, void const * keyItem)
 {
 	if(btree->nItemsTotal == 0)
 		return 0;
@@ -226,8 +275,16 @@ void * BTreePeekItem(BTree * btree, void const * keyItem)
 	size32 foundDepth;
 	if(!descendToLowerBound(btree, keyItem, stack, &foundDepth))
 		return 0;
+	return nodeGetItem(btree, stack[foundDepth].node, stack[foundDepth].index);
+}
+
+
+void * BTreePeekItem(BTree * btree, void const * keyItem)
+{
 	// the lower bound is only the first item not less than the key
-	void * item = nodeGetItem(btree, stack[foundDepth].node, stack[foundDepth].index);
+	void * item = BTreePeekLowerBound(btree, keyItem);
+	if(!item)
+		return 0;
 	return btree->compareItems(item, keyItem, btree->itemSize) ? 0 : item;
 }
 
@@ -746,7 +803,7 @@ void BTreeIterate(BTreeIterator * iterator, BTree * btree)
 	BTreeWriteLock(btree);
 
 	iterator->btree = btree;
-	iterator->stack = btreeAllocate(sizeof(BTreePosition) * btree->height);
+	iterator->stack = btreeAllocate(sizeof(BTreePosition) * btree->height, btree->useCalloc);
 	setIteratorBeforeFirst(iterator);
 }
 
@@ -767,7 +824,7 @@ void * BTreeIteratorPeekItem(BTreeIterator const * iterator)
 
 void BTreeIteratorEnd(BTreeIterator * iterator)
 {
-	btreeFree(iterator->stack);
+	btreeFree(iterator->stack, iterator->btree->useCalloc);
 	BTreeWriteUnlock(iterator->btree);
 	SetMemory(iterator, sizeof(BTreeIterator), 0);
 }

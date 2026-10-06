@@ -15,7 +15,7 @@
 #include "lang/TypedAtom.h"
 
 
-// CLAUDE: the arity of a formula is a size8
+// The arity of a formula is a size8
 #define FORMULA_MAX_ARITY	255
 
 /**
@@ -34,6 +34,11 @@ typedef struct s_FormulaView {
  * FreeFormulaStorage() requires every formula to have been released.
  */
 void InitializeFormulaStorage(void);
+
+/**
+ * Restore the formula registry from the paging area upon restart.
+ */
+void RestoreFormulaStorage(void);
 
 void FreeFormulaStorage(void);
 
@@ -111,7 +116,7 @@ Atom TermGetRoleActor(Atom termForm, Atom const termActors[], const char * role,
  * Create a clause from a list of term formulas, in any order.
  * No term may be repeated.
  *
- * CLAUDE: Unless termOrder is 0, the order of the terms in the clause is written to
+ * Unless termOrder is 0, the order of the terms in the clause is written to
  * termOrder, which must have room for nTerms elements: term termOrder[i] of the list
  * is the term at index i of the clause. See MultisetIterationOrder().
  */
@@ -133,7 +138,7 @@ index8 ClauseGetTermActorsIndex(Atom clauseForm, Atom termForm, uint8 m);
  * Create a conjunction from a list of terms, in any order.
  * No term may be repeated.
  *
- * CLAUDE: Unless termOrder is 0, the order of the terms is written to termOrder,
+ * Unless termOrder is 0, the order of the terms is written to termOrder,
  * as for CreateClause().
  */
 Atom CreateConjunction(Atom const terms[], size8 nTerms, index8 termOrder[]);
@@ -165,7 +170,7 @@ void PrintFormula(Atom formula);
 void PrintFormulaView(FormulaView formulaView);
 
 /**
- * CLAUDE: The order in which the terms and the roles of a formula were entered, as
+ * The order in which the terms and the roles of a formula were entered, as
  * written by ParseFormula(). A formula stores its terms, roles and actors in the
  * order of its form instead; see MultisetIterationOrder().
  *
@@ -182,20 +187,26 @@ typedef struct s_FormOrdering {
 } FormOrdering;
 
 /**
- * CLAUDE: Print the actors of a form as a formula. Unless ordering is 0, the terms
+ * Print a (form, actors) pair a formula. Unless ordering is 0, the terms
  * and roles are printed in the order given by the FormOrdering, rather than in
  * the order of the form.
  */
 void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors, FormOrdering const * ordering);
 
 /**
- * CLAUDE: The number of actors of a predicate, term, clause or conjunction form.
+ * Return te number of actors of the given form.
  */
 size8 FormArity(Atom form);
 
 /**
- * CLAUDE: Print a term, clause or conjunction form, without actors.
+ * Print the given form, without actors.
  */
 void PrintForm(Atom form);
+
+/**
+ * Register functions referred to from persistent memory.
+ */
+void RegisterFormulaFunctions(void);
+
 
 #endif	// FORMULA_H

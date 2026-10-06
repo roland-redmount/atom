@@ -25,8 +25,15 @@
 #include "kernel/operator.h"
 
 
-// TODO: replace this with a machine provider registry ...
-extern StorageProvider btreeStorageProvider;
+/**
+ * Fill in the StorageProvider functions of the B-tree StorageProvider structure
+ */
+void RelationBTreeSetupProvider(StorageProvider * provider);
+
+/**
+ * Register functions stored in persistent memory
+ */
+void RegisterRelationBTreeFunctions(void);
 
 // NOTE: "RelationBTree" sounds more like a B-tree of relations than a relation
 // backed by a B-tree ... rename to BTreeRelation ?

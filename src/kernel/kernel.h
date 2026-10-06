@@ -4,16 +4,17 @@
 
 #include "kernel/Relation.h"
 #include "kernel/operator.h"
-#include "kernel/TupleStore.h"		// for TRANSIENT_MEMORY and PERSISTENT_MEMORY
+#include "kernel/TupleStore.h"
 #include "memory/paging.h"
 #include "platform.h"
 
 
 /**
- * Set up a default memory layout, enable paging and allocation.
+ * Set up a memory, enabling paging and creating the allocator.
  * The memory persistence is passed on to InitializePaging().
+ * Return false if InitializePaging() fails.
  */
-void SetupMemory(uint32 memoryPersistence);
+bool SetupMemory(uint32 memoryPersistence);
 
 void CleanupMemory(void);
 
@@ -21,10 +22,14 @@ void CleanupMemory(void);
  * Initialize a new kernel, creating a blank "world"
  * with only the core predicates defined.
  * The memory persistence is passed on to SetupMemory().
- * 
- * TODO: we also need methods to load a previously persisted state.
  */
-void KernelInitialize(uint32 memoryPersistence);
+bool KernelInitialize(uint32 memoryPersistence);
+
+/**
+ * Close the kernel, keeping the world as it is. If persistence is enabled,
+ * the next session can restart from the paging file; see RESTART_PERSISTENT_MEMORY.
+ */
+void KernelClose(void);
 
 /**
  * Shut down a kernel, removing all facts.

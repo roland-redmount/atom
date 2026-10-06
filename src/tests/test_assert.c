@@ -72,7 +72,6 @@ void testAssertOverlapsService(void)
 	// NOTE: this requires compiling a FILTER service
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(knownFact), 0), ASSERT_EXISTED)
 	
-	RemoveAllCompiledServices();
 	ReleaseFormula(knownFact);
 }
 
@@ -634,7 +633,7 @@ void testLoadRelationText(void)
 
 int main(int argc, char * argv[])
 {
-	KernelInitialize(PERSISTENT_MEMORY);
+	KernelInitialize(TRANSIENT_MEMORY);
 	LoadLibraries();
 
 	ExecuteTest(testAssertRetract);

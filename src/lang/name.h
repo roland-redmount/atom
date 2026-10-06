@@ -12,6 +12,11 @@
 #include "lang/TypedAtom.h"
 
 void InitializeNameStorage(void);
+
+/**
+ * Restore name storage from the paging area upon restart.
+ */
+void RestoreNameStorage(void);
 void FreeNameStorage(void);
 
 size32 NumberOfNames(void);
@@ -36,11 +41,15 @@ void PrintName(Atom name);
 
 data64 NameHashFromCString(char const * cString, data64 initialHash);
 
-
 /**
- * For debugging
+ * Dump the name registry, for debugging.
  */
 void NameDump(void);
+
+/**
+ * Register functions referred to from persistent memory.
+ */
+void RegisterNameFunctions(void);
 
 
 #endif	// NAME_H

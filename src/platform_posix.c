@@ -62,7 +62,6 @@ void CopyMemory(void const * source, void * destination, size32 size)
 }
 
 
-// similar to CopyMemory, but allows source and destination blocks to overlap
 void MoveMemory(void const * source, void * destination, size32 size)
 {
 	memmove(destination, source, size);
@@ -709,40 +708,6 @@ bool DeleteFile(char const * filePath)
 }
 
 
-// access mode specifiers
-// #define FILEMAPPING_WRITABLE	0x01		// read and write access
-// #define FILEMAPPING_CREATE      0x02        // create new mapping file if not already exists
-
-
-static bool createFile(char const * fileName, int * fileDescriptor)
-{
-	*fileDescriptor = open(
-		fileName,
-		O_RDWR | O_CREAT,
-		S_IRUSR | S_IWUSR
-	);
-	if(*fileDescriptor == -1) {
-		int errorNumber = errno;
-		PrintF("creating file '%s' failed, errno = %d\n", fileName, errorNumber);
-		return false;		
-	}
-	return true;
-}
-
-static bool openFile(char const * fileName, int * fileDescriptor)
-{
-	*fileDescriptor = open(
-		fileName,
-		O_RDWR
-	);
-	if(*fileDescriptor == -1) {
-		int errorNumber = errno;
-		PrintF("opening file '%s' failed, errno = %d\n", fileName, errorNumber);
-		return false;		
-	}
-	return true;
-}
-
 static size_t getFileSize(int fileDescriptor)
 {
 	struct stat fileStatus;
@@ -941,8 +906,16 @@ static void * reserveMemory(void * address, size_t size, int fileDescriptor)
 	// NOTE: a fixed memory address should be safe on posix systems,
 	// but the mmap documentation is a bit murky; 
 	// see https://man7.org/linux/man-pages/man2/mmap.2.html
-	if(address)
+	if(address) {
+#ifdef MAP_FIXED_NOREPLACE
+		// Use the MAP_FIXED_NOREPLACE flag if defined by the build system,
+		// causing mmap() to fail rather than replace an already existing mapping.
+		// NOTE: not supported on older linux kernels, or macOS.
+		flags |= MAP_FIXED_NOREPLACE;
+#else
 		flags |= MAP_FIXED;
+#endif
+	}
 
 	void * actual_address = mmap(
 		address,
@@ -967,7 +940,7 @@ static void * reserveMemory(void * address, size_t size, int fileDescriptor)
  * Zero a memory descriptor, so that a caller given one for a block that was
  * never reserved can still pass it to ReleaseMemory().
  */
-static bool reserveFailed(MemoryDescriptor * memory)
+static bool clearMemoryDescriptor(MemoryDescriptor * memory)
 {
 	memory->size = 0;
 	memory->address = 0;
@@ -975,17 +948,32 @@ static bool reserveFailed(MemoryDescriptor * memory)
 }
 
 
+static bool openMappingFile(char const * fileName, int * fileDescriptor)
+{
+	*fileDescriptor = open(
+		fileName,
+		O_RDWR
+	);
+	if(*fileDescriptor == -1) {
+		int errorNumber = errno;
+		PrintF("opening file '%s' failed, errno = %d\n", fileName, errorNumber);
+		return false;		
+	}
+	return true;
+}
+
+
 bool RestoreMappedMemory(void * address, char const * fileName, MemoryDescriptor * memory)
 {
 	int fileDescriptor;
-	if(!openFile(fileName, &fileDescriptor))
-		return reserveFailed(memory);
+	if(!openMappingFile(fileName, &fileDescriptor))
+		return clearMemoryDescriptor(memory);
 
 	size64 size = getFileSize(fileDescriptor);
 	void * reservedAddress = reserveMemory(address, size, fileDescriptor);
 	close(fileDescriptor);
 	if(reservedAddress == 0)
-		return reserveFailed(memory);
+		return clearMemoryDescriptor(memory);
 
 	memory->size = size;
 	memory->address = reservedAddress;
@@ -993,17 +981,33 @@ bool RestoreMappedMemory(void * address, char const * fileName, MemoryDescriptor
 }
 
 
+static bool createMappingFile(char const * fileName, int * fileDescriptor)
+{
+	*fileDescriptor = open(
+		fileName,
+		O_RDWR | O_CREAT | O_TRUNC,		// An existing file is emptied
+		S_IRUSR | S_IWUSR
+	);
+	if(*fileDescriptor == -1) {
+		int errorNumber = errno;
+		PrintF("creating file '%s' failed, errno = %d\n", fileName, errorNumber);
+		return false;		
+	}
+	return true;
+}
+
+
 bool CreateMappedMemory(void * address, size64 size, char const * fileName, MemoryDescriptor * memory)
 {
 	int fileDescriptor;
-	if(!createFile(fileName, &fileDescriptor))
-		return reserveFailed(memory);
+	if(!createMappingFile(fileName, &fileDescriptor))
+		return clearMemoryDescriptor(memory);
 	
 	resizeFile(fileDescriptor, size);
 	void * reservedAddress = reserveMemory(address, size, fileDescriptor);
 	close(fileDescriptor);
 	if(reservedAddress == 0)
-		return reserveFailed(memory);
+		return clearMemoryDescriptor(memory);
 
 	memory->size = size;
 	memory->address = reservedAddress;
@@ -1028,7 +1032,7 @@ bool CreateTransientMemory(size64 size, MemoryDescriptor * memory)
 		NO_MAPPING_FILE
 	);
 	if(reservedAddress == 0)
-		return reserveFailed(memory);
+		return clearMemoryDescriptor(memory);
 
 	memory->size = size;
 	memory->address = reservedAddress;

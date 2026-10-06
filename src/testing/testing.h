@@ -84,6 +84,7 @@ void TestSummary(void);
 
 /**
  * Execute a test function and check for memory leaks
+ * All compiled services are removed before and after executing the test.
  */
 void ExecuteTest(void (*test)(void));
 

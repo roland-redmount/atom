@@ -20,16 +20,8 @@
 #include "ui/query.h"
 #include "ui/session.h"
 #include "util/ResizingArray.h"
-
-
-/*
- * The session numbers each ID atom in the order received from queries, and prints the
- * ID atom as @number. The user may then refer to the same ID atom by entering @number
- * in actions and queries. The session holds a reference to each numbered ID atom,
- * so that the number stays valid for the rest of the session. The ID atom numbered n is the
- * element n - 1 of numberedIDs.
- */
-static ResizingArray numberedIDs;
+#include "memory/allocator.h"
+#include "memory/paging.h"
 
 
 /*
@@ -41,19 +33,34 @@ typedef struct s_IDExpansion {
 	size32 inputLength;		// including the @ character
 } IDExpansion;
 
-// The line input expanded so that each ID atom number is replaced by the hash of the ID atom.
-static StringBuffer expandedLine;
-// Each IDExpansion in idExpansions records one replacement, in the order of the line.
-static ResizingArray idExpansions;
-static bool isInitialized = false;
+typedef struct s_SessionState {
+	/*
+	 * The session numbers each ID atom in the order received from queries, and prints the
+	 * ID atom as @number. The user may then refer to the same ID atom by entering @number
+	 * in actions and queries. The session holds a reference to each numbered ID atom,
+	 * so that the number stays valid for the rest of the session. The ID atom numbered n is the
+	 * element n - 1 of numberedIDs.
+	 */
+	ResizingArray numberedIDs;
+
+	// The line input expanded so that each ID atom number is replaced by the hash of the ID atom.
+	StringBuffer expandedLine;
+	// Each IDExpansion in idExpansions records one replacement, in the order of the line.
+	ResizingArray idExpansions;
+} SessionState;
+
+/* Session state, persisted in STATE_KEY_SESSION. SessionExecuteLine() sets
+   sessionState, and creates the module state on the first line of a new world. */
+static SessionState * sessionState = 0;
 
 
 static void initializeSession(void)
 {
-	CreateResizingArray(&numberedIDs, sizeof(Atom), 16);
-	CreateResizingArray(&idExpansions, sizeof(IDExpansion), 4);
-	StringBufferInit(&expandedLine);
-	isInitialized = true;
+	sessionState = Allocate(sizeof(SessionState));
+	SetPersistentState(STATE_KEY_SESSION, sessionState);
+	CreateResizingArray(&sessionState->numberedIDs, sizeof(Atom), 16);
+	CreateResizingArray(&sessionState->idExpansions, sizeof(IDExpansion), 4);
+	StringBufferInit(&sessionState->expandedLine);
 }
 
 
@@ -114,14 +121,14 @@ static void printHelp(void)
  */
 static index32 numberID(Atom id)
 {
-	for(index32 i = 0; i < numberedIDs.nElements; i++) {
-		Atom const * numberedID = ResizingArrayGetElement(&numberedIDs, i);
+	for(index32 i = 0; i < sessionState->numberedIDs.nElements; i++) {
+		Atom const * numberedID = ResizingArrayGetElement(&sessionState->numberedIDs, i);
 		if(SameAtoms(*numberedID, id))
 			return i + 1;
 	}
 	IFactAcquire(id);
-	ResizingArrayAppend(&numberedIDs, &id);
-	return numberedIDs.nElements;
+	ResizingArrayAppend(&sessionState->numberedIDs, &id);
+	return sessionState->numberedIDs.nElements;
 }
 
 
@@ -142,8 +149,8 @@ static index32 findLinePosition(index32 expandedPosition)
 {
 	// growth is how much longer the expanded line is than the line entered, over the expansions passed
 	size32 growth = 0;
-	for(index32 i = 0; i < idExpansions.nElements; i++) {
-		IDExpansion const * expansion = ResizingArrayGetElement(&idExpansions, i);
+	for(index32 i = 0; i < sessionState->idExpansions.nElements; i++) {
+		IDExpansion const * expansion = ResizingArrayGetElement(&sessionState->idExpansions, i);
 		index32 expandedStart = expansion->linePosition + growth;
 		if(expandedPosition < expandedStart)
 			break;
@@ -192,8 +199,8 @@ static void printUnknownIDNumber(index32 linePosition)
  */
 static bool expandIDNumbers(char const * line)
 {
-	StringBufferReset(&expandedLine);
-	ResizingArrayReset(&idExpansions);
+	StringBufferReset(&sessionState->expandedLine);
+	ResizingArrayReset(&sessionState->idExpansions);
 	bool isInString = false;
 	index32 i = 0;
 	while(line[i]) {
@@ -202,7 +209,7 @@ static bool expandIDNumbers(char const * line)
 
 		bool isWordStart = (i == 0) || !IsNameChar(line[i - 1]);
 		if((line[i] != '@') || isInString || !isWordStart) {
-			StringBufferPush(&expandedLine, line[i++]);
+			StringBufferPush(&sessionState->expandedLine, line[i++]);
 			continue;
 		}
 
@@ -214,29 +221,29 @@ static bool expandIDNumbers(char const * line)
 			nDigits++;
 		}
 		if((nDigits == 0) || (nDigits >= ID_HASH_LENGTH) || !isDecimal) {
-			StringBufferPush(&expandedLine, line[i++]);
+			StringBufferPush(&sessionState->expandedLine, line[i++]);
 			continue;
 		}
 
 		int64 number = StringToInt64(line + i + 1, nDigits);
-		if((number == 0) || (number > numberedIDs.nElements)) {
+		if((number == 0) || (number > sessionState->numberedIDs.nElements)) {
 			printUnknownIDNumber(i);
 			return false;
 		}
-		Atom const * id = ResizingArrayGetElement(&numberedIDs, number - 1);
+		Atom const * id = ResizingArrayGetElement(&sessionState->numberedIDs, number - 1);
 		char hashString[ID_HASH_LENGTH + 2];
 		FormatString(hashString, sizeof(hashString), "@%016llx", (unsigned long long) id->hash);
 		for(index32 j = 0; hashString[j]; j++)
-			StringBufferPush(&expandedLine, hashString[j]);
+			StringBufferPush(&sessionState->expandedLine, hashString[j]);
 
 		IDExpansion expansion = {
 			.linePosition = i,
 			.inputLength = 1 + nDigits,
 		};
-		ResizingArrayAppend(&idExpansions, &expansion);
+		ResizingArrayAppend(&sessionState->idExpansions, &expansion);
 		i += 1 + nDigits;
 	}
-	StringBufferPush(&expandedLine, 0);
+	StringBufferPush(&sessionState->expandedLine, 0);
 	return true;
 }
 
@@ -606,14 +613,15 @@ static int executeCommand(char const * line, char const * commandText)
 
 int SessionExecuteLine(char const * line)
 {
-	if(!isInitialized)
+	sessionState = GetPersistentState(STATE_KEY_SESSION);
+	if(!sessionState)
 		initializeSession();
 	IFactSetPrinter(printNumberedID);
 	// Expand user @number syntax to full hashes
 	if(!expandIDNumbers(line))
 		return SESSION_CONTINUE;
 	// The rest of the session reads the expanded line
-	line = expandedLine.buffer;
+	line = sessionState->expandedLine.buffer;
 
 	char const * firstCharacter = line;
 	while(IsSpaceChar(*firstCharacter))

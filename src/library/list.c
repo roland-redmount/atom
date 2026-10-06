@@ -10,69 +10,76 @@
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
 #include "library/list.h"
+#include "memory/allocator.h"
+#include "memory/paging.h"
 #include "storage/RelationBTree.h"
 #include "util/hashing.h"
 
 
-static Atom listRoleName;
-static Atom positionRoleName;
-static Atom elementRoleName;
-static Atom lengthRoleName;
+typedef struct s_ListLibrary {
+	Atom listRoleName;
+	Atom positionRoleName;
+	Atom elementRoleName;
+	Atom lengthRoleName;
 
-static Atom listPredicateForm;
-static Atom listTermForm;
-static index8 listRoleIndex[3];
+	Atom listPredicateForm;
+	Atom listTermForm;
+	index8 listRoleIndex[3];
 
-static Atom listLengthPredicateForm;
-static Atom listLengthTermForm;
-static index8 listLengthRoleIndex[2];
+	Atom listLengthPredicateForm;
+	Atom listLengthTermForm;
+	index8 listLengthRoleIndex[2];
 
-static Relation listIDRelation;
-static TupleStore * listIDTupleStore;
-static Operator * listIDOperator;
+	Relation listIDRelation;
+	TupleStore * listIDTupleStore;
+	Operator * listIDOperator;
 
-static Relation listLetterRelation;
-static TupleStore * listLetterTupleStore;
-static Operator * listLetterOperator;
+	Relation listLetterRelation;
+	TupleStore * listLetterTupleStore;
+	Operator * listLetterOperator;
 
-static Relation listLengthRelation;
-static TupleStore * listLengthTupleStore;
-static Operator * listLengthOperator;
+	Relation listLengthRelation;
+	TupleStore * listLengthTupleStore;
+	Operator * listLengthOperator;
+} ListLibrary;
+
+
+static ListLibrary * listLibrary = 0;
 
 
 Atom GetListPredicateForm(void)
 {
-	return listPredicateForm;
+	return listLibrary->listPredicateForm;
 }
 
 
 Atom GetListLengthTermForm(void)
 {
-	return listLengthTermForm;
+	return listLibrary->listLengthTermForm;
 }
 
 
 index8 const * GetListRoleIndex(void)
 {
-	return listRoleIndex;
+	return listLibrary->listRoleIndex;
 }
 
 
 void ListSetTuple(Atom const inputTuple[], Atom tuple[])
 {
-	TupleCopyPermuted(inputTuple, tuple, listRoleIndex, 3);
+	TupleCopyPermuted(inputTuple, tuple, listLibrary->listRoleIndex, 3);
 }
 
 
 void ListSetByteArray(byte const inputArray[], byte array[])
 {
-	CopyBytesPermuted(inputArray, array, listRoleIndex, 3);
+	CopyBytesPermuted(inputArray, array, listLibrary->listRoleIndex, 3);
 }
 
 
 index8 const * GetListLengthRoleIndex(void)
 {
-	return listLengthRoleIndex;
+	return listLibrary->listLengthRoleIndex;
 }
 
 
@@ -80,10 +87,10 @@ Relation GetListRelation(byte elementType)
 {
 	switch(elementType) {
 	case AT_ID:
-		return listIDRelation;
+		return listLibrary->listIDRelation;
 
 	case AT_LETTER:
-		return listLetterRelation;
+		return listLibrary->listLetterRelation;
 
 	default:
 		ASSERT(false)
@@ -96,10 +103,10 @@ Operator * GetListOperator(byte elementType)
 {
 	switch(elementType) {
 	case AT_ID:
-		return listIDOperator;
+		return listLibrary->listIDOperator;
 
 	case AT_LETTER:
-		return listLetterOperator;
+		return listLibrary->listLetterOperator;
 
 	default:
 		ASSERT(false)
@@ -110,13 +117,13 @@ Operator * GetListOperator(byte elementType)
 
 Relation GetListLengthRelation(void)
 {
-	return listLengthRelation;
+	return listLibrary->listLengthRelation;
 }
 
 
 Operator * GetListLengthOperator(void)
 {
-	return listLengthOperator;
+	return listLibrary->listLengthOperator;
 }
 
 
@@ -133,10 +140,10 @@ Atom CreateListFromArray(Atom const elements[], byte elementType, size8 nElement
  */
 static void assertListLength(IFactDraft * draft, size32 nElements)
 {
-	IFactBeginConjunction(draft, listLengthTupleStore, listLengthRoleIndex[0]);
+	IFactBeginConjunction(draft, listLibrary->listLengthTupleStore, listLibrary->listLengthRoleIndex[0]);
 
 	Atom listLengthTuple[2];
-	listLengthTuple[listLengthRoleIndex[1]] = (Atom) {._int = nElements};
+	listLengthTuple[listLibrary->listLengthRoleIndex[1]] = (Atom) {._int = nElements};
 	IFactAddTuple(draft, listLengthTuple);
 	IFactEndConjunction(draft);	
 }
@@ -150,12 +157,12 @@ void AddListToIFact(IFactDraft * draft, Atom const elements[], byte elementType,
 	if(nElements > 0) {
 		Relation relation = GetListRelation(elementType);
 		// assert (ĺist position elements) facts for each element
-		IFactBeginConjunction(draft, RelationGetTupleStore(relation), listRoleIndex[0]);
+		IFactBeginConjunction(draft, RelationGetTupleStore(relation), listLibrary->listRoleIndex[0]);
 		Atom listElementTuple[3];
 		for(index32 i = 0; i < nElements; i++) {
 			TupleCopyPermuted(
 				(Atom[]) {(Atom) {0}, (Atom) {._int = i + 1}, elements[i]},
-				listElementTuple, listRoleIndex, 3
+				listElementTuple, listLibrary->listRoleIndex, 3
 			);
 			IFactAddTuple(draft, listElementTuple);
 		}
@@ -170,17 +177,17 @@ bool IsList(Atom atom)
 	// We define this from the (list length) relation since
 	// there may be no (list element position) fact if atom is an empty list.
 	Atom arguments[2];
-	arguments[listLengthRoleIndex[0]] = atom;
-	return OperatorCallOnce(listLengthOperator, arguments);
+	arguments[listLibrary->listLengthRoleIndex[0]] = atom;
+	return OperatorCallOnce(listLibrary->listLengthOperator, arguments);
 }
 
 
 size32 ListLength(Atom list)
 {
 	Atom arguments[2];
-	arguments[listLengthRoleIndex[0]] = list;
-	ASSERT(OperatorCallOnce(listLengthOperator, arguments))
-	return (size32) arguments[listLengthRoleIndex[1]]._int;
+	arguments[listLibrary->listLengthRoleIndex[0]] = list;
+	ASSERT(OperatorCallOnce(listLibrary->listLengthOperator, arguments))
+	return (size32) arguments[listLibrary->listLengthRoleIndex[1]]._int;
 }
 
 
@@ -194,13 +201,13 @@ size32 ListLength(Atom list)
 static Relation findListElementRelation(Atom list)
 {
 	Atom arguments[3];
-	arguments[listRoleIndex[0]] = list;
+	arguments[listLibrary->listRoleIndex[0]] = list;
 	
-	if(OperatorCallOnce(listIDOperator, arguments))
-		return listIDRelation;
+	if(OperatorCallOnce(listLibrary->listIDOperator, arguments))
+		return listLibrary->listIDRelation;
 	
-	if(OperatorCallOnce(listLetterOperator, arguments))
-		return listLetterRelation;
+	if(OperatorCallOnce(listLibrary->listLetterOperator, arguments))
+		return listLibrary->listLetterRelation;
 	
 	return (Relation) {0};
 }
@@ -214,15 +221,15 @@ Atom ListGetElement(Atom list, index32 position)
 
 	byte parameterIO[3];
 	CopyBytesPermuted(
-		(byte[]) {PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT}, parameterIO, listRoleIndex, 3);
+		(byte[]) {PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT}, parameterIO, listLibrary->listRoleIndex, 3);
 	Operator const * op = ServiceGetOperator(
 		(Service) {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 3)}
 	);
 	Atom arguments[3];
-	arguments[listRoleIndex[0]] = list;
-	arguments[listRoleIndex[1]] = (Atom) {._int = position};
+	arguments[listLibrary->listRoleIndex[0]] = list;
+	arguments[listLibrary->listRoleIndex[1]] = (Atom) {._int = position};
 	ASSERT(OperatorCallOnce(op, arguments))
-	return arguments[listRoleIndex[2]];
+	return arguments[listLibrary->listRoleIndex[2]];
 }
 
 
@@ -240,16 +247,16 @@ index32 ListGetPosition(Atom list, Atom element)
 
 	byte parameterIO[3];
 	CopyBytesPermuted(
-		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_IN}, parameterIO, listRoleIndex, 3);
+		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_IN}, parameterIO, listLibrary->listRoleIndex, 3);
 	Operator const * op = ServiceGetOperator(
 		(Service) {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 3)}
 	);
 
 	Atom arguments[3];
-	arguments[listRoleIndex[0]] = list;
-	arguments[listRoleIndex[2]] = element;
+	arguments[listLibrary->listRoleIndex[0]] = list;
+	arguments[listLibrary->listRoleIndex[2]] = element;
 	ASSERT(OperatorCallOnce(op, arguments))
-	return arguments[listRoleIndex[1]]._int;
+	return arguments[listLibrary->listRoleIndex[1]]._int;
 }
 
 
@@ -293,7 +300,7 @@ int8 ListLexicalOrdering(Atom list1, Atom list2, int8 (*compare)(Atom, Atom))
 
 void ListIterate(Atom list, ListIterator * iterator)
 {
-	iterator->queryTuple[listRoleIndex[0]] = list;
+	iterator->queryTuple[listLibrary->listRoleIndex[0]] = list;
 
 	if(ListLength(list) > 0) {
 		Relation relation = findListElementRelation(list);
@@ -301,7 +308,7 @@ void ListIterate(Atom list, ListIterator * iterator)
 		
 		byte parameterIO[3];
 		CopyBytesPermuted(
-			(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT}, parameterIO, listRoleIndex, 3);
+			(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT}, parameterIO, listLibrary->listRoleIndex, 3);
 		Operator const * op = ServiceGetOperator(
 			(Service) {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 3)}
 		);
@@ -323,7 +330,7 @@ bool ListIteratorNext(ListIterator * iterator)
 
 Atom ListIteratorGetElement(ListIterator const * iterator)
 {
-	return iterator->queryTuple[listRoleIndex[2]];
+	return iterator->queryTuple[listLibrary->listRoleIndex[2]];
 }
 
 
@@ -340,7 +347,7 @@ void PrintList(Atom list)
 	PrintCString("(");
 	Relation relation = findListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
-	byte elementType = relation.typeSignature.atomTypes[listRoleIndex[2]];
+	byte elementType = relation.typeSignature.atomTypes[listLibrary->listRoleIndex[2]];
 
 	ListIterator iterator;
 	ListIterate(list, &iterator);
@@ -358,87 +365,101 @@ void PrintList(Atom list)
 
 void ListSetup(void)
 {
-	listRoleName = CreateNameFromCString("list");
-	positionRoleName = CreateNameFromCString("position");
-	elementRoleName = CreateNameFromCString("element");
-	lengthRoleName = CreateNameFromCString("length");
+	listLibrary = Allocate(sizeof(ListLibrary));
+	SetPersistentState(STATE_KEY_LIST, listLibrary);
+
+	listLibrary->listRoleName = CreateNameFromCString("list");
+	listLibrary->positionRoleName = CreateNameFromCString("position");
+	listLibrary->elementRoleName = CreateNameFromCString("element");
+	listLibrary->lengthRoleName = CreateNameFromCString("length");
 
 	// Create the (list position element) and (list length) forms
-	listPredicateForm = CreatePredicateForm((
-		Atom[]) {listRoleName, positionRoleName, elementRoleName}, 3);
-	listRoleIndex[LIST_ROLE_LIST] = PredicateRoleIndex(listPredicateForm, listRoleName);
-	listRoleIndex[LIST_ROLE_POSITION] = PredicateRoleIndex(listPredicateForm, positionRoleName);
-	listRoleIndex[LIST_ROLE_ELEMENT] = PredicateRoleIndex(listPredicateForm, elementRoleName);
-	listTermForm = CreateTermForm(listPredicateForm, true);
+	listLibrary->listPredicateForm = CreatePredicateForm((
+		Atom[]) {listLibrary->listRoleName, listLibrary->positionRoleName, listLibrary->elementRoleName}, 3);
+	listLibrary->listRoleIndex[LIST_ROLE_LIST] = PredicateRoleIndex(listLibrary->listPredicateForm, listLibrary->listRoleName);
+	listLibrary->listRoleIndex[LIST_ROLE_POSITION] = PredicateRoleIndex(listLibrary->listPredicateForm, listLibrary->positionRoleName);
+	listLibrary->listRoleIndex[LIST_ROLE_ELEMENT] = PredicateRoleIndex(listLibrary->listPredicateForm, listLibrary->elementRoleName);
+	listLibrary->listTermForm = CreateTermForm(listLibrary->listPredicateForm, true);
 
-	listLengthPredicateForm = CreatePredicateForm((
-		Atom[]) {listRoleName, lengthRoleName}, 2);
-	listLengthRoleIndex[LIST_LENGTH_ROLE_LIST] =
-		PredicateRoleIndex(listLengthPredicateForm, listRoleName);
-	listLengthRoleIndex[LIST_LENGTH_ROLE_LENGTH] =
-		PredicateRoleIndex(listLengthPredicateForm, lengthRoleName);
-	listLengthTermForm = CreateTermForm(listLengthPredicateForm, true);
+	listLibrary->listLengthPredicateForm = CreatePredicateForm((
+		Atom[]) {listLibrary->listRoleName, listLibrary->lengthRoleName}, 2);
+	listLibrary->listLengthRoleIndex[LIST_LENGTH_ROLE_LIST] =
+		PredicateRoleIndex(listLibrary->listLengthPredicateForm, listLibrary->listRoleName);
+	listLibrary->listLengthRoleIndex[LIST_LENGTH_ROLE_LENGTH] =
+		PredicateRoleIndex(listLibrary->listLengthPredicateForm, listLibrary->lengthRoleName);
+	listLibrary->listLengthTermForm = CreateTermForm(listLibrary->listLengthPredicateForm, true);
 
-	NameRelease(lengthRoleName);
-	NameRelease(elementRoleName);
-	NameRelease(positionRoleName);
-	NameRelease(listRoleName);
+	NameRelease(listLibrary->lengthRoleName);
+	NameRelease(listLibrary->elementRoleName);
+	NameRelease(listLibrary->positionRoleName);
+	NameRelease(listLibrary->listRoleName);
 
 	// Create relations
 	TypeSignature typeSignature = {0};
 	// (list:ID position:INT element:ID)
 	CopyBytesPermuted(
-		(byte[]) {AT_ID, AT_INT, AT_ID}, typeSignature.atomTypes, listRoleIndex, 3);
-	listIDRelation = (Relation) {.form = listTermForm, .typeSignature = typeSignature};
-	listIDTupleStore = CreateTupleStore(listIDRelation, &btreeStorageProvider, 3, listRoleIndex);
+		(byte[]) {AT_ID, AT_INT, AT_ID}, typeSignature.atomTypes, listLibrary->listRoleIndex, 3);
+	listLibrary->listIDRelation = (Relation) {.form = listLibrary->listTermForm, .typeSignature = typeSignature};
+	listLibrary->listIDTupleStore = CreateTupleStore(listLibrary->listIDRelation, GetStorageProvider(PROVIDER_BTREE), 3, listLibrary->listRoleIndex);
 	
 	// (list:ID position:INT element:LETTER)
 	CopyBytesPermuted(
-		(byte[]) {AT_ID, AT_INT, AT_LETTER}, typeSignature.atomTypes, listRoleIndex, 3);
-	listLetterRelation = (Relation) {.form = listTermForm, .typeSignature = typeSignature};
-	listLetterTupleStore = CreateTupleStore(listLetterRelation, &btreeStorageProvider, 3, listRoleIndex);
+		(byte[]) {AT_ID, AT_INT, AT_LETTER}, typeSignature.atomTypes, listLibrary->listRoleIndex, 3);
+	listLibrary->listLetterRelation = (Relation) {.form = listLibrary->listTermForm, .typeSignature = typeSignature};
+	listLibrary->listLetterTupleStore = CreateTupleStore(listLibrary->listLetterRelation, GetStorageProvider(PROVIDER_BTREE), 3, listLibrary->listRoleIndex);
 	
 	// (list:ID length:INT)
 	typeSignature = (TypeSignature) {0};
 	CopyBytesPermuted(
-		(byte[]) {AT_ID, AT_INT}, typeSignature.atomTypes, listLengthRoleIndex, 2);
-	listLengthRelation = (Relation) {.form = listLengthTermForm, .typeSignature = typeSignature};
-	listLengthTupleStore = CreateTupleStore(listLengthRelation, &btreeStorageProvider, 2, listLengthRoleIndex);
+		(byte[]) {AT_ID, AT_INT}, typeSignature.atomTypes, listLibrary->listLengthRoleIndex, 2);
+	listLibrary->listLengthRelation = (Relation) {.form = listLibrary->listLengthTermForm, .typeSignature = typeSignature};
+	listLibrary->listLengthTupleStore = CreateTupleStore(listLibrary->listLengthRelation, GetStorageProvider(PROVIDER_BTREE), 2, listLibrary->listLengthRoleIndex);
 	
-	IFactRelease(listLengthTermForm);
-	IFactRelease(listLengthPredicateForm);
-	IFactRelease(listTermForm);
-	IFactRelease(listPredicateForm);
+	IFactRelease(listLibrary->listLengthTermForm);
+	IFactRelease(listLibrary->listLengthPredicateForm);
+	IFactRelease(listLibrary->listTermForm);
+	IFactRelease(listLibrary->listPredicateForm);
 
 	// Get operators
 	// for (list <ID position >INT element >_)
 	IOSignature elementIOSignature = {0};
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
-		elementIOSignature.parameterIO, listRoleIndex, 3);
-	listIDOperator = ServiceGetOperator(
-		(Service) {.relation = listIDRelation, .ioSignature = elementIOSignature}
+		elementIOSignature.parameterIO, listLibrary->listRoleIndex, 3);
+	listLibrary->listIDOperator = ServiceGetOperator(
+		(Service) {.relation = listLibrary->listIDRelation, .ioSignature = elementIOSignature}
 	);
-	ASSERT(listIDOperator)
-	listLetterOperator = ServiceGetOperator(
-		(Service) {.relation = listLetterRelation, .ioSignature = elementIOSignature}
+	ASSERT(listLibrary->listIDOperator)
+	listLibrary->listLetterOperator = ServiceGetOperator(
+		(Service) {.relation = listLibrary->listLetterRelation, .ioSignature = elementIOSignature}
 	);
-	ASSERT(listLetterOperator)
+	ASSERT(listLibrary->listLetterOperator)
 	// for (list <ID length >INT)
 	IOSignature lengthIOSignature = {0};
 	CopyBytesPermuted(
 		(byte[]) {PARAMETER_IN, PARAMETER_OUT},
-		lengthIOSignature.parameterIO, listLengthRoleIndex, 2);
-	listLengthOperator = ServiceGetOperator(
-		(Service) {.relation = listLengthRelation, .ioSignature = lengthIOSignature}
+		lengthIOSignature.parameterIO, listLibrary->listLengthRoleIndex, 2);
+	listLibrary->listLengthOperator = ServiceGetOperator(
+		(Service) {.relation = listLibrary->listLengthRelation, .ioSignature = lengthIOSignature}
 	);
-	ASSERT(listLengthOperator)
+	ASSERT(listLibrary->listLengthOperator)
+}
+
+
+void ListRestore(void)
+{
+	listLibrary = GetPersistentState(STATE_KEY_LIST);
+	ASSERT(listLibrary)
 }
 
 
 void ListShutdown(void)
 {
-	DropRelation(listLengthRelation);
-	DropRelation(listLetterRelation);
-	DropRelation(listIDRelation);
+	DropRelation(listLibrary->listLengthRelation);
+	DropRelation(listLibrary->listLetterRelation);
+	DropRelation(listLibrary->listIDRelation);
+
+	Free(listLibrary);
+	SetPersistentState(STATE_KEY_LIST, 0);
+	listLibrary = 0;
 }

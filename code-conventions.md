@@ -107,6 +107,34 @@ when 0 indicates a null / absent value: this applies if $x$ is a pointer, but al
 0 value indicates absent, such as with a 1-based index where 0 means "no index".
 
 
+## if/then statements
+
+Prefer `if` statements without negation: `if(test) { ...} else { ...}` is better than `if(!test) { ...} else { ...}` which reverses the logic. In the root scope of a function, prefer a full if-else block
+```
+int fn(void)
+{
+	if(test) {
+		// do stuff
+	}
+	else {
+		// do other stuff
+	}
+}
+```
+instead of
+```
+int fn(void)
+{
+	if(test) {
+		// do stuff
+		return;
+	}
+	// do other stuff
+}
+```
+The former is better as it clearly contrasts the two alternative paths.
+
+
 ## Error handling
 
 Functions generally assume that they are provided valid arguments -- that data structures are properly filled in, pointers are not null, array indexes are within range, &c. We use the `ASSERT()` macro to verify such assumptions in debug builds; violation of the condition of an `ASSERT()` is considered programmer error, and should never occur. Functions do not have to test for programmer errors, return error codes, and callers don't have to test for error codes. It is assumed that functions work correctly when given correct arguments, and it is the callers responsibility to provide correct arguments. In release builds, a violated `ASSERT()` will lead to undefined behavior.

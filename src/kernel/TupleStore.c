@@ -2,6 +2,7 @@
 #include "kernel/dictionary.h"
 #include "kernel/operator.h"
 #include "kernel/TupleStore.h"
+#include "memory/paging.h"
 #include "memory/pool.h"
 
 // These are defined in Relation.c
@@ -11,13 +12,37 @@ void RelationDetachTupleStore(Relation relation, TupleStore * store);
 
 /**
  * Pool allocation for structures
+ * Stored in persistent state STATE_KEY_TUPLE_STORES
  */
-void * storePool = 0;
+static void * storePool = 0;
+
+
+void InitializeTupleStores(void)
+{
+	ASSERT(GetPersistentState(STATE_KEY_TUPLE_STORES) == 0)
+	storePool = CreatePool(sizeof(TupleStore));
+	SetPersistentState(STATE_KEY_TUPLE_STORES, storePool);
+}
+
+
+void RestoreTupleStores(void)
+{
+	storePool = GetPersistentState(STATE_KEY_TUPLE_STORES);
+	ASSERT(storePool)
+}
+
+
+void FreeTupleStores(void)
+{
+	ASSERT(PoolNItems(storePool) == 0)
+	FreePool(storePool);
+	SetPersistentState(STATE_KEY_TUPLE_STORES, 0);
+	storePool = 0;
+}
+
 
 static TupleStore * allocateTupleStore(void)
 {
-	if(!storePool)
-		storePool = CreatePool(sizeof(TupleStore));
 	return PoolAllocate(storePool);
 }
 

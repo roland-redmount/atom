@@ -80,7 +80,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 		// that already exists for the relation? Should we then construct a UNION service?
 		store = CreateTupleStore(
 			relation,
-			provider ? provider : &btreeStorageProvider,
+			provider ? provider : GetStorageProvider(PROVIDER_BTREE),
 			fact.actors->nAtoms, 0);
 	}
 
@@ -338,7 +338,7 @@ Atom CreateIFact(FormulaView formula)
 				store = RelationGetTupleStore(ifactTuples[i].relation);
 			if(!store) {
 				store = CreateTupleStore(
-					ifactTuples[i].relation, &btreeStorageProvider, ifactTuples[i].nColumns, 0);
+					ifactTuples[i].relation, GetStorageProvider(PROVIDER_BTREE), ifactTuples[i].nColumns, 0);
 			}
 			IFactBeginConjunction(&draft, store, ifactTuples[i].idColumn);
 		}

@@ -73,8 +73,6 @@ struct s_RelationImpl;
  * The storage for each relation is described by a RelationImpl struct.
  *
  * For relations that do not require storage, the default storage provider can be used.
- * 
- * TODO: we should probably have a registry of storage providers, keyed by ID
  */
 typedef struct s_StorageProvider {
 	/**
@@ -136,9 +134,26 @@ typedef struct s_StorageProvider {
 #define TUPLE_PROTECTED		3
 
 /**
- * The default provider. This can only be used for read-only (non-mutable) relations.
+ * Each storage provider has a StorageProviderId. Each has a StorageProvider
+ * struct kept in persistent memory at STATE_KEY_STORAGE_PROVIDERS,
+ * so that a TupleStore can point to its provider. 
+ * 
+ * NOTE: This list is a part of the paging file format.
  */
-extern StorageProvider defaultProvider;
+typedef enum e_StorageProviderId {
+	// No storage, for use by read-only (non-mutable) relations. 
+	PROVIDER_DEFAULT = 0,
+
+	// B-tree storage provider
+	PROVIDER_BTREE,
+
+	N_STORAGE_PROVIDERS
+} StorageProviderId;
+
+void SetupStorageProviders(void);
+void FreeStorageProviders(void);
+
+StorageProvider const * GetStorageProvider(StorageProviderId providerId);
 
 
 

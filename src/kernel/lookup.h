@@ -30,12 +30,20 @@
  * of associations to the role.
  */
 
+#ifndef LOOKUP_H
+#define LOOKUP_H
+
 #include "btree/btree.h"
 #include "kernel/Relation.h"
 #include "kernel/typedtuple.h"
 
 
 void InitializeLookup(void);
+
+/**
+ * Restore lookup storage from the paging area upon restart.
+ */
+void RestoreLookup(void);
 void FreeLookup(void);
 
 size32 LookupTotalCount(void);
@@ -137,7 +145,14 @@ Atom LookupIteratorGetRole(LookupIterator const * iterator);
 void LookupIteratorEnd(LookupIterator * iterator);
 
 /**
- * For debugging
- */
-
+ * Dump all lookup entries, for debugging.*/
 void LookupDump(void);
+
+/**
+ * Register functions referred to from persistent memory.
+ */
+void RegisterLookupFunctions(void);
+
+
+#endif	// LOOKUP_H
+	
