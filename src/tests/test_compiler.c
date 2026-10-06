@@ -2294,5 +2294,5 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileQueryWithUselessRule);
 
 	UnloadLibraries();
-	TestSummary();
+	return TestSummary();
 }

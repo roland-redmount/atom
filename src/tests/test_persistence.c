@@ -209,7 +209,7 @@ int main(int argc, char * argv[])
 
 	if((argc > 1) && (CStringCompare(argv[1], "--write-session") == 0)) {
 		writeSessionToPageFile();
-		return 0;
+		return TestSummary();
 	}
 
 	testRestoreMapping();
@@ -218,7 +218,7 @@ int main(int argc, char * argv[])
 	testRestartRefused();
 	testRestartKernel();
 
-	TestSummary();
+	return TestSummary();
 }
 
 

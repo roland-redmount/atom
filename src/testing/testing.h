@@ -78,8 +78,9 @@ void TestMemoryEqual(
 
 /**
  * Print a test result summary.
+ * Returns the exit status for main(): 0 if every test passed, else 1
  */
-void TestSummary(void);
+int TestSummary(void);
 
 
 /**

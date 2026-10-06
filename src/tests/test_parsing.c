@@ -1254,5 +1254,5 @@ int main(int argc, char * argv[])
 	UnloadLibraries();
 	KernelShutdown();
 
-	TestSummary();
+	return TestSummary();
 }

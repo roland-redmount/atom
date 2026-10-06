@@ -271,13 +271,10 @@ foreach(T ${ATOM_TESTS})
     set(SCRATCH ${ATOM_TEST_SCRATCH_ROOT}/${T})
     file(MAKE_DIRECTORY ${SCRATCH})
     add_test(NAME ${T} COMMAND ${T})
-    # A test only passes by exiting normally, so a reported failure has to be
-    # caught by matching the output until TestSummary() sets an exit code.
     # WORKING_DIRECTORY keeps any stray relative path inside the scratch dir.
     set_tests_properties(${T} PROPERTIES
         ENVIRONMENT "ATOM_DATA_DIR=${SCRATCH}"
-        WORKING_DIRECTORY ${SCRATCH}
-        FAIL_REGULAR_EXPRESSION "FAIL")
+        WORKING_DIRECTORY ${SCRATCH})
 endforeach()
 
 # Wire up the fixture gating: each tier sets up a fixture that the next

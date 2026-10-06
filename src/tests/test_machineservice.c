@@ -310,5 +310,5 @@ int main(int argc, char * argv[])
 	FreeMachineServices();
 	KernelShutdown();
 
-	TestSummary();
+	return TestSummary();
 }

@@ -252,12 +252,16 @@ void TestMemoryEqual(
 }
 
 
-void TestSummary(void)
+int TestSummary(void)
 {
-	if(testingFailCount == 0)
+	if(testingFailCount == 0) {
 		PrintCString("OK\n");
-	else
-		PrintCString("FAIL\n");;
+		return 0;
+	}
+	else {
+		PrintCString("FAIL\n");
+		return 1;
+	}
 }
 
 
@@ -274,6 +278,16 @@ void ExecuteTest(void (*test)(void))
 
 typedef enum {CHECK_SETUP = 0, CHECK_TEST = 1, CHECK_TEARDOWN = 2} CheckType;
 const char * checkTypeNames[3] = {"Setup", "Test", "Teardown"};
+
+
+/**
+ * Report a failed reference check, such as "Lost 2 IFacts", as a failed test.
+ */
+static void failCheck(CheckType checkType, char const * verb, int32 difference, char const * noun)
+{
+	PrintF("FAIL %s: %s %d %s.\n", checkTypeNames[checkType], verb, difference, noun);
+	logTest(false);
+}
 
 
 static void executeCheckReferences(void (*function)(void), CheckType checkType)
@@ -311,15 +325,15 @@ static void executeCheckReferences(void (*function)(void), CheckType checkType)
 	if(ifactsInitialized) {
 		int32 refCountDiff = IFactTotalReferenceCount() - initialRefCount;
 		if(checkType != CHECK_TEARDOWN && refCountDiff < 0)
-			PrintF("%s: Lost %d IFact references.\n", checkTypeNames[checkType], refCountDiff);
+			failCheck(checkType, "Lost", refCountDiff, "IFact references");
 		if(checkType != CHECK_SETUP && refCountDiff > 0)
-			PrintF("%s: Failed to release %d IFact references.\n", checkTypeNames[checkType], refCountDiff);
+			failCheck(checkType, "Failed to release", refCountDiff, "IFact references");
 
 		int32 ifactDiff = IFactTotalCount() - initialIFactCount;
 		if(checkType != CHECK_TEARDOWN && ifactDiff < 0)
-			PrintF("%s: Lost %d IFacts.\n", checkTypeNames[checkType], ifactDiff);
+			failCheck(checkType, "Lost", ifactDiff, "IFacts");
 		if(checkType != CHECK_SETUP && ifactDiff > 0) {
-			PrintF("%s: Failed to release %d IFacts.\n", checkTypeNames[checkType], ifactDiff);
+			failCheck(checkType, "Failed to release", ifactDiff, "IFacts");
 			PrintCString("Flagged IFacts:\n");
 			IFactDumpFlagged();
 		}
@@ -327,25 +341,24 @@ static void executeCheckReferences(void (*function)(void), CheckType checkType)
 
 		int32 formulaRefCountDiff = FormulaTotalReferenceCount() - initialFormulaRefCount;
 		if(checkType != CHECK_TEARDOWN && formulaRefCountDiff < 0)
-			PrintF("%s: Lost %d formula references.\n", checkTypeNames[checkType], formulaRefCountDiff);
+			failCheck(checkType, "Lost", formulaRefCountDiff, "formula references");
 		if(checkType != CHECK_SETUP && formulaRefCountDiff > 0)
-			PrintF("%s: Failed to release %d formula references.\n",
-				checkTypeNames[checkType], formulaRefCountDiff);
+			failCheck(checkType, "Failed to release", formulaRefCountDiff, "formula references");
 
 		int32 formulaDiff = NumberOfFormulas() - initialFormulaCount;
 		if(checkType != CHECK_TEARDOWN && formulaDiff < 0)
-			PrintF("%s: Lost %d formulas.\n", checkTypeNames[checkType], formulaDiff);
+			failCheck(checkType, "Lost", formulaDiff, "formulas");
 		if(checkType != CHECK_SETUP && formulaDiff > 0) {
-			PrintF("%s: Failed to release %d formulas.\n", checkTypeNames[checkType], formulaDiff);
+			failCheck(checkType, "Failed to release", formulaDiff, "formulas");
 			FormulaDump();
 		}
 	}
 
 	int32 allocateDiff = AllocatorNBytesAllocated() - initialBytesAllocated;
 	if(checkType != CHECK_TEARDOWN && allocateDiff < 0)
-		PrintF("%s: Lost %d allocated bytes.\n", checkTypeNames[checkType], allocateDiff);
+		failCheck(checkType, "Lost", allocateDiff, "allocated bytes");
 	if(checkType != CHECK_SETUP && allocateDiff > 0) {
-		PrintF("%s: Failed to free %d allocated bytes.\n", checkTypeNames[checkType], allocateDiff);
+		failCheck(checkType, "Failed to free", allocateDiff, "allocated bytes");
 #ifdef DEBUG_ALLOCATE
 		DumpAllocateLog();
 #endif
