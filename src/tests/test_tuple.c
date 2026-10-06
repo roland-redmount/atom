@@ -38,5 +38,5 @@ int main(int argc, char * argv[])
 	ExecuteTest(testTupleSize);
 
 	CleanupMemory();
-	TestSummary();
+	return TestSummary();
 }

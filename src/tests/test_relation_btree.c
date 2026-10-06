@@ -316,7 +316,7 @@ int main(void)
 	// ExecuteTest(testRemoveTuples);
 	// ExecuteTest(testRemoveAllTuples);
 	
-	TestSummary();
-
 	CleanupMemory();
+
+	return TestSummary();
 }

@@ -121,5 +121,5 @@ int main(void)
 	UnloadLibraries();
 	KernelShutdown();
 
-	TestSummary();
+	return TestSummary();
 }
