@@ -87,13 +87,19 @@ size32 BTreeNItems(BTree const * btree);
 
 
 /**
- * Return a pointer to an item stored in the B-tree, matching
- * the given key. The pointer is only valid as long as the B-tree
+ * Return a pointer to the first an item in the B-tree that matches
+ * the given key, or 0 if nt matching item exists.
+ * The pointer is only valid as long as the B-tree
  * is not modified. The caller must not modify the item in a way
  * that alters its ordering vs. other items in the tree.
- * If the item is not found, returns 0.
  */
 void * BTreePeekItem(BTree * btree, void const * key);
+
+/**
+ * Return a pointer to the first item that compares >= key, or 0 if every item
+ * compares < key. The pointer is valid as for BTreePeekItem().
+ */
+void * BTreePeekLowerBound(BTree * btree, void const * key);
 
 /**
  * Similar to BTreePeekItem(), but copies the stored item to *item if found.

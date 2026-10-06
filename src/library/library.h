@@ -7,6 +7,10 @@
 #ifndef LIBRARY_H
 #define LIBRARY_H
 
+/* CLAUDE: Register the functions the libraries store in persistent memory;
+   see memory/references.h. LoadLibraries() calls RegisterLibraryFunctions(). */
+void RegisterLibraryFunctions(void);
+
 void LoadLibraries(void);
 
 void UnloadLibraries(void);

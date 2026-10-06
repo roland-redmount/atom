@@ -9,6 +9,7 @@
 #include "storage/StorageProvider.h"
 #include "storage/RelationBTree.h"
 #include "memory/allocator.h"
+#include "memory/references.h"
 
 
 /**
@@ -309,11 +310,32 @@ static void relationBTreeFree(void * storage)
 }
 
 
-StorageProvider btreeStorageProvider = {
-	.setupStorage = relationBTreeSetupStorage,
-	.setupReader = relationBTreeSetupReader,
-	.addTuple = relationBTreeAddTuple,
-	.removeTuple = relationBTreeRemoveTuple,
-	.numberOfTuples = relationBTreeNTuples,
-	.free = relationBTreeFree,
+void RelationBTreeSetupProvider(StorageProvider * provider)
+{
+	SetReference(&(provider->setupStorage), (AnyFunction) relationBTreeSetupStorage);
+	SetReference(&(provider->setupReader), (AnyFunction) relationBTreeSetupReader);
+	SetReference(&(provider->addTuple), (AnyFunction) relationBTreeAddTuple);
+	SetReference(&(provider->removeTuple), (AnyFunction) relationBTreeRemoveTuple);
+	SetReference(&(provider->numberOfTuples), (AnyFunction) relationBTreeNTuples);
+	SetReference(&(provider->free), (AnyFunction) relationBTreeFree);
+}
+
+
+static NamedFunction const relationBTreeFunctions[] = {
+	{"relationBTree.btreeCompareItems", (AnyFunction) btreeCompareItems},
+	{"relationBTree.btreeSetupState", (AnyFunction) btreeSetupState},
+	{"relationBTree.btreeCall", (AnyFunction) btreeCall},
+	{"relationBTree.btreeFinalizeState", (AnyFunction) btreeFinalizeState},
+	{"relationBTree.relationBTreeSetupStorage", (AnyFunction) relationBTreeSetupStorage},
+	{"relationBTree.relationBTreeSetupReader", (AnyFunction) relationBTreeSetupReader},
+	{"relationBTree.relationBTreeAddTuple", (AnyFunction) relationBTreeAddTuple},
+	{"relationBTree.relationBTreeRemoveTuple", (AnyFunction) relationBTreeRemoveTuple},
+	{"relationBTree.relationBTreeNTuples", (AnyFunction) relationBTreeNTuples},
+	{"relationBTree.relationBTreeFree", (AnyFunction) relationBTreeFree},
 };
+
+
+void RegisterRelationBTreeFunctions(void)
+{
+	RegisterFunctions(relationBTreeFunctions, sizeof(relationBTreeFunctions) / sizeof(NamedFunction));
+}

@@ -123,4 +123,9 @@ void DictionaryIteratorEnd(DictionaryIterator * iterator);
 
 
 
+/* CLAUDE: Register the functions this module stores in persistent memory;
+   see memory/references.h */
+void RegisterDictionaryFunctions(void);
+
+
 #endif	// DICTIONARY_H

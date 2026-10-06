@@ -48,7 +48,7 @@ static Relation createStoredRelation(Atom fact)
 	FormulaView view = FormulaGetView(fact);
 	size8 arity = view.actors->nAtoms;
 	Relation relation = RelationFromFact(view);
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, arity, 0);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), arity, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(view.actors), 0);
 	return relation;
 }
@@ -596,7 +596,7 @@ static void setupRowRelations(RowRelations * rows)
 	rows->facts[1] = CStringToTerm("row 2 amount \"x\"");
 	for(index8 i = 0; i < 2; i++) {
 		rows->relations[i] = RelationFromFact(FormulaGetView(rows->facts[i]));
-		TupleStore * store = CreateTupleStore(rows->relations[i], &btreeStorageProvider, 2, 0);
+		TupleStore * store = CreateTupleStore(rows->relations[i], GetStorageProvider(PROVIDER_BTREE), 2, 0);
 		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(rows->facts[i])), 0);
 	}
 	ASSERT_FALSE(SameRelations(rows->relations[0], rows->relations[1]))
@@ -1038,7 +1038,7 @@ void testCompileRepeatedQueryParameterRecursive(void)
 	char const * storedFacts[3] = {"sym \"a\" with \"a\"", "sym \"a\" with \"b\"", "sym \"c\" with \"c\""};
 	Atom firstFact = CStringToTerm(storedFacts[0]);
 	Relation relation = RelationFromFact(FormulaGetView(firstFact));
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	for(index8 i = 0; i < 3; i++) {
 		Atom fact = CStringToTerm(storedFacts[i]);
 		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
@@ -1192,7 +1192,7 @@ void testCompileSeedPermutation(void)
 {
 	Atom storedFact = CStringToTerm("plus 7 and 3 is 5");
 	Relation relation = RelationFromFact(FormulaGetView(storedFact));
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 3, 0);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 3, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 	FormulaView clause = DictionaryAddClauseFromCString("+ x + y = z | ! plus x and y is z");
 
@@ -1252,7 +1252,7 @@ void testCompileRecursiveJoin2(void)
 	// Create terminating fact
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
 	Relation relation = RelationFromFact(FormulaGetView(terminatingFact));
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 
 	Atom queryTerm = CStringToTerm("number 4 faculty f");
@@ -1318,7 +1318,7 @@ void testCompileRecursiveQueryAllOutput(void)
 		"number n faculty f | ! < n > 0 | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");
 	Relation relation = RelationFromFact(FormulaGetView(terminatingFact));
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	size32 nServicesBefore = NumberOfServices();
 
@@ -1353,7 +1353,7 @@ void testCompileStoredFactsAndRule(void)
 	index8 indexColumns[2];
 	setupBinaryRelationIndexColumns(FormulaGetForm(storedFact), "root", indexColumns);
 	Relation relation = RelationFromFact(FormulaGetView(storedFact));
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2,  indexColumns);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2,  indexColumns);
 	// Store a fact not entailed by the rule
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 	size32 nServicesBefore = NumberOfServices();
@@ -1422,7 +1422,7 @@ void testCompileQueryNoMatchingRules(void)
 		.form = FormulaGetForm(storedFact),
 		.typeSignature = CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
 	};
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, indexColumns);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, indexColumns);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 
 	Atom queryTerm = CStringToTerm("shade 3 value v");
@@ -1461,7 +1461,7 @@ void testCompileQueryWithUselessRule(void)
 		.form = FormulaGetForm(storedFact),
 		.typeSignature = CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
 	};
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, indexColumns);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, indexColumns);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 
 	// Ensure we can find the primitive service
@@ -1730,7 +1730,7 @@ void testCompileRecursiveVariants(void)
 		.form =	precSuccFixture.termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_INT, AT_INT}, 2)
 	};
-	TupleStore * store = CreateTupleStore(precSuccIntRelation, &btreeStorageProvider, 2, 0);
+	TupleStore * store = CreateTupleStore(precSuccIntRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	// Add the facts (prec 1 succ 2), (prec 2 succ 3)
 	index8 precRoleIndex = RelationFixtureRoleIndex(&precSuccFixture, "prec");
 	index8 succRoleIndex = RelationFixtureRoleIndex(&precSuccFixture, "succ");
@@ -1812,7 +1812,7 @@ void testCompileNegatedTerm(void)
 		.form = FormulaGetForm(odd3term),
 		.typeSignature = CreateTypeSignature((byte[]) {AT_INT}, 1)
 	};
-	TupleStore * oddStore = CreateTupleStore(oddRelation, &btreeStorageProvider, 1, 0);
+	TupleStore * oddStore = CreateTupleStore(oddRelation, GetStorageProvider(PROVIDER_BTREE), 1, 0);
 	TupleStoreAddTuple(oddStore, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	// setup the rule
 	FormulaView clause = DictionaryAddClauseFromCString("! even x | ! odd x");
@@ -1864,7 +1864,7 @@ void testCompiledServiceReadsFactsLive(void)
 		.form = FormulaGetForm(odd3term),
 		.typeSignature = CreateTypeSignature((byte[]) {AT_INT}, 1)
 	};
-	TupleStore * store = CreateTupleStore(oddRelation, &btreeStorageProvider, 1, 0);
+	TupleStore * store = CreateTupleStore(oddRelation, GetStorageProvider(PROVIDER_BTREE), 1, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(odd3term)), 0);
 	// Add the rule (odd x -> ! even x)
 	FormulaView clause = DictionaryAddClauseFromCString("! even x | ! odd x");

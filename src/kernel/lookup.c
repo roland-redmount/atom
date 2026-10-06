@@ -10,6 +10,7 @@
 #include "lang/TermForm.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
+#include "memory/references.h"
 #include "util/ResizingArray.h"
 
 
@@ -61,6 +62,17 @@ static int8 compareRecords(LookupRecord const * record, LookupRecord const * rec
 static int8 btreeCompareRecords(void const * item, void const * itemOrKey, size32 itemSize)
 {
 	return compareRecords(item, itemOrKey);
+}
+
+
+static NamedFunction const lookupFunctions[] = {
+	{"lookup.btreeCompareRecords", (AnyFunction) btreeCompareRecords},
+};
+
+
+void RegisterLookupFunctions(void)
+{
+	RegisterFunctions(lookupFunctions, sizeof(lookupFunctions) / sizeof(NamedFunction));
 }
 
 

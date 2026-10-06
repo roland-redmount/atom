@@ -14,6 +14,7 @@
 #include "lang/TypedAtom.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
+#include "memory/references.h"
 #include "parser/ClauseBuilder.h"
 #include "util/ResizingArray.h"
 
@@ -98,6 +99,19 @@ static void btreeFreeItem(void const * item, size32 itemSize)
 	FormulaView const * entry = item;
 	IFactRelease(entry->form);
 	FreeTypedTuple(entry->actors);
+}
+
+
+static NamedFunction const dictionaryFunctions[] = {
+	{"dictionary.btreeCompareItems", (AnyFunction) btreeCompareItems},
+	{"dictionary.btreeCompareIFactRules", (AnyFunction) btreeCompareIFactRules},
+	{"dictionary.btreeFreeItem", (AnyFunction) btreeFreeItem},
+};
+
+
+void RegisterDictionaryFunctions(void)
+{
+	RegisterFunctions(dictionaryFunctions, sizeof(dictionaryFunctions) / sizeof(NamedFunction));
 }
 
 

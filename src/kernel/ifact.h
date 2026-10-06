@@ -229,4 +229,9 @@ void IFactDisableFlagging(void);
 
 
 
+/* CLAUDE: Register the functions this module stores in persistent memory;
+   see memory/references.h */
+void RegisterIFactFunctions(void);
+
+
 #endif  // IFACT_H

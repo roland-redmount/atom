@@ -212,6 +212,14 @@ static index32 pageAlignedPointerToPage(void const * ptr)
 	return pointerToPage(ptr);
 }
 
+bool IsPagedMemoryAddress(void const * address)
+{
+	addr64 baseAddress = (addr64) pageTable;
+	return (pageTable != 0) &&
+		((addr64) address >= baseAddress) && ((addr64) address < baseAddress + MEMORY_SIZE);
+}
+
+
 void * GetPageOfAddress(void const * address)
 {
 	return pageToAddress(pointerToPage(address));

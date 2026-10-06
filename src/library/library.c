@@ -7,8 +7,18 @@
 #include "library/string.h"
 
 
+void RegisterLibraryFunctions(void)
+{
+	RegisterMachineServiceFunctions();
+	RegisterMathFunctions();
+	RegisterReflectFunctions();
+}
+
+
 void LoadLibraries(void)
 {
+	RegisterLibraryFunctions();
+	SetupMachineServices();
 	ListSetup();
 	MathSetup();
 	StringSetup();
@@ -22,4 +32,5 @@ void UnloadLibraries(void)
 	StringShutdown();
 	MathShutdown();
 	ListShutdown();
+	FreeMachineServices();
 }

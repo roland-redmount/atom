@@ -4,6 +4,7 @@
 #include "kernel/kernel.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
+#include "memory/references.h"
 #include "util/hashing.h"
 
 
@@ -48,6 +49,18 @@ static void btreeFreeNameRecord(void const * item, size32 itemSize)
 {
 	NameRecord const * record = item;
 	Free(record->string);
+}
+
+
+static NamedFunction const nameFunctions[] = {
+	{"name.btreeCompareNameRecords", (AnyFunction) btreeCompareNameRecords},
+	{"name.btreeFreeNameRecord", (AnyFunction) btreeFreeNameRecord},
+};
+
+
+void RegisterNameFunctions(void)
+{
+	RegisterFunctions(nameFunctions, sizeof(nameFunctions) / sizeof(NamedFunction));
 }
 
 

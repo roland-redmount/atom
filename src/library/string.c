@@ -131,7 +131,7 @@ void StringSetup(void)
 		.atomTypes = {AT_ID}
 	};
 	stringLibrary->stringRelation = (Relation) {.form = stringLibrary->stringTermForm, .typeSignature = typeSignature};
-	stringLibrary->stringTupleStore = CreateTupleStore(stringLibrary->stringRelation, &btreeStorageProvider, 1, 0);
+	stringLibrary->stringTupleStore = CreateTupleStore(stringLibrary->stringRelation, GetStorageProvider(PROVIDER_BTREE), 1, 0);
 	IFactRelease(stringLibrary->stringTermForm);
 
 	// Store a pointer to the (string<ID) service, created by the B-tree provider.

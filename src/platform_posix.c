@@ -62,7 +62,6 @@ void CopyMemory(void const * source, void * destination, size32 size)
 }
 
 
-// similar to CopyMemory, but allows source and destination blocks to overlap
 void MoveMemory(void const * source, void * destination, size32 size)
 {
 	memmove(destination, source, size);

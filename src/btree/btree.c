@@ -1,6 +1,7 @@
 
 #include "btree/btree.h"
 #include "memory/paging.h"
+#include "memory/references.h"
 
 #define BTREE_NODE_SIZE		MEMORY_PAGE_SIZE
 
@@ -37,8 +38,8 @@ BTree * BTreeCreate(
 
 	btree->itemSize = itemSize;
 	btree->spareItem = btreeAllocate(itemSize);
-	btree->compareItems = compareItems;
-	btree->freeItem = freeItem;
+	SetReference(&(btree->compareItems), (AnyFunction) compareItems);
+	SetReference(&(btree->freeItem), (AnyFunction) freeItem);
 
 	/**
 	 * BTREE_NODE_SIZE = sizeof(BTreeNode) + maxItems * itemSize + (maxItems+1) * sizeof(BTreeNode *)
@@ -110,6 +111,7 @@ void BTreeFree(BTree * btree)
 	ASSERT(!BTreeIsWriteLocked(btree))
 	freeNodeRecursive(btree, btree->root);
 	btreeFree(btree->spareItem);
+	ClearReferences(btree, sizeof(BTree));
 	btreeFree(btree);
 }
 
@@ -218,7 +220,7 @@ static bool descendToLowerBound(
 }
 
 
-void * BTreePeekItem(BTree * btree, void const * keyItem)
+void * BTreePeekLowerBound(BTree * btree, void const * keyItem)
 {
 	if(btree->nItemsTotal == 0)
 		return 0;
@@ -226,8 +228,16 @@ void * BTreePeekItem(BTree * btree, void const * keyItem)
 	size32 foundDepth;
 	if(!descendToLowerBound(btree, keyItem, stack, &foundDepth))
 		return 0;
+	return nodeGetItem(btree, stack[foundDepth].node, stack[foundDepth].index);
+}
+
+
+void * BTreePeekItem(BTree * btree, void const * keyItem)
+{
 	// the lower bound is only the first item not less than the key
-	void * item = nodeGetItem(btree, stack[foundDepth].node, stack[foundDepth].index);
+	void * item = BTreePeekLowerBound(btree, keyItem);
+	if(!item)
+		return 0;
 	return btree->compareItems(item, keyItem, btree->itemSize) ? 0 : item;
 }
 

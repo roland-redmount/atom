@@ -243,4 +243,9 @@ Relation RelationIteratorGet(RelationIterator const * iterator);
 void RelationIteratorEnd(RelationIterator * iterator);
 
 
+/* CLAUDE: Register the functions this module stores in persistent memory;
+   see memory/references.h */
+void RegisterRelationFunctions(void);
+
+
 #endif	// RELATION_H

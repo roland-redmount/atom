@@ -400,20 +400,20 @@ void ListSetup(void)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_ID}, typeSignature.atomTypes, listLibrary->listRoleIndex, 3);
 	listLibrary->listIDRelation = (Relation) {.form = listLibrary->listTermForm, .typeSignature = typeSignature};
-	listLibrary->listIDTupleStore = CreateTupleStore(listLibrary->listIDRelation, &btreeStorageProvider, 3, listLibrary->listRoleIndex);
+	listLibrary->listIDTupleStore = CreateTupleStore(listLibrary->listIDRelation, GetStorageProvider(PROVIDER_BTREE), 3, listLibrary->listRoleIndex);
 	
 	// (list:ID position:INT element:LETTER)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_LETTER}, typeSignature.atomTypes, listLibrary->listRoleIndex, 3);
 	listLibrary->listLetterRelation = (Relation) {.form = listLibrary->listTermForm, .typeSignature = typeSignature};
-	listLibrary->listLetterTupleStore = CreateTupleStore(listLibrary->listLetterRelation, &btreeStorageProvider, 3, listLibrary->listRoleIndex);
+	listLibrary->listLetterTupleStore = CreateTupleStore(listLibrary->listLetterRelation, GetStorageProvider(PROVIDER_BTREE), 3, listLibrary->listRoleIndex);
 	
 	// (list:ID length:INT)
 	typeSignature = (TypeSignature) {0};
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT}, typeSignature.atomTypes, listLibrary->listLengthRoleIndex, 2);
 	listLibrary->listLengthRelation = (Relation) {.form = listLibrary->listLengthTermForm, .typeSignature = typeSignature};
-	listLibrary->listLengthTupleStore = CreateTupleStore(listLibrary->listLengthRelation, &btreeStorageProvider, 2, listLibrary->listLengthRoleIndex);
+	listLibrary->listLengthTupleStore = CreateTupleStore(listLibrary->listLengthRelation, GetStorageProvider(PROVIDER_BTREE), 2, listLibrary->listLengthRoleIndex);
 	
 	IFactRelease(listLibrary->listLengthTermForm);
 	IFactRelease(listLibrary->listLengthPredicateForm);

@@ -72,7 +72,7 @@ static void setupCircleFixture(CircleFixture * fixture)
 	};
 	// The ID column comes first in the index order, as CreateIFactOperator() requires
 	index8 indexColumns[2] = {fixture->circleIndex, fixture->radiusIndex};
-	fixture->store = CreateTupleStore(fixture->relation, &btreeStorageProvider, 2, indexColumns);
+	fixture->store = CreateTupleStore(fixture->relation, GetStorageProvider(PROVIDER_BTREE), 2, indexColumns);
 
 	fixture->ifactService = createCircleService(fixture, PARAMETER_OUT, PARAMETER_IN);
 	fixture->byIdService = createCircleService(fixture, PARAMETER_IN, PARAMETER_OUT);
@@ -283,7 +283,7 @@ void testIFactRuleInvalidation(void)
 		.typeSignature = fixture.relation.typeSignature
 	};
 	intRelation.typeSignature.atomTypes[fixture.radiusIndex] = AT_INT;
-	TupleStore * intStore = CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
+	TupleStore * intStore = CreateTupleStore(intRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	byte parameterIO[2] = {PARAMETER_OUT, PARAMETER_OUT};
 	Service intService = {.relation = intRelation, .ioSignature = CreateIOSignature(parameterIO, 2)};
 	ASSERT_TRUE(ServiceIsStale(intService))
@@ -490,7 +490,7 @@ void testCompileIFactRuleWithSeed(void)
 	CircleRule circleRule;
 	setupCircleRule(&circleRule);
 	index8 indexColumns[2] = {circleRule.radiusIndex, circleRule.circleIndex};
-	TupleStore * store = CreateTupleStore(circleRule.relation, &btreeStorageProvider, 2, indexColumns);
+	TupleStore * store = CreateTupleStore(circleRule.relation, GetStorageProvider(PROVIDER_BTREE), 2, indexColumns);
 	Atom circle = CreateStringFromCString("c");
 	Atom tuple[2];
 	tuple[circleRule.circleIndex] = circle;
@@ -515,7 +515,7 @@ void testCompileIFactRuleWithSeed(void)
 	// restoring the primitive service, marked stale; see ReplaceService()
 	Relation intRelation = circleRule.relation;
 	intRelation.typeSignature.atomTypes[circleRule.radiusIndex] = AT_INT;
-	CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
+	CreateTupleStore(intRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	ASSERT_UINT32_EQUAL(ServiceGetOperator(ifactService)->type, OPERATOR_MACHINE)
 	ASSERT_TRUE(ServiceIsStale(ifactService))
 

@@ -50,7 +50,7 @@ void SetupRelationFixture(
 		.typeSignature = CreateTypeSignature(atomTypes, nColumns)
 	};
 	fixture->store = CreateTupleStore(
-		fixture->relation, &btreeStorageProvider, nColumns, fixture->roleIndex);
+		fixture->relation, GetStorageProvider(PROVIDER_BTREE), nColumns, fixture->roleIndex);
 }
 
 

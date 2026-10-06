@@ -1,6 +1,7 @@
 #include "btree/btree.h"
 #include "kernel/kernel.h"
 #include "memory/allocator.h"
+#include "memory/references.h"
 #include "testing/testing.h"
 #include "util/sort.h"
 
@@ -402,8 +403,47 @@ void testBTreeSeekPrefixKey(void)
 }
 
 
+/* CLAUDE: BTreePeekLowerBound() returns the first item not less than the key. Keys are
+   10, 20, ... so that a key between two items finds the next item. Enough items are
+   inserted for the B-tree to have more than one level. */
+void testBTreePeekLowerBound(void)
+{
+	size32 nTestItems = 1000;
+	BTree * btree = BTreeCreate(sizeof(TestItem), compareTestItems, 0);
+	ASSERT_PTR_EQUAL(BTreePeekLowerBound(btree, &((TestItem) {.key = 0})), 0)
+
+	for(index32 i = 1; i <= nTestItems; i++) {
+		TestItem item;
+		initTestItem(&item, 10 * i);
+		BTreeInsert(btree, &item);
+	}
+	ASSERT_TRUE(BTreeHeight(btree) > 1)
+
+	for(int32 key = 0; key <= 10 * nTestItems; key++) {
+		TestItem const * item = BTreePeekLowerBound(btree, &((TestItem) {.key = key}));
+		int32 expectedKey = (key <= 10) ? 10 : 10 * ((key + 9) / 10);
+		ASSERT_PTR_NOT_EQUAL(item, 0)
+		if(item)
+			ASSERT_INT32_EQUAL(item->key, expectedKey)
+	}
+	// every item is less than a key past the last item
+	TestItem const * item = BTreePeekLowerBound(btree, &((TestItem) {.key = 10 * nTestItems + 1}));
+	ASSERT_PTR_EQUAL(item, 0)
+
+	BTreeFree(btree);
+}
+
+
+// CLAUDE: functions stored in B-trees must be registered; see memory/references.h
+static NamedFunction const testFunctions[] = {
+	{"test_btree.compareTestItems", (AnyFunction) compareTestItems},
+	{"test_btree.compareTestItemPrefix", (AnyFunction) compareTestItemPrefix},
+};
+
+
 int main(int argc, char **argv)
 {
+	RegisterFunctions(testFunctions, sizeof(testFunctions) / sizeof(NamedFunction));
 	SetupMemory(TRANSIENT_MEMORY);
 
 	uint32 randomSeed = GenerateRandomSeed();
@@ -414,6 +454,7 @@ int main(int argc, char **argv)
     ExecuteTest(testBTreeRandomized);
     ExecuteTest(testBTreeIterator);
 	ExecuteTest(testBTreeSeekPrefixKey);
+	ExecuteTest(testBTreePeekLowerBound);
 
 	CleanupMemory();
 

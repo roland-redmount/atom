@@ -5,6 +5,7 @@
 #include "parser/TermBuilder.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
+#include "memory/references.h"
 
 
 //------------------------------- Integer arithmetic ------------------------------------------
@@ -277,6 +278,34 @@ static bool rangeCall(void * state, Atom arguments[], void * readerData, void * 
 	arguments[1] = rangeState->number;
 	rangeState->number._int++;
 	return true;
+}
+
+
+static NamedFunction const mathFunctions[] = {
+	{"math.integerCall", (AnyFunction) integerCall},
+	{"math.addIntCall", (AnyFunction) addIntCall},
+	{"math.subIntCall", (AnyFunction) subIntCall},
+	{"math.mulIntCall", (AnyFunction) mulIntCall},
+	{"math.intDivisionCall", (AnyFunction) intDivisionCall},
+	{"math.addFloatCall", (AnyFunction) addFloatCall},
+	{"math.subFloatCall", (AnyFunction) subFloatCall},
+	{"math.mulFloatCall", (AnyFunction) mulFloatCall},
+	{"math.divFloatCall", (AnyFunction) divFloatCall},
+	{"math.valueRoundedCall", (AnyFunction) valueRoundedCall},
+	{"math.integerFloatCall", (AnyFunction) integerFloatCall},
+	{"math.floatIntegerCall", (AnyFunction) floatIntegerCall},
+	{"math.strictInequalityIntCall", (AnyFunction) strictInequalityIntCall},
+	{"math.strictInequalityFloatCall", (AnyFunction) strictInequalityFloatCall},
+	{"math.nonStrictInequalityIntCall", (AnyFunction) nonStrictInequalityIntCall},
+	{"math.nonStrictInequalityFloatCall", (AnyFunction) nonStrictInequalityFloatCall},
+	{"math.rangeSetup", (AnyFunction) rangeSetup},
+	{"math.rangeCall", (AnyFunction) rangeCall},
+};
+
+
+void RegisterMathFunctions(void)
+{
+	RegisterFunctions(mathFunctions, sizeof(mathFunctions) / sizeof(NamedFunction));
 }
 
 

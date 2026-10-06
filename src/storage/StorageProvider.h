@@ -135,10 +135,21 @@ typedef struct s_StorageProvider {
 #define TUPLE_NOT_FOUND		2
 #define TUPLE_PROTECTED		3
 
-/**
- * The default provider. This can only be used for read-only (non-mutable) relations.
- */
-extern StorageProvider defaultProvider;
+/* CLAUDE: Each storage provider is known by a StorageProviderId. The StorageProvider
+   structs are kept in persistent memory as the module state MODULE_STORAGE_PROVIDERS,
+   so that a TupleStore can point to its provider. PROVIDER_DEFAULT provides no storage,
+   and can only be used for read-only (non-mutable) relations. The numbers are part of
+   the paging file format, so a new provider goes at the end. */
+typedef enum e_StorageProviderId {
+	PROVIDER_DEFAULT = 0,
+	PROVIDER_BTREE,
+	N_STORAGE_PROVIDERS
+} StorageProviderId;
+
+void SetupStorageProviders(void);
+void FreeStorageProviders(void);
+
+StorageProvider const * GetStorageProvider(StorageProviderId providerId);
 
 
 

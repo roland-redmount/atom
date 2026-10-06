@@ -43,4 +43,9 @@ data64 NameHashFromCString(char const * cString, data64 initialHash);
 void NameDump(void);
 
 
+/* CLAUDE: Register the functions this module stores in persistent memory;
+   see memory/references.h */
+void RegisterNameFunctions(void);
+
+
 #endif	// NAME_H

@@ -588,4 +588,9 @@ bool OperatorCallOnce(Operator const * op, Atom arguments[]);
 void PrintOperator(Operator const * op, TypedTuple * const arguments);
 
 
+/* CLAUDE: Register the functions this module stores in persistent memory;
+   see memory/references.h */
+void RegisterOperatorFunctions(void);
+
+
 #endif	// OPERATOR_H

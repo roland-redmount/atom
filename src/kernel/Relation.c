@@ -6,6 +6,7 @@
 #include "lang/TermForm.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
+#include "memory/references.h"
 #include "util/hashing.h"
 #include "util/ResizingArray.h"
 
@@ -59,6 +60,17 @@ static int8 btreeCompareRelationRecords(void const * item, void const * itemOrKe
 	RelationRecord const * record =  item;
 	RelationRecord const * recordOrKey = itemOrKey;
 	return CompareRelations(record->relation, recordOrKey->relation);
+}
+
+
+static NamedFunction const relationFunctions[] = {
+	{"relation.btreeCompareRelationRecords", (AnyFunction) btreeCompareRelationRecords},
+};
+
+
+void RegisterRelationFunctions(void)
+{
+	RegisterFunctions(relationFunctions, sizeof(relationFunctions) / sizeof(NamedFunction));
 }
 
 

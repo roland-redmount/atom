@@ -59,6 +59,7 @@ typedef enum e_PersistentModule {
 	MODULE_RELATIONS,
 	MODULE_SERVICES,
 	MODULE_TUPLE_STORES,
+	MODULE_STORAGE_PROVIDERS,
 	MODULE_MACHINE_SERVICES,
 	MODULE_LIST,
 	MODULE_STRING,
@@ -84,6 +85,12 @@ void FreePage(void const * page);
  */
 void * AllocatePages(size32 nPages);
 void FreePages(void const * firstPage, size32 nPages);
+
+
+/**
+ * Return true if the address lies in the paging area
+ */
+bool IsPagedMemoryAddress(void const * address);
 
 
 /**

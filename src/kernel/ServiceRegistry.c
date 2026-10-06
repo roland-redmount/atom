@@ -9,6 +9,7 @@
 #include "lang/formula.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
+#include "memory/references.h"
 #include "util/ResizingArray.h"
 
 
@@ -105,6 +106,18 @@ static int8 compareOperatorAncestors(OperatorAncestor const * pair, OperatorAnce
 static int8 btreeCompareOperatorAncestors(void const * item, void const * itemOrKey, size32 itemSize)
 {
 	return compareOperatorAncestors((OperatorAncestor const *) item, (OperatorAncestor const *) itemOrKey);
+}
+
+
+static NamedFunction const serviceRegistryFunctions[] = {
+	{"serviceRegistry.btreeCompareServiceRecords", (AnyFunction) btreeCompareServiceRecords},
+	{"serviceRegistry.btreeCompareOperatorAncestors", (AnyFunction) btreeCompareOperatorAncestors},
+};
+
+
+void RegisterServiceRegistryFunctions(void)
+{
+	RegisterFunctions(serviceRegistryFunctions, sizeof(serviceRegistryFunctions) / sizeof(NamedFunction));
 }
 
 

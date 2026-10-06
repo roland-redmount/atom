@@ -10,12 +10,11 @@
 #include "library/MachineService.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
+#include "memory/references.h"
 #include "parser/FormulaBuilder.h"
 
 
-/* CLAUDE: The module state MODULE_MACHINE_SERVICES. The state is created by the first
-   RequestModuleID() or RegisterMachineService(), and freed by FreeModuleRelations() once
-   no module has a relation left. The module ID numbering then starts over at 1. */
+// CLAUDE: The module state MODULE_MACHINE_SERVICES; see SetupMachineServices()
 typedef struct s_MachineServices {
 	uint32 nextModuleID;
 	BTree * moduleRelations;
@@ -25,12 +24,27 @@ typedef struct s_MachineServices {
 static MachineServices * getMachineServices(void)
 {
 	MachineServices * machineServices = GetModuleState(MODULE_MACHINE_SERVICES);
-	if(!machineServices) {
-		machineServices = Allocate(sizeof(MachineServices));
-		machineServices->nextModuleID = 1;
-		SetModuleState(MODULE_MACHINE_SERVICES, machineServices);
-	}
+	ASSERT(machineServices)
 	return machineServices;
+}
+
+
+void SetupMachineServices(void)
+{
+	ASSERT(GetModuleState(MODULE_MACHINE_SERVICES) == 0)
+	MachineServices * machineServices = Allocate(sizeof(MachineServices));
+	machineServices->nextModuleID = 1;
+	SetModuleState(MODULE_MACHINE_SERVICES, machineServices);
+}
+
+
+void FreeMachineServices(void)
+{
+	MachineServices * machineServices = getMachineServices();
+	// every module must have freed its relations
+	ASSERT(machineServices->moduleRelations == 0)
+	Free(machineServices);
+	SetModuleState(MODULE_MACHINE_SERVICES, 0);
 }
 
 
@@ -72,6 +86,17 @@ static int8 btreeCompareModuleRelations(void const * item, void const * itemOrKe
 {
 	return compareModuleRelations(
 		(ModuleRelation const *) item, (ModuleRelation const *) itemOrKey);
+}
+
+
+static NamedFunction const machineServiceFunctions[] = {
+	{"machineService.btreeCompareModuleRelations", (AnyFunction) btreeCompareModuleRelations},
+};
+
+
+void RegisterMachineServiceFunctions(void)
+{
+	RegisterFunctions(machineServiceFunctions, sizeof(machineServiceFunctions) / sizeof(NamedFunction));
 }
 
 
@@ -191,7 +216,7 @@ Service RegisterMachineServiceWithState(
 		ASSERT(!store->hasIndexOrder)
 	}
 	else {
-		store = CreateTupleStore(relation, &defaultProvider, arity, 0);
+		store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_DEFAULT), arity, 0);
 		addModuleRelation(moduleID, relation);
 	}
 	ReleaseFormula(term);
@@ -217,27 +242,21 @@ Service RegisterMachineServiceWithState(
 
 void FreeModuleRelations(uint32 moduleID)
 {
-	MachineServices * machineServices = GetModuleState(MODULE_MACHINE_SERVICES);
-	if(!machineServices)
+	MachineServices * machineServices = getMachineServices();
+	BTree * moduleRelations = machineServices->moduleRelations;
+	if(!moduleRelations)
 		return;
 
-	BTree * moduleRelations = machineServices->moduleRelations;
-	if(moduleRelations) {
-		ModuleRelation key = {.moduleID = moduleID};
-		ModuleRelation entry;
-		while(BTreeGetItem(moduleRelations, &key, &entry)) {
-			ASSERT(BTreeDelete(moduleRelations, &entry, 0) == BTREE_DELETED)
-			DropRelation(entry.relation);
-		}
-
-		// the index is created on demand, so free it when it becomes empty
-		if(BTreeNItems(moduleRelations) == 0) {
-			BTreeFree(moduleRelations);
-			machineServices->moduleRelations = 0;
-		}
+	ModuleRelation key = {.moduleID = moduleID};
+	ModuleRelation entry;
+	while(BTreeGetItem(moduleRelations, &key, &entry)) {
+		ASSERT(BTreeDelete(moduleRelations, &entry, 0) == BTREE_DELETED)
+		DropRelation(entry.relation);
 	}
-	if(!machineServices->moduleRelations) {
-		Free(machineServices);
-		SetModuleState(MODULE_MACHINE_SERVICES, 0);
+
+	// the index is created on demand, so free it when it becomes empty
+	if(BTreeNItems(moduleRelations) == 0) {
+		BTreeFree(moduleRelations);
+		machineServices->moduleRelations = 0;
 	}
 }

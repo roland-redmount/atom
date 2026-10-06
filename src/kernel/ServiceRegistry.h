@@ -193,4 +193,9 @@ void RelationDump(Relation relation);
 void ServiceRegistryDump(void);
 
 
+/* CLAUDE: Register the functions this module stores in persistent memory;
+   see memory/references.h */
+void RegisterServiceRegistryFunctions(void);
+
+
 #endif  // SERVICE_REGISTRY_H

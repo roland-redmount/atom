@@ -5,6 +5,7 @@
 #include "library/reflect.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
+#include "memory/references.h"
 
 /**
  * (formula #1<FORMULA arity #2>INT)
@@ -124,6 +125,23 @@ static bool relationRoleSumCall(void * state, Atom arguments[], void * readerDat
 	FreeMixedTypeRelation(ownState.relation);
 	arguments[2]._float = sum;
 	return true;
+}
+
+
+static NamedFunction const reflectFunctions[] = {
+	{"reflect.formulaArityCall", (AnyFunction) formulaArityCall},
+	{"reflect.queryRelationCall", (AnyFunction) queryRelationCall},
+	{"reflect.relationSizeCall", (AnyFunction) relationSizeCall},
+	{"reflect.relationRoleActorSetup", (AnyFunction) relationRoleActorSetup},
+	{"reflect.relationRoleActorCall", (AnyFunction) relationRoleActorCall},
+	{"reflect.relationRoleActorFinalize", (AnyFunction) relationRoleActorFinalize},
+	{"reflect.relationRoleSumCall", (AnyFunction) relationRoleSumCall},
+};
+
+
+void RegisterReflectFunctions(void)
+{
+	RegisterFunctions(reflectFunctions, sizeof(reflectFunctions) / sizeof(NamedFunction));
 }
 
 

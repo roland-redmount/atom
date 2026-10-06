@@ -12,6 +12,7 @@
 #include "lang/TermForm.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
+#include "memory/references.h"
 #include "util/hashing.h"
 #include "util/sort.h"
 
@@ -73,6 +74,17 @@ static int8 btreeCompareFormulaRecords(void const * item1, void const * item2, s
 	FormulaRecord const * record1 = item1;
 	FormulaRecord const * record2 = item2;
 	return CompareAtoms((Atom) {.hash = record1->hash}, (Atom) {.hash = record2->hash});
+}
+
+
+static NamedFunction const formulaFunctions[] = {
+	{"formula.btreeCompareFormulaRecords", (AnyFunction) btreeCompareFormulaRecords},
+};
+
+
+void RegisterFormulaFunctions(void)
+{
+	RegisterFunctions(formulaFunctions, sizeof(formulaFunctions) / sizeof(NamedFunction));
 }
 
 

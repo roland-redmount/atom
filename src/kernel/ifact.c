@@ -12,6 +12,7 @@
 #include "lang/PredicateForm.h"
 #include "memory/paging.h"
 #include "memory/allocator.h"
+#include "memory/references.h"
 #include "util/hashing.h"
 #include "util/ResizingArray.h"
 #include "util/sort.h"
@@ -96,6 +97,17 @@ static int8 btreeCompareHeaders(void const * item1, void const * item2, size32 i
 	if(ifact1->hash > ifact2->hash)
 		return 1;
 	return 0;
+}
+
+
+static NamedFunction const ifactFunctions[] = {
+	{"ifact.btreeCompareHeaders", (AnyFunction) btreeCompareHeaders},
+};
+
+
+void RegisterIFactFunctions(void)
+{
+	RegisterFunctions(ifactFunctions, sizeof(ifactFunctions) / sizeof(NamedFunction));
 }
 
 

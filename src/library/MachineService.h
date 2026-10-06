@@ -46,6 +46,12 @@
  */
 uint32 RequestModuleID(void);
 
+/* CLAUDE: Create and free the state of machine services, the module state
+   MODULE_MACHINE_SERVICES. This must precede RequestModuleID(). FreeMachineServices()
+   requires every module to have called FreeModuleRelations(). See LoadLibraries(). */
+void SetupMachineServices(void);
+void FreeMachineServices(void);
+
 /**
  * Create a stateless machine Operator with the given call function, and register a Service
  * based on the signature syntax string. The signature is a term whose actors
@@ -77,6 +83,11 @@ Service RegisterMachineServiceWithState(
  * Remove all relations registered by a specific module.
  */
 void FreeModuleRelations(uint32 moduleID);
+
+
+/* CLAUDE: Register the functions this module stores in persistent memory;
+   see memory/references.h */
+void RegisterMachineServiceFunctions(void);
 
 
 #endif	// MACHINE_SERVICE_H

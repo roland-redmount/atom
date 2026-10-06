@@ -198,4 +198,9 @@ size8 FormArity(Atom form);
  */
 void PrintForm(Atom form);
 
+/* CLAUDE: Register the functions this module stores in persistent memory;
+   see memory/references.h */
+void RegisterFormulaFunctions(void);
+
+
 #endif	// FORMULA_H

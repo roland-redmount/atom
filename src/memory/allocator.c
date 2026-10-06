@@ -4,6 +4,7 @@
  */
 
 #include "memory/allocator.h"
+#include "memory/references.h"
 #include "platform.h"
 
 #ifdef DEBUG_ALLOCATE
@@ -34,6 +35,11 @@ int8 compareRecords(void const * item, void const * itemOrKey, size32 itemSize)
 }
 
 bool logAllocations = false;
+
+// CLAUDE: compareRecords() is stored in the allocateLog B-tree; see memory/references.h
+static NamedFunction const allocatorFunctions[] = {
+	{"allocator.compareRecords", (AnyFunction) compareRecords},
+};
 
 #endif
 
@@ -489,6 +495,7 @@ void CreateAllocator(void * address, size8 logAreaSize)
 	setNBytesFree(getInitialNBytesFree());
 	
 #ifdef DEBUG_ALLOCATE
+	RegisterFunctions(allocatorFunctions, sizeof(allocatorFunctions) / sizeof(NamedFunction));
 	allocateLog = BTreeCreate(sizeof(AllocateRecord), &compareRecords, 0);
 #endif
 }
@@ -654,6 +661,10 @@ void Free(void const * memory)
 	ASSERT(getFreeFlag(block) == false);
 	// printf("Free 0x%x\n", block);
 	size8 logSize = getLogBlockSize(block);
+#ifdef DEBUG
+	// CLAUDE: a slot recorded by SetReference() must be cleared before its memory is freed
+	ASSERT(!HasReferences(memory, (1 << logSize) - ALLOC_HEADER_SIZE))
+#endif
 	freeBlock(block);
 	setNBytesFree(getNBytesFree() + (1 << logSize));
 }

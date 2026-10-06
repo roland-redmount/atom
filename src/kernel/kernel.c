@@ -14,6 +14,7 @@
 #include "storage/RelationBTree.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
+#include "memory/references.h"
 
 
 /**
@@ -221,9 +222,28 @@ index8 CorePredicateRoleIndex(index32 formId, index32 roleId)
 #define ALLOCATOR_N_PAGES			(ALLOCATOR_AREA_SIZE / MEMORY_PAGE_SIZE)
 
 
+/**
+ * Add kernel function pointers to the global function table.
+ * See 
+ */
+static void registerKernelFunctions(void)
+{
+	RegisterNameFunctions();
+	RegisterFormulaFunctions();
+	RegisterIFactFunctions();
+	RegisterLookupFunctions();
+	RegisterDictionaryFunctions();
+	RegisterRelationFunctions();
+	RegisterServiceRegistryFunctions();
+	RegisterOperatorFunctions();
+	RegisterRelationBTreeFunctions();
+}
+
+
 void SetupMemory(uint32 memoryPersistence)
 {
 	checkTypeSizes();
+	registerKernelFunctions();
 	InitializePaging(memoryPersistence);
 
 	// setup allocator
@@ -233,11 +253,13 @@ void SetupMemory(uint32 memoryPersistence)
 		Panic("cannot reserve %u pages for the allocator\n", ALLOCATOR_N_PAGES);
 	SetModuleState(MODULE_ALLOCATOR, allocatorArea);
 	CreateAllocator(allocatorArea, LOG_ALLOCATOR_AREA_SIZE);
+	InitializeReferences();
 }
 
 
 void CleanupMemory(void)
 {
+	FreeReferences();
 	// check for memory leaks
 	size32 nBytesAllocated = AllocatorNBytesAllocated();
 	if(nBytesAllocated > 0) {
@@ -318,7 +340,7 @@ static void createCoreRelation(uint32 relationId)
 	CreateRelationBootstrap(kernel->coreRelations[relationId], kernel->corePredicateForms[formId]);
 	kernel->coreTupleStores[relationId] = CreateTupleStore(
 		kernel->coreRelations[relationId],
-		&btreeStorageProvider, corePredicateArity[formId], kernel->corePredicateRoleIndex[formId]);
+		GetStorageProvider(PROVIDER_BTREE), corePredicateArity[formId], kernel->corePredicateRoleIndex[formId]);
 	// Release the reference obtained from CreateRelationBootstrap(),
 	// since TupleStore and associated operators now hold references
 	ReleaseRelation(kernel->coreRelations[relationId]);
@@ -637,6 +659,7 @@ void KernelInitialize(uint32 memoryPersistence)
 	SetupMemory(memoryPersistence);
 	kernel = Allocate(sizeof(Kernel));
 	SetModuleState(MODULE_KERNEL, kernel);
+	SetupStorageProviders();
 	SetupRelationRegistry();
 	SetupServiceRegistry();
 	InitializeTupleStores();
@@ -770,6 +793,7 @@ void KernelShutdown(void)
 	FreeLookup();
 	FreeServiceRegistry();
 	FreeTupleStores();
+	FreeStorageProviders();
 	FreeRelationRegistry();
 	FreeNameStorage();
 	Free(kernel);

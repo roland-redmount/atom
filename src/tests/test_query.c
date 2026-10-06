@@ -236,7 +236,7 @@ void testInvalidateServiceByNewRelation(void)
 		.form = precSuccFixture.termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
 	};
-	CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
+	CreateTupleStore(intRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)
 
 	// Querying again compiles an additional service for the (before:ID after:INT) relation.
@@ -312,7 +312,7 @@ void testInvalidateRelationByRule(void)
 	// Create terminating fact
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
 	Relation relation = RelationFromFact(FormulaGetView(terminatingFact));
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	Atom faculty = CreateNameFromCString("faculty");
 	index8 facultyColumn = PredicateRoleIndex(TermFormGetPredicateForm(relation.form), faculty);
@@ -403,13 +403,13 @@ void testStaleBodyTermUsesPrimitiveOnly(void)
 	// Relation (alpha beta) storing one fact ("a" "b")
 	Atom alphaBetaFact = CStringToTerm("alpha \"a\" beta \"b\"");
 	Relation alphaBetaRelation = RelationFromFact(FormulaGetView(alphaBetaFact));
-	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, &btreeStorageProvider, 2, 0);
+	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(alphaBetaFact)), 0);
 
 	// Relation (gamma delta) storing one fact ("c" "d")
 	Atom gammaDeltaFact = CStringToTerm("gamma \"c\" delta \"d\"");
 	Relation gammaDeltaRelation = RelationFromFact(FormulaGetView(gammaDeltaFact));
-	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, &btreeStorageProvider, 2, 0);
+	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(gammaDeltaFact)), 0);
 
 	// Add rule giving (alpha beta) the tuples of (gamma delta), rendering all
@@ -447,7 +447,7 @@ void testSelfJoinOverUnionRelation(void)
 	// Relation (alpha beta) stores the edges (A, B) and (B, C)
 	Atom edge1 = CStringToTerm("alpha 'A beta 'B");
 	Relation alphaBetaRelation = RelationFromFact(FormulaGetView(edge1));
-	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, &btreeStorageProvider, 2, 0);
+	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(edge1)), 0);
 	Atom edge2 = CStringToTerm("alpha 'B beta 'C");
 	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(edge2)), 0);
@@ -455,7 +455,7 @@ void testSelfJoinOverUnionRelation(void)
 	// Relation (gamma delta) stores the edge (C, D)
 	Atom edge3 = CStringToTerm("gamma 'C delta 'D");
 	Relation gammaDeltaRelation = RelationFromFact(FormulaGetView(edge3));
-	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, &btreeStorageProvider, 2, 0);
+	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(edge3)), 0);
 
 	// The below rule adds (C, D) to (alpha beta), its service is a UNION with tuples
@@ -502,7 +502,7 @@ void testStorePrimitiveStaleWhenRuleExists(void)
 	// (gamma delta) stores the edge (C, D)
 	Atom gammaFact = CStringToTerm("gamma 'C delta 'D");
 	Relation gammaDeltaRelation = RelationFromFact(FormulaGetView(gammaFact));
-	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, &btreeStorageProvider, 2, 0);
+	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(gammaFact)), 0);
 
 	// A rule deriving (alpha beta) from (gamma delta), added before any (alpha beta) relation
@@ -513,7 +513,7 @@ void testStorePrimitiveStaleWhenRuleExists(void)
 	// because the rule already derives the term form, although nothing was invalidated.
 	Atom alphaFact = CStringToTerm("alpha 'A beta 'B");
 	Relation alphaBetaRelation = RelationFromFact(FormulaGetView(alphaFact));
-	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, &btreeStorageProvider, 2, 0);
+	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(alphaFact)), 0);
 	ASSERT_INT32_EQUAL(numberOfStaleServices(alphaBetaRelation), 3)
 
@@ -612,7 +612,7 @@ void testFilterServiceOverReplacedPrimitive(void)
 {
 	Atom fact = CStringToTerm("sym \"a\" with \"b\"");
 	Relation relation = RelationFromFact(FormulaGetView(fact));
-	TupleStore * store = CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
 	FormulaView clause = DictionaryAddClauseFromCString("sym x with y | ! sym y with x");
 

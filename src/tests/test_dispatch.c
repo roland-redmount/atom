@@ -167,10 +167,10 @@ void testDispatchNegatedTerm(void)
 	TypeSignature typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2);
 	Relation relation = {.form = termForm, .typeSignature = typeSignature};
 	// We must have a service to dispatch to, so create a B-tree storage
-	CreateTupleStore(relation, &btreeStorageProvider, 2, 0);
+	CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	// Create the (! even odd) relation
 	Relation negatedRelation = {.form = negatedTermForm, .typeSignature = typeSignature};
-	CreateTupleStore(negatedRelation, &btreeStorageProvider, 2, 0);
+	CreateTupleStore(negatedRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	ASSERT_FALSE(SameRelations(relation, negatedRelation))
 
 	// Test that dispatches reaches the correct relation
@@ -250,12 +250,12 @@ void testDispatchIterator(void)
 		.form = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2)
 	};
-	CreateTupleStore(idRelation, &btreeStorageProvider, 2, 0);
+	CreateTupleStore(idRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	Relation intRelation = {
 		.form = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
 	};
-	CreateTupleStore(intRelation, &btreeStorageProvider, 2, 0);
+	CreateTupleStore(intRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	
 	// Only the service with two output parameters matches, so each table contributes
 	// one match
