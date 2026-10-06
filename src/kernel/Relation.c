@@ -1,6 +1,7 @@
 
 #include "kernel/ifact.h"
 #include "kernel/Relation.h"
+#include "kernel/ServiceRegistry.h"
 #include "kernel/TupleStore.h"
 #include "lang/ConjunctionForm.h"
 #include "lang/TermForm.h"
@@ -43,9 +44,16 @@ typedef struct s_RelationRecord {
 	Atom predicateForm;
 	// Whether this relation holds a reference to its forms; see RelationReleaseForm()
 	bool ownsForm;
+	// See below
+	byte flags;
 	TupleStore * tupleStore;	// may be 0
 	uint32 referenceCount;
 } RelationRecord;
+
+// Relation is closed, and has its own services
+#define RELATION_CLOSED				1
+// Relation is closed, and its services are inferred from the opposite relation.
+#define RELATION_CLOSED_INFERRED	2
 
 
 /**
@@ -196,6 +204,10 @@ byte RelationRemoveTuple(Relation relation, Atom const tuple[], uint8 idPosition
 
 void DropRelation(Relation relation)
 {
+	// CLAUDE: Opening the relation releases the references held by CloseRelation()
+	if(RelationExists(relation) && (findRelationRecord(relation)->flags == RELATION_CLOSED))
+		OpenRelation(relation);
+
 	// Remove all services associated with the relation
 	bool foundService;
 	do {
@@ -437,4 +449,83 @@ void RelationIteratorEnd(RelationIterator * iterator)
 bool IsRelationForm(Atom form)
 {
 	return IsTermForm(form) || IsConjunctionForm(form);
+}
+
+
+/**
+ * CLAUDE: The opposite relation of a closed relation; see CloseRelation().
+ */
+static Relation findOppositeRelation(Relation relation)
+{
+	Atom oppositeForm = TermFormCreateOppositeForm(relation.form);
+	// CLAUDE: The record of the opposite relation holds a reference to the opposite form,
+	// and so the opposite form remains valid after release
+	IFactRelease(oppositeForm);
+	return (Relation) {.form = oppositeForm, .typeSignature = relation.typeSignature};
+}
+
+
+#ifdef DEBUG
+static bool relationHasServices(Relation relation)
+{
+	ServiceIterator iterator;
+	ServiceRegistryIterate(relation, &iterator);
+	bool hasServices = ServiceIteratorNext(&iterator);
+	ServiceIteratorEnd(&iterator);
+	return hasServices;
+}
+#endif
+
+
+void CloseRelation(Relation relation)
+{
+	ASSERT(IsTermForm(relation.form))
+	ASSERT(!RelationIsClosed(relation))
+	Atom oppositeForm = TermFormCreateOppositeForm(relation.form);
+	Relation opposite = {.form = oppositeForm, .typeSignature = relation.typeSignature};
+	ASSERT(!RelationIsClosed(opposite))
+	// CLAUDE: The opposite relation is now answered by INVERT operators,
+	// so any service compiled for it from rules is stale
+	InvalidateTermFormServices(oppositeForm, INVALIDATE_BY_RULE);
+
+	AcquireRelation(relation);
+	AcquireRelation(opposite);
+	IFactRelease(oppositeForm);
+	RelationRecord * oppositeRecord = findRelationRecord(opposite);
+	ASSERT(!oppositeRecord->tupleStore)
+	ASSERT(!relationHasServices(opposite))
+	oppositeRecord->flags = RELATION_CLOSED_INFERRED;
+	findRelationRecord(relation)->flags = RELATION_CLOSED;
+}
+
+
+void OpenRelation(Relation relation)
+{
+	RelationRecord * record = findRelationRecord(relation);
+	ASSERT(record)
+	ASSERT(record->flags == RELATION_CLOSED)
+	Relation opposite = findOppositeRelation(relation);
+	RelationRecord * oppositeRecord = findRelationRecord(opposite);
+	ASSERT(oppositeRecord)
+	ASSERT(oppositeRecord->flags == RELATION_CLOSED_INFERRED)
+	record->flags = 0;
+	oppositeRecord->flags = 0;
+	// CLAUDE: Remove the INVERT services of the opposite relation
+	InvalidateTermFormServices(opposite.form, INVALIDATE_BY_RULE);
+	ReleaseRelation(opposite);
+	ReleaseRelation(relation);
+}
+
+
+bool RelationIsClosed(Relation relation)
+{
+	RelationRecord * record = findRelationRecord(relation);
+	return record && record->flags;
+}
+
+
+bool RelationIsClosedInferred(Relation relation)
+{
+	RelationRecord * record = findRelationRecord(relation);
+	return record && (record->flags == RELATION_CLOSED_INFERRED);
 }

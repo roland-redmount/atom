@@ -2489,12 +2489,72 @@ static size8 compileIFactRule(
 
 
 /**
+ * CLAUDE: Test whether a query is answered by an INVERT operator; see CloseRelation().
+ * This requires a term query where all parameters are typed inputs, and whose
+ * relation is closed and inferred from its opposite relation.
+ */
+static bool queryIsClosedInferred(ParameterizedQuery const * query)
+{
+	if(!IsTermForm(query->form))
+		return false;
+	for(index8 i = 0; i < query->arity; i++) {
+		Atom parameter = query->parameters[i];
+		if((parameter.parameter.io != PARAMETER_IN) || !parameter.parameter.atomType)
+			return false;
+	}
+	Relation relation = {
+		.form = query->form,
+		.typeSignature = ParametersGetTypeSignature(query->parameters, query->arity)
+	};
+	return RelationIsClosedInferred(relation);
+}
+
+
+/**
+ * Compile a query to a closed, inferred relation, producing an INVERT operator over a service
+ * for the opposite query. The opposite query has the opposite term form and the
+ * same parameters. Returns the number of variants written to the variants array, which is 0 if
+ * no service is found for the opposite query, and 1 otherwise.
+ */
+static size8 compileInvertedQuery(
+	CompileStack * compileStack, ParameterizedQuery const * query, CompiledVariant variants[])
+{
+	ParameterizedQuery oppositeQuery = *query;
+	oppositeQuery.form = TermFormCreateOppositeForm(query->form);
+	Service service;
+	index8 permutation[RELATION_MAX_ARITY];
+	bool foundService = dispatchOrCompileTerm(
+		compileStack, &oppositeQuery, TERM_DISPATCH_OR_COMPILE, &service, permutation, 0, 0, 0);
+	IFactRelease(oppositeQuery.form);
+	if(!foundService)
+		return 0;
+
+	Operator * serviceOperator = arrangeServiceArguments(
+		ServiceGetOperator(service), service.equalitySignature,
+		query->parameters, query->arity, permutation);
+	Operator * invertOperator = CreateInvertOperator(serviceOperator);
+	Atom parameters[query->arity];
+	TupleCopy(query->parameters, parameters, query->arity);
+	size8 nVariants = 0;
+	addCompiledVariant(variants, &nVariants, parameters, query->arity, invertOperator, UNION_OPERATOR_LAST);
+	return nVariants;
+}
+
+
+/**
  * Attempt to compile a query into one or more services (variants).
  * Returns the number of variants written to the variants array.
  */
 static size8 compileQueryVariants(
 	CompileStack * compileStack, ParameterizedQuery const * query, CompiledVariant variants[])
 {
+	// A query to a closed, inferred relation yields an INVERT operator only
+	if(queryIsClosedInferred(query)) {
+		size8 nInvertedVariants = compileInvertedQuery(compileStack, query, variants);
+		if(nInvertedVariants > 0)
+			return nInvertedVariants;
+	}
+
 	// Find a matching ifact and setup its TupleSTore before seeding;
 	// see setupIFactRuleStore()
 	index8 ifactIdColumn = 0;

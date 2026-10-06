@@ -1,12 +1,5 @@
 /**
- * A Relation encapsulates a relation (a set of tuples), and is identified by
- * a Relation. A Relaton may have one RelationWriter, and one or more Services.
- * 
- * A Relation for which no RelationWriter exists is read-only. Examples arithmetic relations,
- * and relations (and their services) produced by the compiler.
- * 
- * A Relation with a RelationWriter but no services write-only, a kind of data sink.
- * Output devices such as a screen canvas can be modelled as write-only relations.
+ * A Relation is a set of tuples, and is identified by a form and a type signature.
  */
 
 #ifndef RELATION_H
@@ -165,6 +158,7 @@ byte RelationRemoveTuple(Relation relation, Atom const tuple[], uint8 idPosition
 
 /**
  * Drop the relation, all its services, and any associated tuple storage.
+ * If the relation is closed, it is opened first; see OpenRelation()
  */
 void DropRelation(Relation relation);
 
@@ -176,6 +170,40 @@ void DropRelation(Relation relation);
  * if they are empty.
  */
 void DropEmptyRelations(void);
+
+
+/**
+ * Mark a relation as closed. A tuple that is not in a closed relation is inferred to belong
+ * to the opposite relation, which has the opposite term form and the same type signature.
+ * For example, if the relation (even x<INT) is closed, then the opposite relation (! even x<INT)
+ * contains the tuple (3) because the fact (even 3) is not in the (even) relation.
+ *
+ * The relation must have a term form. The opposite relation is created if it does not exist,
+ * and must have no TupleStore and no primitive service. Compiled services of the opposite
+ * relation are invalidated.
+ *
+ * The given relation is flagged RELATION_CLOSED, and its opposite relation is flagged
+ * RELATION_CLOSED_INFERRED. Both relations gain a reference to prevent deallocation.
+ */
+void CloseRelation(Relation relation);
+
+/**
+ * Reverse CloseRelation(): release both relations and clear their flags.
+ * The given relation must be marked RELATION_CLOSED.
+ */
+void OpenRelation(Relation relation);
+
+/**
+ * Test whether the relation is either a closed relation or the opposite relation
+ * of a closed relation. Returns false if the relation does not exist.
+ */
+bool RelationIsClosed(Relation relation);
+
+/**
+ * Test whether the relation is closed and inferred from its opposite relation.
+ * Returns false if the relation does not exist.
+ */
+bool RelationIsClosedInferred(Relation relation);
 
 /**
  * Release the references this relation holds to its term form, without releasing the relation.

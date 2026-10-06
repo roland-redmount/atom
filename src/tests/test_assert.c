@@ -112,6 +112,57 @@ void testAssertContradictsStoredFact(void)
 
 
 /**
+ * CLAUDE: A closed relation rejects a new fact, since the negation of the fact is inferred.
+ * To add a fact, the relation must first be opened, and then closed again.
+ */
+void testAssertClosedRelation(void)
+{
+	Atom even2 = CStringToTerm("even 2");
+	Atom even6 = CStringToTerm("even 6");
+	Atom notEven3 = CStringToTerm("! even 3");
+	Atom notEven2 = CStringToTerm("! even 2");
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even2), 0), ASSERT_OK)
+	Relation relation = RelationFromFact(FormulaGetView(even2));
+	CloseRelation(relation);
+
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even6), 0), ASSERT_CONTRADICTION)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(notEven3), 0), ASSERT_EXISTED)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(notEven2), 0), ASSERT_CONTRADICTION)
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 1)
+
+	// CLAUDE: The opened relation accepts the fact
+	OpenRelation(relation);
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even6), 0), ASSERT_OK)
+	CloseRelation(relation);
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 2)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even6), 0), ASSERT_EXISTED)
+
+	OpenRelation(relation);
+	RetractFact(FormulaGetView(even6));
+	RetractFact(FormulaGetView(even2));
+	DropRelation(relation);
+	ReleaseFormula(notEven2);
+	ReleaseFormula(notEven3);
+	ReleaseFormula(even6);
+	ReleaseFormula(even2);
+}
+
+
+/**
+ * CLAUDE: The relation (+ + =) is closed by MathSetup(), and rejects the fact (+ 1 + 1 = 3),
+ * since the negation of the fact is inferred.
+ */
+void testAssertClosedComputedRelation(void)
+{
+	Atom fact = CStringToTerm("+ 1 + 1 = 3");
+	Relation relation = RelationFromFact(FormulaGetView(fact));
+	ASSERT_TRUE(RelationIsClosed(relation))
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_CONTRADICTION)
+	ReleaseFormula(fact);
+}
+
+
+/**
  * A fact also contradicts the knowledge base when its negation can be derived from a rule.
  * Finding the contradiction then compiles the query for the negated term;
  * see checkContradiction() in assert.c.
@@ -640,6 +691,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertOverlapsService);
 	ExecuteTest(testAssertContradictsStoredFact);
 	ExecuteTest(testAssertContradictsDerivedFact);
+	ExecuteTest(testAssertClosedRelation);
+	ExecuteTest(testAssertClosedComputedRelation);
 	ExecuteTest(testAssertFormulaFact);
 	ExecuteTest(testAssertFormulaRule);
 	ExecuteTest(testAssertFormulaIFactRule);

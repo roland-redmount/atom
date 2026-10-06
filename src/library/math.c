@@ -326,10 +326,14 @@ void MathSetup(void)
 	SetPersistentState(STATE_KEY_MATH, mathLibrary);
 
 	mathLibrary->moduleID = RequestModuleID();
+	Service service;
 
 	// Integer arithmetic
 	RegisterMachineService(mathLibrary->moduleID, "integer #1<INT", integerCall);
-	RegisterMachineService(mathLibrary->moduleID, "+ #1<INT + #2<INT = #3>INT", addIntCall);
+
+	service = RegisterMachineService(mathLibrary->moduleID, "+ #1<INT + #2<INT = #3>INT", addIntCall);
+	CloseRelation(service.relation);
+	
 	RegisterMachineService(mathLibrary->moduleID, "+ #1<INT - #2<INT = #3>INT", subIntCall);
 	RegisterMachineService(mathLibrary->moduleID, "* #1<INT * #2<INT = #3>INT", mulIntCall);
 	RegisterMachineService(mathLibrary->moduleID, "* #1<INT / #2<INT = #3>INT rem #4>INT", intDivisionCall);

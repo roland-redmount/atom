@@ -686,6 +686,64 @@ static void constantFinalizeContext(OperatorContext * context)
 }
 
 
+//------------------------------------- OPERATOR_INVERT -----------------------------------------
+
+typedef struct s_InvertContext {
+	bool called;
+} InvertContext;
+
+
+Operator * CreateInvertOperator(Operator * childOperator)
+{
+	Operator * op = createOperator(OPERATOR_INVERT, childOperator->nArguments, sizeof(InvertContext));
+	op->impl.invert.childOperator = childOperator;
+	addParent(childOperator);
+	// INVERT yields at most one tuple, so any index order holds
+	setIdentityIndexOrder(op);
+	return op;
+}
+
+
+static void invertSetupContext(OperatorContext * context)
+{
+	// INVERT has no context to set up.
+	// The child context is created on the first call.
+}
+
+
+static bool invertCall(OperatorContext * context)
+{
+	InvertContext * invertContext = (InvertContext *) &context->data;
+	if(invertContext->called)
+		return false;
+	invertContext->called = true;
+
+	// The child is called with a copy of the arguments, so that a child writing
+	// its arguments leaves the arguments of this operator unchanged
+	Operator const * op = context->op;
+	size8 nArguments = op->nArguments;
+	Atom childArguments[nArguments];
+	CopyMemory(context->arguments, childArguments, nArguments * sizeof(Atom));
+	OperatorContext * childContext = createContext(
+		context, op->impl.invert.childOperator, childArguments);
+	bool childFound = OperatorCall(childContext);
+	OperatorFreeContext(childContext);
+	return !childFound;
+}
+
+
+static void teardownInvertOperator(Operator * op)
+{
+	ASSERT(op->type == OPERATOR_INVERT)
+	removeParent(op->impl.invert.childOperator);
+}
+
+
+static void invertFinalizeContext(OperatorContext * context)
+{
+}
+
+
 //------------------------------------- OPERATOR_JOIN -----------------------------------------
 
 typedef struct s_JoinContext {
@@ -1751,6 +1809,7 @@ size8 OperatorNChildren(Operator const * op)
 	case OPERATOR_FILTER:
 	case OPERATOR_IFACT:
 	case OPERATOR_CONSTANT:
+	case OPERATOR_INVERT:
 		return 1;
 
 	case OPERATOR_MACHINE:
@@ -1797,6 +1856,9 @@ Operator * OperatorGetChild(Operator const * op, index8 index)
 
 	case OPERATOR_CONSTANT:
 		return op->impl.constant.childOperator;
+
+	case OPERATOR_INVERT:
+		return op->impl.invert.childOperator;
 
 	default:
 		ASSERT(false)
@@ -1854,6 +1916,10 @@ static void teardownOperator(Operator * op)
 
 	case OPERATOR_CONSTANT:
 		teardownConstantOperator(op);
+		break;
+
+	case OPERATOR_INVERT:
+		teardownInvertOperator(op);
 		break;
 	
 	default:
@@ -1961,6 +2027,10 @@ static OperatorContext * createContext(
 	case OPERATOR_CONSTANT:
 		constantSetupContext(context);
 		break;
+
+	case OPERATOR_INVERT:
+		invertSetupContext(context);
+		break;
 	
 	default:
 		ASSERT(false)
@@ -2051,6 +2121,10 @@ bool OperatorCall(OperatorContext * context)
 		success = constantCall(context);
 		break;
 
+	case OPERATOR_INVERT:
+		success = invertCall(context);
+		break;
+
 	default:
 		ASSERT(false)
 		success = false;
@@ -2114,6 +2188,10 @@ void OperatorFreeContext(OperatorContext * context)
 	case OPERATOR_CONSTANT:
 		constantFinalizeContext(context);
 		break;
+
+	case OPERATOR_INVERT:
+		invertFinalizeContext(context);
+		break;
 	
 	default:
 		ASSERT(false)
@@ -2148,7 +2226,8 @@ static const char * operatorNames[N_OPERATOR_TYPES + 1] = {
 	"FILTER",
 	"MACHINE",
 	"IFACT",
-	"CONSTANT"
+	"CONSTANT",
+	"INVERT"
 };
 
 /**
@@ -2347,6 +2426,12 @@ static void printOperatorRecursive(
 		PrintChar(')');
 		break;
 	}
+
+	case OPERATOR_INVERT:
+		PrintCString(" (");
+		printOperatorRecursive(op->impl.invert.childOperator, arguments, nextParameterNumber, depth + 1);
+		PrintChar(')');
+		break;
 
 	default:
 		ASSERT(false);

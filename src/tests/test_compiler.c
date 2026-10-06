@@ -2232,6 +2232,152 @@ void testFilterServiceInvalidatedByRule(void)
 }
 
 
+/**
+ * Dispatch or compile an all-input query, and check the type of the root operator
+ * of its service. Returns the number of tuples the service yields.
+ */
+static size32 callBoundQuery(char const * queryString, enum OperatorType rootType)
+{
+	Atom queryTerm = CStringToTerm(queryString);
+	Service service;
+	index8 permutation[RELATION_MAX_ARITY];
+	size32 nTuples = 0;
+	if(DispatchOrCompileQuery(FormulaGetView(queryTerm), &service, permutation)) {
+		Operator * op = ServiceGetOperator(service);
+		ASSERT_INT32_EQUAL(op->type, rootType)
+		size8 arity = FormulaGetActors(queryTerm)->nAtoms;
+		Atom arguments[arity];
+		TupleCopy(TypedTuplePeekAtoms(FormulaGetActors(queryTerm)), arguments, arity);
+		void * context = OperatorCreateContext(op, arguments);
+		while(OperatorCall(context))
+			nTuples++;
+		OperatorFreeContext(context);
+	}
+	ReleaseFormula(queryTerm);
+	return nTuples;
+}
+
+
+/**
+ * Test that the query to the opposite relation of a closed stored relation compiles to an
+ * INVERT operator, which yields a tuple if and only if the closed relation lacks the tuple.
+ */
+void testCompileClosedStoredRelation(void)
+{
+	Atom even2 = CStringToTerm("even 2");
+	Atom even4 = CStringToTerm("even 4");
+	Relation evenRelation = createStoredRelation(even2);
+	RelationAddTuple(evenRelation, TypedTuplePeekAtoms(FormulaGetActors(even4)), 0);
+	CloseRelation(evenRelation);
+
+	Atom negatedTerm = CStringToTerm("! even 3");
+	Relation negatedRelation = RelationFromFact(FormulaGetView(negatedTerm));
+	ASSERT_TRUE(RelationIsClosed(evenRelation))
+	ASSERT_FALSE(RelationIsClosedInferred(evenRelation))
+	ASSERT_TRUE(RelationIsClosedInferred(negatedRelation))
+
+	ASSERT_UINT32_EQUAL(callBoundQuery("! even 3", OPERATOR_INVERT), 1)
+	ASSERT_UINT32_EQUAL(callBoundQuery("! even 4", OPERATOR_INVERT), 0)
+	ASSERT_UINT32_EQUAL(callBoundQuery("! even 5", OPERATOR_INVERT), 1)
+
+	// CLAUDE: The opposite relation of a closed relation cannot be enumerated
+	Atom enumerateTerm = CStringToTerm("! even _");
+	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(enumerateTerm), 0), 0)
+	ReleaseFormula(enumerateTerm);
+
+	// CLAUDE: Opening the relation removes the opposite relation, and its INVERT service
+	size32 nCompiledServices = NumberOfCompiledServices();
+	OpenRelation(evenRelation);
+	ASSERT_FALSE(RelationExists(negatedRelation))
+	ASSERT_TRUE(NumberOfCompiledServices() < nCompiledServices)
+	ASSERT_FALSE(RelationIsClosed(evenRelation))
+
+	ReleaseFormula(negatedTerm);
+	RelationRemoveTuple(evenRelation, TypedTuplePeekAtoms(FormulaGetActors(even4)), 0);
+	dropStoredRelation(evenRelation, even2);
+	ReleaseFormula(even4);
+	ReleaseFormula(even2);
+}
+
+
+/**
+ * Test that the closed computed relation (+ + =) lets the compiler answer (! + 1 + 1 = 3).
+ * The machine service of (+ + =) has an output, so the INVERT operator reads a FILTER service.
+ */
+void testCompileClosedComputedRelation(void)
+{
+	Atom sumTerm = CStringToTerm("+ 1 + 2 = 3");
+	Relation sumRelation = RelationFromFact(FormulaGetView(sumTerm));
+	// CLAUDE: The relation is closed by MathSetup()
+	ASSERT_TRUE(RelationIsClosed(sumRelation))
+
+	ASSERT_UINT32_EQUAL(callBoundQuery("! + 1 + 2 = 4", OPERATOR_INVERT), 1)
+	ASSERT_UINT32_EQUAL(callBoundQuery("! + 1 + 2 = 3", OPERATOR_INVERT), 0)
+	ASSERT_UINT32_EQUAL(callBoundQuery("! + 1 + 1 = 3", OPERATOR_INVERT), 1)
+	ASSERT_UINT32_EQUAL(callBoundQuery("! + 1 + 1 = 2", OPERATOR_INVERT), 0)
+
+	ReleaseFormula(sumTerm);
+}
+
+
+/**
+ * CLAUDE: The rule (! even x | ! odd x) is not used for a query to the opposite relation of
+ * the closed relation (even x<INT), and a query to (even x<INT) itself is not inverted.
+ * The facts (even 4) and (odd 4) contradict through the rule, which shows that the rule is not used.
+ */
+void testCompileClosedRelationIgnoresRules(void)
+{
+	Atom even4 = CStringToTerm("even 4");
+	Atom odd4 = CStringToTerm("odd 4");
+	Relation evenRelation = createStoredRelation(even4);
+	Relation oddRelation = createStoredRelation(odd4);
+	FormulaView clause = DictionaryAddClauseFromCString("! even x | ! odd x");
+	CloseRelation(evenRelation);
+
+	// CLAUDE: The closed relation is compiled first, from its own tuples only
+	ASSERT_UINT32_EQUAL(callBoundQuery("even 3", OPERATOR_MACHINE), 0)
+	ASSERT_UINT32_EQUAL(callBoundQuery("even 4", OPERATOR_MACHINE), 1)
+	ASSERT_UINT32_EQUAL(callBoundQuery("! even 4", OPERATOR_INVERT), 0)
+	ASSERT_UINT32_EQUAL(callBoundQuery("! even 3", OPERATOR_INVERT), 1)
+
+	// CLAUDE: Dropping a closed relation drops the opposite relation too
+	Atom negatedTerm = CStringToTerm("! even 3");
+	Relation negatedRelation = RelationFromFact(FormulaGetView(negatedTerm));
+	dropStoredRelation(evenRelation, even4);
+	ASSERT_FALSE(RelationExists(evenRelation))
+	ASSERT_FALSE(RelationExists(negatedRelation))
+	ReleaseFormula(negatedTerm);
+	DictionaryRemoveClause(&clause);
+	dropStoredRelation(oddRelation, odd4);
+	ReleaseFormula(odd4);
+	ReleaseFormula(even4);
+}
+
+
+/**
+ * CLAUDE: A relation computed by a rule can be closed before the relation is compiled.
+ * The rule (even x | ! two x) with the fact (two 2) defines the closed relation.
+ */
+void testCompileClosedRuleRelation(void)
+{
+	Atom two2 = CStringToTerm("two 2");
+	Relation twoRelation = createStoredRelation(two2);
+	FormulaView clause = DictionaryAddClauseFromCString("even x | ! two x");
+	Atom even2 = CStringToTerm("even 2");
+	Relation evenRelation = RelationFromFact(FormulaGetView(even2));
+	CloseRelation(evenRelation);
+
+	ASSERT_UINT32_EQUAL(callBoundQuery("! even 3", OPERATOR_INVERT), 1)
+	ASSERT_UINT32_EQUAL(callBoundQuery("! even 2", OPERATOR_INVERT), 0)
+
+	OpenRelation(evenRelation);
+	ReleaseFormula(even2);
+	DictionaryRemoveClause(&clause);
+	dropStoredRelation(twoRelation, two2);
+	ReleaseFormula(two2);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(TRANSIENT_MEMORY);
@@ -2277,6 +2423,11 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileNegatedTerm);
 	ExecuteTest(testCompiledServiceReadsFactsLive);
 	ExecuteTest(testCompileSquares);
+
+	ExecuteTest(testCompileClosedStoredRelation);
+	ExecuteTest(testCompileClosedComputedRelation);
+	ExecuteTest(testCompileClosedRelationIgnoresRules);
+	ExecuteTest(testCompileClosedRuleRelation);
 
 	ExecuteTest(testCompileChainedRules);
 	ExecuteTest(testCompileChainedRuleOrder);
