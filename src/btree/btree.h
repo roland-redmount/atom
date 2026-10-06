@@ -31,6 +31,7 @@ struct s_BTreeNode {
 	
 	uint32 writeLockCount;	// semaphore preventing mutating operations
 	bool readLocked;		// lock for exclusive access
+	bool useCalloc;			// used by DEBUG_ALLOCATE builds
 
 	// Temporary item for returning copies from delete operations.
 	// NOTE: this is not thread-safe, but mutating operations
@@ -47,12 +48,22 @@ struct s_BTreeNode {
  * and also to compare items to query keys, unless another function
  * is provided. For queries, the second item is the key.
  */
-
 BTree * BTreeCreate(
 	size32 item_size,
 	ItemComparator compareItems,
 	void (*freeItem)(void const * item, size32 itemSize)
 );
+
+/**
+ * Same as BTreeCreate(), but uses calloc() for allocations.
+ * Only available in DEBUG_ALLOCATE builds.
+ */
+#ifdef DEBUG_ALLOCATE
+BTree * BTreeCreateWithCalloc(
+	size32 itemSize, ItemComparator compareItems,
+	void (*freeItem)(void const * item, size32 itemSize));
+#endif
+
 
 /**
  * Delete all items and free the B-tree structure.

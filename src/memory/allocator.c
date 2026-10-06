@@ -35,12 +35,6 @@ int8 compareRecords(void const * item, void const * itemOrKey, size32 itemSize)
 }
 
 bool logAllocations = false;
-
-// CLAUDE: compareRecords() is stored in the allocateLog B-tree; see memory/references.h
-static NamedFunction const allocatorFunctions[] = {
-	{"allocator.compareRecords", (AnyFunction) compareRecords},
-};
-
 #endif
 
 static struct {
@@ -495,8 +489,7 @@ void CreateAllocator(void * address, size8 logAreaSize)
 	setNBytesFree(getInitialNBytesFree());
 	
 #ifdef DEBUG_ALLOCATE
-	RegisterFunctions(allocatorFunctions, sizeof(allocatorFunctions) / sizeof(NamedFunction));
-	allocateLog = BTreeCreate(sizeof(AllocateRecord), &compareRecords, 0);
+	allocateLog = BTreeCreateWithCalloc(sizeof(AllocateRecord), &compareRecords, 0);
 #endif
 }
 
@@ -611,8 +604,6 @@ void * _LogAllocate(char const * fileName, uint32 lineNumber, size32 allocSize)
 {
 	void * block = _Allocate(allocSize);
 	if(logAllocations) {
-		// cannot log allocation from btree.c since we use a B-tree for logging ..
-		ASSERT(CStringCompare(fileName, "src/btree/btree.c") != 0)
 		if(block) {
 			AllocateRecord record = {
 				.fileName = fileName, 
@@ -676,7 +667,6 @@ void Free(void const * memory)
 void _LogFree(char const * fileName, uint32 lineNumber, void const * block)
 {
 	if(logAllocations) {
-		ASSERT(CStringCompare(fileName, "src/btree/btree.c") != 0)
 		// Find record with this address
 		AllocateRecord key = {.address = block};
 		AllocateRecord record;
