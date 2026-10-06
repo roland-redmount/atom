@@ -25,12 +25,14 @@
 #include "kernel/operator.h"
 
 
-/* CLAUDE: Fill in the StorageProvider functions of the B-tree provider;
-   see GetStorageProvider() */
+/**
+ * Fill in the StorageProvider functions of the B-tree StorageProvider structure
+ */
 void RelationBTreeSetupProvider(StorageProvider * provider);
 
-/* CLAUDE: Register the functions this module stores in persistent memory;
-   see memory/references.h */
+/**
+ * Register functions stored in persistent memory
+ */
 void RegisterRelationBTreeFunctions(void);
 
 // NOTE: "RelationBTree" sounds more like a B-tree of relations than a relation

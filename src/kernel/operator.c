@@ -1636,7 +1636,6 @@ Operator * CreateMachineOperator(
 	Operator * op = createOperator(
 		OPERATOR_MACHINE, nArguments, sizeof(MachineOperatorContext) + readerSpec->stateSize);
 	op->impl.machine.storage = storage;
-	// CLAUDE: the function pointers are written by SetReference(); see memory/references.h
 	RelationReaderSpec * spec = &(op->impl.machine.readerSpec);
 	spec->ioSignature = readerSpec->ioSignature;
 	spec->readerData = readerSpec->readerData;

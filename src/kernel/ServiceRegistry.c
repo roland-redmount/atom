@@ -33,7 +33,7 @@ typedef struct s_ServiceRegistry {
 	BTree * operatorAncestors;
 } ServiceRegistry;
 
-// pointer to the module state MODULE_SERVICES
+
 static ServiceRegistry * serviceRegistry = 0;
 
 
@@ -124,7 +124,7 @@ void RegisterServiceRegistryFunctions(void)
 void SetupServiceRegistry(void)
 {
 	serviceRegistry = Allocate(sizeof(ServiceRegistry));
-	SetModuleState(MODULE_SERVICES, serviceRegistry);
+	SetPersistentState(STATE_KEY_SERVICES, serviceRegistry);
 	// B-tree of Services, mapping Relation, IOSignature -> Service
 	serviceRegistry->serviceRecords = BTreeCreate(
 		sizeof(ServiceRecord),
@@ -143,7 +143,7 @@ void SetupServiceRegistry(void)
 
 void RestoreServiceRegistry(void)
 {
-	serviceRegistry = GetModuleState(MODULE_SERVICES);
+	serviceRegistry = GetPersistentState(STATE_KEY_SERVICES);
 	ASSERT(serviceRegistry)
 }
 
@@ -153,7 +153,7 @@ void FreeServiceRegistry(void)
 	BTreeFree(serviceRegistry->serviceRecords);
 	BTreeFree(serviceRegistry->operatorAncestors);
 	Free(serviceRegistry);
-	SetModuleState(MODULE_SERVICES, 0);
+	SetPersistentState(STATE_KEY_SERVICES, 0);
 	serviceRegistry = 0;
 }
 

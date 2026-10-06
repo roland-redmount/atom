@@ -19,7 +19,7 @@ typedef struct s_Lookup {
 	size32 nRolesTotal;
 } Lookup;
 
-// pointer to the module state MODULE_LOOKUP
+
 static Lookup * lookup = 0;
 
 
@@ -82,7 +82,7 @@ void RegisterLookupFunctions(void)
 void InitializeLookup(void)
 {
 	lookup = Allocate(sizeof(Lookup));
-	SetModuleState(MODULE_LOOKUP, lookup);
+	SetPersistentState(STATE_KEY_LOOKUP, lookup);
 	lookup->btree = BTreeCreate(
 	    sizeof(LookupRecord),
 	    btreeCompareRecords,
@@ -94,7 +94,7 @@ void InitializeLookup(void)
 
 void RestoreLookup(void)
 {
-	lookup = GetModuleState(MODULE_LOOKUP);
+	lookup = GetPersistentState(STATE_KEY_LOOKUP);
 	ASSERT(lookup)
 }
 
@@ -104,7 +104,7 @@ void FreeLookup(void)
 	ASSERT(BTreeNItems(lookup->btree) == 0)
 	BTreeFree(lookup->btree);
 	Free(lookup);
-	SetModuleState(MODULE_LOOKUP, 0);
+	SetPersistentState(STATE_KEY_LOOKUP, 0);
 	lookup = 0;
 }
 

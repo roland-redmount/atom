@@ -47,7 +47,7 @@
 uint32 RequestModuleID(void);
 
 /* CLAUDE: Create and free the state of machine services, the module state
-   MODULE_MACHINE_SERVICES. This must precede RequestModuleID(). FreeMachineServices()
+   STATE_KEY_MACHINE_SERVICES. This must precede RequestModuleID(). FreeMachineServices()
    requires every module to have called FreeModuleRelations(). See LoadLibraries(). */
 void SetupMachineServices(void);
 void FreeMachineServices(void);

@@ -188,11 +188,11 @@ static NamedFunction const referenceFunctions[] = {
 
 /*
  * The reference table is a persisten B-tree of Reference items, ordered by slot.
- * It is always looked up from the module state, which is 0 when no table exists.
+ * It is always looked up from persistent state, which is 0 when no table exists.
  */
 static BTree * getReferenceTable(void)
 {
-	return GetModuleState(MODULE_REFERENCES);
+	return GetPersistentState(STATE_KEY_REFERENCES);
 }
 
 
@@ -211,7 +211,7 @@ void InitializeReferences(void)
 	isCreatingTable = true;
 	BTree * table = BTreeCreate(sizeof(Reference), btreeCompareReferences, 0);
 	isCreatingTable = false;
-	SetModuleState(MODULE_REFERENCES, table);
+	SetPersistentState(STATE_KEY_REFERENCES, table);
 }
 
 
@@ -219,7 +219,7 @@ void FreeReferences(void)
 {
 	BTree * table = getReferenceTable();
 	ASSERT(BTreeNItems(table) == 0)
-	SetModuleState(MODULE_REFERENCES, 0);
+	SetPersistentState(STATE_KEY_REFERENCES, 0);
 	BTreeFree(table);
 }
 

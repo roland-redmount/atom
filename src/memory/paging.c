@@ -11,17 +11,13 @@ byte * pageTable = 0;
 
 /**
  * The persistent root page, located on the page following the bit field pages.
- * It holds the paging state, and the state of every PersistentModule.
+ * It holds the paging state, and the state of kernel modules.
  */
 #define ROOT_PAGE				BITFIELD_N_PAGES
 
 // Magic number marking the root of a paging file; the bytes read "ATOMPAGE".
 #define PAGING_FILE_MAGIC		0x41544F4D50414745
 
-// Persistent data version number. Must be increased whenever the layout of
-// a persistent structure, a PersistentModule number or a registered function name changes,
-// since a paging file written by an earlier version can then not be restored.
-#define PERSISTENCE_VERSION	1
 
 typedef struct s_PersistentRoot {
 	data64 magic;
@@ -30,7 +26,7 @@ typedef struct s_PersistentRoot {
 	// true while a process has the paging area in use; see ShutdownPaging()
 	bool isOpen;
 	index32 firstFreePage;
-	void * moduleStates[N_PERSISTENT_MODULES];
+	void * states[N_STATE_KEYS];
 } PersistentRoot;
 
 static struct {
@@ -251,17 +247,17 @@ void ShutdownPaging(void)
 
 
 
-void * GetModuleState(PersistentModule module)
+void * GetPersistentState(PersistentStateKey key)
 {
-	ASSERT(module < N_PERSISTENT_MODULES)
-	return paging.root->moduleStates[module];
+	ASSERT(key < N_STATE_KEYS)
+	return paging.root->states[key];
 }
 
 
-void SetModuleState(PersistentModule module, void * state)
+void SetPersistentState(PersistentStateKey key, void * state)
 {
-	ASSERT(module < N_PERSISTENT_MODULES)
-	paging.root->moduleStates[module] = state;
+	ASSERT(key < N_STATE_KEYS)
+	paging.root->states[key] = state;
 }
 
 

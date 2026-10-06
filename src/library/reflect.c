@@ -149,13 +149,13 @@ typedef struct s_ReflectLibrary {
 	uint32 moduleID;
 } ReflectLibrary;
 
-// pointer to the module state MODULE_REFLECT
+
 static ReflectLibrary * reflectLibrary = 0;
 
 void ReflectionSetup(void)
 {
 	reflectLibrary = Allocate(sizeof(ReflectLibrary));
-	SetModuleState(MODULE_REFLECT, reflectLibrary);
+	SetPersistentState(STATE_KEY_REFLECT, reflectLibrary);
 
 	reflectLibrary->moduleID = RequestModuleID();
 
@@ -177,7 +177,7 @@ void ReflectionSetup(void)
 
 void ReflectionRestore(void)
 {
-	reflectLibrary = GetModuleState(MODULE_REFLECT);
+	reflectLibrary = GetPersistentState(STATE_KEY_REFLECT);
 	ASSERT(reflectLibrary)
 }
 
@@ -187,6 +187,6 @@ void ReflectionShutdown(void)
 	FreeModuleRelations(reflectLibrary->moduleID);
 
 	Free(reflectLibrary);
-	SetModuleState(MODULE_REFLECT, 0);
+	SetPersistentState(STATE_KEY_REFLECT, 0);
 	reflectLibrary = 0;
 }

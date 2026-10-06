@@ -41,7 +41,7 @@ typedef struct s_FormulaStorage {
 	uint32 nReferencesTotal;
 } FormulaStorage;
 
-// pointer to the module state MODULE_FORMULAS
+
 static FormulaStorage * formulaStorage = 0;
 
 
@@ -99,7 +99,7 @@ static FormulaRecord * peekFormulaRecord(data64 hash)
 void InitializeFormulaStorage(void)
 {
 	formulaStorage = Allocate(sizeof(FormulaStorage));
-	SetModuleState(MODULE_FORMULAS, formulaStorage);
+	SetPersistentState(STATE_KEY_FORMULAS, formulaStorage);
 	// Create the B-tree. No freeItem() callback used here; a FormulaRecord is taken apart by
 	// ReleaseFormula() before it is deleted; see ReleaseFormula().
 	formulaStorage->tree = BTreeCreate(sizeof(FormulaRecord), btreeCompareFormulaRecords, 0);
@@ -109,7 +109,7 @@ void InitializeFormulaStorage(void)
 
 void RestoreFormulaStorage(void)
 {
-	formulaStorage = GetModuleState(MODULE_FORMULAS);
+	formulaStorage = GetPersistentState(STATE_KEY_FORMULAS);
 	ASSERT(formulaStorage)
 }
 
@@ -120,7 +120,7 @@ void FreeFormulaStorage(void)
 	ASSERT(formulaStorage->nReferencesTotal == 0)
 	BTreeFree(formulaStorage->tree);
 	Free(formulaStorage);
-	SetModuleState(MODULE_FORMULAS, 0);
+	SetPersistentState(STATE_KEY_FORMULAS, 0);
 	formulaStorage = 0;
 }
 

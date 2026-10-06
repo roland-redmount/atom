@@ -180,7 +180,7 @@ typedef struct s_Kernel {
 
 } Kernel;
 
-// pointer to the module state MODULE_KERNEL
+
 static Kernel * kernel = 0;
 
 
@@ -249,7 +249,7 @@ bool SetupMemory(uint32 memoryPersistence)
 
 	if(memoryPersistence == RESTART_PERSISTENT_MEMORY) {
 		// A restored paging area already holds the allocator and the reference table
-		OpenAllocator(GetModuleState(MODULE_ALLOCATOR), LOG_ALLOCATOR_AREA_SIZE);
+		OpenAllocator(GetPersistentState(STATE_KEY_ALLOCATOR), LOG_ALLOCATOR_AREA_SIZE);
 		if(!ResolveReferences()) {
 			ShutdownPaging();
 			return false;
@@ -260,7 +260,7 @@ bool SetupMemory(uint32 memoryPersistence)
 		void * allocatorArea = AllocatePages(ALLOCATOR_N_PAGES);
 		if(allocatorArea == 0)
 			Panic("cannot reserve %u pages for the allocator\n", ALLOCATOR_N_PAGES);
-		SetModuleState(MODULE_ALLOCATOR, allocatorArea);
+		SetPersistentState(STATE_KEY_ALLOCATOR, allocatorArea);
 		CreateAllocator(allocatorArea, LOG_ALLOCATOR_AREA_SIZE);
 		InitializeReferences();
 	}
@@ -284,7 +284,7 @@ void CleanupMemory(void)
 	}
 	ASSERT(AllocatorIsEmpty())
 	CloseAllocator();
-	FreePages(GetModuleState(MODULE_ALLOCATOR), ALLOCATOR_N_PAGES);
+	FreePages(GetPersistentState(STATE_KEY_ALLOCATOR), ALLOCATOR_N_PAGES);
 	ShutdownPaging();
 }
 
@@ -670,7 +670,7 @@ static void setupCoreServices(void)
  */
 static void restoreKernel(void)
 {
-	kernel = GetModuleState(MODULE_KERNEL);
+	kernel = GetPersistentState(STATE_KEY_KERNEL);
 	ASSERT(kernel)
 	RestoreRelationRegistry();
 	RestoreServiceRegistry();
@@ -692,7 +692,7 @@ bool KernelInitialize(uint32 memoryPersistence)
 	}
 	else {
 		kernel = Allocate(sizeof(Kernel));
-		SetModuleState(MODULE_KERNEL, kernel);
+		SetPersistentState(STATE_KEY_KERNEL, kernel);
 		SetupStorageProviders();
 		SetupRelationRegistry();
 		SetupServiceRegistry();
@@ -839,7 +839,7 @@ void KernelShutdown(void)
 	FreeRelationRegistry();
 	FreeNameStorage();
 	Free(kernel);
-	SetModuleState(MODULE_KERNEL, 0);
+	SetPersistentState(STATE_KEY_KERNEL, 0);
 	kernel = 0;
 	CleanupMemory();
 }

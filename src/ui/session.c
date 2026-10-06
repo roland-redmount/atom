@@ -49,7 +49,7 @@ typedef struct s_SessionState {
 	ResizingArray idExpansions;
 } SessionState;
 
-/* pointer to the module state MODULE_SESSION. SessionExecuteLine() sets
+/* Session state, persisted in STATE_KEY_SESSION. SessionExecuteLine() sets
    sessionState, and creates the module state on the first line of a new world. */
 static SessionState * sessionState = 0;
 
@@ -57,7 +57,7 @@ static SessionState * sessionState = 0;
 static void initializeSession(void)
 {
 	sessionState = Allocate(sizeof(SessionState));
-	SetModuleState(MODULE_SESSION, sessionState);
+	SetPersistentState(STATE_KEY_SESSION, sessionState);
 	CreateResizingArray(&sessionState->numberedIDs, sizeof(Atom), 16);
 	CreateResizingArray(&sessionState->idExpansions, sizeof(IDExpansion), 4);
 	StringBufferInit(&sessionState->expandedLine);
@@ -613,7 +613,7 @@ static int executeCommand(char const * line, char const * commandText)
 
 int SessionExecuteLine(char const * line)
 {
-	sessionState = GetModuleState(MODULE_SESSION);
+	sessionState = GetPersistentState(STATE_KEY_SESSION);
 	if(!sessionState)
 		initializeSession();
 	IFactSetPrinter(printNumberedID);

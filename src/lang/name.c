@@ -23,7 +23,7 @@ typedef struct s_NameStorage {
 	uint32 nReferencesTotal;
 } NameStorage;
 
-// pointer to the module state MODULE_NAMES
+
 static NameStorage * nameStorage = 0;
 
 
@@ -81,7 +81,7 @@ static bool addNameRecord(NameRecord const * record)
 void InitializeNameStorage(void)
 {
 	nameStorage = Allocate(sizeof(NameStorage));
-	SetModuleState(MODULE_NAMES, nameStorage);
+	SetPersistentState(STATE_KEY_NAMES, nameStorage);
 	nameStorage->tree = BTreeCreate(
 	    sizeof(NameRecord),
 	    btreeCompareNameRecords,
@@ -93,7 +93,7 @@ void InitializeNameStorage(void)
 
 void RestoreNameStorage(void)
 {
-	nameStorage = GetModuleState(MODULE_NAMES);
+	nameStorage = GetPersistentState(STATE_KEY_NAMES);
 	ASSERT(nameStorage)
 }
 
@@ -102,7 +102,7 @@ void FreeNameStorage(void)
 {
 	BTreeFree(nameStorage->tree);
 	Free(nameStorage);
-	SetModuleState(MODULE_NAMES, 0);
+	SetPersistentState(STATE_KEY_NAMES, 0);
 	nameStorage = 0;
 }
 

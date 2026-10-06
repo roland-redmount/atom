@@ -26,7 +26,7 @@ typedef struct s_Dictionary {
 	BTree * ifactRules;
 } Dictionary;
 
-// pointer to the module state MODULE_DICTIONARY
+
 static Dictionary * dictionary = 0;
 
 
@@ -118,7 +118,7 @@ void RegisterDictionaryFunctions(void)
 void SetupDictionary(void)
 {
 	dictionary = Allocate(sizeof(Dictionary));
-	SetModuleState(MODULE_DICTIONARY, dictionary);
+	SetPersistentState(STATE_KEY_DICTIONARY, dictionary);
 	dictionary->btree = BTreeCreate(sizeof(FormulaView), &btreeCompareItems, &btreeFreeItem);
 	dictionary->ifactRules = BTreeCreate(sizeof(FormulaView), &btreeCompareIFactRules, &btreeFreeItem);
 }
@@ -126,7 +126,7 @@ void SetupDictionary(void)
 
 void RestoreDictionary(void)
 {
-	dictionary = GetModuleState(MODULE_DICTIONARY);
+	dictionary = GetPersistentState(STATE_KEY_DICTIONARY);
 	ASSERT(dictionary)
 }
 
@@ -136,7 +136,7 @@ void TeardownDictionary(void)
 	BTreeFree(dictionary->btree);
 	BTreeFree(dictionary->ifactRules);
 	Free(dictionary);
-	SetModuleState(MODULE_DICTIONARY, 0);
+	SetPersistentState(STATE_KEY_DICTIONARY, 0);
 	dictionary = 0;
 }
 

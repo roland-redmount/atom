@@ -41,15 +41,14 @@ void PrintName(Atom name);
 
 data64 NameHashFromCString(char const * cString, data64 initialHash);
 
-
 /**
- * For debugging
+ * Dump the name registry, for debugging.
  */
 void NameDump(void);
 
-
-/* CLAUDE: Register the functions this module stores in persistent memory;
-   see memory/references.h */
+/**
+ * Register functions referred to from persistent memory.
+ */
 void RegisterNameFunctions(void);
 
 

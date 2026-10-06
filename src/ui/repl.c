@@ -19,15 +19,11 @@
 
 
 /*
- * Read the command line for --transient, which keeps the session's memory to
- * itself rather than mirroring it to a paging file. That is what a WebAssembly
- * build needs, having no disk to mirror to, and it also leaves a command line
- * session with nothing to clean up afterwards.
- */
-/*
- * CLAUDE: --new starts a blank world in a new paging file, replacing the paging file of
- * an earlier session. --restart continues the session from the paging file that the
- * previous session closed, and is what the repl does when given no option.
+ * Read command line options:
+ *
+ *   --transient runs with TRANSIENT_MEMORY
+ *   --new runs with NEW_PERSISTENT_MEMORY
+ *   --restart runs with RESTART_PERSISTENT_MEMORY
  */
 static uint32 getMemoryPersistence(int argc, char * argv[])
 {

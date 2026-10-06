@@ -17,9 +17,9 @@ void ReflectionRestore(void);
 
 void ReflectionShutdown(void);
 
-
-/* CLAUDE: Register the functions this module stores in persistent memory;
-   see memory/references.h */
+/**
+ * Register functions referred to from persistent memory.
+ */
 void RegisterReflectFunctions(void);
 
 

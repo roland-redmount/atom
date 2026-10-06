@@ -59,8 +59,7 @@ typedef struct s_Relation {
 } Relation;
 
 /**
- * CLAUDE: Test whether a form can be the form of a relation, which is a term form or a
- * conjunction form.
+ * Returns true if the given form is a term form or a conjunction form.
  */
 bool IsRelationForm(Atom form);
 
@@ -247,9 +246,9 @@ Relation RelationIteratorGet(RelationIterator const * iterator);
 
 void RelationIteratorEnd(RelationIterator * iterator);
 
-
-/* CLAUDE: Register the functions this module stores in persistent memory;
-   see memory/references.h */
+/**
+ * Register functions referred to from persistent memory.
+ */
 void RegisterRelationFunctions(void);
 
 

@@ -12,22 +12,22 @@ void RelationDetachTupleStore(Relation relation, TupleStore * store);
 
 /**
  * Pool allocation for structures
- * This is also the module state MODULE_TUPLE_STORES
+ * Stored in persistent state STATE_KEY_TUPLE_STORES
  */
 static void * storePool = 0;
 
 
 void InitializeTupleStores(void)
 {
-	ASSERT(GetModuleState(MODULE_TUPLE_STORES) == 0)
+	ASSERT(GetPersistentState(STATE_KEY_TUPLE_STORES) == 0)
 	storePool = CreatePool(sizeof(TupleStore));
-	SetModuleState(MODULE_TUPLE_STORES, storePool);
+	SetPersistentState(STATE_KEY_TUPLE_STORES, storePool);
 }
 
 
 void RestoreTupleStores(void)
 {
-	storePool = GetModuleState(MODULE_TUPLE_STORES);
+	storePool = GetPersistentState(STATE_KEY_TUPLE_STORES);
 	ASSERT(storePool)
 }
 
@@ -36,7 +36,7 @@ void FreeTupleStores(void)
 {
 	ASSERT(PoolNItems(storePool) == 0)
 	FreePool(storePool);
-	SetModuleState(MODULE_TUPLE_STORES, 0);
+	SetPersistentState(STATE_KEY_TUPLE_STORES, 0);
 	storePool = 0;
 }
 

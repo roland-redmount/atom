@@ -43,7 +43,7 @@ typedef struct s_ListLibrary {
 	Operator * listLengthOperator;
 } ListLibrary;
 
-// pointer to the module state MODULE_LIST
+
 static ListLibrary * listLibrary = 0;
 
 
@@ -366,7 +366,7 @@ void PrintList(Atom list)
 void ListSetup(void)
 {
 	listLibrary = Allocate(sizeof(ListLibrary));
-	SetModuleState(MODULE_LIST, listLibrary);
+	SetPersistentState(STATE_KEY_LIST, listLibrary);
 
 	listLibrary->listRoleName = CreateNameFromCString("list");
 	listLibrary->positionRoleName = CreateNameFromCString("position");
@@ -448,7 +448,7 @@ void ListSetup(void)
 
 void ListRestore(void)
 {
-	listLibrary = GetModuleState(MODULE_LIST);
+	listLibrary = GetPersistentState(STATE_KEY_LIST);
 	ASSERT(listLibrary)
 }
 
@@ -460,6 +460,6 @@ void ListShutdown(void)
 	DropRelation(listLibrary->listIDRelation);
 
 	Free(listLibrary);
-	SetModuleState(MODULE_LIST, 0);
+	SetPersistentState(STATE_KEY_LIST, 0);
 	listLibrary = 0;
 }

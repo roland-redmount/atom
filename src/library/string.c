@@ -21,7 +21,7 @@ typedef struct s_StringLibrary {
 	Operator * stringOperator;
 } StringLibrary;
 
-//  pointer to the module state MODULE_STRING
+
 static StringLibrary * stringLibrary = 0;
 
 
@@ -115,7 +115,7 @@ Atom ParseString(char const * syntax, size32 length)
 void StringSetup(void)
 {
 	stringLibrary = Allocate(sizeof(StringLibrary));
-	SetModuleState(MODULE_STRING, stringLibrary);
+	SetPersistentState(STATE_KEY_STRING, stringLibrary);
 
 	// Create the (string) predicate form
 	stringLibrary->stringRoleName = CreateNameFromCString("string");
@@ -144,7 +144,7 @@ void StringSetup(void)
 
 void StringRestore(void)
 {
-	stringLibrary = GetModuleState(MODULE_STRING);
+	stringLibrary = GetPersistentState(STATE_KEY_STRING);
 	ASSERT(stringLibrary)
 }
 
@@ -154,6 +154,6 @@ void StringShutdown(void)
 	DropRelation(stringLibrary->stringRelation);
 
 	Free(stringLibrary);
-	SetModuleState(MODULE_STRING, 0);
+	SetPersistentState(STATE_KEY_STRING, 0);
 	stringLibrary = 0;
 }

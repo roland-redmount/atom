@@ -316,14 +316,14 @@ typedef struct s_MathLibrary {
 	FormulaView mathRules[N_MATH_RULES];
 } MathLibrary;
 
-// pointer to the module state MODULE_MATH
+
 static MathLibrary * mathLibrary = 0;
 
 
 void MathSetup(void)
 {
 	mathLibrary = Allocate(sizeof(MathLibrary));
-	SetModuleState(MODULE_MATH, mathLibrary);
+	SetPersistentState(STATE_KEY_MATH, mathLibrary);
 
 	mathLibrary->moduleID = RequestModuleID();
 
@@ -379,7 +379,7 @@ void MathSetup(void)
 
 void MathRestore(void)
 {
-	mathLibrary = GetModuleState(MODULE_MATH);
+	mathLibrary = GetPersistentState(STATE_KEY_MATH);
 	ASSERT(mathLibrary)
 }
 
@@ -392,6 +392,6 @@ void MathShutdown(void)
 	FreeModuleRelations(mathLibrary->moduleID);
 
 	Free(mathLibrary);
-	SetModuleState(MODULE_MATH, 0);
+	SetPersistentState(STATE_KEY_MATH, 0);
 	mathLibrary = 0;
 }

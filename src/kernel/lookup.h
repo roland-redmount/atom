@@ -30,6 +30,9 @@
  * of associations to the role.
  */
 
+#ifndef LOOKUP_H
+#define LOOKUP_H
+
 #include "btree/btree.h"
 #include "kernel/Relation.h"
 #include "kernel/typedtuple.h"
@@ -142,12 +145,14 @@ Atom LookupIteratorGetRole(LookupIterator const * iterator);
 void LookupIteratorEnd(LookupIterator * iterator);
 
 /**
- * For debugging
- */
-
+ * Dump all lookup entries, for debugging.*/
 void LookupDump(void);
 
-
-/* CLAUDE: Register the functions this module stores in persistent memory;
-   see memory/references.h */
+/**
+ * Register functions referred to from persistent memory.
+ */
 void RegisterLookupFunctions(void);
+
+
+#endif	// LOOKUP_H
+	

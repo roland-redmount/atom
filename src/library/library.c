@@ -20,7 +20,7 @@ void LoadLibraries(void)
 {
 	RegisterLibraryFunctions();
 	// CLAUDE: in a restored paging area, the libraries are already loaded
-	if(GetModuleState(MODULE_MACHINE_SERVICES)) {
+	if(GetPersistentState(STATE_KEY_MACHINE_SERVICES)) {
 		ListRestore();
 		MathRestore();
 		StringRestore();

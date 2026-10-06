@@ -50,7 +50,7 @@ typedef struct s_RelationRecord {
 
 /**
  * B-tree for lookup of relations by form, stores RelationRecord items.
- * This is also the module state MODULE_RELATIONS
+ * Stored in persistent state STATE_KEY_RELATIONS
  */
 static BTree * relationRegistry;
 
@@ -371,13 +371,13 @@ void SetupRelationRegistry(void)
 		btreeCompareRelationRecords,
 		0 // freeItem
 	);
-	SetModuleState(MODULE_RELATIONS, relationRegistry);
+	SetPersistentState(STATE_KEY_RELATIONS, relationRegistry);
 }
 
 
 void RestoreRelationRegistry(void)
 {
-	relationRegistry = GetModuleState(MODULE_RELATIONS);
+	relationRegistry = GetPersistentState(STATE_KEY_RELATIONS);
 	ASSERT(relationRegistry)
 }
 
@@ -385,7 +385,7 @@ void RestoreRelationRegistry(void)
 void FreeRelationRegistry(void)
 {
 	BTreeFree(relationRegistry);
-	SetModuleState(MODULE_RELATIONS, 0);
+	SetPersistentState(STATE_KEY_RELATIONS, 0);
 	relationRegistry = 0;
 }
 

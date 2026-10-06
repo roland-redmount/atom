@@ -64,11 +64,11 @@ void testRestartPaging(void)
 	ASSERT_TRUE(InitializePaging(NEW_PERSISTENT_MEMORY))
 	byte * page = AllocatePage();
 	CopyMemory("abcdefghij", page, 10);
-	SetModuleState(MODULE_KERNEL, page);
+	SetPersistentState(STATE_KEY_KERNEL, page);
 	ShutdownPaging();
 
 	ASSERT_TRUE(InitializePaging(RESTART_PERSISTENT_MEMORY))
-	ASSERT_PTR_EQUAL(GetModuleState(MODULE_KERNEL), page)
+	ASSERT_PTR_EQUAL(GetPersistentState(STATE_KEY_KERNEL), page)
 	ASSERT_MEMORY_EQUAL(page, "abcdefghij", 10)
 	// the page table is restored, so the page is not handed out again
 	byte * nextPage = AllocatePage();

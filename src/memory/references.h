@@ -1,5 +1,5 @@
 /**
- * CLAUDE: Function references in persistent memory.
+ * Relocation of function references (pointers) in persistent memory.
  *
  * A function address changes from one run of the program to the next, so a function
  * pointer stored in the paging area becomes invalid once a paging file is restored.
@@ -42,7 +42,7 @@ void RegisterFunctions(NamedFunction const functions[], size32 nFunctions);
 
 /**
  * Create and free the reference table. The reference table is the module state
- * MODULE_REFERENCES. FreeReferences() requires every reference to be cleared first.
+ * STATE_KEY_REFERENCES. FreeReferences() requires every reference to be cleared first.
  */
 void InitializeReferences(void);
 void FreeReferences(void);

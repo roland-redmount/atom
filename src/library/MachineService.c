@@ -14,7 +14,6 @@
 #include "parser/FormulaBuilder.h"
 
 
-// CLAUDE: The module state MODULE_MACHINE_SERVICES; see SetupMachineServices()
 typedef struct s_MachineServices {
 	uint32 nextModuleID;
 	BTree * moduleRelations;
@@ -23,7 +22,7 @@ typedef struct s_MachineServices {
 
 static MachineServices * getMachineServices(void)
 {
-	MachineServices * machineServices = GetModuleState(MODULE_MACHINE_SERVICES);
+	MachineServices * machineServices = GetPersistentState(STATE_KEY_MACHINE_SERVICES);
 	ASSERT(machineServices)
 	return machineServices;
 }
@@ -31,10 +30,10 @@ static MachineServices * getMachineServices(void)
 
 void SetupMachineServices(void)
 {
-	ASSERT(GetModuleState(MODULE_MACHINE_SERVICES) == 0)
+	ASSERT(GetPersistentState(STATE_KEY_MACHINE_SERVICES) == 0)
 	MachineServices * machineServices = Allocate(sizeof(MachineServices));
 	machineServices->nextModuleID = 1;
-	SetModuleState(MODULE_MACHINE_SERVICES, machineServices);
+	SetPersistentState(STATE_KEY_MACHINE_SERVICES, machineServices);
 }
 
 
@@ -44,7 +43,7 @@ void FreeMachineServices(void)
 	// every module must have freed its relations
 	ASSERT(machineServices->moduleRelations == 0)
 	Free(machineServices);
-	SetModuleState(MODULE_MACHINE_SERVICES, 0);
+	SetPersistentState(STATE_KEY_MACHINE_SERVICES, 0);
 }
 
 

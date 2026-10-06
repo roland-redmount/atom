@@ -4,7 +4,7 @@
 
 #include "kernel/Relation.h"
 #include "kernel/operator.h"
-#include "kernel/TupleStore.h"		// for TRANSIENT_MEMORY and PERSISTENT_MEMORY
+#include "kernel/TupleStore.h"
 #include "memory/paging.h"
 #include "platform.h"
 

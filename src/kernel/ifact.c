@@ -84,7 +84,7 @@ typedef struct s_IFactStorage {
 	bool flagCreatedIFacts;
 } IFactStorage;
 
-// pointer to the module state MODULE_IFACTS
+
 static IFactStorage * ifactStorage = 0;
 
 
@@ -118,7 +118,7 @@ void InitializeIFacts(void)
 	ASSERT(sizeof(IFactHeader) == 16 + sizeof(IFactConjunction *));
 
 	ifactStorage = Allocate(sizeof(IFactStorage));
-	SetModuleState(MODULE_IFACTS, ifactStorage);
+	SetPersistentState(STATE_KEY_IFACTS, ifactStorage);
 
 	ifactStorage->btree = BTreeCreate(
 	    sizeof(IFactHeader),
@@ -132,7 +132,7 @@ void InitializeIFacts(void)
 
 void RestoreIFacts(void)
 {
-	ifactStorage = GetModuleState(MODULE_IFACTS);
+	ifactStorage = GetPersistentState(STATE_KEY_IFACTS);
 	ASSERT(ifactStorage)
 }
 
@@ -211,7 +211,7 @@ void FreeIFacts(void)
 	ASSERT(IFactTotalCount() == 0);
 	BTreeFree(ifactStorage->btree);
 	Free(ifactStorage);
-	SetModuleState(MODULE_IFACTS, 0);
+	SetPersistentState(STATE_KEY_IFACTS, 0);
 	ifactStorage = 0;
 }
 
