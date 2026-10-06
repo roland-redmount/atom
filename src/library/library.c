@@ -19,19 +19,21 @@ void RegisterLibraryFunctions(void)
 void LoadLibraries(void)
 {
 	RegisterLibraryFunctions();
-	// CLAUDE: in a restored paging area, the libraries are already loaded
 	if(GetPersistentState(STATE_KEY_MACHINE_SERVICES)) {
+		// Restore persistent state for libraries
 		ListRestore();
 		MathRestore();
 		StringRestore();
 		ReflectionRestore();
-		return;
 	}
-	SetupMachineServices();
-	ListSetup();
-	MathSetup();
-	StringSetup();
-	ReflectionSetup();
+	else {
+		// Setup from scratch
+		SetupMachineServices();
+		ListSetup();
+		MathSetup();
+		StringSetup();
+		ReflectionSetup();
+	}
 }
 
 
