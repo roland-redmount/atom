@@ -1,4 +1,6 @@
 
+#include "kernel/ClosedRelation.h"
+#include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
 #include "kernel/Relation.h"
@@ -456,7 +458,10 @@ static size32 invalidateRelationServices(Relation relation, InvalidationUseCase 
 }
 
 
-size32 InvalidateTermFormServices(Atom termForm, InvalidationUseCase useCase)
+/*
+ * CLAUDE: Invalidate compiled services for the given term form; see InvalidateTermFormServices().
+ */
+static size32 invalidateFormServices(Atom termForm, InvalidationUseCase useCase)
 {
 	// Collect all relations matching the the termForm
 	ResizingArray relations;
@@ -475,6 +480,20 @@ size32 InvalidateTermFormServices(Atom termForm, InvalidationUseCase useCase)
 		nServicesRemoved += invalidateRelationServices(*relation, useCase);
 	}
 	FreeResizingArray(&relations);
+	return nServicesRemoved;
+}
+
+
+size32 InvalidateTermFormServices(Atom termForm, InvalidationUseCase useCase)
+{
+	size32 nServicesRemoved = invalidateFormServices(termForm, useCase);
+	// CLAUDE: A query to the opposite relation of a closed relation compiles to an INVERT
+	// operator, which depends on whether the closed relation has a service; see CloseRelation()
+	if(RelationIsClosedForm(termForm)) {
+		Atom oppositeForm = TermFormCreateOppositeForm(termForm);
+		nServicesRemoved += invalidateFormServices(oppositeForm, useCase);
+		IFactRelease(oppositeForm);
+	}
 	return nServicesRemoved;
 }
 

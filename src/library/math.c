@@ -1,4 +1,5 @@
 
+#include "kernel/ClosedRelation.h"
 #include "kernel/dictionary.h"
 #include "library/MachineService.h"
 #include "library/math.h"
@@ -310,10 +311,14 @@ void RegisterMathFunctions(void)
 
 
 #define N_MATH_RULES	5
+// The number of relations closed by MathSetup()
+#define N_MATH_CLOSED_FORMS	2
 
 typedef struct s_MathLibrary {
 	uint32 moduleID;
 	FormulaView mathRules[N_MATH_RULES];
+	// The term forms of the relations closed by MathSetup()
+	Atom closedForms[N_MATH_CLOSED_FORMS];
 } MathLibrary;
 
 
@@ -326,14 +331,12 @@ void MathSetup(void)
 	SetPersistentState(STATE_KEY_MATH, mathLibrary);
 
 	mathLibrary->moduleID = RequestModuleID();
-	Service service;
 
 	// Integer arithmetic
-	RegisterMachineService(mathLibrary->moduleID, "integer #1<INT", integerCall);
-
+	Service service = RegisterMachineService(mathLibrary->moduleID, "integer #1<INT", integerCall);
+	mathLibrary->closedForms[0] = service.relation.form;
 	service = RegisterMachineService(mathLibrary->moduleID, "+ #1<INT + #2<INT = #3>INT", addIntCall);
-	CloseRelation(service.relation);
-	
+	mathLibrary->closedForms[1] = service.relation.form;
 	RegisterMachineService(mathLibrary->moduleID, "+ #1<INT - #2<INT = #3>INT", subIntCall);
 	RegisterMachineService(mathLibrary->moduleID, "* #1<INT * #2<INT = #3>INT", mulIntCall);
 	RegisterMachineService(mathLibrary->moduleID, "* #1<INT / #2<INT = #3>INT rem #4>INT", intDivisionCall);
@@ -378,6 +381,10 @@ void MathSetup(void)
 	// Mixed float-int arithmetic. These rules will yield services only for FLOAT x and INT i
 	mathLibrary->mathRules[3] = DictionaryAddClauseFromCString("+ x + i = y | ! integer i float f | ! + x + f = y");
 	mathLibrary->mathRules[4] = DictionaryAddClauseFromCString("* x * i = y | ! integer i float f | ! * x * f = y");
+
+	// Close relations
+	for(index32 i = 0; i < N_MATH_CLOSED_FORMS; i++)
+		ASSERT(CloseRelation(mathLibrary->closedForms[i]) == CLOSE_OK)
 }
 
 
@@ -390,6 +397,8 @@ void MathRestore(void)
 
 void MathShutdown(void)
 {
+	for(index32 i = 0; i < N_MATH_CLOSED_FORMS; i++)
+		OpenRelation(mathLibrary->closedForms[i]);
 	for(index32 i = 0; i < N_MATH_RULES; i++)
 		DictionaryRemoveClause(&mathLibrary->mathRules[i]);
 

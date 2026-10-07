@@ -10,6 +10,7 @@
 #include "compiler/compiledvariant.h"
 #include "compiler/compiler.h"
 #include "compiler/compilestack.h"
+#include "kernel/ClosedRelation.h"
 #include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
 #include "kernel/kernel.h"
@@ -2502,37 +2503,48 @@ static bool queryIsClosedInferred(ParameterizedQuery const * query)
 		if((parameter.parameter.io != PARAMETER_IN) || !parameter.parameter.atomType)
 			return false;
 	}
-	Relation relation = {
-		.form = query->form,
-		.typeSignature = ParametersGetTypeSignature(query->parameters, query->arity)
-	};
-	return RelationIsClosedInferred(relation);
+	return RelationIsClosedInferred(query->form);
 }
 
 
 /**
  * Compile a query to a closed, inferred relation, producing an INVERT operator over a service
- * for the opposite query. The opposite query has the opposite term form and the
- * same parameters. Returns the number of variants written to the variants array, which is 0 if
- * no service is found for the opposite query, and 1 otherwise.
+ * for the opposite query, which has the opposite term form and the same parameters.
+ * All parameters must be inputs.
+ *
+ * If no service is found for the opposite query, the opposite relation is empty, and the
+ * INVERT operator then always returns its argument.
+ * 
+ * Returns the number of variants written to the variants array, or is 0 if nothing was compiled.
  */
+
 static size8 compileInvertedQuery(
 	CompileStack * compileStack, ParameterizedQuery const * query, CompiledVariant variants[])
 {
 	ParameterizedQuery oppositeQuery = *query;
 	oppositeQuery.form = TermFormCreateOppositeForm(query->form);
-	Service service;
-	index8 permutation[RELATION_MAX_ARITY];
-	bool foundService = dispatchOrCompileTerm(
-		compileStack, &oppositeQuery, TERM_DISPATCH_OR_COMPILE, &service, permutation, 0, 0, 0);
-	IFactRelease(oppositeQuery.form);
-	if(!foundService)
-		return 0;
 
-	Operator * serviceOperator = arrangeServiceArguments(
-		ServiceGetOperator(service), service.equalitySignature,
-		query->parameters, query->arity, permutation);
-	Operator * invertOperator = CreateInvertOperator(serviceOperator);
+	bool isRecursive = CompileStackContainsForm(compileStack, oppositeQuery.form);
+	Operator * serviceOperator = 0;
+	if(!isRecursive) {
+		Service service;
+		index8 permutation[RELATION_MAX_ARITY];
+		if(dispatchOrCompileTerm(
+			compileStack, &oppositeQuery, TERM_DISPATCH_OR_COMPILE, &service, permutation, 0, 0, 0)) {
+			serviceOperator = arrangeServiceArguments(
+				ServiceGetOperator(service), service.equalitySignature,
+				query->parameters, query->arity, permutation);
+		}
+	}
+	IFactRelease(oppositeQuery.form);
+	if(isRecursive) {
+		// The query is cross-recursive via the closed-relation rule.
+		return 0;
+	}
+
+	index8 argumentMap[query->arity];
+	size8 nArguments = ParametersGetArgumentMap(query->parameters, query->arity, argumentMap);
+	Operator * invertOperator = CreateInvertOperator(serviceOperator, nArguments);
 	Atom parameters[query->arity];
 	TupleCopy(query->parameters, parameters, query->arity);
 	size8 nVariants = 0;
@@ -2549,11 +2561,9 @@ static size8 compileQueryVariants(
 	CompileStack * compileStack, ParameterizedQuery const * query, CompiledVariant variants[])
 {
 	// A query to a closed, inferred relation yields an INVERT operator only
-	if(queryIsClosedInferred(query)) {
-		size8 nInvertedVariants = compileInvertedQuery(compileStack, query, variants);
-		if(nInvertedVariants > 0)
-			return nInvertedVariants;
-	}
+	// CLAUDE: A query left unanswered by compileInvertedQuery() is not compiled from rules either
+	if(queryIsClosedInferred(query))
+		return compileInvertedQuery(compileStack, query, variants);
 
 	// Find a matching ifact and setup its TupleSTore before seeding;
 	// see setupIFactRuleStore()

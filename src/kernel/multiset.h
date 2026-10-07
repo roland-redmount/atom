@@ -54,6 +54,10 @@ size32 MultisetNUniqueElements(Atom multiset, byte elementType);
  */
 size32 MultisetSize(Atom multiset, byte elementType);
 
+/**
+ * Find the multiple (count) of the given element in the given multiset.
+ * Returns 0 if the element is not in the multiset.
+ */
 size32 MultisetGetElementMultiple(Atom multiset, Atom element);
 
 /**

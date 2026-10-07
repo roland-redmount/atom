@@ -300,7 +300,7 @@ void testInvertOperator(void)
 	index8 positionIndex = GetListRoleIndex()[LIST_ROLE_POSITION];
 	Operator * filterOperator = CreateFilterOperator(
 		listOperator, (index8[]) {positionIndex, elementIndex}, 2);
-	Operator * invertOperator = CreateInvertOperator(filterOperator);
+	Operator * invertOperator = CreateInvertOperator(filterOperator, filterOperator->nArguments);
 	ASSERT_UINT32_EQUAL(invertOperator->nArguments, 3)
 
 	Atom string = CreateStringFromCString("alibaba");
@@ -322,6 +322,25 @@ void testInvertOperator(void)
 	OperatorFreeContext(context);
 
 	IFactRelease(string);
+	CheckOperator(invertOperator);
+}
+
+
+/**
+ * CLAUDE: Test an INVERT operator with no child, which stands for an empty child relation.
+ * The operator yields the bound tuple once.
+ */
+void testInvertOperatorNoChild(void)
+{
+	Operator * invertOperator = CreateInvertOperator(0, 2);
+	ASSERT_UINT32_EQUAL(OperatorNChildren(invertOperator), 0)
+	Atom arguments[2] = {(Atom) {._int = 1}, (Atom) {._int = 2}};
+	OperatorContext * context = OperatorCreateContext(invertOperator, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	ASSERT_INT64_EQUAL(arguments[0]._int, 1)
+	ASSERT_INT64_EQUAL(arguments[1]._int, 2)
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
 	CheckOperator(invertOperator);
 }
 
@@ -780,6 +799,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testConstrainOperator);
 	ExecuteTest(testFilterOperator);
 	ExecuteTest(testInvertOperator);
+	ExecuteTest(testInvertOperatorNoChild);
 	ExecuteTest(testConstantOperator);
 	ExecuteTest(testUnionOperator);
 	ExecuteTest(testUnionDuplicateAtExhaustion);

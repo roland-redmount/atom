@@ -446,7 +446,9 @@ Operator * CreateConstantOperator(
  * Create an INVERT operator over the given child operator; see OPERATOR_INVERT.
  * The operator has the arity of the child operator, and the identity index order.
  */
-Operator * CreateInvertOperator(Operator * childOperator);
+/* CLAUDE: The operator takes nArguments arguments. The childOperator may be 0, which stands
+   for an empty child relation, so that the operator yields every tuple of bound arguments. */
+Operator * CreateInvertOperator(Operator * childOperator, size8 nArguments);
 
 /**
  * Create a PROJECT operator with the given number of arguments, which may not exceed the

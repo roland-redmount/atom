@@ -12,6 +12,8 @@ Atom CreateTermMultiset(Atom const termForms[], size8 nTermForms, index32 relati
 	// reduce to unique terms
 	Atom uniqueTermForms[nTermForms];
 	CopyMemory(termForms, uniqueTermForms, nTermForms * sizeof(Atom));
+	// CLAUDE: ReduceAtomsArray() requires repeated term forms to be adjacent
+	SortAtoms(uniqueTermForms, nTermForms);
 	uint32 multiplicities[nTermForms];
 	size8 nUniqueTermForms = ReduceAtomsArray(uniqueTermForms, multiplicities, nTermForms);
 

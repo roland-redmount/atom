@@ -694,11 +694,13 @@ typedef struct s_InvertContext {
 } InvertContext;
 
 
-Operator * CreateInvertOperator(Operator * childOperator)
+Operator * CreateInvertOperator(Operator * childOperator, size8 nArguments)
 {
-	Operator * op = createOperator(OPERATOR_INVERT, childOperator->nArguments, sizeof(InvertContext));
+	ASSERT(!childOperator || (childOperator->nArguments == nArguments))
+	Operator * op = createOperator(OPERATOR_INVERT, nArguments, sizeof(InvertContext));
 	op->impl.invert.childOperator = childOperator;
-	addParent(childOperator);
+	if(childOperator)
+		addParent(childOperator);
 	// INVERT yields at most one tuple, so any index order holds
 	setIdentityIndexOrder(op);
 	return op;
@@ -718,6 +720,9 @@ static bool invertCall(OperatorContext * context)
 	if(invertContext->called)
 		return false;
 	invertContext->called = true;
+	// CLAUDE: Without a child operator, the child relation is empty
+	if(!context->op->impl.invert.childOperator)
+		return true;
 
 	// The child is called with a copy of the arguments, so that a child writing
 	// its arguments leaves the arguments of this operator unchanged
@@ -736,7 +741,8 @@ static bool invertCall(OperatorContext * context)
 static void teardownInvertOperator(Operator * op)
 {
 	ASSERT(op->type == OPERATOR_INVERT)
-	removeParent(op->impl.invert.childOperator);
+	if(op->impl.invert.childOperator)
+		removeParent(op->impl.invert.childOperator);
 }
 
 
@@ -1810,8 +1816,11 @@ size8 OperatorNChildren(Operator const * op)
 	case OPERATOR_FILTER:
 	case OPERATOR_IFACT:
 	case OPERATOR_CONSTANT:
-	case OPERATOR_INVERT:
 		return 1;
+
+	case OPERATOR_INVERT:
+		// CLAUDE: An INVERT operator of an empty relation has no child
+		return op->impl.invert.childOperator ? 1 : 0;
 
 	case OPERATOR_MACHINE:
 	case OPERATOR_RECURSE:
@@ -2428,9 +2437,11 @@ static void printOperatorRecursive(
 	}
 
 	case OPERATOR_INVERT:
-		PrintCString(" (");
-		printOperatorRecursive(op->impl.invert.childOperator, arguments, nextParameterNumber, depth + 1);
-		PrintChar(')');
+		if(op->impl.invert.childOperator) {
+			PrintCString(" (");
+			printOperatorRecursive(op->impl.invert.childOperator, arguments, nextParameterNumber, depth + 1);
+			PrintChar(')');
+		}
 		break;
 
 	default:

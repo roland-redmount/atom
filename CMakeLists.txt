@@ -111,6 +111,7 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
     src/lang/unification.c
     src/lang/Variable.c
 
+    src/kernel/ClosedRelation.c
     src/kernel/dictionary.c
     src/kernel/dispatch.c
     src/kernel/ifact.c

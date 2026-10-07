@@ -1,5 +1,6 @@
 
 #include "compiler/compiler.h"
+#include "kernel/ClosedRelation.h"
 #include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
 #include "kernel/kernel.h"
@@ -2268,29 +2269,34 @@ void testCompileClosedStoredRelation(void)
 	Atom even4 = CStringToTerm("even 4");
 	Relation evenRelation = createStoredRelation(even2);
 	RelationAddTuple(evenRelation, TypedTuplePeekAtoms(FormulaGetActors(even4)), 0);
-	CloseRelation(evenRelation);
+	Atom evenForm = FormulaGetForm(even2);
+	ASSERT_INT32_EQUAL(CloseRelation(evenForm), CLOSE_OK)
 
 	Atom negatedTerm = CStringToTerm("! even 3");
-	Relation negatedRelation = RelationFromFact(FormulaGetView(negatedTerm));
-	ASSERT_TRUE(RelationIsClosed(evenRelation))
-	ASSERT_FALSE(RelationIsClosedInferred(evenRelation))
-	ASSERT_TRUE(RelationIsClosedInferred(negatedRelation))
+	Atom negatedForm = FormulaGetForm(negatedTerm);
+	ASSERT_TRUE(RelationIsClosed(evenForm))
+	ASSERT_FALSE(RelationIsClosedInferred(evenForm))
+	ASSERT_TRUE(RelationIsClosed(negatedForm))
+	ASSERT_TRUE(RelationIsClosedInferred(negatedForm))
 
 	ASSERT_UINT32_EQUAL(callBoundQuery("! even 3", OPERATOR_INVERT), 1)
 	ASSERT_UINT32_EQUAL(callBoundQuery("! even 4", OPERATOR_INVERT), 0)
 	ASSERT_UINT32_EQUAL(callBoundQuery("! even 5", OPERATOR_INVERT), 1)
+	// We obtain an INVERT operator also for the relation (even x<ID) which does not exist
+	ASSERT_UINT32_EQUAL(callBoundQuery("! even \"foo\"", OPERATOR_INVERT), 1)
 
 	// CLAUDE: The opposite relation of a closed relation cannot be enumerated
 	Atom enumerateTerm = CStringToTerm("! even _");
 	ASSERT_UINT32_EQUAL(CompileQuery(FormulaGetView(enumerateTerm), 0), 0)
 	ReleaseFormula(enumerateTerm);
 
-	// CLAUDE: Opening the relation removes the opposite relation, and its INVERT service
+	// CLAUDE: Opening the relation removes the INVERT services of the opposite relation
 	size32 nCompiledServices = NumberOfCompiledServices();
-	OpenRelation(evenRelation);
-	ASSERT_FALSE(RelationExists(negatedRelation))
+	OpenRelation(evenForm);
+	ASSERT_FALSE(RelationExists(RelationFromFact(FormulaGetView(negatedTerm))))
 	ASSERT_TRUE(NumberOfCompiledServices() < nCompiledServices)
-	ASSERT_FALSE(RelationIsClosed(evenRelation))
+	ASSERT_FALSE(RelationIsClosed(evenForm))
+	ASSERT_FALSE(RelationIsClosed(negatedForm))
 
 	ReleaseFormula(negatedTerm);
 	RelationRemoveTuple(evenRelation, TypedTuplePeekAtoms(FormulaGetActors(even4)), 0);
@@ -2307,22 +2313,35 @@ void testCompileClosedStoredRelation(void)
 void testCompileClosedComputedRelation(void)
 {
 	Atom sumTerm = CStringToTerm("+ 1 + 2 = 3");
-	Relation sumRelation = RelationFromFact(FormulaGetView(sumTerm));
 	// CLAUDE: The relation is closed by MathSetup()
-	ASSERT_TRUE(RelationIsClosed(sumRelation))
+	ASSERT_TRUE(RelationIsClosed(FormulaGetForm(sumTerm)))
 
 	ASSERT_UINT32_EQUAL(callBoundQuery("! + 1 + 2 = 4", OPERATOR_INVERT), 1)
 	ASSERT_UINT32_EQUAL(callBoundQuery("! + 1 + 2 = 3", OPERATOR_INVERT), 0)
 	ASSERT_UINT32_EQUAL(callBoundQuery("! + 1 + 1 = 3", OPERATOR_INVERT), 1)
 	ASSERT_UINT32_EQUAL(callBoundQuery("! + 1 + 1 = 2", OPERATOR_INVERT), 0)
+	// No service or rule yields a sum of a string
+	ASSERT_UINT32_EQUAL(callBoundQuery("! + \"a\" + 1 = 2", OPERATOR_INVERT), 1)
 
 	ReleaseFormula(sumTerm);
 }
 
 
 /**
+ * CLAUDE: The relation (integer x) is closed by MathSetup(). Only an INT atom is an integer,
+ * so a query for an atom of any other type compiles to an INVERT operator with no child.
+ */
+void testCompileClosedInteger(void)
+{
+	ASSERT_UINT32_EQUAL(callBoundQuery("! integer 3", OPERATOR_INVERT), 0)
+	ASSERT_UINT32_EQUAL(callBoundQuery("! integer \"foo\"", OPERATOR_INVERT), 1)
+	ASSERT_UINT32_EQUAL(callBoundQuery("! integer 1.5", OPERATOR_INVERT), 1)
+}
+
+
+/**
  * CLAUDE: The rule (! even x | ! odd x) is not used for a query to the opposite relation of
- * the closed relation (even x<INT), and a query to (even x<INT) itself is not inverted.
+ * the closed relation (even x), and a query to (even x) itself is not inverted.
  * The facts (even 4) and (odd 4) contradict through the rule, which shows that the rule is not used.
  */
 void testCompileClosedRelationIgnoresRules(void)
@@ -2332,7 +2351,7 @@ void testCompileClosedRelationIgnoresRules(void)
 	Relation evenRelation = createStoredRelation(even4);
 	Relation oddRelation = createStoredRelation(odd4);
 	FormulaView clause = DictionaryAddClauseFromCString("! even x | ! odd x");
-	CloseRelation(evenRelation);
+	ASSERT_INT32_EQUAL(CloseRelation(FormulaGetForm(even4)), CLOSE_OK)
 
 	// CLAUDE: The closed relation is compiled first, from its own tuples only
 	ASSERT_UINT32_EQUAL(callBoundQuery("even 3", OPERATOR_MACHINE), 0)
@@ -2340,14 +2359,9 @@ void testCompileClosedRelationIgnoresRules(void)
 	ASSERT_UINT32_EQUAL(callBoundQuery("! even 4", OPERATOR_INVERT), 0)
 	ASSERT_UINT32_EQUAL(callBoundQuery("! even 3", OPERATOR_INVERT), 1)
 
-	// CLAUDE: Dropping a closed relation drops the opposite relation too
-	Atom negatedTerm = CStringToTerm("! even 3");
-	Relation negatedRelation = RelationFromFact(FormulaGetView(negatedTerm));
-	dropStoredRelation(evenRelation, even4);
-	ASSERT_FALSE(RelationExists(evenRelation))
-	ASSERT_FALSE(RelationExists(negatedRelation))
-	ReleaseFormula(negatedTerm);
+	OpenRelation(FormulaGetForm(even4));
 	DictionaryRemoveClause(&clause);
+	dropStoredRelation(evenRelation, even4);
 	dropStoredRelation(oddRelation, odd4);
 	ReleaseFormula(odd4);
 	ReleaseFormula(even4);
@@ -2364,17 +2378,70 @@ void testCompileClosedRuleRelation(void)
 	Relation twoRelation = createStoredRelation(two2);
 	FormulaView clause = DictionaryAddClauseFromCString("even x | ! two x");
 	Atom even2 = CStringToTerm("even 2");
-	Relation evenRelation = RelationFromFact(FormulaGetView(even2));
-	CloseRelation(evenRelation);
+	ASSERT_INT32_EQUAL(CloseRelation(FormulaGetForm(even2)), CLOSE_OK)
 
 	ASSERT_UINT32_EQUAL(callBoundQuery("! even 3", OPERATOR_INVERT), 1)
 	ASSERT_UINT32_EQUAL(callBoundQuery("! even 2", OPERATOR_INVERT), 0)
 
-	OpenRelation(evenRelation);
+	OpenRelation(FormulaGetForm(even2));
 	ReleaseFormula(even2);
 	DictionaryRemoveClause(&clause);
 	dropStoredRelation(twoRelation, two2);
 	ReleaseFormula(two2);
+}
+
+
+/**
+ * Creating a new typed relation for a closed relation invalidates the INVERT service compiled for
+ * the opposite relation; see InvalidateTermFormServices().
+ */
+void testCompileClosedRelationInvalidated(void)
+{
+	Atom fooA = CStringToTerm("foo \"a\"");
+	ASSERT_INT32_EQUAL(CloseRelation(FormulaGetForm(fooA)), CLOSE_OK)
+	ASSERT_UINT32_EQUAL(callBoundQuery("! foo \"a\"", OPERATOR_INVERT), 1)
+
+	size32 nCompiledServices = NumberOfCompiledServices();
+	Relation fooRelation = createStoredRelation(fooA);
+	ASSERT_TRUE(NumberOfCompiledServices() < nCompiledServices)
+	ASSERT_UINT32_EQUAL(callBoundQuery("! foo \"a\"", OPERATOR_INVERT), 0)
+	ASSERT_UINT32_EQUAL(callBoundQuery("! foo \"b\"", OPERATOR_INVERT), 1)
+
+	OpenRelation(FormulaGetForm(fooA));
+	dropStoredRelation(fooRelation, fooA);
+	ReleaseFormula(fooA);
+}
+
+
+/**
+ * Given the rule even y <-  prec x succ y & ! even x, closing the (even x) relation leads
+ * to cross-recursion. Compiling (even #1<INT) leads to the query (! even #1<INT), which
+ * then leads to (even #1<INT) again via the closed-relation rule. The compile stack guard
+ * catches this, and  no INVERT operator is compiled; see* compileInvertedQuery().
+ */
+void testCompileClosedRelationNegationRecursion(void)
+{
+	Atom even0 = CStringToTerm("even 0");
+	Atom succ01 = CStringToTerm("prec 0 succ 1");
+	Atom succ12 = CStringToTerm("prec 1 succ 2");
+	Relation evenRelation = createStoredRelation(even0);
+	Relation succRelation = createStoredRelation(succ01);
+	RelationAddTuple(succRelation, TypedTuplePeekAtoms(FormulaGetActors(succ12)), 0);
+	FormulaView clause = DictionaryAddClauseFromCString("even y | ! prec x succ y | even x");
+	ASSERT_INT32_EQUAL(CloseRelation(FormulaGetForm(even0)), CLOSE_OK)
+
+	ASSERT_UINT32_EQUAL(callBoundQuery("even 2", OPERATOR_MACHINE), 0)
+	ASSERT_UINT32_EQUAL(callBoundQuery("even 0", OPERATOR_MACHINE), 1)
+	ASSERT_UINT32_EQUAL(callBoundQuery("! even 0", OPERATOR_INVERT), 0)
+
+	OpenRelation(FormulaGetForm(even0));
+	DictionaryRemoveClause(&clause);
+	RelationRemoveTuple(succRelation, TypedTuplePeekAtoms(FormulaGetActors(succ12)), 0);
+	dropStoredRelation(succRelation, succ01);
+	dropStoredRelation(evenRelation, even0);
+	ReleaseFormula(succ12);
+	ReleaseFormula(succ01);
+	ReleaseFormula(even0);
 }
 
 
@@ -2428,6 +2495,9 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileClosedComputedRelation);
 	ExecuteTest(testCompileClosedRelationIgnoresRules);
 	ExecuteTest(testCompileClosedRuleRelation);
+	ExecuteTest(testCompileClosedInteger);
+	ExecuteTest(testCompileClosedRelationInvalidated);
+	ExecuteTest(testCompileClosedRelationNegationRecursion);
 
 	ExecuteTest(testCompileChainedRules);
 	ExecuteTest(testCompileChainedRuleOrder);
