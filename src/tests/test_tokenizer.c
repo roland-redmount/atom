@@ -490,21 +490,96 @@ static bool tokenTypeHandler(void * context, Token token)
 
 
 /**
- * CLAUDE: A relation [[foo 1]] is read as two TOKEN_BEGIN_REFLECT and two TOKEN_END_REFLECT.
- * The second [ is read in TOKENIZER_ROLE_STATE.
+ * A relation [:foo 1] is read as TOKEN_BEGIN_RELATION, the tokens of the formula,
+ * and TOKEN_END_REFLECT.
  */
 static void testRelationBrackets(void)
 {
 	TokenTypeList list = {.nTokens = 0};
-	TokenizeCString("bar [[foo 1]]", tokenTypeHandler, &list);
+	TokenizeCString("bar [:foo 1]", tokenTypeHandler, &list);
 
 	enum TokenType expected[] = {
-		TOKEN_NAME, TOKEN_BEGIN_REFLECT, TOKEN_BEGIN_REFLECT,
-		TOKEN_NAME, TOKEN_NUMBER, TOKEN_END_REFLECT, TOKEN_END_REFLECT
+		TOKEN_NAME, TOKEN_BEGIN_RELATION, TOKEN_NAME, TOKEN_NUMBER, TOKEN_END_REFLECT
 	};
-	ASSERT_UINT32_EQUAL(list.nTokens, 7)
-	for(index8 i = 0; i < 7; i++)
+	ASSERT_UINT32_EQUAL(list.nTokens, 5)
+	for(index8 i = 0; i < 5; i++)
 		ASSERT_UINT32_EQUAL(list.types[i], expected[i])
+}
+
+
+/**
+ * The role names of a form [. ! foo baz] are read in TOKENIZER_FORM_STATE, so that
+ * a name follows a name. The ] closing the form returns the tokenizer to TOKENIZER_ROLE_STATE.
+ */
+static void testFormBrackets(void)
+{
+	TokenTypeList list = {.nTokens = 0};
+	TokenizeCString("bar [. ! foo baz] qux 1", tokenTypeHandler, &list);
+
+	enum TokenType expected[] = {
+		TOKEN_NAME, TOKEN_BEGIN_FORM, TOKEN_NOT, TOKEN_NAME, TOKEN_NAME,
+		TOKEN_END_REFLECT, TOKEN_NAME, TOKEN_NUMBER
+	};
+	ASSERT_UINT32_EQUAL(list.nTokens, 8)
+	for(index8 i = 0; i < 8; i++)
+		ASSERT_UINT32_EQUAL(list.types[i], expected[i])
+}
+
+
+/**
+ * The character following [ decides the token. Whitespace completes a plain [,
+ * and any other character ends it without being part of it. A . or : separated from
+ * the [ by whitespace is rejected, since both are reserved characters.
+ */
+static void testBeginReflectToken(void)
+{
+	Tokenizer tokenizer;
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
+
+	TokenizerRestart(&tokenizer, TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '['), TOKENIZER_ACCEPTED)
+	ASSERT_FALSE(TokenizerIsFull(&tokenizer))
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, ' '), TOKENIZER_ACCEPTED)
+	ASSERT_TRUE(TokenizerIsFull(&tokenizer))
+	Token token = TokenizerGetToken(&tokenizer);
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_BEGIN_REFLECT)
+	TokenizerReset(&tokenizer);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '.'), TOKENIZER_REJECTED)
+
+	// CLAUDE: A name character ends the [ and begins a name, read in TOKENIZER_ROLE_STATE
+	token = takeTerminatedToken(&tokenizer, "[", 'f', TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_BEGIN_REFLECT)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'f'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(tokenizer.type, TOKEN_NAME)
+
+	// CLAUDE: The second [ of [[ is rejected in TOKENIZER_ROLE_STATE
+	token = takeTerminatedToken(&tokenizer, "[", '[', TOKENIZER_ACTOR_STATE);
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_BEGIN_REFLECT)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '['), TOKENIZER_REJECTED)
+
+	TokenizerFree(&tokenizer);
+}
+
+
+/**
+ * The character # is reserved, so it cannot occur in a name, in either
+ * TOKENIZER_ROLE_STATE or TOKENIZER_FORM_STATE. A # still begins a parameter in
+ * TOKENIZER_ACTOR_STATE; see testTokenizeParameter().
+ */
+static void testHashNotInName(void)
+{
+	Tokenizer tokenizer;
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
+
+	TokenizerRestart(&tokenizer, TOKENIZER_ROLE_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '#'), TOKENIZER_REJECTED)
+	TokenizerRestart(&tokenizer, TOKENIZER_ROLE_STATE);
+	pushCString(&tokenizer, "foo");
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '#'), TOKENIZER_REJECTED)
+	TokenizerRestart(&tokenizer, TOKENIZER_FORM_STATE);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '#'), TOKENIZER_REJECTED)
+
+	TokenizerFree(&tokenizer);
 }
 
 
@@ -580,6 +655,9 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCreateTokenFromCString);
 	ExecuteTest(testSeparatorTerminatesToken);
 	ExecuteTest(testRelationBrackets);
+	ExecuteTest(testFormBrackets);
+	ExecuteTest(testBeginReflectToken);
+	ExecuteTest(testHashNotInName);
 	ExecuteTest(testReflectedNameBrackets);
 
 	UnloadLibraries();

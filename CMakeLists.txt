@@ -155,14 +155,15 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
     src/parser/Characters.c
     src/parser/ClauseBuilder.c
     src/parser/ConjunctionBuilder.c
-    src/parser/FormTupleParsers.c
     src/parser/FormulaBuilder.c
     src/parser/PartBuilder.c
     src/parser/PredicateBuilder.c
     src/parser/StringBuffer.c
     src/parser/TermBuilder.c
+    src/parser/TermFormBuilder.c
     src/parser/Token.c
     src/parser/Tokenizer.c
+    src/parser/TupleParser.c
 
     src/ui/assert.c
     src/ui/load.c

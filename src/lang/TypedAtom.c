@@ -176,15 +176,15 @@ void PrintTypedAtom(TypedAtom typedAtom)
 				PrintMultiset(typedAtom.atom);
 		}
 		else if(IsTermForm(typedAtom.atom))
-			PrintTermForm(typedAtom.atom);
+			PrintReflectedTermForm(typedAtom.atom);
 		else
 			IFactPrint(typedAtom.atom);
 		break;
 
 	case AT_RELATION:
-		PrintCString("[[");
+		PrintCString("[:");
 		PrintFormula(typedAtom.atom);
-		PrintCString("]]");
+		PrintChar(']');
 		break;
 
 	default:

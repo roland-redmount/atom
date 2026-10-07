@@ -37,6 +37,11 @@ Atom TermFormCreateOppositeForm(Atom termForm);
 void PrintTermForm(Atom termForm);
 
 /**
+ * Print a term form as a reflected form, as in [. ! parent child]
+ */
+void PrintReflectedTermForm(Atom termForm);
+
+/**
  * Number of actors in a term of this form.
  */
 size8 TermFormArity(Atom termForm);

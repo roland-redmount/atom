@@ -5,6 +5,7 @@
 #include "memory/allocator.h"
 #include "parser/FormulaBuilder.h"
 #include "parser/PartBuilder.h"
+#include "parser/TermFormBuilder.h"
 #include "parser/Tokenizer.h"
 
 
@@ -13,6 +14,7 @@ void InitializePartBuilder(PartBuilder * builder, enum FormulaScope scope)
 	builder->state = STATE_EMPTY;
 	builder->scope = scope;
 	builder->formulaBuilder = 0;
+	builder->termFormBuilder = 0;
 	// role and actor are undefined
 }
 
@@ -30,6 +32,48 @@ static void releaseFormulaBuilder(PartBuilder * builder)
 	CleanupFormulaBuilder(builder->formulaBuilder);
 	Free(builder->formulaBuilder);
 	builder->formulaBuilder = 0;
+}
+
+
+/**
+ * Begin a reflected formula or relation, collected by a nested formula builder.
+ * The reflectionType is either AT_FORMULA or AT_RELATION.
+ */
+static void beginReflection(PartBuilder * builder, byte reflectionType, enum BuilderState state)
+{
+	builder->formulaBuilder = Allocate(sizeof(FormulaBuilder));
+	// a reflection within a reflection is still a reflection
+	InitializeFormulaBuilder(builder->formulaBuilder, FORMULA_REFLECTED_SCOPE);
+	builder->reflectionType = reflectionType;
+	builder->state = state;
+}
+
+
+static void releaseTermFormBuilder(PartBuilder * builder)
+{
+	CleanupTermFormBuilder(builder->termFormBuilder);
+	Free(builder->termFormBuilder);
+	builder->termFormBuilder = 0;
+}
+
+
+/**
+ * Push a token to a part builder in STATE_REFLECTED_FORM. The TOKEN_END_REFLECT
+ * closing the form makes the term form the actor.
+ */
+static bool pushReflectedFormToken(PartBuilder * builder, Token token)
+{
+	if(token.type == TOKEN_END_REFLECT) {
+		if(!TermFormBuilderIsValid(builder->termFormBuilder))
+			return false;
+		Atom termForm = TermFormBuilderCreateTermForm(builder->termFormBuilder, 0);
+		// CLAUDE: the reference from TermFormBuilderCreateTermForm() belongs to the actor
+		builder->actor = CreateTypedAtom(AT_ID, termForm);
+		releaseTermFormBuilder(builder);
+		builder->state = STATE_COMPLETE;
+		return true;
+	}
+	return TermFormBuilderPush(builder->termFormBuilder, token);
 }
 
 
@@ -55,9 +99,7 @@ static bool pushReflectionToken(PartBuilder * builder, Token token)
 		// so it is not acquired here
 		builder->actor = CreateTypedAtom(builder->reflectionType, formula);
 		releaseFormulaBuilder(builder);
-		// CLAUDE: a relation [[ ... ]] still needs its second ]
-		builder->state = (builder->reflectionType == AT_RELATION) ?
-			STATE_RELATION_END : STATE_COMPLETE;
+		builder->state = STATE_COMPLETE;
 		return true;
 	}
 	else {
@@ -81,11 +123,18 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 
 	case STATE_HAS_NAME:
 		if(token.type == TOKEN_BEGIN_REFLECT) {
-			builder->formulaBuilder = Allocate(sizeof(FormulaBuilder));
-			// a reflection within a reflection is still a reflection
-			InitializeFormulaBuilder(builder->formulaBuilder, FORMULA_REFLECTED_SCOPE);
-			builder->reflectionType = AT_FORMULA;
-			builder->state = STATE_REFLECTION_START;
+			beginReflection(builder, AT_FORMULA, STATE_REFLECTION_START);
+			return true;
+		}
+		// A relation [: ... ] holds a formula, and never a name
+		if(token.type == TOKEN_BEGIN_RELATION) {
+			beginReflection(builder, AT_RELATION, STATE_REFLECTION);
+			return true;
+		}
+		if(token.type == TOKEN_BEGIN_FORM) {
+			builder->termFormBuilder = Allocate(sizeof(TermFormBuilder));
+			InitializeTermFormBuilder(builder->termFormBuilder);
+			builder->state = STATE_REFLECTED_FORM;
 			return true;
 		}
 		// A TOKEN_END_REFLECT is never an actor; see STATE_REFLECTED_NAME
@@ -101,12 +150,6 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 		return true;
 
 	case STATE_REFLECTION_START:
-		// A second [ directly after the first makes the reflection a relation [[ ... ]]
-		if(token.type == TOKEN_BEGIN_REFLECT) {
-			builder->reflectionType = AT_RELATION;
-			builder->state = STATE_REFLECTION;
-			return true;
-		}
 		// A name may be a reflected name [name]; see STATE_REFLECTED_NAME
 		if(token.type == TOKEN_NAME) {
 			builder->actor = token.typedAtom;
@@ -136,11 +179,8 @@ bool PartBuilderPush(PartBuilder * builder, Token token)
 	case STATE_REFLECTION:
 		return pushReflectionToken(builder, token);
 
-	case STATE_RELATION_END:
-		if(token.type != TOKEN_END_REFLECT)
-			return false;
-		builder->state = STATE_COMPLETE;
-		return true;
+	case STATE_REFLECTED_FORM:
+		return pushReflectedFormToken(builder, token);
 
 	case STATE_COMPLETE:
 		// cannot accept more tokens
@@ -193,7 +233,12 @@ void PartBuilderReset(PartBuilder * builder)
 		ReleaseTypedAtom(builder->actor);
 		releaseFormulaBuilder(builder);
 	}
-	else if((builder->state == STATE_RELATION_END) || (builder->state == STATE_COMPLETE)) {
+	else if(builder->state == STATE_REFLECTED_FORM) {
+		// An unterminated reflected form, abandoned with its nested builder
+		NameRelease(builder->role);
+		releaseTermFormBuilder(builder);
+	}
+	else if(builder->state == STATE_COMPLETE) {
 		NameRelease(builder->role);
 		ReleaseTypedAtom(builder->actor);
 	}

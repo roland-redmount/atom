@@ -2,7 +2,9 @@
 #include "lang/Variable.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
+#include "kernel/multiset.h"
 #include "kernel/Parameter.h"
+#include "lang/name.h"
 #include "lang/TermForm.h"
 
 
@@ -112,6 +114,25 @@ void PrintTermForm(Atom termForm)
 	if(!TermFormGetSign(termForm))
 		PrintChar('!');
 	PrintPredicateForm(TermFormGetPredicateForm(termForm));
+}
+
+
+void PrintReflectedTermForm(Atom termForm)
+{
+	PrintCString("[.");
+	if(!TermFormGetSign(termForm))
+		PrintCString(" !");
+	MultisetIterator iterator;
+	MultisetIterate(TermFormGetPredicateForm(termForm), AT_NAME, &iterator);
+	while(MultisetIteratorNext(&iterator)) {
+		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
+		for(index8 i = 0; i < elementMultiple.multiple; i++) {
+			PrintChar(' ');
+			PrintName(elementMultiple.element);
+		}
+	}
+	MultisetIteratorEnd(&iterator);
+	PrintChar(']');
 }
 
 
