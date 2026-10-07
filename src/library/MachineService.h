@@ -61,7 +61,7 @@ void FreeMachineServices(void);
  *
  * The signature must number its parameter #1, ... , @n in the order the MachineFunction
  * expects its arguments.
- * If the corresponding Relation does not exist, it is created, with the default provider (no storage).
+ * If the corresponding TypedRelation does not exist, it is created, with the default provider (no storage).
  * Returns the registered service.
  * 
  * NOTE: unlike CreateTupleStore(), this does not invalidate compiled services,

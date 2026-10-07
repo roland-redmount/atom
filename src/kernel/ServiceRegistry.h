@@ -1,5 +1,5 @@
 /**
- * The service registry keeps track of the Services registered for each Relation.
+ * The service registry keeps track of the Services registered for each TypedRelation.
  * Dispatch uses the service registry to match queries to services.
  */
 
@@ -9,11 +9,11 @@
 #include "btree/btree.h"
 #include "kernel/operator.h"
 #include "kernel/Parameter.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 
 
 /**
- * A Service is defined by an (Relation, IOSignature, EqualitySignature) tuple.
+ * A Service is defined by an (TypedRelation, IOSignature, EqualitySignature) tuple.
  * A service is implemented by an Operator graph, and holds a pointer to the root
  * operator of this graph. 
  * The operator takes as many arguments as there are unique parameters, and the EqualitySignature
@@ -24,11 +24,11 @@
  * or else the 1-based position of the first occurence. This format allows us to encode
  * a service with no repeated arguments as the zero vector. See EqualitySignatureGetArgumentMap()
  * 
- * Because an Operator assumes a specific IOSignature, the pair (Relation, Operator)
+ * Because an Operator assumes a specific IOSignature, the pair (TypedRelation, Operator)
  * is also 1:1 with a Service.
  */
 typedef struct s_Service {
-	Relation relation;
+	TypedRelation relation;
 	IOSignature ioSignature;
 	EqualitySignature equalitySignature;
 } Service;
@@ -56,8 +56,8 @@ void SetupServiceRegistry(void);
 void RestoreServiceRegistry(void);
 
 /**
- * Register a new Service with the given Operator. Attaches the services' Relation
- * to the Operator and acquires the Relation.
+ * Register a new Service with the given Operator. Attaches the services' TypedRelation
+ * to the Operator and acquires the TypedRelation.
  * If the service is compiled, there must not exist a service already.
  * 
  * NOTE: For services whose form contain repeated roles, such as `(a b b)`,
@@ -88,7 +88,7 @@ size32 RemoveService(Service service);
 /**
  * Remove all services for the given relation.
  */
-void ServiceRegistryRemoveAll(Relation relation);
+void ServiceRegistryRemoveAll(TypedRelation relation);
 
 /**
  * Deallocate the service registry. Before calling this function,
@@ -126,7 +126,7 @@ bool ServiceIsStale(Service service);
 
 /**
  * Invalidate compiled services for the given term form. 
- * This function removes (1) every compiled Service for each Relation matching the given form,
+ * This function removes (1) every compiled Service for each TypedRelation matching the given form,
  * and (2) every compiled Service that calls any services matching the term form, transitively.
  * Also marks the involved relations as stale; exactly when a relation become stale differs
  * depending on useCase. Returns the total number of services removed.
@@ -152,14 +152,14 @@ void RemoveAllCompiledServices(void);
  * Iterating over services
  */
 typedef struct {
-	Relation relation;
+	TypedRelation relation;
 	BTreeIterator btreeIterator;
 } ServiceIterator;
 
 /**
  * Create iterator over all service records for a given relation
  */
-void ServiceRegistryIterate(Relation relation, ServiceIterator * iterator);
+void ServiceRegistryIterate(TypedRelation relation, ServiceIterator * iterator);
 
 bool ServiceIteratorNext(ServiceIterator * iterator);
 
@@ -197,7 +197,7 @@ void PrintServiceWithActors(Service service, TypedTuple const * actors);
  * Dump all tuples of the given relation.
  * Requires an associated service for enumerating all tuples.
  */
-void RelationDump(Relation relation);
+void RelationDump(TypedRelation relation);
 
 /**
  * Print a list of all registered services

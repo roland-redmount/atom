@@ -6,7 +6,7 @@
  * because (even 3) does not hold.
  *
  * A closed relation is identified by its term form, so that every typed relation of the form
- * is closed, including one whose Relation has not been created. The term form of a closed relation
+ * is closed, including one whose TypedRelation has not been created. The term form of a closed relation
  * is stored in the relation (closed-relation f), as in the fact (closed-relation [. even]).
  * This is used by the compiler to generate an all-input service for the opposite relation.
  *

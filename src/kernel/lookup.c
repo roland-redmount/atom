@@ -115,7 +115,7 @@ size32 LookupTotalCount(void)
 }
 
 
-bool LookupHasEntry(Atom atom, Relation relation, Atom termForm, Atom role)
+bool LookupHasEntry(Atom atom, TypedRelation relation, Atom termForm, Atom role)
 {
 	ASSERT(!IsNullRelation(relation))
 	ASSERT(termForm.hash)
@@ -143,7 +143,7 @@ static void addRecord(LookupRecord * record)
 }
 
 
-void LookupAddRole(Atom atom, Relation relation, Atom termForm, Atom role)
+void LookupAddRole(Atom atom, TypedRelation relation, Atom termForm, Atom role)
 {
 	LookupRecord record = {
 		.atom = atom,
@@ -169,7 +169,7 @@ static void removeRecord(LookupRecord * record)
 }
 
 
-void LookupRemoveRole(Atom atom, Relation relation, Atom termForm, Atom role)
+void LookupRemoveRole(Atom atom, TypedRelation relation, Atom termForm, Atom role)
 {
 	LookupRecord record = {
 		.atom = atom,
@@ -186,7 +186,7 @@ void LookupRemoveRole(Atom atom, Relation relation, Atom termForm, Atom role)
  * in a fact. The term's actors start at actorsOffset in the actors array of the fact.
  */
 static void updateTermRoles(
-	Relation relation, Atom termForm, Atom predicateForm, index8 actorsOffset, Atom const actors[],
+	TypedRelation relation, Atom termForm, Atom predicateForm, index8 actorsOffset, Atom const actors[],
 	void (*updateRecord)(LookupRecord *))
 {
 	LookupRecord record = {
@@ -217,7 +217,7 @@ static void updateTermRoles(
  * does not work during bootstrap.
  */
 static void updateFactRoles(
-	Relation relation, Atom const actors[], void (*updateRecord)(LookupRecord *))
+	TypedRelation relation, Atom const actors[], void (*updateRecord)(LookupRecord *))
 {
 	if(!RelationIsConjunction(relation)) {
 		Atom predicateForm = RelationGetPredicateForm(relation);
@@ -242,7 +242,7 @@ static void updateFactRoles(
 }
 
 
-void LookupAddFactRoles(Relation relation, Atom const actors[])
+void LookupAddFactRoles(TypedRelation relation, Atom const actors[])
 {
 	// iterate over roles names in the relation
 	// and add corresponding actors to lookup table
@@ -250,7 +250,7 @@ void LookupAddFactRoles(Relation relation, Atom const actors[])
 }
 
 
-void LookupRemoveFactRoles(Relation relation, Atom const actors[])
+void LookupRemoveFactRoles(TypedRelation relation, Atom const actors[])
 {
 	updateFactRoles(relation, actors, removeRecord);
 }
@@ -285,7 +285,7 @@ bool LookupIteratorNext(LookupIterator * iterator)
 }
 
 
-Relation LookupIteratorGetRelation(LookupIterator const * iterator)
+TypedRelation LookupIteratorGetRelation(LookupIterator const * iterator)
 {
 	LookupRecord const * record = BTreeIteratorPeekItem(&(iterator->treeIterator));
 	return record->relation;
@@ -313,14 +313,14 @@ void LookupIteratorEnd(LookupIterator * iterator)
 }
 
 
-Relation LookupFindRelation(Atom atom, Atom termForm, Atom role)
+TypedRelation LookupFindRelation(Atom atom, Atom termForm, Atom role)
 {
-	Relation relation = {0};
+	TypedRelation relation = {0};
 	LookupIterator iterator;
 	LookupIterate(atom, &iterator);
 	while(LookupIteratorNext(&iterator)) {
 		Atom currentRole = LookupIteratorGetRole(&iterator);
-		Relation currentRelation = LookupIteratorGetRelation(&iterator);
+		TypedRelation currentRelation = LookupIteratorGetRelation(&iterator);
 
 		if(SameAtoms(currentRole, role) && SameAtoms(currentRelation.form, termForm)) {
 			ASSERT(IsNullRelation(relation))		// ensure we have only 1 matching relation

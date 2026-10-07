@@ -6,9 +6,9 @@
 #include "memory/paging.h"
 #include "memory/pool.h"
 
-// These are defined in Relation.c
-extern void RelationAttachTupleStore(Relation relation, TupleStore * store);
-void RelationDetachTupleStore(Relation relation, TupleStore * store);
+// These are defined in TypedRelation.c
+extern void RelationAttachTupleStore(TypedRelation relation, TupleStore * store);
+void RelationDetachTupleStore(TypedRelation relation, TupleStore * store);
 
 
 /**
@@ -58,7 +58,7 @@ static IOSignature TupleStoreGetCanonicalIOSignature(TupleStore const * store, I
 }
 
 
-TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provider, size8 nColumns, index8 const indexColumns[])
+TupleStore * CreateTupleStore(TypedRelation relation, StorageProvider const * provider, size8 nColumns, index8 const indexColumns[])
 {
 	// CLAUDE: The tuples of the opposite relation of a closed relation are inferred; see CloseRelation()
 	ASSERT(!RelationIsClosedInferred(relation.form))

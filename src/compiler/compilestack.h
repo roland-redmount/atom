@@ -17,7 +17,7 @@
 #define COMPILE_STACK_H
 
 #include "kernel/dispatch.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "lang/formula.h"
 
 

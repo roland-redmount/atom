@@ -2,7 +2,7 @@
 #ifndef OPERATOR_H
 #define OPERATOR_H
 
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "storage/StorageProvider.h"
 
 
@@ -222,7 +222,7 @@ struct s_Operator {
 	bool held;
 	// The relation is set iff the operator is a root operator for a service,
 	// and can be used to locate that service. For a MACHINE operator, this must be 0.
-	Relation relation;
+	TypedRelation relation;
 	union {
 		// for OPERATOR_IDENTIFY
 		struct {
@@ -535,9 +535,9 @@ size8 OperatorNChildren(Operator const * op);
 Operator * OperatorGetChild(Operator const * op, index8 index);
 
 /**
- * Attach an operator to a service, specified by its Relation
+ * Attach an operator to a service, specified by its TypedRelation
  */
-void AttachOperator(Operator * op, Relation relation);
+void AttachOperator(Operator * op, TypedRelation relation);
 
 /**
  * Detach an operator from its a service. This may deallocate the operator.

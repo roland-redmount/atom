@@ -1,6 +1,6 @@
 
 #include "kernel/ifact.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/TupleStore.h"
 #include "lang/ConjunctionForm.h"
 #include "lang/TermForm.h"
@@ -36,7 +36,7 @@ size8 TypeSignatureNAtomTypes(TypeSignature typeSignature)
 
 
 typedef struct s_RelationRecord {
-	Relation relation;
+	TypedRelation relation;
 	// The predicate form of relation.termForm. Kept here because during bootstrap,
 	// TermFormGetPredicateForm() is unreachable, and therefore LookupAddPredicateRoles()
 	// would fail when creating the predicate form FORM_TERM_FORM in setupCoreService().
@@ -74,14 +74,14 @@ void RegisterRelationFunctions(void)
 }
 
 
-static RelationRecord * findRelationRecord(Relation relation)
+static RelationRecord * findRelationRecord(TypedRelation relation)
 {
 	RelationRecord key = {.relation = relation};
 	return BTreePeekItem(relationRegistry, &key);
 }
 
 
-void CreateRelationBootstrap(Relation relation, Atom predicateForm)
+void CreateRelationBootstrap(TypedRelation relation, Atom predicateForm)
 {
 	// Create a new record
 	RelationRecord record = {
@@ -96,7 +96,7 @@ void CreateRelationBootstrap(Relation relation, Atom predicateForm)
 }
 
 
-void AcquireRelation(Relation relation)
+void AcquireRelation(TypedRelation relation)
 {
 	RelationRecord * existingRecord = findRelationRecord(relation);
 	if(existingRecord) {
@@ -111,7 +111,7 @@ void AcquireRelation(Relation relation)
 }
 
 
-void ReleaseRelation(Relation relation)
+void ReleaseRelation(TypedRelation relation)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
@@ -134,7 +134,7 @@ void ReleaseRelation(Relation relation)
 /**
  * Set the relation's tuple store. This should only be called from CreateTupleStore().
  */
-void RelationAttachTupleStore(Relation relation, TupleStore * store)
+void RelationAttachTupleStore(TypedRelation relation, TupleStore * store)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
@@ -145,7 +145,7 @@ void RelationAttachTupleStore(Relation relation, TupleStore * store)
 /**
  * Unset the relation's tuple store. This should only be called from CreateTupleStore().
  */
-void RelationDetachTupleStore(Relation relation, TupleStore * store)
+void RelationDetachTupleStore(TypedRelation relation, TupleStore * store)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
@@ -155,16 +155,16 @@ void RelationDetachTupleStore(Relation relation, TupleStore * store)
 
 
 /**
- * Return the TupleStore associated with this Relation, or 0 if none exists.
+ * Return the TupleStore associated with this TypedRelation, or 0 if none exists.
  */
-TupleStore * RelationGetTupleStore(Relation relation)
+TupleStore * RelationGetTupleStore(TypedRelation relation)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
 	return record->tupleStore;
 }
 
-byte RelationAddTuple(Relation relation, Atom const tuple[], uint8 idPosition)
+byte RelationAddTuple(TypedRelation relation, Atom const tuple[], uint8 idPosition)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
@@ -174,7 +174,7 @@ byte RelationAddTuple(Relation relation, Atom const tuple[], uint8 idPosition)
 }
 
 
-size32 RelationNRows(Relation relation)
+size32 RelationNRows(TypedRelation relation)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
@@ -184,7 +184,7 @@ size32 RelationNRows(Relation relation)
 }
 
 
-byte RelationRemoveTuple(Relation relation, Atom const tuple[], uint8 idPosition)
+byte RelationRemoveTuple(TypedRelation relation, Atom const tuple[], uint8 idPosition)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
@@ -194,7 +194,7 @@ byte RelationRemoveTuple(Relation relation, Atom const tuple[], uint8 idPosition
 }
 
 
-void DropRelation(Relation relation)
+void DropRelation(TypedRelation relation)
 {
 	// Remove all services associated with the relation
 	bool foundService;
@@ -257,7 +257,7 @@ void DropEmptyRelations(void)
 {
 	// collect all empty relations
 	ResizingArray relationsArray;
-	CreateResizingArray(&relationsArray, sizeof(Relation), 10);
+	CreateResizingArray(&relationsArray, sizeof(TypedRelation), 10);
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, relationRegistry);
 	while(BTreeIteratorNext(&iterator)) {
@@ -268,13 +268,13 @@ void DropEmptyRelations(void)
 	BTreeIteratorEnd(&iterator);
 
 	for(index32 i = 0; i < relationsArray.nElements; i++) {
-		Relation * relation = ResizingArrayGetElement(&relationsArray, i);
+		TypedRelation * relation = ResizingArrayGetElement(&relationsArray, i);
 		DropRelation(*relation);
 	}
 }
 
 
-Atom RelationGetPredicateForm(Relation relation)
+Atom RelationGetPredicateForm(TypedRelation relation)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
@@ -283,7 +283,7 @@ Atom RelationGetPredicateForm(Relation relation)
 }
 
 
-bool RelationIsConjunction(Relation relation)
+bool RelationIsConjunction(TypedRelation relation)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
@@ -291,13 +291,13 @@ bool RelationIsConjunction(Relation relation)
 }
 
 
-bool RelationExists(Relation relation)
+bool RelationExists(TypedRelation relation)
 {
 	return (findRelationRecord(relation) != 0);
 }
 
 
-int8 CompareRelations(Relation relation, Relation relationOrKey)
+int8 CompareRelations(TypedRelation relation, TypedRelation relationOrKey)
 {
 	// First compare forms
 	if(relation.form.hash < relationOrKey.form.hash)
@@ -313,20 +313,20 @@ int8 CompareRelations(Relation relation, Relation relationOrKey)
 	}
 }
 
-bool SameRelations(Relation relation1, Relation relation2)
+bool SameRelations(TypedRelation relation1, TypedRelation relation2)
 {
 	return SameAtoms(relation1.form, relation2.form) &&
 		SameTypeSignatures(relation1.typeSignature, relation2.typeSignature);
 }
 
 
-bool IsNullRelation(Relation relation)
+bool IsNullRelation(TypedRelation relation)
 {
 	return relation.form.hash == 0;
 }
 
 
-void RelationReleaseTermForm(Relation relation)
+void RelationReleaseTermForm(TypedRelation relation)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
@@ -337,7 +337,7 @@ void RelationReleaseTermForm(Relation relation)
 }
 
 
-data64 RelationHash(Relation relation, data64 initialHash)
+data64 RelationHash(TypedRelation relation, data64 initialHash)
 {
 	data64 hash = initialHash;
 	// hash the form and types
@@ -347,7 +347,7 @@ data64 RelationHash(Relation relation, data64 initialHash)
 }
 
 
-Relation RelationFromFact(FormulaView term)
+TypedRelation RelationFromFact(FormulaView term)
 {
 	ASSERT(IsTermForm(term.form))
 	TypeSignature typeSignature = CreateTypeSignature(
@@ -359,7 +359,7 @@ Relation RelationFromFact(FormulaView term)
 			typeSignature.atomTypes[i] = AT_ID;
 	}
 
-	return (Relation) {.form = term.form, .typeSignature = typeSignature};
+	return (TypedRelation) {.form = term.form, .typeSignature = typeSignature};
 }
 
 
@@ -421,7 +421,7 @@ bool RelationIteratorNext(RelationIterator * iterator)
 }
 
 
-Relation RelationIteratorGet(RelationIterator const * iterator)
+TypedRelation RelationIteratorGet(RelationIterator const * iterator)
 {
 	RelationRecord * record = BTreeIteratorPeekItem(&(iterator->btreeIterator));
 	return record->relation;

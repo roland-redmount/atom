@@ -7,7 +7,7 @@
 #ifndef TERMFORMBUILDER_H
 #define TERMFORMBUILDER_H
 
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "parser/Token.h"
 
 

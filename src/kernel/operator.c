@@ -2,7 +2,7 @@
 #include "btree/btree.h"
 #include "kernel/ifact.h"
 #include "kernel/operator.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "kernel/TupleStore.h"
@@ -1941,13 +1941,13 @@ static void teardownOperator(Operator * op)
 }
 
 
-void AttachOperator(Operator * op, Relation signature)
+void AttachOperator(Operator * op, TypedRelation signature)
 {
 	ASSERT(IsNullRelation(op->relation))
 	op->relation = signature;
 
 #ifdef DEBUG
-	// If the Relation has a TupleStore with a defined index order, the new operator's
+	// If the TypedRelation has a TupleStore with a defined index order, the new operator's
 	// index order must match that of the TupleStore.
 	TupleStore * store = RelationGetTupleStore(signature);
 	if(store) {
@@ -1965,7 +1965,7 @@ void AttachOperator(Operator * op, Relation signature)
 void DetachOperator(Operator * op)
 {
 	ASSERT(!IsNullRelation(op->relation))
-	op->relation = (Relation) {0};
+	op->relation = (TypedRelation) {0};
 	CheckOperator(op);
 }
 

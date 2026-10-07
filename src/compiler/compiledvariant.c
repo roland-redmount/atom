@@ -1,6 +1,6 @@
 
 #include "compiler/compiledvariant.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "lang/formula.h"
 
 

@@ -1,6 +1,6 @@
 
 #include "kernel/ifact.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/typedtuple.h"
 #include "lang/TermForm.h"
 #include "parser/Characters.h"

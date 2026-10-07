@@ -3,7 +3,7 @@
 #include "kernel/ifact.h"
 #include "kernel/operator.h"
 #include "kernel/Parameter.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/TupleStore.h"
 #include "lang/formula.h"
@@ -58,7 +58,7 @@ uint32 RequestModuleID(void)
  */
 typedef struct s_ModuleRelation {
 	uint32 moduleID;
-	Relation relation;
+	TypedRelation relation;
 } ModuleRelation;
 
 
@@ -102,7 +102,7 @@ void RegisterMachineServiceFunctions(void)
 /**
  * Associate a registered relation with a module ID
  */
-static void addModuleRelation(uint32 moduleID, Relation relation)
+static void addModuleRelation(uint32 moduleID, TypedRelation relation)
 {
 	// Create B-tree on first call
 	MachineServices * machineServices = getMachineServices();
@@ -206,7 +206,7 @@ Service RegisterMachineServiceWithState(
 	size8 nArguments = EqualitySignatureGetArgumentMap(equalitySignature, arity, argumentMap);
 	
 	// Create the relation, unless it already exists
-	Relation relation = {.form = termView.form, .typeSignature = typeSignature};
+	TypedRelation relation = {.form = termView.form, .typeSignature = typeSignature};
 	TupleStore * store = 0;
 	if(RelationExists(relation))
 		store = RelationGetTupleStore(relation);

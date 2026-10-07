@@ -5,7 +5,7 @@
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
 #include "kernel/multiset.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"
 #include "lang/TermForm.h"
@@ -89,12 +89,12 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 	// find existing relation table, or create new
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	Relation relation = {.form = fact.form, .typeSignature = typeSignature};
+	TypedRelation relation = {.form = fact.form, .typeSignature = typeSignature};
 	TupleStore * store = 0;
 	if(RelationExists(relation))
 	 	store = RelationGetTupleStore(relation);
 	if(store) {
-		// NOTE: this is a limitation of having a single TupleStore per Relation
+		// NOTE: this is a limitation of having a single TupleStore per TypedRelation
 		if(!TupleStoreIsWritable(store))
 			return ASSERT_NOT_WRITABLE;
 	}
@@ -196,7 +196,7 @@ void RetractFact(FormulaView fact)
 
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	Relation relation = {.form = fact.form, .typeSignature = typeSignature};
+	TypedRelation relation = {.form = fact.form, .typeSignature = typeSignature};
 	TupleStore * store = RelationGetTupleStore(relation);
 	if(!store) {
 		// The relation has no stored tuples
@@ -218,7 +218,7 @@ void RetractFact(FormulaView fact)
  * Structure for temporary storage of tuples for IFactCreate()
  */
 typedef struct s_IFactTuple {
-	Relation relation;
+	TypedRelation relation;
 	size8 nColumns;
 	index8 idColumn;
 	Atom tuple[RELATION_MAX_ARITY];
@@ -287,7 +287,7 @@ static bool collectTermIFactTuples(
 	if(!hasGenerator)
 		return false;
 
-	ifactTuple.relation = (Relation) {.form = termForm, .typeSignature = termSignature};
+	ifactTuple.relation = (TypedRelation) {.form = termForm, .typeSignature = termSignature};
 	ResizingArrayAppend(ifactTupleArray, &ifactTuple);
 
 	if(termActorIndex)

@@ -3,7 +3,7 @@
 #include "kernel/kernel.h"
 #include "kernel/MixedTypeRelation.h"
 #include "kernel/operator.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/TupleStore.h"
 #include "lang/formula.h"
@@ -26,7 +26,7 @@
  */
 typedef struct s_CircleFixture {
 	Atom termForm;
-	Relation relation;
+	TypedRelation relation;
 	TupleStore * store;
 	index8 circleIndex;
 	index8 radiusIndex;
@@ -66,7 +66,7 @@ static void setupCircleFixture(CircleFixture * fixture)
 	byte atomTypes[2];
 	atomTypes[fixture->circleIndex] = AT_ID;
 	atomTypes[fixture->radiusIndex] = AT_FLOAT;
-	fixture->relation = (Relation) {
+	fixture->relation = (TypedRelation) {
 		.form = fixture->termForm,
 		.typeSignature = CreateTypeSignature(atomTypes, 2)
 	};
@@ -278,7 +278,7 @@ void testIFactRuleInvalidation(void)
 	ReleaseFormula(query);
 
 	// A relation of the term form created after the rule has stale primitive services
-	Relation intRelation = {
+	TypedRelation intRelation = {
 		.form = fixture.termForm,
 		.typeSignature = fixture.relation.typeSignature
 	};
@@ -307,7 +307,7 @@ typedef struct s_CircleRule {
 	Atom termForm;
 	index8 circleIndex;
 	index8 radiusIndex;
-	Relation relation;
+	TypedRelation relation;
 	FormulaView ifactRule;
 } CircleRule;
 
@@ -320,7 +320,7 @@ static void setupCircleRule(CircleRule * circleRule)
 	byte atomTypes[2];
 	atomTypes[circleRule->circleIndex] = AT_ID;
 	atomTypes[circleRule->radiusIndex] = AT_FLOAT;
-	circleRule->relation = (Relation) {
+	circleRule->relation = (TypedRelation) {
 		.form = circleRule->termForm,
 		.typeSignature = CreateTypeSignature(atomTypes, 2)
 	};
@@ -513,7 +513,7 @@ void testCompileIFactRuleWithSeed(void)
 
 	// CLAUDE: Creating an INT relation of the term form invalidates the compiled service,
 	// restoring the primitive service, marked stale; see ReplaceService()
-	Relation intRelation = circleRule.relation;
+	TypedRelation intRelation = circleRule.relation;
 	intRelation.typeSignature.atomTypes[circleRule.radiusIndex] = AT_INT;
 	CreateTupleStore(intRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	ASSERT_UINT32_EQUAL(ServiceGetOperator(ifactService)->type, OPERATOR_MACHINE)
@@ -559,7 +559,7 @@ void testCompileIFactRuleTwoTypes(void)
 	ASSERT_UINT32_EQUAL(runQuery(intQuery, &tuple), 1)
 	FreeTypedTuple(tuple);
 	ReleaseFormula(intQuery);
-	Relation intRelation = circleRule.relation;
+	TypedRelation intRelation = circleRule.relation;
 	intRelation.typeSignature.atomTypes[circleRule.radiusIndex] = AT_INT;
 	TupleStore * intStore = RelationGetTupleStore(intRelation);
 	ASSERT_UINT32_EQUAL(TupleStoreNTuples(intStore), 1)

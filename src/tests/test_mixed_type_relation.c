@@ -3,7 +3,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/MixedTypeRelation.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/TupleStore.h"
 #include "library/library.h"
@@ -150,13 +150,13 @@ void testConcatAcrossRelations(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	Relation idRelation = {
+	TypedRelation idRelation = {
 		.form = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2)
 	};
 	TupleStore * idStore = CreateTupleStore(idRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	
-	Relation intRelation = {
+	TypedRelation intRelation = {
 		.form = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
 	};

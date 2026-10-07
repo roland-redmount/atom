@@ -15,7 +15,7 @@
 #include "lang/TypedAtom.h"
 #include "kernel/ifact.h"
 #include "kernel/operator.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 
 
 /**
@@ -130,7 +130,7 @@ index8 const * GetListLengthRoleIndex(void);
  * The (list position element) relation storing elements of the given type,
  * which is AT_ID or AT_LETTER.
  */
-Relation GetListRelation(byte elementType);
+TypedRelation GetListRelation(byte elementType);
 
 /**
  * The service (list <ID position >INT element >elementType) of the relation
@@ -138,7 +138,7 @@ Relation GetListRelation(byte elementType);
  */
 Operator * GetListOperator(byte elementType);
 
-Relation GetListLengthRelation(void);
+TypedRelation GetListLengthRelation(void);
 
 /**
  * The service (list <ID length >INT)

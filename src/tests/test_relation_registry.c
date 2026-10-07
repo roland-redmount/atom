@@ -1,7 +1,7 @@
 
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "lang/formula.h"
 #include "library/library.h"
 #include "library/list.h"
@@ -38,14 +38,14 @@ static void teardownFixture(void)
 
 
 /**
- * Test add and remove a Relation
+ * Test add and remove a TypedRelation
  */
 void testAddRemoveRelation(void)
 {
 	setupFixture();
 	size32 nRelationsInitial = RelationRegistryNRelations();
 
-	Relation relation = {.form = fixture.form, .typeSignature = fixture.typeSignature};
+	TypedRelation relation = {.form = fixture.form, .typeSignature = fixture.typeSignature};
 	AcquireRelation(relation);
 	ASSERT_UINT32_EQUAL(RelationRegistryNRelations(), nRelationsInitial + 1)
 
@@ -65,8 +65,8 @@ void testAddRemoveRelation(void)
 void testIterateRelations(void)
 {
 	Atom form = GetCoreTermForm(FORM_MULTISET_ELEMENT_MULTIPLE);
-	Relation multisetName = GetCoreRelation(RELATION_MULTISET_NAME);
-	Relation multisetId = GetCoreRelation(RELATION_MULTISET_ID);
+	TypedRelation multisetName = GetCoreRelation(RELATION_MULTISET_NAME);
+	TypedRelation multisetId = GetCoreRelation(RELATION_MULTISET_ID);
 
 	bool foundName = false;
 	bool foundId = false;
@@ -75,7 +75,7 @@ void testIterateRelations(void)
 	RelationIterator iterator;
 	RelationRegistryIterate(form, &iterator);
 	while(RelationIteratorNext(&iterator)) {
-		Relation relation = RelationIteratorGet(&iterator);
+		TypedRelation relation = RelationIteratorGet(&iterator);
 		// every relation yielded must belong to the form we asked for
 		ASSERT_TRUE(SameAtoms(relation.form, form))
 		if(SameRelations(relation, multisetName))

@@ -6,7 +6,7 @@
 #define ASSERT_H
 
 #include "kernel/typedtuple.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "lang/formula.h"
 
 /**

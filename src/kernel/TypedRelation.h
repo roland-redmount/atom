@@ -1,9 +1,9 @@
 /**
- * A Relation is a set of tuples, and is identified by a form and a type signature.
+ * A TypedRelation is a set of tuples, and is identified by a form and a type signature.
  */
 
-#ifndef RELATION_H
-#define RELATION_H
+#ifndef TYPED_RELATION_H
+#define TYPED_RELATION_H
 
 #include "btree/btree.h"
 #include "lang/Atom.h"
@@ -42,14 +42,14 @@ bool SameTypeSignatures(TypeSignature signature1, TypeSignature signature2);
 size8 TypeSignatureNAtomTypes(TypeSignature typeSignature);
 
 /**
- * A Relation is a pair (form, type signature). The form may be a term form,
+ * A TypedRelation is a pair (form, type signature). The form may be a term form,
  * such as (! odd x) or (odd x), or a conjunction form, such as (=< n >= a & >= n =< b),
- * but not a clause form. A Relation plus an IOSignature identifies a Service.
+ * but not a clause form. A TypedRelation plus an IOSignature identifies a Service.
  */
-typedef struct s_Relation {
+typedef struct s_TypedRelation {
 	Atom form;
 	TypeSignature typeSignature;
-} Relation;
+} TypedRelation;
 
 /**
  * Returns true if the given form is a term form or a conjunction form.
@@ -59,84 +59,84 @@ bool IsRelationForm(Atom form);
 /**
  * Ordering of two relation signatures
  */
-int8 CompareRelations(Relation relation, Relation relationOrKey);
+int8 CompareRelations(TypedRelation relation, TypedRelation relationOrKey);
 
 /**
  * Test relation signatures for identity
  */
-bool SameRelations(Relation relation1, Relation relation2);
+bool SameRelations(TypedRelation relation1, TypedRelation relation2);
 
 /**
  * Test for a null relation, marking an absent value (no relation)
  */
-bool IsNullRelation(Relation relation);
+bool IsNullRelation(TypedRelation relation);
 
 /**
  * Compute the hash of a relation, on top of an initialHash
  */
-data64 RelationHash(Relation relation, data64 initialHash);
+data64 RelationHash(TypedRelation relation, data64 initialHash);
 
 /**
  * Return the relation that the given fact belongs to,
  * based on its atom types. The fact must be a term.
- * The returned Relation might not exist in the relation registry.
+ * The returned TypedRelation might not exist in the relation registry.
  * If the fact contains an AT_GENERATOR atom, the relation type is inferred to be AT_ID.
  */
-Relation RelationFromFact(FormulaView term);
+TypedRelation RelationFromFact(FormulaView term);
 
 /**
- * Register a new Relation, or aquire a reference to one that already exists.
+ * Register a new TypedRelation, or aquire a reference to one that already exists.
  * 
  * NOTE: Only Service and TupleStore should need to use this function.
  */
-void AcquireRelation(Relation relation);
+void AcquireRelation(TypedRelation relation);
 
 /**
  * Release a reference to a relation.
  */
-void ReleaseRelation(Relation relation);
+void ReleaseRelation(TypedRelation relation);
 
 /**
  * Create a relation with the predicate form given explicitly, rather than computed from
  * TermFormGetPredicateForm(termForm). This function is only for bootstrapping, where
  * TermFormGetPredicateForm() is not yet available. See setupCoreServices() in kernel.c
  */
-void CreateRelationBootstrap(Relation relation, Atom predicateForm);
+void CreateRelationBootstrap(TypedRelation relation, Atom predicateForm);
 
 /**
  * Create a relation from a term, whose actors must be parameters, e.g.
  * for example (+ #1<INT + #2<INT = #3>INT)
  * The IO direction of each parameter is ignored.
  */
-Relation CreateRelationFromTerm(Atom term);
+TypedRelation CreateRelationFromTerm(Atom term);
 
 /**
- * Return the TupleStore associated with this Relation, or 0 if none exists.
+ * Return the TupleStore associated with this TypedRelation, or 0 if none exists.
  */
-struct s_TupleStore * RelationGetTupleStore(Relation relation);
+struct s_TupleStore * RelationGetTupleStore(TypedRelation relation);
 
 /**
- * Return the predicate form corresponding to the Relation's term form.
+ * Return the predicate form corresponding to the TypedRelation's term form.
  * This is used to avoid calling TermFormGetPredicateForm() form LookupAddPredicateRoles(),
  * which is critical during bootstrap; see CreateRelationBootstrap()
  */
-Atom RelationGetPredicateForm(Relation relation);
+Atom RelationGetPredicateForm(TypedRelation relation);
 
 /**
  * Test whether the relation's form is a conjunction form rather than a term form.
  * Unlike IsConjunctionForm(), this also works during bootstrap; see RelationGetPredicateForm().
  */
-bool RelationIsConjunction(Relation relation);
+bool RelationIsConjunction(TypedRelation relation);
 
 /**
  * Test if the given relation exists in the registry.
  */
-bool RelationExists(Relation relation);
+bool RelationExists(TypedRelation relation);
 
 /**
  * Return the number of rows in a relation.
  */
-size32 RelationNRows(Relation relation);
+size32 RelationNRows(TypedRelation relation);
 
 /**
  * Add a single tuple to the relation, acquiring each atom in the tuple.
@@ -145,7 +145,7 @@ size32 RelationNRows(Relation relation);
  * Acquires a reference to each atom in the tuple, except an identified atom.
  * Does not add lookup entries; see AssertFact()
  */
-byte RelationAddTuple(Relation relation, Atom const tuple[], uint8 idPosition);
+byte RelationAddTuple(TypedRelation relation, Atom const tuple[], uint8 idPosition);
 
 /**
  * Remove the given tuple from the relation.
@@ -154,12 +154,12 @@ byte RelationAddTuple(Relation relation, Atom const tuple[], uint8 idPosition);
  * to remove the tuple.
  * Does not remove the associated lookup entries; see RetractFact()
  */
-byte RelationRemoveTuple(Relation relation, Atom const tuple[], uint8 idPosition);
+byte RelationRemoveTuple(TypedRelation relation, Atom const tuple[], uint8 idPosition);
 
 /**
  * Drop the relation, all its services, and any associated tuple storage.
  */
-void DropRelation(Relation relation);
+void DropRelation(TypedRelation relation);
 
 /**
  * Garbage collect any relations that have only primitive services
@@ -184,7 +184,7 @@ void DropEmptyRelations(void);
  * still have its services, which are used to locate the tuples to retract. It should be
  * released immediately afterwards.
  */
-void RelationReleaseTermForm(Relation relation);
+void RelationReleaseTermForm(TypedRelation relation);
 
 /**
  * Setup an empty relation registry. Called during bootstrapping only.
@@ -234,7 +234,7 @@ bool RelationIteratorNext(RelationIterator * iterator);
  * Only valid after RelationIteratorNext() has returned true,
  * and until RelationIteratorEnd() is called.
  */
-Relation RelationIteratorGet(RelationIterator const * iterator);
+TypedRelation RelationIteratorGet(RelationIterator const * iterator);
 
 
 void RelationIteratorEnd(RelationIterator * iterator);
@@ -245,4 +245,4 @@ void RelationIteratorEnd(RelationIterator * iterator);
 void RegisterRelationFunctions(void);
 
 
-#endif	// RELATION_H
+#endif	// TYPED_RELATION_H

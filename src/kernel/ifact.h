@@ -13,7 +13,7 @@
 #ifndef IFACT_H
 #define IFACT_H
 
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/TupleStore.h"
 #include "kernel/typedtuple.h"
 

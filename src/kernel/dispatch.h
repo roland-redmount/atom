@@ -12,7 +12,7 @@
 #define DISPATCH_H
 
 #include "kernel/Parameter.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/formula.h"
 
@@ -133,9 +133,9 @@ typedef struct {
 	// The service record at the current positon
 	ServiceRecord const * serviceRecord;
 #ifdef DEBUG
-	// Relation of the previous match, kept to verify that one query never matches two
+	// TypedRelation of the previous match, kept to verify that one query never matches two
 	// services of one relation; see ServiceRegistryAdd()
-	Relation const * previousMatchRelation;
+	TypedRelation const * previousMatchRelation;
 #endif
 } DispatchIterator;
 

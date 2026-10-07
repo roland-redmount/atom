@@ -34,7 +34,7 @@
 #define LOOKUP_H
 
 #include "btree/btree.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/typedtuple.h"
 
 
@@ -52,31 +52,31 @@ size32 LookupTotalCount(void);
  * Test whether an atom participates in a given role in the given term form
  * of the given relation. To enumerate roles for an atom, see LookupIterate().
  */
-bool LookupHasEntry(Atom atom, Relation relation, Atom termForm, Atom role);
+bool LookupHasEntry(Atom atom, TypedRelation relation, Atom termForm, Atom role);
 
 /**
  * Add a lookup entry for an atom participating in the given role
  * in the given term, in the given relation.
  */
-void LookupAddRole(Atom atom, Relation relation, Atom termForm, Atom role);
+void LookupAddRole(Atom atom, TypedRelation relation, Atom termForm, Atom role);
 
 /**
  * Remove a lookup entry for an atom participating in a role.
  * This is called by RetractFact()
  */
-void LookupRemoveRole(Atom atom, Relation relation, Atom termForm, Atom role);
+void LookupRemoveRole(Atom atom, TypedRelation relation, Atom termForm, Atom role);
 
 /**
  * Add lookup entries for all actors in a fact from a given relation,
  * defined by an actor list corresponding to the relation's form.
  */
-void LookupAddFactRoles(Relation relation, Atom const actors[]);
+void LookupAddFactRoles(TypedRelation relation, Atom const actors[]);
 
 /**
  * Remove lookup entries for each actor in a fact, defined by an actor list
  * for a given relation.
  */
-void LookupRemoveFactRoles(Relation relation, Atom const actors[]);
+void LookupRemoveFactRoles(TypedRelation relation, Atom const actors[]);
 
 /**
  * Lookup the relation with the given term form where the given atom partipates
@@ -91,7 +91,7 @@ void LookupRemoveFactRoles(Relation relation, Atom const actors[]);
  * TODO: this is not a good design. Figure out some better way to handle those
  * cases in list, multiset.
  */
-Relation LookupFindRelation(Atom atom, Atom termForm, Atom role);
+TypedRelation LookupFindRelation(Atom atom, Atom termForm, Atom role);
 
 /**
  * Remove lookup entries for all atoms acting in the given predicate form.
@@ -114,7 +114,7 @@ Relation LookupFindRelation(Atom atom, Atom termForm, Atom role);
  */
 typedef struct s_LookupRecord {
 	Atom atom;
-	Relation relation;
+	TypedRelation relation;
 	Atom termForm;
 	Atom role;
 	size32 nFacts;	// the number of facts that match this record
@@ -136,7 +136,7 @@ void LookupIterate(Atom atom, LookupIterator * iterator);
 
 bool LookupIteratorNext(LookupIterator * iterator);
 
-Relation LookupIteratorGetRelation(LookupIterator const * iterator);
+TypedRelation LookupIteratorGetRelation(LookupIterator const * iterator);
 
 Atom LookupIteratorGetTermForm(LookupIterator const * iterator);
 

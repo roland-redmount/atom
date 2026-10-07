@@ -7,7 +7,7 @@
  * nothing of the registries or of kernel bootstrapping: giving a relation storage is the
  * caller's business, and is done the same way whatever the provider.
  *
- *   Relation const * relation = CreateRelation(termForm, nColumns, atomTypes);
+ *   TypedRelation const * relation = CreateRelation(termForm, nColumns, atomTypes);
  *   RelationWriter * table = CreateRelationWriter(
  *       relation, &btreeTableProvider, indexColumns);
  *   ReleaseRelation(relation);
@@ -20,7 +20,7 @@
 #define RELATION_B_TREE_H
 
 #include "btree/btree.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/tuple.h"
 #include "kernel/operator.h"
 

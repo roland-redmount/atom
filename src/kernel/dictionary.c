@@ -4,7 +4,7 @@
 #include "kernel/multiset.h"
 #include "kernel/ifact.h"
 #include "kernel/operator.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/TupleStore.h"
 #include "kernel/typedtuple.h"
@@ -343,17 +343,17 @@ static void releaseIFactRuleCache(FormulaView const * ifactRule)
 	index8 idColumn = IFactRuleFindGeneratorIndex(ifactRule->actors);
 	// Collect the relations first, since releasing an ifact may alter the relation registry
 	ResizingArray relations;
-	CreateResizingArray(&relations, sizeof(Relation), 4);
+	CreateResizingArray(&relations, sizeof(TypedRelation), 4);
 	RelationIterator iterator;
 	RelationRegistryIterate(ifactRule->form, &iterator);
 	while(RelationIteratorNext(&iterator)) {
-		Relation relation = RelationIteratorGet(&iterator);
+		TypedRelation relation = RelationIteratorGet(&iterator);
 		ResizingArrayAppend(&relations, &relation);
 	}
 	RelationIteratorEnd(&iterator);
 
 	for(index32 i = 0; i < relations.nElements; i++) {
-		Relation const * relation = ResizingArrayGetElement(&relations, i);
+		TypedRelation const * relation = ResizingArrayGetElement(&relations, i);
 		TupleStore * store = RelationGetTupleStore(*relation);
 		if(store)
 			IFactReleaseCached(store, idColumn);

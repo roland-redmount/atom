@@ -4,7 +4,7 @@
 #include "kernel/letter.h"
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
@@ -30,15 +30,15 @@ typedef struct s_ListLibrary {
 	Atom listLengthTermForm;
 	index8 listLengthRoleIndex[2];
 
-	Relation listIDRelation;
+	TypedRelation listIDRelation;
 	TupleStore * listIDTupleStore;
 	Operator * listIDOperator;
 
-	Relation listLetterRelation;
+	TypedRelation listLetterRelation;
 	TupleStore * listLetterTupleStore;
 	Operator * listLetterOperator;
 
-	Relation listLengthRelation;
+	TypedRelation listLengthRelation;
 	TupleStore * listLengthTupleStore;
 	Operator * listLengthOperator;
 } ListLibrary;
@@ -83,7 +83,7 @@ index8 const * GetListLengthRoleIndex(void)
 }
 
 
-Relation GetListRelation(byte elementType)
+TypedRelation GetListRelation(byte elementType)
 {
 	switch(elementType) {
 	case AT_ID:
@@ -94,7 +94,7 @@ Relation GetListRelation(byte elementType)
 
 	default:
 		ASSERT(false)
-		return (Relation) {0};
+		return (TypedRelation) {0};
 	}
 }
 
@@ -115,7 +115,7 @@ Operator * GetListOperator(byte elementType)
 }
 
 
-Relation GetListLengthRelation(void)
+TypedRelation GetListLengthRelation(void)
 {
 	return listLibrary->listLengthRelation;
 }
@@ -155,7 +155,7 @@ static void assertListLength(IFactDraft * draft, size32 nElements)
 void AddListToIFact(IFactDraft * draft, Atom const elements[], byte elementType, size32 nElements)
 {
 	if(nElements > 0) {
-		Relation relation = GetListRelation(elementType);
+		TypedRelation relation = GetListRelation(elementType);
 		// assert (ĺist position elements) facts for each element
 		IFactBeginConjunction(draft, RelationGetTupleStore(relation), listLibrary->listRoleIndex[0]);
 		Atom listElementTuple[3];
@@ -198,7 +198,7 @@ size32 ListLength(Atom list)
  * TODO: this is not well-defined in general, there may be > 1 relation for lists
  * containing mixed types, although CreateList() does not yields such lists.
  */
-static Relation findListElementRelation(Atom list)
+static TypedRelation findListElementRelation(Atom list)
 {
 	Atom arguments[3];
 	arguments[listLibrary->listRoleIndex[0]] = list;
@@ -209,14 +209,14 @@ static Relation findListElementRelation(Atom list)
 	if(OperatorCallOnce(listLibrary->listLetterOperator, arguments))
 		return listLibrary->listLetterRelation;
 	
-	return (Relation) {0};
+	return (TypedRelation) {0};
 }
 
 
 Atom ListGetElement(Atom list, index32 position)
 {
 	ASSERT(ListLength(list) > 0)
-	Relation relation = findListElementRelation(list);
+	TypedRelation relation = findListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 
 	byte parameterIO[3];
@@ -236,7 +236,7 @@ Atom ListGetElement(Atom list, index32 position)
 index32 ListGetPosition(Atom list, Atom element)
 {
 	ASSERT(IsList(list))
-	Relation relation = findListElementRelation(list);
+	TypedRelation relation = findListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 
 	// TODO: this service is not one the B-tree provider registers, as its inputs are not
@@ -303,7 +303,7 @@ void ListIterate(Atom list, ListIterator * iterator)
 	iterator->queryTuple[listLibrary->listRoleIndex[0]] = list;
 
 	if(ListLength(list) > 0) {
-		Relation relation = findListElementRelation(list);
+		TypedRelation relation = findListElementRelation(list);
 		ASSERT(!IsNullRelation(relation))
 		
 		byte parameterIO[3];
@@ -345,7 +345,7 @@ void ListIteratorEnd(ListIterator * iterator)
 void PrintList(Atom list)
 {
 	PrintCString("(");
-	Relation relation = findListElementRelation(list);
+	TypedRelation relation = findListElementRelation(list);
 	ASSERT(!IsNullRelation(relation))
 	byte elementType = relation.typeSignature.atomTypes[listLibrary->listRoleIndex[2]];
 
@@ -399,20 +399,20 @@ void ListSetup(void)
 	// (list:ID position:INT element:ID)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_ID}, typeSignature.atomTypes, listLibrary->listRoleIndex, 3);
-	listLibrary->listIDRelation = (Relation) {.form = listLibrary->listTermForm, .typeSignature = typeSignature};
+	listLibrary->listIDRelation = (TypedRelation) {.form = listLibrary->listTermForm, .typeSignature = typeSignature};
 	listLibrary->listIDTupleStore = CreateTupleStore(listLibrary->listIDRelation, GetStorageProvider(PROVIDER_BTREE), 3, listLibrary->listRoleIndex);
 	
 	// (list:ID position:INT element:LETTER)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_LETTER}, typeSignature.atomTypes, listLibrary->listRoleIndex, 3);
-	listLibrary->listLetterRelation = (Relation) {.form = listLibrary->listTermForm, .typeSignature = typeSignature};
+	listLibrary->listLetterRelation = (TypedRelation) {.form = listLibrary->listTermForm, .typeSignature = typeSignature};
 	listLibrary->listLetterTupleStore = CreateTupleStore(listLibrary->listLetterRelation, GetStorageProvider(PROVIDER_BTREE), 3, listLibrary->listRoleIndex);
 	
 	// (list:ID length:INT)
 	typeSignature = (TypeSignature) {0};
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT}, typeSignature.atomTypes, listLibrary->listLengthRoleIndex, 2);
-	listLibrary->listLengthRelation = (Relation) {.form = listLibrary->listLengthTermForm, .typeSignature = typeSignature};
+	listLibrary->listLengthRelation = (TypedRelation) {.form = listLibrary->listLengthTermForm, .typeSignature = typeSignature};
 	listLibrary->listLengthTupleStore = CreateTupleStore(listLibrary->listLengthRelation, GetStorageProvider(PROVIDER_BTREE), 2, listLibrary->listLengthRoleIndex);
 	
 	IFactRelease(listLibrary->listLengthTermForm);

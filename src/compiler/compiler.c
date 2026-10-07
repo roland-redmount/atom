@@ -17,7 +17,7 @@
 #include "kernel/multiset.h"
 #include "kernel/operator.h"
 #include "kernel/Parameter.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "lang/ClauseForm.h"
@@ -2441,7 +2441,7 @@ static TupleStore * setupIFactRuleStore(ParameterizedQuery const * query, index8
 	byte atomTypes[query->arity];
 	for(index8 i = 0; i < query->arity; i++)
 		atomTypes[i] = (i == *idColumn) ? AT_ID : query->parameters[i].parameter.atomType;
-	Relation relation = {
+	TypedRelation relation = {
 		.form = query->form,
 		.typeSignature = CreateTypeSignature(atomTypes, query->arity)
 	};
@@ -2633,7 +2633,7 @@ static size8 compileParameterizedQuery(
 	size8 nRegisteredServices = 0;
 	for(index8 i = 0; i < nVariants; i++) {
 		IOSignature ioSignature = CompiledVariantGetIOSignature(&variants[i], query->arity);
-		Relation relation = (Relation) {
+		TypedRelation relation = (TypedRelation) {
 			.form = query->form,
 			.typeSignature = CompiledVariantGetTypeSignature(&variants[i], query->arity),
 		};

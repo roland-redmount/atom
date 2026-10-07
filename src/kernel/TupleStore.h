@@ -2,13 +2,13 @@
 #ifndef TUPLE_STORE_H
 #define TUPLE_STORE_H
 
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "storage/StorageProvider.h"
 
 
 typedef struct s_TupleStore {
-	Relation relation;
+	TypedRelation relation;
 	/*
 	 * The order of index columns. Only set if the service provider defines readers.
 	 *
@@ -52,7 +52,7 @@ void FreeTupleStores(void);
  * as specified by the provider. The relation must not already exist.
  */
 TupleStore * CreateTupleStore(
-	Relation relation, StorageProvider const * provider, size8 nColumns, index8 const indexColumns[]);
+	TypedRelation relation, StorageProvider const * provider, size8 nColumns, index8 const indexColumns[]);
 
 /**
  * Remove the given TupleStore.

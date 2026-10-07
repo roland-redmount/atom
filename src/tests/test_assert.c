@@ -7,7 +7,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "lang/formula.h"
 #include "library/library.h"
 #include "library/list.h"
@@ -34,7 +34,7 @@ void testAssertRetract(void)
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(FormulaGetActors(fact1)), nColumns);
 
-	Relation relation = {.form = FormulaGetForm(fact1), .typeSignature = typeSignature};
+	TypedRelation relation = {.form = FormulaGetForm(fact1), .typeSignature = typeSignature};
 	// The relation does not exist until the first fact is asserted
 	ASSERT_FALSE(RelationExists(relation))
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact1), 0), ASSERT_OK)
@@ -87,14 +87,14 @@ void testAssertContradictsStoredFact(void)
 	// Assert a fact
 	Atom fact = CStringToTerm("prec \"a\" succ \"b\"");
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_OK)
-	Relation relation = RelationFromFact(FormulaGetView(fact));
+	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
 	ASSERT_TRUE(RelationExists(relation))
 
 	// (! prec "a" succ "b") is refused, contradicting the fact just asserted
 	Atom negatedFact = CStringToTerm("! prec \"a\" succ \"b\"");
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(negatedFact), 0), ASSERT_CONTRADICTION)
 	// and the refused assert leaves no relation behind
-	Relation negatedRelation = RelationFromFact(FormulaGetView(negatedFact));
+	TypedRelation negatedRelation = RelationFromFact(FormulaGetView(negatedFact));
 	ASSERT_FALSE(RelationExists(negatedRelation))
 	
 	// Retracting the fact it contradicts makes the same assert succeed
@@ -127,7 +127,7 @@ void testAssertClosedRelation(void)
 	Atom notEven2 = CStringToTerm("! even 2");
 	Atom closedEven = CStringToTerm("closed-relation [. even]");
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even2), 0), ASSERT_OK)
-	Relation relation = RelationFromFact(FormulaGetView(even2));
+	TypedRelation relation = RelationFromFact(FormulaGetView(even2));
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedEven), 0), ASSERT_OK)
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedEven), 0), ASSERT_EXISTED)
 	ASSERT_TRUE(RelationIsClosed(FormulaGetForm(even2)))
@@ -202,7 +202,7 @@ void testAssertClosedRelationRejected(void)
 	// CLAUDE: The opposite relation is stored
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(notOdd3), 0), ASSERT_OK)
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedOdd), 0), ASSERT_NOT_CLOSABLE)
-	Relation notOddRelation = RelationFromFact(FormulaGetView(notOdd3));
+	TypedRelation notOddRelation = RelationFromFact(FormulaGetView(notOdd3));
 	RetractFact(FormulaGetView(notOdd3));
 	DropRelation(notOddRelation);
 
@@ -238,7 +238,7 @@ void testAssertContradictsDerivedFact(void)
 	FormulaView even3View = FormulaGetView(even3);
 	ASSERT_INT32_EQUAL(AssertFact(even3View, 0), ASSERT_CONTRADICTION)
 	// no relation was created
-	Relation evenRelation = RelationFromFact(even3View);
+	TypedRelation evenRelation = RelationFromFact(even3View);
 	ASSERT_FALSE(RelationExists(evenRelation))
 	ReleaseFormula(even3);
 
@@ -363,8 +363,8 @@ void testAssertFormulaRejects(void)
  */
 void testCreateIFactList(void)
 {
-	Relation listLetter = GetListRelation(AT_LETTER);
-	Relation listLength = GetListLengthRelation();
+	TypedRelation listLetter = GetListRelation(AT_LETTER);
+	TypedRelation listLength = GetListLengthRelation();
 	size32 listLetterNRows = RelationNRows(listLetter);
 	size32 listLengthNRows = RelationNRows(listLength);
 
@@ -413,12 +413,12 @@ void testCreateIFactNewRelations(void)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
 
 	Atom colourNameTerm = CStringToTerm("colour * name \"red\"");
-	Relation colourNameRelation = RelationFromFact(FormulaGetView(colourNameTerm));
+	TypedRelation colourNameRelation = RelationFromFact(FormulaGetView(colourNameTerm));
 	ReleaseFormula(colourNameTerm);
 	ASSERT_INT32_EQUAL(RelationNRows(colourNameRelation), 1)
 
 	Atom colourCodeTerm = CStringToTerm("colour * code 4");
-	Relation colourCodeRelation = RelationFromFact(FormulaGetView(colourCodeTerm));
+	TypedRelation colourCodeRelation = RelationFromFact(FormulaGetView(colourCodeTerm));
 	ReleaseFormula(colourCodeTerm);
 	ASSERT_INT32_EQUAL(RelationNRows(colourCodeRelation), 1)
 
@@ -442,7 +442,7 @@ void testCreateIFactTwoIdColumns(void)
 	byte atomTypes[2] = {AT_ID, AT_ID};
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, 2);
 	
-	Relation relation = {.form = FormulaGetForm(sameFormTerm), .typeSignature = typeSignature};
+	TypedRelation relation = {.form = FormulaGetForm(sameFormTerm), .typeSignature = typeSignature};
 	ASSERT_FALSE(RelationExists(relation))
 
 	Atom formula = CStringToConjunction("pair * other \"a\" & pair \"a\" other *");
@@ -470,7 +470,7 @@ void testCreateIFactTwoIdColumns(void)
  */
 void testCreateIFactExisting(void)
 {
-	Relation listLength = GetListLengthRelation();
+	TypedRelation listLength = GetListLengthRelation();
 	size32 listLengthNRows = RelationNRows(listLength);
 
 	Atom formula = CStringToConjunction("list * position 1 element 'C & list * length 1");
@@ -495,7 +495,7 @@ void testCreateIFactExisting(void)
  */
 void testCreateIFactDefiningFactsProtected(void)
 {
-	Relation listLength = GetListLengthRelation();
+	TypedRelation listLength = GetListLengthRelation();
 	size32 listLengthNRows = RelationNRows(listLength);
 
 	Atom formula = CStringToConjunction("list * position 1 element 'D & list * length 1");
@@ -552,7 +552,7 @@ void testCreateIFactTerm(void)
 		atomTypes[i] = SameTypedAtoms(actor, generatorAtom) ? AT_ID : actor.type;
 	}
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, nColumns);
-	Relation relation = {.form = FormulaGetForm(term), .typeSignature = typeSignature};
+	TypedRelation relation = {.form = FormulaGetForm(term), .typeSignature = typeSignature};
 	ASSERT_FALSE(RelationExists(relation))
 
 	Atom ifact = CreateIFact(FormulaGetView(term));
@@ -593,7 +593,7 @@ void testCreateIFactIdColumnNotFirst(void)
 	Atom ifact = CreateIFact(termView);
 	ASSERT_TRUE(ifact.hash != 0)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
-	Relation relation = RelationFromFact(termView);
+	TypedRelation relation = RelationFromFact(termView);
 	ASSERT_TRUE(RelationExists(relation))
 
 	// Calling again retrieves the ID atom already created
@@ -629,7 +629,7 @@ void testCreateIFactClause(void)
 	Atom termIFact = CreateIFact(FormulaGetView(term));
 	ASSERT_TRUE(SameAtoms(termIFact, clauseIFact))
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(clauseIFact), 2)
-	Relation relation = RelationFromFact(FormulaGetView(term));
+	TypedRelation relation = RelationFromFact(FormulaGetView(term));
 	ASSERT_INT32_EQUAL(RelationNRows(relation), 1)
 
 	IFactRelease(termIFact);
@@ -729,7 +729,7 @@ void testLoadRelationText(void)
 	ASSERT_INT32_EQUAL(report.assertResult, ASSERT_CONTRADICTION)
 	IFactRelease(report.form);
 
-	Relation relation = RelationFromFact(FormulaGetView(fact1));
+	TypedRelation relation = RelationFromFact(FormulaGetView(fact1));
 	RetractFact(FormulaGetView(fact1));
 	RetractFact(FormulaGetView(fact2));
 	DropRelation(relation);

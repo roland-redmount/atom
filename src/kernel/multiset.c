@@ -25,7 +25,7 @@ Atom CreateMultiset(MultisetElementGenerator generator, void const * data, size3
  * 
  * NOTE: here we assume there are only two multiset relations
  */
-Relation findMultisetRelationByType(byte elementType)
+TypedRelation findMultisetRelationByType(byte elementType)
 {
 	switch(elementType) {
 		case AT_ID:
@@ -36,7 +36,7 @@ Relation findMultisetRelationByType(byte elementType)
 
 		default:
 		ASSERT(false)
-		return (Relation) {0};
+		return (TypedRelation) {0};
 	}
 }
 
@@ -44,7 +44,7 @@ Relation findMultisetRelationByType(byte elementType)
 /**
  * Find the relation associated with a multiset.
  */
-static Relation findMultisetRelation(Atom multiset)
+static TypedRelation findMultisetRelation(Atom multiset)
 {
 	Operator * op;
 	Atom arguments[3];
@@ -62,7 +62,7 @@ static Relation findMultisetRelation(Atom multiset)
 	if(OperatorCallOnce(op, arguments))
 		return GetCoreRelation(RELATION_MULTISET_NAME);
 	
-	return (Relation) {0};
+	return (TypedRelation) {0};
 }
 
 
@@ -70,7 +70,7 @@ void AddMultisetToIFact(
 	IFactDraft * draft,
 	MultisetElementGenerator generator, void const * data, size32 nUniqueElements, byte elementType)
 {
-	Relation relation = findMultisetRelationByType(elementType);
+	TypedRelation relation = findMultisetRelationByType(elementType);
 	ASSERT(!IsNullRelation(relation))
 
 	// assert (multiset element multiple) facts
@@ -144,7 +144,7 @@ bool IsMultiset(Atom atom)
 /**
  * Multiset iterator
  */
-static void multisetIterate(Atom multiset, Relation relation, MultisetIterator * iterator)
+static void multisetIterate(Atom multiset, TypedRelation relation, MultisetIterator * iterator)
 {
 	byte parameterIO[3];
 	CoreFormSetByteArray(
@@ -255,7 +255,7 @@ Atom MultisetFindElement(Atom multiset, byte elementType, index32 k)
 size32 MultisetGetElementMultiple(Atom multiset, Atom element)
 {
 	MultisetIterator iterator;
-	Relation relation = findMultisetRelation(multiset);
+	TypedRelation relation = findMultisetRelation(multiset);
 	ASSERT(!IsNullRelation(relation))
 	multisetIterate(multiset, relation, &iterator);
 	size32 multiple = 0;
@@ -301,7 +301,7 @@ size32 MultisetSize(Atom multiset, byte elementType)
  */
 static byte findMultisetElementType(Atom multiset)
 {
-	Relation relation = findMultisetRelation(multiset);
+	TypedRelation relation = findMultisetRelation(multiset);
 	return relation.typeSignature.atomTypes[
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)
 	];
