@@ -174,6 +174,13 @@ void ServiceIteratorEnd(ServiceIterator * iterator);
 Operator * ServiceGetOperator(Service service);
 
 /**
+ * Copy the Service evaluated by the given operator to *service.
+ * Returns false if the registry holds no such service.
+ * The operator must be attached to a relation.
+ */
+bool FindServiceByOperator(Operator const * op, Service * service);
+
+/**
  * View the service record for the service. The returned pointer is
  * valid only as long as the service registery is not altered.
  */

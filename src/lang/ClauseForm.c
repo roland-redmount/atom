@@ -43,11 +43,14 @@ void PrintClauseForm(Atom clauseForm)
 	MultisetIterator iterator;
 	MultisetIterate(clauseForm, AT_ID, &iterator);
 
+	bool isFirst = true;
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
+			if(!isFirst)
+				PrintCString(" | ");
 			PrintTermForm(elementMultiple.element);
-			PrintCString(" | ");
+			isFirst = false;
 		}
 	}
 	MultisetIteratorEnd(&iterator);

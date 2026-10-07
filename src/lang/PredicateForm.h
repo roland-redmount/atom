@@ -57,6 +57,9 @@ index8 PredicateRoleIndex(Atom predicateForm, Atom roleName);
  */
 uint8 PredicateFindRolePosition(Atom predicateForm, Atom roleName);
 
+/**
+ * CLAUDE: Print the role names of a predicate form separated by spaces, as in "child parent".
+ */
 void PrintPredicateForm(Atom predicateForm);
 
 

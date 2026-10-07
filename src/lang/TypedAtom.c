@@ -168,8 +168,12 @@ void PrintTypedAtom(TypedAtom typedAtom)
 				PrintList(typedAtom.atom);
 		}
 		else if(IsMultiset(typedAtom.atom)) {
-			if(IsPredicateForm(typedAtom.atom))
+			if(IsPredicateForm(typedAtom.atom)) {
+				// CLAUDE: The parentheses delimit the role names; a predicate form has no syntax
+				PrintChar('(');
 				PrintPredicateForm(typedAtom.atom);
+				PrintChar(')');
+			}
 			else if(IsClauseForm(typedAtom.atom))
 				PrintClauseForm(typedAtom.atom);
 			else

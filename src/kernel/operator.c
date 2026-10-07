@@ -3,6 +3,7 @@
 #include "kernel/ifact.h"
 #include "kernel/operator.h"
 #include "kernel/Relation.h"
+#include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "kernel/TupleStore.h"
 #include "kernel/typedtuple.h"
@@ -2274,21 +2275,20 @@ static void printOperatorRecursive(
 
 	if((depth > 0) && !IsNullRelation(op->relation)) {
 		// The operator is the head of another service; print its term form and end recursion
-		// An operator taking one argument per column is printed as a formula,
-		// such as (+ <#1 + 1 = #2>).
+		// CLAUDE: The service is printed as a formula, such as (+ #1< + 1 = #2>). A service
+		// repeating a parameter takes fewer arguments than the form has roles, and the
+		// argument map of its EqualitySignature gives the argument of each role.
+		Service service;
+		ASSERT(FindServiceByOperator(op, &service))
 		size8 arity = FormArity(op->relation.form);
-		if(op->nArguments == arity) {
-			TypedTuple * actors = CreateTypedTuple(arity);
-			for(index8 i = 0; i < arity; i++) {
-				TypedTupleSetElement(actors, i, arguments[i]);
-			}
-			PrintFormActorsAsFormula(op->relation.form, actors, 0);
-			FreeTypedTuple(actors);
-		}
-		else {
-			PrintForm(op->relation.form);
-			printArguments(arguments, op->nArguments);
-		}
+		index8 argumentMap[arity];
+		ASSERT(EqualitySignatureGetArgumentMap(service.equalitySignature, arity, argumentMap)
+			== op->nArguments)
+		TypedTuple * actors = CreateTypedTuple(arity);
+		for(index8 i = 0; i < arity; i++)
+			TypedTupleSetElement(actors, i, arguments[argumentMap[i]]);
+		PrintFormActorsAsFormula(op->relation.form, actors, 0);
+		FreeTypedTuple(actors);
 		return;
 	}
 

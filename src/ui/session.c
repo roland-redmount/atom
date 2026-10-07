@@ -479,7 +479,7 @@ static void executeLoad(char const * pathText)
 	if(report.form.hash) {
 		SessionPrintMargin();
 		PrintF("Asserted %u facts of the form ", report.nAsserted);
-		PrintTermForm(report.form);
+		PrintReflectedTermForm(report.form);
 		PrintCString(".\n");
 		if(report.nExisting > 0) {
 			SessionPrintMargin();
