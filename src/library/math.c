@@ -312,7 +312,7 @@ void RegisterMathFunctions(void)
 
 #define N_MATH_RULES	5
 // The number of relations closed by MathSetup()
-#define N_MATH_CLOSED_FORMS	2
+#define N_MATH_CLOSED_FORMS	4
 
 typedef struct s_MathLibrary {
 	uint32 moduleID;
@@ -354,11 +354,13 @@ void MathSetup(void)
 	RegisterMachineService(mathLibrary->moduleID, "integer #1>INT float #2<FLOAT", floatIntegerCall);
 
 	// inequalities
-	RegisterMachineService(mathLibrary->moduleID, "< #1<INT > #2<INT", strictInequalityIntCall);
+	service = RegisterMachineService(mathLibrary->moduleID, "< #1<INT > #2<INT", strictInequalityIntCall);
 	RegisterMachineService(mathLibrary->moduleID, "< #1<FLOAT > #2<FLOAT", strictInequalityFloatCall);
+	mathLibrary->closedForms[2] = service.relation.form;
 
-	RegisterMachineService(mathLibrary->moduleID, "=< #1<INT >= #2<INT", nonStrictInequalityIntCall);
+	service = RegisterMachineService(mathLibrary->moduleID, "=< #1<INT >= #2<INT", nonStrictInequalityIntCall);
 	RegisterMachineService(mathLibrary->moduleID, "=< #1<FLOAT >= #2<FLOAT", nonStrictInequalityFloatCall);
+	mathLibrary->closedForms[3] = service.relation.form;
 
 	// The range a =< n =< b is the conjunction (n >= a & b >= n), since
 	// (=< x >= y) reads x >= y. Neither term is a finite relation on its own.
