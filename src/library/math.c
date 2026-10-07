@@ -1,4 +1,5 @@
 
+#include "kernel/ClosedRelation.h"
 #include "kernel/dictionary.h"
 #include "library/MachineService.h"
 #include "library/math.h"
@@ -310,10 +311,14 @@ void RegisterMathFunctions(void)
 
 
 #define N_MATH_RULES	5
+// The number of relations closed by MathSetup()
+#define N_MATH_CLOSED_FORMS	4
 
 typedef struct s_MathLibrary {
 	uint32 moduleID;
 	FormulaView mathRules[N_MATH_RULES];
+	// The term forms of the relations closed by MathSetup()
+	Atom closedForms[N_MATH_CLOSED_FORMS];
 } MathLibrary;
 
 
@@ -328,8 +333,10 @@ void MathSetup(void)
 	mathLibrary->moduleID = RequestModuleID();
 
 	// Integer arithmetic
-	RegisterMachineService(mathLibrary->moduleID, "integer #1<INT", integerCall);
-	RegisterMachineService(mathLibrary->moduleID, "+ #1<INT + #2<INT = #3>INT", addIntCall);
+	Service service = RegisterMachineService(mathLibrary->moduleID, "integer #1<INT", integerCall);
+	mathLibrary->closedForms[0] = service.relation.form;
+	service = RegisterMachineService(mathLibrary->moduleID, "+ #1<INT + #2<INT = #3>INT", addIntCall);
+	mathLibrary->closedForms[1] = service.relation.form;
 	RegisterMachineService(mathLibrary->moduleID, "+ #1<INT - #2<INT = #3>INT", subIntCall);
 	RegisterMachineService(mathLibrary->moduleID, "* #1<INT * #2<INT = #3>INT", mulIntCall);
 	RegisterMachineService(mathLibrary->moduleID, "* #1<INT / #2<INT = #3>INT rem #4>INT", intDivisionCall);
@@ -347,11 +354,13 @@ void MathSetup(void)
 	RegisterMachineService(mathLibrary->moduleID, "integer #1>INT float #2<FLOAT", floatIntegerCall);
 
 	// inequalities
-	RegisterMachineService(mathLibrary->moduleID, "< #1<INT > #2<INT", strictInequalityIntCall);
+	service = RegisterMachineService(mathLibrary->moduleID, "< #1<INT > #2<INT", strictInequalityIntCall);
 	RegisterMachineService(mathLibrary->moduleID, "< #1<FLOAT > #2<FLOAT", strictInequalityFloatCall);
+	mathLibrary->closedForms[2] = service.relation.form;
 
-	RegisterMachineService(mathLibrary->moduleID, "=< #1<INT >= #2<INT", nonStrictInequalityIntCall);
+	service = RegisterMachineService(mathLibrary->moduleID, "=< #1<INT >= #2<INT", nonStrictInequalityIntCall);
 	RegisterMachineService(mathLibrary->moduleID, "=< #1<FLOAT >= #2<FLOAT", nonStrictInequalityFloatCall);
+	mathLibrary->closedForms[3] = service.relation.form;
 
 	// The range a =< n =< b is the conjunction (n >= a & b >= n), since
 	// (=< x >= y) reads x >= y. Neither term is a finite relation on its own.
@@ -374,6 +383,10 @@ void MathSetup(void)
 	// Mixed float-int arithmetic. These rules will yield services only for FLOAT x and INT i
 	mathLibrary->mathRules[3] = DictionaryAddClauseFromCString("+ x + i = y | ! integer i float f | ! + x + f = y");
 	mathLibrary->mathRules[4] = DictionaryAddClauseFromCString("* x * i = y | ! integer i float f | ! * x * f = y");
+
+	// Close relations
+	for(index32 i = 0; i < N_MATH_CLOSED_FORMS; i++)
+		ASSERT(CloseRelation(mathLibrary->closedForms[i]) == CLOSE_OK)
 }
 
 
@@ -386,6 +399,8 @@ void MathRestore(void)
 
 void MathShutdown(void)
 {
+	for(index32 i = 0; i < N_MATH_CLOSED_FORMS; i++)
+		OpenRelation(mathLibrary->closedForms[i]);
 	for(index32 i = 0; i < N_MATH_RULES; i++)
 		DictionaryRemoveClause(&mathLibrary->mathRules[i]);
 

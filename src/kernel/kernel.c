@@ -3,6 +3,7 @@
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
+#include "kernel/ClosedRelation.h"
 #include "kernel/dictionary.h"
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
@@ -678,6 +679,7 @@ static void restoreKernel(void)
 	RestoreLookup();
 	RestoreIFacts();
 	RestoreDictionary();
+	RestoreClosedRelations();
 	RestoreFormulaStorage();
 	RestoreNameStorage();
 }
@@ -704,6 +706,8 @@ bool KernelInitialize(uint32 memoryPersistence)
 
 		setupCoreRoleNames();
 		setupCoreServices();
+		// CLAUDE: created before the counts below, so that its form counts as a core ifact
+		SetupClosedRelations();
 
 		kernel->nCoreIFacts = IFactTotalCount();
 		kernel->nCoreIFactRefs = IFactTotalReferenceCount();
@@ -745,6 +749,7 @@ void KernelShutdown(void)
 	}
 
 	RemoveAllCompiledServices();
+	TeardownClosedRelations();
 
 	/**
 	 * NOTE: The below removes all core services to rewind everything

@@ -148,6 +148,10 @@ static void checkSessionAnswers(void)
 	ASSERT_UINT32_EQUAL(countAnswers("name \"ann\" age 3"), 1)
 	ASSERT_UINT32_EQUAL(countAnswers("+ 2 + 3 = 5"), 1)
 	ASSERT_UINT32_EQUAL(countAnswers("+ 2 + 3 = 6"), 0)
+	// CLAUDE: The relation (parent child) is closed by the session, and (+ + =) by MathSetup()
+	ASSERT_UINT32_EQUAL(countAnswers("! parent 1 child 3"), 1)
+	ASSERT_UINT32_EQUAL(countAnswers("! parent 1 child 2"), 0)
+	ASSERT_UINT32_EQUAL(countAnswers("! + 2 + 3 = 6"), 1)
 }
 
 
@@ -163,6 +167,7 @@ static void writeSessionToPageFile(void)
 	assertFormula("parent 2 child 3");
 	assertFormula("grandparent x grandchild z | ! parent x child y | ! parent y child z");
 	assertFormula("name \"ann\" age 3");
+	assertFormula("closed-relation [. parent child]");
 	checkSessionAnswers();
 	KernelClose();
 }

@@ -25,3 +25,13 @@ bool CompileStackContainsTerm(CompileStack const * stack, ParameterizedQuery con
 	}
 	return false;
 }
+
+
+bool CompileStackContainsForm(CompileStack const * stack, Atom form)
+{
+	for(index8 i = 0; i < stack->depth; i++) {
+		if(SameAtoms(stack->queries[i].form, form))
+			return true;
+	}
+	return false;
+}

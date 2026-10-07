@@ -3,6 +3,7 @@
 #include "kernel/ifact.h"
 #include "kernel/operator.h"
 #include "kernel/Relation.h"
+#include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "kernel/TupleStore.h"
 #include "kernel/typedtuple.h"
@@ -683,6 +684,70 @@ static void constantFinalizeContext(OperatorContext * context)
 	ConstantContext * constantContext = (ConstantContext *) &context->data;
 	if(constantContext->childContext)
 		OperatorFreeContext(constantContext->childContext);
+}
+
+
+//------------------------------------- OPERATOR_INVERT -----------------------------------------
+
+typedef struct s_InvertContext {
+	bool called;
+} InvertContext;
+
+
+Operator * CreateInvertOperator(Operator * childOperator, size8 nArguments)
+{
+	ASSERT(!childOperator || (childOperator->nArguments == nArguments))
+	Operator * op = createOperator(OPERATOR_INVERT, nArguments, sizeof(InvertContext));
+	op->impl.invert.childOperator = childOperator;
+	if(childOperator)
+		addParent(childOperator);
+	// INVERT yields at most one tuple, so any index order holds
+	setIdentityIndexOrder(op);
+	return op;
+}
+
+
+static void invertSetupContext(OperatorContext * context)
+{
+	// INVERT has no context to set up.
+	// The child context is created on the first call.
+}
+
+
+static bool invertCall(OperatorContext * context)
+{
+	InvertContext * invertContext = (InvertContext *) &context->data;
+	if(invertContext->called)
+		return false;
+	invertContext->called = true;
+	// CLAUDE: Without a child operator, the child relation is empty
+	if(!context->op->impl.invert.childOperator)
+		return true;
+
+	// The child is called with a copy of the arguments, so that a child writing
+	// its arguments leaves the arguments of this operator unchanged
+	Operator const * op = context->op;
+	size8 nArguments = op->nArguments;
+	Atom childArguments[nArguments];
+	CopyMemory(context->arguments, childArguments, nArguments * sizeof(Atom));
+	OperatorContext * childContext = createContext(
+		context, op->impl.invert.childOperator, childArguments);
+	bool childFound = OperatorCall(childContext);
+	OperatorFreeContext(childContext);
+	return !childFound;
+}
+
+
+static void teardownInvertOperator(Operator * op)
+{
+	ASSERT(op->type == OPERATOR_INVERT)
+	if(op->impl.invert.childOperator)
+		removeParent(op->impl.invert.childOperator);
+}
+
+
+static void invertFinalizeContext(OperatorContext * context)
+{
 }
 
 
@@ -1753,6 +1818,10 @@ size8 OperatorNChildren(Operator const * op)
 	case OPERATOR_CONSTANT:
 		return 1;
 
+	case OPERATOR_INVERT:
+		// CLAUDE: An INVERT operator of an empty relation has no child
+		return op->impl.invert.childOperator ? 1 : 0;
+
 	case OPERATOR_MACHINE:
 	case OPERATOR_RECURSE:
 		return 0;
@@ -1797,6 +1866,9 @@ Operator * OperatorGetChild(Operator const * op, index8 index)
 
 	case OPERATOR_CONSTANT:
 		return op->impl.constant.childOperator;
+
+	case OPERATOR_INVERT:
+		return op->impl.invert.childOperator;
 
 	default:
 		ASSERT(false)
@@ -1854,6 +1926,10 @@ static void teardownOperator(Operator * op)
 
 	case OPERATOR_CONSTANT:
 		teardownConstantOperator(op);
+		break;
+
+	case OPERATOR_INVERT:
+		teardownInvertOperator(op);
 		break;
 	
 	default:
@@ -1961,6 +2037,10 @@ static OperatorContext * createContext(
 	case OPERATOR_CONSTANT:
 		constantSetupContext(context);
 		break;
+
+	case OPERATOR_INVERT:
+		invertSetupContext(context);
+		break;
 	
 	default:
 		ASSERT(false)
@@ -2051,6 +2131,10 @@ bool OperatorCall(OperatorContext * context)
 		success = constantCall(context);
 		break;
 
+	case OPERATOR_INVERT:
+		success = invertCall(context);
+		break;
+
 	default:
 		ASSERT(false)
 		success = false;
@@ -2114,6 +2198,10 @@ void OperatorFreeContext(OperatorContext * context)
 	case OPERATOR_CONSTANT:
 		constantFinalizeContext(context);
 		break;
+
+	case OPERATOR_INVERT:
+		invertFinalizeContext(context);
+		break;
 	
 	default:
 		ASSERT(false)
@@ -2148,7 +2236,8 @@ static const char * operatorNames[N_OPERATOR_TYPES + 1] = {
 	"FILTER",
 	"MACHINE",
 	"IFACT",
-	"CONSTANT"
+	"CONSTANT",
+	"INVERT"
 };
 
 /**
@@ -2195,21 +2284,20 @@ static void printOperatorRecursive(
 
 	if((depth > 0) && !IsNullRelation(op->relation)) {
 		// The operator is the head of another service; print its term form and end recursion
-		// An operator taking one argument per column is printed as a formula,
-		// such as (+ <#1 + 1 = #2>).
+		// CLAUDE: The service is printed as a formula, such as (+ #1< + 1 = #2>). A service
+		// repeating a parameter takes fewer arguments than the form has roles, and the
+		// argument map of its EqualitySignature gives the argument of each role.
+		Service service;
+		ASSERT(FindServiceByOperator(op, &service))
 		size8 arity = FormArity(op->relation.form);
-		if(op->nArguments == arity) {
-			TypedTuple * actors = CreateTypedTuple(arity);
-			for(index8 i = 0; i < arity; i++) {
-				TypedTupleSetElement(actors, i, arguments[i]);
-			}
-			PrintFormActorsAsFormula(op->relation.form, actors, 0);
-			FreeTypedTuple(actors);
-		}
-		else {
-			PrintForm(op->relation.form);
-			printArguments(arguments, op->nArguments);
-		}
+		index8 argumentMap[arity];
+		ASSERT(EqualitySignatureGetArgumentMap(service.equalitySignature, arity, argumentMap)
+			== op->nArguments)
+		TypedTuple * actors = CreateTypedTuple(arity);
+		for(index8 i = 0; i < arity; i++)
+			TypedTupleSetElement(actors, i, arguments[argumentMap[i]]);
+		PrintFormActorsAsFormula(op->relation.form, actors, 0);
+		FreeTypedTuple(actors);
 		return;
 	}
 
@@ -2347,6 +2435,14 @@ static void printOperatorRecursive(
 		PrintChar(')');
 		break;
 	}
+
+	case OPERATOR_INVERT:
+		if(op->impl.invert.childOperator) {
+			PrintCString(" (");
+			printOperatorRecursive(op->impl.invert.childOperator, arguments, nextParameterNumber, depth + 1);
+			PrintChar(')');
+		}
+		break;
 
 	default:
 		ASSERT(false);

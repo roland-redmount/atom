@@ -289,6 +289,63 @@ void testFilterOperator(void)
 
 
 /**
+ * Test an INVERT operator over a FILTER operator of the relation
+ * (list <ID position <INT element <LETTER). The INVERT operator yields the bound tuple
+ * once if the letter is not at the position in the string "alibaba", and no tuple otherwise.
+ */
+void testInvertOperator(void)
+{
+	Operator * listOperator = GetListOperator(AT_LETTER);
+	index8 elementIndex = GetListRoleIndex()[LIST_ROLE_ELEMENT];
+	index8 positionIndex = GetListRoleIndex()[LIST_ROLE_POSITION];
+	Operator * filterOperator = CreateFilterOperator(
+		listOperator, (index8[]) {positionIndex, elementIndex}, 2);
+	Operator * invertOperator = CreateInvertOperator(filterOperator, filterOperator->nArguments);
+	ASSERT_UINT32_EQUAL(invertOperator->nArguments, 3)
+
+	Atom string = CreateStringFromCString("alibaba");
+	Atom arguments[3];
+
+	// CLAUDE: The letter 'a' is at position 1, so there is no tuple
+	ListSetTuple((Atom[]) {string, (Atom) {._int = 1}, CreateLetter('a')}, arguments);
+	OperatorContext * context = OperatorCreateContext(invertOperator, arguments);
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	// CLAUDE: The letter 'a' is not at position 2, so the bound tuple is yielded once
+	ListSetTuple((Atom[]) {string, (Atom) {._int = 2}, CreateLetter('a')}, arguments);
+	context = OperatorCreateContext(invertOperator, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	ASSERT_INT64_EQUAL(arguments[positionIndex]._int, 2)
+	ASSERT_CHAR_EQUAL(LetterToChar(arguments[elementIndex]), 'a')
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+
+	IFactRelease(string);
+	CheckOperator(invertOperator);
+}
+
+
+/**
+ * CLAUDE: Test an INVERT operator with no child, which stands for an empty child relation.
+ * The operator yields the bound tuple once.
+ */
+void testInvertOperatorNoChild(void)
+{
+	Operator * invertOperator = CreateInvertOperator(0, 2);
+	ASSERT_UINT32_EQUAL(OperatorNChildren(invertOperator), 0)
+	Atom arguments[2] = {(Atom) {._int = 1}, (Atom) {._int = 2}};
+	OperatorContext * context = OperatorCreateContext(invertOperator, arguments);
+	ASSERT_TRUE(OperatorCall(context))
+	ASSERT_INT64_EQUAL(arguments[0]._int, 1)
+	ASSERT_INT64_EQUAL(arguments[1]._int, 2)
+	ASSERT_FALSE(OperatorCall(context))
+	OperatorFreeContext(context);
+	CheckOperator(invertOperator);
+}
+
+
+/**
  * CLAUDE: Test a CONSTANT operator adding an output constant 42 and an input constant 'q'
  * to the relation (list <ID position >INT element >LETTER). The operator yields the
  * tuples of the list "abc" when the caller binds 'q', and no tuples when the caller
@@ -741,6 +798,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testJoinOperator2);
 	ExecuteTest(testConstrainOperator);
 	ExecuteTest(testFilterOperator);
+	ExecuteTest(testInvertOperator);
+	ExecuteTest(testInvertOperatorNoChild);
 	ExecuteTest(testConstantOperator);
 	ExecuteTest(testUnionOperator);
 	ExecuteTest(testUnionDuplicateAtExhaustion);

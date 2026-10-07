@@ -2,6 +2,7 @@
  * Tests for the high level fact interface, AssertFact() and RetractFact().
  */
 
+#include "kernel/ClosedRelation.h"
 #include "kernel/dictionary.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
@@ -108,6 +109,112 @@ void testAssertContradictsStoredFact(void)
 	DropRelation(negatedRelation);
 	ReleaseFormula(negatedFact);
 	ReleaseFormula(fact);
+}
+
+
+/**
+ * Asserting (closed-relation [. even]) closes the relation (even x), which then rejects
+ * a new fact, since the negation of the fact is inferred. This holds also for a typed relation
+ * that does not exist, such as (even x<ID). Retracting (closed-relation [. even]) opens the
+ * relation, which then accepts the fact.
+ */
+void testAssertClosedRelation(void)
+{
+	Atom even2 = CStringToTerm("even 2");
+	Atom even6 = CStringToTerm("even 6");
+	Atom evenFoo = CStringToTerm("even \"foo\"");
+	Atom notEven3 = CStringToTerm("! even 3");
+	Atom notEven2 = CStringToTerm("! even 2");
+	Atom closedEven = CStringToTerm("closed-relation [. even]");
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even2), 0), ASSERT_OK)
+	Relation relation = RelationFromFact(FormulaGetView(even2));
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedEven), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedEven), 0), ASSERT_EXISTED)
+	ASSERT_TRUE(RelationIsClosed(FormulaGetForm(even2)))
+
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even6), 0), ASSERT_CONTRADICTION)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(evenFoo), 0), ASSERT_CONTRADICTION)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(notEven3), 0), ASSERT_EXISTED)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(notEven2), 0), ASSERT_CONTRADICTION)
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 1)
+
+	// CLAUDE: The opened relation accepts the fact
+	RetractFact(FormulaGetView(closedEven));
+	ASSERT_FALSE(RelationIsClosed(FormulaGetForm(even2)))
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even6), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedEven), 0), ASSERT_OK)
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 2)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even6), 0), ASSERT_EXISTED)
+
+	RetractFact(FormulaGetView(closedEven));
+	RetractFact(FormulaGetView(even6));
+	RetractFact(FormulaGetView(even2));
+	DropRelation(relation);
+	ReleaseFormula(closedEven);
+	ReleaseFormula(notEven2);
+	ReleaseFormula(notEven3);
+	ReleaseFormula(evenFoo);
+	ReleaseFormula(even6);
+	ReleaseFormula(even2);
+}
+
+
+/**
+ * The relations (+ + =) and (integer x) are closed by MathSetup(), and reject the facts
+ * (+ 1 + 1 = 3) and (integer "foo"), since the negation of each fact is inferred.
+ */
+void testAssertClosedComputedRelation(void)
+{
+	Atom sum = CStringToTerm("+ 1 + 1 = 3");
+	Atom integer = CStringToTerm("integer \"foo\"");
+	ASSERT_TRUE(RelationIsClosed(FormulaGetForm(sum)))
+	ASSERT_TRUE(RelationIsClosed(FormulaGetForm(integer)))
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(sum), 0), ASSERT_CONTRADICTION)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(integer), 0), ASSERT_CONTRADICTION)
+	ReleaseFormula(integer);
+	ReleaseFormula(sum);
+}
+
+
+/**
+ * CLAUDE: A relation cannot be closed unless the actor of (closed-relation f) is a term form,
+ * and the opposite relation is neither closed nor stored; see CloseRelation(). A rule cannot
+ * derive (closed-relation f).
+ */
+void testAssertClosedRelationRejected(void)
+{
+	Atom closedInt = CStringToTerm("closed-relation 3");
+	Atom closedString = CStringToTerm("closed-relation \"even\"");
+	Atom closedEven = CStringToTerm("closed-relation [. even]");
+	Atom closedNotEven = CStringToTerm("closed-relation [. ! even]");
+	Atom notOdd3 = CStringToTerm("! odd 3");
+	Atom closedOdd = CStringToTerm("closed-relation [. odd]");
+	Atom rule = CStringToClause("closed-relation f | ! foo f");
+
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedInt), 0), ASSERT_NOT_CLOSABLE)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedString), 0), ASSERT_NOT_CLOSABLE)
+
+	// CLAUDE: The opposite relation is closed
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedEven), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedNotEven), 0), ASSERT_NOT_CLOSABLE)
+	RetractFact(FormulaGetView(closedEven));
+
+	// CLAUDE: The opposite relation is stored
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(notOdd3), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedOdd), 0), ASSERT_NOT_CLOSABLE)
+	Relation notOddRelation = RelationFromFact(FormulaGetView(notOdd3));
+	RetractFact(FormulaGetView(notOdd3));
+	DropRelation(notOddRelation);
+
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_RESERVED_FORM)
+
+	ReleaseFormula(rule);
+	ReleaseFormula(closedOdd);
+	ReleaseFormula(notOdd3);
+	ReleaseFormula(closedNotEven);
+	ReleaseFormula(closedEven);
+	ReleaseFormula(closedString);
+	ReleaseFormula(closedInt);
 }
 
 
@@ -640,6 +747,9 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertOverlapsService);
 	ExecuteTest(testAssertContradictsStoredFact);
 	ExecuteTest(testAssertContradictsDerivedFact);
+	ExecuteTest(testAssertClosedRelation);
+	ExecuteTest(testAssertClosedComputedRelation);
+	ExecuteTest(testAssertClosedRelationRejected);
 	ExecuteTest(testAssertFormulaFact);
 	ExecuteTest(testAssertFormulaRule);
 	ExecuteTest(testAssertFormulaIFactRule);

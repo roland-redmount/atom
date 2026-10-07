@@ -14,8 +14,10 @@ bool IsHexDigitChar(char c)
 }
 
 
-// these characters cannot occur in syntax
-static char const * reservedChars = (char const *) "():;.,`";
+// these characters cannot occur in names, and occur in syntax only as part of specific tokens:
+// '.' in a number or [. and ':' in [: (see TOKEN_BEGIN_FORM and TOKEN_BEGIN_RELATION),
+// and '#' in a parameter (see TOKEN_PARAMETER).
+static char const * reservedChars = (char const *) "():;.,`#";
 
 // valid characters in syntax
 bool IsSyntaxChar(char c)

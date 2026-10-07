@@ -16,12 +16,13 @@
 #include "library/string.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/ConjunctionBuilder.h"
-#include "parser/FormTupleParsers.h"
 #include "parser/FormulaBuilder.h"
 #include "parser/PredicateBuilder.h"
 #include "parser/PartBuilder.h"
 #include "parser/TermBuilder.h"
+#include "parser/TermFormBuilder.h"
 #include "parser/Tokenizer.h"
+#include "parser/TupleParser.h"
 #include "testing/testing.h"
 
 
@@ -437,7 +438,7 @@ static void testCStringToFormula(void)
 /**
  * Build the term (<reflectionRole> [<formula>] <numberRole> <number>),
  * with the given formula as the actor of the reflection role.
- * reflectionType is AT_FORMULA for [<formula>], or AT_RELATION for [[<formula>]]
+ * reflectionType is AT_FORMULA for [<formula>], or AT_RELATION for [:<formula>]
  */
 static Atom createTermWithReflection(
 	char const * reflectionRole, byte reflectionType, Atom reflectedFormula,
@@ -473,7 +474,7 @@ static bool formulaBuilderTokenHandler(void * context, Token token)
 
 /* CLAUDE: Same as testReflection(), for either reflection syntax. A reflectionType
    AT_FORMULA parses "term [<formulaString>] arity 2", and a reflectionType AT_RELATION parses
-   "term [[<formulaString>]] arity 2". */
+   "term [:<formulaString>] arity 2". */
 static void testReflectionOfType(char const * formulaString, byte reflectionType)
 {
 	// Create the expected formula, parsing only the formula inside the reflection.
@@ -490,9 +491,9 @@ static void testReflectionOfType(char const * formulaString, byte reflectionType
 	TermBuilder builder;
 	InitializeTermBuilder(&builder, FORMULA_TOP_SCOPE);
 	bool isRelation = (reflectionType == AT_RELATION);
-	TokenizeCString(isRelation ? "term [[" : "term [", TermBuilderTokenHandler, &builder);
+	TokenizeCString(isRelation ? "term [:" : "term [", TermBuilderTokenHandler, &builder);
 	TokenizeCString(formulaString, TermBuilderTokenHandler, &builder);
-	TokenizeCString(isRelation ? "]] arity 2" : "] arity 2", TermBuilderTokenHandler, &builder);
+	TokenizeCString("] arity 2", TermBuilderTokenHandler, &builder);
 	ASSERT(TermBuilderIsValid(&builder))
 	Atom parsedTerm = TermBuilderCreateFormula(&builder, 0);
 	TermBuilderFree(&builder);
@@ -963,7 +964,7 @@ static void testReflectionRejected(void)
 }
 
 
-/* CLAUDE: A relation [[ ... ]] holds any formula a reflection [ ... ] holds. */
+/* CLAUDE: A relation [: ... ] holds any formula a reflection [ ... ] holds. */
 static void testReflectedRelation(void)
 {
 	testReflectionOfType("foo \"a\" bar b", AT_RELATION);
@@ -993,14 +994,14 @@ static void testNestedReflectionOfType(char const * termString, byte outerType, 
 }
 
 
-/* CLAUDE: A relation nests within a formula reflection, and the other way around. Three
+/* CLAUDE: A relation nests within a formula reflection, and the other way around. Two
    closing brackets in a row close one reflection and one relation. */
 static void testNestedRelation(void)
 {
-	testNestedReflectionOfType("term [[foo [bar 1] baz 2]] arity 3", AT_RELATION, AT_FORMULA);
-	testNestedReflectionOfType("term [foo [[bar 1]] baz 2] arity 3", AT_FORMULA, AT_RELATION);
-	testNestedReflectionOfType("term [[foo [[bar 1]] baz 2]] arity 3", AT_RELATION, AT_RELATION);
-	testNestedReflectionOfType("term [[baz 2 foo [bar 1]]] arity 3", AT_RELATION, AT_FORMULA);
+	testNestedReflectionOfType("term [:foo [bar 1] baz 2] arity 3", AT_RELATION, AT_FORMULA);
+	testNestedReflectionOfType("term [foo [:bar 1] baz 2] arity 3", AT_FORMULA, AT_RELATION);
+	testNestedReflectionOfType("term [:foo [:bar 1] baz 2] arity 3", AT_RELATION, AT_RELATION);
+	testNestedReflectionOfType("term [:baz 2 foo [bar 1]] arity 3", AT_RELATION, AT_FORMULA);
 }
 
 
@@ -1009,21 +1010,17 @@ static void testRelationRejected(void)
 {
 	index32 errorPosition;
 
-	// a relation is closed by two brackets, so a name after one bracket is rejected
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [[bar 1] baz 2", 0, &errorPosition).hash, 0)
-	ASSERT_UINT32_EQUAL(errorPosition, 13)
-
-	// a relation missing the second closing bracket is reported at the end of the string
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [[bar 1]", 0, &errorPosition).hash, 0)
-	ASSERT_UINT32_EQUAL(errorPosition, 12)
+	// an unterminated relation is reported at the end of the string
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [:bar 1", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 11)
 
 	// a relation holding no formula
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [[]]", 0, &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [:]", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 6)
 
-	// a third opening bracket stands where a role name is expected
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [[[bar 1]]]", 0, &errorPosition).hash, 0)
-	ASSERT_UINT32_EQUAL(errorPosition, 6)
+	// the double bracket [[ is not valid syntax: the second [ stands where a role name is expected
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [[bar 1]]", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 5)
 
 	// an opening bracket after an actor stands where a role name is expected
 	ASSERT_UINT64_EQUAL(ParseFormula("foo [bar 1 [baz 2]]", 0, &errorPosition).hash, 0)
@@ -1031,9 +1028,13 @@ static void testRelationRejected(void)
 	ASSERT_UINT64_EQUAL(ParseFormula("foo 1 [bar 2]", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 6)
 
-	// whitespace between the brackets is allowed; see PartBuilder
-	Atom spaced = ParseFormula("foo [ [bar 1] ]", 0, &errorPosition);
-	Atom expected = CStringToFormula("foo [[bar 1]]");
+	// the : must follow the [ directly, as : is a reserved character
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [ :bar 1]", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 6)
+
+	// whitespace after [: is allowed
+	Atom spaced = ParseFormula("foo [: bar 1 ]", 0, &errorPosition);
+	Atom expected = CStringToFormula("foo [:bar 1]");
 	ASSERT_TRUE(SameAtoms(spaced, expected))
 	ASSERT_UINT32_EQUAL(FormulaGetActors(spaced)->nAtoms, 1)
 	ASSERT_UINT32_EQUAL(TypedTupleGetElement(FormulaGetActors(spaced), 0).type, AT_RELATION)
@@ -1054,37 +1055,32 @@ static void testRelationPartBuilderReset(void)
 		CreateTypedAtom(AT_NAME, CreateNameFromCString("bar"))
 	};
 	Token numberToken = (Token) {TOKEN_NUMBER, CreateTypedAtom(AT_INT, (Atom) {._int = 1})};
-	Token beginToken = (Token) {TOKEN_BEGIN_REFLECT, invalidAtom};
+	Token beginToken = (Token) {TOKEN_BEGIN_RELATION, invalidAtom};
 	Token endToken = (Token) {TOKEN_END_REFLECT, invalidAtom};
 
 	PartBuilder builder;
 	InitializePartBuilder(&builder, FORMULA_TOP_SCOPE);
 
-	// reset after the first opening bracket
+	// CLAUDE: reset after the opening bracket
 	ASSERT_TRUE(PartBuilderPush(&builder, nameToken))
 	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
 	PartBuilderReset(&builder);
 	ASSERT_TRUE(PartBuilderIsEmpty(&builder))
 
-	// reset after the first closing bracket of a relation
+	// CLAUDE: reset before the closing bracket
 	ASSERT_TRUE(PartBuilderPush(&builder, nameToken))
-	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
 	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
 	ASSERT_TRUE(PartBuilderPush(&builder, innerNameToken))
 	ASSERT_TRUE(PartBuilderPush(&builder, numberToken))
-	ASSERT_TRUE(PartBuilderPush(&builder, endToken))
 	ASSERT_FALSE(PartBuilderComplete(&builder))
-	ASSERT_FALSE(PartBuilderPush(&builder, innerNameToken))
 	PartBuilderReset(&builder);
 	ASSERT_TRUE(PartBuilderIsEmpty(&builder))
 
 	// a complete relation
 	ASSERT_TRUE(PartBuilderPush(&builder, nameToken))
 	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
-	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
 	ASSERT_TRUE(PartBuilderPush(&builder, innerNameToken))
 	ASSERT_TRUE(PartBuilderPush(&builder, numberToken))
-	ASSERT_TRUE(PartBuilderPush(&builder, endToken))
 	ASSERT_TRUE(PartBuilderPush(&builder, endToken))
 	ASSERT_TRUE(PartBuilderComplete(&builder))
 	ASSERT_UINT32_EQUAL(PartBuilderGetActor(&builder).type, AT_RELATION)
@@ -1124,7 +1120,7 @@ static void testReflectedName(void)
 	ReleaseFormula(expected);
 
 	expected = createTermWithReflection("term", AT_RELATION, inner, "arity", 3);
-	parsed = CStringToTerm("term [[foo [bar] baz 2]] arity 3");
+	parsed = CStringToTerm("term [:foo [bar] baz 2] arity 3");
 	ASSERT_TRUE(SameAtoms(parsed, expected))
 	ReleaseFormula(parsed);
 	ReleaseFormula(expected);
@@ -1140,7 +1136,7 @@ static void testReflectedNameRejected(void)
 	index32 errorPosition;
 
 	// a name cannot be reflected inside a relation
-	ASSERT_UINT64_EQUAL(ParseFormula("foo [[bar]]", 0, &errorPosition).hash, 0)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [:bar]", 0, &errorPosition).hash, 0)
 	ASSERT_UINT32_EQUAL(errorPosition, 9)
 
 	// a ] after a role name closes nothing but a reflected name
@@ -1215,6 +1211,165 @@ static void testReflectedNamePartBuilder(void)
 }
 
 
+/* CLAUDE: Parse a term form with ParseTermForm(), which reads the same role names as a
+   reflected form [. ... ] holds. */
+static Atom parseTermFormString(char const * formString)
+{
+	index8 roleOrder[RELATION_MAX_ARITY];
+	index32 errorIndex;
+	Atom termForm = ParseTermForm(formString, roleOrder, &errorIndex);
+	ASSERT(termForm.hash)
+	return termForm;
+}
+
+
+/* CLAUDE: Compare the term "foo <form> qux 1" parsed from termString with the term built
+   from the term form that ParseTermForm() yields for formString. */
+static void testReflectedFormOf(char const * termString, char const * formString)
+{
+	Atom termForm = parseTermFormString(formString);
+	Atom expected = createTermWithReflection("foo", AT_ID, termForm, "qux", 1);
+	Atom parsed = CStringToTerm(termString);
+	ASSERT_TRUE(SameAtoms(parsed, expected))
+	Atom actor = TermGetRoleActor(
+		FormulaGetForm(parsed), TypedTuplePeekAtoms(FormulaGetActors(parsed)), "foo", 1);
+	ASSERT_TRUE(IsTermForm(actor))
+	ReleaseFormula(parsed);
+	ReleaseFormula(expected);
+	IFactRelease(termForm);
+}
+
+
+/* CLAUDE: A reflected form [. ... ] is the term form as an AT_ID actor. The role names may
+   be repeated and written in any order, and a leading ! negates the form. */
+static void testReflectedForm(void)
+{
+	testReflectedFormOf("foo [. bar baz] qux 1", "bar baz");
+	testReflectedFormOf("foo [.bar baz ] qux 1", "bar baz");
+	testReflectedFormOf("foo [. baz bar] qux 1", "bar baz");
+	testReflectedFormOf("foo [. ! bar baz] qux 1", "! bar baz");
+	testReflectedFormOf("foo [.!bar] qux 1", "! bar");
+	testReflectedFormOf("foo [. + + =] qux 1", "+ + =");
+	testReflectedFormOf("qux 1 foo [. bar]", "bar");
+}
+
+
+/* CLAUDE: A reflected form nests within a formula reflection and within a relation. */
+static void testNestedReflectedForm(void)
+{
+	Atom termForm = parseTermFormString("bar");
+	Atom inner = createTermWithReflection("foo", AT_ID, termForm, "baz", 2);
+
+	Atom expected = createTermWithReflection("term", AT_FORMULA, inner, "arity", 3);
+	Atom parsed = CStringToTerm("term [foo [. bar] baz 2] arity 3");
+	ASSERT_TRUE(SameAtoms(parsed, expected))
+	ReleaseFormula(parsed);
+	parsed = CStringToTerm("term [baz 2 foo [. bar]] arity 3");
+	ASSERT_TRUE(SameAtoms(parsed, expected))
+	ReleaseFormula(parsed);
+	ReleaseFormula(expected);
+
+	expected = createTermWithReflection("term", AT_RELATION, inner, "arity", 3);
+	parsed = CStringToTerm("term [:foo [. bar] baz 2] arity 3");
+	ASSERT_TRUE(SameAtoms(parsed, expected))
+	ReleaseFormula(parsed);
+	ReleaseFormula(expected);
+
+	ReleaseFormula(inner);
+	IFactRelease(termForm);
+}
+
+
+/* CLAUDE: Invalid reflected form syntax, reported by ParseFormula() at the offending token. */
+static void testReflectedFormRejected(void)
+{
+	index32 errorPosition;
+
+	// CLAUDE: a form holds at least one role name
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [.]", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 6)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [. !]", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 8)
+
+	// CLAUDE: a ! may only precede the role names
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [. bar !]", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 11)
+
+	// CLAUDE: a form holds role names only
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [. bar 1]", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 11)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [. bar & baz]", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 11)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [. bar [baz]]", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 11)
+
+	// CLAUDE: at most RELATION_MAX_ARITY role names
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [. a b c d e f g h i]", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 23)
+
+	// CLAUDE: an unterminated form is reported at the end of the string
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [. bar", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 10)
+
+	// CLAUDE: a reflected form is an actor, so a role name follows it
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [. bar] [. baz]", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 12)
+
+	// CLAUDE: the . must follow the [ directly, as . is a reserved character
+	ASSERT_UINT64_EQUAL(ParseFormula("foo [ . bar]", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 6)
+}
+
+
+/* CLAUDE: Resetting a part builder releases a reflected form at each stage of parsing the form. */
+static void testFormPartBuilderReset(void)
+{
+	Token nameToken = (Token) {
+		TOKEN_NAME,
+		CreateTypedAtom(AT_NAME, CreateNameFromCString("foo"))
+	};
+	Token innerNameToken = (Token) {
+		TOKEN_NAME,
+		CreateTypedAtom(AT_NAME, CreateNameFromCString("bar"))
+	};
+	Token notToken = (Token) {TOKEN_NOT, invalidAtom};
+	Token beginToken = (Token) {TOKEN_BEGIN_FORM, invalidAtom};
+	Token endToken = (Token) {TOKEN_END_REFLECT, invalidAtom};
+
+	PartBuilder builder;
+	InitializePartBuilder(&builder, FORMULA_TOP_SCOPE);
+
+	// CLAUDE: reset after the opening bracket
+	ASSERT_TRUE(PartBuilderPush(&builder, nameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
+	PartBuilderReset(&builder);
+	ASSERT_TRUE(PartBuilderIsEmpty(&builder))
+
+	// CLAUDE: reset before the closing bracket, holding a role name
+	ASSERT_TRUE(PartBuilderPush(&builder, nameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, notToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, innerNameToken))
+	ASSERT_FALSE(PartBuilderComplete(&builder))
+	PartBuilderReset(&builder);
+	ASSERT_TRUE(PartBuilderIsEmpty(&builder))
+
+	// CLAUDE: a complete form
+	ASSERT_TRUE(PartBuilderPush(&builder, nameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, beginToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, innerNameToken))
+	ASSERT_TRUE(PartBuilderPush(&builder, endToken))
+	ASSERT_TRUE(PartBuilderComplete(&builder))
+	ASSERT_UINT32_EQUAL(PartBuilderGetActor(&builder).type, AT_ID)
+	ASSERT_FALSE(PartBuilderPush(&builder, endToken))
+	PartBuilderReset(&builder);
+	ASSERT_TRUE(PartBuilderIsEmpty(&builder))
+
+	ReleaseTypedAtom(nameToken.typedAtom);
+	ReleaseTypedAtom(innerNameToken.typedAtom);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(TRANSIENT_MEMORY);
@@ -1250,6 +1405,10 @@ int main(int argc, char * argv[])
 	ExecuteTest(testReflectedName);
 	ExecuteTest(testReflectedNameRejected);
 	ExecuteTest(testReflectedNamePartBuilder);
+	ExecuteTest(testReflectedForm);
+	ExecuteTest(testNestedReflectedForm);
+	ExecuteTest(testReflectedFormRejected);
+	ExecuteTest(testFormPartBuilderReset);
 
 	UnloadLibraries();
 	KernelShutdown();
