@@ -328,6 +328,106 @@ void testAssertFormulaIFactRule(void)
 
 
 /**
+ * CLAUDE: Retracting a rule removes it from the dictionary and invalidates the services
+ * compiled from it. The rule (! even x | ! odd x) makes (even 3) contradict (odd 3);
+ * see testAssertContradictsDerivedFact(). Once the rule is retracted, (even 3) can be asserted.
+ */
+void testRetractFormulaRule(void)
+{
+	Atom rule = CStringToClause("! even x | ! odd x");
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+
+	Atom odd3 = CStringToTerm("odd 3");
+	FormulaView odd3View = FormulaGetView(odd3);
+	ASSERT_INT32_EQUAL(AssertFact(odd3View, 0), ASSERT_OK)
+	Atom even3 = CStringToTerm("even 3");
+	FormulaView even3View = FormulaGetView(even3);
+	ASSERT_INT32_EQUAL(AssertFact(even3View, 0), ASSERT_CONTRADICTION)
+
+	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_OK)
+	ASSERT_FALSE(DictionaryContainsClause(rule))
+	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_NOT_FOUND)
+	ASSERT_INT32_EQUAL(AssertFact(even3View, 0), ASSERT_OK)
+
+	// a clause with other variable names is a different clause; see DictionaryAddClause()
+	Atom renamedRule = CStringToClause("! even y | ! odd y");
+	ASSERT_INT32_EQUAL(RetractFormula(renamedRule), RETRACT_NOT_FOUND)
+	ReleaseFormula(renamedRule);
+
+	ASSERT_INT32_EQUAL(RetractFormula(even3), RETRACT_OK)
+	DropRelation(RelationFromFact(even3View));
+	ReleaseFormula(even3);
+	ASSERT_INT32_EQUAL(RetractFormula(odd3), RETRACT_OK)
+	DropRelation(RelationFromFact(odd3View));
+	ReleaseFormula(odd3);
+	ReleaseFormula(rule);
+}
+
+
+/**
+ * CLAUDE: An ifact rule is retracted whatever its variable names, since the dictionary
+ * compares ifact rules by term form and generator position only.
+ */
+void testRetractFormulaIFactRule(void)
+{
+	Atom rule = CStringToTerm("circle * radius r");
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+
+	Atom renamedRule = CStringToTerm("circle * radius s");
+	ASSERT_INT32_EQUAL(RetractFormula(renamedRule), RETRACT_OK)
+	ASSERT_FALSE(DictionaryContainsIFactRule(rule))
+	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_NOT_FOUND)
+	ReleaseFormula(renamedRule);
+	ReleaseFormula(rule);
+
+	Atom invalidRule = CStringToTerm("circle * radius 5.0");
+	ASSERT_INT32_EQUAL(RetractFormula(invalidRule), RETRACT_INVALID_IFACT)
+	ReleaseFormula(invalidRule);
+}
+
+
+/**
+ * CLAUDE: A term with variables is neither a fact nor an ifact rule, and a conjunction
+ * is neither a fact nor a rule.
+ */
+void testRetractFormulaRejects(void)
+{
+	Atom termWithVariable = CStringToTerm("foo x bar 1");
+	ASSERT_INT32_EQUAL(RetractFormula(termWithVariable), RETRACT_TERM_VARIABLE)
+	ReleaseFormula(termWithVariable);
+
+	Atom conjunction = CStringToConjunction("foo x & bar x");
+	ASSERT_INT32_EQUAL(RetractFormula(conjunction), RETRACT_NOT_CLAUSE)
+	ReleaseFormula(conjunction);
+}
+
+
+/**
+ * CLAUDE: A user may retract a rule added by MathSetup(), or open a relation that
+ * MathSetup() closed. The test asserts both again, which leaves dictionary entries that
+ * MathShutdown() did not create. MathShutdown() must then still find and remove them.
+ */
+void testRetractMathRule(void)
+{
+	Atom rule = CStringToClause("+ x + y = z | ! + z - x = y");
+	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_OK)
+	ASSERT_FALSE(DictionaryContainsClause(rule))
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+	ReleaseFormula(rule);
+
+	Atom closedInteger = CStringToTerm("closed-relation [. integer]");
+	ASSERT_INT32_EQUAL(RetractFormula(closedInteger), RETRACT_OK)
+	Atom integer = CStringToTerm("integer 1");
+	ASSERT_FALSE(RelationIsClosed(FormulaGetForm(integer)))
+
+	ASSERT_INT32_EQUAL(AssertFormula(closedInteger), ASSERT_OK)
+	ASSERT_TRUE(RelationIsClosed(FormulaGetForm(integer)))
+	ReleaseFormula(integer);
+	ReleaseFormula(closedInteger);
+}
+
+
+/**
  * A formula that is neither a fact nor a rule is refused, and the result code says which
  * of the two it failed to be.
  */
@@ -754,6 +854,9 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertFormulaRule);
 	ExecuteTest(testAssertFormulaIFactRule);
 	ExecuteTest(testAssertFormulaRejects);
+	ExecuteTest(testRetractFormulaRule);
+	ExecuteTest(testRetractFormulaIFactRule);
+	ExecuteTest(testRetractFormulaRejects);
 	ExecuteTest(testCreateIFactTerm);
 	ExecuteTest(testCreateIFactIdColumnNotFirst);
 	ExecuteTest(testCreateIFactClause);
@@ -764,6 +867,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCreateIFactDefiningFactsProtected);
 	ExecuteTest(testCreateIFactRejects);
 	ExecuteTest(testLoadRelationText);
+	ExecuteTest(testRetractMathRule);
 
 	UnloadLibraries();
 	KernelShutdown();

@@ -54,6 +54,22 @@ int AssertFormula(Atom formula);
 void RetractFact(FormulaView fact);
 
 /**
+ * High level method to retract any formula; the counterpart of AssertFormula().
+ * An ifact rule is removed by DictionaryRemoveIFactRule(), a fact by RetractFact(),
+ * and a clause by DictionaryRemoveClause().
+ * 
+ * NOTE: The clause must have the same variable names as when asserted; see DictionaryAddClause().
+ */
+int RetractFormula(Atom formula);
+
+// Result codes for RetractFormula()
+#define RETRACT_OK					1	// the fact or rule was retracted, or the fact did not exist
+#define RETRACT_NOT_FOUND			2	// the rule is not in the dictionary
+#define RETRACT_TERM_VARIABLE		3	// a term containing variables is not a fact
+#define RETRACT_INVALID_IFACT		4	// a formula with generators that is not an ifact rule
+#define RETRACT_NOT_CLAUSE			5	// a conjunction
+
+/**
  * High level function to create an IFact from a formula containing
  * one of more generator (*) atoms. The caller obtains a reference to the IFact.
  */

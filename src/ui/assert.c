@@ -214,6 +214,37 @@ void RetractFact(FormulaView fact)
 }
 
 
+int RetractFormula(Atom formula)
+{
+	FormulaView formulaView = FormulaGetView(formula);
+
+	if(TypedTupleContainsAtom(formulaView.actors, generatorAtom)) {
+		if(!IsIFactRule(formula))
+			return RETRACT_INVALID_IFACT;
+		if(!DictionaryContainsIFactRule(formula))
+			return RETRACT_NOT_FOUND;
+		DictionaryRemoveIFactRule(&formulaView);
+		return RETRACT_OK;
+	}
+
+	if(FormulaIsTerm(formula)) {
+		if(TypedTupleContainsVariable(formulaView.actors))
+			return RETRACT_TERM_VARIABLE;
+		RetractFact(formulaView);
+		return RETRACT_OK;
+	}
+
+	if(FormulaIsClause(formula)) {
+		if(!DictionaryContainsClause(formula))
+			return RETRACT_NOT_FOUND;
+		DictionaryRemoveClause(&formulaView);
+		return RETRACT_OK;
+	}
+
+	return RETRACT_NOT_CLAUSE;
+}
+
+
 /**
  * Structure for temporary storage of tuples for IFactCreate()
  */

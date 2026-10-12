@@ -110,6 +110,8 @@ static void printHelp(void)
 	printLine("  :load <file>          Assert the facts in a text file. The first line lists the");
 	printLine("                        role names, and each following line the actors of one fact.");
 	printLine("  :retract <term>       Retract a fact. The term must not contain variables.");
+	printLine("  :retract <clause>     Retract a rule. The variable names must match the asserted rule.");
+	printLine("  :retract <term with *> Retract an ifact rule.");
 	printLine("  :help                 Print this text.");
 	printLine("  :quit, ctrl-D         End the session.");
 	PrintChar('\n');
@@ -315,7 +317,7 @@ static void printAssertResult(int result)
 {
 	switch(result) {
 	case ASSERT_OK:
-		printLine("Asserted.");
+		printLine("Ok.");
 		break;
 
 	case ASSERT_EXISTED:
@@ -390,38 +392,62 @@ static void executeAssert(char const * formulaText, index32 linePosition)
 
 
 /*
- * CLAUDE: Retract one fact, which is the text following the :retract command. Only a term
- * with no variable is a fact; see RetractFact().
+ * Report the result of retracting a formula.
  */
-static void executeRetract(char const * factText, index32 linePosition)
+static void printRetractResult(int result)
 {
-	if(!*factText) {
-		printLine(":retract requires a term.");
-		return;
-	}
-
-	index32 errorPosition;
-	Atom fact = ParseFormula(factText, 0, &errorPosition);
-	if(!fact.hash) {
-		printParseError(linePosition + errorPosition);
-		return;
-	}
-
-	FormulaView factView = FormulaGetView(fact);
-	if(!IsTermForm(factView.form))
-		printLine("Only a fact can be retracted.");
-	else if(TypedTupleContainsVariable(factView.actors))
-		printLine("A fact may not contain a variable.");
-	else {
-		RetractFact(factView);
+	switch(result) {
+	case RETRACT_OK:
 		printLine("Ok.");
+		break;
+
+	case RETRACT_NOT_FOUND:
+		printLine("No such rule.");
+		break;
+
+	case RETRACT_TERM_VARIABLE:
+		printLine("A fact may not contain a variable.");
+		break;
+
+	case RETRACT_INVALID_IFACT:
+		printLine("An ifact rule must be a single term with one generator (*) and distinct variables.");
+		break;
+
+	case RETRACT_NOT_CLAUSE:
+		printLine("Only a fact or a rule can be retracted.");
+		break;
+
+	default:
+		ASSERT(false)
+		break;
 	}
-	ReleaseFormula(fact);
 }
 
 
 /*
- * CLAUDE: Report where a load stopped and why; see LoadReport.
+ * Retract a fact, a clause rule or an ifact rule.
+ */
+static void executeRetract(char const * formulaText, index32 linePosition)
+{
+	if(!*formulaText) {
+		printLine(":retract requires a term or a clause.");
+		return;
+	}
+
+	index32 errorPosition;
+	Atom formula = ParseFormula(formulaText, 0, &errorPosition);
+	if(!formula.hash) {
+		printParseError(linePosition + errorPosition);
+		return;
+	}
+
+	printRetractResult(RetractFormula(formula));
+	ReleaseFormula(formula);
+}
+
+
+/*
+ * Report where a load failed and why; see LoadReport.
  */
 static void printLoadError(char const * filePath, LoadReport const * report)
 {
@@ -463,7 +489,7 @@ static void printLoadError(char const * filePath, LoadReport const * report)
 
 
 /*
- * CLAUDE: Assert the facts of the text file named by the text following the :load
+ * Assert the facts encoded in the text file named by the text following the :load
  * command; see LoadRelationFile().
  */
 static void executeLoad(char const * pathText)
