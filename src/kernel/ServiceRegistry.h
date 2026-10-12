@@ -181,6 +181,13 @@ Operator * ServiceGetOperator(Service service);
 bool FindServiceByOperator(Operator const * op, Service * service);
 
 /**
+ * Test whether the given operator is the operator of a primitive service that a
+ * compiled service has replaced; see ReplacePrimitiveService(). Such an operator is attached
+ * to its relation, but FindServiceByOperator() does not find it.
+ */
+bool OperatorIsReplaced(Operator const * op);
+
+/**
  * View the service record for the service. The returned pointer is
  * valid only as long as the service registery is not altered.
  */

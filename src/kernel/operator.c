@@ -2282,7 +2282,9 @@ static void printOperatorRecursive(
 	for(index8 i = 0; i < 3 * depth; i++)
 		PrintChar(' ');
 
-	if((depth > 0) && !IsNullRelation(op->relation)) {
+	// CLAUDE: The operator of a replaced primitive service is printed as an operator, since the
+	// operator is a part of the replacing service; see ReplacePrimitiveService()
+	if((depth > 0) && !IsNullRelation(op->relation) && !OperatorIsReplaced(op)) {
 		// The operator is the head of another service; print its term form and end recursion
 		// CLAUDE: The service is printed as a formula, such as (+ #1< + 1 = #2>). A service
 		// repeating a parameter takes fewer arguments than the form has roles, and the

@@ -186,6 +186,23 @@ bool FindServiceByOperator(Operator const * op, Service * service)
 }
 
 
+bool OperatorIsReplaced(Operator const * op)
+{
+	ASSERT(!IsNullRelation(op->relation))
+	ServiceIterator iterator;
+	ServiceRegistryIterate(op->relation, &iterator);
+	bool found = false;
+	while(ServiceIteratorNext(&iterator)) {
+		if(ServiceIteratorPeekRecord(&iterator)->replacedOperator == op) {
+			found = true;
+			break;
+		}
+	}
+	ServiceIteratorEnd(&iterator);
+	return found;
+}
+
+
 /**
  * Find the unique operators that are descendants of op in the operator graph
  * and have an associated TypedRelation, and add them to the serviceArray.

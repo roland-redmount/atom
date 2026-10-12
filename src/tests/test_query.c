@@ -642,6 +642,38 @@ void testFilterServiceOverReplacedPrimitive(void)
 }
 
 
+/**
+ * CLAUDE: A compiled service that replaced a primitive service reads the operator of the
+ * primitive service. PrintService() prints the replaced operator as an operator, not as
+ * another service; see ReplacePrimitiveService().
+ */
+void testPrintServiceOverReplacedPrimitive(void)
+{
+	Atom fact = CStringToTerm("sym \"a\" with \"b\"");
+	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+	FormulaView clause = DictionaryAddClauseFromCString("sym x with y | ! sym y with x");
+
+	// The all-output query replaces the primitive service
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("sym x with y"), 2)
+	byte parameterIO[2] = {PARAMETER_OUT, PARAMETER_OUT};
+	Service service = {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 2)};
+	ServiceRecord const * record = ServiceGetRecord(service);
+	ASSERT_TRUE(record != 0)
+	ASSERT_TRUE(record->replacedOperator != 0)
+	ASSERT_TRUE(OperatorIsReplaced(record->replacedOperator))
+	ASSERT_FALSE(OperatorIsReplaced(record->op))
+	PrintService(service);
+	PrintChar('\n');
+
+	DictionaryRemoveClause(&clause);
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+	DropRelation(relation);
+	ReleaseFormula(fact);
+}
+
+
 /* CLAUDE: A query on a bootstrapped core relation is answered by the services the kernel
    registered for that relation, with no compilation. The bootstrapped predicate form @1 is
    (multiset element multiple), and @3 is the positive term form of @1. */
@@ -680,6 +712,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testQueryConjunction);
 	ExecuteTest(testQueryConjunctionRule);
 	ExecuteTest(testFilterServiceOverReplacedPrimitive);
+	ExecuteTest(testPrintServiceOverReplacedPrimitive);
 	ExecuteTest(testQueryBootstrapRelations);
 
 	UnloadLibraries();
