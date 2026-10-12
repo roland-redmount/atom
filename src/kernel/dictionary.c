@@ -206,35 +206,68 @@ bool DictionaryContainsClause(Atom clause)
 }
 
 
-bool ClauseFormExistsForTermForm(Atom termForm)
+/*
+ * CLAUDE: Append each clause form holding the given term form to clauseForms, and return the
+ * number of clause forms found. If clauseForms is 0, the scan stops at the first clause form.
+ * If opposite is true, the scan finds the clause forms holding the opposite term form instead.
+ * The opposite term form is matched by predicate form and sign, since creating the opposite
+ * term form would create a new ifact; see RelationIsClosedInferred().
+ * The scan reads every (multiset element multiple) tuple, as findMatchingClauses() in
+ * compiler.c does, for want of an element index; see the TODO there.
+ */
+static size32 findClauseFormsForTermForm(Atom termForm, bool opposite, ResizingArray * clauseForms)
 {
-	// CLAUDE: Scan every (multiset element multiple) tuple for a clause form holding the
-	// given term form. This is the existence-only counterpart of findMatchingClauses()
-	// in compiler.c, and is likewise a full scan for want of an element index; see the
-	// TODO there.
-
 	Operator const * multisetOperator = GetCoreOperator(SERVICE_MULTISET_ID_ALL);
 	if(!multisetOperator) {
 		// The service does not exist during kernel bootstrapping
-		return false;
+		return 0;
 	}
+	// CLAUDE: The predicate form is found at the first clause form, since
+	// TermFormGetPredicateForm() is not available during bootstrap, when no clause form exists
+	Atom predicateForm = {0};
 	Atom multisetQueryTuple[3];
 	OperatorContext * multisetContext = OperatorCreateContext(multisetOperator, multisetQueryTuple);
-	bool found = false;
+	size32 nClauseForms = 0;
 	while(OperatorCall(multisetContext)) {
-		Atom element = multisetQueryTuple[
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
-		if(!SameAtoms(element, termForm))
-			continue;
 		Atom clauseForm = multisetQueryTuple[
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)];
 		if(!IsClauseForm(clauseForm))
 			continue;
-		found = true;
-		break;
+		Atom element = multisetQueryTuple[
+			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
+		if(opposite && !predicateForm.hash)
+			predicateForm = TermFormGetPredicateForm(termForm);
+		bool isMatch = opposite ?
+			SameAtoms(TermFormGetPredicateForm(element), predicateForm)
+				&& (TermFormGetSign(element) != TermFormGetSign(termForm)) :
+			SameAtoms(element, termForm);
+		if(!isMatch)
+			continue;
+		nClauseForms++;
+		if(!clauseForms)
+			break;
+		ResizingArrayAppend(clauseForms, &clauseForm);
 	}
 	OperatorFreeContext(multisetContext);
-	return found;
+	return nClauseForms;
+}
+
+
+bool ClauseFormExistsForTermForm(Atom termForm)
+{
+	return findClauseFormsForTermForm(termForm, false, 0) > 0;
+}
+
+
+void InvalidateClausesForTermForm(Atom termForm)
+{
+	// CLAUDE: The clause forms are collected first, since invalidation removes services
+	ResizingArray clauseForms;
+	CreateResizingArray(&clauseForms, sizeof(Atom), 4);
+	findClauseFormsForTermForm(termForm, true, &clauseForms);
+	for(index32 i = 0; i < clauseForms.nElements; i++)
+		invalidateClauseServices(*(Atom *) ResizingArrayGetElement(&clauseForms, i));
+	FreeResizingArray(&clauseForms);
 }
 
 

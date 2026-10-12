@@ -18,6 +18,7 @@
 #include "testing/testing.h"
 #include "ui/assert.h"
 #include "ui/load.h"
+#include "ui/query.h"
 
 
 /**
@@ -424,6 +425,50 @@ void testRetractMathRule(void)
 	ASSERT_TRUE(RelationIsClosed(FormulaGetForm(integer)))
 	ReleaseFormula(integer);
 	ReleaseFormula(closedInteger);
+}
+
+
+/*
+ * CLAUDE: Run a query with UserQuery() and return the number of facts found.
+ */
+static size32 countQueryFacts(char const * queryString)
+{
+	Atom query = CStringToTerm(queryString);
+	MixedTypeRelation * relation = UserQuery(FormulaGetView(query));
+	size32 nFacts = 0;
+	while(MixedTypeRelationNext(relation))
+		nFacts++;
+	FreeMixedTypeRelation(relation);
+	ReleaseFormula(query);
+	return nFacts;
+}
+
+
+/**
+ * CLAUDE: Asserting (circle "c" radius -3) compiles a query for (< -3 > 0) while checking for a
+ * contradiction, before the relation (circle radius) exists. The compiled service then has no
+ * part from the rule. Creating the relation must invalidate the service, so that the next query
+ * for (< -3 > 0) is compiled again from the rule; see InvalidateClausesForTermForm().
+ */
+void testAssertFactAfterRule(void)
+{
+	Atom rule = CStringToClause("! circle c radius r | < r > 0");
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+	Atom circle = CStringToTerm("circle \"c\" radius -3");
+	ASSERT_INT32_EQUAL(AssertFormula(circle), ASSERT_OK)
+
+	// (< -3 > 0) is derived from the rule, and (< 5 > 0) is computed by the MACHINE service
+	ASSERT_UINT32_EQUAL(countQueryFacts("< -3 > 0"), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("< 5 > 0"), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("< -5 > 0"), 0)
+
+	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_OK)
+	ASSERT_UINT32_EQUAL(countQueryFacts("< -3 > 0"), 0)
+	TypedRelation circleRelation = RelationFromFact(FormulaGetView(circle));
+	RetractFact(FormulaGetView(circle));
+	DropRelation(circleRelation);
+	ReleaseFormula(circle);
+	ReleaseFormula(rule);
 }
 
 
@@ -857,6 +902,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testRetractFormulaRule);
 	ExecuteTest(testRetractFormulaIFactRule);
 	ExecuteTest(testRetractFormulaRejects);
+	ExecuteTest(testAssertFactAfterRule);
 	ExecuteTest(testCreateIFactTerm);
 	ExecuteTest(testCreateIFactIdColumnNotFirst);
 	ExecuteTest(testCreateIFactClause);

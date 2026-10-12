@@ -48,6 +48,16 @@ bool DictionaryContainsClause(Atom clause);
 bool ClauseFormExistsForTermForm(Atom termForm);
 
 /**
+ * CLAUDE: Invalidate the services of every term form in each clause form holding the opposite
+ * of the given term form, as DictionaryAddClause() does for a new clause. Such a clause reads
+ * the given term form as a rule body term. For example, the clause (! circle c radius r | < r > 0)
+ * derives (< r > 0) from (circle c radius r). A service compiled before a relation of the given
+ * term form existed has no part from the clause, so CreateTupleStore() calls this function
+ * for a new relation.
+ */
+void InvalidateClausesForTermForm(Atom termForm);
+
+/**
  * Parse a string into a clause (formula) and call DictionaryAddClause()
  */
 FormulaView DictionaryAddClauseFromCString(const char * clauseString);
