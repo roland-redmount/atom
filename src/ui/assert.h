@@ -40,6 +40,8 @@ int AssertFormula(Atom formula);
 #define ASSERT_NOT_CLAUSE			7	// a conjunction
 #define ASSERT_INVALID_IFACT		8	// a formula with generators that is not an ifact
 #define ASSERT_NOT_WRITABLE			9	// the specified relation is not writable
+#define ASSERT_NOT_CLOSABLE			10	// CLAUDE: the relation cannot be closed; see CloseRelation()
+#define ASSERT_RESERVED_FORM		11	// CLAUDE: a rule cannot derive (closed-relation f)
 
 /**
  * High level method to retract a fact. Removes the tuple from the corresponding

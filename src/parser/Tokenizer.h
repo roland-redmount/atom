@@ -29,25 +29,34 @@
 /**
  * The tokenizer alternates between two states, reading either a role or an actor.
  * This affords some context-sensitiviy, so that 'x' can indicate a name in the role state,
- * but a variable in the actor state. Each token is can occur only in one of the two states,
- * as indicated below.
+ * but a variable in the actor state. A third state reads the role names of a reflected
+ * form [. ... ], where a name is followed by another name rather than by an actor.
+ * Each token can occur only in the states indicated below.
  */
 enum TokenizerState {
 	// When reading a role, these tokens are allowed:
 	// TOKEN_NAME, TOKEN_NOT, TOKEN_OR, TOKEN_AND, TOKEN_END_REFLECT
 	TOKENIZER_ROLE_STATE = 1,
 	// When reading an actor, these tokens are allowed:
-	// TOKEN_NUMBER, TOKEN_STRING, TOKEN_LETTER, TOKEN_VARIABLE, TOKEN_PARAMETER, TOKEN_BEGIN_REFLECT,
+	// TOKEN_NUMBER, TOKEN_STRING, TOKEN_LETTER, TOKEN_VARIABLE, TOKEN_PARAMETER, TOKEN_ID,
+	// TOKEN_BEGIN_REFLECT, TOKEN_BEGIN_FORM, TOKEN_BEGIN_RELATION, TOKEN_END_REFLECT,
 	// TOKEN_GENERATOR
 
 	// CLAUDE: A TOKEN_NUMBER may begin with a minus sign, as in -7. In TOKENIZER_ROLE_STATE,
 	// the - character begins a TOKEN_NAME instead, as in (+ x - y = z).
 	TOKENIZER_ACTOR_STATE = 2,
+	// CLAUDE: When reading the role names of a reflected form, these tokens are allowed:
+	// TOKEN_NAME, TOKEN_NOT, TOKEN_END_REFLECT
+	TOKENIZER_FORM_STATE = 3,
 };
 
-/* TOKEN_BEGIN_REFLECT and TOKEN_END_REFLECT can occur in both states; see PartBuilder.
-   In TOKENIZER_ROLE_STATE, TOKEN_BEGIN_REFLECT is the second bracket of a relation [[ ... ]].
-   In TOKENIZER_ACTOR_STATE, TOKEN_END_REFLECT closes a reflected name [name]. */
+/* TOKEN_END_REFLECT can occur in every state; see PartBuilder.
+   In TOKENIZER_ROLE_STATE, TOKEN_END_REFLECT closes a reflected formula or relation, which
+   ends with an actor. In TOKENIZER_ACTOR_STATE, TOKEN_END_REFLECT closes a reflected name
+   [name]. In TOKENIZER_FORM_STATE, TOKEN_END_REFLECT closes a reflected form.
+
+   The character [ begins TOKEN_BEGIN_REFLECT, which becomes TOKEN_BEGIN_FORM if the next
+   character is '.', and TOKEN_BEGIN_RELATION if the next character is ':'. */
 
 
 /**
@@ -189,6 +198,17 @@ typedef bool (*TokenHandler)(void * context, Token token);
  * or an ASSERT will be triggered.
  */
 void TokenizeCString(char const * cString, TokenHandler handler, void * context);
+
+/**
+ * Tokenize a whole C string, reading every token in the given state rather than the
+ * state that the syntax leads to. Each token is passed to the handler, and released once the
+ * handler has processed it. Returns false at the first character the tokenizer rejects,
+ * or the first token the handler rejects, and writes the index where the offending token
+ * begins to errorIndex. See ParseTermForm() and ParseActors().
+ */
+bool TokenizeCStringInState(
+	char const * cString, enum TokenizerState state,
+	TokenHandler handler, void * context, index32 * errorIndex);
 
 
 #endif	// TOKENIZER_H

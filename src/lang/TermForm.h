@@ -34,7 +34,14 @@ Atom TermFormCreateOppositeForm(Atom termForm);
 /**
  * Print a term form
  */
+/* CLAUDE: The term form is printed as it is written in a reflected form, as in
+   "! parent child"; see PrintPredicateForm(). */
 void PrintTermForm(Atom termForm);
+
+/**
+ * Print a term form as a reflected form, as in [. ! parent child]
+ */
+void PrintReflectedTermForm(Atom termForm);
 
 /**
  * Number of actors in a term of this form.

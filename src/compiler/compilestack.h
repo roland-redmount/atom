@@ -38,5 +38,10 @@ void CompileStackPop(CompileStack * stack);
 
 bool CompileStackContainsTerm(CompileStack const * stack, ParameterizedQuery const * query);
 
+/**
+ * Test whether the stack holds a query of the given form, with any parameters.
+ */
+bool CompileStackContainsForm(CompileStack const * stack, Atom form);
+
 
 #endif // COMPILE_STACK_H

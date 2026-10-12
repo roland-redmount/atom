@@ -20,8 +20,10 @@ enum TokenType {
 	TOKEN_AND,				// logical conjunction (&)
 	TOKEN_OR,				// logical disjunction (|)
 	TOKEN_NOT,				// logical negation
-	TOKEN_BEGIN_REFLECT,	// begin a reflection block
-	TOKEN_END_REFLECT,		// end a reflection block
+	TOKEN_BEGIN_REFLECT,	// begin a reflected name or formula, written [
+	TOKEN_BEGIN_FORM,		// begin a reflected form, written [.
+	TOKEN_BEGIN_RELATION,	// begin a reflected relation, written [:
+	TOKEN_END_REFLECT,		// end any reflection, written ]
 	TOKEN_GENERATOR,		// the * generator character
 	TOKEN_ID,				// an AT_ID atom written by its hash, as @ and 16 hex digits
 };

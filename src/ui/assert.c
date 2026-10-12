@@ -1,4 +1,5 @@
 
+#include "kernel/ClosedRelation.h"
 #include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
 #include "kernel/ifact.h"
@@ -51,11 +52,34 @@ static bool negatedFactExists(FormulaView fact)
 }
 
 
+/*
+ * CLAUDE: Assert the fact (closed-relation f), closing the relation of the form f.
+ */
+static int assertClosedRelation(FormulaView fact)
+{
+	TypedAtom form = TypedTupleGetElement(fact.actors, 0);
+	if(form.type != AT_ID)
+		return ASSERT_NOT_CLOSABLE;
+	switch(CloseRelation(form.atom)) {
+	case CLOSE_OK:
+		return ASSERT_OK;
+	case CLOSE_EXISTED:
+		return ASSERT_EXISTED;
+	default:
+		return ASSERT_NOT_CLOSABLE;
+	}
+}
+
+
 int AssertFact(FormulaView fact, StorageProvider const * provider)
 {
 	ASSERT(IsTermForm(fact.form));
 	ASSERT(!TypedTupleContainsVariable(fact.actors));
 	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
+
+	// CLAUDE: The relation (closed-relation f) is only written by CloseRelation()
+	if(SameAtoms(fact.form, GetClosedRelationForm()))
+		return assertClosedRelation(fact);
 
 	if(factExists(fact))
 		return ASSERT_EXISTED;
@@ -103,6 +127,10 @@ static int assertRule(Atom clause, FormulaView clauseView)
 	//  A clause with no variable is a disjunction of facts, not a rule
 	if(!TypedTupleContainsVariable(clauseView.actors))
 		return ASSERT_CLAUSE_NO_VARIABLE;
+	// CLAUDE: The relation (closed-relation f) is only written by CloseRelation(), and a rule
+	// deriving its tuples would be ignored
+	if(MultisetGetElementMultiple(clauseView.form, GetClosedRelationForm()) > 0)
+		return ASSERT_RESERVED_FORM;
 
 	if(DictionaryContainsClause(clause))
 		return ASSERT_EXISTED;
@@ -141,8 +169,25 @@ int AssertFormula(Atom formula)
 }
 
 
+/*
+ * CLAUDE: Retract the fact (closed-relation f), opening the relation of the form f.
+ */
+static void retractClosedRelation(FormulaView fact)
+{
+	TypedAtom form = TypedTupleGetElement(fact.actors, 0);
+	if((form.type == AT_ID) && RelationIsClosedForm(form.atom))
+		OpenRelation(form.atom);
+}
+
+
 void RetractFact(FormulaView fact)
 {
+	// CLAUDE: The relation (closed-relation f) is only written by OpenRelation()
+	if(SameAtoms(fact.form, GetClosedRelationForm())) {
+		retractClosedRelation(fact);
+		return;
+	}
+
 	// If the fact does not exist, there is nothing to do.
 	// TODO: if the fact is produced by a compiled service and the relation
 	// also has storage that does not contain the fact, this won't work.

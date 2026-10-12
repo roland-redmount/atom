@@ -150,15 +150,16 @@ void PrintPredicateForm(Atom predicateForm)
 	MultisetIterator iterator;
 	MultisetIterate(predicateForm, AT_NAME, &iterator);
 
-	PrintChar('(');
+	bool isFirst = true;
 	while(MultisetIteratorNext(&iterator)) {
 		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < elementMultiple.multiple; j++) {
+			if(!isFirst)
+				PrintChar(' ');
 			PrintName(elementMultiple.element);
-			PrintChar(' ');
+			isFirst = false;
 		}
 	}
 	MultisetIteratorEnd(&iterator);
-	PrintChar(')');
 }
 

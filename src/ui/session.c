@@ -350,6 +350,14 @@ static void printAssertResult(int result)
 		printLine("An ifact rule must be a single term with one generator (*) and distinct variables.");
 		break;
 
+	case ASSERT_NOT_CLOSABLE:
+		printLine("The relation cannot be closed: the actor must be a term form whose opposite relation is neither closed nor stored.");
+		break;
+
+	case ASSERT_RESERVED_FORM:
+		printLine("A rule cannot derive the relation (closed-relation f).");
+		break;
+
 	default:
 		ASSERT(false)
 		break;
@@ -479,7 +487,7 @@ static void executeLoad(char const * pathText)
 	if(report.form.hash) {
 		SessionPrintMargin();
 		PrintF("Asserted %u facts of the form ", report.nAsserted);
-		PrintTermForm(report.form);
+		PrintReflectedTermForm(report.form);
 		PrintCString(".\n");
 		if(report.nExisting > 0) {
 			SessionPrintMargin();

@@ -115,9 +115,29 @@ static enum TokenizerResult roleStateBeginToken(Tokenizer * tokenizer, char c)
 		// closing a reflection, whose formula ended with an actor
 		return beginSingleCharacterToken(tokenizer, TOKEN_END_REFLECT);
 
-	case '[':
-		// CLAUDE: the second bracket of [[, which opens a relation; see PartBuilder
-		return beginSingleCharacterToken(tokenizer, TOKEN_BEGIN_REFLECT);
+	default:
+		if(IsNameInitialChar(c)) {
+			tokenizer->type = TOKEN_NAME;
+			StringBufferPush(&(tokenizer->buffer), c);
+			tokenizer->isValid = true;
+			return TOKENIZER_ACCEPTED;
+		}
+		return TOKENIZER_REJECTED;
+	}
+}
+
+
+/**
+ * Process the character c in TOKENIZER_FORM_STATE to begin a new token
+ */
+static enum TokenizerResult formStateBeginToken(Tokenizer * tokenizer, char c)
+{
+	switch(c) {
+	case '!':
+		return beginSingleCharacterToken(tokenizer, TOKEN_NOT);
+
+	case ']':
+		return beginSingleCharacterToken(tokenizer, TOKEN_END_REFLECT);
 
 	default:
 		if(IsNameInitialChar(c)) {
@@ -184,7 +204,10 @@ static enum TokenizerResult actorStateBeginToken(Tokenizer * tokenizer, char c)
 		return beginSingleCharacterToken(tokenizer, TOKEN_GENERATOR);
 
 	case '[':
-		return beginSingleCharacterToken(tokenizer, TOKEN_BEGIN_REFLECT);
+		// CLAUDE: the next character decides whether this begins a form or a relation
+		tokenizer->type = TOKEN_BEGIN_REFLECT;
+		tokenizer->isValid = true;
+		return TOKENIZER_ACCEPTED;
 
 	case ']':
 		// Closing a reflected name [name]; see PartBuilder
@@ -239,8 +262,22 @@ enum TokenizerResult TokenizerPush(Tokenizer * tokenizer, char c)
 		// the state decides which tokens may begin here
 		if(tokenizer->state == TOKENIZER_ACTOR_STATE)
 			return actorStateBeginToken(tokenizer, c);
+		else if(tokenizer->state == TOKENIZER_FORM_STATE)
+			return formStateBeginToken(tokenizer, c);
 		else
 			return roleStateBeginToken(tokenizer, c);
+
+	case TOKEN_BEGIN_REFLECT:
+		// The character following [ may make the tokens [. or [:
+		if(c == '.')
+			return beginSingleCharacterToken(tokenizer, TOKEN_BEGIN_FORM);
+		if(c == ':')
+			return beginSingleCharacterToken(tokenizer, TOKEN_BEGIN_RELATION);
+		tokenizerSetFull(tokenizer);
+		if(IsWhiteSpace(c) || (c == 0))
+			return TOKENIZER_ACCEPTED;
+		// any other character begins the token after the [
+		return TOKENIZER_ENDED;
 
 	case TOKEN_NAME:
 		if(IsNameChar(c)) {
@@ -412,11 +449,17 @@ bool TokenizerIsFull(Tokenizer const * tokenizer)
 
 /**
  * Set the tokenizer state for the next token. A role name is followed by an actor,
- * and everything else by a role name.
+ * and everything else by a role name. The role names of a reflected form [. ... ] are
+ * read in TOKENIZER_FORM_STATE, up to and including the closing ].
  */
-static enum TokenizerState nextState(enum TokenType type)
+static enum TokenizerState nextState(enum TokenizerState state, enum TokenType type)
 {
-	return (type == TOKEN_NAME) ? TOKENIZER_ACTOR_STATE : TOKENIZER_ROLE_STATE;
+	if(type == TOKEN_BEGIN_FORM)
+		return TOKENIZER_FORM_STATE;
+	else if((state == TOKENIZER_FORM_STATE) && (type != TOKEN_END_REFLECT))
+		return TOKENIZER_FORM_STATE;
+	else
+		return (type == TOKEN_NAME) ? TOKENIZER_ACTOR_STATE : TOKENIZER_ROLE_STATE;
 }
 
 
@@ -441,7 +484,7 @@ void TokenizerReset(Tokenizer * tokenizer)
 {
 	// CLAUDE: a reset follows the syntax, which only a completed token says anything about
 	ASSERT(tokenizer->isFull)
-	clearToken(tokenizer, nextState(tokenizer->type));
+	clearToken(tokenizer, nextState(tokenizer->state, tokenizer->type));
 }
 
 
@@ -598,4 +641,50 @@ void TokenizeCString(char const * cString, TokenHandler handler, void * context)
 			handleToken(&tokenizer, handler, context);
 	}
 	TokenizerFree(&tokenizer);
+}
+
+
+bool TokenizeCStringInState(
+	char const * cString, enum TokenizerState state,
+	TokenHandler handler, void * context, index32 * errorIndex)
+{
+	Tokenizer tokenizer;
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
+	TokenizerRestart(&tokenizer, state);
+	size32 length = CStringLength(cString);
+	index32 tokenIndex = 0;
+	bool isAccepted = true;
+
+	// Iteration includes the 0 terminator, which completes the last token
+	for(index32 i = 0; i <= length; i++) {
+		if(!tokenizer.type)
+			tokenIndex = i;
+
+		enum TokenizerResult result = TokenizerPush(&tokenizer, cString[i]);
+		if(result == TOKENIZER_REJECTED) {
+			*errorIndex = i;
+			isAccepted = false;
+			break;
+		}
+		if(result == TOKENIZER_ENDED) {
+			// the character is pushed again below, after the token is handled
+			i--;
+		}
+		if(TokenizerIsFull(&tokenizer)) {
+			Token token = TokenizerGetToken(&tokenizer);
+			isAccepted = handler(context, token);
+			ReleaseToken(token);
+			if(!isAccepted) {
+				*errorIndex = tokenIndex;
+				break;
+			}
+			// TokenizerReset() keeps the separator rule of enum TokenizerInputMode,
+			// but follows the formula syntax to the next state. Every token here is read
+			// in the same state instead.
+			TokenizerReset(&tokenizer);
+			tokenizer.state = state;
+		}
+	}
+	TokenizerFree(&tokenizer);
+	return isAccepted;
 }

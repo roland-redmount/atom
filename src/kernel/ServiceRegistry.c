@@ -1,4 +1,6 @@
 
+#include "kernel/ClosedRelation.h"
+#include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
 #include "kernel/Relation.h"
@@ -164,11 +166,7 @@ bool ServiceRegistryInitialized(void)
 }
 
 
-/**
- * Copy the Service evaluated by the given operator to *service.
- * Returns false if the registry holds no such service.
- */
-static bool findServiceByOperator(Operator const * op, Service * service)
+bool FindServiceByOperator(Operator const * op, Service * service)
 {
 	ASSERT(!IsNullRelation(op->relation))
 	// Iterate over all services for the given relation
@@ -228,7 +226,7 @@ static size32 removeAncestorServices(Operator const * op)
 	while(BTreeGetItem(serviceRegistry->operatorAncestors, &key, &pair)) {
 		// remove the service identified by the (relation, operator) pair
 		Service ancestorService;
-		findServiceByOperator(pair.ancestor, &ancestorService);
+		FindServiceByOperator(pair.ancestor, &ancestorService);
 		nServicesRemoved += RemoveService(ancestorService);
 	}
 	return nServicesRemoved;
@@ -413,7 +411,7 @@ static void collectParentServices(Operator const * op, ResizingArray * ancestorS
 			if(pair->op != op)
 				break;
 			Service ancestorService;
-			bool found = findServiceByOperator(pair->ancestor, &ancestorService);
+			bool found = FindServiceByOperator(pair->ancestor, &ancestorService);
 			ASSERT(found)
 			ResizingArrayAppend(ancestorServices, &ancestorService);
 		} while(BTreeIteratorNext(&iterator));
@@ -460,7 +458,10 @@ static size32 invalidateRelationServices(Relation relation, InvalidationUseCase 
 }
 
 
-size32 InvalidateTermFormServices(Atom termForm, InvalidationUseCase useCase)
+/*
+ * CLAUDE: Invalidate compiled services for the given term form; see InvalidateTermFormServices().
+ */
+static size32 invalidateFormServices(Atom termForm, InvalidationUseCase useCase)
 {
 	// Collect all relations matching the the termForm
 	ResizingArray relations;
@@ -479,6 +480,20 @@ size32 InvalidateTermFormServices(Atom termForm, InvalidationUseCase useCase)
 		nServicesRemoved += invalidateRelationServices(*relation, useCase);
 	}
 	FreeResizingArray(&relations);
+	return nServicesRemoved;
+}
+
+
+size32 InvalidateTermFormServices(Atom termForm, InvalidationUseCase useCase)
+{
+	size32 nServicesRemoved = invalidateFormServices(termForm, useCase);
+	// CLAUDE: A query to the opposite relation of a closed relation compiles to an INVERT
+	// operator, which depends on whether the closed relation has a service; see CloseRelation()
+	if(RelationIsClosedForm(termForm)) {
+		Atom oppositeForm = TermFormCreateOppositeForm(termForm);
+		nServicesRemoved += invalidateFormServices(oppositeForm, useCase);
+		IFactRelease(oppositeForm);
+	}
 	return nServicesRemoved;
 }
 

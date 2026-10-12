@@ -1,12 +1,5 @@
 /**
- * A Relation encapsulates a relation (a set of tuples), and is identified by
- * a Relation. A Relaton may have one RelationWriter, and one or more Services.
- * 
- * A Relation for which no RelationWriter exists is read-only. Examples arithmetic relations,
- * and relations (and their services) produced by the compiler.
- * 
- * A Relation with a RelationWriter but no services write-only, a kind of data sink.
- * Output devices such as a screen canvas can be modelled as write-only relations.
+ * A Relation is a set of tuples, and is identified by a form and a type signature.
  */
 
 #ifndef RELATION_H

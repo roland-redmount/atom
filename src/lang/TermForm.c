@@ -110,8 +110,16 @@ bool TermFormGetSign(Atom termForm)
 void PrintTermForm(Atom termForm)
 {	
 	if(!TermFormGetSign(termForm))
-		PrintChar('!');
+		PrintCString("! ");
 	PrintPredicateForm(TermFormGetPredicateForm(termForm));
+}
+
+
+void PrintReflectedTermForm(Atom termForm)
+{
+	PrintCString("[. ");
+	PrintTermForm(termForm);
+	PrintChar(']');
 }
 
 

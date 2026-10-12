@@ -194,9 +194,17 @@ typedef struct s_OperatorContext OperatorContext;
 	 * This expresses a constant in the head term of a rule; see compileConjunction().
 	 */
 	OPERATOR_CONSTANT = 12,
+
+	/**
+	 * INVERT yields the tuple of input arguments if and only if its child operator
+	 * yields no tuple for these arguments. All arguments must be inputs. This is the
+	 * complement of the child relation, restricted to one tuple. The compiler uses INVERT
+	 * to answer a query to the opposite relation of a closed relation; see CloseRelation().
+	 */
+	OPERATOR_INVERT = 13,
 };
 
-#define N_OPERATOR_TYPES 12
+#define N_OPERATOR_TYPES 13
 
 
 struct s_Operator {
@@ -307,6 +315,10 @@ struct s_Operator {
 			index8 * inputArguments;
 			size8 nInputs;
 		} constant;
+		// for OPERATOR_INVERT
+		struct {
+			Operator * childOperator;
+		} invert;
 	} impl;
 };
 
@@ -429,6 +441,14 @@ Operator * CreateFilterOperator(
 Operator * CreateConstantOperator(
 	Operator * childOperator, Atom const constants[], byte const constantTypes[], size8 nConstants,
 	index8 const inputArguments[], size8 nInputs);
+
+/**
+ * Create an INVERT operator over the given child operator; see OPERATOR_INVERT.
+ * The operator has the arity of the child operator, and the identity index order.
+ */
+/* CLAUDE: The operator takes nArguments arguments. The childOperator may be 0, which stands
+   for an empty child relation, so that the operator yields every tuple of bound arguments. */
+Operator * CreateInvertOperator(Operator * childOperator, size8 nArguments);
 
 /**
  * Create a PROJECT operator with the given number of arguments, which may not exceed the

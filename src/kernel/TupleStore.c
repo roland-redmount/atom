@@ -1,4 +1,5 @@
 
+#include "kernel/ClosedRelation.h"
 #include "kernel/dictionary.h"
 #include "kernel/operator.h"
 #include "kernel/TupleStore.h"
@@ -59,6 +60,8 @@ static IOSignature TupleStoreGetCanonicalIOSignature(TupleStore const * store, I
 
 TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provider, size8 nColumns, index8 const indexColumns[])
 {
+	// CLAUDE: The tuples of the opposite relation of a closed relation are inferred; see CloseRelation()
+	ASSERT(!RelationIsClosedInferred(relation.form))
 	TupleStore * store = allocateTupleStore();
 	store->relation = relation;
 	store->nColumns = nColumns;
