@@ -207,8 +207,9 @@ bool DictionaryContainsClause(Atom clause)
 
 
 /*
- * CLAUDE: Append each clause form holding the given term form to clauseForms, and return the
- * number of clause forms found. If clauseForms is 0, the scan stops at the first clause form.
+ * Append each clause form containing the given term form to clauseForms, and return the
+ * number of clause forms found. If clauseForms is 0, the scan stops at the first clause form;
+ * this can be used to check of matching clauses exist.
  * If opposite is true, the scan finds the clause forms holding the opposite term form instead.
  * The opposite term form is matched by predicate form and sign, since creating the opposite
  * term form would create a new ifact; see RelationIsClosedInferred().
@@ -261,10 +262,11 @@ bool ClauseFormExistsForTermForm(Atom termForm)
 
 void InvalidateClausesForTermForm(Atom termForm)
 {
-	// CLAUDE: The clause forms are collected first, since invalidation removes services
+	// The clause forms are collected first, since invalidation removes services
 	ResizingArray clauseForms;
 	CreateResizingArray(&clauseForms, sizeof(Atom), 4);
 	findClauseFormsForTermForm(termForm, true, &clauseForms);
+	// Invalidate the services
 	for(index32 i = 0; i < clauseForms.nElements; i++)
 		invalidateClauseServices(*(Atom *) ResizingArrayGetElement(&clauseForms, i));
 	FreeResizingArray(&clauseForms);
