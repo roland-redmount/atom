@@ -598,6 +598,34 @@ void testInvalidateDependentsOfClosedRelation(void)
 
 
 /**
+ * CLAUDE: Compiling the conjunction (big c & circle d radius 20) compiles (big c) first, while
+ * the relation (circle radius) does not exist. The second term then creates the relation, so
+ * the conjunction must be compiled again to read (big @1); see compileQueryVariants().
+ */
+void testCompileAfterStoreCreated(void)
+{
+	Atom ifactRule = CStringToTerm("circle * radius r");
+	Atom bigRule = CStringToClause("big c | ! circle c radius r | ! < r > 10");
+	Atom bigFact = CStringToTerm("big \"x\"");
+	ASSERT_INT32_EQUAL(AssertFormula(ifactRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(bigFact), ASSERT_OK)
+
+	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 2)
+	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 2)
+
+	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(ifactRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(bigFact), RETRACT_OK)
+	dropFormRelations("circle 1 radius 1");
+	dropFormRelations("big 1");
+	ReleaseFormula(bigFact);
+	ReleaseFormula(bigRule);
+	ReleaseFormula(ifactRule);
+}
+
+
+/**
  * A formula that is neither a fact nor a rule is refused, and the result code says which
  * of the two it failed to be.
  */
@@ -1031,6 +1059,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testInvalidateDependentsOfNewRelation);
 	ExecuteTest(testInvalidateDependentsOfNewRule);
 	ExecuteTest(testInvalidateDependentsOfClosedRelation);
+	ExecuteTest(testCompileAfterStoreCreated);
 	ExecuteTest(testCreateIFactTerm);
 	ExecuteTest(testCreateIFactIdColumnNotFirst);
 	ExecuteTest(testCreateIFactClause);

@@ -2415,7 +2415,9 @@ static bool queryMatchesIFactRule(ParameterizedQuery const * query, index8 idCol
  * This function must be called before seedVariantsFromServices(), so that the primitive
  * services of a created TupleStore are seeded.
  */
-static TupleStore * setupIFactRuleStore(ParameterizedQuery const * query, index8 * idColumn)
+/* CLAUDE: A created TupleStore is counted in compileStack->nStoresCreated. */
+static TupleStore * setupIFactRuleStore(
+	CompileStack * compileStack, ParameterizedQuery const * query, index8 * idColumn)
 {
 	EqualitySignature equalitySignature =
 		ParametersGetEqualitySignature(query->parameters, query->arity);
@@ -2449,6 +2451,7 @@ static TupleStore * setupIFactRuleStore(ParameterizedQuery const * query, index8
 		// Create a new TupleStore, with identity index order, as in AssertFact().
 		// A compiled service of the relation must have the index order of the store;
 		// see AttachOperator().
+		compileStack->nStoresCreated++;
 		return CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), query->arity, 0);
 	}
 	TupleStore * store = RelationGetTupleStore(relation);
@@ -2569,20 +2572,34 @@ static size8 compileQueryVariants(
 	// see setupIFactRuleStore()
 	index8 ifactIdColumn = 0;
 	TupleStore * ifactStore = IsConjunctionForm(query->form) ?
-		0 : setupIFactRuleStore(query, &ifactIdColumn);
+		0 : setupIFactRuleStore(compileStack, query, &ifactIdColumn);
 
-	// Initialize the set of variants with known primitive services as variants
-	size8 nVariants = seedVariantsFromServices(query, variants);
+	// CLAUDE: A TupleStore created by a nested compilation invalidates services, but not the
+	// variants under construction here, which may read services compiled before the TupleStore
+	// existed. The variants are then discarded and compiled again; see InvalidateDependentServices().
+	size8 nVariants;
+	size32 nStoresCreated;
+	do {
+		nStoresCreated = compileStack->nStoresCreated;
 
-	if(IsConjunctionForm(query->form)) {
-		// Currently, a conjunction query is compiled direcly, not involving rules
-		nVariants = compileConjunctionQuery(compileStack, query, variants, nVariants);
-	}
-	else {
-		// Every matching clause compiles here, the recursive ones into the variants the
-		// non-recursive ones settled
-		nVariants = compileQueryClauses(compileStack, query, variants, nVariants);
-	}
+		// Initialize the set of variants with known primitive services as variants
+		nVariants = seedVariantsFromServices(query, variants);
+
+		if(IsConjunctionForm(query->form)) {
+			// Currently, a conjunction query is compiled direcly, not involving rules
+			nVariants = compileConjunctionQuery(compileStack, query, variants, nVariants);
+		}
+		else {
+			// Every matching clause compiles here, the recursive ones into the variants the
+			// non-recursive ones settled
+			nVariants = compileQueryClauses(compileStack, query, variants, nVariants);
+		}
+
+		if(compileStack->nStoresCreated != nStoresCreated) {
+			for(index8 i = 0; i < nVariants; i++)
+				CheckOperator(variants[i].op);
+		}
+	} while(compileStack->nStoresCreated != nStoresCreated);
 
 	// Any recursive variant must be completed by wrapping with a FIXPOINT operator
 	for(index8 i = 0; i < nVariants; i++) {
