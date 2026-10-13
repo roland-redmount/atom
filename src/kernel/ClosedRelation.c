@@ -1,4 +1,5 @@
 #include "kernel/ClosedRelation.h"
+#include "kernel/dictionary.h"
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
 #include "kernel/operator.h"
@@ -122,6 +123,7 @@ int CloseRelation(Atom form)
 		LookupAddFactRoles(closedRelations->relation, &form);
 		// CLAUDE: The opposite relation is answered by INVERT operators from now on
 		InvalidateTermFormServices(oppositeForm, INVALIDATE_BY_RULE);
+		InvalidateDependentServices(&oppositeForm, 1);
 		result = CLOSE_OK;
 	}
 	IFactRelease(oppositeForm);

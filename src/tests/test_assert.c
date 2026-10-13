@@ -14,6 +14,7 @@
 #include "library/string.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/ConjunctionBuilder.h"
+#include "parser/FormulaBuilder.h"
 #include "parser/TermBuilder.h"
 #include "testing/testing.h"
 #include "ui/assert.h"
@@ -430,10 +431,11 @@ void testRetractMathRule(void)
 
 /*
  * CLAUDE: Run a query with UserQuery() and return the number of facts found.
+ * The query may be a term or a conjunction.
  */
 static size32 countQueryFacts(char const * queryString)
 {
-	Atom query = CStringToTerm(queryString);
+	Atom query = CStringToFormula(queryString);
 	MixedTypeRelation * relation = UserQuery(FormulaGetView(query));
 	size32 nFacts = 0;
 	while(MixedTypeRelationNext(relation))
@@ -448,7 +450,7 @@ static size32 countQueryFacts(char const * queryString)
  * CLAUDE: Asserting (circle "c" radius -3) compiles a query for (< -3 > 0) while checking for a
  * contradiction, before the relation (circle radius) exists. The compiled service then has no
  * part from the rule. Creating the relation must invalidate the service, so that the next query
- * for (< -3 > 0) is compiled again from the rule; see InvalidateClausesForTermForm().
+ * for (< -3 > 0) is compiled again from the rule; see InvalidateDependentServices().
  */
 void testAssertFactAfterRule(void)
 {
@@ -469,6 +471,129 @@ void testAssertFactAfterRule(void)
 	DropRelation(circleRelation);
 	ReleaseFormula(circle);
 	ReleaseFormula(rule);
+}
+
+
+/*
+ * CLAUDE: Drop every relation of the form of the given term.
+ */
+static void dropFormRelations(char const * termString)
+{
+	Atom term = CStringToTerm(termString);
+	ResizingArray relations;
+	CreateResizingArray(&relations, sizeof(TypedRelation), 4);
+	RelationIterator iterator;
+	RelationRegistryIterate(FormulaGetForm(term), &iterator);
+	while(RelationIteratorNext(&iterator)) {
+		TypedRelation relation = RelationIteratorGet(&iterator);
+		ResizingArrayAppend(&relations, &relation);
+	}
+	RelationIteratorEnd(&iterator);
+	for(index32 i = 0; i < relations.nElements; i++)
+		DropRelation(*(TypedRelation *) ResizingArrayGetElement(&relations, i));
+	FreeResizingArray(&relations);
+	ReleaseFormula(term);
+}
+
+
+/**
+ * CLAUDE: The query (huge c) is compiled before the relation (circle radius) exists, so the
+ * rule for (big c) yields nothing, and (huge c) keeps no operator reading (big c). Creating
+ * the relation must still invalidate (huge c), which depends on (circle radius) through
+ * two rules; see InvalidateDependentServices().
+ */
+void testInvalidateDependentsOfNewRelation(void)
+{
+	Atom ifactRule = CStringToTerm("circle * radius r");
+	Atom bigRule = CStringToClause("big c | ! circle c radius r | ! < r > 10");
+	Atom hugeRule = CStringToClause("huge c | ! big c");
+	Atom hugeFact = CStringToTerm("huge \"x\"");
+	ASSERT_INT32_EQUAL(AssertFormula(ifactRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(hugeRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(hugeFact), ASSERT_OK)
+	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 1)
+
+	// The query creates the relation (circle radius) holding the ifact (circle @1 radius 20)
+	ASSERT_UINT32_EQUAL(countQueryFacts("circle c radius 20"), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 2)
+
+	ASSERT_INT32_EQUAL(RetractFormula(hugeRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(ifactRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(hugeFact), RETRACT_OK)
+	dropFormRelations("circle 1 radius 1");
+	dropFormRelations("huge 1");
+	ReleaseFormula(hugeFact);
+	ReleaseFormula(hugeRule);
+	ReleaseFormula(bigRule);
+	ReleaseFormula(ifactRule);
+}
+
+
+/**
+ * CLAUDE: The queries (huge c) and (huge c & small d) are compiled before any rule derives
+ * (big c), so the queries keep no operator reading (big c). Adding the rule for (big c)
+ * must still invalidate both queries; see InvalidateDependentServices().
+ */
+void testInvalidateDependentsOfNewRule(void)
+{
+	Atom smallFact = CStringToTerm("small \"y\"");
+	Atom hugeFact = CStringToTerm("huge \"x\"");
+	Atom hugeRule = CStringToClause("huge c | ! big c");
+	Atom bigRule = CStringToClause("big c | ! small c");
+	ASSERT_INT32_EQUAL(AssertFormula(smallFact), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(hugeFact), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(hugeRule), ASSERT_OK)
+	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("huge c & small d"), 1)
+
+	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
+	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 2)
+	ASSERT_UINT32_EQUAL(countQueryFacts("huge c & small d"), 2)
+
+	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(hugeRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(hugeFact), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(smallFact), RETRACT_OK)
+	dropFormRelations("huge 1");
+	dropFormRelations("small 1");
+	ReleaseFormula(bigRule);
+	ReleaseFormula(hugeRule);
+	ReleaseFormula(hugeFact);
+	ReleaseFormula(smallFact);
+}
+
+
+/**
+ * CLAUDE: With (big c) closed, (! big "z") is inferred while no rule derives (big "z"), and the
+ * rule (small c | big c) derives (small "z"). Adding a rule that derives (big "z") must
+ * invalidate (small "z"), which reads (! big c) through an INVERT operator.
+ */
+void testInvalidateDependentsOfClosedRelation(void)
+{
+	Atom closedBig = CStringToTerm("closed-relation [. big]");
+	Atom smallRule = CStringToClause("small c | big c");
+	Atom hugeFact = CStringToTerm("huge \"z\"");
+	Atom bigRule = CStringToClause("big c | ! huge c");
+	ASSERT_INT32_EQUAL(AssertFormula(closedBig), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(smallRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(hugeFact), ASSERT_OK)
+	ASSERT_UINT32_EQUAL(countQueryFacts("small \"z\""), 1)
+
+	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
+	ASSERT_UINT32_EQUAL(countQueryFacts("big \"z\""), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("small \"z\""), 0)
+
+	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(smallRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(closedBig), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(hugeFact), RETRACT_OK)
+	dropFormRelations("huge 1");
+	ReleaseFormula(bigRule);
+	ReleaseFormula(hugeFact);
+	ReleaseFormula(smallRule);
+	ReleaseFormula(closedBig);
 }
 
 
@@ -903,6 +1028,9 @@ int main(int argc, char * argv[])
 	ExecuteTest(testRetractFormulaIFactRule);
 	ExecuteTest(testRetractFormulaRejects);
 	ExecuteTest(testAssertFactAfterRule);
+	ExecuteTest(testInvalidateDependentsOfNewRelation);
+	ExecuteTest(testInvalidateDependentsOfNewRule);
+	ExecuteTest(testInvalidateDependentsOfClosedRelation);
 	ExecuteTest(testCreateIFactTerm);
 	ExecuteTest(testCreateIFactIdColumnNotFirst);
 	ExecuteTest(testCreateIFactClause);

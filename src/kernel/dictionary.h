@@ -48,14 +48,18 @@ bool DictionaryContainsClause(Atom clause);
 bool ClauseFormExistsForTermForm(Atom termForm);
 
 /**
- * CLAUDE: Invalidate the services of every term form in each clause form holding the opposite
- * of the given term form, as DictionaryAddClause() does for a new clause. Such a clause reads
- * the given term form as a rule body term. For example, the clause (! circle c radius r | < r > 0)
- * derives (< r > 0) from (circle c radius r). A service compiled before a relation of the given
- * term form existed has no part from the clause, so CreateTupleStore() calls this function
- * for a new relation.
+ * CLAUDE: Invalidate the services of every form depending on the given term forms, but not
+ * the services of the given term forms. A form Q depends on a term form B if
+ * 1) a clause form holds Q and the opposite of B, so that a rule for Q reads B as a body term,
+ * 2) Q is a conjunction form holding B, or
+ * 3) Q is the opposite of B, and B is closed; see CloseRelation().
+ * Dependence is transitive: a form depending on Q depends on B too.
+ *
+ * A service compiled while B had no service has no operator reading B, so removing services
+ * of B does not reach the service. This function is called when B may gain services: by
+ * CreateTupleStore(), DictionaryAddClause(), DictionaryAddIFactRule() and CloseRelation().
  */
-void InvalidateClausesForTermForm(Atom termForm);
+void InvalidateDependentServices(Atom const termForms[], size32 nTermForms);
 
 /**
  * Parse a string into a clause (formula) and call DictionaryAddClause()
