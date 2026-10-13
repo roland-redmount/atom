@@ -29,6 +29,12 @@ bool TermBuilderIsValid(TermBuilder const * builder);
 bool TermBuilderIsEmpty(TermBuilder const * builder);
 
 /**
+ * Negate the term being built, so that (! foo x) becomes (foo x) and (foo x) becomes
+ * (! foo x). The builder must not be empty.
+ */
+void TermBuilderNegate(TermBuilder * builder);
+
+/**
  * CLAUDE: Create the term formula. Unless roleOrder is 0, the order of the roles is
  * written to roleOrder; see PredicateBuilderCreateFormula().
  */

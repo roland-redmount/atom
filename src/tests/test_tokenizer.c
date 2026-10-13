@@ -639,6 +639,71 @@ static void testTokenizerInput(void)
 }
 
 
+/* CLAUDE: The types of the tokens read by TokenizeCString(); see collectTokenType(). */
+typedef struct {
+	enum TokenType types[16];
+	size8 nTypes;
+} TokenTypes;
+
+
+static bool collectTokenType(void * context, Token token)
+{
+	TokenTypes * tokenTypes = (TokenTypes *) context;
+	ASSERT(tokenTypes->nTypes < 16)
+	tokenTypes->types[tokenTypes->nTypes++] = token.type;
+	return true;
+}
+
+
+static void assertTokenTypes(char const * string, enum TokenType const expected[], size8 nExpected)
+{
+	TokenTypes tokenTypes = {.nTypes = 0};
+	TokenizeCString(string, collectTokenType, &tokenTypes);
+	ASSERT_UINT32_EQUAL(tokenTypes.nTypes, nExpected)
+	for(index8 i = 0; i < nExpected; i++)
+		ASSERT_UINT32_EQUAL(tokenTypes.types[i], expected[i])
+}
+
+
+/* CLAUDE: <- is the token TOKEN_IMPLIED_BY, with or without a space around it. */
+static void testTokenizeImpliedBy(void)
+{
+	enum TokenType expected[] = {
+		TOKEN_NAME, TOKEN_VARIABLE, TOKEN_IMPLIED_BY, TOKEN_NAME, TOKEN_VARIABLE};
+	assertTokenTypes("foo x <- bar y", expected, 5);
+	assertTokenTypes("foo x<-bar y", expected, 5);
+	assertTokenTypes("foo 12<-bar y", (enum TokenType[]) {
+		TOKEN_NAME, TOKEN_NUMBER, TOKEN_IMPLIED_BY, TOKEN_NAME, TOKEN_VARIABLE}, 5);
+
+	Token token = CreateTokenFromCString("<-", TOKENIZER_ROLE_STATE);
+	ASSERT_UINT32_EQUAL(token.type, TOKEN_IMPLIED_BY)
+	ReleaseToken(token);
+
+	// the comparison names < =< <= remain names
+	char const * names[] = {"<", "=<", "<="};
+	for(index8 i = 0; i < 3; i++) {
+		token = CreateTokenFromCString(names[i], TOKENIZER_ROLE_STATE);
+		ASSERT_UINT32_EQUAL(token.type, TOKEN_NAME)
+		ReleaseToken(token);
+	}
+
+	// a < directly after a variable or a number may only begin <-
+	Tokenizer tokenizer;
+	TokenizerInit(&tokenizer, TOKENIZER_STRING_INPUT);
+	token = takeTerminatedToken(&tokenizer, "x", '<', TOKENIZER_ACTOR_STATE);
+	ReleaseToken(token);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '<'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, 'y'), TOKENIZER_REJECTED)
+
+	token = takeTerminatedToken(&tokenizer, "12", '<', TOKENIZER_ACTOR_STATE);
+	ASSERT_INT64_EQUAL(token.typedAtom.atom._int, 12);
+	ReleaseToken(token);
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '<'), TOKENIZER_ACCEPTED)
+	ASSERT_UINT32_EQUAL(TokenizerPush(&tokenizer, '='), TOKENIZER_REJECTED)
+	TokenizerFree(&tokenizer);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(TRANSIENT_MEMORY);
@@ -659,6 +724,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testBeginReflectToken);
 	ExecuteTest(testHashNotInName);
 	ExecuteTest(testReflectedNameBrackets);
+	ExecuteTest(testTokenizeImpliedBy);
 
 	UnloadLibraries();
 	KernelShutdown();

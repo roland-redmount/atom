@@ -831,6 +831,7 @@ static void testFormOrdering(void)
 	testFormOrderingOf("beta 1 gamma 2 & zed 3 alpha 4 & alpha 5");
 	testFormOrderingOf("zed 1 alpha 2 & alpha 3 zed 4");
 	testFormOrderingOf("zed 1 alpha 2 | ! beta 3 gamma 4");
+	testFormOrderingOf("zed 1 alpha 2 <- beta 3 gamma 4 & alpha 5");
 }
 
 
@@ -876,6 +877,60 @@ static void testRepeatedTermRejected(void)
 	ASSERT_UINT32_EQUAL(ConjunctionFormNTermsTotal(FormulaGetForm(conjunction)), 2)
 	ASSERT_UINT32_EQUAL(ConjunctionFormNUniqueTermForms(FormulaGetForm(conjunction)), 1)
 	ReleaseFormula(conjunction);
+}
+
+
+/* CLAUDE: ParseFormula() parses the string to the same formula as the expected string. */
+static void assertParsesAs(char const * string, char const * expectedString)
+{
+	index32 errorPosition;
+	Atom formula = ParseFormula(string, 0, &errorPosition);
+	ASSERT_TRUE(formula.hash != 0)
+	Atom expectedFormula = CStringToFormula(expectedString);
+	ASSERT_TRUE(SameAtoms(formula, expectedFormula))
+	ReleaseFormula(expectedFormula);
+	ReleaseFormula(formula);
+}
+
+
+/* CLAUDE: The implication (foo x <- bar x & baz x) is the clause (foo x | ! bar x | ! baz x). */
+static void testImpliedBy(void)
+{
+	assertParsesAs("foo x <- bar x & baz x", "foo x | ! bar x | ! baz x");
+	assertParsesAs("foo x<-bar x&baz x", "foo x | ! bar x | ! baz x");
+	assertParsesAs("foo x <- ! bar x", "foo x | bar x");
+	assertParsesAs("! foo x <- bar x", "! foo x | ! bar x");
+	assertParsesAs("foo 1<-bar x", "foo 1 | ! bar x");
+	assertParsesAs("foo \"ab\"<-bar x", "foo \"ab\" | ! bar x");
+	assertParsesAs("foo [bar 1]<-baz x", "foo [bar 1] | ! baz x");
+	assertParsesAs("foo [baz x <- bar x]", "foo [baz x | ! bar x]");
+	assertParsesAs("big c <- circle c radius r & < r > 10", "big c | ! circle c radius r | ! < r > 10");
+	assertParsesAs("=< n >= 2", "=< n >= 2");
+
+	index32 errorPosition;
+	// <- can only follow the first term
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x | bar x <- baz x", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 14)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x & bar x <- baz x", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 14)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x <- bar x <- baz x", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 15)
+	ASSERT_UINT64_EQUAL(ParseFormula("<- foo x", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 0)
+
+	// the terms following <- are joined by &
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x <- bar x | baz x", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 15)
+
+	// <- needs at least one term following it
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x <-", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 8)
+
+	// a < directly after an actor may only begin <-, so the error is where - should be
+	ASSERT_UINT64_EQUAL(ParseFormula("foo x<y", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 6)
+	ASSERT_UINT64_EQUAL(ParseFormula("foo 1<y", 0, &errorPosition).hash, 0)
+	ASSERT_UINT32_EQUAL(errorPosition, 6)
 }
 
 
@@ -1391,6 +1446,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testParseTermForm);
 	ExecuteTest(testParseActors);
 	ExecuteTest(testRepeatedTermRejected);
+	ExecuteTest(testImpliedBy);
 	ExecuteTest(testReflectedTerm);
 	ExecuteTest(testReflectedNegatedTerm);
 	ExecuteTest(testReflectedTermWithQuote);

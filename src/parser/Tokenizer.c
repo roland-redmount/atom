@@ -96,6 +96,43 @@ static enum TokenizerResult beginSingleCharacterToken(
 }
 
 
+/* CLAUDE: True if c is a name character that the token before c needs a separator from;
+   see enum TokenizerInputMode. The character '<' is exempt, since '<' may begin
+   TOKEN_IMPLIED_BY directly after an actor; see completeImpliedBy(). */
+static bool isMissingSeparator(Tokenizer const * tokenizer, char c)
+{
+	return (tokenizer->inputMode == TOKENIZER_STRING_INPUT) && tokenizer->needsSeparator &&
+		IsNameChar(c) && (c != '<');
+}
+
+
+/* CLAUDE: Complete the name "<" as TOKEN_IMPLIED_BY, written <-, when c is '-'. The token
+   is complete at the '-', so "<-bar" reads as <- followed by the name bar. A '<' directly
+   after an actor may only begin TOKEN_IMPLIED_BY. Such a '<' leaves needsSeparator set,
+   and any character other than '-' is rejected. Returns 0 when c continues an ordinary name. */
+static enum TokenizerResult completeImpliedBy(Tokenizer * tokenizer, char c)
+{
+	bool isLessThan = (tokenizer->buffer.stringLength == 1) && (tokenizer->buffer.buffer[0] == '<');
+	if(isLessThan && (c == '-') && (tokenizer->state == TOKENIZER_ROLE_STATE)) {
+		tokenizer->type = TOKEN_IMPLIED_BY;
+		tokenizerSetFull(tokenizer);
+		return TOKENIZER_ACCEPTED;
+	}
+	if((tokenizer->inputMode == TOKENIZER_STRING_INPUT) && tokenizer->needsSeparator)
+		return TOKENIZER_REJECTED;
+	return 0;
+}
+
+
+/* CLAUDE: End a number or an ID atom at the character '<', which may only begin
+   TOKEN_IMPLIED_BY; see completeImpliedBy(). The tokenizer must be full. */
+static enum TokenizerResult endBeforeImpliedBy(Tokenizer * tokenizer)
+{
+	tokenizer->needsSeparator = true;
+	return TOKENIZER_ENDED;
+}
+
+
 /**
  * Process the character c in TOKENIZER_ROLE_STATE to begin a new token
  */
@@ -243,7 +280,7 @@ enum TokenizerResult TokenizerPush(Tokenizer * tokenizer, char c)
 			return TOKENIZER_ACCEPTED;
 		}
 		// A name character is rejected in string input mode if a separator is needed.
-		if((tokenizer->inputMode == TOKENIZER_STRING_INPUT)	&& tokenizer->needsSeparator && IsNameChar(c))
+		if(isMissingSeparator(tokenizer, c))
 			return TOKENIZER_REJECTED;
 		// Any other character is valid syntax, but caller must pop the completed token first
 		return TOKENIZER_ENDED;
@@ -257,7 +294,7 @@ enum TokenizerResult TokenizerPush(Tokenizer * tokenizer, char c)
 			return TOKENIZER_ACCEPTED;
 		}
 		// A name character is rejected in string input mode if a separator is needed.
-		if((tokenizer->inputMode == TOKENIZER_STRING_INPUT)	&& tokenizer->needsSeparator && IsNameChar(c))
+		if(isMissingSeparator(tokenizer, c))
 			return TOKENIZER_REJECTED;
 		// the state decides which tokens may begin here
 		if(tokenizer->state == TOKENIZER_ACTOR_STATE)
@@ -279,7 +316,10 @@ enum TokenizerResult TokenizerPush(Tokenizer * tokenizer, char c)
 		// any other character begins the token after the [
 		return TOKENIZER_ENDED;
 
-	case TOKEN_NAME:
+	case TOKEN_NAME: {
+		enum TokenizerResult impliedByResult = completeImpliedBy(tokenizer, c);
+		if(impliedByResult)
+			return impliedByResult;
 		if(IsNameChar(c)) {
 			StringBufferPush(&(tokenizer->buffer), c);
 			return TOKENIZER_ACCEPTED;
@@ -295,6 +335,7 @@ enum TokenizerResult TokenizerPush(Tokenizer * tokenizer, char c)
 			return TOKENIZER_ENDED;
 		}
 		return TOKENIZER_REJECTED;
+	}
 
 	case TOKEN_NUMBER:
 		// A minus sign must be followed directly by a digit
@@ -328,6 +369,10 @@ enum TokenizerResult TokenizerPush(Tokenizer * tokenizer, char c)
 			// a separator terminates the number and begins a token of its own
 			tokenizerSetFull(tokenizer);
 			return TOKENIZER_ENDED;
+		}
+		if(c == '<') {
+			tokenizerSetFull(tokenizer);
+			return endBeforeImpliedBy(tokenizer);
 		}
 		return TOKENIZER_REJECTED;
 
@@ -431,6 +476,8 @@ enum TokenizerResult TokenizerPush(Tokenizer * tokenizer, char c)
 			return finishID(tokenizer) ? TOKENIZER_ACCEPTED : TOKENIZER_REJECTED;
 		if(IsSeparatorChar(c))
 			return finishID(tokenizer) ? TOKENIZER_ENDED : TOKENIZER_REJECTED;
+		if(c == '<')
+			return finishID(tokenizer) ? endBeforeImpliedBy(tokenizer) : TOKENIZER_REJECTED;
 		return TOKENIZER_REJECTED;
 
 	default:

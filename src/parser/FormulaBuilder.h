@@ -11,13 +11,12 @@
 /**
  * A FormulaBuilder accepts the tokens of any formula, and yields the simplest
  * formula that holds them: a term if the tokens contain no TOKEN_OR and no
- * TOKEN_AND, a clause if they contain TOKEN_OR, and a conjunction if they
- * contain TOKEN_AND. This is what a reflection [ ... ] parses to, since the
- * kind of formula inside the brackets is not known until the tokens have been read.
+ * TOKEN_AND, a clause if they contain TOKEN_OR ('|'), and a conjunction if they
+ * contain TOKEN_AND ('&'). A formula cannot include both TOKEN_OR and TOKEN_AND tokens.
  *
- * CLAUDE: A clause is a disjunction of terms and a conjunction is a conjunction
- * of terms, so the two cannot be nested. Mixing TOKEN_OR and TOKEN_AND in one
- * formula is rejected; the first of the two accepted fixes the kind of formula.
+ * A clause can also be written with a TOKEN_IMPLIED_BY ("<-") following the first term,
+ * for example "foo x <- bar x & baz x", which yields the clause (foo x | ! bar x | ! baz x).
+ * See FormulaBuilderPush().
  */
 typedef struct s_FormulaBuilder {
 	TermBuilder termBuilder;
