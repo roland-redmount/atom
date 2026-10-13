@@ -8,6 +8,7 @@
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
 #include "kernel/TypedRelation.h"
+#include "lang/name.h"
 #include "lang/formula.h"
 #include "library/library.h"
 #include "library/list.h"
@@ -16,6 +17,7 @@
 #include "parser/ConjunctionBuilder.h"
 #include "parser/FormulaBuilder.h"
 #include "parser/TermBuilder.h"
+#include "parser/TermFormBuilder.h"
 #include "testing/testing.h"
 #include "ui/assert.h"
 #include "ui/load.h"
@@ -974,65 +976,136 @@ void testCreateIFactRejects(void)
 }
 
 
+/* CLAUDE: Assert that the knowledgebase holds the fact written by the C string, then retract it. */
+static void retractLoadedFact(char const * factString)
+{
+	Atom fact = CStringToTerm(factString);
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_EXISTED)
+	RetractFact(FormulaGetView(fact));
+	ReleaseFormula(fact);
+}
+
+
+/* CLAUDE: Drop the relation holding the fact written by the C string. */
+static void dropRelationOf(char const * factString)
+{
+	Atom fact = CStringToTerm(factString);
+	DropRelation(RelationFromFact(FormulaGetView(fact)));
+	ReleaseFormula(fact);
+}
+
+
 /**
- * CLAUDE: LoadRelationText() asserts one fact per line, with the actors of each line
- * in the order of the role names of the first line.
+ * CLAUDE: LoadRelationText() asserts one fact per line. Each role of the term form reads
+ * the column named by the role in the first line.
  */
 void testLoadRelationText(void)
 {
+	index32 errorIndex;
+	Atom parentChild = ParseTermForm("parent child", 0, &errorIndex);
 	LoadReport report;
-	// CLAUDE: the role names are not listed in the order of the form, (child parent)
-	LoadRelationText("parent child\n\"Al\" \"Bob\"\n\n\"Al\" \"Cy\"", &report);
+
+	// CLAUDE: columns separated by spaces, and a blank line that is skipped
+	LoadRelationText("parent child\n\"Al\" \"Bob\"\n\n\"Al\" \"Cy\"", parentChild, &report);
 	ASSERT_INT32_EQUAL(report.result, LOAD_OK)
 	ASSERT_UINT32_EQUAL(report.lineNumber, 4)
 	ASSERT_UINT32_EQUAL(report.nAsserted, 2)
 	ASSERT_UINT32_EQUAL(report.nExisting, 0)
-	IFactRelease(report.form);
 
-	Atom fact1 = CStringToTerm("parent \"Al\" child \"Bob\"");
-	Atom fact2 = CStringToTerm("parent \"Al\" child \"Cy\"");
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact1), 0), ASSERT_EXISTED)
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact2), 0), ASSERT_EXISTED)
+	// CLAUDE: a byte order mark, "\r\n" line endings, spaces around the columns, and an
+	// unused column with an empty value. The columns are not in the order of the form.
+	LoadRelationText(
+		"\xEF\xBB\xBF" "child, age ,parent\r\n\"Bob\", 3 ,\"Al\"\r\n\"Dan\",,\"Al\"\r\n",
+		parentChild, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_OK)
+	ASSERT_UINT32_EQUAL(report.nAsserted, 1)
+	ASSERT_UINT32_EQUAL(report.nExisting, 1)
 
-	// CLAUDE: tabs and "\r\n" line endings are accepted
-	LoadRelationText("child\tparent\r\n\"Bob\"\t\"Al\"\r\n", &report);
+	// CLAUDE: a line with an empty column read by a role is skipped
+	LoadRelationText("parent,child\n\"Al\",\n,\"Eve\"\n", parentChild, &report);
 	ASSERT_INT32_EQUAL(report.result, LOAD_OK)
 	ASSERT_UINT32_EQUAL(report.nAsserted, 0)
-	ASSERT_UINT32_EQUAL(report.nExisting, 1)
-	IFactRelease(report.form);
+	ASSERT_UINT32_EQUAL(report.nSkipped, 2)
 
-	LoadRelationText("parent child\n\"Al\" x\n", &report);
+	// CLAUDE: columns separated by tabs
+	LoadRelationText("parent\tchild\n\"Al\"\t\"Fay\"\n", parentChild, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_OK)
+	ASSERT_UINT32_EQUAL(report.nAsserted, 1)
+
+	LoadRelationText("parent,child\n\"Al\"\n", parentChild, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_WRONG_COLUMN_COUNT)
+	ASSERT_UINT32_EQUAL(report.lineNumber, 2)
+	ASSERT_UINT32_EQUAL(report.nColumns, 1)
+	ASSERT_UINT32_EQUAL(report.nHeaderColumns, 2)
+
+	LoadRelationText("parent,child\n\"Al\",x\n", parentChild, &report);
 	ASSERT_INT32_EQUAL(report.result, LOAD_SYNTAX_ERROR)
 	ASSERT_UINT32_EQUAL(report.lineNumber, 2)
 	ASSERT_UINT32_EQUAL(report.errorIndex, 5)
-	IFactRelease(report.form);
 
-	LoadRelationText("parent child\n\"Al\"\n", &report);
-	ASSERT_INT32_EQUAL(report.result, LOAD_WRONG_ARITY)
-	ASSERT_UINT32_EQUAL(report.lineNumber, 2)
-	ASSERT_UINT32_EQUAL(report.nActors, 1)
-	IFactRelease(report.form);
-
-	LoadRelationText("\nparent 1\n", &report);
+	// CLAUDE: a column holds one actor only
+	LoadRelationText("parent,child\n\"Al\",\"Bo\" \"Cy\"\n", parentChild, &report);
 	ASSERT_INT32_EQUAL(report.result, LOAD_SYNTAX_ERROR)
-	ASSERT_UINT32_EQUAL(report.lineNumber, 2)
+	ASSERT_UINT32_EQUAL(report.errorIndex, 10)
+
+	// CLAUDE: a column of the first line must be a name
+	LoadRelationText("parent,1x\n", parentChild, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_SYNTAX_ERROR)
+	ASSERT_UINT32_EQUAL(report.lineNumber, 1)
 	ASSERT_UINT32_EQUAL(report.errorIndex, 7)
-	ASSERT_UINT64_EQUAL(report.form.hash, 0)
 
-	LoadRelationText("\n \n", &report);
-	ASSERT_INT32_EQUAL(report.result, LOAD_NO_FORM)
+	// CLAUDE: the first line names the columns, and may not be blank
+	LoadRelationText("\nparent,child\n", parentChild, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_NO_HEADER)
+	ASSERT_UINT32_EQUAL(report.lineNumber, 1)
+	LoadRelationText("", parentChild, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_NO_HEADER)
 
-	LoadRelationText("! parent child\n\"Al\" \"Bob\"\n", &report);
+	Atom parentSibling = ParseTermForm("parent sibling", 0, &errorIndex);
+	LoadRelationText("parent,child\n", parentSibling, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_MISSING_COLUMN)
+	Atom sibling = CreateNameFromCString("sibling");
+	ASSERT_TRUE(SameAtoms(report.missingRole, sibling))
+	NameRelease(sibling);
+	IFactRelease(parentSibling);
+
+	Atom notParentChild = ParseTermForm("! parent child", 0, &errorIndex);
+	LoadRelationText("parent,child\n\"Al\",\"Bob\"\n", notParentChild, &report);
 	ASSERT_INT32_EQUAL(report.result, LOAD_ASSERT_FAILED)
 	ASSERT_INT32_EQUAL(report.assertResult, ASSERT_CONTRADICTION)
-	IFactRelease(report.form);
+	IFactRelease(notParentChild);
 
-	TypedRelation relation = RelationFromFact(FormulaGetView(fact1));
-	RetractFact(FormulaGetView(fact1));
-	RetractFact(FormulaGetView(fact2));
-	DropRelation(relation);
-	ReleaseFormula(fact2);
-	ReleaseFormula(fact1);
+	retractLoadedFact("parent \"Al\" child \"Bob\"");
+	retractLoadedFact("parent \"Al\" child \"Cy\"");
+	retractLoadedFact("parent \"Al\" child \"Dan\"");
+	retractLoadedFact("parent \"Al\" child \"Fay\"");
+	dropRelationOf("parent \"Al\" child \"Bob\"");
+	IFactRelease(parentChild);
+}
+
+
+/**
+ * CLAUDE: A role name written twice in the term form reads two columns of that name.
+ */
+void testLoadRepeatedRole(void)
+{
+	index32 errorIndex;
+	Atom spouseSpouse = ParseTermForm("spouse spouse", 0, &errorIndex);
+	LoadReport report;
+
+	LoadRelationText("spouse,age,spouse\n\"Al\",3,\"Bea\"\n", spouseSpouse, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_OK)
+	ASSERT_UINT32_EQUAL(report.nAsserted, 1)
+
+	LoadRelationText("spouse,age\n", spouseSpouse, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_MISSING_COLUMN)
+	Atom spouse = CreateNameFromCString("spouse");
+	ASSERT_TRUE(SameAtoms(report.missingRole, spouse))
+	NameRelease(spouse);
+
+	retractLoadedFact("spouse \"Al\" spouse \"Bea\"");
+	dropRelationOf("spouse \"Al\" spouse \"Bea\"");
+	IFactRelease(spouseSpouse);
 }
 
 
@@ -1070,6 +1143,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCreateIFactDefiningFactsProtected);
 	ExecuteTest(testCreateIFactRejects);
 	ExecuteTest(testLoadRelationText);
+	ExecuteTest(testLoadRepeatedRole);
 	ExecuteTest(testRetractMathRule);
 
 	UnloadLibraries();

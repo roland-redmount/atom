@@ -752,6 +752,76 @@ static void testParseActors(void)
 }
 
 
+/* CLAUDE: The column has the given start index and length. */
+static void assertColumn(Column column, index32 start, size32 length)
+{
+	ASSERT_UINT32_EQUAL(column.start, start)
+	ASSERT_UINT32_EQUAL(column.length, length)
+}
+
+
+/**
+ * CLAUDE: SplitColumns() separates columns by a separator character.
+ */
+static void testSplitColumns(void)
+{
+	Column columns[8];
+
+	// CLAUDE: an empty column, spaces around a column, and an empty last column
+	ASSERT_UINT32_EQUAL(SplitColumns("a,, b ,", ',', columns, 8), 4)
+	assertColumn(columns[0], 0, 1);
+	assertColumn(columns[1], 2, 0);
+	assertColumn(columns[2], 4, 1);
+	assertColumn(columns[3], 7, 0);
+
+	// CLAUDE: a separator inside a string does not end a column
+	ASSERT_UINT32_EQUAL(SplitColumns("\"a,b\",c", ',', columns, 8), 2)
+	assertColumn(columns[0], 0, 5);
+
+	// CLAUDE: a space separator is like any other, so two spaces enclose an empty column
+	ASSERT_UINT32_EQUAL(SplitColumns("a  bc", ' ', columns, 8), 3)
+	assertColumn(columns[0], 0, 1);
+	assertColumn(columns[1], 2, 0);
+	assertColumn(columns[2], 3, 2);
+
+	// CLAUDE: the number of columns is returned even when the columns array is full
+	ASSERT_UINT32_EQUAL(SplitColumns("a,b,c", ',', columns, 2), 3)
+}
+
+
+/**
+ * CLAUDE: ParseColumnActor() reads one actor from a column, and reports errors at
+ * the index in the whole string.
+ */
+static void testParseColumnActor(void)
+{
+	char const * line = "\"ab\", ,42,1 2,x";
+	Column columns[5];
+	ASSERT_UINT32_EQUAL(SplitColumns(line, ',', columns, 5), 5)
+	TypedAtom actor;
+	bool isEmpty;
+	index32 errorIndex;
+
+	ASSERT_TRUE(ParseColumnActor(line, columns[0], &actor, &isEmpty, &errorIndex))
+	ASSERT_FALSE(isEmpty)
+	ASSERT_UINT32_EQUAL(actor.type, AT_ID)
+	ReleaseTypedAtom(actor);
+
+	ASSERT_TRUE(ParseColumnActor(line, columns[1], &actor, &isEmpty, &errorIndex))
+	ASSERT_TRUE(isEmpty)
+
+	ASSERT_TRUE(ParseColumnActor(line, columns[2], &actor, &isEmpty, &errorIndex))
+	ASSERT_FALSE(isEmpty)
+	ASSERT_INT64_EQUAL(actor.atom._int, 42)
+
+	// CLAUDE: a column holds one actor only
+	ASSERT_FALSE(ParseColumnActor(line, columns[3], &actor, &isEmpty, &errorIndex))
+	ASSERT_UINT32_EQUAL(errorIndex, 12)
+	ASSERT_FALSE(ParseColumnActor(line, columns[4], &actor, &isEmpty, &errorIndex))
+	ASSERT_UINT32_EQUAL(errorIndex, 14)
+}
+
+
 /*
  * CLAUDE: Collect the term forms of a clause or conjunction form in order, as the
  * terms of a formula of that form are ordered. A term form is its own single term.
@@ -1445,6 +1515,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testFormOrdering);
 	ExecuteTest(testParseTermForm);
 	ExecuteTest(testParseActors);
+	ExecuteTest(testSplitColumns);
+	ExecuteTest(testParseColumnActor);
 	ExecuteTest(testRepeatedTermRejected);
 	ExecuteTest(testImpliedBy);
 	ExecuteTest(testReflectedTerm);

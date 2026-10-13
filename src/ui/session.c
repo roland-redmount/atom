@@ -9,6 +9,7 @@
 #include "kernel/ServiceRegistry.h"
 #include "kernel/Parameter.h"
 #include "lang/formula.h"
+#include "lang/name.h"
 #include "ui/assert.h"
 #include "ui/load.h"
 #include "lang/TermForm.h"
@@ -109,8 +110,9 @@ static void printHelp(void)
 	printLine("                        and contain at least one variable.");
 	printLine("  :assert <term with *> Assert an ifact rule, such as (circle * radius r).");
 	printLine("  :inspect <formula>    Print the service(s) that the formula dispatches to");
-	printLine("  :load <file>          Assert the facts in a text file. The first line lists the");
-	printLine("                        role names, and each following line the actors of one fact.");
+	printLine("  :load <file> <role names> Assert facts of the term form with the given role names.");
+	printLine("                        The first line of the file names the columns, separated");
+	printLine("                        by commas or spaces. Each role reads the column of its name.");
 	printLine("  :retract <term>       Retract a fact. The term must not contain variables.");
 	printLine("  :retract <clause>     Retract a rule. The variable names must match the asserted rule.");
 	printLine("  :retract <term with *> Retract an ifact rule.");
@@ -460,8 +462,14 @@ static void printLoadError(char const * filePath, LoadReport const * report)
 		PrintF("Cannot read %s\n", filePath);
 		return;
 	}
-	if(report->result == LOAD_NO_FORM) {
-		PrintF("%s has no line of role names.\n", filePath);
+	if(report->result == LOAD_NO_HEADER) {
+		PrintF("%s has no first line of column names.\n", filePath);
+		return;
+	}
+	if(report->result == LOAD_MISSING_COLUMN) {
+		PrintF("The first line of %s has too few columns named ", filePath);
+		PrintName(report->missingRole);
+		PrintCString(".\n");
 		return;
 	}
 
@@ -472,12 +480,12 @@ static void printLoadError(char const * filePath, LoadReport const * report)
 		break;
 
 	case LOAD_SYNTAX_ERROR:
-		PrintF("syntax error at column %u.\n", report->errorIndex + 1);
+		PrintF("syntax error at character %u.\n", report->errorIndex + 1);
 		break;
 
-	case LOAD_WRONG_ARITY:
-		PrintF("%u actors, but the form has %u roles.\n",
-			report->nActors, TermFormArity(report->form));
+	case LOAD_WRONG_COLUMN_COUNT:
+		PrintF("%u columns, but the first line has %u.\n",
+			report->nColumns, report->nHeaderColumns);
 		break;
 
 	case LOAD_ASSERT_FAILED:
@@ -496,35 +504,50 @@ static void printLoadError(char const * filePath, LoadReport const * report)
  * Assert the facts encoded in the text file named by the text following the :load
  * command; see LoadRelationFile().
  */
-static void executeLoad(char const * pathText)
+static void executeLoad(char const * argumentText, index32 linePosition)
 {
-	size32 pathLength = CStringLength(pathText);
-	while((pathLength > 0) && IsSpaceChar(pathText[pathLength - 1]))
-		pathLength--;
-	if(pathLength == 0) {
-		printLine(":load requires a file name.");
+	// CLAUDE: the file name is the first word, and the role names of the term form follow it
+	size32 pathLength = 0;
+	while(argumentText[pathLength] && !IsSpaceChar(argumentText[pathLength]))
+		pathLength++;
+	char const * termFormText = argumentText + pathLength;
+	while(IsSpaceChar(*termFormText))
+		termFormText++;
+	if((pathLength == 0) || !*termFormText) {
+		printLine(":load requires a file name and role names.");
 		return;
 	}
 	char filePath[pathLength + 1];
-	CopyMemory(pathText, filePath, pathLength);
+	CopyMemory(argumentText, filePath, pathLength);
 	filePath[pathLength] = 0;
 
+	index32 errorIndex;
+	Atom form = ParseTermForm(termFormText, 0, &errorIndex);
+	if(!form.hash) {
+		printParseError(linePosition + (termFormText - argumentText) + errorIndex);
+		return;
+	}
+
 	LoadReport report;
-	LoadRelationFile(filePath, &report);
+	LoadRelationFile(filePath, form, &report);
 	if(report.result != LOAD_OK)
 		printLoadError(filePath, &report);
 
-	if(report.form.hash) {
+	if((report.result == LOAD_OK) || (report.nAsserted + report.nExisting + report.nSkipped > 0)) {
 		SessionPrintMargin();
 		PrintF("Asserted %u facts of the form ", report.nAsserted);
-		PrintReflectedTermForm(report.form);
+		PrintReflectedTermForm(form);
 		PrintCString(".\n");
 		if(report.nExisting > 0) {
 			SessionPrintMargin();
 			PrintF("%u facts were already known.\n", report.nExisting);
 		}
-		IFactRelease(report.form);
+		if(report.nSkipped > 0) {
+			SessionPrintMargin();
+			PrintF("Skipped %u lines with missing values.\n", report.nSkipped);
+		}
 	}
+	IFactRelease(form);
 }
 
 
@@ -678,7 +701,7 @@ static int executeCommand(char const * line, char const * commandText)
 
 	char const * pathText = matchCommand(commandText, ":load");
 	if(pathText) {
-		executeLoad(pathText);
+		executeLoad(pathText, pathText - line);
 		return SESSION_CONTINUE;
 	}
 
