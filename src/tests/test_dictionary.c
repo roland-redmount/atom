@@ -8,6 +8,7 @@
 #include "library/string.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/TermBuilder.h"
+#include "parser/TermFormBuilder.h"
 #include "testing/testing.h"
 
 
@@ -67,6 +68,56 @@ void testDictionaryAddTwice(void)
 	DictionaryRemoveClause(&clause);
 	ASSERT_FALSE(DictionaryContainsClause(rule))
 	ReleaseFormula(rule);
+}
+
+
+/* CLAUDE: True if the array of Atom holds the given atom. */
+static bool arrayHasAtom(ResizingArray const * array, Atom atom)
+{
+	for(index32 i = 0; i < array->nElements; i++) {
+		if(SameAtoms(*(Atom const *) ResizingArrayGetElement(array, i), atom))
+			return true;
+	}
+	return false;
+}
+
+
+/* CLAUDE: DictionaryFindClauseForms() finds the clause forms holding a term form. The term
+   forms (fern) and (! fern) are distinct, so a rule holding one is not found by the other. */
+static void testDictionaryFindClauseForms(void)
+{
+	Atom headRule = CStringToClause("fern x | ! moss x");
+	Atom bodyRule = CStringToClause("lichen x | ! fern x | ! moss x");
+	FormulaView headClause = DictionaryAddClause(headRule);
+	FormulaView bodyClause = DictionaryAddClause(bodyRule);
+
+	index32 errorIndex;
+	Atom fern = ParseTermForm("fern", 0, &errorIndex);
+	Atom notFern = ParseTermForm("! fern", 0, &errorIndex);
+	Atom notMoss = ParseTermForm("! moss", 0, &errorIndex);
+	ResizingArray clauseForms;
+	CreateResizingArray(&clauseForms, sizeof(Atom), 4);
+
+	ASSERT_UINT32_EQUAL(DictionaryFindClauseForms(fern, &clauseForms), 1)
+	ASSERT_TRUE(arrayHasAtom(&clauseForms, FormulaGetForm(headRule)))
+
+	ResizingArrayReset(&clauseForms);
+	ASSERT_UINT32_EQUAL(DictionaryFindClauseForms(notFern, &clauseForms), 1)
+	ASSERT_TRUE(arrayHasAtom(&clauseForms, FormulaGetForm(bodyRule)))
+
+	ResizingArrayReset(&clauseForms);
+	ASSERT_UINT32_EQUAL(DictionaryFindClauseForms(notMoss, &clauseForms), 2)
+	ASSERT_TRUE(arrayHasAtom(&clauseForms, FormulaGetForm(headRule)))
+	ASSERT_TRUE(arrayHasAtom(&clauseForms, FormulaGetForm(bodyRule)))
+
+	FreeResizingArray(&clauseForms);
+	IFactRelease(fern);
+	IFactRelease(notFern);
+	IFactRelease(notMoss);
+	DictionaryRemoveClause(&headClause);
+	DictionaryRemoveClause(&bodyClause);
+	ReleaseFormula(headRule);
+	ReleaseFormula(bodyRule);
 }
 
 
@@ -139,6 +190,7 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testDictionary);
 	ExecuteTest(testDictionaryAddTwice);
+	ExecuteTest(testDictionaryFindClauseForms);
 	ExecuteTest(testIFactRules);
 	ExecuteTest(testIFactRuleRejects);
 

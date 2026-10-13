@@ -2,6 +2,7 @@
  * A session answering the lines a front end reads. See ui/session.h.
  */
 
+#include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
 #include "kernel/ifact.h"
 #include "kernel/Parameter.h"
@@ -15,6 +16,7 @@
 #include "parser/Characters.h"
 #include "parser/FormulaBuilder.h"
 #include "parser/StringBuffer.h"
+#include "parser/TermFormBuilder.h"
 #include "parser/Tokenizer.h"
 #include "platform.h"
 #include "ui/query.h"
@@ -112,6 +114,8 @@ static void printHelp(void)
 	printLine("  :retract <term>       Retract a fact. The term must not contain variables.");
 	printLine("  :retract <clause>     Retract a rule. The variable names must match the asserted rule.");
 	printLine("  :retract <term with *> Retract an ifact rule.");
+	printLine("  :rules <role names>   Print the rules containing a term form, such as (foo bar)");
+	printLine("                        or (! foo bar). Ifact rules are not printed.");
 	printLine("  :help                 Print this text.");
 	printLine("  :quit, ctrl-D         End the session.");
 	PrintChar('\n');
@@ -579,6 +583,50 @@ static void executeInspect(char const * queryText, index32 linePosition)
 
 
 /*
+ * Print each clause rule in the dictionary containing the term form written by the
+ * text following the :rules command, such as "foo bar" or "! foo bar". Ifact rules are not
+ * printed.
+ */
+static void executeRules(char const * termFormText, index32 linePosition)
+{
+	if(!*termFormText) {
+		printLine(":rules requires a term form, such as \"foo\" or \"!foo bar\".");
+		return;
+	}
+
+	index32 errorIndex;
+	Atom termForm = ParseTermForm(termFormText, 0, &errorIndex);
+	if(!termForm.hash) {
+		printParseError(linePosition + errorIndex);
+		return;
+	}
+
+	ResizingArray clauseForms;
+	CreateResizingArray(&clauseForms, sizeof(Atom), 4);
+	DictionaryFindClauseForms(termForm, &clauseForms);
+
+	size32 nRules = 0;
+	for(index32 i = 0; i < clauseForms.nElements; i++) {
+		Atom clauseForm = *(Atom const *) ResizingArrayGetElement(&clauseForms, i);
+		DictionaryIterator iterator;
+		DictionaryIterateClauses(clauseForm, &iterator);
+		while(DictionaryIteratorNext(&iterator)) {
+			SessionPrintMargin();
+			PrintFormActorsAsFormula(clauseForm, DictionaryIteratorPeekActors(&iterator), 0);
+			PrintChar('\n');
+			nRules++;
+		}
+		DictionaryIteratorEnd(&iterator);
+	}
+	FreeResizingArray(&clauseForms);
+
+	if(nRules == 0)
+		printLine("No rules found.");
+	IFactRelease(termForm);
+}
+
+
+/*
  * Match the command a line begins with. Returns the command's argument, which is whatever
  * follows the command word with the space between them dropped, or 0 if the line begins
  * with some other command. A command taking no argument is matched with an empty argument.
@@ -631,6 +679,12 @@ static int executeCommand(char const * line, char const * commandText)
 	char const * pathText = matchCommand(commandText, ":load");
 	if(pathText) {
 		executeLoad(pathText);
+		return SESSION_CONTINUE;
+	}
+
+	char const * termFormText = matchCommand(commandText, ":rules");
+	if(termFormText) {
+		executeRules(termFormText, termFormText - line);
 		return SESSION_CONTINUE;
 	}
 

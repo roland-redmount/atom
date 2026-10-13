@@ -254,6 +254,13 @@ bool ClauseFormExistsForTermForm(Atom termForm)
 }
 
 
+size32 DictionaryFindClauseForms(Atom termForm, ResizingArray * clauseForms)
+{
+	ASSERT(clauseForms)
+	return findClauseFormsForTermForm(termForm, clauseForms);
+}
+
+
 /*
  * CLAUDE: A term form held by a clause form or a conjunction form, read from the relation
  * (multiset element multiple); see InvalidateDependentServices().

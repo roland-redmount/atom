@@ -9,6 +9,7 @@
 #include "kernel/typedtuple.h"
 #include "lang/formula.h"
 #include "btree/btree.h"
+#include "util/ResizingArray.h"
 
 
 /**
@@ -46,6 +47,13 @@ bool DictionaryContainsClause(Atom clause);
  * Used to decide whether a newly created primitive service must be marked stale.
  */
 bool ClauseFormExistsForTermForm(Atom termForm);
+
+/**
+ * Append each clause form holding the given term form to clauseForms, an array of
+ * Atom, and return the number of clause forms appended. A clause form is appended once, even
+ * if the term form occurs more than once in the clause form.
+ */
+size32 DictionaryFindClauseForms(Atom termForm, ResizingArray * clauseForms);
 
 /**
  * CLAUDE: Invalidate the services of every form depending on the given term forms, but not
