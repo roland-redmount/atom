@@ -884,6 +884,15 @@ static void testFormOrderingOf(char const * formulaString)
 		}
 		actorsOffset += termArity;
 	}
+
+	// CLAUDE: the actor entered at position k is the number k + 1; see FormOrderingGetEnteredActors()
+	size8 arity = FormArity(view.form);
+	index8 actorIndices[arity];
+	FormOrderingGetEnteredActors(view.form, &ordering, actorIndices);
+	for(index8 k = 0; k < arity; k++) {
+		TypedAtom actor = TypedTupleGetElement(view.actors, actorIndices[k]);
+		ASSERT_INT64_EQUAL(actor.atom._int, k + 1)
+	}
 	ReleaseFormula(formula);
 }
 

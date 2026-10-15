@@ -636,10 +636,9 @@ void IFactPrint(Atom atom)
 {
 	IFactHeader * header = peekIFactHeader(atom.hash);
 	ASSERT(header)
-	if(ifactPrinter)
-		ifactPrinter(atom);
-	else
-		PrintF("ID(..%x)", atom.hash & 0xFFFF);
+	if(ifactPrinter && ifactPrinter(atom))
+		return;
+	PrintF("ID(..%x)", atom.hash & 0xFFFF);
 }
 
 

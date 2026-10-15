@@ -46,8 +46,8 @@ bool FormulaBuilderIsValid(FormulaBuilder const * builder);
 bool FormulaBuilderFinish(FormulaBuilder * builder);
 
 /**
- * CLAUDE: Create the formula. Unless ordering is 0, the order in which the terms and
- * roles were pushed is written to ordering.
+ * Create the formula. The order in which the terms and roles were pushed
+ * is written to ordering, unless 0.
  */
 Atom FormulaBuilderCreateFormula(FormulaBuilder * builder, FormOrdering * ordering);
 
@@ -64,15 +64,10 @@ Atom CStringToFormula(char const * cString);
 
 /**
  * Parse a C string to a term, clause or conjunction, whichever it turns out to be,
- * without requiring the string to be valid syntax. A string that is not a formula is a
- * normal outcome here, unlike with CStringToFormula(): it yields the zero atom, whose
- * hash the caller tests, and the index of the character parsing failed at is written to
- * errorPosition. That index is the length of
- * the string when the string ends in the middle of a formula, which is also what an
- * empty string yields.
- *
- * CLAUDE: Unless ordering is 0, the order in which the terms and roles of the formula
- * were written is written to ordering; see FormOrdering.
+ * without requiring the string to be valid syntax. A string that cannot be parsed into
+ * a formula yields the zero atom, and the index into cString where parsing failed is
+ * written to errorPosition. If cString ended before the formula was complete,
+ * errorPosition is set to the length of cString.
  */
 Atom ParseFormula(char const * cString, FormOrdering * ordering, index32 * errorPosition);
 

@@ -174,8 +174,8 @@ void PrintFormulaView(FormulaView formulaView);
  * written by ParseFormula(). A formula stores its terms, roles and actors in the
  * order of its form instead; see MultisetIterationOrder().
  *
- * termOrder[i] is the entered index of the term at index i of the form. A predicate
- * or term form has a single term. The role order of each term is stored in roleOrder
+ * termOrder[i] is the entered index of the term at index i of the form.
+ * The role order of each term is stored in roleOrder
  * at the same indices as the actors of the term in the actors tuple. So for a term whose
  * first actor has index a, roleOrder[a + i] is the entered index (within the term) of
  * the role at index i of the term.
@@ -192,6 +192,12 @@ typedef struct s_FormOrdering {
  * the order of the form.
  */
 void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors, FormOrdering const * ordering);
+
+/**
+ * Write the index of each actor of the form to actorIndices, according to <orderring>.
+ * The actorIndices[] array must hold at least FormArity(form) elements.
+ */
+void FormOrderingGetEnteredActors(Atom form, FormOrdering const * ordering, index8 actorIndices[]);
 
 /**
  * Return te number of actors of the given form.

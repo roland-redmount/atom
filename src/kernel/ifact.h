@@ -208,9 +208,10 @@ uint32 IFactTotalCount(void);
 void IFactPrint(Atom ifact);
 
 /**
- * CLAUDE: A function printing an AT_ID atom in place of the default output of IFactPrint().
+ * A callbavk used to modify the default output of IFactPrint(). If this function
+ * cannot print the given atom, it must returns false; IFactPrint() then prints the default output.
  */
-typedef void (*IFactPrinter)(Atom ifact);
+typedef bool (*IFactPrinter)(Atom ifact);
 
 /**
  * CLAUDE: Set the function that IFactPrint() hands each AT_ID atom to. A zero printer
