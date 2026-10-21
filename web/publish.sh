@@ -1,14 +1,13 @@
 #!/bin/sh
 #
-# Copy the built web front end into a site that serves it.
+# Copy the built web front end into an external folder.
 #
-#   web/publish.sh ../www-roland/atom
+#   web/publish.sh <destination>
 #
-# The site keeps a copy rather than building atom itself, so that building the
-# site needs no C toolchain and no network. What is copied is recorded in a
-# VERSION file, so that the site says which atom build it is carrying.
+# The destinaton folder is typically a subfolder of a web site root.
+# The build version copied is recorded in a VERSION file.
 #
-# Build the front end first:
+# Before running this command, build the front end using:
 #
 #   emcmake cmake -B build/wasm -DCMAKE_BUILD_TYPE=Debug
 #   cmake --build build/wasm

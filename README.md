@@ -12,20 +12,47 @@ Features:
 * Type safety and correctness via logic rules -- no dedicated type system
 * Automatic persistence to disk -- no load/save operations needed
 
-A primer on the atom language concepts is here [TODO].
+A brief, interactive tutorial on the **atom** language concepts is here [TODO].
+
+
+## Platforms and dependencies
+
+**atom** is currently being developed on Linux, and should work on MacOS as well. There are currently no dependencies except the C standard library. Windows builds are currently not supported, but should be pretty straightforward to implement.
+
+
+## Building
+
+Clone the repo and build with CMake:
+```
+cmake -B build/debug -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/debug
+```
+
+This builds a shared library in `build/debug/lib`  and the REPL (command line client) and test executables in `build/debug/bin`. For a release build, use `-DCMAKE_BUILD_TYPE=Release` instead. VSCode task definitions are also provided for the different build types.
+
+
+
+### Web application
+
+**atom** can be compiled to WASM for web applications; see `src/ui/web.c`. This requires the [Emscripten SDK](https://github.com/emscripten-core/emsdk). Assuming `emcmake` on the path, do:
+```
+emcmake cmake -B build/wasm -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/wasm
+```
+This build optimizes for size. The `build/wasm/web` folder contains the resulting WASM executable and a test page. To add the web app to a site, see `web/publish.sh`.
+
 
 ## Implementation
 
-_The implementation is incomplete and many features described here are not yet in place._
+The **atom** implementation consists of:
+* Storage providers that provide persistent tuple storage
+* Primitive services, which provide fundamental operations such as arithmetic.
+* A parser for the atom syntax, which generates "code" (formulas) represented as atoms (reflection)
+* A compiler, which evalates queries against known logic rules and generates programs in an intermediate 
+representation, which is executed by an interpreter. The intermediate representation could be further compiled to bytecode / machine code.
 
-One challenge with implementing atom is that declarative logic does not map naturally onto traditional, imperative programming: logic execution is not strictly sequential, and there is no notion of linear memory. The current implementation compiles atom's logic rules into an intermediate representation which is executed by an interpreter.
+The implementation language in C99. We try to minimize dependencies on third-party packages. All dependencies on the C standard library or OS services should be wrapped in a platform layer (`src/platform.h`) to promote platform independence.
 
-We use C99 as the implementation language to stay close to the machine and avoid unnecessary abstractions (read: OOP) that don't align well with atom concepts. We try to minimize dependencies on C standard libraries or third-party packages to stay self-contained. All dependencies should be wrapped in a platform layer to promote platform independence. Atom is currently being developed on Linux.
-
-## Documentation
-
-Currently maintained separately (TODO: include docs here)
-
-## Code conventions
+### Code conventions
 
 See [this document](code-conventions.md).
