@@ -10,6 +10,7 @@
 #define CONNECTIVE_NONE		0		// no TOKEN_OR or TOKEN_AND yet
 #define CONNECTIVE_OR		1		// a disjunction, yielding a clause
 #define CONNECTIVE_AND		2		// a conjunction, yielding a conjunction
+#define CONNECTIVE_IMPLIED_BY	3	// an implication, yielding a clause
 
 
 void InitializeFormulaBuilder(FormulaBuilder * builder, enum FormulaScope scope)
@@ -72,8 +73,20 @@ bool FormulaBuilderPush(FormulaBuilder * builder, Token token)
 		tokenConnective = CONNECTIVE_OR;
 	else if(token.type == TOKEN_AND)
 		tokenConnective = CONNECTIVE_AND;
+	else if(token.type == TOKEN_IMPLIED_BY)
+		tokenConnective = CONNECTIVE_IMPLIED_BY;
 	else
 		return false;
+
+	/* CLAUDE: In the formula (foo x <- bar x & baz x), each term following TOKEN_IMPLIED_BY
+	   is negated, and a TOKEN_AND joins the term to the next. The result is the clause
+	   (foo x | ! bar x | ! baz x). */
+	if(builder->connective == CONNECTIVE_IMPLIED_BY) {
+		if((tokenConnective != CONNECTIVE_AND) || !TermBuilderIsValid(&(builder->termBuilder)))
+			return false;
+		TermBuilderNegate(&(builder->termBuilder));
+		tokenConnective = CONNECTIVE_IMPLIED_BY;
+	}
 
 	// the first connective fixes the kind of formula. A different connective
 	// later would mix a disjunction and a conjunction, which is not a formula.
@@ -105,6 +118,9 @@ bool FormulaBuilderFinish(FormulaBuilder * builder)
 		return true;
 
 	ASSERT(TermBuilderIsValid(&(builder->termBuilder)));
+	// CLAUDE: the last term following TOKEN_IMPLIED_BY is negated; see FormulaBuilderPush()
+	if(builder->connective == CONNECTIVE_IMPLIED_BY)
+		TermBuilderNegate(&(builder->termBuilder));
 	builder->isValid = addCurrentTerm(builder);
 	return builder->isValid;
 }

@@ -3,6 +3,7 @@
 #include "kernel/dictionary.h"
 #include "library/MachineService.h"
 #include "library/math.h"
+#include "parser/ClauseBuilder.h"
 #include "parser/TermBuilder.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
@@ -316,13 +317,23 @@ void RegisterMathFunctions(void)
 
 typedef struct s_MathLibrary {
 	uint32 moduleID;
-	FormulaView mathRules[N_MATH_RULES];
+	// The clause of each rule added by MathSetup().
+	Atom mathRules[N_MATH_RULES];
 	// The term forms of the relations closed by MathSetup()
 	Atom closedForms[N_MATH_CLOSED_FORMS];
 } MathLibrary;
 
 
 static MathLibrary * mathLibrary = 0;
+
+
+// Add a rule to the dictionary, keeping its clause in mathLibrary->mathRules.
+static void addMathRule(index32 ruleIndex, char const * clauseString)
+{
+	Atom rule = CStringToClause(clauseString);
+	DictionaryAddClause(rule);
+	mathLibrary->mathRules[ruleIndex] = rule;
+}
 
 
 void MathSetup(void)
@@ -373,16 +384,16 @@ void MathSetup(void)
 	// NOTE: adding these rules leaves various primitive service stale, needs compilation
 	
 	// integer division, with zero remainder
-	mathLibrary->mathRules[0] = DictionaryAddClauseFromCString("* x / y = z | ! * x / y = z rem 0");
+	addMathRule(0, "* x / y = z | ! * x / y = z rem 0");
 
 	// Solving x + y = z for y
-	mathLibrary->mathRules[1] = DictionaryAddClauseFromCString("+ x + y = z | ! + z - x = y");
+	addMathRule(1, "+ x + y = z | ! + z - x = y");
 	// Solving x * y = z for y. For integers, this requires division with zero remainder
-	mathLibrary->mathRules[2] = DictionaryAddClauseFromCString("* x * y = z | ! * z / x = y");
+	addMathRule(2, "* x * y = z | ! * z / x = y");
 
 	// Mixed float-int arithmetic. These rules will yield services only for FLOAT x and INT i
-	mathLibrary->mathRules[3] = DictionaryAddClauseFromCString("+ x + i = y | ! integer i float f | ! + x + f = y");
-	mathLibrary->mathRules[4] = DictionaryAddClauseFromCString("* x * i = y | ! integer i float f | ! * x * f = y");
+	addMathRule(3, "+ x + i = y | ! integer i float f | ! + x + f = y");
+	addMathRule(4, "* x * i = y | ! integer i float f | ! * x * f = y");
 
 	// Close relations
 	for(index32 i = 0; i < N_MATH_CLOSED_FORMS; i++)
@@ -399,10 +410,19 @@ void MathRestore(void)
 
 void MathShutdown(void)
 {
-	for(index32 i = 0; i < N_MATH_CLOSED_FORMS; i++)
-		OpenRelation(mathLibrary->closedForms[i]);
-	for(index32 i = 0; i < N_MATH_RULES; i++)
-		DictionaryRemoveClause(&mathLibrary->mathRules[i]);
+	for(index32 i = 0; i < N_MATH_CLOSED_FORMS; i++) {
+		// Retract the rule, unless already removed (by the user)
+		if(RelationIsClosedForm(mathLibrary->closedForms[i]))
+			OpenRelation(mathLibrary->closedForms[i]);
+	}
+	for(index32 i = 0; i < N_MATH_RULES; i++) {
+		Atom rule = mathLibrary->mathRules[i];
+		if(DictionaryContainsClause(rule)) {
+			FormulaView ruleView = FormulaGetView(rule);
+			DictionaryRemoveClause(&ruleView);
+		}
+		ReleaseFormula(rule);
+	}
 
 	FreeModuleRelations(mathLibrary->moduleID);
 

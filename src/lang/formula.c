@@ -583,6 +583,49 @@ void PrintFormActorsAsFormula(Atom form, TypedTuple const * actors, FormOrdering
 }
 
 
+void FormOrderingGetEnteredActors(Atom form, FormOrdering const * ordering, index8 actorIndices[])
+{
+	if(IsPredicateForm(form) || IsTermForm(form)) {
+		for(index8 j = 0; j < FormArity(form); j++)
+			actorIndices[ordering->roleOrder[j]] = j;
+		return;
+	}
+
+	// CLAUDE: the arity of each term, with terms in the order of the form
+	size8 nTerms = 0;
+	size8 termArities[FormArity(form)];
+	MultisetIterator iterator;
+	MultisetIterate(form, AT_ID, &iterator);
+	while(MultisetIteratorNext(&iterator)) {
+		ElementMultiple em = MultisetIteratorGetElement(&iterator);
+		for(index8 j = 0; j < em.multiple; j++)
+			termArities[nTerms++] = TermFormArity(em.element);
+	}
+	MultisetIteratorEnd(&iterator);
+	ASSERT(ordering->nTerms == nTerms)
+
+	// CLAUDE: the entered index of the first actor of each term, with terms in the order entered
+	size8 enteredArities[nTerms];
+	for(index8 i = 0; i < nTerms; i++)
+		enteredArities[ordering->termOrder[i]] = termArities[i];
+	index8 enteredOffsets[nTerms];
+	index8 enteredOffset = 0;
+	for(index8 i = 0; i < nTerms; i++) {
+		enteredOffsets[i] = enteredOffset;
+		enteredOffset += enteredArities[i];
+	}
+
+	index8 actorsOffset = 0;
+	for(index8 i = 0; i < nTerms; i++) {
+		for(index8 j = 0; j < termArities[i]; j++) {
+			index8 actorIndex = actorsOffset + j;
+			actorIndices[enteredOffsets[ordering->termOrder[i]] + ordering->roleOrder[actorIndex]] = actorIndex;
+		}
+		actorsOffset += termArities[i];
+	}
+}
+
+
 void PrintForm(Atom form)
 {
 	if(IsTermForm(form))

@@ -4,7 +4,7 @@
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"

@@ -2,8 +2,8 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
-#include "kernel/Relation.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/formula.h"
 #include "library/library.h"
@@ -15,7 +15,7 @@
 
 
 struct {
-	Relation relation;
+	TypedRelation relation;
 	TupleStore * store;
 } fixture;
 
@@ -41,10 +41,10 @@ static IOSignature const firstInputIOSignature = {
 
 
 /**
- * Add a dummy MACHINE operator to the given Relation.
+ * Add a dummy MACHINE operator to the given TypedRelation.
  * This operator cannot evaluate anything, only useful for testing the registry.
  */
-static Service addDummyMachineOperator(Relation relation)
+static Service addDummyMachineOperator(TypedRelation relation)
 {
 	RelationReaderSpec dummyReaderspec = {.ioSignature = firstInputIOSignature};
 	Operator * op = CreateMachineOperator(2, 0, &dummyReaderspec, 0);
@@ -59,7 +59,7 @@ static Service addDummyMachineOperator(Relation relation)
  * which must have arity = EXAMPLE_FORM_ARITY
  */
 static Service createIdentityOpService(
-	Relation relation, IOSignature ioSignature, Operator * childOperator)
+	TypedRelation relation, IOSignature ioSignature, Operator * childOperator)
 {
 	Operator * op = CreateIdentityOperator(childOperator);
 	Service service = {.relation = relation, .ioSignature = ioSignature};		// exampleIOSignature 
@@ -99,7 +99,7 @@ void testInvalidateDependentServices(void)
 
 	// Hand-build a "compiled" service that depends on the machine service
 	TypeSignature typeSignature1 = CreateTypeSignature((byte[]) {AT_INT, AT_LETTER}, 2);
-	Relation relation1 = {.form = fixture.relation.form, .typeSignature = typeSignature1};
+	TypedRelation relation1 = {.form = fixture.relation.form, .typeSignature = typeSignature1};
 	// The Service will acquire the relation
 	Service service1 = createIdentityOpService(relation1, firstInputIOSignature, machineOp);
 	Operator * op1 = ServiceGetOperator(service1);
@@ -108,7 +108,7 @@ void testInvalidateDependentServices(void)
 
 	// A second "compiled" service that depends on the first one
 	TypeSignature typeSignature2 = CreateTypeSignature((byte[]) {AT_LETTER, AT_LETTER}, 2);
-	Relation relation2 = {.form = fixture.relation.form, .typeSignature = typeSignature2};
+	TypedRelation relation2 = {.form = fixture.relation.form, .typeSignature = typeSignature2};
 	Service service2 = createIdentityOpService(relation2, firstInputIOSignature, op1);
 	Operator * op2 = ServiceGetOperator(service2);
 	ASSERT_NOT_NULL(op2)
@@ -123,7 +123,7 @@ void testInvalidateDependentServices(void)
 	RemoveService(machineService);
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 0)
 	ASSERT_UINT32_EQUAL(NumberOfServices(), initialNServices)
-	// The associated Relations are removed as well
+	// The associated TypedRelations are removed as well
 	ASSERT_FALSE(RelationExists(relation1))
 	ASSERT_FALSE(RelationExists(relation2))
 
@@ -144,7 +144,7 @@ void testInvalidateOnPrimitiveService(void)
 
 	// Create a "compiled" Service depending on the machine service
 	TypeSignature compiledTypes = CreateTypeSignature((byte[]) {AT_INT, AT_LETTER}, 2);
-	Relation relation = {.form = fixture.relation.form, .typeSignature = compiledTypes};
+	TypedRelation relation = {.form = fixture.relation.form, .typeSignature = compiledTypes};
 	Service service = createIdentityOpService(relation, firstInputIOSignature, machineOp);
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 1)
 	Operator * compiledOperator = ServiceGetOperator(service);
@@ -188,7 +188,7 @@ void testDropRelatonWithCompiledService(void)
 
 	// Create "compiled" service for a separate relation, depending on the above service
 	TypeSignature compiledTypes = CreateTypeSignature((byte[]) {AT_INT, AT_LETTER}, 2);
-	Relation compiledRelation = {.form = fixture.relation.form, .typeSignature = compiledTypes};
+	TypedRelation compiledRelation = {.form = fixture.relation.form, .typeSignature = compiledTypes};
 	// NOTE: this construction is incorrect, as compiledRelation has different
 	// type signature than fixture.relation. Doesn't matter here though
 	Service compiledService = createIdentityOpService(compiledRelation, firstInputIOSignature, machineOp);

@@ -6,7 +6,7 @@
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "library/library.h"
 #include "library/list.h"
@@ -557,7 +557,7 @@ void testIndexOrder(void)
 	Operator * listOperator = GetListOperator(AT_LETTER);
 
 	// NOTE: indexOrder[] is currently not publicly accessible
-	// Relation listRelation = GetListRelation(AT_LETTER);
+	// TypedRelation listRelation = GetListRelation(AT_LETTER);
 	// ASSERT_NOT_NULL(listOperator->indexOrder)
 	// for(index8 i = 0; i < 3; i++)
 	// 	ASSERT_UINT32_EQUAL(listOperator->indexOrder[i], listRelation->indexColumns[i])

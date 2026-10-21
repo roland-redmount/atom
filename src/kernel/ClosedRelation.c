@@ -1,9 +1,10 @@
 #include "kernel/ClosedRelation.h"
+#include "kernel/dictionary.h"
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
 #include "kernel/operator.h"
 #include "kernel/Parameter.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/TupleStore.h"
 #include "lang/name.h"
@@ -19,7 +20,7 @@
  * STATE_KEY_CLOSED_RELATIONS.
  */
 typedef struct s_ClosedRelations {
-	Relation relation;
+	TypedRelation relation;
 	// The operator of the service (closed-relation f<ID), testing whether a form is closed
 	Operator * testOperator;
 	// The operator of the service (closed-relation f>ID), enumerating the closed forms
@@ -42,7 +43,7 @@ void SetupClosedRelations(void)
 	NameRelease(roleName);
 
 	// Create the relation and its TupleSTore
-	state->relation = (Relation) {
+	state->relation = (TypedRelation) {
 		.form = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID}, 1)
 	};
@@ -122,6 +123,7 @@ int CloseRelation(Atom form)
 		LookupAddFactRoles(closedRelations->relation, &form);
 		// CLAUDE: The opposite relation is answered by INVERT operators from now on
 		InvalidateTermFormServices(oppositeForm, INVALIDATE_BY_RULE);
+		InvalidateDependentServices(&oppositeForm, 1);
 		result = CLOSE_OK;
 	}
 	IFactRelease(oppositeForm);

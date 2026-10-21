@@ -7,17 +7,21 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/letter.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
+#include "lang/name.h"
 #include "lang/formula.h"
 #include "library/library.h"
 #include "library/list.h"
 #include "library/string.h"
 #include "parser/ClauseBuilder.h"
 #include "parser/ConjunctionBuilder.h"
+#include "parser/FormulaBuilder.h"
 #include "parser/TermBuilder.h"
+#include "parser/TermFormBuilder.h"
 #include "testing/testing.h"
 #include "ui/assert.h"
 #include "ui/load.h"
+#include "ui/query.h"
 
 
 /**
@@ -34,7 +38,7 @@ void testAssertRetract(void)
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(FormulaGetActors(fact1)), nColumns);
 
-	Relation relation = {.form = FormulaGetForm(fact1), .typeSignature = typeSignature};
+	TypedRelation relation = {.form = FormulaGetForm(fact1), .typeSignature = typeSignature};
 	// The relation does not exist until the first fact is asserted
 	ASSERT_FALSE(RelationExists(relation))
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact1), 0), ASSERT_OK)
@@ -87,14 +91,14 @@ void testAssertContradictsStoredFact(void)
 	// Assert a fact
 	Atom fact = CStringToTerm("prec \"a\" succ \"b\"");
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_OK)
-	Relation relation = RelationFromFact(FormulaGetView(fact));
+	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
 	ASSERT_TRUE(RelationExists(relation))
 
 	// (! prec "a" succ "b") is refused, contradicting the fact just asserted
 	Atom negatedFact = CStringToTerm("! prec \"a\" succ \"b\"");
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(negatedFact), 0), ASSERT_CONTRADICTION)
 	// and the refused assert leaves no relation behind
-	Relation negatedRelation = RelationFromFact(FormulaGetView(negatedFact));
+	TypedRelation negatedRelation = RelationFromFact(FormulaGetView(negatedFact));
 	ASSERT_FALSE(RelationExists(negatedRelation))
 	
 	// Retracting the fact it contradicts makes the same assert succeed
@@ -127,7 +131,7 @@ void testAssertClosedRelation(void)
 	Atom notEven2 = CStringToTerm("! even 2");
 	Atom closedEven = CStringToTerm("closed-relation [. even]");
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(even2), 0), ASSERT_OK)
-	Relation relation = RelationFromFact(FormulaGetView(even2));
+	TypedRelation relation = RelationFromFact(FormulaGetView(even2));
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedEven), 0), ASSERT_OK)
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedEven), 0), ASSERT_EXISTED)
 	ASSERT_TRUE(RelationIsClosed(FormulaGetForm(even2)))
@@ -202,7 +206,7 @@ void testAssertClosedRelationRejected(void)
 	// CLAUDE: The opposite relation is stored
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(notOdd3), 0), ASSERT_OK)
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedOdd), 0), ASSERT_NOT_CLOSABLE)
-	Relation notOddRelation = RelationFromFact(FormulaGetView(notOdd3));
+	TypedRelation notOddRelation = RelationFromFact(FormulaGetView(notOdd3));
 	RetractFact(FormulaGetView(notOdd3));
 	DropRelation(notOddRelation);
 
@@ -238,7 +242,7 @@ void testAssertContradictsDerivedFact(void)
 	FormulaView even3View = FormulaGetView(even3);
 	ASSERT_INT32_EQUAL(AssertFact(even3View, 0), ASSERT_CONTRADICTION)
 	// no relation was created
-	Relation evenRelation = RelationFromFact(even3View);
+	TypedRelation evenRelation = RelationFromFact(even3View);
 	ASSERT_FALSE(RelationExists(evenRelation))
 	ReleaseFormula(even3);
 
@@ -328,6 +332,302 @@ void testAssertFormulaIFactRule(void)
 
 
 /**
+ * CLAUDE: Retracting a rule removes it from the dictionary and invalidates the services
+ * compiled from it. The rule (! even x | ! odd x) makes (even 3) contradict (odd 3);
+ * see testAssertContradictsDerivedFact(). Once the rule is retracted, (even 3) can be asserted.
+ */
+void testRetractFormulaRule(void)
+{
+	Atom rule = CStringToClause("! even x | ! odd x");
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+
+	Atom odd3 = CStringToTerm("odd 3");
+	FormulaView odd3View = FormulaGetView(odd3);
+	ASSERT_INT32_EQUAL(AssertFact(odd3View, 0), ASSERT_OK)
+	Atom even3 = CStringToTerm("even 3");
+	FormulaView even3View = FormulaGetView(even3);
+	ASSERT_INT32_EQUAL(AssertFact(even3View, 0), ASSERT_CONTRADICTION)
+
+	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_OK)
+	ASSERT_FALSE(DictionaryContainsClause(rule))
+	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_NOT_FOUND)
+	ASSERT_INT32_EQUAL(AssertFact(even3View, 0), ASSERT_OK)
+
+	// a clause with other variable names is a different clause; see DictionaryAddClause()
+	Atom renamedRule = CStringToClause("! even y | ! odd y");
+	ASSERT_INT32_EQUAL(RetractFormula(renamedRule), RETRACT_NOT_FOUND)
+	ReleaseFormula(renamedRule);
+
+	ASSERT_INT32_EQUAL(RetractFormula(even3), RETRACT_OK)
+	DropRelation(RelationFromFact(even3View));
+	ReleaseFormula(even3);
+	ASSERT_INT32_EQUAL(RetractFormula(odd3), RETRACT_OK)
+	DropRelation(RelationFromFact(odd3View));
+	ReleaseFormula(odd3);
+	ReleaseFormula(rule);
+}
+
+
+/**
+ * CLAUDE: An ifact rule is retracted whatever its variable names, since the dictionary
+ * compares ifact rules by term form and generator position only.
+ */
+void testRetractFormulaIFactRule(void)
+{
+	Atom rule = CStringToTerm("circle * radius r");
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+
+	Atom renamedRule = CStringToTerm("circle * radius s");
+	ASSERT_INT32_EQUAL(RetractFormula(renamedRule), RETRACT_OK)
+	ASSERT_FALSE(DictionaryContainsIFactRule(rule))
+	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_NOT_FOUND)
+	ReleaseFormula(renamedRule);
+	ReleaseFormula(rule);
+
+	Atom invalidRule = CStringToTerm("circle * radius 5.0");
+	ASSERT_INT32_EQUAL(RetractFormula(invalidRule), RETRACT_INVALID_IFACT)
+	ReleaseFormula(invalidRule);
+}
+
+
+/**
+ * CLAUDE: A term with variables is neither a fact nor an ifact rule, and a conjunction
+ * is neither a fact nor a rule.
+ */
+void testRetractFormulaRejects(void)
+{
+	Atom termWithVariable = CStringToTerm("foo x bar 1");
+	ASSERT_INT32_EQUAL(RetractFormula(termWithVariable), RETRACT_TERM_VARIABLE)
+	ReleaseFormula(termWithVariable);
+
+	Atom conjunction = CStringToConjunction("foo x & bar x");
+	ASSERT_INT32_EQUAL(RetractFormula(conjunction), RETRACT_NOT_CLAUSE)
+	ReleaseFormula(conjunction);
+}
+
+
+/**
+ * CLAUDE: A user may retract a rule added by MathSetup(), or open a relation that
+ * MathSetup() closed. The test asserts both again, which leaves dictionary entries that
+ * MathShutdown() did not create. MathShutdown() must then still find and remove them.
+ */
+void testRetractMathRule(void)
+{
+	Atom rule = CStringToClause("+ x + y = z | ! + z - x = y");
+	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_OK)
+	ASSERT_FALSE(DictionaryContainsClause(rule))
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+	ReleaseFormula(rule);
+
+	Atom closedInteger = CStringToTerm("closed-relation [. integer]");
+	ASSERT_INT32_EQUAL(RetractFormula(closedInteger), RETRACT_OK)
+	Atom integer = CStringToTerm("integer 1");
+	ASSERT_FALSE(RelationIsClosed(FormulaGetForm(integer)))
+
+	ASSERT_INT32_EQUAL(AssertFormula(closedInteger), ASSERT_OK)
+	ASSERT_TRUE(RelationIsClosed(FormulaGetForm(integer)))
+	ReleaseFormula(integer);
+	ReleaseFormula(closedInteger);
+}
+
+
+/*
+ * CLAUDE: Run a query with UserQuery() and return the number of facts found.
+ * The query may be a term or a conjunction.
+ */
+static size32 countQueryFacts(char const * queryString)
+{
+	Atom query = CStringToFormula(queryString);
+	MixedTypeRelation * relation = UserQuery(FormulaGetView(query));
+	size32 nFacts = 0;
+	while(MixedTypeRelationNext(relation))
+		nFacts++;
+	FreeMixedTypeRelation(relation);
+	ReleaseFormula(query);
+	return nFacts;
+}
+
+
+/**
+ * CLAUDE: Asserting (circle "c" radius -3) compiles a query for (< -3 > 0) while checking for a
+ * contradiction, before the relation (circle radius) exists. The compiled service then has no
+ * part from the rule. Creating the relation must invalidate the service, so that the next query
+ * for (< -3 > 0) is compiled again from the rule; see InvalidateDependentServices().
+ */
+void testAssertFactAfterRule(void)
+{
+	Atom rule = CStringToClause("! circle c radius r | < r > 0");
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+	Atom circle = CStringToTerm("circle \"c\" radius -3");
+	ASSERT_INT32_EQUAL(AssertFormula(circle), ASSERT_OK)
+
+	// (< -3 > 0) is derived from the rule, and (< 5 > 0) is computed by the MACHINE service
+	ASSERT_UINT32_EQUAL(countQueryFacts("< -3 > 0"), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("< 5 > 0"), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("< -5 > 0"), 0)
+
+	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_OK)
+	ASSERT_UINT32_EQUAL(countQueryFacts("< -3 > 0"), 0)
+	TypedRelation circleRelation = RelationFromFact(FormulaGetView(circle));
+	RetractFact(FormulaGetView(circle));
+	DropRelation(circleRelation);
+	ReleaseFormula(circle);
+	ReleaseFormula(rule);
+}
+
+
+/*
+ * CLAUDE: Drop every relation of the form of the given term.
+ */
+static void dropFormRelations(char const * termString)
+{
+	Atom term = CStringToTerm(termString);
+	ResizingArray relations;
+	CreateResizingArray(&relations, sizeof(TypedRelation), 4);
+	RelationIterator iterator;
+	RelationRegistryIterate(FormulaGetForm(term), &iterator);
+	while(RelationIteratorNext(&iterator)) {
+		TypedRelation relation = RelationIteratorGet(&iterator);
+		ResizingArrayAppend(&relations, &relation);
+	}
+	RelationIteratorEnd(&iterator);
+	for(index32 i = 0; i < relations.nElements; i++)
+		DropRelation(*(TypedRelation *) ResizingArrayGetElement(&relations, i));
+	FreeResizingArray(&relations);
+	ReleaseFormula(term);
+}
+
+
+/**
+ * CLAUDE: The query (huge c) is compiled before the relation (circle radius) exists, so the
+ * rule for (big c) yields nothing, and (huge c) keeps no operator reading (big c). Creating
+ * the relation must still invalidate (huge c), which depends on (circle radius) through
+ * two rules; see InvalidateDependentServices().
+ */
+void testInvalidateDependentsOfNewRelation(void)
+{
+	Atom ifactRule = CStringToTerm("circle * radius r");
+	Atom bigRule = CStringToClause("big c | ! circle c radius r | ! < r > 10");
+	Atom hugeRule = CStringToClause("huge c | ! big c");
+	Atom hugeFact = CStringToTerm("huge \"x\"");
+	ASSERT_INT32_EQUAL(AssertFormula(ifactRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(hugeRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(hugeFact), ASSERT_OK)
+	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 1)
+
+	// The query creates the relation (circle radius) holding the ifact (circle @1 radius 20)
+	ASSERT_UINT32_EQUAL(countQueryFacts("circle c radius 20"), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 2)
+
+	ASSERT_INT32_EQUAL(RetractFormula(hugeRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(ifactRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(hugeFact), RETRACT_OK)
+	dropFormRelations("circle 1 radius 1");
+	dropFormRelations("huge 1");
+	ReleaseFormula(hugeFact);
+	ReleaseFormula(hugeRule);
+	ReleaseFormula(bigRule);
+	ReleaseFormula(ifactRule);
+}
+
+
+/**
+ * CLAUDE: The queries (huge c) and (huge c & small d) are compiled before any rule derives
+ * (big c), so the queries keep no operator reading (big c). Adding the rule for (big c)
+ * must still invalidate both queries; see InvalidateDependentServices().
+ */
+void testInvalidateDependentsOfNewRule(void)
+{
+	Atom smallFact = CStringToTerm("small \"y\"");
+	Atom hugeFact = CStringToTerm("huge \"x\"");
+	Atom hugeRule = CStringToClause("huge c | ! big c");
+	Atom bigRule = CStringToClause("big c | ! small c");
+	ASSERT_INT32_EQUAL(AssertFormula(smallFact), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(hugeFact), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(hugeRule), ASSERT_OK)
+	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("huge c & small d"), 1)
+
+	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
+	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 2)
+	ASSERT_UINT32_EQUAL(countQueryFacts("huge c & small d"), 2)
+
+	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(hugeRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(hugeFact), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(smallFact), RETRACT_OK)
+	dropFormRelations("huge 1");
+	dropFormRelations("small 1");
+	ReleaseFormula(bigRule);
+	ReleaseFormula(hugeRule);
+	ReleaseFormula(hugeFact);
+	ReleaseFormula(smallFact);
+}
+
+
+/**
+ * CLAUDE: With (big c) closed, (! big "z") is inferred while no rule derives (big "z"), and the
+ * rule (small c | big c) derives (small "z"). Adding a rule that derives (big "z") must
+ * invalidate (small "z"), which reads (! big c) through an INVERT operator.
+ */
+void testInvalidateDependentsOfClosedRelation(void)
+{
+	Atom closedBig = CStringToTerm("closed-relation [. big]");
+	Atom smallRule = CStringToClause("small c | big c");
+	Atom hugeFact = CStringToTerm("huge \"z\"");
+	Atom bigRule = CStringToClause("big c | ! huge c");
+	ASSERT_INT32_EQUAL(AssertFormula(closedBig), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(smallRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(hugeFact), ASSERT_OK)
+	ASSERT_UINT32_EQUAL(countQueryFacts("small \"z\""), 1)
+
+	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
+	ASSERT_UINT32_EQUAL(countQueryFacts("big \"z\""), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("small \"z\""), 0)
+
+	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(smallRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(closedBig), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(hugeFact), RETRACT_OK)
+	dropFormRelations("huge 1");
+	ReleaseFormula(bigRule);
+	ReleaseFormula(hugeFact);
+	ReleaseFormula(smallRule);
+	ReleaseFormula(closedBig);
+}
+
+
+/**
+ * CLAUDE: Compiling the conjunction (big c & circle d radius 20) compiles (big c) first, while
+ * the relation (circle radius) does not exist. The second term then creates the relation, so
+ * the conjunction must be compiled again to read (big @1); see compileQueryVariants().
+ */
+void testCompileAfterStoreCreated(void)
+{
+	Atom ifactRule = CStringToTerm("circle * radius r");
+	Atom bigRule = CStringToClause("big c | ! circle c radius r | ! < r > 10");
+	Atom bigFact = CStringToTerm("big \"x\"");
+	ASSERT_INT32_EQUAL(AssertFormula(ifactRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(bigFact), ASSERT_OK)
+
+	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 2)
+	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 2)
+
+	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(ifactRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(bigFact), RETRACT_OK)
+	dropFormRelations("circle 1 radius 1");
+	dropFormRelations("big 1");
+	ReleaseFormula(bigFact);
+	ReleaseFormula(bigRule);
+	ReleaseFormula(ifactRule);
+}
+
+
+/**
  * A formula that is neither a fact nor a rule is refused, and the result code says which
  * of the two it failed to be.
  */
@@ -363,8 +663,8 @@ void testAssertFormulaRejects(void)
  */
 void testCreateIFactList(void)
 {
-	Relation listLetter = GetListRelation(AT_LETTER);
-	Relation listLength = GetListLengthRelation();
+	TypedRelation listLetter = GetListRelation(AT_LETTER);
+	TypedRelation listLength = GetListLengthRelation();
 	size32 listLetterNRows = RelationNRows(listLetter);
 	size32 listLengthNRows = RelationNRows(listLength);
 
@@ -413,12 +713,12 @@ void testCreateIFactNewRelations(void)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
 
 	Atom colourNameTerm = CStringToTerm("colour * name \"red\"");
-	Relation colourNameRelation = RelationFromFact(FormulaGetView(colourNameTerm));
+	TypedRelation colourNameRelation = RelationFromFact(FormulaGetView(colourNameTerm));
 	ReleaseFormula(colourNameTerm);
 	ASSERT_INT32_EQUAL(RelationNRows(colourNameRelation), 1)
 
 	Atom colourCodeTerm = CStringToTerm("colour * code 4");
-	Relation colourCodeRelation = RelationFromFact(FormulaGetView(colourCodeTerm));
+	TypedRelation colourCodeRelation = RelationFromFact(FormulaGetView(colourCodeTerm));
 	ReleaseFormula(colourCodeTerm);
 	ASSERT_INT32_EQUAL(RelationNRows(colourCodeRelation), 1)
 
@@ -442,7 +742,7 @@ void testCreateIFactTwoIdColumns(void)
 	byte atomTypes[2] = {AT_ID, AT_ID};
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, 2);
 	
-	Relation relation = {.form = FormulaGetForm(sameFormTerm), .typeSignature = typeSignature};
+	TypedRelation relation = {.form = FormulaGetForm(sameFormTerm), .typeSignature = typeSignature};
 	ASSERT_FALSE(RelationExists(relation))
 
 	Atom formula = CStringToConjunction("pair * other \"a\" & pair \"a\" other *");
@@ -470,7 +770,7 @@ void testCreateIFactTwoIdColumns(void)
  */
 void testCreateIFactExisting(void)
 {
-	Relation listLength = GetListLengthRelation();
+	TypedRelation listLength = GetListLengthRelation();
 	size32 listLengthNRows = RelationNRows(listLength);
 
 	Atom formula = CStringToConjunction("list * position 1 element 'C & list * length 1");
@@ -495,7 +795,7 @@ void testCreateIFactExisting(void)
  */
 void testCreateIFactDefiningFactsProtected(void)
 {
-	Relation listLength = GetListLengthRelation();
+	TypedRelation listLength = GetListLengthRelation();
 	size32 listLengthNRows = RelationNRows(listLength);
 
 	Atom formula = CStringToConjunction("list * position 1 element 'D & list * length 1");
@@ -552,7 +852,7 @@ void testCreateIFactTerm(void)
 		atomTypes[i] = SameTypedAtoms(actor, generatorAtom) ? AT_ID : actor.type;
 	}
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, nColumns);
-	Relation relation = {.form = FormulaGetForm(term), .typeSignature = typeSignature};
+	TypedRelation relation = {.form = FormulaGetForm(term), .typeSignature = typeSignature};
 	ASSERT_FALSE(RelationExists(relation))
 
 	Atom ifact = CreateIFact(FormulaGetView(term));
@@ -593,7 +893,7 @@ void testCreateIFactIdColumnNotFirst(void)
 	Atom ifact = CreateIFact(termView);
 	ASSERT_TRUE(ifact.hash != 0)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(ifact), 1)
-	Relation relation = RelationFromFact(termView);
+	TypedRelation relation = RelationFromFact(termView);
 	ASSERT_TRUE(RelationExists(relation))
 
 	// Calling again retrieves the ID atom already created
@@ -629,7 +929,7 @@ void testCreateIFactClause(void)
 	Atom termIFact = CreateIFact(FormulaGetView(term));
 	ASSERT_TRUE(SameAtoms(termIFact, clauseIFact))
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(clauseIFact), 2)
-	Relation relation = RelationFromFact(FormulaGetView(term));
+	TypedRelation relation = RelationFromFact(FormulaGetView(term));
 	ASSERT_INT32_EQUAL(RelationNRows(relation), 1)
 
 	IFactRelease(termIFact);
@@ -676,65 +976,136 @@ void testCreateIFactRejects(void)
 }
 
 
+/* CLAUDE: Assert that the knowledgebase holds the fact written by the C string, then retract it. */
+static void retractLoadedFact(char const * factString)
+{
+	Atom fact = CStringToTerm(factString);
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_EXISTED)
+	RetractFact(FormulaGetView(fact));
+	ReleaseFormula(fact);
+}
+
+
+/* CLAUDE: Drop the relation holding the fact written by the C string. */
+static void dropRelationOf(char const * factString)
+{
+	Atom fact = CStringToTerm(factString);
+	DropRelation(RelationFromFact(FormulaGetView(fact)));
+	ReleaseFormula(fact);
+}
+
+
 /**
- * CLAUDE: LoadRelationText() asserts one fact per line, with the actors of each line
- * in the order of the role names of the first line.
+ * CLAUDE: LoadRelationText() asserts one fact per line. Each role of the term form reads
+ * the column named by the role in the first line.
  */
 void testLoadRelationText(void)
 {
+	index32 errorIndex;
+	Atom parentChild = ParseTermForm("parent child", 0, &errorIndex);
 	LoadReport report;
-	// CLAUDE: the role names are not listed in the order of the form, (child parent)
-	LoadRelationText("parent child\n\"Al\" \"Bob\"\n\n\"Al\" \"Cy\"", &report);
+
+	// CLAUDE: columns separated by spaces, and a blank line that is skipped
+	LoadRelationText("parent child\n\"Al\" \"Bob\"\n\n\"Al\" \"Cy\"", parentChild, &report);
 	ASSERT_INT32_EQUAL(report.result, LOAD_OK)
 	ASSERT_UINT32_EQUAL(report.lineNumber, 4)
 	ASSERT_UINT32_EQUAL(report.nAsserted, 2)
 	ASSERT_UINT32_EQUAL(report.nExisting, 0)
-	IFactRelease(report.form);
 
-	Atom fact1 = CStringToTerm("parent \"Al\" child \"Bob\"");
-	Atom fact2 = CStringToTerm("parent \"Al\" child \"Cy\"");
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact1), 0), ASSERT_EXISTED)
-	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact2), 0), ASSERT_EXISTED)
+	// CLAUDE: a byte order mark, "\r\n" line endings, spaces around the columns, and an
+	// unused column with an empty value. The columns are not in the order of the form.
+	LoadRelationText(
+		"\xEF\xBB\xBF" "child, age ,parent\r\n\"Bob\", 3 ,\"Al\"\r\n\"Dan\",,\"Al\"\r\n",
+		parentChild, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_OK)
+	ASSERT_UINT32_EQUAL(report.nAsserted, 1)
+	ASSERT_UINT32_EQUAL(report.nExisting, 1)
 
-	// CLAUDE: tabs and "\r\n" line endings are accepted
-	LoadRelationText("child\tparent\r\n\"Bob\"\t\"Al\"\r\n", &report);
+	// CLAUDE: a line with an empty column read by a role is skipped
+	LoadRelationText("parent,child\n\"Al\",\n,\"Eve\"\n", parentChild, &report);
 	ASSERT_INT32_EQUAL(report.result, LOAD_OK)
 	ASSERT_UINT32_EQUAL(report.nAsserted, 0)
-	ASSERT_UINT32_EQUAL(report.nExisting, 1)
-	IFactRelease(report.form);
+	ASSERT_UINT32_EQUAL(report.nSkipped, 2)
 
-	LoadRelationText("parent child\n\"Al\" x\n", &report);
+	// CLAUDE: columns separated by tabs
+	LoadRelationText("parent\tchild\n\"Al\"\t\"Fay\"\n", parentChild, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_OK)
+	ASSERT_UINT32_EQUAL(report.nAsserted, 1)
+
+	LoadRelationText("parent,child\n\"Al\"\n", parentChild, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_WRONG_COLUMN_COUNT)
+	ASSERT_UINT32_EQUAL(report.lineNumber, 2)
+	ASSERT_UINT32_EQUAL(report.nColumns, 1)
+	ASSERT_UINT32_EQUAL(report.nHeaderColumns, 2)
+
+	LoadRelationText("parent,child\n\"Al\",x\n", parentChild, &report);
 	ASSERT_INT32_EQUAL(report.result, LOAD_SYNTAX_ERROR)
 	ASSERT_UINT32_EQUAL(report.lineNumber, 2)
 	ASSERT_UINT32_EQUAL(report.errorIndex, 5)
-	IFactRelease(report.form);
 
-	LoadRelationText("parent child\n\"Al\"\n", &report);
-	ASSERT_INT32_EQUAL(report.result, LOAD_WRONG_ARITY)
-	ASSERT_UINT32_EQUAL(report.lineNumber, 2)
-	ASSERT_UINT32_EQUAL(report.nActors, 1)
-	IFactRelease(report.form);
-
-	LoadRelationText("\nparent 1\n", &report);
+	// CLAUDE: a column holds one actor only
+	LoadRelationText("parent,child\n\"Al\",\"Bo\" \"Cy\"\n", parentChild, &report);
 	ASSERT_INT32_EQUAL(report.result, LOAD_SYNTAX_ERROR)
-	ASSERT_UINT32_EQUAL(report.lineNumber, 2)
+	ASSERT_UINT32_EQUAL(report.errorIndex, 10)
+
+	// CLAUDE: a column of the first line must be a name
+	LoadRelationText("parent,1x\n", parentChild, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_SYNTAX_ERROR)
+	ASSERT_UINT32_EQUAL(report.lineNumber, 1)
 	ASSERT_UINT32_EQUAL(report.errorIndex, 7)
-	ASSERT_UINT64_EQUAL(report.form.hash, 0)
 
-	LoadRelationText("\n \n", &report);
-	ASSERT_INT32_EQUAL(report.result, LOAD_NO_FORM)
+	// CLAUDE: the first line names the columns, and may not be blank
+	LoadRelationText("\nparent,child\n", parentChild, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_NO_HEADER)
+	ASSERT_UINT32_EQUAL(report.lineNumber, 1)
+	LoadRelationText("", parentChild, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_NO_HEADER)
 
-	LoadRelationText("! parent child\n\"Al\" \"Bob\"\n", &report);
+	Atom parentSibling = ParseTermForm("parent sibling", 0, &errorIndex);
+	LoadRelationText("parent,child\n", parentSibling, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_MISSING_COLUMN)
+	Atom sibling = CreateNameFromCString("sibling");
+	ASSERT_TRUE(SameAtoms(report.missingRole, sibling))
+	NameRelease(sibling);
+	IFactRelease(parentSibling);
+
+	Atom notParentChild = ParseTermForm("! parent child", 0, &errorIndex);
+	LoadRelationText("parent,child\n\"Al\",\"Bob\"\n", notParentChild, &report);
 	ASSERT_INT32_EQUAL(report.result, LOAD_ASSERT_FAILED)
 	ASSERT_INT32_EQUAL(report.assertResult, ASSERT_CONTRADICTION)
-	IFactRelease(report.form);
+	IFactRelease(notParentChild);
 
-	Relation relation = RelationFromFact(FormulaGetView(fact1));
-	RetractFact(FormulaGetView(fact1));
-	RetractFact(FormulaGetView(fact2));
-	DropRelation(relation);
-	ReleaseFormula(fact2);
-	ReleaseFormula(fact1);
+	retractLoadedFact("parent \"Al\" child \"Bob\"");
+	retractLoadedFact("parent \"Al\" child \"Cy\"");
+	retractLoadedFact("parent \"Al\" child \"Dan\"");
+	retractLoadedFact("parent \"Al\" child \"Fay\"");
+	dropRelationOf("parent \"Al\" child \"Bob\"");
+	IFactRelease(parentChild);
+}
+
+
+/**
+ * CLAUDE: A role name written twice in the term form reads two columns of that name.
+ */
+void testLoadRepeatedRole(void)
+{
+	index32 errorIndex;
+	Atom spouseSpouse = ParseTermForm("spouse spouse", 0, &errorIndex);
+	LoadReport report;
+
+	LoadRelationText("spouse,age,spouse\n\"Al\",3,\"Bea\"\n", spouseSpouse, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_OK)
+	ASSERT_UINT32_EQUAL(report.nAsserted, 1)
+
+	LoadRelationText("spouse,age\n", spouseSpouse, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_MISSING_COLUMN)
+	Atom spouse = CreateNameFromCString("spouse");
+	ASSERT_TRUE(SameAtoms(report.missingRole, spouse))
+	NameRelease(spouse);
+
+	retractLoadedFact("spouse \"Al\" spouse \"Bea\"");
+	dropRelationOf("spouse \"Al\" spouse \"Bea\"");
+	IFactRelease(spouseSpouse);
 }
 
 
@@ -754,6 +1125,14 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertFormulaRule);
 	ExecuteTest(testAssertFormulaIFactRule);
 	ExecuteTest(testAssertFormulaRejects);
+	ExecuteTest(testRetractFormulaRule);
+	ExecuteTest(testRetractFormulaIFactRule);
+	ExecuteTest(testRetractFormulaRejects);
+	ExecuteTest(testAssertFactAfterRule);
+	ExecuteTest(testInvalidateDependentsOfNewRelation);
+	ExecuteTest(testInvalidateDependentsOfNewRule);
+	ExecuteTest(testInvalidateDependentsOfClosedRelation);
+	ExecuteTest(testCompileAfterStoreCreated);
 	ExecuteTest(testCreateIFactTerm);
 	ExecuteTest(testCreateIFactIdColumnNotFirst);
 	ExecuteTest(testCreateIFactClause);
@@ -764,6 +1143,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCreateIFactDefiningFactsProtected);
 	ExecuteTest(testCreateIFactRejects);
 	ExecuteTest(testLoadRelationText);
+	ExecuteTest(testLoadRepeatedRole);
+	ExecuteTest(testRetractMathRule);
 
 	UnloadLibraries();
 	KernelShutdown();

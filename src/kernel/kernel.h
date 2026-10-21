@@ -2,7 +2,7 @@
  * The kernel provides the essential "core" relation tables and services
  */
 
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/operator.h"
 #include "kernel/TupleStore.h"
 #include "memory/paging.h"
@@ -131,7 +131,7 @@ void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
  */
 Atom GetCoreRoleName(index32 roleId);
 
-Relation GetCoreRelation(index32 relationId);
+TypedRelation GetCoreRelation(index32 relationId);
 
 TupleStore * GetCoreTupleStore(index32 relationId);
 

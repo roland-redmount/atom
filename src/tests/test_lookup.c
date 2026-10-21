@@ -2,7 +2,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/lookup.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "lang/name.h"
 #include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
@@ -17,7 +17,7 @@ static struct {
 	index8 nodeIndex;
 	index8 weightIndex;
 	Atom termForm;
-	Relation relation;
+	TypedRelation relation;
 } relationFixture;
 
 
@@ -35,7 +35,7 @@ static void createRelationFixture(void)
 	atomTypes[relationFixture.nodeIndex] = AT_ID;
 	atomTypes[relationFixture.weightIndex] = AT_INT;
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, 2);
-	relationFixture.relation = (Relation) {
+	relationFixture.relation = (TypedRelation) {
 		.form = relationFixture.termForm, .typeSignature = typeSignature};
 	AcquireRelation(relationFixture.relation);
 

@@ -9,7 +9,7 @@
 #ifndef STRING_H
 #define STRING_H
 
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "lang/Atom.h"
 
 
@@ -35,7 +35,7 @@ Atom GetStringPredicateForm(void);
 
 Atom GetStringTermForm(void);
 
-Relation GetStringRelation(void);
+TypedRelation GetStringRelation(void);
 
 Atom CreateString(char const * chars, size32 length);
 

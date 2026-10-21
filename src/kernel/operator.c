@@ -2,7 +2,7 @@
 #include "btree/btree.h"
 #include "kernel/ifact.h"
 #include "kernel/operator.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "kernel/TupleStore.h"
@@ -1941,13 +1941,13 @@ static void teardownOperator(Operator * op)
 }
 
 
-void AttachOperator(Operator * op, Relation signature)
+void AttachOperator(Operator * op, TypedRelation signature)
 {
 	ASSERT(IsNullRelation(op->relation))
 	op->relation = signature;
 
 #ifdef DEBUG
-	// If the Relation has a TupleStore with a defined index order, the new operator's
+	// If the TypedRelation has a TupleStore with a defined index order, the new operator's
 	// index order must match that of the TupleStore.
 	TupleStore * store = RelationGetTupleStore(signature);
 	if(store) {
@@ -1965,7 +1965,7 @@ void AttachOperator(Operator * op, Relation signature)
 void DetachOperator(Operator * op)
 {
 	ASSERT(!IsNullRelation(op->relation))
-	op->relation = (Relation) {0};
+	op->relation = (TypedRelation) {0};
 	CheckOperator(op);
 }
 
@@ -2282,7 +2282,9 @@ static void printOperatorRecursive(
 	for(index8 i = 0; i < 3 * depth; i++)
 		PrintChar(' ');
 
-	if((depth > 0) && !IsNullRelation(op->relation)) {
+	// CLAUDE: The operator of a replaced primitive service is printed as an operator, since the
+	// operator is a part of the replacing service; see ReplacePrimitiveService()
+	if((depth > 0) && !IsNullRelation(op->relation) && !OperatorIsReplaced(op)) {
 		// The operator is the head of another service; print its term form and end recursion
 		// CLAUDE: The service is printed as a formula, such as (+ #1< + 1 = #2>). A service
 		// repeating a parameter takes fewer arguments than the form has roles, and the

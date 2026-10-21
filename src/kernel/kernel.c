@@ -9,7 +9,7 @@
 #include "kernel/lookup.h"
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/TupleStore.h"
 #include "storage/RelationBTree.h"
@@ -169,7 +169,7 @@ typedef struct s_Kernel {
 	// in "kernel order" for form i.
 	index8 corePredicateRoleIndex[N_CORE_FORMS + 1][CORE_FORMS_MAX_ARITY];
 	// Corresponding core relations, tuple stores and services
-	Relation coreRelations[N_CORE_RELATIONS + 1];
+	TypedRelation coreRelations[N_CORE_RELATIONS + 1];
 	TupleStore * coreTupleStores[N_CORE_RELATIONS + 1];
 	Operator * coreOperators[N_CORE_SERVICES + 1];
 
@@ -345,7 +345,7 @@ static void createCoreRelation(uint32 relationId)
 	CoreFormSetByteArray(formId, coreRelationAtomTypes[relationId], atomTypes);
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, corePredicateArity[formId]);
 
-	kernel->coreRelations[relationId] = (Relation) {
+	kernel->coreRelations[relationId] = (TypedRelation) {
 		.form = kernel->coreTermForms[formId],
 		.typeSignature = typeSignature
 	};
@@ -359,7 +359,7 @@ static void createCoreRelation(uint32 relationId)
 }
 
 
-Relation GetCoreRelation(index32 relationId)
+TypedRelation GetCoreRelation(index32 relationId)
 {
 	return kernel->coreRelations[relationId];
 }

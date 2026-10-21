@@ -47,6 +47,19 @@ void ResizingArrayAppend(ResizingArray * array, const void * element)
 }
 
 
+void ResizingArrayRemoveElement(ResizingArray * array, index32 index)
+{
+	ASSERT(index < array->nElements)
+	index32 lastIndex = array->nElements - 1;
+	if(index != lastIndex) {
+		CopyMemory(ResizingArrayGetElement(array, lastIndex),
+			ResizingArrayGetElement(array, index), array->elementSize);
+	}
+	array->nElements--;
+	SetBufferSize(&(array->buffer), array->nElements * array->elementSize);
+}
+
+
 void ResizingArrayReset(ResizingArray * array)
 {
 	SetBufferSize(&(array->buffer), 0);

@@ -11,13 +11,12 @@
 /**
  * A FormulaBuilder accepts the tokens of any formula, and yields the simplest
  * formula that holds them: a term if the tokens contain no TOKEN_OR and no
- * TOKEN_AND, a clause if they contain TOKEN_OR, and a conjunction if they
- * contain TOKEN_AND. This is what a reflection [ ... ] parses to, since the
- * kind of formula inside the brackets is not known until the tokens have been read.
+ * TOKEN_AND, a clause if they contain TOKEN_OR ('|'), and a conjunction if they
+ * contain TOKEN_AND ('&'). A formula cannot include both TOKEN_OR and TOKEN_AND tokens.
  *
- * CLAUDE: A clause is a disjunction of terms and a conjunction is a conjunction
- * of terms, so the two cannot be nested. Mixing TOKEN_OR and TOKEN_AND in one
- * formula is rejected; the first of the two accepted fixes the kind of formula.
+ * A clause can also be written with a TOKEN_IMPLIED_BY ("<-") following the first term,
+ * for example "foo x <- bar x & baz x", which yields the clause (foo x | ! bar x | ! baz x).
+ * See FormulaBuilderPush().
  */
 typedef struct s_FormulaBuilder {
 	TermBuilder termBuilder;
@@ -47,8 +46,8 @@ bool FormulaBuilderIsValid(FormulaBuilder const * builder);
 bool FormulaBuilderFinish(FormulaBuilder * builder);
 
 /**
- * CLAUDE: Create the formula. Unless ordering is 0, the order in which the terms and
- * roles were pushed is written to ordering.
+ * Create the formula. The order in which the terms and roles were pushed
+ * is written to ordering, unless 0.
  */
 Atom FormulaBuilderCreateFormula(FormulaBuilder * builder, FormOrdering * ordering);
 
@@ -65,15 +64,10 @@ Atom CStringToFormula(char const * cString);
 
 /**
  * Parse a C string to a term, clause or conjunction, whichever it turns out to be,
- * without requiring the string to be valid syntax. A string that is not a formula is a
- * normal outcome here, unlike with CStringToFormula(): it yields the zero atom, whose
- * hash the caller tests, and the index of the character parsing failed at is written to
- * errorPosition. That index is the length of
- * the string when the string ends in the middle of a formula, which is also what an
- * empty string yields.
- *
- * CLAUDE: Unless ordering is 0, the order in which the terms and roles of the formula
- * were written is written to ordering; see FormOrdering.
+ * without requiring the string to be valid syntax. A string that cannot be parsed into
+ * a formula yields the zero atom, and the index into cString where parsing failed is
+ * written to errorPosition. If cString ended before the formula was complete,
+ * errorPosition is set to the length of cString.
  */
 Atom ParseFormula(char const * cString, FormOrdering * ordering, index32 * errorPosition);
 

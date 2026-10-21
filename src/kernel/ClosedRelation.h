@@ -6,7 +6,7 @@
  * because (even 3) does not hold.
  *
  * A closed relation is identified by its term form, so that every typed relation of the form
- * is closed, including one whose Relation has not been created. The term form of a closed relation
+ * is closed, including one whose TypedRelation has not been created. The term form of a closed relation
  * is stored in the relation (closed-relation f), as in the fact (closed-relation [. even]).
  * This is used by the compiler to generate an all-input service for the opposite relation.
  *
@@ -69,13 +69,13 @@ void OpenRelation(Atom form);
 bool RelationIsClosedForm(Atom form);
 
 /**
- * CLAUDE: Test whether the relation of the given form is either a closed relation,
- * or the opposite relation of a closed relation.
+ * Test whether the relation of the given form is either a closed relation,
+ * or the opposite (inferred) relation of a closed relation.
  */
 bool RelationIsClosed(Atom form);
 
 /**
- * CLAUDE: Test whether the relation of the given form is the opposite relation
+ * Test whether the relation of the given form is the opposite (inferred) relation
  * of a closed relation, whose tuples are inferred from the closed relation.
  */
 bool RelationIsClosedInferred(Atom form);

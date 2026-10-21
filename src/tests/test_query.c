@@ -2,7 +2,7 @@
 #include "compiler/compiler.h"
 #include "kernel/dictionary.h"
 #include "kernel/kernel.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/formula.h"
 #include "lang/name.h"
@@ -229,10 +229,10 @@ void testInvalidateServiceByNewRelation(void)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
 	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 1)
 
-	// Add a second Relation of the (prec succ) form, but with different type signature,
+	// Add a second TypedRelation of the (prec succ) form, but with different type signature,
 	// creating new primitive services not present during the compilation above.
 	// This should invalidate the compiled service, since it now depends on the new relation.
-	Relation intRelation = {
+	TypedRelation intRelation = {
 		.form = precSuccFixture.termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
 	};
@@ -288,7 +288,7 @@ void testInvalidateServiceByRule(void)
 	TeardownRelationFixture(&precSuccFixture);
 }
 
-size32 numberOfStaleServices(Relation relation)
+size32 numberOfStaleServices(TypedRelation relation)
 {
 	ServiceIterator iterator;
 	ServiceRegistryIterate(relation, &iterator);
@@ -311,7 +311,7 @@ void testInvalidateRelationByRule(void)
 {
 	// Create terminating fact
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
-	Relation relation = RelationFromFact(FormulaGetView(terminatingFact));
+	TypedRelation relation = RelationFromFact(FormulaGetView(terminatingFact));
 	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	Atom faculty = CreateNameFromCString("faculty");
@@ -400,15 +400,15 @@ void testStaleClearedAfterRuleRemoved(void)
  */
 void testStaleBodyTermUsesPrimitiveOnly(void)
 {
-	// Relation (alpha beta) storing one fact ("a" "b")
+	// TypedRelation (alpha beta) storing one fact ("a" "b")
 	Atom alphaBetaFact = CStringToTerm("alpha \"a\" beta \"b\"");
-	Relation alphaBetaRelation = RelationFromFact(FormulaGetView(alphaBetaFact));
+	TypedRelation alphaBetaRelation = RelationFromFact(FormulaGetView(alphaBetaFact));
 	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(alphaBetaFact)), 0);
 
-	// Relation (gamma delta) storing one fact ("c" "d")
+	// TypedRelation (gamma delta) storing one fact ("c" "d")
 	Atom gammaDeltaFact = CStringToTerm("gamma \"c\" delta \"d\"");
-	Relation gammaDeltaRelation = RelationFromFact(FormulaGetView(gammaDeltaFact));
+	TypedRelation gammaDeltaRelation = RelationFromFact(FormulaGetView(gammaDeltaFact));
 	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(gammaDeltaFact)), 0);
 
@@ -444,17 +444,17 @@ void testStaleBodyTermUsesPrimitiveOnly(void)
  */
 void testSelfJoinOverUnionRelation(void)
 {
-	// Relation (alpha beta) stores the edges (A, B) and (B, C)
+	// TypedRelation (alpha beta) stores the edges (A, B) and (B, C)
 	Atom edge1 = CStringToTerm("alpha 'A beta 'B");
-	Relation alphaBetaRelation = RelationFromFact(FormulaGetView(edge1));
+	TypedRelation alphaBetaRelation = RelationFromFact(FormulaGetView(edge1));
 	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(edge1)), 0);
 	Atom edge2 = CStringToTerm("alpha 'B beta 'C");
 	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(edge2)), 0);
 
-	// Relation (gamma delta) stores the edge (C, D)
+	// TypedRelation (gamma delta) stores the edge (C, D)
 	Atom edge3 = CStringToTerm("gamma 'C delta 'D");
-	Relation gammaDeltaRelation = RelationFromFact(FormulaGetView(edge3));
+	TypedRelation gammaDeltaRelation = RelationFromFact(FormulaGetView(edge3));
 	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(edge3)), 0);
 
@@ -501,7 +501,7 @@ void testStorePrimitiveStaleWhenRuleExists(void)
 {
 	// (gamma delta) stores the edge (C, D)
 	Atom gammaFact = CStringToTerm("gamma 'C delta 'D");
-	Relation gammaDeltaRelation = RelationFromFact(FormulaGetView(gammaFact));
+	TypedRelation gammaDeltaRelation = RelationFromFact(FormulaGetView(gammaFact));
 	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(gammaFact)), 0);
 
@@ -512,7 +512,7 @@ void testStorePrimitiveStaleWhenRuleExists(void)
 	// Creating the (alpha beta) store with the edge (A, B). Its primitives must be stale
 	// because the rule already derives the term form, although nothing was invalidated.
 	Atom alphaFact = CStringToTerm("alpha 'A beta 'B");
-	Relation alphaBetaRelation = RelationFromFact(FormulaGetView(alphaFact));
+	TypedRelation alphaBetaRelation = RelationFromFact(FormulaGetView(alphaFact));
 	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(alphaFact)), 0);
 	ASSERT_INT32_EQUAL(numberOfStaleServices(alphaBetaRelation), 3)
@@ -611,7 +611,7 @@ void testQueryConjunctionRule(void)
 void testFilterServiceOverReplacedPrimitive(void)
 {
 	Atom fact = CStringToTerm("sym \"a\" with \"b\"");
-	Relation relation = RelationFromFact(FormulaGetView(fact));
+	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
 	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
 	FormulaView clause = DictionaryAddClauseFromCString("sym x with y | ! sym y with x");
@@ -634,6 +634,38 @@ void testFilterServiceOverReplacedPrimitive(void)
 
 	// The recompiled FILTER service reads the replacing service
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples(secondColumnQuery), 1)
+
+	DictionaryRemoveClause(&clause);
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+	DropRelation(relation);
+	ReleaseFormula(fact);
+}
+
+
+/**
+ * CLAUDE: A compiled service that replaced a primitive service reads the operator of the
+ * primitive service. PrintService() prints the replaced operator as an operator, not as
+ * another service; see ReplacePrimitiveService().
+ */
+void testPrintServiceOverReplacedPrimitive(void)
+{
+	Atom fact = CStringToTerm("sym \"a\" with \"b\"");
+	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+	FormulaView clause = DictionaryAddClauseFromCString("sym x with y | ! sym y with x");
+
+	// The all-output query replaces the primitive service
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("sym x with y"), 2)
+	byte parameterIO[2] = {PARAMETER_OUT, PARAMETER_OUT};
+	Service service = {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 2)};
+	ServiceRecord const * record = ServiceGetRecord(service);
+	ASSERT_TRUE(record != 0)
+	ASSERT_TRUE(record->replacedOperator != 0)
+	ASSERT_TRUE(OperatorIsReplaced(record->replacedOperator))
+	ASSERT_FALSE(OperatorIsReplaced(record->op))
+	PrintService(service);
+	PrintChar('\n');
 
 	DictionaryRemoveClause(&clause);
 	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
@@ -680,6 +712,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testQueryConjunction);
 	ExecuteTest(testQueryConjunctionRule);
 	ExecuteTest(testFilterServiceOverReplacedPrimitive);
+	ExecuteTest(testPrintServiceOverReplacedPrimitive);
 	ExecuteTest(testQueryBootstrapRelations);
 
 	UnloadLibraries();

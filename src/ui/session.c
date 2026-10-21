@@ -2,19 +2,23 @@
  * A session answering the lines a front end reads. See ui/session.h.
  */
 
+#include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
 #include "kernel/ifact.h"
 #include "kernel/Parameter.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/Parameter.h"
 #include "lang/formula.h"
+#include "lang/name.h"
 #include "ui/assert.h"
 #include "ui/load.h"
 #include "lang/TermForm.h"
+#include "lang/Variable.h"
 #include "library/string.h"
 #include "parser/Characters.h"
 #include "parser/FormulaBuilder.h"
 #include "parser/StringBuffer.h"
+#include "parser/TermFormBuilder.h"
 #include "parser/Tokenizer.h"
 #include "platform.h"
 #include "ui/query.h"
@@ -31,22 +35,45 @@
 typedef struct s_IDExpansion {
 	index32 linePosition;
 	size32 inputLength;		// including the @ character
+	// CLAUDE: the length of the replacement in the expanded line; see expandIDNames()
+	size32 expandedLength;
 } IDExpansion;
+
+/*
+ * A NamedID maps a name entered by the user to an ID atom. The user enters the name
+ * as @name in queries and commands, and the session prints the ID atom as @name.
+ */
+typedef struct s_NamedID {
+	char * name;		// without the @ character
+	Atom id;
+} NamedID;
+
+/*
+ * A NewName is a @name in a query line that names no ID atom yet. The query line is
+ * expanded with the anonymous variable _ in place of the @name. The anonymous variable is
+ * the anonymousIndex-th anonymous variable of the query, counted in the order entered.
+ * executeQuery() binds the name to the ID atom found in place of that anonymous variable.
+ */
+typedef struct s_NewName {
+	char const * name;	// points to the char after the '@' in the line entered
+	size32 nameLength;
+	index32 anonymousIndex;
+} NewName;
 
 typedef struct s_SessionState {
 	/*
-	 * The session numbers each ID atom in the order received from queries, and prints the
-	 * ID atom as @number. The user may then refer to the same ID atom by entering @number
-	 * in actions and queries. The session holds a reference to each numbered ID atom,
-	 * so that the number stays valid for the rest of the session. The ID atom numbered n is the
-	 * element n - 1 of numberedIDs.
+	 * Each NamedID of the session. The session holds a reference to each named ID atom,
+	 * so that the name stays valid until the user removes it with :clear.
+	 * NOTE: the same ID atom may have more than one name.
 	 */
-	ResizingArray numberedIDs;
+	ResizingArray namedIDs;
 
 	// The line input expanded so that each ID atom number is replaced by the hash of the ID atom.
 	StringBuffer expandedLine;
 	// Each IDExpansion in idExpansions records one replacement, in the order of the line.
 	ResizingArray idExpansions;
+	// CLAUDE: Each NewName of the line, in the order of the line
+	ResizingArray newNames;
 } SessionState;
 
 /* Session state, persisted in STATE_KEY_SESSION. SessionExecuteLine() sets
@@ -58,8 +85,9 @@ static void initializeSession(void)
 {
 	sessionState = Allocate(sizeof(SessionState));
 	SetPersistentState(STATE_KEY_SESSION, sessionState);
-	CreateResizingArray(&sessionState->numberedIDs, sizeof(Atom), 16);
+	CreateResizingArray(&sessionState->namedIDs, sizeof(NamedID), 16);
 	CreateResizingArray(&sessionState->idExpansions, sizeof(IDExpansion), 4);
+	CreateResizingArray(&sessionState->newNames, sizeof(NewName), 4);
 	StringBufferInit(&sessionState->expandedLine);
 }
 
@@ -99,17 +127,24 @@ static void printHelp(void)
 	printLine("  + 2 + 3 = s    or    foo x bar y & foo y bar z");
 	printLine("to view every matching fact in the knowledgebase.");
 	printLine("Variables are single letters and _ is the anonymous variable.");
-	printLine("An ID atom is printed as @1, @2 and so on, and can be entered the same way.");
+	printLine("An ID atom is printed as @name once named. A query naming an unknown @name in place");
+	printLine("of an actor names the ID atom found there, if the query has a single result.");
 	PrintChar('\n');
 	printLine("Commands:");
 	printLine("  :assert <term>        Assert a fact. The term must not contain variables.");
 	printLine("  :assert <clause>      Assert a rule. The clause must have at least two terms");
 	printLine("                        and contain at least one variable.");
 	printLine("  :assert <term with *> Assert an ifact rule, such as (circle * radius r).");
+	printLine("  :clear @name          Remove the name @name, so that it can name another ID atom.");
 	printLine("  :inspect <formula>    Print the service(s) that the formula dispatches to");
-	printLine("  :load <file>          Assert the facts in a text file. The first line lists the");
-	printLine("                        role names, and each following line the actors of one fact.");
+	printLine("  :load <file> <role names> Assert facts of the term form with the given role names.");
+	printLine("                        The first line of the file names the columns, separated");
+	printLine("                        by commas or spaces. Each role reads the column of its name.");
 	printLine("  :retract <term>       Retract a fact. The term must not contain variables.");
+	printLine("  :retract <clause>     Retract a rule. The variable names must match the asserted rule.");
+	printLine("  :retract <term with *> Retract an ifact rule.");
+	printLine("  :rules <role names>   Print the rules containing a term form, such as (foo bar)");
+	printLine("                        or (! foo bar). Ifact rules are not printed.");
 	printLine("  :help                 Print this text.");
 	printLine("  :quit, ctrl-D         End the session.");
 	PrintChar('\n');
@@ -117,27 +152,72 @@ static void printHelp(void)
 
 
 /*
- * Return the number of an ID atom, numbering the ID atom first if it has no number.
+ * Return the NamedID with the given name, or 0 if there is none.
  */
-static index32 numberID(Atom id)
+static NamedID * findNamedIDByName(char const * name, size32 length)
 {
-	for(index32 i = 0; i < sessionState->numberedIDs.nElements; i++) {
-		Atom const * numberedID = ResizingArrayGetElement(&sessionState->numberedIDs, i);
-		if(SameAtoms(*numberedID, id))
-			return i + 1;
+	for(index32 i = 0; i < sessionState->namedIDs.nElements; i++) {
+		NamedID * namedID = ResizingArrayGetElement(&sessionState->namedIDs, i);
+		if((CStringLength(namedID->name) == length) && (CompareMemory(namedID->name, name, length) == 0))
+			return namedID;
 	}
-	IFactAcquire(id);
-	ResizingArrayAppend(&sessionState->numberedIDs, &id);
-	return sessionState->numberedIDs.nElements;
+	return 0;
 }
 
 
 /*
- * Print an ID atom as @ and its number; see IFactSetPrinter().
+ * Return the first NamedID of an ID atom, or 0 if the ID atom has no name.
  */
-static void printNumberedID(Atom id)
+static NamedID * findNamedIDByID(Atom id)
 {
-	PrintF("@%u", numberID(id));
+	for(index32 i = 0; i < sessionState->namedIDs.nElements; i++) {
+		NamedID * namedID = ResizingArrayGetElement(&sessionState->namedIDs, i);
+		if(SameAtoms(namedID->id, id))
+			return namedID;
+	}
+	return 0;
+}
+
+
+/*
+ * Bind a name to an ID atom. The name must not be bound to an ID atom already.
+ */
+static void addNamedID(char const * name, size32 length, Atom id)
+{
+	ASSERT(!findNamedIDByName(name, length))
+	NamedID namedID = {
+		.name = Allocate(length + 1),
+		.id = id,
+	};
+	CopyMemory(name, namedID.name, length);
+	namedID.name[length] = 0;
+	IFactAcquire(id);
+	ResizingArrayAppend(&sessionState->namedIDs, &namedID);
+}
+
+
+/*
+ * Print an ID atom as @name. Returns false, having printed nothing, if the
+ * ID atom has no name; see IFactSetPrinter().
+ */
+static bool printNamedID(Atom id)
+{
+	NamedID const * namedID = findNamedIDByID(id);
+	if(!namedID)
+		return false;
+	PrintChar('@');
+	PrintCString(namedID->name);
+	return true;
+}
+
+
+/*
+ * Print a name entered by the user, with the @ character.
+ */
+static void printEnteredName(char const * name, size32 length)
+{
+	PrintChar('@');
+	PrintCharString(name, length);
 }
 
 
@@ -154,9 +234,9 @@ static index32 findLinePosition(index32 expandedPosition)
 		index32 expandedStart = expansion->linePosition + growth;
 		if(expandedPosition < expandedStart)
 			break;
-		if(expandedPosition < expandedStart + (1 + ID_HASH_LENGTH))
+		if(expandedPosition < expandedStart + expansion->expandedLength)
 			return expansion->linePosition;
-		growth += (1 + ID_HASH_LENGTH) - expansion->inputLength;
+		growth += expansion->expandedLength - expansion->inputLength;
 	}
 	return expandedPosition - growth;
 }
@@ -179,33 +259,74 @@ static void printParseError(index32 errorPosition)
 
 
 /*
- *  Point at an invalid ID atom in the input line, like printParseError() does.
+ * CLAUDE: Point at the character of the line entered where a @name went wrong, like
+ * printParseError() does, and print the message after the caret.
  */
-static void printUnknownIDNumber(index32 linePosition)
+static void printNameError(index32 linePosition, char const * message)
 {
 	SessionPrintMargin();
 	for(index32 i = 0; i < linePosition; i++)
 		PrintChar(' ');
-	PrintCString("^ no ID atom has this number\n");
+	PrintCString("^ ");
+	PrintCString(message);
+	PrintChar('\n');
 }
 
 
 /*
- * Copy an input line to expandedLine, replacing each user ID number by the full hash of
- * the ID atom, written as @ followed by ID_HASH_LENGTH hex digits; see TOKEN_ID. An ID atom number
- * is @ and a decimal number, at the start of a word and outside of a string. Other text is
- * copied as is, and left for ParseFormula() to judge. Returns false, having printed an
- * error, if an ID atom number names no numbered ID atom.
+ * CLAUDE: Return the NewName of the line with the given name, or 0 if there is none.
  */
-static bool expandIDNumbers(char const * line)
+static NewName const * findNewName(char const * name, size32 length)
+{
+	for(index32 i = 0; i < sessionState->newNames.nElements; i++) {
+		NewName const * newName = ResizingArrayGetElement(&sessionState->newNames, i);
+		if((newName->nameLength == length) && (CompareMemory(newName->name, name, length) == 0))
+			return newName;
+	}
+	return 0;
+}
+
+
+/*
+ * CLAUDE: Copy an input line to expandedLine, replacing each @name. A @name is @ at the start
+ * of a word and outside of a string, followed by a name; see IsNameInitialChar(). A @name of a
+ * NamedID is replaced by the hash of the ID atom, written as @ followed by ID_HASH_LENGTH hex
+ * digits; see TOKEN_ID. A hash entered by the user is copied as is.
+ *
+ * In a query line (isQuery), a @name of no NamedID is replaced by the anonymous variable _,
+ * and recorded as a NewName. Such a @name may occur only once in the line, and not inside
+ * [ ]. In any other line, a @name of no NamedID is an error.
+ *
+ * Other text is copied as is, and left for ParseFormula() to judge. Returns false, having
+ * printed an error, if a @name cannot be replaced.
+ */
+static bool expandIDNames(char const * line, bool isQuery)
 {
 	StringBufferReset(&sessionState->expandedLine);
 	ResizingArrayReset(&sessionState->idExpansions);
+	ResizingArrayReset(&sessionState->newNames);
 	bool isInString = false;
+	size32 bracketDepth = 0;
+	// CLAUDE: the number of anonymous variables outside [ ] so far; see NewName
+	index32 nAnonymous = 0;
 	index32 i = 0;
 	while(line[i]) {
 		if(line[i] == '"')
 			isInString = !isInString;
+		if(!isInString) {
+			// CLAUDE: a letter literal 'c may be any character, such as '" or '_
+			if((line[i] == '\'') && line[i + 1]) {
+				StringBufferPush(&sessionState->expandedLine, line[i++]);
+				StringBufferPush(&sessionState->expandedLine, line[i++]);
+				continue;
+			}
+			if(line[i] == '[')
+				bracketDepth++;
+			if((line[i] == ']') && (bracketDepth > 0))
+				bracketDepth--;
+			if((line[i] == '_') && (bracketDepth == 0))
+				nAnonymous++;
+		}
 
 		bool isWordStart = (i == 0) || !IsNameChar(line[i - 1]);
 		if((line[i] != '@') || isInString || !isWordStart) {
@@ -213,35 +334,55 @@ static bool expandIDNumbers(char const * line)
 			continue;
 		}
 
-		// a hash has ID_HASH_LENGTH digits, so fewer decimal digits make an ID atom number
-		size32 nDigits = 0;
-		bool isDecimal = true;
-		while(IsHexDigitChar(line[i + 1 + nDigits])) {
-			isDecimal = isDecimal && IsDigitChar(line[i + 1 + nDigits]);
-			nDigits++;
+		char const * name = line + i + 1;
+		size32 length = 0;
+		bool isHex = true;
+		while(IsNameChar(name[length])) {
+			isHex = isHex && IsHexDigitChar(name[length]);
+			length++;
 		}
-		if((nDigits == 0) || (nDigits >= ID_HASH_LENGTH) || !isDecimal) {
+		bool isHash = isHex && (length == ID_HASH_LENGTH);
+		if(isHash || !IsNameInitialChar(name[0])) {
 			StringBufferPush(&sessionState->expandedLine, line[i++]);
 			continue;
 		}
 
-		int64 number = StringToInt64(line + i + 1, nDigits);
-		if((number == 0) || (number > sessionState->numberedIDs.nElements)) {
-			printUnknownIDNumber(i);
-			return false;
-		}
-		Atom const * id = ResizingArrayGetElement(&sessionState->numberedIDs, number - 1);
-		char hashString[ID_HASH_LENGTH + 2];
-		FormatString(hashString, sizeof(hashString), "@%016llx", (unsigned long long) id->hash);
-		for(index32 j = 0; hashString[j]; j++)
-			StringBufferPush(&sessionState->expandedLine, hashString[j]);
-
 		IDExpansion expansion = {
 			.linePosition = i,
-			.inputLength = 1 + nDigits,
+			.inputLength = 1 + length,
 		};
+		NamedID const * namedID = findNamedIDByName(name, length);
+		if(namedID) {
+			char hashString[ID_HASH_LENGTH + 2];
+			FormatString(hashString, sizeof(hashString), "@%016llx", (unsigned long long) namedID->id.hash);
+			for(index32 j = 0; hashString[j]; j++)
+				StringBufferPush(&sessionState->expandedLine, hashString[j]);
+			expansion.expandedLength = 1 + ID_HASH_LENGTH;
+		}
+		else {
+			if(!isQuery) {
+				printNameError(i, "no ID atom has this name");
+				return false;
+			}
+			if(bracketDepth > 0) {
+				printNameError(i, "a new name cannot be inside [ ]");
+				return false;
+			}
+			if(findNewName(name, length)) {
+				printNameError(i, "a new name can occur only once in a query");
+				return false;
+			}
+			StringBufferPush(&sessionState->expandedLine, '_');
+			expansion.expandedLength = 1;
+			NewName newName = {
+				.name = name,
+				.nameLength = length,
+				.anonymousIndex = nAnonymous++,
+			};
+			ResizingArrayAppend(&sessionState->newNames, &newName);
+		}
 		ResizingArrayAppend(&sessionState->idExpansions, &expansion);
-		i += 1 + nDigits;
+		i += 1 + length;
 	}
 	StringBufferPush(&sessionState->expandedLine, 0);
 	return true;
@@ -273,6 +414,66 @@ static void printInspectSummary(size32 nServices)
 }
 
 
+/*
+ * CLAUDE: Write the index in the query actors of the anonymous variable of each NewName, in
+ * the order of newNames; see NewName.
+ */
+static void findNewNameActors(FormulaView queryView, FormOrdering const * ordering, index8 actorIndices[])
+{
+	size8 arity = FormArity(queryView.form);
+	index8 enteredActorIndices[arity];
+	FormOrderingGetEnteredActors(queryView.form, ordering, enteredActorIndices);
+	index32 nAnonymous = 0;
+	for(index8 k = 0; k < arity; k++) {
+		TypedAtom actor = TypedTupleGetElement(queryView.actors, enteredActorIndices[k]);
+		if((actor.type != AT_VARIABLE) || (actor.atom.hash != anonymousVariable.atom.hash))
+			continue;
+		for(index32 i = 0; i < sessionState->newNames.nElements; i++) {
+			NewName const * newName = ResizingArrayGetElement(&sessionState->newNames, i);
+			if(newName->anonymousIndex == nAnonymous)
+				actorIndices[i] = enteredActorIndices[k];
+		}
+		nAnonymous++;
+	}
+}
+
+
+/*
+ * CLAUDE: Bind each NewName to the ID atom at its actor index in the single result of a query.
+ */
+static void addNewNames(TypedTuple const * result, index8 const actorIndices[])
+{
+	for(index32 i = 0; i < sessionState->newNames.nElements; i++) {
+		NewName const * newName = ResizingArrayGetElement(&sessionState->newNames, i);
+		TypedAtom actor = TypedTupleGetElement(result, actorIndices[i]);
+		if(actor.type == AT_ID)
+			addNamedID(newName->name, newName->nameLength, actor.atom);
+	}
+}
+
+
+/*
+ * CLAUDE: Report each NewName that executeQuery() could not bind to an ID atom.
+ */
+static void printNewNamesNotAdded(size32 nTuples)
+{
+	for(index32 i = 0; i < sessionState->newNames.nElements; i++) {
+		NewName const * newName = ResizingArrayGetElement(&sessionState->newNames, i);
+		if(findNamedIDByName(newName->name, newName->nameLength))
+			continue;
+		SessionPrintMargin();
+		if(nTuples == 0)
+			PrintCString("No result, so ");
+		else if(nTuples > 1)
+			PrintF("%u results, so ", nTuples);
+		else
+			PrintCString("The result is not an ID atom, so ");
+		printEnteredName(newName->name, newName->nameLength);
+		PrintCString(" was not named.\n");
+	}
+}
+
+
 /**
  * Submit one query and print each resulting fact and the total number of facts.
  */
@@ -294,14 +495,36 @@ static void executeQuery(char const * line)
 
 	MixedTypeRelation * resultRelations = UserQuery(queryView);
 	size32 nTuples = 0;
-	while(MixedTypeRelationNext(resultRelations)) {
+	bool hasTuple = MixedTypeRelationNext(resultRelations);
+
+	// CLAUDE: A NewName is bound only if the query has a single result. Reading the next result
+	// overwrites the first, so the first result is copied.
+	bool hasNewNames = (sessionState->newNames.nElements > 0);
+	if(hasNewNames && hasTuple) {
+		index8 actorIndices[sessionState->newNames.nElements];
+		findNewNameActors(queryView, &ordering, actorIndices);
+		TypedTuple * firstResult = CreateTupleFromTuple(MixedTypeRelationPeekTuple(resultRelations));
+		hasTuple = MixedTypeRelationNext(resultRelations);
+		if(!hasTuple)
+			addNewNames(firstResult, actorIndices);
+		SessionPrintMargin();
+		PrintFormActorsAsFormula(queryView.form, firstResult, &ordering);
+		PrintChar('\n');
+		nTuples++;
+		FreeTypedTuple(firstResult);
+	}
+
+	while(hasTuple) {
 		SessionPrintMargin();
 		PrintFormActorsAsFormula(queryView.form, MixedTypeRelationPeekTuple(resultRelations), &ordering);
 		PrintChar('\n');
 		nTuples++;
+		hasTuple = MixedTypeRelationNext(resultRelations);
 	}
 	// the relation counts the services it read, so it is read out before being freed
 	printQueryResultSummary(resultRelations, nTuples);
+	if(hasNewNames)
+		printNewNamesNotAdded(nTuples);
 	FreeMixedTypeRelation(resultRelations);
 	ReleaseFormula(query);
 }
@@ -315,7 +538,7 @@ static void printAssertResult(int result)
 {
 	switch(result) {
 	case ASSERT_OK:
-		printLine("Asserted.");
+		printLine("Ok.");
 		break;
 
 	case ASSERT_EXISTED:
@@ -390,38 +613,62 @@ static void executeAssert(char const * formulaText, index32 linePosition)
 
 
 /*
- * CLAUDE: Retract one fact, which is the text following the :retract command. Only a term
- * with no variable is a fact; see RetractFact().
+ * Report the result of retracting a formula.
  */
-static void executeRetract(char const * factText, index32 linePosition)
+static void printRetractResult(int result)
 {
-	if(!*factText) {
-		printLine(":retract requires a term.");
-		return;
-	}
-
-	index32 errorPosition;
-	Atom fact = ParseFormula(factText, 0, &errorPosition);
-	if(!fact.hash) {
-		printParseError(linePosition + errorPosition);
-		return;
-	}
-
-	FormulaView factView = FormulaGetView(fact);
-	if(!IsTermForm(factView.form))
-		printLine("Only a fact can be retracted.");
-	else if(TypedTupleContainsVariable(factView.actors))
-		printLine("A fact may not contain a variable.");
-	else {
-		RetractFact(factView);
+	switch(result) {
+	case RETRACT_OK:
 		printLine("Ok.");
+		break;
+
+	case RETRACT_NOT_FOUND:
+		printLine("No such rule.");
+		break;
+
+	case RETRACT_TERM_VARIABLE:
+		printLine("A fact may not contain a variable.");
+		break;
+
+	case RETRACT_INVALID_IFACT:
+		printLine("An ifact rule must be a single term with one generator (*) and distinct variables.");
+		break;
+
+	case RETRACT_NOT_CLAUSE:
+		printLine("Only a fact or a rule can be retracted.");
+		break;
+
+	default:
+		ASSERT(false)
+		break;
 	}
-	ReleaseFormula(fact);
 }
 
 
 /*
- * CLAUDE: Report where a load stopped and why; see LoadReport.
+ * Retract a fact, a clause rule or an ifact rule.
+ */
+static void executeRetract(char const * formulaText, index32 linePosition)
+{
+	if(!*formulaText) {
+		printLine(":retract requires a term or a clause.");
+		return;
+	}
+
+	index32 errorPosition;
+	Atom formula = ParseFormula(formulaText, 0, &errorPosition);
+	if(!formula.hash) {
+		printParseError(linePosition + errorPosition);
+		return;
+	}
+
+	printRetractResult(RetractFormula(formula));
+	ReleaseFormula(formula);
+}
+
+
+/*
+ * Report where a load failed and why; see LoadReport.
  */
 static void printLoadError(char const * filePath, LoadReport const * report)
 {
@@ -430,8 +677,14 @@ static void printLoadError(char const * filePath, LoadReport const * report)
 		PrintF("Cannot read %s\n", filePath);
 		return;
 	}
-	if(report->result == LOAD_NO_FORM) {
-		PrintF("%s has no line of role names.\n", filePath);
+	if(report->result == LOAD_NO_HEADER) {
+		PrintF("%s has no first line of column names.\n", filePath);
+		return;
+	}
+	if(report->result == LOAD_MISSING_COLUMN) {
+		PrintF("The first line of %s has too few columns named ", filePath);
+		PrintName(report->missingRole);
+		PrintCString(".\n");
 		return;
 	}
 
@@ -442,12 +695,12 @@ static void printLoadError(char const * filePath, LoadReport const * report)
 		break;
 
 	case LOAD_SYNTAX_ERROR:
-		PrintF("syntax error at column %u.\n", report->errorIndex + 1);
+		PrintF("syntax error at character %u.\n", report->errorIndex + 1);
 		break;
 
-	case LOAD_WRONG_ARITY:
-		PrintF("%u actors, but the form has %u roles.\n",
-			report->nActors, TermFormArity(report->form));
+	case LOAD_WRONG_COLUMN_COUNT:
+		PrintF("%u columns, but the first line has %u.\n",
+			report->nColumns, report->nHeaderColumns);
 		break;
 
 	case LOAD_ASSERT_FAILED:
@@ -463,38 +716,53 @@ static void printLoadError(char const * filePath, LoadReport const * report)
 
 
 /*
- * CLAUDE: Assert the facts of the text file named by the text following the :load
+ * Assert the facts encoded in the text file named by the text following the :load
  * command; see LoadRelationFile().
  */
-static void executeLoad(char const * pathText)
+static void executeLoad(char const * argumentText, index32 linePosition)
 {
-	size32 pathLength = CStringLength(pathText);
-	while((pathLength > 0) && IsSpaceChar(pathText[pathLength - 1]))
-		pathLength--;
-	if(pathLength == 0) {
-		printLine(":load requires a file name.");
+	// CLAUDE: the file name is the first word, and the role names of the term form follow it
+	size32 pathLength = 0;
+	while(argumentText[pathLength] && !IsSpaceChar(argumentText[pathLength]))
+		pathLength++;
+	char const * termFormText = argumentText + pathLength;
+	while(IsSpaceChar(*termFormText))
+		termFormText++;
+	if((pathLength == 0) || !*termFormText) {
+		printLine(":load requires a file name and role names.");
 		return;
 	}
 	char filePath[pathLength + 1];
-	CopyMemory(pathText, filePath, pathLength);
+	CopyMemory(argumentText, filePath, pathLength);
 	filePath[pathLength] = 0;
 
+	index32 errorIndex;
+	Atom form = ParseTermForm(termFormText, 0, &errorIndex);
+	if(!form.hash) {
+		printParseError(linePosition + (termFormText - argumentText) + errorIndex);
+		return;
+	}
+
 	LoadReport report;
-	LoadRelationFile(filePath, &report);
+	LoadRelationFile(filePath, form, &report);
 	if(report.result != LOAD_OK)
 		printLoadError(filePath, &report);
 
-	if(report.form.hash) {
+	if((report.result == LOAD_OK) || (report.nAsserted + report.nExisting + report.nSkipped > 0)) {
 		SessionPrintMargin();
 		PrintF("Asserted %u facts of the form ", report.nAsserted);
-		PrintReflectedTermForm(report.form);
+		PrintReflectedTermForm(form);
 		PrintCString(".\n");
 		if(report.nExisting > 0) {
 			SessionPrintMargin();
 			PrintF("%u facts were already known.\n", report.nExisting);
 		}
-		IFactRelease(report.form);
+		if(report.nSkipped > 0) {
+			SessionPrintMargin();
+			PrintF("Skipped %u lines with missing values.\n", report.nSkipped);
+		}
 	}
+	IFactRelease(form);
 }
 
 
@@ -553,6 +821,82 @@ static void executeInspect(char const * queryText, index32 linePosition)
 
 
 /*
+ * Print each clause rule in the dictionary containing the term form written by the
+ * text following the :rules command, such as "foo bar" or "! foo bar". Ifact rules are not
+ * printed.
+ */
+static void executeRules(char const * termFormText, index32 linePosition)
+{
+	if(!*termFormText) {
+		printLine(":rules requires a term form, such as \"foo\" or \"!foo bar\".");
+		return;
+	}
+
+	index32 errorIndex;
+	Atom termForm = ParseTermForm(termFormText, 0, &errorIndex);
+	if(!termForm.hash) {
+		printParseError(linePosition + errorIndex);
+		return;
+	}
+
+	ResizingArray clauseForms;
+	CreateResizingArray(&clauseForms, sizeof(Atom), 4);
+	DictionaryFindClauseForms(termForm, &clauseForms);
+
+	size32 nRules = 0;
+	for(index32 i = 0; i < clauseForms.nElements; i++) {
+		Atom clauseForm = *(Atom const *) ResizingArrayGetElement(&clauseForms, i);
+		DictionaryIterator iterator;
+		DictionaryIterateClauses(clauseForm, &iterator);
+		while(DictionaryIteratorNext(&iterator)) {
+			SessionPrintMargin();
+			PrintFormActorsAsFormula(clauseForm, DictionaryIteratorPeekActors(&iterator), 0);
+			PrintChar('\n');
+			nRules++;
+		}
+		DictionaryIteratorEnd(&iterator);
+	}
+	FreeResizingArray(&clauseForms);
+
+	if(nRules == 0)
+		printLine("No rules found.");
+	IFactRelease(termForm);
+}
+
+
+/*
+ * Remove the name entered after the :clear command, so that the name can be bound
+ * to another ID atom. The session releases its reference to the ID atom.
+ */
+static void executeClear(char const * nameText, index32 linePosition)
+{
+	size32 length = 0;
+	if(nameText[0] == '@') {
+		while(IsNameChar(nameText[1 + length]))
+			length++;
+	}
+	char const * rest = nameText + 1 + length;
+	while(IsSpaceChar(*rest))
+		rest++;
+	if((length == 0) || *rest) {
+		printLine(":clear requires a name, such as @myCar.");
+		return;
+	}
+
+	NamedID * namedID = findNamedIDByName(nameText + 1, length);
+	if(!namedID) {
+		printNameError(linePosition, "no ID atom has this name");
+		return;
+	}
+	IFactRelease(namedID->id);
+	Free(namedID->name);
+	index32 index = namedID - (NamedID *) ResizingArrayGetMemory(&sessionState->namedIDs);
+	ResizingArrayRemoveElement(&sessionState->namedIDs, index);
+	printLine("Ok.");
+}
+
+
+/*
  * Match the command a line begins with. Returns the command's argument, which is whatever
  * follows the command word with the space between them dropped, or 0 if the line begins
  * with some other command. A command taking no argument is matched with an empty argument.
@@ -604,7 +948,13 @@ static int executeCommand(char const * line, char const * commandText)
 
 	char const * pathText = matchCommand(commandText, ":load");
 	if(pathText) {
-		executeLoad(pathText);
+		executeLoad(pathText, pathText - line);
+		return SESSION_CONTINUE;
+	}
+
+	char const * termFormText = matchCommand(commandText, ":rules");
+	if(termFormText) {
+		executeRules(termFormText, termFormText - line);
 		return SESSION_CONTINUE;
 	}
 
@@ -624,9 +974,21 @@ int SessionExecuteLine(char const * line)
 	sessionState = GetPersistentState(STATE_KEY_SESSION);
 	if(!sessionState)
 		initializeSession();
-	IFactSetPrinter(printNumberedID);
-	// Expand user @number syntax to full hashes
-	if(!expandIDNumbers(line))
+	IFactSetPrinter(printNamedID);
+
+	// :clear reads its @name as entered, so it is matched before the line is expanded
+	char const * enteredFirstCharacter = line;
+	while(IsSpaceChar(*enteredFirstCharacter))
+		enteredFirstCharacter++;
+	char const * clearText = matchCommand(enteredFirstCharacter, ":clear");
+	if(clearText) {
+		executeClear(clearText, clearText - line);
+		return SESSION_CONTINUE;
+	}
+
+	// Expand each @name; see expandIDNames()
+	bool isQuery = (*enteredFirstCharacter != ':');
+	if(!expandIDNames(line, isQuery))
 		return SESSION_CONTINUE;
 	// The rest of the session reads the expanded line
 	line = sessionState->expandedLine.buffer;

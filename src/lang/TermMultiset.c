@@ -4,7 +4,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 
 
 Atom CreateTermMultiset(Atom const termForms[], size8 nTermForms, index32 relationId)

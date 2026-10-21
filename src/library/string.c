@@ -16,7 +16,7 @@ typedef struct s_StringLibrary {
 	Atom stringRoleName;
 	Atom stringPredicateForm;
 	Atom stringTermForm;
-	Relation stringRelation;
+	TypedRelation stringRelation;
 	TupleStore * stringTupleStore;
 	Operator * stringOperator;
 } StringLibrary;
@@ -43,7 +43,7 @@ Atom GetStringTermForm(void)
 }
 
 
-Relation GetStringRelation(void)
+TypedRelation GetStringRelation(void)
 {
 	return stringLibrary->stringRelation;
 }
@@ -130,7 +130,7 @@ void StringSetup(void)
 	TypeSignature typeSignature = {
 		.atomTypes = {AT_ID}
 	};
-	stringLibrary->stringRelation = (Relation) {.form = stringLibrary->stringTermForm, .typeSignature = typeSignature};
+	stringLibrary->stringRelation = (TypedRelation) {.form = stringLibrary->stringTermForm, .typeSignature = typeSignature};
 	stringLibrary->stringTupleStore = CreateTupleStore(stringLibrary->stringRelation, GetStorageProvider(PROVIDER_BTREE), 1, 0);
 	IFactRelease(stringLibrary->stringTermForm);
 

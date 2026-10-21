@@ -41,6 +41,14 @@ void testResizingArray(void)
 		"abcdefghijklmnopqrst",
 		nStrings * stringLength 
 	)
+
+	// CLAUDE: the last element takes the place of an element removed, and an element
+	// appended after a removal follows the elements left
+	ResizingArrayRemoveElement(&array, 1);
+	ResizingArrayRemoveElement(&array, 2);
+	ResizingArrayAppend(&array, strings[1]);
+	ASSERT_UINT32_EQUAL(array.nElements, 3)
+	ASSERT_MEMORY_EQUAL(ResizingArrayGetMemory(&array), "abcdepqrstfghij", 3 * stringLength)
 	FreeResizingArray(&array);
 }
 

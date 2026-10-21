@@ -17,7 +17,7 @@
 #define COMPILE_STACK_H
 
 #include "kernel/dispatch.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "lang/formula.h"
 
 
@@ -26,6 +26,9 @@
 typedef struct s_CompileStack {
 	ParameterizedQuery queries[MAX_COMPILE_STACK_DEPTH];
 	size8 depth;
+	// CLAUDE: The number of TupleStores created by setupIFactRuleStore() during the compilation;
+	// see compileQueryVariants()
+	size32 nStoresCreated;
 } CompileStack;
 
 

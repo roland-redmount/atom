@@ -7,7 +7,7 @@
 #include "kernel/ifact.h"
 #include "kernel/letter.h"
 #include "library/library.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "library/string.h"
 #include "kernel/tuple.h"
@@ -44,11 +44,11 @@ static void setupBinaryRelationIndexColumns(
 /*
  * CLAUDE: Create a relation with a B-tree in identity index order, holding the given fact.
  */
-static Relation createStoredRelation(Atom fact)
+static TypedRelation createStoredRelation(Atom fact)
 {
 	FormulaView view = FormulaGetView(fact);
 	size8 arity = view.actors->nAtoms;
-	Relation relation = RelationFromFact(view);
+	TypedRelation relation = RelationFromFact(view);
 	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), arity, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(view.actors), 0);
 	return relation;
@@ -58,7 +58,7 @@ static Relation createStoredRelation(Atom fact)
 /*
  * CLAUDE: Remove the given fact and drop its relation; see createStoredRelation().
  */
-static void dropStoredRelation(Relation relation, Atom fact)
+static void dropStoredRelation(TypedRelation relation, Atom fact)
 {
 	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
 	DropRelation(relation);
@@ -363,7 +363,7 @@ void testCompileHeadVariableJoiningQueryParameters(void)
 void testCompileFilterAsRecursiveBaseCase(void)
 {
 	Atom fact = CStringToTerm("quantity \"x\" value 20.0 unit \"Celsius\"");
-	Relation relation = createStoredRelation(fact);
+	TypedRelation relation = createStoredRelation(fact);
 	FormulaView clause = DictionaryAddClauseFromCString(
 		"quantity t value k unit \"Kelvin\" | ! + c + 273.15 = k | ! quantity t value c unit \"Celsius\"");
 	size32 nCompiledBefore = NumberOfCompiledServices();
@@ -400,7 +400,7 @@ void testCompileFilterAsRecursiveBaseCase(void)
 void testCompileFilterVariantAfterFailedRule(void)
 {
 	Atom fact = CStringToTerm("quantity \"x\" value 20 unit \"Celsius\"");
-	Relation relation = createStoredRelation(fact);
+	TypedRelation relation = createStoredRelation(fact);
 	FormulaView clause = DictionaryAddClauseFromCString(
 		"quantity t value k unit \"Kelvin\" | ! + c + 273.15 = k | ! quantity t value c unit \"Celsius\"");
 	size32 nCompiledBefore = NumberOfCompiledServices();
@@ -435,7 +435,7 @@ void testCompileFilterVariantAfterFailedRule(void)
 static enum OperatorType compileKelvinFromOffset(bool withCycle)
 {
 	Atom fact = CStringToTerm("quantity \"x\" value 30.0 unit \"Offset\"");
-	Relation relation = createStoredRelation(fact);
+	TypedRelation relation = createStoredRelation(fact);
 	FormulaView kelvinClause = DictionaryAddClauseFromCString(
 		"quantity t value k unit \"Kelvin\" | ! + c + 273.15 = k | ! quantity t value c unit \"Celsius\"");
 	FormulaView celsiusClause = DictionaryAddClauseFromCString(
@@ -498,10 +498,10 @@ void testCompileFilterAndRule(void)
 {
 	// Stored fact (quantity "x" value 20.0 unit "Celsius")
 	Atom tempFact = CStringToTerm("quantity \"x\" value 20.0 unit \"Celsius\"");
-	Relation tempRelation = createStoredRelation(tempFact);
+	TypedRelation tempRelation = createStoredRelation(tempFact);
 	// A rule computing facts of the same form
 	Atom kelvinFact = CStringToTerm("kelvin \"y\" value 300.0");
-	Relation kelvinRelation = createStoredRelation(kelvinFact);
+	TypedRelation kelvinRelation = createStoredRelation(kelvinFact);
 	FormulaView clause = DictionaryAddClauseFromCString(
 		"quantity t value k unit \"Kelvin\" | ! kelvin t value k");
 
@@ -588,7 +588,7 @@ void testCompileProject(void)
  */
 typedef struct {
 	Atom facts[2];
-	Relation relations[2];
+	TypedRelation relations[2];
 } RowRelations;
 
 static void setupRowRelations(RowRelations * rows)
@@ -1038,7 +1038,7 @@ void testCompileRepeatedQueryParameterRecursive(void)
 {
 	char const * storedFacts[3] = {"sym \"a\" with \"a\"", "sym \"a\" with \"b\"", "sym \"c\" with \"c\""};
 	Atom firstFact = CStringToTerm(storedFacts[0]);
-	Relation relation = RelationFromFact(FormulaGetView(firstFact));
+	TypedRelation relation = RelationFromFact(FormulaGetView(firstFact));
 	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	for(index8 i = 0; i < 3; i++) {
 		Atom fact = CStringToTerm(storedFacts[i]);
@@ -1192,7 +1192,7 @@ void testCompileRuleOverConjunctionServiceAndTerm(void)
 void testCompileSeedPermutation(void)
 {
 	Atom storedFact = CStringToTerm("plus 7 and 3 is 5");
-	Relation relation = RelationFromFact(FormulaGetView(storedFact));
+	TypedRelation relation = RelationFromFact(FormulaGetView(storedFact));
 	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 3, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
 	FormulaView clause = DictionaryAddClauseFromCString("+ x + y = z | ! plus x and y is z");
@@ -1252,7 +1252,7 @@ void testCompileRecursiveJoin2(void)
 		"number n faculty f | ! < n > 0 | ! + n - 1 = m | ! number m faculty e | ! * e * n = f");
 	// Create terminating fact
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
-	Relation relation = RelationFromFact(FormulaGetView(terminatingFact));
+	TypedRelation relation = RelationFromFact(FormulaGetView(terminatingFact));
 	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 
@@ -1318,7 +1318,7 @@ void testCompileRecursiveQueryAllOutput(void)
 	FormulaView clause = DictionaryAddClauseFromCString(
 		"number n faculty f | ! < n > 0 | ! + m + 1 = n | ! number m faculty e | ! * e * n = f");
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");
-	Relation relation = RelationFromFact(FormulaGetView(terminatingFact));
+	TypedRelation relation = RelationFromFact(FormulaGetView(terminatingFact));
 	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
 	size32 nServicesBefore = NumberOfServices();
@@ -1353,7 +1353,7 @@ void testCompileStoredFactsAndRule(void)
 	// ensure the role "root" is the first index column
 	index8 indexColumns[2];
 	setupBinaryRelationIndexColumns(FormulaGetForm(storedFact), "root", indexColumns);
-	Relation relation = RelationFromFact(FormulaGetView(storedFact));
+	TypedRelation relation = RelationFromFact(FormulaGetView(storedFact));
 	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2,  indexColumns);
 	// Store a fact not entailed by the rule
 	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(storedFact)), 0);
@@ -1419,7 +1419,7 @@ void testCompileQueryNoMatchingRules(void)
 	Atom storedFact = CStringToTerm("shade 3 value 7");
 	index8 indexColumns[2];
 	setupBinaryRelationIndexColumns(FormulaGetForm(storedFact), "shade", indexColumns);
-	Relation relation = {
+	TypedRelation relation = {
 		.form = FormulaGetForm(storedFact),
 		.typeSignature = CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
 	};
@@ -1458,7 +1458,7 @@ void testCompileQueryWithUselessRule(void)
 	Atom storedFact = CStringToTerm("tone 3 level 7");
 	index8 indexColumns[2];
 	setupBinaryRelationIndexColumns(FormulaGetForm(storedFact), "tone", indexColumns);
-	Relation relation = {
+	TypedRelation relation = {
 		.form = FormulaGetForm(storedFact),
 		.typeSignature = CreateTypeSignature(TypedTuplePeekAtomTypes(FormulaGetActors(storedFact)), 2)
 	};
@@ -1727,7 +1727,7 @@ void testCompileRecursiveVariants(void)
 
 	// Add a second (prec succ) relation with types {AT_INT, AT_INT},
 	// defining a separate graph.
-	Relation precSuccIntRelation = {
+	TypedRelation precSuccIntRelation = {
 		.form =	precSuccFixture.termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_INT, AT_INT}, 2)
 	};
@@ -1809,7 +1809,7 @@ void testCompileNegatedTerm(void)
 {
 	// Setup the fact (odd 3)
 	Atom odd3term = CStringToTerm("odd 3");
-	Relation oddRelation = {
+	TypedRelation oddRelation = {
 		.form = FormulaGetForm(odd3term),
 		.typeSignature = CreateTypeSignature((byte[]) {AT_INT}, 1)
 	};
@@ -1861,7 +1861,7 @@ void testCompiledServiceReadsFactsLive(void)
 {
 	// Add the fact (odd 3)
 	Atom odd3term = CStringToTerm("odd 3");
-	Relation oddRelation = {
+	TypedRelation oddRelation = {
 		.form = FormulaGetForm(odd3term),
 		.typeSignature = CreateTypeSignature((byte[]) {AT_INT}, 1)
 	};
@@ -2267,7 +2267,7 @@ void testCompileClosedStoredRelation(void)
 {
 	Atom even2 = CStringToTerm("even 2");
 	Atom even4 = CStringToTerm("even 4");
-	Relation evenRelation = createStoredRelation(even2);
+	TypedRelation evenRelation = createStoredRelation(even2);
 	RelationAddTuple(evenRelation, TypedTuplePeekAtoms(FormulaGetActors(even4)), 0);
 	Atom evenForm = FormulaGetForm(even2);
 	ASSERT_INT32_EQUAL(CloseRelation(evenForm), CLOSE_OK)
@@ -2348,8 +2348,8 @@ void testCompileClosedRelationIgnoresRules(void)
 {
 	Atom even4 = CStringToTerm("even 4");
 	Atom odd4 = CStringToTerm("odd 4");
-	Relation evenRelation = createStoredRelation(even4);
-	Relation oddRelation = createStoredRelation(odd4);
+	TypedRelation evenRelation = createStoredRelation(even4);
+	TypedRelation oddRelation = createStoredRelation(odd4);
 	FormulaView clause = DictionaryAddClauseFromCString("! even x | ! odd x");
 	ASSERT_INT32_EQUAL(CloseRelation(FormulaGetForm(even4)), CLOSE_OK)
 
@@ -2375,7 +2375,7 @@ void testCompileClosedRelationIgnoresRules(void)
 void testCompileClosedRuleRelation(void)
 {
 	Atom two2 = CStringToTerm("two 2");
-	Relation twoRelation = createStoredRelation(two2);
+	TypedRelation twoRelation = createStoredRelation(two2);
 	FormulaView clause = DictionaryAddClauseFromCString("even x | ! two x");
 	Atom even2 = CStringToTerm("even 2");
 	ASSERT_INT32_EQUAL(CloseRelation(FormulaGetForm(even2)), CLOSE_OK)
@@ -2402,7 +2402,7 @@ void testCompileClosedRelationInvalidated(void)
 	ASSERT_UINT32_EQUAL(callBoundQuery("! foo \"a\"", OPERATOR_INVERT), 1)
 
 	size32 nCompiledServices = NumberOfCompiledServices();
-	Relation fooRelation = createStoredRelation(fooA);
+	TypedRelation fooRelation = createStoredRelation(fooA);
 	ASSERT_TRUE(NumberOfCompiledServices() < nCompiledServices)
 	ASSERT_UINT32_EQUAL(callBoundQuery("! foo \"a\"", OPERATOR_INVERT), 0)
 	ASSERT_UINT32_EQUAL(callBoundQuery("! foo \"b\"", OPERATOR_INVERT), 1)
@@ -2424,8 +2424,8 @@ void testCompileClosedRelationNegationRecursion(void)
 	Atom even0 = CStringToTerm("even 0");
 	Atom succ01 = CStringToTerm("prec 0 succ 1");
 	Atom succ12 = CStringToTerm("prec 1 succ 2");
-	Relation evenRelation = createStoredRelation(even0);
-	Relation succRelation = createStoredRelation(succ01);
+	TypedRelation evenRelation = createStoredRelation(even0);
+	TypedRelation succRelation = createStoredRelation(succ01);
 	RelationAddTuple(succRelation, TypedTuplePeekAtoms(FormulaGetActors(succ12)), 0);
 	FormulaView clause = DictionaryAddClauseFromCString("even y | ! prec x succ y | even x");
 	ASSERT_INT32_EQUAL(CloseRelation(FormulaGetForm(even0)), CLOSE_OK)

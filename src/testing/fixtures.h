@@ -8,7 +8,7 @@
 #define FIXTURES_H
 
 #include "kernel/dictionary.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/TupleStore.h"
 #include "kernel/typedtuple.h"
 
@@ -34,7 +34,7 @@
  */
 typedef struct {
 	Atom termForm;
-	Relation relation;
+	TypedRelation relation;
 	TupleStore * store;
 	size8 nColumns;
 	// Column index of each role, in the order the role names were given

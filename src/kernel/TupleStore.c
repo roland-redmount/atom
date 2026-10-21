@@ -6,9 +6,9 @@
 #include "memory/paging.h"
 #include "memory/pool.h"
 
-// These are defined in Relation.c
-extern void RelationAttachTupleStore(Relation relation, TupleStore * store);
-void RelationDetachTupleStore(Relation relation, TupleStore * store);
+// These are defined in TypedRelation.c
+extern void RelationAttachTupleStore(TypedRelation relation, TupleStore * store);
+void RelationDetachTupleStore(TypedRelation relation, TupleStore * store);
 
 
 /**
@@ -58,7 +58,7 @@ static IOSignature TupleStoreGetCanonicalIOSignature(TupleStore const * store, I
 }
 
 
-TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provider, size8 nColumns, index8 const indexColumns[])
+TupleStore * CreateTupleStore(TypedRelation relation, StorageProvider const * provider, size8 nColumns, index8 const indexColumns[])
 {
 	// CLAUDE: The tuples of the opposite relation of a closed relation are inferred; see CloseRelation()
 	ASSERT(!RelationIsClosedInferred(relation.form))
@@ -74,6 +74,10 @@ TupleStore * CreateTupleStore(Relation relation, StorageProvider const * provide
 	// since any service compiled from a rule containing this term form
 	// may now become dependent on the this relation.
 	size32 nInvalidated = InvalidateTermFormServices(relation.form, INVALIDATE_BY_PRIMITIVE);
+
+	// CLAUDE: A service compiled before this relation existed has no operator reading the
+	// relation, so InvalidateTermFormServices() does not reach the service
+	InvalidateDependentServices(&relation.form, 1);
 
 	// A primitive service of this relation is stale if there exists a rule
 	// containing the term form. We also check (nInvalidated > 0) for cases where

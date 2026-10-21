@@ -1,7 +1,7 @@
 
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "library/string.h"
 #include "lang/name.h"
@@ -45,7 +45,7 @@ void SetupRelationFixture(
 		fixture->roleIndex[i] = RelationFixtureRoleIndex(fixture, roleNames[i]);
 		atomTypes[i] = AT_ID;
 	}
-	fixture->relation = (Relation) {
+	fixture->relation = (TypedRelation) {
 		.form = fixture->termForm,
 		.typeSignature = CreateTypeSignature(atomTypes, nColumns)
 	};

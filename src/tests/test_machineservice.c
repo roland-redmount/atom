@@ -3,7 +3,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/operator.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"

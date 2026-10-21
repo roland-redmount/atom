@@ -16,8 +16,8 @@
 
 static void testCreateList(void)
 {
-	Relation listLength = GetListLengthRelation();
-	Relation listPositionElement = GetListRelation(AT_LETTER);
+	TypedRelation listLength = GetListLengthRelation();
+	TypedRelation listPositionElement = GetListRelation(AT_LETTER);
 
 	size32 listLengthNRowsInitial = RelationNRows(listLength);
 	size32 listPositionElementNRowsInitial = RelationNRows(listPositionElement);

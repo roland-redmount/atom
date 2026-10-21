@@ -16,7 +16,7 @@
 #ifndef CHOICE_POINTS_H
 #define CHOICE_POINTS_H
 
-#include "kernel/Relation.h"		// for RELATION_MAX_ARITY
+#include "kernel/TypedRelation.h"		// for RELATION_MAX_ARITY
 #include "kernel/ServiceRegistry.h"	// for Service
 
 

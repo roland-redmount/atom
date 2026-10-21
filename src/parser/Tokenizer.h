@@ -35,7 +35,7 @@
  */
 enum TokenizerState {
 	// When reading a role, these tokens are allowed:
-	// TOKEN_NAME, TOKEN_NOT, TOKEN_OR, TOKEN_AND, TOKEN_END_REFLECT
+	// TOKEN_NAME, TOKEN_NOT, TOKEN_OR, TOKEN_AND, TOKEN_END_REFLECT, TOKEN_IMPLIED_BY
 	TOKENIZER_ROLE_STATE = 1,
 	// When reading an actor, these tokens are allowed:
 	// TOKEN_NUMBER, TOKEN_STRING, TOKEN_LETTER, TOKEN_VARIABLE, TOKEN_PARAMETER, TOKEN_ID,

@@ -48,6 +48,11 @@ void * ResizingArrayGetElement(ResizingArray const * array, index32 index);
 void ResizingArrayAppend(ResizingArray * array, const void * element);
 
 /**
+ * Remove the element at the given index and move the last element to its place.
+ */
+void ResizingArrayRemoveElement(ResizingArray * array, index32 index);
+
+/**
  * Rset an array to zero size
  */
 void ResizingArrayReset(ResizingArray * array);

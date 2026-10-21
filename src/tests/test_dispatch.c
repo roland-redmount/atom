@@ -1,7 +1,7 @@
 
 #include "kernel/dictionary.h"
 #include "kernel/dispatch.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "lang/TermForm.h"
 #include "kernel/kernel.h"
@@ -165,11 +165,11 @@ void testDispatchNegatedTerm(void)
 
 	// Create the (even odd) relation
 	TypeSignature typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2);
-	Relation relation = {.form = termForm, .typeSignature = typeSignature};
+	TypedRelation relation = {.form = termForm, .typeSignature = typeSignature};
 	// We must have a service to dispatch to, so create a B-tree storage
 	CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	// Create the (! even odd) relation
-	Relation negatedRelation = {.form = negatedTermForm, .typeSignature = typeSignature};
+	TypedRelation negatedRelation = {.form = negatedTermForm, .typeSignature = typeSignature};
 	CreateTupleStore(negatedRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	ASSERT_FALSE(SameRelations(relation, negatedRelation))
 
@@ -246,12 +246,12 @@ void testDispatchIterator(void)
 		(char const * []) {"first", "second"}, 2, true);
 
 	// Two relation tables for the term form, one per combination of column types
-	Relation idRelation = {
+	TypedRelation idRelation = {
 		.form = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_ID}, 2)
 	};
 	CreateTupleStore(idRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
-	Relation intRelation = {
+	TypedRelation intRelation = {
 		.form = termForm,
 		.typeSignature = CreateTypeSignature((byte[]) {AT_ID, AT_INT}, 2)
 	};

@@ -123,7 +123,7 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
     src/kernel/MixedTypeRelation.c
     src/kernel/multiset.c
     src/kernel/Parameter.c
-    src/kernel/Relation.c
+    src/kernel/TypedRelation.c
     src/kernel/operator.c
     src/kernel/ServiceRegistry.c
     src/kernel/tuple.c

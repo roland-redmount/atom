@@ -26,6 +26,7 @@ enum TokenType {
 	TOKEN_END_REFLECT,		// end any reflection, written ]
 	TOKEN_GENERATOR,		// the * generator character
 	TOKEN_ID,				// an AT_ID atom written by its hash, as @ and 16 hex digits
+	TOKEN_IMPLIED_BY,		// logical implication (<-)
 };
 
 typedef struct s_Token {

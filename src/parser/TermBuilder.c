@@ -51,6 +51,13 @@ bool TermBuilderIsEmpty(TermBuilder const * builder)
 }
 
 
+void TermBuilderNegate(TermBuilder * builder)
+{
+	ASSERT(!builder->isEmpty)
+	builder->sign = !builder->sign;
+}
+
+
 Atom TermBuilderCreateFormula(TermBuilder const * builder, index8 roleOrder[])
 {
 	ASSERT(builder->isValid);

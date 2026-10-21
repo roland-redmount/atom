@@ -11,7 +11,7 @@
 
 static void testMultiset(void)
 {
-	Relation relation = GetCoreRelation(RELATION_MULTISET_NAME);
+	TypedRelation relation = GetCoreRelation(RELATION_MULTISET_NAME);
 	uint32 initialNRows = RelationNRows(relation);
 
 	Atom one = CreateNameFromCString("one");

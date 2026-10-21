@@ -3,7 +3,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/Parameter.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "lang/TermForm.h"
@@ -18,7 +18,7 @@
 typedef struct s_ServiceRegistry {
 	/**
 	 * The registry of services, as a B-tree storing ServiceRecords.
-	 * This provides lookup of Services by Relation and IOSignature;
+	 * This provides lookup of Services by TypedRelation and IOSignature;
 	 * see compareServices().
 	 */
 	BTree * serviceRecords;
@@ -127,7 +127,7 @@ void SetupServiceRegistry(void)
 {
 	serviceRegistry = Allocate(sizeof(ServiceRegistry));
 	SetPersistentState(STATE_KEY_SERVICES, serviceRegistry);
-	// B-tree of Services, mapping Relation, IOSignature -> Service
+	// B-tree of Services, mapping TypedRelation, IOSignature -> Service
 	serviceRegistry->serviceRecords = BTreeCreate(
 		sizeof(ServiceRecord),
 		btreeCompareServiceRecords,
@@ -186,10 +186,27 @@ bool FindServiceByOperator(Operator const * op, Service * service)
 }
 
 
+bool OperatorIsReplaced(Operator const * op)
+{
+	ASSERT(!IsNullRelation(op->relation))
+	ServiceIterator iterator;
+	ServiceRegistryIterate(op->relation, &iterator);
+	bool found = false;
+	while(ServiceIteratorNext(&iterator)) {
+		if(ServiceIteratorPeekRecord(&iterator)->replacedOperator == op) {
+			found = true;
+			break;
+		}
+	}
+	ServiceIteratorEnd(&iterator);
+	return found;
+}
+
+
 /**
  * Find the unique operators that are descendants of op in the operator graph
- * and have an associated Relation, and add them to the serviceArray.
- * The search stops at any operator that has an associated Relation,
+ * and have an associated TypedRelation, and add them to the serviceArray.
+ * The search stops at any operator that has an associated TypedRelation,
  * so that we only return the operators for which the service corresponding
  * to operator <op> is an immediate dependent of the returned operator's services.
  */
@@ -386,7 +403,7 @@ bool ServiceIsStale(Service service)
 }
 
 
-void ServiceRegistryRemoveAll(Relation relation)
+void ServiceRegistryRemoveAll(TypedRelation relation)
 {
 	// Add all services for the given relation to 
 	ServiceRecord key = {.service = (Service) {.relation = relation } };
@@ -420,7 +437,7 @@ static void collectParentServices(Operator const * op, ResizingArray * ancestorS
 }
 
 
-static size32 invalidateRelationServices(Relation relation, InvalidationUseCase useCase)
+static size32 invalidateRelationServices(TypedRelation relation, InvalidationUseCase useCase)
 {
 	ResizingArray staleServices;
 	CreateResizingArray(&staleServices, sizeof(Service), 8);
@@ -465,18 +482,18 @@ static size32 invalidateFormServices(Atom termForm, InvalidationUseCase useCase)
 {
 	// Collect all relations matching the the termForm
 	ResizingArray relations;
-	CreateResizingArray(&relations, sizeof(Relation), 8);
+	CreateResizingArray(&relations, sizeof(TypedRelation), 8);
 	RelationIterator relationIterator;
 	RelationRegistryIterate(termForm, &relationIterator);
 	while(RelationIteratorNext(&relationIterator)) {
-		Relation relation = RelationIteratorGet(&relationIterator);
+		TypedRelation relation = RelationIteratorGet(&relationIterator);
 		ResizingArrayAppend(&relations, &relation);
 	}
 	RelationIteratorEnd(&relationIterator);
 
 	size32 nServicesRemoved = 0;
 	for(index32 i = 0; i < relations.nElements; i++) {
-		Relation * relation = ResizingArrayGetElement(&relations, i);
+		TypedRelation * relation = ResizingArrayGetElement(&relations, i);
 		nServicesRemoved += invalidateRelationServices(*relation, useCase);
 	}
 	FreeResizingArray(&relations);
@@ -534,7 +551,7 @@ size32 NumberOfCompiledServices(void)
 }
 
 
-void ServiceRegistryIterate(Relation relation, ServiceIterator * iterator)
+void ServiceRegistryIterate(TypedRelation relation, ServiceIterator * iterator)
 {
 	iterator->relation = relation;
 	BTreeIterate(&(iterator->btreeIterator), serviceRegistry->serviceRecords);
@@ -654,7 +671,7 @@ static bool signatureHasInputParameter(IOSignature ioSignature, size8 nParameter
 	return hasInput;
 }
 
-void RelationDump(Relation relation)
+void RelationDump(TypedRelation relation)
 {
 	// Find an all-outputs service for enumerating all tuples from the relation
 	// NOTE: this can be done by dispatch?

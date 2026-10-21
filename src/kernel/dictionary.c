@@ -1,15 +1,17 @@
 #include "btree/btree.h"
+#include "kernel/ClosedRelation.h"
 #include "kernel/dictionary.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "kernel/ifact.h"
 #include "kernel/operator.h"
-#include "kernel/Relation.h"
+#include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/TupleStore.h"
 #include "kernel/typedtuple.h"
 #include "lang/formula.h"
 #include "lang/ClauseForm.h"
+#include "lang/ConjunctionForm.h"
 #include "lang/TermForm.h"
 #include "lang/TypedAtom.h"
 #include "memory/allocator.h"
@@ -161,7 +163,9 @@ static void setupEntry(FormulaView * entry, Atom clauseForm, TypedTuple const * 
  * the query term form, so it is sufficient to invalidate services associated with any of the
  * term forms in the given clause. See compileQueryClauses().
  */
-static void invalidateClauseServices(Atom clauseForm)
+/* CLAUDE: If invalidateDependents is true, the services of forms depending on the term forms
+ * are invalidated too; see InvalidateDependentServices(). */
+static void invalidateClauseServices(Atom clauseForm, bool invalidateDependents)
 {
 	// Collect the term forms before invalidating any service: the multiset iterator
 	// evaluates a service of its own, and invalidation removes services
@@ -180,6 +184,8 @@ static void invalidateClauseServices(Atom clauseForm)
 		Atom termForm = *(Atom *) ResizingArrayGetElement(&termForms, i);
 		InvalidateTermFormServices(termForm, INVALIDATE_BY_RULE);
 	}
+	if(invalidateDependents)
+		InvalidateDependentServices(ResizingArrayGetMemory(&termForms), termForms.nElements);
 	FreeResizingArray(&termForms);
 }
 
@@ -206,35 +212,244 @@ bool DictionaryContainsClause(Atom clause)
 }
 
 
-bool ClauseFormExistsForTermForm(Atom termForm)
+/*
+ * Append each clause form containing the given term form to clauseForms, and return the
+ * number of clause forms found. If clauseForms is 0, the scan stops at the first clause form;
+ * this can be used to check of matching clauses exist.
+ * The scan reads every (multiset element multiple) tuple, as findMatchingClauses() in
+ * compiler.c does, for want of an element index; see the TODO there.
+ */
+static size32 findClauseFormsForTermForm(Atom termForm, ResizingArray * clauseForms)
 {
-	// CLAUDE: Scan every (multiset element multiple) tuple for a clause form holding the
-	// given term form. This is the existence-only counterpart of findMatchingClauses()
-	// in compiler.c, and is likewise a full scan for want of an element index; see the
-	// TODO there.
-
 	Operator const * multisetOperator = GetCoreOperator(SERVICE_MULTISET_ID_ALL);
 	if(!multisetOperator) {
 		// The service does not exist during kernel bootstrapping
-		return false;
+		return 0;
 	}
 	Atom multisetQueryTuple[3];
 	OperatorContext * multisetContext = OperatorCreateContext(multisetOperator, multisetQueryTuple);
-	bool found = false;
+	size32 nClauseForms = 0;
 	while(OperatorCall(multisetContext)) {
-		Atom element = multisetQueryTuple[
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
-		if(!SameAtoms(element, termForm))
-			continue;
 		Atom clauseForm = multisetQueryTuple[
 			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)];
 		if(!IsClauseForm(clauseForm))
 			continue;
-		found = true;
-		break;
+		Atom element = multisetQueryTuple[
+			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
+		if(!SameAtoms(element, termForm))
+			continue;
+		nClauseForms++;
+		if(!clauseForms)
+			break;
+		ResizingArrayAppend(clauseForms, &clauseForm);
 	}
 	OperatorFreeContext(multisetContext);
-	return found;
+	return nClauseForms;
+}
+
+
+bool ClauseFormExistsForTermForm(Atom termForm)
+{
+	return findClauseFormsForTermForm(termForm, 0) > 0;
+}
+
+
+size32 DictionaryFindClauseForms(Atom termForm, ResizingArray * clauseForms)
+{
+	ASSERT(clauseForms)
+	return findClauseFormsForTermForm(termForm, clauseForms);
+}
+
+
+/*
+ * CLAUDE: A term form held by a clause form or a conjunction form, read from the relation
+ * (multiset element multiple); see InvalidateDependentServices().
+ */
+typedef struct s_FormMember {
+	Atom form;				// the clause form or conjunction form
+	bool isClause;			// true for a clause form, false for a conjunction form
+	Atom termForm;
+	Atom predicateForm;		// the predicate form of termForm
+	bool sign;				// the sign of termForm
+	size32 multiple;		// the number of terms of the form with termForm
+} FormMember;
+
+
+/*
+ * CLAUDE: A form visited by InvalidateDependentServices(). A term form is identified by
+ * predicate form and sign, so that an opposite form need not exist as an atom.
+ * The form is 0 for an opposite form whose atom is not known.
+ */
+typedef struct s_DependentForm {
+	Atom form;
+	bool isConjunction;
+	Atom predicateForm;		// for a term form only
+	bool sign;				// for a term form only
+} DependentForm;
+
+
+/*
+ * CLAUDE: Append every term form held by a clause form or a conjunction form to members.
+ */
+static void collectFormMembers(ResizingArray * members)
+{
+	Operator const * multisetOperator = GetCoreOperator(SERVICE_MULTISET_ID_ALL);
+	if(!multisetOperator) {
+		// The service does not exist during kernel bootstrapping
+		return;
+	}
+	Atom multisetQueryTuple[3];
+	OperatorContext * multisetContext = OperatorCreateContext(multisetOperator, multisetQueryTuple);
+	while(OperatorCall(multisetContext)) {
+		Atom form = multisetQueryTuple[
+			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)];
+		bool isClause = IsClauseForm(form);
+		if(!isClause && !IsConjunctionForm(form))
+			continue;
+		FormMember member = {
+			.form = form,
+			.isClause = isClause,
+			.termForm = multisetQueryTuple[
+				CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)],
+			.multiple = (size32) multisetQueryTuple[
+				CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)]._int,
+		};
+		ResizingArrayAppend(members, &member);
+	}
+	OperatorFreeContext(multisetContext);
+
+	// The predicate forms are found after the scan, which must not be interrupted by
+	// other operator calls
+	for(index32 i = 0; i < members->nElements; i++) {
+		FormMember * member = ResizingArrayGetElement(members, i);
+		member->predicateForm = TermFormGetPredicateForm(member->termForm);
+		member->sign = TermFormGetSign(member->termForm);
+	}
+}
+
+
+static bool isSameDependentForm(DependentForm const * form1, DependentForm const * form2)
+{
+	if(form1->isConjunction != form2->isConjunction)
+		return false;
+	if(form1->isConjunction)
+		return SameAtoms(form1->form, form2->form);
+	return SameAtoms(form1->predicateForm, form2->predicateForm) && (form1->sign == form2->sign);
+}
+
+
+/*
+ * CLAUDE: Append the given form to dependentForms, unless it is there already.
+ */
+static void addDependentForm(ResizingArray * dependentForms, DependentForm const * form)
+{
+	for(index32 i = 0; i < dependentForms->nElements; i++) {
+		if(isSameDependentForm(ResizingArrayGetElement(dependentForms, i), form))
+			return;
+	}
+	ResizingArrayAppend(dependentForms, form);
+}
+
+
+static DependentForm termFormDependent(Atom termForm, Atom predicateForm, bool sign)
+{
+	return (DependentForm) {
+		.form = termForm, .isConjunction = false, .predicateForm = predicateForm, .sign = sign
+	};
+}
+
+
+/*
+ * CLAUDE: Append the forms depending directly on the given term form to dependentForms;
+ * see InvalidateDependentServices().
+ */
+static void addDirectDependents(
+	DependentForm const * termForm, FormMember const members[], size32 nMembers,
+	ResizingArray * dependentForms)
+{
+	for(index32 i = 0; i < nMembers; i++) {
+		FormMember const * member = &members[i];
+		if(!SameAtoms(member->predicateForm, termForm->predicateForm))
+			continue;
+		if(!member->isClause) {
+			// A conjunction form holding the term form
+			if(member->sign == termForm->sign) {
+				DependentForm conjunction = {.form = member->form, .isConjunction = true};
+				addDependentForm(dependentForms, &conjunction);
+			}
+			continue;
+		}
+		if(member->sign == termForm->sign)
+			continue;
+		// A clause form holding the opposite term form. Each other term form of the clause
+		// form reads the term form as a rule body term, and so does the opposite term form
+		// if the clause form holds it more than once.
+		for(index32 j = 0; j < nMembers; j++) {
+			FormMember const * other = &members[j];
+			if(!SameAtoms(other->form, member->form))
+				continue;
+			if((j == i) && (member->multiple < 2))
+				continue;
+			DependentForm dependent = termFormDependent(other->termForm, other->predicateForm, other->sign);
+			addDependentForm(dependentForms, &dependent);
+		}
+	}
+
+	// The opposite relation of a closed relation is read by INVERT operators
+	if(termForm->form.hash && RelationIsClosedForm(termForm->form)) {
+		DependentForm opposite = termFormDependent(
+			(Atom) {0}, termForm->predicateForm, !termForm->sign);
+		// The atom of the opposite form is known if a clause form or conjunction form holds it
+		for(index32 i = 0; i < nMembers; i++) {
+			if(SameAtoms(members[i].predicateForm, opposite.predicateForm)
+				&& (members[i].sign == opposite.sign)) {
+				opposite.form = members[i].termForm;
+				break;
+			}
+		}
+		addDependentForm(dependentForms, &opposite);
+	}
+}
+
+
+void InvalidateDependentServices(Atom const termForms[], size32 nTermForms)
+{
+	ResizingArray members;
+	CreateResizingArray(&members, sizeof(FormMember), 16);
+	collectFormMembers(&members);
+	if(members.nElements == 0) {
+		// No form depends on another. This is always the case during bootstrap,
+		// when TermFormGetPredicateForm() is not available.
+		FreeResizingArray(&members);
+		return;
+	}
+
+	// The given term forms come first in dependentForms, and are not invalidated
+	ResizingArray dependentForms;
+	CreateResizingArray(&dependentForms, sizeof(DependentForm), 16);
+	for(index32 i = 0; i < nTermForms; i++) {
+		DependentForm termForm = termFormDependent(
+			termForms[i], TermFormGetPredicateForm(termForms[i]), TermFormGetSign(termForms[i]));
+		addDependentForm(&dependentForms, &termForm);
+	}
+	size32 nGivenForms = dependentForms.nElements;
+
+	// Each form added to dependentForms is visited once, in order. A conjunction form
+	// has no dependents, since rules hold term forms only.
+	for(index32 i = 0; i < dependentForms.nElements; i++) {
+		DependentForm form = *(DependentForm *) ResizingArrayGetElement(&dependentForms, i);
+		if(!form.isConjunction)
+			addDirectDependents(&form, ResizingArrayGetMemory(&members), members.nElements, &dependentForms);
+	}
+	FreeResizingArray(&members);
+
+	// An opposite form whose atom is not known has no services
+	for(index32 i = nGivenForms; i < dependentForms.nElements; i++) {
+		DependentForm const * form = ResizingArrayGetElement(&dependentForms, i);
+		if(form->form.hash)
+			InvalidateTermFormServices(form->form, INVALIDATE_BY_RULE);
+	}
+	FreeResizingArray(&dependentForms);
 }
 
 
@@ -250,7 +465,7 @@ FormulaView DictionaryAddClause(Atom clause)
 	FormulaView clauseView = FormulaGetView(clause);
 	setupEntry(&entry, clauseView.form, clauseView.actors);
 	ASSERT(BTreeInsert(dictionary->btree, &entry) == BTREE_INSERTED)
-	invalidateClauseServices(entry.form);
+	invalidateClauseServices(entry.form, true);
 	return entry;
 }
 
@@ -268,7 +483,7 @@ void DictionaryRemoveClause(FormulaView * clause)
 {
 	// Invalidate before the entry goes: the clause form is released with it, and the
 	// compiled services are stale either way
-	invalidateClauseServices(clause->form);
+	invalidateClauseServices(clause->form, false);
 	ASSERT(BTreeDelete(dictionary->btree, clause, 0) == BTREE_DELETED)
 }
 
@@ -314,6 +529,7 @@ FormulaView DictionaryAddIFactRule(Atom rule)
 	setupEntry(&entry, key.form, key.actors);
 	ASSERT(BTreeInsert(dictionary->ifactRules, &entry) == BTREE_INSERTED)
 	InvalidateTermFormServices(entry.form, INVALIDATE_BY_RULE);
+	InvalidateDependentServices(&entry.form, 1);
 	return entry;
 }
 
@@ -343,17 +559,17 @@ static void releaseIFactRuleCache(FormulaView const * ifactRule)
 	index8 idColumn = IFactRuleFindGeneratorIndex(ifactRule->actors);
 	// Collect the relations first, since releasing an ifact may alter the relation registry
 	ResizingArray relations;
-	CreateResizingArray(&relations, sizeof(Relation), 4);
+	CreateResizingArray(&relations, sizeof(TypedRelation), 4);
 	RelationIterator iterator;
 	RelationRegistryIterate(ifactRule->form, &iterator);
 	while(RelationIteratorNext(&iterator)) {
-		Relation relation = RelationIteratorGet(&iterator);
+		TypedRelation relation = RelationIteratorGet(&iterator);
 		ResizingArrayAppend(&relations, &relation);
 	}
 	RelationIteratorEnd(&iterator);
 
 	for(index32 i = 0; i < relations.nElements; i++) {
-		Relation const * relation = ResizingArrayGetElement(&relations, i);
+		TypedRelation const * relation = ResizingArrayGetElement(&relations, i);
 		TupleStore * store = RelationGetTupleStore(*relation);
 		if(store)
 			IFactReleaseCached(store, idColumn);
