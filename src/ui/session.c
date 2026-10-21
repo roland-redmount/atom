@@ -474,6 +474,28 @@ static void printNewNamesNotAdded(size32 nTuples)
 }
 
 
+/* CLAUDE: executeQuery() prints at most this many facts, followed by "..." if there are more. */
+#define MAX_PRINTED_RESULTS 10
+
+
+/*
+ * CLAUDE: Print the nTuples-th result of a query, counted from 0, if nTuples is less than
+ * MAX_PRINTED_RESULTS. Print "..." for the first result beyond MAX_PRINTED_RESULTS.
+ */
+static void printQueryResult(FormulaView queryView, TypedTuple const * result, FormOrdering const * ordering, size32 nTuples)
+{
+	if(nTuples == MAX_PRINTED_RESULTS) {
+		printLine("...");
+		return;
+	}
+	if(nTuples > MAX_PRINTED_RESULTS)
+		return;
+	SessionPrintMargin();
+	PrintFormActorsAsFormula(queryView.form, result, ordering);
+	PrintChar('\n');
+}
+
+
 /**
  * Submit one query and print each resulting fact and the total number of facts.
  */
@@ -507,17 +529,13 @@ static void executeQuery(char const * line)
 		hasTuple = MixedTypeRelationNext(resultRelations);
 		if(!hasTuple)
 			addNewNames(firstResult, actorIndices);
-		SessionPrintMargin();
-		PrintFormActorsAsFormula(queryView.form, firstResult, &ordering);
-		PrintChar('\n');
+		printQueryResult(queryView, firstResult, &ordering, nTuples);
 		nTuples++;
 		FreeTypedTuple(firstResult);
 	}
 
 	while(hasTuple) {
-		SessionPrintMargin();
-		PrintFormActorsAsFormula(queryView.form, MixedTypeRelationPeekTuple(resultRelations), &ordering);
-		PrintChar('\n');
+		printQueryResult(queryView, MixedTypeRelationPeekTuple(resultRelations), &ordering, nTuples);
 		nTuples++;
 		hasTuple = MixedTypeRelationNext(resultRelations);
 	}
