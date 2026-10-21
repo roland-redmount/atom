@@ -1,24 +1,26 @@
 <!-- title: Atom tutorial -->
 <!-- date: 2026-10-21 -->
 
-This is a brief tutorial of the main concepts of the atom language. We'll work through examples with a command-line interface to **atom** running in the browser, so you can freely experiment with the language. This instance of atom is in-memory only, so the session is not saved anywhere. A local version of the command-line client with persistent session can be built from [source](https://github.com/roland-redmount/atom).
+This is a brief tutorial of the main concepts of the **atom** language. We'll work through examples with a command-line interface to **atom** running in the browser, so you can freely experiment with the language. This instance of atom is in-memory only, so the session is not saved anywhere. A local version of the command-line client with persistent session can be built from [source](https://github.com/roland-redmount/atom).
 ## Atoms and relations
 
-All data in **atom** is stored as *facts*, which are logical statements known to be true. A set of facts is called a *relation*, which is similar to a database table, or a dataframe in R / python. First, we'll load an example data set on elven characters in Tolkien's *Silmarillion* (we are nerds after all). Execute the command with the `run` button, or with `ctrl + enter`.
+All data in **atom** is stored as *facts*, which are logical statements known to be true. A set of facts is called a *relation*, which is similar to a database table, or a dataframe in R / python. First, we'll load an example data set on elven characters in Tolkien's *Silmarillion* (we are nerds after all). Execute these command with the `run` button, or with `ctrl + enter`.
 ```atom
 :load data/finwe-family/parent_child.csv parent child
+:load data/finwe-family/spouse.csv spouse spouse
 ```
-This enters some facts into the **atom** knowledgebase.
 
 Here's a simple query that yields a relation:
 ```atom
 parent "Finwe" child "Feanor"
 ```
-Here `parent` and `child` are *roles*, and `"Finwe"` and `"Feanor"` are *atoms*. An atom is essentially just an identifier: it has no internal structure (hence the name). The entire line is a *predicate*, a simple logical statement that relate the atoms to each other; in this case stating that Finwe is a parent of Feanor, or equivalently, that Feanor is the child of Finwe. Running the query returns a relation consisting of a single fact, the predicate itself. This means that this logical statement is indeed true in the current *world* -- the set of all facts known to running **atom** process. On the other hand,
+Here `parent` and `child` are *roles*, and `"Finwe"` and `"Feanor"` are *atoms*. An atom is essentially just an identifier: it has no internal structure (hence the name). The entire line is a *predicate*, a simple logical statement that relate the atoms to each other; in this case stating that Finwe is a parent of Feanor, or equivalently, that Feanor is the child of Finwe. Running the query returns a relation consisting of a single fact, the predicate itself. This means that this logical statement is indeed true in the current *world* -- the set of all facts known to running **atom** process.
+
+On the other hand, the query
 ```atom
 parent "Finwe" child "Galadriel"
 ```
-yields nothing, because this predicate is not known to be true the current world; it is not a fact. To be precise, that doesn't necessarily mean that Finwe is *not* the parent of Galadriel, only that we *don't know* for sure that he is. More about this later.
+yields nothing, because this predicate is not known to be true the current world -- it is not a fact. That doesn't necessarily mean that Finwe is *not* the parent of Galadriel, only that we *don't know* for sure that he is. More about this later.
 
 ### Variables
 
@@ -34,12 +36,7 @@ SELECT parent, child
 FROM parent_child
 WHERE parent = "Finwe"
 ```
-One difference is that in **atom**, the relation itself does not have a dedicated name. When needed, we refer to the relation by a tuple of roles`(parent child)`.
-
-*Drop or move this:*
-In contrast, in prolog or datalog, the parent-child relation would be named something like `parent_child(x, y)` and the user must figure our from documentation which of `x` and `y` is the parent and which is the child . (A functional language would have the one-way `parent(x) -> y`, and an object-oriented language would have somethings like `x.is_parent_of(y)`, which is clear for functions with a single argument, but not for multiple arguments, and we must go consult the docs again.)
-
-Because roles are named, they can be given in any order: the query
+One difference is that in **atom**, the relation itself does not have a dedicated name. When needed, we refer to the relation by a tuple of roles`(parent child)`.  Also, since roles are named, they can be given in any order: the query
 ```atom
 child c parent "Finwe"
 ```
@@ -57,17 +54,13 @@ To view all parent-child relationships om this relation, we would use two variab
 ```atom
 parent p child c
 ```
-We can also use the anonyuous variable `_` whenever we don't variable names. Each occurence of `_` counts as a distinct variable, so
-```atom
-parent _ child _
-```
-is the same query as above.
+We can also use the anonymous variable `_` whenever we don't variable names. Each occurrence of `_` counts as a distinct variable. Try it in the above query.
 
 Some relations are fundamentally symmetric: for example, if `x` is a spouse of `y`, then `y` is also a spouse of `x`. To handle such relations, **atom** allows a role to associated with more than one atom in a predicate:
 ```atom
 spouse _ spouse _
 ```
-As before, role order is  These two queries yield the same relation:
+These two queries yield the same relation:
 ```atom
 spouse "Feanor" spouse _
 spouse _ spouse "Feanor"
@@ -79,21 +72,21 @@ Relations are not merely data tables: they can also represent computation. For e
 ```atom
 + 1 + 2 = _
 ```
-Here `+` and `=` are role names, with no special significance. Note that this relation has symmetry, with two atoms in the `+` role. This particular relation is a primitive built into the **atom** system, but we can also define new computed relations (see [[Atom tutorial#Logic rules|logic rules]]). 
+Here `+` and `=` are role names, with no special significance. Note that this relation has symmetry, with two atoms in the `+` role, so that `+ 2 + 1 = _` is the same query as the above. The addition relation is a primitive built into the **atom** system, but we can also define new computed relations (see [[Atom tutorial#Logic rules|logic rules]]). 
 
-The **atom** language itself makes no distinction between "computed" and "stored" relations, but treats all queries in the same way. This allows expressing computation as questions or statements rather than procedures. Variables in queries are analogous to return values in functional or imperative languages. For example, we can think of the above query as selecting one fact from an infinite relation `(+ + -)` over all integers. 
+The **atom** language itself makes no distinction between "computed" and "stored" relations. This allows expressing computation as questions or statements rather than procedures. Variables in queries are analogous to return values in functional or imperative languages. For example, we can think of the above query as selecting one fact from an infinite relation `(+ + -)` over all integers. 
 
 Since relations have no input-output direction, we can also do the "inverse" query
 ```atom
 + 1 + x = 3
 ```
-to solve the equation $1 + x = 3$ for $x$. Such queries are not *always* possible, since not all operations can be easily inverted. For example, if we `(complex riemann-zeta)` represents the [Riemann zeta function](https://en.wikipedia.org/wiki/Riemann_zeta_function) of a complex number, computing the query `complex z riemann-zeta 0` would require proving the [Riemann hypothesis](https://en.wikipedia.org/wiki/Riemann_hypothesis). There are many examples of functions whose inverse is difficult to compute; but *if* an inverse is available, it can be represented with a relation.
+to solve the equation for `x`. Such queries are not *always* possible, since not all operations can be easily inverted. For example, if we had a relation `(complex riemann-zeta)` representing the [Riemann zeta function](https://en.wikipedia.org/wiki/Riemann_zeta_function) of a complex number, computing the query `complex z riemann-zeta 0` would require proving the [Riemann hypothesis](https://en.wikipedia.org/wiki/Riemann_hypothesis). There are many examples of functions whose inverse is difficult to compute; but *if* an inverse is available, it can be represented with a relation.
 
-Relations handle corner cases gracefully, since computations that do not have a well-defined result simply yield no tuples, rather than causing an error. For example
+Relations handle also corner cases gracefully, since computations that do not have a well-defined result simply yield no tuples, rather than causing an error. For example
 ```atom
 * 1 / 0 = _
 ```
-yields no tuple since division by zero is not defined. In contrast, implementing division $z = x / y$ by a function `divide(x, y) -> z` requires error handling, because functions must return a value. In **atom**, this kind of error does not exist.
+yields no tuple since division by zero is not defined. In most languages, implementing division by a function `divide(x, y) -> z` requires error handling, because functions must return a value. In **atom**, these kind of errors do not occur.
 
 ## Creating facts and atoms
 
