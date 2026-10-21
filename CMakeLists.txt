@@ -1,9 +1,18 @@
 cmake_minimum_required(VERSION 3.20)
-project(atom C)
+project(atom VERSION 0.3.0 LANGUAGES C)
+
+# Build type defaults to Debug.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type: Debug, Release, RelWithDebInfo or MinSizeRel" FORCE)
+endif()
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
+
+# For VSCode, write compile_commands.json to the build directory, so that IntelliSense
+# sees the compile definitions of the build; see .vscode/c_cpp_properties.json
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -179,6 +188,8 @@ add_library(atom ${ATOM_LIBRARY_TYPE}
 
 target_include_directories(atom PUBLIC src)
 target_compile_definitions(atom PUBLIC $<$<CONFIG:Debug>:DEBUG>)
+# the version set by project(), printed by SessionPrintBanner()
+target_compile_definitions(atom PRIVATE ATOM_VERSION="${PROJECT_VERSION}")
 
 # Default directories compiled into the binary, used when neither an
 # environment variable nor the user configuration file says otherwise.

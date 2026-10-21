@@ -113,7 +113,7 @@ static void printLine(char const * text)
 void SessionPrintBanner(void)
 {
 	PrintChar('\n');
-	printLine("atom v.0.1");
+	printLine("atom v" ATOM_VERSION);
 	PrintChar('\n');
 	printLine("Enter a query, or :help for the commands.");
 	PrintChar('\n');

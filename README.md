@@ -1,31 +1,60 @@
-# atom
+<p align="center">
+	<img width="40%" src="atom-logo-no-background.svg"</img>
+<p align="center">
 
-This is the most recent codebase for the **atom** project, an experimental language and computing system.
 
-## What is it
+##
 
-**atom** is a declarative logic language for data science. It is based on a relational data model where all information is stored in relations between atoms, which have no internal structure -- sort of the opposite of object-oriented languages. You might think of it as a [relational algebra](https://en.wikipedia.org/wiki/Relational_algebra) where tables can be computed on-the-fly using logic reasoning methods. The closest living relative is probably [datalog](https://en.wikipedia.org/wiki/Datalog).
+**atom** is an experimental relational / logic language aimed at data science applications. It is based on a relational data model where all information is stored in _relations_ between _atoms_, which have no internal structure. You might think of **atom** as a [relational algebra](https://en.wikipedia.org/wiki/Relational_algebra) where relations can be computed on-the-fly using logic reasoning methods. The closest living relative is probably [datalog](https://en.wikipedia.org/wiki/Datalog).
 
 Features:
 * Simple declarative language with minimal syntax
-* Open-world model using three-state logic to represent unknowns
-* Type safety and correctness via logic rules -- no dedicated type system
-* Automatic persistence to disk -- no load/save operations needed
+* Open-world model with three-state logic to handle missing / unknown data
+* No objects -- data structures are implemented by relations
+* Type safety and correctness proofs from logic rules -- no dedicated type system
+* Interactive, fully persistent computation envivonment
 
-A primer on the atom language concepts is here [TODO].
+A brief, interactive tutorial on the **atom** language concepts is here [TODO].
+
+
+## Platforms and dependencies
+
+**atom** is currently being developed on Linux, and should work on MacOS as well. There are currently no dependencies except the C standard library. Windows builds are currently not supported, but should be pretty straightforward to implement.
+
+
+## Building
+
+Clone the repo and build with CMake:
+```
+cmake -B build/debug -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/debug
+```
+
+This builds a shared library in `build/debug/lib`  and the REPL (command line client) and test executables in `build/debug/bin`. For a release build, use `-DCMAKE_BUILD_TYPE=Release` instead. VSCode task definitions are also provided for the different build types.
+
+
+
+### Web application
+
+**atom** can be compiled to WASM for web applications; see `src/ui/web.c`. This requires the [Emscripten SDK](https://github.com/emscripten-core/emsdk). Assuming `emcmake` on the path, do:
+```
+emcmake cmake -B build/wasm -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/wasm
+```
+This build optimizes for size. The `build/wasm/web` folder contains the resulting WASM executable and a test page. To add the web app to a site, see `web/publish.sh`.
+
 
 ## Implementation
 
-_The implementation is incomplete and many features described here are not yet in place._
+The **atom** implementation consists of:
+* Storage providers that provide persistent tuple storage
+* Primitive services, which provide fundamental operations such as arithmetic.
+* A parser for the atom syntax, which generates "code" (formulas) represented as atoms (reflection)
+* A compiler, which evalates queries against known logic rules and generates programs in an intermediate 
+representation, which is executed by an interpreter. The intermediate representation could be further compiled to bytecode / machine code.
 
-One challenge with implementing atom is that declarative logic does not map naturally onto traditional, imperative programming: logic execution is not strictly sequential, and there is no notion of linear memory. The current implementation compiles atom's logic rules into an intermediate representation which is executed by an interpreter.
+The implementation language in C99. We try to minimize dependencies on third-party packages. All dependencies on the C standard library or OS services should be wrapped in a platform layer (`src/platform.h`) to promote platform independence.
 
-We use C99 as the implementation language to stay close to the machine and avoid unnecessary abstractions (read: OOP) that don't align well with atom concepts. We try to minimize dependencies on C standard libraries or third-party packages to stay self-contained. All dependencies should be wrapped in a platform layer to promote platform independence. Atom is currently being developed on Linux.
-
-## Documentation
-
-Currently maintained separately (TODO: include docs here)
-
-## Code conventions
+### Code conventions
 
 See [this document](code-conventions.md).

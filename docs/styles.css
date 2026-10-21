@@ -1,0 +1,162 @@
+/* CLAUDE: the stylesheet of the documentation site, after the one of www.rolandnilsson.net */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #080820;
+  --surface: #10113e;
+  --text: #e0e0e0;
+  --text-muted: #a0a0b0;
+  --accent: #4fc3f7;
+  --code-bg: #1a1b4a;
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text);
+  background: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.site-header {
+  background: var(--surface);
+  padding: 0.75rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.site-header a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.site-header a:hover {
+  color: var(--text);
+}
+
+.site-header .home {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem 2.5rem;
+}
+
+.main article {
+  font-family: Charter, Georgia, serif;
+}
+
+.main article h1 {
+  font-size: 2rem;
+  margin-bottom: 1.5rem;
+  color: #fff;
+}
+
+.main article h2 {
+  font-size: 1.4rem;
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+  color: #fff;
+}
+
+.main article h3 {
+  font-size: 1.15rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: #fff;
+}
+
+.main article p {
+  margin-bottom: 1rem;
+}
+
+.main article a {
+  color: var(--accent);
+}
+
+.main article code {
+  background: var(--code-bg);
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.main article pre {
+  background: var(--code-bg);
+  padding: 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.main article pre code {
+  padding: 0;
+  background: none;
+}
+
+/* CLAUDE: a runnable atom snippet, matched to the code blocks around it; see web/atom-snippet.js */
+.main article atom-snippet {
+  --atom-surface: var(--code-bg);
+  --atom-muted: var(--text-muted);
+  --atom-code-size: 0.9em;
+  --atom-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.main article ul,
+.main article ol {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+}
+
+.main article li {
+  margin-bottom: 0.3rem;
+}
+
+.main article table {
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+
+.main article th,
+.main article td {
+  border: 1px solid var(--code-bg);
+  padding: 0.3rem 0.7rem;
+}
+
+.site-footer {
+  text-align: center;
+  padding: 1rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+  .site-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .main {
+    padding: 1.5rem 1rem;
+  }
+}
