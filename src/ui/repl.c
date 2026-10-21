@@ -61,7 +61,7 @@ int main(int argc, char * argv[])
 			break;
 
 		case READLINE_TOO_LONG:
-			SessionPrintMargin();
+			SessionPrintStatusPrefix();
 			PrintF("A line may hold at most %u characters.\n", LINE_BUFFER_SIZE - 1);
 			break;
 

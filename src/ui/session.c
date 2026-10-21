@@ -92,10 +92,9 @@ static void initializeSession(void)
 }
 
 
-void SessionPrintMargin(void)
+void SessionPrintStatusPrefix(void)
 {
-	for(index32 i = 0; i < CStringLength(SESSION_PROMPT); i++)
-		PrintChar(' ');
+	PrintCString(SESSION_STATUS_PREFIX);
 }
 
 
@@ -104,9 +103,30 @@ void SessionPrintMargin(void)
  */
 static void printLine(char const * text)
 {
-	SessionPrintMargin();
 	PrintCString(text);
 	PrintChar('\n');
+}
+
+
+/*
+ * CLAUDE: Print one status line, such as a summary or an error message; see
+ * SessionPrintStatusPrefix().
+ */
+static void printStatusLine(char const * text)
+{
+	SessionPrintStatusPrefix();
+	printLine(text);
+}
+
+
+/*
+ * CLAUDE: Indent by the width of SESSION_PROMPT, so that a caret printed next lines up
+ * with a character of the line entered after the prompt.
+ */
+static void printPromptIndent(void)
+{
+	for(index32 i = 0; i < CStringLength(SESSION_PROMPT); i++)
+		PrintChar(' ');
 }
 
 
@@ -251,7 +271,7 @@ static void printParseError(index32 errorPosition)
 {
 	// errorPosition counts in the expanded line; see expandIDNumbers()
 	index32 linePosition = findLinePosition(errorPosition);
-	SessionPrintMargin();
+	printPromptIndent();
 	for(index32 i = 0; i < linePosition; i++)
 		PrintChar(' ');
 	PrintCString("^ syntax error\n");
@@ -264,7 +284,7 @@ static void printParseError(index32 errorPosition)
  */
 static void printNameError(index32 linePosition, char const * message)
 {
-	SessionPrintMargin();
+	printPromptIndent();
 	for(index32 i = 0; i < linePosition; i++)
 		PrintChar(' ');
 	PrintCString("^ ");
@@ -395,7 +415,7 @@ static bool expandIDNames(char const * line, bool isQuery)
 static void printQueryResultSummary(MixedTypeRelation const * mixedTypeRelation, size32 nTuples)
 {
 	size32 nServices = MixedTypeRelationNServices(mixedTypeRelation);
-	SessionPrintMargin();
+	SessionPrintStatusPrefix();
 	PrintF("%d facts from %d matching services\n", nTuples, nServices);
 }
 
@@ -406,10 +426,10 @@ static void printQueryResultSummary(MixedTypeRelation const * mixedTypeRelation,
 static void printInspectSummary(size32 nServices)
 {
 	if(nServices == 0) {
-		printLine("No matching service. Execute a query to compile a service.");
+		printStatusLine("No matching service. Execute a query to compile a service.");
 		return;
 	}
-	SessionPrintMargin();
+	SessionPrintStatusPrefix();
 	PrintF("%d matching services\n", nServices);
 }
 
@@ -461,7 +481,7 @@ static void printNewNamesNotAdded(size32 nTuples)
 		NewName const * newName = ResizingArrayGetElement(&sessionState->newNames, i);
 		if(findNamedIDByName(newName->name, newName->nameLength))
 			continue;
-		SessionPrintMargin();
+		SessionPrintStatusPrefix();
 		if(nTuples == 0)
 			PrintCString("No result, so ");
 		else if(nTuples > 1)
@@ -471,6 +491,27 @@ static void printNewNamesNotAdded(size32 nTuples)
 		printEnteredName(newName->name, newName->nameLength);
 		PrintCString(" was not named.\n");
 	}
+}
+
+
+/* CLAUDE: executeQuery() prints at most this many facts, followed by "..." if there are more. */
+#define MAX_PRINTED_RESULTS 10
+
+
+/*
+ * CLAUDE: Print the nTuples-th result of a query, counted from 0, if nTuples is less than
+ * MAX_PRINTED_RESULTS. Print "..." for the first result beyond MAX_PRINTED_RESULTS.
+ */
+static void printQueryResult(FormulaView queryView, TypedTuple const * result, FormOrdering const * ordering, size32 nTuples)
+{
+	if(nTuples == MAX_PRINTED_RESULTS) {
+		printLine("...");
+		return;
+	}
+	if(nTuples > MAX_PRINTED_RESULTS)
+		return;
+	PrintFormActorsAsFormula(queryView.form, result, ordering);
+	PrintChar('\n');
 }
 
 
@@ -488,7 +529,7 @@ static void executeQuery(char const * line)
 	}
 	FormulaView queryView = FormulaGetView(query);
 	if(!IsRelationForm(queryView.form)) {
-		printLine("A query must be a term or a conjunction of terms.");
+		printStatusLine("A query must be a term or a conjunction of terms.");
 		ReleaseFormula(query);
 		return;
 	}
@@ -507,17 +548,13 @@ static void executeQuery(char const * line)
 		hasTuple = MixedTypeRelationNext(resultRelations);
 		if(!hasTuple)
 			addNewNames(firstResult, actorIndices);
-		SessionPrintMargin();
-		PrintFormActorsAsFormula(queryView.form, firstResult, &ordering);
-		PrintChar('\n');
+		printQueryResult(queryView, firstResult, &ordering, nTuples);
 		nTuples++;
 		FreeTypedTuple(firstResult);
 	}
 
 	while(hasTuple) {
-		SessionPrintMargin();
-		PrintFormActorsAsFormula(queryView.form, MixedTypeRelationPeekTuple(resultRelations), &ordering);
-		PrintChar('\n');
+		printQueryResult(queryView, MixedTypeRelationPeekTuple(resultRelations), &ordering, nTuples);
 		nTuples++;
 		hasTuple = MixedTypeRelationNext(resultRelations);
 	}
@@ -538,47 +575,47 @@ static void printAssertResult(int result)
 {
 	switch(result) {
 	case ASSERT_OK:
-		printLine("Ok.");
+		printStatusLine("Ok.");
 		break;
 
 	case ASSERT_EXISTED:
-		printLine("Already known.");
+		printStatusLine("Already known.");
 		break;
 
 	case ASSERT_CONTRADICTION:
-		printLine("Contradicts the knowledgebase.");
+		printStatusLine("Contradicts the knowledgebase.");
 		break;
 
 	case ASSERT_TERM_VARIABLE:
-		printLine("A fact may not contain a variable.");
+		printStatusLine("A fact may not contain a variable.");
 		break;
 
 	case ASSERT_CLAUSE_NO_VARIABLE:
-		printLine("A rule must contain at least one variable.");
+		printStatusLine("A rule must contain at least one variable.");
 		break;
 
 	case ASSERT_CLAUSE_ONE_TERM:
-		printLine("A rule must contain at least two terms.");
+		printStatusLine("A rule must contain at least two terms.");
 		break;
 
 	case ASSERT_NOT_CLAUSE:
-		printLine("Only a fact or a rule can be asserted.");
+		printStatusLine("Only a fact or a rule can be asserted.");
 		break;
 
 	case ASSERT_NOT_WRITABLE:
-		printLine("The relation is not writable.");
+		printStatusLine("The relation is not writable.");
 		break;
 
 	case ASSERT_INVALID_IFACT:
-		printLine("An ifact rule must be a single term with one generator (*) and distinct variables.");
+		printStatusLine("An ifact rule must be a single term with one generator (*) and distinct variables.");
 		break;
 
 	case ASSERT_NOT_CLOSABLE:
-		printLine("The relation cannot be closed: the actor must be a term form whose opposite relation is neither closed nor stored.");
+		printStatusLine("The relation cannot be closed: the actor must be a term form whose opposite relation is neither closed nor stored.");
 		break;
 
 	case ASSERT_RESERVED_FORM:
-		printLine("A rule cannot derive the relation (closed-relation f).");
+		printStatusLine("A rule cannot derive the relation (closed-relation f).");
 		break;
 
 	default:
@@ -596,7 +633,7 @@ static void printAssertResult(int result)
 static void executeAssert(char const * formulaText, index32 linePosition)
 {
 	if(!*formulaText) {
-		printLine(":assert requies a term or a clause.");
+		printStatusLine(":assert requies a term or a clause.");
 		return;
 	}
 
@@ -619,23 +656,23 @@ static void printRetractResult(int result)
 {
 	switch(result) {
 	case RETRACT_OK:
-		printLine("Ok.");
+		printStatusLine("Ok.");
 		break;
 
 	case RETRACT_NOT_FOUND:
-		printLine("No such rule.");
+		printStatusLine("No such rule.");
 		break;
 
 	case RETRACT_TERM_VARIABLE:
-		printLine("A fact may not contain a variable.");
+		printStatusLine("A fact may not contain a variable.");
 		break;
 
 	case RETRACT_INVALID_IFACT:
-		printLine("An ifact rule must be a single term with one generator (*) and distinct variables.");
+		printStatusLine("An ifact rule must be a single term with one generator (*) and distinct variables.");
 		break;
 
 	case RETRACT_NOT_CLAUSE:
-		printLine("Only a fact or a rule can be retracted.");
+		printStatusLine("Only a fact or a rule can be retracted.");
 		break;
 
 	default:
@@ -651,7 +688,7 @@ static void printRetractResult(int result)
 static void executeRetract(char const * formulaText, index32 linePosition)
 {
 	if(!*formulaText) {
-		printLine(":retract requires a term or a clause.");
+		printStatusLine(":retract requires a term or a clause.");
 		return;
 	}
 
@@ -672,7 +709,7 @@ static void executeRetract(char const * formulaText, index32 linePosition)
  */
 static void printLoadError(char const * filePath, LoadReport const * report)
 {
-	SessionPrintMargin();
+	SessionPrintStatusPrefix();
 	if(report->result == LOAD_CANNOT_READ) {
 		PrintF("Cannot read %s\n", filePath);
 		return;
@@ -729,7 +766,7 @@ static void executeLoad(char const * argumentText, index32 linePosition)
 	while(IsSpaceChar(*termFormText))
 		termFormText++;
 	if((pathLength == 0) || !*termFormText) {
-		printLine(":load requires a file name and role names.");
+		printStatusLine(":load requires a file name and role names.");
 		return;
 	}
 	char filePath[pathLength + 1];
@@ -749,16 +786,16 @@ static void executeLoad(char const * argumentText, index32 linePosition)
 		printLoadError(filePath, &report);
 
 	if((report.result == LOAD_OK) || (report.nAsserted + report.nExisting + report.nSkipped > 0)) {
-		SessionPrintMargin();
+		SessionPrintStatusPrefix();
 		PrintF("Asserted %u facts of the form ", report.nAsserted);
 		PrintReflectedTermForm(form);
 		PrintCString(".\n");
 		if(report.nExisting > 0) {
-			SessionPrintMargin();
+			SessionPrintStatusPrefix();
 			PrintF("%u facts were already known.\n", report.nExisting);
 		}
 		if(report.nSkipped > 0) {
-			SessionPrintMargin();
+			SessionPrintStatusPrefix();
 			PrintF("Skipped %u lines with missing values.\n", report.nSkipped);
 		}
 	}
@@ -774,7 +811,7 @@ static void executeLoad(char const * argumentText, index32 linePosition)
 static void executeInspect(char const * queryText, index32 linePosition)
 {
 	if(!*queryText) {
-		printLine(":inspect requires a formula.");
+		printStatusLine(":inspect requires a formula.");
 		return;
 	}
 
@@ -786,7 +823,7 @@ static void executeInspect(char const * queryText, index32 linePosition)
 	}
 	FormulaView queryView = FormulaGetView(query);
 	if(!IsRelationForm(queryView.form)) {
-		printLine("A query must be a term or a conjunction of terms.");
+		printStatusLine("A query must be a term or a conjunction of terms.");
 		ReleaseFormula(query);
 		return;
 	}
@@ -805,7 +842,6 @@ static void executeInspect(char const * queryText, index32 linePosition)
 	size32 nServices = 0;
 	TypedTuple * permutedActors = CreateTypedTuple(arity);
 	while(DispatchIteratorNext(&iterator)) {
-		SessionPrintMargin();
 		TypedTupleCopySubset(queryView.actors, permutation, arity, permutedActors);
 		PrintServiceWithActors(
 			DispatchIteratorPeekServiceRecord(&iterator)->service, permutedActors);
@@ -828,7 +864,7 @@ static void executeInspect(char const * queryText, index32 linePosition)
 static void executeRules(char const * termFormText, index32 linePosition)
 {
 	if(!*termFormText) {
-		printLine(":rules requires a term form, such as \"foo\" or \"!foo bar\".");
+		printStatusLine(":rules requires a term form, such as \"foo\" or \"!foo bar\".");
 		return;
 	}
 
@@ -849,7 +885,6 @@ static void executeRules(char const * termFormText, index32 linePosition)
 		DictionaryIterator iterator;
 		DictionaryIterateClauses(clauseForm, &iterator);
 		while(DictionaryIteratorNext(&iterator)) {
-			SessionPrintMargin();
 			PrintFormActorsAsFormula(clauseForm, DictionaryIteratorPeekActors(&iterator), 0);
 			PrintChar('\n');
 			nRules++;
@@ -859,7 +894,7 @@ static void executeRules(char const * termFormText, index32 linePosition)
 	FreeResizingArray(&clauseForms);
 
 	if(nRules == 0)
-		printLine("No rules found.");
+		printStatusLine("No rules found.");
 	IFactRelease(termForm);
 }
 
@@ -879,7 +914,7 @@ static void executeClear(char const * nameText, index32 linePosition)
 	while(IsSpaceChar(*rest))
 		rest++;
 	if((length == 0) || *rest) {
-		printLine(":clear requires a name, such as @myCar.");
+		printStatusLine(":clear requires a name, such as @myCar.");
 		return;
 	}
 
@@ -892,7 +927,7 @@ static void executeClear(char const * nameText, index32 linePosition)
 	Free(namedID->name);
 	index32 index = namedID - (NamedID *) ResizingArrayGetMemory(&sessionState->namedIDs);
 	ResizingArrayRemoveElement(&sessionState->namedIDs, index);
-	printLine("Ok.");
+	printStatusLine("Ok.");
 }
 
 
@@ -964,7 +999,7 @@ static int executeCommand(char const * line, char const * commandText)
 		return SESSION_CONTINUE;
 	}
 
-	printLine("Unknown command. Enter :help for the commands.");
+	printStatusLine("Unknown command. Enter :help for the commands.");
 	return SESSION_CONTINUE;
 }
 

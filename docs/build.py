@@ -76,6 +76,13 @@ class AnchorRenderer(mistune.HTMLRenderer):
         self.anchors.add(unique)
         return f'<h{level} id="{unique}">{text}</h{level}>\n'
 
+    def link(self, text, url, title=None):
+        # CLAUDE: a link to another site opens in a new tab, so that the tutorial session is kept
+        a = super().link(text, url, title)
+        if re.match(r"(https?:)?//", url):
+            a = a.replace("<a ", '<a target="_blank" rel="noopener" ', 1)
+        return a
+
 
 def wiki_link(match, page_name, warnings):
     # CLAUDE: an Obsidian link [[page#heading|text]] as an html link. The page and the
