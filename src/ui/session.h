@@ -15,13 +15,13 @@
 #include "platform.h"
 
 
-/**
- * What a line is entered after. A front end prints this before reading a line, so that
- * a session lines its own output up with what was typed; see SessionPrintMargin().
- */
+// The prompt used prior to user input
 #define SESSION_PROMPT		"> "
 
-// What SessionExecuteLine() reports back to the front end that called it
+// Prefix used for a status line; see SessionPrintStatusPrefix()
+#define SESSION_STATUS_PREFIX	">> "
+
+// Return codes for SessionExecuteLine()
 #define SESSION_CONTINUE	1
 #define SESSION_QUIT		2
 
@@ -31,17 +31,15 @@
  */
 void SessionPrintBanner(void);
 
-
 /**
- * Indent to the left margin, which is where the prompt leaves the cursor. Everything a
- * session prints starts here, so that it lines up with what was typed after the prompt.
- * A front end printing a message of its own uses this to line that message up too.
+ * Begin a status line, such as a summary or an error message, so that the status
+ * line is told apart from a query result. A front end printing a message of its own uses
+ * this too.
  */
-void SessionPrintMargin(void);
-
+void SessionPrintStatusPrefix(void);
 
 /**
- * Answer one line, printing whatever the line asks for. Returns SESSION_QUIT once the
+ * Execute one one line of input and print results. Returns SESSION_QUIT once the
  * session has been asked to end, and SESSION_CONTINUE while it has not.
  */
 int SessionExecuteLine(char const * line);
