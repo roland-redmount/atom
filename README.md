@@ -1,16 +1,18 @@
-# atom
+<p align="center">
+	<img width="40%" src="atom-logo-no-background.svg"</img>
+<p align="center">
 
-This is the most recent codebase for the **atom** project, an experimental language and computing system.
 
-## What is it
+##
 
-**atom** is a declarative logic language for data science. It is based on a relational data model where all information is stored in relations between atoms, which have no internal structure -- sort of the opposite of object-oriented languages. You might think of it as a [relational algebra](https://en.wikipedia.org/wiki/Relational_algebra) where tables can be computed on-the-fly using logic reasoning methods. The closest living relative is probably [datalog](https://en.wikipedia.org/wiki/Datalog).
+**atom** is an experimental relational / logic language aimed at data science applications. It is based on a relational data model where all information is stored in _relations_ between _atoms_, which have no internal structure. You might think of **atom** as a [relational algebra](https://en.wikipedia.org/wiki/Relational_algebra) where relations can be computed on-the-fly using logic reasoning methods. The closest living relative is probably [datalog](https://en.wikipedia.org/wiki/Datalog).
 
 Features:
 * Simple declarative language with minimal syntax
-* Open-world model using three-state logic to represent unknowns
-* Type safety and correctness via logic rules -- no dedicated type system
-* Automatic persistence to disk -- no load/save operations needed
+* Open-world model with three-state logic to handle missing / unknown data
+* No objects -- data structures are implemented by relations
+* Type safety and correctness proofs from logic rules -- no dedicated type system
+* Interactive, fully persistent computation envivonment
 
 A brief, interactive tutorial on the **atom** language concepts is here [TODO].
 
