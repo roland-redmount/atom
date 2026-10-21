@@ -1,10 +1,16 @@
 <!-- title: Atom tutorial -->
 <!-- date: 2026-10-21 -->
 
-This is a brief tutorial of the main concepts of the atom language. We'll work through examples with a command-line interface to **atom** running in the browser, so you can freely experiment with the language. This instance of atom has some toy data sets pre-loaded; it is in-memory only, so the session is not saved anywhere. A local version of the command-line client with persistent session can be built from [source](https://github.com/roland-redmount/atom).
+This is a brief tutorial of the main concepts of the atom language. We'll work through examples with a command-line interface to **atom** running in the browser, so you can freely experiment with the language. This instance of atom is in-memory only, so the session is not saved anywhere. A local version of the command-line client with persistent session can be built from [source](https://github.com/roland-redmount/atom).
 ## Atoms and relations
 
-All data in **atom** is stored as *facts*, which are logical statements known to be true. A set of facts is called a *relation*, which is similar to a database table, or a dataframe in R / python. As an example, we'll look at some facts in small dataset on elven characters in Tolkien's *Silmarillion* (we are nerds after all). Here's a simple query that yields a relation:
+All data in **atom** is stored as *facts*, which are logical statements known to be true. A set of facts is called a *relation*, which is similar to a database table, or a dataframe in R / python. First, we'll load an example data set on elven characters in Tolkien's *Silmarillion* (we are nerds after all). Execute the command with the `run` button, or with `ctrl + enter`.
+```atom
+:load data/finwe-family/parent_child.csv parent child
+```
+This enters some facts into the **atom** knowledgebase.
+
+Here's a simple query that yields a relation:
 ```atom
 parent "Finwe" child "Feanor"
 ```

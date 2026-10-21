@@ -322,7 +322,7 @@ if(EMSCRIPTEN)
         -sEXPORT_ES6=1
         -sENVIRONMENT=web,worker,node
         -sEXPORTED_FUNCTIONS=_WebInitialize,_WebExecuteLine
-        -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
+        -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,FS
         -sALLOW_MEMORY_GROWTH=1
         -sINITIAL_MEMORY=33554432
     )
