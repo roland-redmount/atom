@@ -6,6 +6,7 @@
                 "${workspaceFolder}/**"
             ],
             "defines": ["DEBUG"],
+            "compileCommands": "${workspaceFolder}/build/debug/compile_commands.json",
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c99",
             "intelliSenseMode": "linux-gcc-x64"
@@ -16,6 +17,18 @@
                 "${workspaceFolder}/**"
             ],
             "defines": ["DEBUG", "DEBUG_ALLOCATE"],
+            "compileCommands": "${workspaceFolder}/build/debug-allocate/compile_commands.json",
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c99",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "release",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [],
+            "compileCommands": "${workspaceFolder}/build/release/compile_commands.json",
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c99",
             "intelliSenseMode": "linux-gcc-x64"
