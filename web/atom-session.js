@@ -42,9 +42,26 @@ function receive(event)
         run.finish({ ended: true, message });
 }
 
+/*
+ * CLAUDE: The files a page lists in <meta name="atom-files" content="...">, as paths
+ * relative to the page and separated by spaces. The worker writes each file to the
+ * session's file system at the same path, so that a snippet can read the file with
+ * :load; see atom-worker.js.
+ */
+function pageFiles()
+{
+    const meta = document.querySelector('meta[name="atom-files"]');
+    if(!meta)
+        return [];
+    return meta.content.split(/\s+/).filter((path) => path).map(
+        (path) => ({ path, url: new URL(path, document.baseURI).href }));
+}
+
 function startWorker()
 {
     worker = new Worker(new URL(WORKER_PATH, import.meta.url), { type: "module" });
+    // CLAUDE: the worker waits for the files message before it starts the session
+    worker.postMessage({ type: "files", files: pageFiles() });
     worker.onmessage = receive;
     worker.onerror = (event) => {
         for(const [id, run] of pendingRuns) {

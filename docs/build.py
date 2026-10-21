@@ -20,6 +20,8 @@ import mistune
 
 DOCS = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(DOCS)
+# CLAUDE: the data files that snippets read with :load, copied to the same place in the site
+DATA = os.path.join(DOCS, "data")
 
 # CLAUDE: each published page, from the markdown file name in docs/ to the page written
 PAGES = {
@@ -114,6 +116,16 @@ def enable_atom_snippets(content):
     )
 
 
+def data_files():
+    # CLAUDE: the path of each file in DATA, relative to docs/, with / as separator
+    paths = []
+    for directory, _, names in os.walk(DATA):
+        for name in names:
+            path = os.path.relpath(os.path.join(directory, name), DOCS)
+            paths.append(path.replace(os.sep, "/"))
+    return sorted(paths)
+
+
 def build_page(source, template, warnings):
     raw = read(os.path.join(DOCS, source))
     page_name = source[: -len(".md")]
@@ -126,10 +138,16 @@ def build_page(source, template, warnings):
     content = enable_atom_snippets(content)
     content = f"<h1>{title}</h1>\n" + content
 
+    head = ""
     scripts = ""
     if "<atom-snippet>" in content:
         scripts = '<script type="module" src="atom/atom-snippet.js"></script>'
+        # CLAUDE: the session writes these files to its file system; see web/atom-session.js
+        files = data_files()
+        if files:
+            head = f'<meta name="atom-files" content="{html.escape(" ".join(files))}">'
     page = template.replace("{{title}}", title)
+    page = page.replace("{{head}}", head)
     page = page.replace("{{content}}", content)
     page = page.replace("{{scripts}}", scripts)
     return page
@@ -159,6 +177,8 @@ def main():
 
     shutil.copy2(os.path.join(DOCS, "styles.css"), os.path.join(args.out, "styles.css"))
     shutil.copy2(os.path.join(REPO, "atom-logo-no-background.svg"), os.path.join(args.out, "atom-logo.svg"))
+    if os.path.isdir(DATA):
+        shutil.copytree(DATA, os.path.join(args.out, "data"))
     os.makedirs(os.path.join(args.out, "atom"))
     for f in ATOM_FILES:
         shutil.copy2(os.path.join(args.atom, f), os.path.join(args.out, "atom", f))

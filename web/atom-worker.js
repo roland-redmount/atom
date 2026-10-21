@@ -6,7 +6,8 @@
  * page stops a query that does not end by terminating the worker, which is the
  * only way to interrupt one; see atom-snippet.js.
  *
- * Messages in:  { type: "run", id, source }
+ * Messages in:  { type: "files", files }        sent once, before any run
+ *               { type: "run", id, source }
  * Messages out: { type: "ready" }
  *               { type: "output", id, text }   one line, as it is printed
  *               { type: "done", id, ended }    ended: the session was asked to quit
@@ -39,9 +40,35 @@ function printLine(text)
     postMessage({ type: "output", id: currentId, text });
 }
 
+// CLAUDE: the files message, which each { path, url } of files is written from; see writeFiles()
+let receiveFiles = null;
+const filesReceived = new Promise((resolve) => { receiveFiles = resolve; });
+
+/*
+ * CLAUDE: Fetch each file and write the file to the module's file system at its path,
+ * relative to the current directory of the module. A session then reads the file as it
+ * reads any other file, such as with :load.
+ */
+async function writeFiles(fileSystem, files)
+{
+    const contents = await Promise.all(files.map(async ({ url }) => {
+        const response = await fetch(url);
+        if(!response.ok)
+            throw new Error(`cannot fetch ${url}: ${response.status} ${response.statusText}`);
+        return new Uint8Array(await response.arrayBuffer());
+    }));
+    files.forEach(({ path }, i) => {
+        const directory = path.substring(0, path.lastIndexOf("/"));
+        if(directory)
+            fileSystem.mkdirTree(directory);
+        fileSystem.writeFile(path, contents[i]);
+    });
+}
+
 const started = (async () => {
     const factory = (await import(modulePath)).default;
     const atom = await factory({ print: printLine, printErr: printLine });
+    await writeFiles(atom.FS, await filesReceived);
     executeLine = atom.cwrap("WebExecuteLine", "number", ["string"]);
     atom.ccall("WebInitialize", null, [], []);
 })();
@@ -53,6 +80,10 @@ started.then(
 
 onmessage = async (event) => {
     const { type, id, source } = event.data;
+    if(type === "files") {
+        receiveFiles(event.data.files);
+        return;
+    }
     if(type !== "run")
         return;
 
