@@ -143,30 +143,27 @@ void SessionPrintBanner(void)
 static void printHelp(void)
 {
 	PrintChar('\n');
-	printLine("Enter a query as a term or conjunction, such as");
-	printLine("  + 2 + 3 = s    or    foo x bar y & foo y bar z");
-	printLine("to view every matching fact in the knowledgebase.");
-	printLine("Variables are single letters and _ is the anonymous variable.");
-	printLine("An ID atom is printed as @name once named. A query naming an unknown @name in place");
-	printLine("of an actor names the ID atom found there, if the query has a single result.");
+	printLine("Queries are entered directly as a formula, such as");
+	printLine("  + 2 + 3 = _    or    foo x bar y & foo y bar z");
+	printLine("Variables are single letters, _ is the anonymous variable.");
+	printLine("An ID atom can be assigned a @name with a query like");
+	printLine("  circle @myCircle radius 1.0");
 	PrintChar('\n');
 	printLine("Commands:");
-	printLine("  :assert <term>        Assert a fact. The term must not contain variables.");
-	printLine("  :assert <clause>      Assert a rule. The clause must have at least two terms");
-	printLine("                        and contain at least one variable.");
-	printLine("  :assert <term with *> Assert an ifact rule, such as (circle * radius r).");
-	printLine("  :clear @name          Remove the name @name, so that it can name another ID atom.");
-	printLine("  :inspect <formula>    Print the service(s) that the formula dispatches to");
-	printLine("  :load <file> <role names> Assert facts of the term form with the given role names.");
-	printLine("                        The first line of the file names the columns, separated");
-	printLine("                        by commas or spaces. Each role reads the column of its name.");
-	printLine("  :retract <term>       Retract a fact. The term must not contain variables.");
-	printLine("  :retract <clause>     Retract a rule. The variable names must match the asserted rule.");
-	printLine("  :retract <term with *> Retract an ifact rule.");
-	printLine("  :rules <role names>   Print the rules containing a term form, such as (foo bar)");
-	printLine("                        or (! foo bar). Ifact rules are not printed.");
-	printLine("  :help                 Print this text.");
-	printLine("  :quit, ctrl-D         End the session.");
+	printLine(":assert <term>        Assert a fact. The term must not contain variables.");
+	printLine(":assert <term>        Assert an ifact rule, such as (circle * radius r).");
+	printLine(":assert <clause>      Assert a rule. The clause must have > 1 term");
+	printLine("                      and contain at least one variable.");
+	printLine(":clear @name          Remove the name @name.");
+	printLine(":inspect <query>      Print the service(s) that the query dispatches to");
+	printLine(":load <file> <form>   Import a facts from a CSV file, of the given form,");
+	printLine("                      whose roles must match file column names.");
+	printLine(":retract <term>       Retract a fact. The term must not contain variables.");
+	printLine(":retract <term>       Retract an ifact rule.");
+	printLine(":retract <clause>     Retract a rule. Variable names must match.");
+	printLine(":rules <form>         Print clause rules containing a term form.");
+	printLine(":help                 Print this text.");
+	printLine(":quit, ctrl-D         End the session.");
 	PrintChar('\n');
 }
 
