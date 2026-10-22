@@ -237,6 +237,15 @@ void SetPrintIndent(uint32 nChars);
 uint32 GetPrintIndent(void);
 
 /**
+ * Count the characters printed between BeginPrintCount() and EndPrintCount(),
+ * instead of writing the characters to the output stream. EndPrintCount() returns the count
+ * and disables counting.
+ * This finds how wide a printed value is, for example to align columns of a table.
+ */
+void BeginPrintCount(void);
+size32 EndPrintCount(void);
+
+/**
  * Reading from an input stream
  */
 

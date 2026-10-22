@@ -162,6 +162,7 @@ static void printHelp(void)
 	printLine(":retract <term>       Retract an ifact rule.");
 	printLine(":retract <clause>     Retract a rule. Variable names must match.");
 	printLine(":rules <form>         Print clause rules containing a term form.");
+	printLine(":view table|formula   Print results as a table of variables, or as formulas.");
 	printLine(":help                 Print this text.");
 	printLine(":quit, ctrl-D         End the session.");
 	PrintChar('\n');
@@ -491,24 +492,128 @@ static void printNewNamesNotAdded(size32 nTuples)
 }
 
 
-/* CLAUDE: executeQuery() prints at most this many facts, followed by "..." if there are more. */
+// executeQuery() prints at most this many facts, followed by "..." if there are more.
 #define MAX_PRINTED_RESULTS 10
+
+// Values of resultView, set with the :view command
+#define RESULT_VIEW_FORMULA	1
+#define RESULT_VIEW_TABLE	2
+
+/* How executeQuery() prints a result; see printQueryResults(). The view is a
+   display preference only, so the view is not kept in SessionState. */
+static int resultView = RESULT_VIEW_FORMULA;
+
+// The space printed between two columns of a table of results
+#define TABLE_COLUMN_GAP	2
+
+
+/**
+ * Write the actor index of the first occurrence of each named variable of a
+ * query, in the order entered, and return the number of named variables.
+ * Anonymous variables and quoted variables are ignored.
+ */
+static size8 findColumnActors(FormulaView queryView, FormOrdering const * ordering, index8 actorIndices[])
+{
+	size8 arity = FormArity(queryView.form);
+	index8 enteredActorIndices[arity];
+	FormOrderingGetEnteredActors(queryView.form, ordering, enteredActorIndices);
+	size8 nColumns = 0;
+	for(index8 k = 0; k < arity; k++) {
+		TypedAtom actor = TypedTupleGetElement(queryView.actors, enteredActorIndices[k]);
+		if((actor.type != AT_VARIABLE) || (actor.atom.hash == anonymousVariable.atom.hash))
+			continue;
+		if(VariableIsQuoted(actor.atom))
+			continue;
+		bool isNewVariable = true;
+		for(index8 j = 0; j < nColumns; j++) {
+			Atom column = TypedTupleGetElement(queryView.actors, actorIndices[j]).atom;
+			if(SameVariable(actor.atom, column))
+				isNewVariable = false;
+		}
+		if(isNewVariable)
+			actorIndices[nColumns++] = enteredActorIndices[k];
+	}
+	return nColumns;
+}
+
+
+static void printSpaces(size32 nSpaces)
+{
+	for(index32 i = 0; i < nSpaces; i++)
+		PrintChar(' ');
+}
+
+
+/**
+ * Print the results of a query as a table, with a header row of variable names and
+ * one row per result. The column at index j holds the actor at actorIndices[j].
+ */
+static void printResultTable(FormulaView queryView, TypedTuple * const results[], size32 nResults,
+	index8 const actorIndices[], size8 nColumns)
+{
+	size32 columnWidths[nColumns];
+	for(index8 j = 0; j < nColumns; j++) {
+		BeginPrintCount();
+		PrintVariable(TypedTupleGetElement(queryView.actors, actorIndices[j]).atom);
+		columnWidths[j] = EndPrintCount();
+		for(index32 i = 0; i < nResults; i++) {
+			BeginPrintCount();
+			PrintTypedAtom(TypedTupleGetElement(results[i], actorIndices[j]));
+			size32 width = EndPrintCount();
+			if(width > columnWidths[j])
+				columnWidths[j] = width;
+		}
+	}
+
+	for(index8 j = 0; j < nColumns; j++) {
+		BeginPrintCount();
+		PrintVariable(TypedTupleGetElement(queryView.actors, actorIndices[j]).atom);
+		size32 width = EndPrintCount();
+		PrintVariable(TypedTupleGetElement(queryView.actors, actorIndices[j]).atom);
+		if(j + 1 < nColumns)
+			printSpaces(columnWidths[j] - width + TABLE_COLUMN_GAP);
+	}
+	PrintChar('\n');
+
+	for(index32 i = 0; i < nResults; i++) {
+		for(index8 j = 0; j < nColumns; j++) {
+			TypedAtom value = TypedTupleGetElement(results[i], actorIndices[j]);
+			BeginPrintCount();
+			PrintTypedAtom(value);
+			size32 width = EndPrintCount();
+			PrintTypedAtom(value);
+			if(j + 1 < nColumns)
+				printSpaces(columnWidths[j] - width + TABLE_COLUMN_GAP);
+		}
+		PrintChar('\n');
+	}
+}
 
 
 /*
- * CLAUDE: Print the nTuples-th result of a query, counted from 0, if nTuples is less than
- * MAX_PRINTED_RESULTS. Print "..." for the first result beyond MAX_PRINTED_RESULTS.
+ * Print the results of a query according to resultView, followed by "..." if
+ * the query has more than MAX_PRINTED_RESULTS results. nTuples is the number of results of
+ * the query, and nPrinted is the number of printed results. A query with no named variable
+ * is printed as formulas in either view; see findColumnActors().
  */
-static void printQueryResult(FormulaView queryView, TypedTuple const * result, FormOrdering const * ordering, size32 nTuples)
+static void printQueryResults(FormulaView queryView, FormOrdering const * ordering,
+	TypedTuple * const printedResults[], size32 nPrinted, size32 nTuples)
 {
-	if(nTuples == MAX_PRINTED_RESULTS) {
-		printLine("...");
-		return;
+	index8 actorIndices[FormArity(queryView.form)];
+	size8 nColumns = 0;
+	if(resultView == RESULT_VIEW_TABLE)
+		nColumns = findColumnActors(queryView, ordering, actorIndices);
+
+	if((nColumns > 0) && (nPrinted > 0))
+		printResultTable(queryView, printedResults, nPrinted, actorIndices, nColumns);
+	else {
+		for(index32 i = 0; i < nPrinted; i++) {
+			PrintFormActorsAsFormula(queryView.form, printedResults[i], ordering);
+			PrintChar('\n');
+		}
 	}
 	if(nTuples > MAX_PRINTED_RESULTS)
-		return;
-	PrintFormActorsAsFormula(queryView.form, result, ordering);
-	PrintChar('\n');
+		printLine("...");
 }
 
 
@@ -531,34 +636,33 @@ static void executeQuery(char const * line)
 		return;
 	}
 
+	// CLAUDE: Reading the next result overwrites the current result, so each printed
+	// result is copied.
 	MixedTypeRelation * resultRelations = UserQuery(queryView);
+	TypedTuple * printedResults[MAX_PRINTED_RESULTS];
+	size32 nPrinted = 0;
 	size32 nTuples = 0;
-	bool hasTuple = MixedTypeRelationNext(resultRelations);
+	while(MixedTypeRelationNext(resultRelations)) {
+		if(nPrinted < MAX_PRINTED_RESULTS)
+			printedResults[nPrinted++] = CreateTupleFromTuple(MixedTypeRelationPeekTuple(resultRelations));
+		nTuples++;
+	}
 
-	// CLAUDE: A NewName is bound only if the query has a single result. Reading the next result
-	// overwrites the first, so the first result is copied.
+	// CLAUDE: A NewName is bound only if the query has a single result.
 	bool hasNewNames = (sessionState->newNames.nElements > 0);
-	if(hasNewNames && hasTuple) {
+	if(hasNewNames && (nTuples == 1)) {
 		index8 actorIndices[sessionState->newNames.nElements];
 		findNewNameActors(queryView, &ordering, actorIndices);
-		TypedTuple * firstResult = CreateTupleFromTuple(MixedTypeRelationPeekTuple(resultRelations));
-		hasTuple = MixedTypeRelationNext(resultRelations);
-		if(!hasTuple)
-			addNewNames(firstResult, actorIndices);
-		printQueryResult(queryView, firstResult, &ordering, nTuples);
-		nTuples++;
-		FreeTypedTuple(firstResult);
+		addNewNames(printedResults[0], actorIndices);
 	}
 
-	while(hasTuple) {
-		printQueryResult(queryView, MixedTypeRelationPeekTuple(resultRelations), &ordering, nTuples);
-		nTuples++;
-		hasTuple = MixedTypeRelationNext(resultRelations);
-	}
+	printQueryResults(queryView, &ordering, printedResults, nPrinted, nTuples);
 	// the relation counts the services it read, so it is read out before being freed
 	printQueryResultSummary(resultRelations, nTuples);
 	if(hasNewNames)
 		printNewNamesNotAdded(nTuples);
+	for(index32 i = 0; i < nPrinted; i++)
+		FreeTypedTuple(printedResults[i]);
 	FreeMixedTypeRelation(resultRelations);
 	ReleaseFormula(query);
 }
@@ -952,6 +1056,39 @@ static char const * matchCommand(char const * line, char const * command)
 
 
 /*
+ * CLAUDE: Determine if an argument is the given word, with nothing following the word.
+ */
+static bool matchWholeArgument(char const * argument, char const * word)
+{
+	char const * rest = matchCommand(argument, word);
+	return rest && !*rest;
+}
+
+
+/*
+ * CLAUDE: Set resultView to the view named by the argument of the :view command, or print
+ * the current view if there is no argument.
+ */
+static void executeView(char const * viewText)
+{
+	if(!*viewText) {
+		SessionPrintStatusPrefix();
+		PrintF("Results are printed as %s.\n", (resultView == RESULT_VIEW_TABLE) ? "a table" : "formulas");
+	}
+	else if(matchWholeArgument(viewText, "table")) {
+		resultView = RESULT_VIEW_TABLE;
+		printStatusLine("Ok.");
+	}
+	else if(matchWholeArgument(viewText, "formula")) {
+		resultView = RESULT_VIEW_FORMULA;
+		printStatusLine("Ok.");
+	}
+	else
+		printStatusLine("The view must be table or formula.");
+}
+
+
+/*
  * Execute a command, which is the word beginning with ':' that the given command text
  * starts with. The whole line is passed as well, since a command argument is reported at
  * its position in the line the user typed rather than in the argument itself.
@@ -987,6 +1124,12 @@ static int executeCommand(char const * line, char const * commandText)
 	char const * termFormText = matchCommand(commandText, ":rules");
 	if(termFormText) {
 		executeRules(termFormText, termFormText - line);
+		return SESSION_CONTINUE;
+	}
+
+	char const * viewText = matchCommand(commandText, ":view");
+	if(viewText) {
+		executeView(viewText);
 		return SESSION_CONTINUE;
 	}
 
