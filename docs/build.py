@@ -22,6 +22,8 @@ DOCS = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(DOCS)
 # CLAUDE: the data files that snippets read with :load, copied to the same place in the site
 DATA = os.path.join(DOCS, "data")
+# CLAUDE: the web fonts that styles.css loads
+FONTS = os.path.join(DOCS, "fonts")
 
 # CLAUDE: each published page, from the markdown file name in docs/ to the page written
 PAGES = {
@@ -186,6 +188,8 @@ def main():
     shutil.copy2(os.path.join(REPO, "atom-logo-no-background.svg"), os.path.join(args.out, "atom-logo.svg"))
     if os.path.isdir(DATA):
         shutil.copytree(DATA, os.path.join(args.out, "data"))
+    if os.path.isdir(FONTS):
+        shutil.copytree(FONTS, os.path.join(args.out, "fonts"))
     os.makedirs(os.path.join(args.out, "atom"))
     for f in ATOM_FILES:
         shutil.copy2(os.path.join(args.atom, f), os.path.join(args.out, "atom", f))
