@@ -6,8 +6,8 @@
 #
 # --atom is the built web front end (default build/wasm/web); see web/publish.sh.
 # --out is where the site is written (default build/site). Serve that directory over
-# http to view it, e.g. python -m http.server -d build/site, since a browser does
-# not run the web front end from a file:// address.
+# http to view it, with python docs/serve.py, since a browser does not run the web
+# front end from a file:// address.
 
 import argparse
 import html
