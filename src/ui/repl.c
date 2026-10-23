@@ -11,6 +11,7 @@
 #include "library/MachineService.h"
 #include "library/library.h"
 #include "library/string.h"
+#include "parser/StringBuffer.h"
 #include "platform.h"
 #include "ui/session.h"
 
@@ -40,6 +41,23 @@ static uint32 getMemoryPersistence(int argc, char * argv[])
 }
 
 
+/*
+ * Append a line to an entry, following a '\n' unless the entry is empty. The entry
+ * is kept terminated by 0.
+ */
+static void appendLine(StringBuffer * entry, char const * line)
+{
+	if(entry->stringLength > 0) {
+		// replace the terminating 0 by the line break
+		entry->stringLength--;
+		StringBufferPush(entry, '\n');
+	}
+	for(index32 i = 0; line[i]; i++)
+		StringBufferPush(entry, line[i]);
+	StringBufferPush(entry, 0);
+}
+
+
 int main(int argc, char * argv[])
 {
 	// A restored world holds library functions, which must be known before the restart
@@ -53,26 +71,46 @@ int main(int argc, char * argv[])
 	SessionPrintBanner();
 
 	char line[LINE_BUFFER_SIZE];
+	// the lines read so far of an entry that is not complete; see SESSION_INCOMPLETE
+	StringBuffer entry;
+	StringBufferInit(&entry);
 	bool isRunning = true;
 	while(isRunning) {
-		switch(ReadLine(SESSION_PROMPT, line, LINE_BUFFER_SIZE)) {
-		case READLINE_OK:
-			isRunning = (SessionExecuteLine(line) == SESSION_CONTINUE);
+		char const * prompt = (entry.stringLength > 0) ? SESSION_CONTINUATION_PROMPT : SESSION_PROMPT;
+		switch(ReadLine(prompt, line, LINE_BUFFER_SIZE)) {
+		case READLINE_OK: {
+			appendLine(&entry, line);
+			int result = SessionExecuteLine(entry.buffer);
+			if(result != SESSION_INCOMPLETE)
+				StringBufferReset(&entry);
+			isRunning = (result != SESSION_QUIT);
 			break;
+		}
 
 		case READLINE_TOO_LONG:
 			SessionPrintStatusPrefix();
 			PrintF("A line may hold at most %u characters.\n", LINE_BUFFER_SIZE - 1);
+			StringBufferReset(&entry);
+			break;
+
+		case READLINE_CANCELLED:
+			StringBufferReset(&entry);
 			break;
 
 		case READLINE_END:
 			// end of input, from a redirected file or Ctrl-D at the terminal.
 			// The prompt was printed and nothing was typed after it.
 			PrintChar('\n');
+			// a blank line ends an entry that is not complete, reporting the error
+			if(entry.stringLength > 0) {
+				appendLine(&entry, "");
+				SessionExecuteLine(entry.buffer);
+			}
 			isRunning = false;
 			break;
 		}
 	}
+	StringBufferFree(&entry);
 
 	// Close, and write the current world to the page file if persistence is enabled.
 	KernelClose();

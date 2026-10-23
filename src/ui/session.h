@@ -17,6 +17,9 @@
 
 // The prompt used prior to user input
 #define SESSION_PROMPT		"> "
+// CLAUDE: The prompt used prior to each further line of an entry; see SessionExecuteLine().
+// The prompt is as wide as SESSION_PROMPT, so that a caret pointing at an error lines up.
+#define SESSION_CONTINUATION_PROMPT	"  "
 
 // Prefix used for a status line; see SessionPrintStatusPrefix()
 #define SESSION_STATUS_PREFIX	">> "
@@ -24,6 +27,7 @@
 // Return codes for SessionExecuteLine()
 #define SESSION_CONTINUE	1
 #define SESSION_QUIT		2
+#define SESSION_INCOMPLETE	3
 
 
 /**
@@ -43,6 +47,14 @@ void SessionPrintStatusPrefix(void);
  * session has been asked to end, and SESSION_CONTINUE while it has not.
  */
 int SessionExecuteLine(char const * line);
+
+/*
+ * CLAUDE: The line given to SessionExecuteLine() is an entry of one or more lines,
+ * separated by '\n'. SessionExecuteLine() returns SESSION_INCOMPLETE if the formula of the
+ * entry is not complete yet, as in "foo x <-". The front end then appends '\n' and the next
+ * line to the entry, and calls SessionExecuteLine() with the entry again. An entry ending
+ * with a blank line is never incomplete, so a blank line ends an entry that is not complete.
+ */
 
 
 #endif	// SESSION_H

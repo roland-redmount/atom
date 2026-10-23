@@ -287,25 +287,42 @@ static bool tokenizeToFormulaBuilder(
 }
 
 
-Atom ParseFormula(char const * cString, FormOrdering * ordering, index32 * errorPosition)
+int ParseFormulaInput(char const * cString, FormOrdering * ordering, Atom * formula, index32 * errorPosition)
 {
 	FormulaBuilder builder;
 	InitializeFormulaBuilder(&builder, FORMULA_TOP_SCOPE);
 
-	Atom formula = (Atom) {0};
+	*formula = (Atom) {0};
+	int result = PARSE_INVALID;
 	if(tokenizeToFormulaBuilder(cString, &builder, errorPosition)) {
-		if(FormulaBuilderIsValid(&builder) && FormulaBuilderFinish(&builder))
-			formula = FormulaBuilderCreateFormula(&builder, ordering);
-		else
+		// FormulaBuilderFinish() clears isValid on a repeated last term, so
+		// FormulaBuilderIsValid() is read before FormulaBuilderFinish()
+		bool hasAllSyntax = FormulaBuilderIsValid(&builder);
+		if(hasAllSyntax && FormulaBuilderFinish(&builder)) {
+			*formula = FormulaBuilderCreateFormula(&builder, ordering);
+			result = PARSE_COMPLETE;
+		}
+		else {
 			// Either every token was accepted but they do not add up to a formula, or
 			// the last term repeats one before it, which is only known once
 			// no more tokens follow. Either way the string ends where the missing
 			// syntax should have been.
 			*errorPosition = CStringLength(cString);
+			// CLAUDE: more tokens can complete the formula, but cannot undo a repeated term
+			result = hasAllSyntax ? PARSE_INVALID : PARSE_INCOMPLETE;
+		}
 	}
 	// A builder abandoned part way through releases whatever it had collected,
 	// so this is also the error path; see PartBuilderReset().
 	CleanupFormulaBuilder(&builder);
+	return result;
+}
+
+
+Atom ParseFormula(char const * cString, FormOrdering * ordering, index32 * errorPosition)
+{
+	Atom formula;
+	ParseFormulaInput(cString, ordering, &formula, errorPosition);
 	return formula;
 }
 

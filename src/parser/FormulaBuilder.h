@@ -71,5 +71,20 @@ Atom CStringToFormula(char const * cString);
  */
 Atom ParseFormula(char const * cString, FormOrdering * ordering, index32 * errorPosition);
 
+// Results of ParseFormulaInput()
+#define PARSE_COMPLETE		1
+#define PARSE_INCOMPLETE	2
+#define PARSE_INVALID		3
+
+/**
+ * Parse a C string as ParseFormula() does, and tell an incomplete string from an
+ * invalid string. A string is incomplete if every token is accepted, but the string ends
+ * before the formula does, as in "foo x <-". More text may complete an incomplete string.
+ * If the formula is complete, returns PARSE_COMPLETE and writes the formula to formula;
+ * else returns PARSE_INCOMPLETE or PARSE_INVALID and writes the zero atom to formula
+ * and the error position to errorPosition.
+ */
+int ParseFormulaInput(char const * cString, FormOrdering * ordering, Atom * formula, index32 * errorPosition);
+
 
 #endif	// FORMULABUILDER_H

@@ -493,7 +493,7 @@ static void addHistoryLine(char const * text, size32 length)
 
 
 /*
- * CLAUDE: Read a line from a terminal in raw mode, with the editing keys listed
+ * Read a line from a terminal in raw mode, with the editing keys listed
  * at ReadLine(). A full buffer refuses further characters, so READLINE_TOO_LONG
  * does not occur.
  */
@@ -532,10 +532,8 @@ static int editLine(char const * prompt, char * buffer, size32 bufferSize)
 			line.cursorIndex = line.length;
 			redrawLine(&line);
 			fputs("^C\n", stdout);
-			line.length = 0;
-			line.cursorIndex = 0;
-			historyIndex = nHistoryLines;
-			break;
+			// the caller starts over, as the caller may hold earlier lines to discard too
+			return READLINE_CANCELLED;
 
 		case 127:
 		case CONTROL_KEY('h'):

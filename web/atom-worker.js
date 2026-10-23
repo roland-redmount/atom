@@ -18,6 +18,8 @@
  */
 
 const SESSION_QUIT = 2;
+// CLAUDE: the entry needs a further line; see SessionExecuteLine() in ui/session.h
+const SESSION_INCOMPLETE = 3;
 
 /*
  * A session that stops the module leaves it unusable, but not obviously so: a
@@ -97,12 +99,22 @@ onmessage = async (event) => {
         currentId = id;
         let ended = false;
         // a snippet is answered a line at a time, as if the lines were typed
+        // CLAUDE: the lines of an entry that is not complete yet, or null
+        let entry = null;
         for(const line of source.split("\n")) {
-            if(executeLine(line) === SESSION_QUIT) {
+            entry = (entry === null) ? line : `${entry}\n${line}`;
+            const result = executeLine(entry);
+            if(result === SESSION_INCOMPLETE)
+                continue;
+            entry = null;
+            if(result === SESSION_QUIT) {
                 ended = true;
                 break;
             }
         }
+        // CLAUDE: a blank line ends an entry that is not complete, reporting the error
+        if(entry !== null)
+            executeLine(`${entry}\n`);
         postMessage({ type: "done", id, ended });
     }
     catch(error) {

@@ -55,9 +55,9 @@ static size32 addColumn(
 	char const * cString, index32 start, index32 end,
 	Column columns[], size32 maxColumns, size32 nColumns)
 {
-	while((start < end) && IsWhiteSpace(cString[start]))
+	while((start < end) && (cString[start] == ' '))
 		start++;
-	while((end > start) && IsWhiteSpace(cString[end - 1]))
+	while((end > start) && (cString[end - 1] == ' '))
 		end--;
 	if(nColumns < maxColumns)
 		columns[nColumns] = (Column) {.start = start, .length = end - start};

@@ -80,6 +80,11 @@ typedef struct s_SessionState {
    sessionState, and creates the module state on the first line of a new world. */
 static SessionState * sessionState = 0;
 
+/* CLAUDE: The entry given to SessionExecuteLine(), as entered, and whether the last line of
+   the entry is blank; see SESSION_INCOMPLETE. */
+static char const * enteredEntry = 0;
+static bool isLastLineBlank = false;
+
 
 static void initializeSession(void)
 {
@@ -130,6 +135,22 @@ static void printPromptIndent(void)
 }
 
 
+/*
+ * CLAUDE: Indent by the width of the prompt and by the column of linePosition in its line
+ * of enteredEntry, so that a caret printed next is under the character at linePosition.
+ * A tab is indented by a tab, as the terminal echoed it.
+ */
+static void printCaretIndent(index32 linePosition)
+{
+	index32 lineStart = linePosition;
+	while((lineStart > 0) && (enteredEntry[lineStart - 1] != '\n'))
+		lineStart--;
+	printPromptIndent();
+	for(index32 i = lineStart; i < linePosition; i++)
+		PrintChar((enteredEntry[i] == '\t') ? '\t' : ' ');
+}
+
+
 void SessionPrintBanner(void)
 {
 	PrintChar('\n');
@@ -148,6 +169,7 @@ static void printHelp(void)
 	printLine("Variables are single letters, _ is the anonymous variable.");
 	printLine("An ID atom can be assigned a @name with a query like");
 	printLine("  circle @myCircle radius 1.0");
+	printLine("Input may continue across multiple lines until complete.");
 	PrintChar('\n');
 	printLine("Commands:");
 	printLine(":assert <term>        Assert a fact. The term must not contain variables.");
@@ -269,9 +291,7 @@ static void printParseError(index32 errorPosition)
 {
 	// errorPosition counts in the expanded line; see expandIDNumbers()
 	index32 linePosition = findLinePosition(errorPosition);
-	printPromptIndent();
-	for(index32 i = 0; i < linePosition; i++)
-		PrintChar(' ');
+	printCaretIndent(linePosition);
 	PrintCString("^ syntax error\n");
 }
 
@@ -282,9 +302,7 @@ static void printParseError(index32 errorPosition)
  */
 static void printNameError(index32 linePosition, char const * message)
 {
-	printPromptIndent();
-	for(index32 i = 0; i < linePosition; i++)
-		PrintChar(' ');
+	printCaretIndent(linePosition);
 	PrintCString("^ ");
 	PrintCString(message);
 	PrintChar('\n');
@@ -404,6 +422,24 @@ static bool expandIDNames(char const * line, bool isQuery)
 	}
 	StringBufferPush(&sessionState->expandedLine, 0);
 	return true;
+}
+
+
+/*
+ * CLAUDE: Parse the formula of formulaText, which begins at linePosition in the expanded
+ * line, and print an error if the formula is invalid. Returns SESSION_INCOMPLETE if a
+ * further line may complete the formula, and SESSION_CONTINUE otherwise. Writes the formula
+ * to formula, or the zero atom if there is no formula.
+ */
+static int parseEntryFormula(char const * formulaText, index32 linePosition, FormOrdering * ordering, Atom * formula)
+{
+	index32 errorPosition;
+	int result = ParseFormulaInput(formulaText, ordering, formula, &errorPosition);
+	if((result == PARSE_INCOMPLETE) && !isLastLineBlank)
+		return SESSION_INCOMPLETE;
+	if(result != PARSE_COMPLETE)
+		printParseError(linePosition + errorPosition);
+	return SESSION_CONTINUE;
 }
 
 
@@ -620,20 +656,18 @@ static void printQueryResults(FormulaView queryView, FormOrdering const * orderi
 /**
  * Submit one query and print each resulting fact and the total number of facts.
  */
-static void executeQuery(char const * line)
+static int executeQuery(char const * line)
 {
-	index32 errorPosition;
 	FormOrdering ordering;
-	Atom query = ParseFormula(line, &ordering, &errorPosition);
-	if(!query.hash) {
-		printParseError(errorPosition);
-		return;
-	}
+	Atom query;
+	int parseResult = parseEntryFormula(line, 0, &ordering, &query);
+	if(!query.hash)
+		return parseResult;
 	FormulaView queryView = FormulaGetView(query);
 	if(!IsRelationForm(queryView.form)) {
 		printStatusLine("A query must be a term or a conjunction of terms.");
 		ReleaseFormula(query);
-		return;
+		return SESSION_CONTINUE;
 	}
 
 	// CLAUDE: Reading the next result overwrites the current result, so each printed
@@ -665,6 +699,7 @@ static void executeQuery(char const * line)
 		FreeTypedTuple(printedResults[i]);
 	FreeMixedTypeRelation(resultRelations);
 	ReleaseFormula(query);
+	return SESSION_CONTINUE;
 }
 
 
@@ -731,22 +766,21 @@ static void printAssertResult(int result)
  * part way into the line the user typed, so its position there is what puts the caret of a
  * syntax error under the character it names.
  */
-static void executeAssert(char const * formulaText, index32 linePosition)
+static int executeAssert(char const * formulaText, index32 linePosition)
 {
 	if(!*formulaText) {
 		printStatusLine(":assert requies a term or a clause.");
-		return;
+		return SESSION_CONTINUE;
 	}
 
-	index32 errorPosition;
-	Atom formula = ParseFormula(formulaText, 0, &errorPosition);
-	if(!formula.hash) {
-		printParseError(linePosition + errorPosition);
-		return;
-	}
+	Atom formula;
+	int parseResult = parseEntryFormula(formulaText, linePosition, 0, &formula);
+	if(!formula.hash)
+		return parseResult;
 
 	printAssertResult(AssertFormula(formula));
 	ReleaseFormula(formula);
+	return SESSION_CONTINUE;
 }
 
 
@@ -786,22 +820,21 @@ static void printRetractResult(int result)
 /*
  * Retract a fact, a clause rule or an ifact rule.
  */
-static void executeRetract(char const * formulaText, index32 linePosition)
+static int executeRetract(char const * formulaText, index32 linePosition)
 {
 	if(!*formulaText) {
 		printStatusLine(":retract requires a term or a clause.");
-		return;
+		return SESSION_CONTINUE;
 	}
 
-	index32 errorPosition;
-	Atom formula = ParseFormula(formulaText, 0, &errorPosition);
-	if(!formula.hash) {
-		printParseError(linePosition + errorPosition);
-		return;
-	}
+	Atom formula;
+	int parseResult = parseEntryFormula(formulaText, linePosition, 0, &formula);
+	if(!formula.hash)
+		return parseResult;
 
 	printRetractResult(RetractFormula(formula));
 	ReleaseFormula(formula);
+	return SESSION_CONTINUE;
 }
 
 
@@ -909,24 +942,22 @@ static void executeLoad(char const * argumentText, index32 linePosition)
  * command. The query is not executed, and no service is compiled for it, so a query that
  * does not dispatch to an existing service gives no output. See dispatch.h.
  */
-static void executeInspect(char const * queryText, index32 linePosition)
+static int executeInspect(char const * queryText, index32 linePosition)
 {
 	if(!*queryText) {
 		printStatusLine(":inspect requires a formula.");
-		return;
+		return SESSION_CONTINUE;
 	}
 
-	index32 errorPosition;
-	Atom query = ParseFormula(queryText, 0, &errorPosition);
-	if(!query.hash) {
-		printParseError(linePosition + errorPosition);
-		return;
-	}
+	Atom query;
+	int parseResult = parseEntryFormula(queryText, linePosition, 0, &query);
+	if(!query.hash)
+		return parseResult;
 	FormulaView queryView = FormulaGetView(query);
 	if(!IsRelationForm(queryView.form)) {
 		printStatusLine("A query must be a term or a conjunction of terms.");
 		ReleaseFormula(query);
-		return;
+		return SESSION_CONTINUE;
 	}
 
 	size8 arity = queryView.actors->nAtoms;
@@ -954,6 +985,7 @@ static void executeInspect(char const * queryText, index32 linePosition)
 	printInspectSummary(nServices);
 	FreeTypedTuple(permutedActors);
 	ReleaseFormula(query);
+	return SESSION_CONTINUE;
 }
 
 
@@ -1104,16 +1136,12 @@ static int executeCommand(char const * line, char const * commandText)
 	}
 
 	char const * formulaText = matchCommand(commandText, ":assert");
-	if(formulaText) {
-		executeAssert(formulaText, formulaText - line);
-		return SESSION_CONTINUE;
-	}
+	if(formulaText)
+		return executeAssert(formulaText, formulaText - line);
 
 	char const * queryText = matchCommand(commandText, ":inspect");
-	if(queryText) {
-		executeInspect(queryText, queryText - line);
-		return SESSION_CONTINUE;
-	}
+	if(queryText)
+		return executeInspect(queryText, queryText - line);
 
 	char const * pathText = matchCommand(commandText, ":load");
 	if(pathText) {
@@ -1134,13 +1162,31 @@ static int executeCommand(char const * line, char const * commandText)
 	}
 
 	char const * retractText = matchCommand(commandText, ":retract");
-	if(retractText) {
-		executeRetract(retractText, retractText - line);
-		return SESSION_CONTINUE;
-	}
+	if(retractText)
+		return executeRetract(retractText, retractText - line);
 
 	printStatusLine("Unknown command. Enter :help for the commands.");
 	return SESSION_CONTINUE;
+}
+
+
+/*
+ * CLAUDE: Determine if the text has more than one line and the last line is blank.
+ */
+static bool endsWithBlankLine(char const * text)
+{
+	index32 lastLineStart = 0;
+	for(index32 i = 0; text[i]; i++) {
+		if(text[i] == '\n')
+			lastLineStart = i + 1;
+	}
+	if(lastLineStart == 0)
+		return false;
+	for(index32 i = lastLineStart; text[i]; i++) {
+		if(!IsSpaceChar(text[i]))
+			return false;
+	}
+	return true;
 }
 
 
@@ -1150,6 +1196,8 @@ int SessionExecuteLine(char const * line)
 	if(!sessionState)
 		initializeSession();
 	IFactSetPrinter(printNamedID);
+	enteredEntry = line;
+	isLastLineBlank = endsWithBlankLine(line);
 
 	// :clear reads its @name as entered, so it is matched before the line is expanded
 	char const * enteredFirstCharacter = line;
@@ -1180,6 +1228,5 @@ int SessionExecuteLine(char const * line)
 
 	// The query is parsed from the whole line, so that the position of a syntax error
 	// counts from where the line began rather than from its first word.
-	executeQuery(line);
-	return SESSION_CONTINUE;
+	return executeQuery(line);
 }
