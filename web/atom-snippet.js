@@ -60,6 +60,10 @@ textarea {
     resize: none;
     background: transparent;
     color: inherit;
+    /* CLAUDE: a long line scrolls sideways instead of wrapping; see fitEditor() */
+    white-space: pre;
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 textarea:focus {
     outline: 2px solid color-mix(in srgb, currentColor 40%, transparent);
@@ -68,7 +72,7 @@ textarea:focus {
 .controls {
     display: flex;
     gap: 6px;
-    padding: 0.75rem 0.75rem 0 0;
+    padding: 0.75rem 0.75rem 0;
 }
 button {
     font: inherit;
@@ -121,7 +125,7 @@ class AtomSnippet extends HTMLElement
             <style>${STYLE}</style>
             <div class="frame">
                 <div class="entry">
-                    <textarea spellcheck="false" aria-label="atom snippet"></textarea>
+                    <textarea spellcheck="false" wrap="off" aria-label="atom snippet"></textarea>
                     <div class="controls">
                         <button class="run">Run</button>
                         <button class="reset quiet">Reset</button>
@@ -153,12 +157,23 @@ class AtomSnippet extends HTMLElement
         // snippet that was interrupted keeps what it had printed by then
         onSessionReset(() => { if(!this.running) this.clear(); });
 
+        // CLAUDE: a change of width can add or remove the horizontal scrollbar
+        window.addEventListener("resize", () => this.fitEditor());
         this.fitEditor();
     }
 
+    // CLAUDE: Make the editor tall enough for every line and for the horizontal scrollbar,
+    // so that the editor never scrolls vertically. The horizontal scrollbar is the
+    // difference of offsetHeight and clientHeight, as the editor has no border.
     fitEditor()
     {
         this.editor.rows = this.editor.value.split("\n").length;
+        this.editor.style.height = "";
+        // CLAUDE: an editor that is not displayed has no height to measure
+        if(this.editor.scrollHeight === 0)
+            return;
+        const scrollbarHeight = this.editor.offsetHeight - this.editor.clientHeight;
+        this.editor.style.height = `${this.editor.scrollHeight + scrollbarHeight}px`;
     }
 
     clear()

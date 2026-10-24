@@ -1013,6 +1013,46 @@ static void testImpliedBy(void)
 }
 
 
+/* CLAUDE: ParseFormulaInput() returns the given result for the string. */
+static void assertParseResult(char const * string, int expectedResult)
+{
+	Atom formula;
+	index32 errorPosition;
+	ASSERT_INT32_EQUAL(ParseFormulaInput(string, 0, &formula, &errorPosition), expectedResult)
+	if(formula.hash)
+		ReleaseFormula(formula);
+}
+
+
+/*
+ * CLAUDE: ParseFormulaInput() tells a string that more text can complete from a string
+ * that is invalid. A line break is whitespace, so a formula may span several lines.
+ */
+static void testParseFormulaInput(void)
+{
+	assertParseResult("foo x bar 1", PARSE_COMPLETE);
+	assertParseResult("foo x <-\n  bar x &\n\tbaz x\n", PARSE_COMPLETE);
+	assertParsesAs("foo x <-\n  bar x &\r\n\tbaz x", "foo x <- bar x & baz x");
+
+	assertParseResult("", PARSE_INCOMPLETE);
+	assertParseResult("foo x <-", PARSE_INCOMPLETE);
+	assertParseResult("foo x <-\n", PARSE_INCOMPLETE);
+	assertParseResult("foo x bar", PARSE_INCOMPLETE);
+	assertParseResult("foo 1 &", PARSE_INCOMPLETE);
+	assertParseResult("foo 1 | !", PARSE_INCOMPLETE);
+	assertParseResult("foo [bar 1", PARSE_INCOMPLETE);
+	assertParseResult("foo [. bar", PARSE_INCOMPLETE);
+
+	// CLAUDE: no text following can undo a repeated term, end a string or follow a sign
+	assertParseResult("foo 1 | foo 1", PARSE_INVALID);
+	assertParseResult("foo \"abc", PARSE_INVALID);
+	assertParseResult("foo \"ab\ncd\"", PARSE_INVALID);
+	assertParseResult("foo -", PARSE_INVALID);
+	assertParseResult("foo x bar %", PARSE_INVALID);
+	assertParseResult("foo 1 &\n& bar 2", PARSE_INVALID);
+}
+
+
 /**
  * Test parsing a term containing a reflection [foo "a" bar b]
  */
@@ -1528,6 +1568,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testParseColumnActor);
 	ExecuteTest(testRepeatedTermRejected);
 	ExecuteTest(testImpliedBy);
+	ExecuteTest(testParseFormulaInput);
 	ExecuteTest(testReflectedTerm);
 	ExecuteTest(testReflectedNegatedTerm);
 	ExecuteTest(testReflectedTermWithQuote);

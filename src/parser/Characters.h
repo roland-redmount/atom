@@ -33,6 +33,9 @@ bool IsNameChar(char c);
  */
 bool IsSeparatorChar(char c);
 
+/**
+ * A whitespace character is ' ', \r, \n, and \t
+ */
 bool IsWhiteSpace(char c);
 
 // A digit 0-9 or a lowercase letter a-f, as in the hash of an AT_ID atom

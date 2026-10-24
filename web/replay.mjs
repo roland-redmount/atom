@@ -8,7 +8,9 @@
 import { readFileSync } from "node:fs";
 
 const SESSION_PROMPT = "> ";
+const SESSION_CONTINUATION_PROMPT = "  ";
 const SESSION_QUIT = 2;
+const SESSION_INCOMPLETE = 3;
 
 const modulePath = process.argv[2];
 const write = (text) => process.stdout.write(text);
@@ -21,7 +23,13 @@ const initialize = atom.cwrap("WebInitialize", null, []);
 const executeLine = atom.cwrap("WebExecuteLine", "number", ["string"]);
 
 initialize();
+// CLAUDE: the lines of an entry that is not complete yet, or null; see ui/repl.c
+let entry = null;
 for (const line of readFileSync(0, "utf8").split("\n")) {
-    write(SESSION_PROMPT);
-    if (executeLine(line) === SESSION_QUIT) break;
+    write(entry === null ? SESSION_PROMPT : SESSION_CONTINUATION_PROMPT);
+    entry = (entry === null) ? line : `${entry}\n${line}`;
+    const result = executeLine(entry);
+    if (result === SESSION_INCOMPLETE) continue;
+    entry = null;
+    if (result === SESSION_QUIT) break;
 }

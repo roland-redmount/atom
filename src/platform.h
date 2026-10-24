@@ -237,6 +237,15 @@ void SetPrintIndent(uint32 nChars);
 uint32 GetPrintIndent(void);
 
 /**
+ * Count the characters printed between BeginPrintCount() and EndPrintCount(),
+ * instead of writing the characters to the output stream. EndPrintCount() returns the count
+ * and disables counting.
+ * This finds how wide a printed value is, for example to align columns of a table.
+ */
+void BeginPrintCount(void);
+size32 EndPrintCount(void);
+
+/**
  * Reading from an input stream
  */
 
@@ -255,6 +264,7 @@ int ReadLine(char const * prompt, char * buffer, size32 bufferSize);
 #define READLINE_OK			1	// a line was read
 #define READLINE_END		2	// end of input, nothing was read
 #define READLINE_TOO_LONG	3	// the line did not fit the buffer and was discarded
+#define READLINE_CANCELLED	4	// Ctrl-C discarded the line
 
 /**
  * File I/O

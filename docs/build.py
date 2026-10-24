@@ -6,8 +6,8 @@
 #
 # --atom is the built web front end (default build/wasm/web); see web/publish.sh.
 # --out is where the site is written (default build/site). Serve that directory over
-# http to view it, e.g. python -m http.server -d build/site, since a browser does
-# not run the web front end from a file:// address.
+# http to view it, with python docs/serve.py, since a browser does not run the web
+# front end from a file:// address.
 
 import argparse
 import html
@@ -22,6 +22,8 @@ DOCS = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(DOCS)
 # CLAUDE: the data files that snippets read with :load, copied to the same place in the site
 DATA = os.path.join(DOCS, "data")
+# CLAUDE: the web fonts that styles.css loads
+FONTS = os.path.join(DOCS, "fonts")
 
 # CLAUDE: each published page, from the markdown file name in docs/ to the page written
 PAGES = {
@@ -62,9 +64,12 @@ def heading_anchor(text):
 class AnchorRenderer(mistune.HTMLRenderer):
     # CLAUDE: give each heading an id, so that a link can name the heading
 
+    # CLAUDE: each heading is also recorded as (level, anchor, text) for page_outline()
+
     def __init__(self):
         super().__init__(escape=False)
         self.anchors = set()
+        self.headings = []
 
     def heading(self, text, level, **attrs):
         anchor = heading_anchor(text)
@@ -74,6 +79,7 @@ class AnchorRenderer(mistune.HTMLRenderer):
             n += 1
             unique = f"{anchor}-{n}"
         self.anchors.add(unique)
+        self.headings.append((level, unique, text))
         return f'<h{level} id="{unique}">{text}</h{level}>\n'
 
     def link(self, text, url, title=None):
@@ -82,6 +88,29 @@ class AnchorRenderer(mistune.HTMLRenderer):
         if re.match(r"(https?:)?//", url):
             a = a.replace("<a ", '<a target="_blank" rel="noopener" ', 1)
         return a
+
+
+def page_outline(headings):
+    # CLAUDE: a nested list linking to each level 2 heading, and below it to each level 3
+    # heading that follows it, for the sidebar of the page
+    sections = []
+    for level, anchor, text in headings:
+        if level not in (2, 3):
+            continue
+        link = f'<a href="#{anchor}">{re.sub(r"<[^>]+>", "", text)}</a>'
+        if level == 2 or not sections:
+            sections.append((link, []))
+        else:
+            sections[-1][1].append(link)
+    if not sections:
+        return ""
+    items = []
+    for link, subsections in sections:
+        sublist = ""
+        if subsections:
+            sublist = "<ul>" + "".join(f"<li>{s}</li>" for s in subsections) + "</ul>"
+        items.append(f"<li>{link}{sublist}</li>")
+    return "<ul>\n" + "\n".join(items) + "\n</ul>"
 
 
 def wiki_link(match, page_name, warnings):
@@ -137,8 +166,9 @@ def build_page(source, template, warnings):
     raw = read(os.path.join(DOCS, source))
     page_name = source[: -len(".md")]
     title = extract_meta(raw, "title") or page_name
+    renderer = AnchorRenderer()
     markdown = mistune.create_markdown(
-        renderer=AnchorRenderer(),
+        renderer=renderer,
         plugins=["strikethrough", "footnotes", "table"])
     content = markdown(strip_meta(raw))
     content = convert_wiki_links(content, page_name, warnings)
@@ -155,6 +185,7 @@ def build_page(source, template, warnings):
             head = f'<meta name="atom-files" content="{html.escape(" ".join(files))}">'
     page = template.replace("{{title}}", title)
     page = page.replace("{{head}}", head)
+    page = page.replace("{{outline}}", page_outline(renderer.headings))
     page = page.replace("{{content}}", content)
     page = page.replace("{{scripts}}", scripts)
     return page
@@ -186,6 +217,8 @@ def main():
     shutil.copy2(os.path.join(REPO, "atom-logo-no-background.svg"), os.path.join(args.out, "atom-logo.svg"))
     if os.path.isdir(DATA):
         shutil.copytree(DATA, os.path.join(args.out, "data"))
+    if os.path.isdir(FONTS):
+        shutil.copytree(FONTS, os.path.join(args.out, "fonts"))
     os.makedirs(os.path.join(args.out, "atom"))
     for f in ATOM_FILES:
         shutil.copy2(os.path.join(args.atom, f), os.path.join(args.out, "atom", f))

@@ -52,7 +52,7 @@ static void initializeLoader(Loader * loader, Atom form, LoadReport * report)
 
 static bool isBlank(char const * line)
 {
-	while(IsWhiteSpace(*line))
+	while(*line == ' ')
 		line++;
 	return !*line;
 }
@@ -65,7 +65,7 @@ static bool isBlank(char const * line)
 static char findSeparator(char const * header)
 {
 	for(index32 i = 0; header[i]; i++) {
-		if(!IsNameChar(header[i]) && !IsWhiteSpace(header[i]))
+		if(!IsNameChar(header[i]) && (header[i] != ' '))
 			return header[i];
 	}
 	return ' ';

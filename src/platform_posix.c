@@ -185,10 +185,40 @@ uint32 GetPrintIndent(void)
 	return printIndent;
 }
 
+// true between BeginPrintCount() and EndPrintCount()
+static bool isCountingPrint = false;
+static size32 printCount = 0;
+
+void BeginPrintCount(void)
+{
+	isCountingPrint = true;
+	printCount = 0;
+}
+
+size32 EndPrintCount(void)
+{
+	isCountingPrint = false;
+	return printCount;
+}
+
+/**
+ * Write one byte to stdout, or count the byte if BeginPrintCount() has been called.
+ * A UTF-8 continuation byte is not counted.
+ */
+static void outputChar(char c)
+{
+	if(isCountingPrint) {
+		if((c & 0xC0) != 0x80)
+			printCount++;
+	}
+	else
+		fputc(c, stdout);
+}
+
 static void indent(void)
 {
 	for(index32 i = 0; i < printIndent; i++)
-		fputc(' ', stdout);
+		outputChar(' ');
 }
 
 
@@ -200,25 +230,31 @@ static void indent(void)
 
 #define FORMAT_STRING_BUFFER_SIZE	1024
 
-// static char formatStringBuffer[FORMAT_STRING_BUFFER_SIZE];
-
 size32 PrintF(char const * formatString, ...)
 {
 	va_list args;
 	va_start(args, formatString);
-	// TODO: this does not seem to handle varargs propely?
-	// size32 nCharsPrinted = FormatString(
-	// 	formatStringBuffer, FORMAT_STRING_BUFFER_SIZE, formatString, args);
-	// PrintCString(formatStringBuffer);
+
 	indent();
-	size32 nCharsPrinted = vprintf(formatString, args);
+	size32 nCharsPrinted;
+	if(isCountingPrint) {
+		char buffer[FORMAT_STRING_BUFFER_SIZE];
+		nCharsPrinted = vsnprintf(buffer, FORMAT_STRING_BUFFER_SIZE, formatString, args);
+		for(index32 i = 0; buffer[i]; i++)
+			outputChar(buffer[i]);
+		// CLAUDE: bytes beyond the buffer are counted as one character each
+		if(nCharsPrinted >= FORMAT_STRING_BUFFER_SIZE)
+			printCount += nCharsPrinted - (FORMAT_STRING_BUFFER_SIZE - 1);
+	}
+	else
+		nCharsPrinted = vprintf(formatString, args);
 	va_end(args);
 	return nCharsPrinted;
 }
 
 void PrintChar(char c)
 {
-	fputc(c, stdout);
+	outputChar(c);
 }
 
 
@@ -233,7 +269,12 @@ void PrintCharString(char const * string, size32 length)
 void PrintCString(char const * string)
 {
 	indent();
-	fputs(string, stdout);
+	if(isCountingPrint) {
+		for(index32 i = 0; string[i]; i++)
+			outputChar(string[i]);
+	}
+	else
+		fputs(string, stdout);
 }
 
 
@@ -452,7 +493,7 @@ static void addHistoryLine(char const * text, size32 length)
 
 
 /*
- * CLAUDE: Read a line from a terminal in raw mode, with the editing keys listed
+ * Read a line from a terminal in raw mode, with the editing keys listed
  * at ReadLine(). A full buffer refuses further characters, so READLINE_TOO_LONG
  * does not occur.
  */
@@ -491,10 +532,8 @@ static int editLine(char const * prompt, char * buffer, size32 bufferSize)
 			line.cursorIndex = line.length;
 			redrawLine(&line);
 			fputs("^C\n", stdout);
-			line.length = 0;
-			line.cursorIndex = 0;
-			historyIndex = nHistoryLines;
-			break;
+			// the caller starts over, as the caller may hold earlier lines to discard too
+			return READLINE_CANCELLED;
 
 		case 127:
 		case CONTROL_KEY('h'):

@@ -4,7 +4,7 @@
 
 bool IsWhiteSpace(char c)
 {
-	return c == ' ';
+	return (c == ' ') || (c == '\n') || (c == '\t') || (c == '\r');
 }
 
 

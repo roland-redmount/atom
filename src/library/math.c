@@ -313,7 +313,7 @@ void RegisterMathFunctions(void)
 
 #define N_MATH_RULES	5
 // The number of relations closed by MathSetup()
-#define N_MATH_CLOSED_FORMS	4
+#define N_MATH_CLOSED_FORMS	7
 
 typedef struct s_MathLibrary {
 	uint32 moduleID;
@@ -343,14 +343,19 @@ void MathSetup(void)
 
 	mathLibrary->moduleID = RequestModuleID();
 
-	// Integer arithmetic
+	// Type predicates
 	Service service = RegisterMachineService(mathLibrary->moduleID, "integer #1<INT", integerCall);
 	mathLibrary->closedForms[0] = service.relation.form;
+
+	// Integer arithmetic
 	service = RegisterMachineService(mathLibrary->moduleID, "+ #1<INT + #2<INT = #3>INT", addIntCall);
 	mathLibrary->closedForms[1] = service.relation.form;
-	RegisterMachineService(mathLibrary->moduleID, "+ #1<INT - #2<INT = #3>INT", subIntCall);
-	RegisterMachineService(mathLibrary->moduleID, "* #1<INT * #2<INT = #3>INT", mulIntCall);
-	RegisterMachineService(mathLibrary->moduleID, "* #1<INT / #2<INT = #3>INT rem #4>INT", intDivisionCall);
+	service = RegisterMachineService(mathLibrary->moduleID, "+ #1<INT - #2<INT = #3>INT", subIntCall);
+	mathLibrary->closedForms[2] = service.relation.form;
+	service = RegisterMachineService(mathLibrary->moduleID, "* #1<INT * #2<INT = #3>INT", mulIntCall);
+	mathLibrary->closedForms[3] = service.relation.form;
+	service = RegisterMachineService(mathLibrary->moduleID, "* #1<INT / #2<INT = #3>INT rem #4>INT", intDivisionCall);
+	mathLibrary->closedForms[4] = service.relation.form;
 
 	// Floating point arithmetic
 	RegisterMachineService(mathLibrary->moduleID, "+ #1<FLOAT + #2<FLOAT = #3>FLOAT", addFloatCall);
@@ -367,11 +372,11 @@ void MathSetup(void)
 	// inequalities
 	service = RegisterMachineService(mathLibrary->moduleID, "< #1<INT > #2<INT", strictInequalityIntCall);
 	RegisterMachineService(mathLibrary->moduleID, "< #1<FLOAT > #2<FLOAT", strictInequalityFloatCall);
-	mathLibrary->closedForms[2] = service.relation.form;
+	mathLibrary->closedForms[5] = service.relation.form;
 
 	service = RegisterMachineService(mathLibrary->moduleID, "=< #1<INT >= #2<INT", nonStrictInequalityIntCall);
 	RegisterMachineService(mathLibrary->moduleID, "=< #1<FLOAT >= #2<FLOAT", nonStrictInequalityFloatCall);
-	mathLibrary->closedForms[3] = service.relation.form;
+	mathLibrary->closedForms[6] = service.relation.form;
 
 	// The range a =< n =< b is the conjunction (n >= a & b >= n), since
 	// (=< x >= y) reads x >= y. Neither term is a finite relation on its own.
