@@ -74,9 +74,9 @@ bool TupleStoreIsWritable(TupleStore const * store);
 bool TupleStoreIsFinite(TupleStore const * store);
 
 
-byte TupleStoreAddTuple(TupleStore * store, Atom const tuple[], uint8 idPosition);
+byte TupleStoreAddTuple(TupleStore * store, Atom const tuple[]);
 
-byte TupleStoreRemoveTuple(TupleStore * store, Atom const tuple[], uint8 idPosition);
+byte TupleStoreRemoveTuple(TupleStore * store, Atom const tuple[]);
 
 size32 TupleStoreNTuples(TupleStore const * store);
 

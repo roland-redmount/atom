@@ -73,6 +73,8 @@ int RetractFormula(Atom formula);
  * High level function to create an IFact from a formula containing
  * one of more generator (*) atoms. The caller obtains a reference to the IFact.
  */
+/* CLAUDE: Returns a zero atom if the formula is not a valid ifact, or if a relation of
+   the formula has a TupleStore; see IFactSetupRelation(). */
 Atom CreateIFact(FormulaView formula);
 
 

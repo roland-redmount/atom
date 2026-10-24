@@ -5,6 +5,7 @@
 #include "kernel/ifact.h"
 #include "kernel/lookup.h"
 #include "kernel/multiset.h"
+#include "kernel/TupleStore.h"
 #include "kernel/TypedRelation.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"
@@ -91,8 +92,12 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
 	TypedRelation relation = {.form = fact.form, .typeSignature = typeSignature};
 	TupleStore * store = 0;
-	if(RelationExists(relation))
+	if(RelationExists(relation)) {
 	 	store = RelationGetTupleStore(relation);
+		// CLAUDE: A relation holding ifacts is not writable; see IFactCreateReaderService()
+		if(IFactRelationHasReader(relation))
+			return ASSERT_NOT_WRITABLE;
+	}
 	if(store) {
 		// NOTE: this is a limitation of having a single TupleStore per TypedRelation
 		if(!TupleStoreIsWritable(store))
@@ -109,7 +114,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 	}
 
 	// Add the tuple
-	ASSERT(RelationAddTuple(relation, actorsArray, 0) == TUPLE_ADDED)
+	ASSERT(RelationAddTuple(relation, actorsArray) == TUPLE_ADDED)
 	LookupAddFactRoles(relation, actorsArray);
 
 	return ASSERT_OK;
@@ -202,15 +207,15 @@ void RetractFact(FormulaView fact)
 		// The relation has no stored tuples
 		return;
 	}
+	// CLAUDE: The defining facts of an ifact are never stored in a TupleStore; see IFactConjunction
+	if(!TupleStoreIsWritable(store))
+		return;
 	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
 
 	// Remove the tuple. This will not remove defining facts
-	byte removeResult = TupleStoreRemoveTuple(store, actorsArray, 0) ;
+	byte removeResult = TupleStoreRemoveTuple(store, actorsArray) ;
 	if(removeResult == TUPLE_REMOVED)
 		LookupRemoveFactRoles(relation, actorsArray);
-	else {
-		ASSERT(removeResult == TUPLE_PROTECTED)
-	}
 }
 
 
@@ -401,6 +406,15 @@ Atom CreateIFact(FormulaView formula)
 	size8 nTuples = ifactTupleArray.nElements;
 	QuickSort(ifactTuples, nTuples, sizeof(IFactTuple), &compareIFactTuples);
 
+	// CLAUDE: Every relation must be able to hold ifacts; see IFactSetupRelation()
+	for(index32 i = 0; i < nTuples; i++) {
+		bool createdReader;
+		if(!IFactSetupRelation(ifactTuples[i].relation, ifactTuples[i].idColumn, &createdReader)) {
+			freeIFactTuples(&ifactTupleArray);
+			return (Atom) {0};
+		}
+	}
+
 	// Create the ifact
 	IFactDraft draft;
 	IFactBegin(&draft);
@@ -409,14 +423,7 @@ Atom CreateIFact(FormulaView formula)
 			// Begin new conjunction, from a new RelationWriter
 			if(i > 0)
 				IFactEndConjunction(&draft);
-			TupleStore * store = 0;
-			if(RelationExists(ifactTuples[i].relation))
-				store = RelationGetTupleStore(ifactTuples[i].relation);
-			if(!store) {
-				store = CreateTupleStore(
-					ifactTuples[i].relation, GetStorageProvider(PROVIDER_BTREE), ifactTuples[i].nColumns, 0);
-			}
-			IFactBeginConjunction(&draft, store, ifactTuples[i].idColumn);
+			IFactBeginConjunction(&draft, ifactTuples[i].relation, ifactTuples[i].idColumn);
 		}
 		IFactAddTuple(&draft, ifactTuples[i].tuple);
 	}

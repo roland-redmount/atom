@@ -69,23 +69,7 @@ TupleStore * CreateTupleStore(TypedRelation relation, StorageProvider const * pr
 	AcquireRelation(relation);
 	RelationAttachTupleStore(relation, store);
 
-	// Invalidate compiled services for this term form.
-	// NOTE: it is not sufficient to invalidate only the current relation,
-	// since any service compiled from a rule containing this term form
-	// may now become dependent on the this relation.
-	size32 nInvalidated = InvalidateTermFormServices(relation.form, INVALIDATE_BY_PRIMITIVE);
-
-	// CLAUDE: A service compiled before this relation existed has no operator reading the
-	// relation, so InvalidateTermFormServices() does not reach the service
-	InvalidateDependentServices(&relation.form, 1);
-
-	// A primitive service of this relation is stale if there exists a rule
-	// containing the term form. We also check (nInvalidated > 0) for cases where
-	// a dependent operator were added through other means than the compiler,
-	// so that no rule exists; this mainly occurs in test cases.
-	bool primitivesStale = (nInvalidated > 0) ||
-		ClauseFormExistsForTermForm(relation.form) ||
-		IFactRuleExistsForTermForm(relation.form);
+	bool primitivesStale = InvalidateServicesForNewRelation(relation.form);
 
 	size32 nReaders = 0;
 	if(provider->setupStorage) {
@@ -143,44 +127,38 @@ bool TupleStoreIsWritable(TupleStore const * store)
 }
 
 
-byte TupleStoreAddTuple(TupleStore * store, Atom const tuple[], uint8 idPosition)
+byte TupleStoreAddTuple(TupleStore * store, Atom const tuple[])
 {
 	ASSERT(TupleStoreIsWritable(store))
 	// Permute tuple to the provider's order
 	Atom providerTuple[store->nColumns];
 	for(index8 i = 0; i < store->nColumns; i++)
 		providerTuple[i] = tuple[store->indexColumns[i]];
-	index8 providerIdPositon = idPosition ? store->indexColumns[idPosition - 1] + 1 : 0;
 	// Call the provider to store the tuple
-	byte result = store->provider->addTuple(store->storage, providerTuple, providerIdPositon);
+	byte result = store->provider->addTuple(store->storage, providerTuple);
 	// Acquire atoms
 	if(result == TUPLE_ADDED) {
-		for(index8 i = 0; i < store->nColumns; i++) {
-			if(i + 1 != idPosition)
-				AcquireAtom(tuple[i], store->relation.typeSignature.atomTypes[i]);
-		}
+		for(index8 i = 0; i < store->nColumns; i++)
+			AcquireAtom(tuple[i], store->relation.typeSignature.atomTypes[i]);
 	}
 	return result;
 }
 
 
-byte TupleStoreRemoveTuple(TupleStore * store, Atom const tuple[], uint8 idPosition)
+byte TupleStoreRemoveTuple(TupleStore * store, Atom const tuple[])
 {
 	ASSERT(TupleStoreIsWritable(store))
 	// Permute tuple to the provider's order
 	Atom providerTuple[store->nColumns];
 	for(index8 i = 0; i < store->nColumns; i++)
 		providerTuple[i] = tuple[store->indexColumns[i]];
-	index8 providerIdPositon = idPosition ? store->indexColumns[idPosition - 1] + 1 : 0;
 	// Call the provider to remove th tuple
-	byte result = store->provider->removeTuple(store->storage, providerTuple, providerIdPositon);
+	byte result = store->provider->removeTuple(store->storage, providerTuple);
 
 	// Release atoms
 	if(result == TUPLE_REMOVED) {
-		for(index32 i = 0; i < store->nColumns; i++) {
-			if((i + 1) != idPosition)
-				ReleaseTypedAtom(CreateTypedAtom(store->relation.typeSignature.atomTypes[i], tuple[i]));
-		}
+		for(index32 i = 0; i < store->nColumns; i++)
+			ReleaseTypedAtom(CreateTypedAtom(store->relation.typeSignature.atomTypes[i], tuple[i]));
 	}
 	return result;
 }

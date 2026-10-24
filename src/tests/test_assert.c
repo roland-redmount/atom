@@ -502,34 +502,33 @@ static void dropFormRelations(char const * termString)
  * CLAUDE: The query (huge c) is compiled before the relation (circle radius) exists, so the
  * rule for (big c) yields nothing, and (huge c) keeps no operator reading (big c). Creating
  * the relation must still invalidate (huge c), which depends on (circle radius) through
- * two rules; see InvalidateDependentServices().
+ * two rules; see InvalidateDependentServices(). The relation is created by asserting the
+ * fact (circle "d" radius 20).
  */
 void testInvalidateDependentsOfNewRelation(void)
 {
-	Atom ifactRule = CStringToTerm("circle * radius r");
 	Atom bigRule = CStringToClause("big c | ! circle c radius r | ! < r > 10");
 	Atom hugeRule = CStringToClause("huge c | ! big c");
 	Atom hugeFact = CStringToTerm("huge \"x\"");
-	ASSERT_INT32_EQUAL(AssertFormula(ifactRule), ASSERT_OK)
+	Atom circleFact = CStringToTerm("circle \"d\" radius 20");
 	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
 	ASSERT_INT32_EQUAL(AssertFormula(hugeRule), ASSERT_OK)
 	ASSERT_INT32_EQUAL(AssertFormula(hugeFact), ASSERT_OK)
 	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 1)
 
-	// The query creates the relation (circle radius) holding the ifact (circle @1 radius 20)
-	ASSERT_UINT32_EQUAL(countQueryFacts("circle c radius 20"), 1)
+	ASSERT_INT32_EQUAL(AssertFormula(circleFact), ASSERT_OK)
 	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 2)
 
 	ASSERT_INT32_EQUAL(RetractFormula(hugeRule), RETRACT_OK)
 	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(ifactRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(circleFact), RETRACT_OK)
 	ASSERT_INT32_EQUAL(RetractFormula(hugeFact), RETRACT_OK)
 	dropFormRelations("circle 1 radius 1");
 	dropFormRelations("huge 1");
+	ReleaseFormula(circleFact);
 	ReleaseFormula(hugeFact);
 	ReleaseFormula(hugeRule);
 	ReleaseFormula(bigRule);
-	ReleaseFormula(ifactRule);
 }
 
 
@@ -602,7 +601,9 @@ void testInvalidateDependentsOfClosedRelation(void)
 /**
  * CLAUDE: Compiling the conjunction (big c & circle d radius 20) compiles (big c) first, while
  * the relation (circle radius) does not exist. The second term then creates the relation, so
- * the conjunction must be compiled again to read (big @1); see compileQueryVariants().
+ * the conjunction is compiled again; see compileQueryVariants(). The circle @1 created by the
+ * IFACT operator is not a fact, so (big c) does not yield @1, and the conjunction yields
+ * (big "x") only.
  */
 void testCompileAfterStoreCreated(void)
 {
@@ -613,8 +614,8 @@ void testCompileAfterStoreCreated(void)
 	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
 	ASSERT_INT32_EQUAL(AssertFormula(bigFact), ASSERT_OK)
 
-	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 2)
-	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 2)
+	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 1)
 
 	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
 	ASSERT_INT32_EQUAL(RetractFormula(ifactRule), RETRACT_OK)
@@ -761,6 +762,18 @@ void testCreateIFactTwoIdColumns(void)
 	DropRelation(relation);
 	ReleaseFormula(formula);
 	ReleaseFormula(sameFormTerm);
+}
+
+
+/**
+ * CLAUDE: A relation holding ifacts is not writable, so a fact not defining an ifact cannot be
+ * asserted in the relation; see IFactCreateReaderService(). The list "ab" has length 2.
+ */
+void testAssertIntoIFactRelation(void)
+{
+	Atom fact = CStringToTerm("list \"ab\" length 5");
+	ASSERT_INT32_EQUAL(AssertFormula(fact), ASSERT_NOT_WRITABLE)
+	ReleaseFormula(fact);
 }
 
 
@@ -1140,6 +1153,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCreateIFactNewRelations);
 	ExecuteTest(testCreateIFactTwoIdColumns);
 	ExecuteTest(testCreateIFactExisting);
+	ExecuteTest(testAssertIntoIFactRelation);
 	ExecuteTest(testCreateIFactDefiningFactsProtected);
 	ExecuteTest(testCreateIFactRejects);
 	ExecuteTest(testLoadRelationText);

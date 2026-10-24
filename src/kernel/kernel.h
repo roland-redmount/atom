@@ -95,12 +95,11 @@ void KernelShutdown(void);
 #define SERVICE_MULTISET_NAME				1	// (multiset <ID element >NAME multiple >INT)
 #define SERVICE_PREDICATE_FORM				2	// (predicate-form <ID)
 #define SERVICE_MULTISET_ID					3	// (multiset <ID element >ID multiple >INT)
-#define SERVICE_MULTISET_ID_ALL				4	// (multiset >ID element >ID multiple >INT)
-#define SERVICE_TERM_FORM					5	// (term-form <ID predicate-form >ID sign >INT)
-#define SERVICE_CLAUSE_FORM					6	// (clause-form <ID)
-#define SERVICE_CONJUNCTION_FORM			7	// (conjunction-form <ID)
+#define SERVICE_TERM_FORM					4	// (term-form <ID predicate-form >ID sign >INT)
+#define SERVICE_CLAUSE_FORM					5	// (clause-form <ID)
+#define SERVICE_CONJUNCTION_FORM			6	// (conjunction-form <ID)
 
-#define N_CORE_SERVICES                     7
+#define N_CORE_SERVICES                     6
 
 /**
  * Lookup one of the "primitive" forms for core tables
@@ -132,8 +131,6 @@ void CoreFormSetByteArray(index32 formId, byte const inputArray[], byte array[])
 Atom GetCoreRoleName(index32 roleId);
 
 TypedRelation GetCoreRelation(index32 relationId);
-
-TupleStore * GetCoreTupleStore(index32 relationId);
 
 /**
  * Return the operator of a core service, given a SERVICE_* id.

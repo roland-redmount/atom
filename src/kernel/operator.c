@@ -1013,10 +1013,9 @@ static void unionSetupContext(OperatorContext * context)
 		OperatorFreeContext(unionContext->lookaheadContext);
 		unionContext->lookaheadContext = 0;
 	}
-	// CLAUDE: The second context is created after the first child has been called, so that
-	// an IFACT operator as the first child can add its tuple to a TupleStore before the
-	// second child reads that TupleStore; see OPERATOR_IFACT. Setting up the second context
-	// only reads the input arguments, which the first child leaves unchanged.
+	// CLAUDE: The second context is created after the first child has been called.
+	// Setting up the second context only reads the input arguments, which the first
+	// child leaves unchanged.
 	unionContext->nextContext = createContext(
 		context, context->op->impl._union.second, context->arguments);
 }
@@ -1739,19 +1738,16 @@ typedef struct s_IFactOperatorContext {
 } IFactOperatorContext;
 
 
-Operator * CreateIFactOperator(TupleStore * store, index8 idColumn)
+Operator * CreateIFactOperator(TypedRelation relation, index8 idColumn)
 {
-	ASSERT(TupleStoreIsWritable(store))
-	size8 nArguments = store->nColumns;
+	size8 nArguments = TypeSignatureNAtomTypes(relation.typeSignature);
 	ASSERT(idColumn < nArguments)
 	Operator * op = createOperator(OPERATOR_IFACT, nArguments, sizeof(IFactOperatorContext));
-	op->impl.ifact.store = store;
+	op->impl.ifact.relation = relation;
 	op->impl.ifact.idColumn = idColumn;
-	op->impl.ifact.childOperator = IFactSetupStoreOperator(store, idColumn);
-	addParent(op->impl.ifact.childOperator);
-	// The operator indexOrder must be the same as the TupleStore's
-	allocateIndexOrder(op);
-	CopyMemory(store->indexColumns, op->indexOrder, nArguments);
+
+	// IFACT yields at most one tuple, so any index order holds
+	setIdentityIndexOrder(op);
 	return op;
 }
 
@@ -1764,18 +1760,19 @@ static void ifactSetupContext(OperatorContext * context)
 
 static bool ifactCall(OperatorContext * context)
 {
+	Operator const * op = context->op;
 	IFactOperatorContext * ifactContext = (IFactOperatorContext *) &context->data;
 	if(ifactContext->isExhausted)
 		return false;
 	ifactContext->isExhausted = true;
 
-	Operator const * op = context->op;
 	IFactDraft draft;
 	IFactBegin(&draft);
-	IFactBeginConjunction(&draft, op->impl.ifact.store, op->impl.ifact.idColumn);
+	IFactBeginConjunction(&draft, op->impl.ifact.relation, op->impl.ifact.idColumn);
 	IFactAddTuple(&draft, context->arguments);
 	IFactEndConjunction(&draft);
 	Atom idAtom = IFactEnd(&draft);
+
 	IFactMarkCached(idAtom);
 
 	context->arguments[op->impl.ifact.idColumn] = idAtom;
@@ -1785,10 +1782,7 @@ static bool ifactCall(OperatorContext * context)
 
 static void teardownIFactOperator(Operator * op)
 {
-	ASSERT(op->type == OPERATOR_IFACT)
-	// CLAUDE: the cached ifacts are kept; they are released with the ifact rule,
-	// see DictionaryRemoveIFactRule()
-	removeParent(op->impl.ifact.childOperator);
+	// nothing to do
 }
 
 
@@ -1814,7 +1808,6 @@ size8 OperatorNChildren(Operator const * op)
 	case OPERATOR_CONSTRAIN:
 	case OPERATOR_FIXPOINT:
 	case OPERATOR_FILTER:
-	case OPERATOR_IFACT:
 	case OPERATOR_CONSTANT:
 		return 1;
 
@@ -1822,6 +1815,7 @@ size8 OperatorNChildren(Operator const * op)
 		// CLAUDE: An INVERT operator of an empty relation has no child
 		return op->impl.invert.childOperator ? 1 : 0;
 
+	case OPERATOR_IFACT:
 	case OPERATOR_MACHINE:
 	case OPERATOR_RECURSE:
 		return 0;
@@ -1860,9 +1854,6 @@ Operator * OperatorGetChild(Operator const * op, index8 index)
 
 	case OPERATOR_FILTER:
 		return op->impl.filter.childOperator;
-
-	case OPERATOR_IFACT:
-		return op->impl.ifact.childOperator;
 
 	case OPERATOR_CONSTANT:
 		return op->impl.constant.childOperator;
@@ -2421,7 +2412,7 @@ static void printOperatorRecursive(
 		break;
 
 	case OPERATOR_IFACT:
-		// CLAUDE: the child operator is not called by IFACT, and is not printed
+		// CLAUDE: IFACT has no child operator
 		break;
 
 	case OPERATOR_CONSTANT: {

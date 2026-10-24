@@ -14,7 +14,6 @@
 #define IFACT_H
 
 #include "kernel/TypedRelation.h"
-#include "kernel/TupleStore.h"
 #include "kernel/typedtuple.h"
 
 
@@ -29,11 +28,21 @@ struct s_Service;
  * The entire IFact is a conjuction ...
  */
 typedef struct s_IFactConjunction {
-	TupleStore * store;
+	TypedRelation relation;
+	size8 nColumns;
 	index8 idColumn;		// position of the identified atom in the tuple
-	byte pad;
 	size16 nRows;			// number of tuples in this conjunction
-} __attribute__((packed)) IFactConjunction;
+	// CLAUDE: nRows tuples of nColumns atoms each, in canonical order, ordered by
+	// TupleCompare(). The tuples are allocated with Allocate(), and hold a reference to
+	// each atom except the identified atom; see IFactAddTuple().
+	Atom * tuples;
+} IFactConjunction;
+
+/*
+ * CLAUDE: An IFactConjunction does not hold a reference to the form of its relation.
+ * The relation must outlive every ifact with a conjunction of the relation;
+ * see ReleaseRelation().
+ */
 
 
 /**
@@ -59,11 +68,9 @@ struct s_IFactHeader {
 
 
 /**
- * A "draft" ifact, used while constructin a new ifact.
+ * A "draft" ifact, used while constructing a new ifact.
  */
 typedef struct s_IFactDraft {
-	Atom * tupleStorage;
-	Atom * currentTuple;
 	IFactHeader header;		// IFact being constructed
 	bool hasBegunConjunction;
 } IFactDraft;
@@ -102,7 +109,7 @@ void IFactBegin(IFactDraft * draft);
  * NOTE: this function may register a new service for the TupleStore's relation
  * with the idColumn as the single input, if no such service already exists.
  */
-void IFactBeginConjunction(IFactDraft * draft, TupleStore * store, index8 idColumn);
+void IFactBeginConjunction(IFactDraft * draft, TypedRelation relation, index8 idColumn);
 
 /**
  * Add one tuple, defining one predicate of the current conjunction (predicate form).
@@ -152,27 +159,49 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash);
 void IFactReserve(data64 hash);
 
 /**
- * Return the operator of reading tuples from the given TupleStore with idColumn
- * as the only input. If no such service exists, a FILTER service is registered for it.
- * Registering a service is not allowed while a query is running, so the service
- * must exist before a running query calls this function.
- */
-Operator * IFactSetupStoreOperator(TupleStore const * store, index8 idColumn);
-
-/**
- * CLAUDE: Mark an ifact as cached, taking over the reference the caller holds.
+ * Mark an ifact as cached, taking over the reference the caller holds.
  * A cached ifact holds exactly one reference owned by the cache. If the ifact is
  * already cached, the caller's reference is released instead.
- * See OPERATOR_IFACT in operator.h.
+ * This is required for ifacts created by the IFACT operator. See OPERATOR_IFACT in operator.h.
  */
 void IFactMarkCached(Atom ifact);
 
 /**
  * CLAUDE: Release the cache reference of every cached ifact consisting of a single
- * conjunction on the given TupleStore and idColumn, and clear the IFACT_CACHED flag.
+ * conjunction with the given ID column, on a relation of the given form.
+ * Clear the IFACT_CACHED flag of each such ifact.
  * An ifact with no other reference is removed, together with its tuple.
  */
-void IFactReleaseCached(TupleStore const * store, index8 idColumn);
+void IFactReleaseCached(Atom form, index8 idColumn);
+
+/**
+ * CLAUDE: Return the number of tuples of all ifacts on the given relation.
+ * This scans every ifact.
+ */
+size32 IFactRelationNTuples(TypedRelation relation);
+
+/**
+ * Register a primitive service reading the ifacts on the given relation, with the
+ * identified atom in idColumn. The service has idColumn as its only input, and yields the
+ * tuples of the given ifact on the relation. The service holds the relation, and the
+ * relation has no TupleStore. A relation with such a service holds ifacts only;
+ * see AssertFact(). The service must not already exist.
+ */
+void IFactCreateReaderService(TypedRelation relation, index8 idColumn);
+
+/**
+ * CLAUDE: Test if the relation has a service created by IFactCreateReaderService().
+ */
+bool IFactRelationHasReader(TypedRelation relation);
+
+/**
+ * Prepare the relation to hold ifacts with the identified atom in idColumn, and
+ * return true if the relation can hold them. A relation with a TupleStore cannot hold
+ * ifacts, since the TupleStore holds asserted facts. If the relation has no reader for
+ * idColumn, the reader is created with IFactCreateReaderService(), and *createdReader is
+ * set to true.
+ */
+bool IFactSetupRelation(TypedRelation relation, index8 idColumn, bool * createdReader);
 
 /**
  * Acquire a reference to an AT_ID atom.

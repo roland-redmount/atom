@@ -56,6 +56,46 @@ bool ClauseFormExistsForTermForm(Atom termForm);
 size32 DictionaryFindClauseForms(Atom termForm, ResizingArray * clauseForms);
 
 /**
+ * CLAUDE: The form index records the term forms of each clause form with a rule in the
+ * dictionary, and of each conjunction form with a relation; see AcquireRelation().
+ * Each entry of the form index records that a term form occurs a number of times
+ * (the multiple) in a clause form or a conjunction form.
+ */
+typedef struct s_FormIndexEntry {
+	Atom termForm;
+	Atom form;
+	size32 multiple;
+	bool isClause;
+} FormIndexEntry;
+
+/**
+ * CLAUDE: Add a reference to the given conjunction form in the form index, or release one.
+ * The relation registry calls these functions as a relation of the conjunction form
+ * is created and removed.
+ */
+void DictionaryIndexConjunctionForm(Atom conjunctionForm);
+
+void DictionaryUnindexConjunctionForm(Atom conjunctionForm);
+
+typedef struct s_FormIndexIterator {
+	Atom termForm;
+	BTreeIterator btreeIterator;
+} FormIndexIterator;
+
+/**
+ * CLAUDE: Iterate over the form index entries of the given term form.
+ * A zero term form iterates over every entry. The form index must not be changed
+ * during the iteration.
+ */
+void DictionaryIterateFormIndex(Atom termForm, FormIndexIterator * iterator);
+
+bool FormIndexIteratorNext(FormIndexIterator * iterator);
+
+FormIndexEntry const * FormIndexIteratorPeek(FormIndexIterator const * iterator);
+
+void FormIndexIteratorEnd(FormIndexIterator * iterator);
+
+/**
  * CLAUDE: Invalidate the services of every form depending on the given term forms, but not
  * the services of the given term forms. A form Q depends on a term form B if
  * 1) a clause form holds Q and the opposite of B, so that a rule for Q reads B as a body term,
@@ -68,6 +108,14 @@ size32 DictionaryFindClauseForms(Atom termForm, ResizingArray * clauseForms);
  * CreateTupleStore(), DictionaryAddClause(), DictionaryAddIFactRule() and CloseRelation().
  */
 void InvalidateDependentServices(Atom const termForms[], size32 nTermForms);
+
+/**
+ * CLAUDE: Invalidate the services that a new relation of the given term form may affect,
+ * before primitive services of the relation are created. Return true if the primitive
+ * services of the relation must be marked stale; see ServiceMarkStale().
+ * Called by CreateTupleStore() and IFactCreateReaderService().
+ */
+bool InvalidateServicesForNewRelation(Atom termForm);
 
 /**
  * Parse a string into a clause (formula) and call DictionaryAddClause()

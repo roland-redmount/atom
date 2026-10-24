@@ -64,7 +64,7 @@ void RelationFixtureAddTuple(RelationFixture * fixture, char const * const atomN
 
 	TypedTuple * tuple = CreateTypedTupleFromArray(actors, fixture->nColumns);
 	// the relation table now holds a reference to each atom
-	RelationAddTuple(fixture->relation, TypedTuplePeekAtoms(tuple), 0);
+	RelationAddTuple(fixture->relation, TypedTuplePeekAtoms(tuple));
 	for(index8 i = 0; i < fixture->nColumns; i++)
 		ReleaseTypedAtom(actors[i]);
 
@@ -86,7 +86,7 @@ void TeardownRelationFixture(RelationFixture * fixture)
 	// the relation table must be empty before it can be removed
 	for(index8 i = 0; i < fixture->nTuples; i++) {
 		RelationRemoveTuple(
-			fixture->relation, TypedTuplePeekAtoms(fixture->tuples[i]), 0);
+			fixture->relation, TypedTuplePeekAtoms(fixture->tuples[i]));
 		FreeTypedTuple(fixture->tuples[i]);
 	}
 	DropRelation(fixture->relation);

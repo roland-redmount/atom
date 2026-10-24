@@ -95,19 +95,15 @@ typedef struct s_StorageProvider {
 	/**
 	 * Add a tuple to the relation.
 	 * The atom types are fixed, so providing an Atom array is sufficient.
-	 * If idPosition is > 0 it indicates the 1-based position of an identified
-	 * atom (the tuple is part of an ifact).
 	 * May be 0 if the provider does not support write access.
 	 */
-	byte (*addTuple)(void * storage, Atom const tuple[], uint8 idPosition);
+	byte (*addTuple)(void * storage, Atom const tuple[]);
 
 	/**
 	 * Remove a specific tuple from storage.
-	 * If the stored tuple had an identified atom, it must match the given idPosition,
-	 * or an error occurs.
 	 * May be 0 if the provider does not support write access.
 	 */
-	byte (*removeTuple)(void * storage, Atom const tuple[], uint8 idPosition);
+	byte (*removeTuple)(void * storage, Atom const tuple[]);
 
 	/**
 	 * Return number of tuples in the relation table
@@ -131,7 +127,6 @@ typedef struct s_StorageProvider {
 // result codes for StorageProvider.removeTuple()
 #define TUPLE_REMOVED		1
 #define TUPLE_NOT_FOUND		2
-#define TUPLE_PROTECTED		3
 
 /**
  * Each storage provider has a StorageProviderId. Each has a StorageProvider

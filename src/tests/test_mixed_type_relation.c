@@ -172,8 +172,8 @@ void testConcatAcrossRelations(void)
 	};
 	TypedTuple * idTuple = CreateTypedTupleFromArray(idActors, 2);
 	TypedTuple * intTuple = CreateTypedTupleFromArray(intActors, 2);
-	TupleStoreAddTuple(idStore, TypedTuplePeekAtoms(idTuple), 0);
-	TupleStoreAddTuple(intStore, TypedTuplePeekAtoms(intTuple), 0);
+	TupleStoreAddTuple(idStore, TypedTuplePeekAtoms(idTuple));
+	TupleStoreAddTuple(intStore, TypedTuplePeekAtoms(intTuple));
 	for(index8 i = 0; i < 2; i++) {
 		ReleaseTypedAtom(idActors[i]);
 		ReleaseTypedAtom(intActors[i]);
@@ -199,8 +199,8 @@ void testConcatAcrossRelations(void)
 	FreeMixedTypeRelation(relation);
 	ReleaseFormula(query);
 
-	RelationRemoveTuple(idRelation, TypedTuplePeekAtoms(idTuple), 0);
-	RelationRemoveTuple(intRelation, TypedTuplePeekAtoms(intTuple), 0);
+	RelationRemoveTuple(idRelation, TypedTuplePeekAtoms(idTuple));
+	RelationRemoveTuple(intRelation, TypedTuplePeekAtoms(intTuple));
 	FreeTypedTuple(idTuple);
 	FreeTypedTuple(intTuple);
 	DropRelation(intRelation);

@@ -13,14 +13,10 @@
 
 
 /**
- * A B-tree item stores the tuple Atom array, permuted according to the column order,
- * and the column number (not permuted) of an identified atom, if any.
+ * A B-tree item stores the tuple Atom array, permuted according to the column order.
  */
 typedef struct s_BTreeTuple {
 	size8 nAtoms;
-	// 1-based position of the identified atom in the tuple, or 0 if none.
-	// Not used for comparing tuples.
-	uint8 idPosition;
 	// Only atoms[0] .. atoms[nAtomsPresent-1] are stored in the tuple.
 	// This is = nAtoms in B-tree items (full tuple is stored),
 	// but < nAtoms in queries as output arguments are not present.
@@ -35,12 +31,10 @@ static size32 btreeTupleNBytes(size8 nAtoms)
 }
 
 
-static BTreeTuple * createBTreeTuple(
-	size8 nColumns, uint8 idPosition, index8 nAtomsPresent, Atom const atoms[])
+static BTreeTuple * createBTreeTuple(size8 nColumns, index8 nAtomsPresent, Atom const atoms[])
 {
 	BTreeTuple * btreeTuple = Allocate(btreeTupleNBytes(nColumns));
 	btreeTuple->nAtoms = nColumns;
-	btreeTuple->idPosition = idPosition;
 	btreeTuple->nAtomsPresent = nAtomsPresent;
 	TupleCopy(atoms, btreeTuple->atoms, nColumns);
 	return btreeTuple;
@@ -94,42 +88,25 @@ void FreeRelationBTree(RelationBTree const * relation)
 }
 
 
-byte RelationBTreeAddTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition)
+byte RelationBTreeAddTuple(RelationBTree * relation, Atom const tuple[])
 {
-	// NOTE: if we are to query for tuples based on idPosition, it must be the leading column
-	
-	BTreeTuple * btreeTuple = createBTreeTuple(
-		relation->nColumns, idPosition, relation->nColumns, tuple);
+	BTreeTuple * btreeTuple = createBTreeTuple(relation->nColumns, relation->nColumns, tuple);
 	byte result = BTreeInsert(relation->btree, btreeTuple);
 	Free(btreeTuple);
 	return result;
 }
 
 
-byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition)
+byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[])
 {
 	ASSERT(!BTreeIsWriteLocked(relation->btree))
 
-	// NOTE: the below logic is common to all relation tables, could be moved to RelationWriter?
-	// This would require a method to get the idPosition of a stored tuple from the RelationTableProvider.
-
-	// retrieve the stored tuple to inspect its idPosition
-	BTreeTuple * queryTuple = createBTreeTuple(
-		relation->nColumns, 0, relation->nColumns, tuple);
+	BTreeTuple * queryTuple = createBTreeTuple(relation->nColumns, relation->nColumns, tuple);
 	BTreeTuple * btreeTuple = BTreePeekItem(relation->btree, queryTuple);
 	Free(queryTuple);
 	if(!btreeTuple)
 		return TUPLE_NOT_FOUND;
-	
-	if(idPosition && (btreeTuple->idPosition != idPosition)) {
-		// The specified idPosition is wrong, indicating an internal error
-		ASSERT(false)
-	}
-	if(!idPosition && btreeTuple->idPosition) {
-		// Attempt to retract an identifying fact
-		return TUPLE_PROTECTED;
-	}
-	
+
 	// TODO: we should probably have a BTreeDeleteAt(void * item) function that accepts a direct
 	// pointer to a stored item, to avoid re-running the search
 	ASSERT(BTreeDelete(relation->btree, btreeTuple, 0) == BTREE_DELETED)
@@ -154,7 +131,7 @@ void RelationBTreeIterate(
 {
 	iterator->relation = relation;
 	if(queryTuple) {
-		iterator->queryTuple = createBTreeTuple(relation->nColumns, 0, nInputs, queryTuple);
+		iterator->queryTuple = createBTreeTuple(relation->nColumns, nInputs, queryTuple);
 	}
 	else
 		iterator->queryTuple = 0;
@@ -292,15 +269,15 @@ static size32 relationBTreeNTuples(void * storage)
 }
 
 
-static byte relationBTreeAddTuple(void * storage, Atom const tuple[], uint8 idPosition)
+static byte relationBTreeAddTuple(void * storage, Atom const tuple[])
 {
-	return RelationBTreeAddTuple((RelationBTree *) storage, tuple, idPosition);
+	return RelationBTreeAddTuple((RelationBTree *) storage, tuple);
 }
 
 
-static byte relationBTreeRemoveTuple(void * storage, Atom const tuple[], uint8 idPosition)
+static byte relationBTreeRemoveTuple(void * storage, Atom const tuple[])
 {
-	return RelationBTreeRemoveTuple((RelationBTree *) storage, tuple, idPosition);
+	return RelationBTreeRemoveTuple((RelationBTree *) storage, tuple);
 }
 
 
