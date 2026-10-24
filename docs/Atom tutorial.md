@@ -1,60 +1,67 @@
 <!-- title: Atom tutorial -->
 <!-- date: 2026-10-21 -->
 
-This is a brief tutorial of the main concepts of the **atom** language. We'll work through examples with a command-line interface to **atom** running in the browser, so you can freely experiment with the language. This instance of atom is in-memory only, so the session is not saved anywhere. A local version of the command-line client with persistent session can be built from [source](https://github.com/roland-redmount/atom).
-## Atoms and relations
+This is a brief tutorial of the main concepts of the **atom** language. We'll work through examples with a command line client to **atom** running in the browser, so you can freely experiment with the language. This instance of atom is in-memory only, so the session is not saved anywhere. A local version of the client with persistent session can be built from [source](https://github.com/roland-redmount/atom).
 
-All data in **atom** is stored as *facts*, which are logical statements known to be true. A set of facts is called a *relation*, which is similar to a database table, or a dataframe in R / python. First, we'll load an example data set on elven characters in Tolkien's *Silmarillion* (we are nerds after all). Execute these command with the `run` button, or with `ctrl + enter`.
+For this tutorial we need to load an example data set, which is a family tree from Tolkien's *Silmarillion*. Run these commands with the `run` button, or with `ctrl + enter`.
 ```atom
 :load data/finwe-family/parent_child.csv parent child
 :load data/finwe-family/spouse.csv spouse spouse
+:load data/finwe-family/person.csv person sex
+:load data/finwe-family/person.csv person birth-era
+:load data/finwe-family/person.csv person birth-year
 ```
+All input fields in this tutorial are editable and connected to a single running **atom** session, which can be reset with the `reset` button. Feel free to experiment!
 
-Here's a simple query that yields a relation:
+## Atoms and relations
+
+All data in **atom** is stored as *facts*, which are logical statements known to be true. A set of facts is called a *relation*, which is similar to a database table, or a dataframe in R or pandas.  Let's start with a very simple query:
 ```atom
 parent "Finwe" child "Feanor"
 ```
-Here `parent` and `child` are *roles*, and `"Finwe"` and `"Feanor"` are *atoms*. An atom is essentially just an identifier: it has no internal structure (hence the name). The entire line is a *predicate*, a simple logical statement that relate the atoms to each other; in this case stating that Finwe is a parent of Feanor, or equivalently, that Feanor is the child of Finwe. Running the query returns a relation consisting of a single fact, the predicate itself. This means that this logical statement is indeed true in the current *world* -- the set of all facts known to running **atom** process.
+Here `parent` and `child` are *roles*, and `"Finwe"` and `"Feanor"` are *atoms*. An atom is essentially just an identifier -- it has no internal structure, hence the name. The entire line is a *predicate*, a simple logical statement that relate the atoms to each other. This predicate states that Finwe is a parent of Feanor, or equivalently, that Feanor is a child of Finwe. Running the query returns a relation consisting of a single fact, namely the predicate itself. This means that this logical statement is indeed true.
 
 On the other hand, the query
 ```atom
 parent "Finwe" child "Galadriel"
 ```
-yields nothing, because this predicate is not known to be true the current world -- it is not a fact. That doesn't necessarily mean that Finwe is *not* the parent of Galadriel, only that we *don't know* for sure that he is. More about this later.
+yields nothing, because this predicate is not known to be true (it is not a fact). That doesn't necessarily mean that Finwe is *not* the parent of Galadriel, only that we *don't know* for sure that he is. More about this later.
 
 ### Variables
 
-A somewhat more interesting view is obtained by introducing a variable:
+Variables let us view relations consisting of multiple facts. For example,
 ```atom
 parent "Finwe" child c
 ```
-This yields the relation consisting of all known facts where `"Finwe"` is the parent. The variable `c` means that any atom can occur in the role `child` in the relation. Variable names in **atom** are just single letters: they are local to the formula and not meant to be descriptive -- that's what the role name (`child`) is for.
+yields the relation consisting of all known facts with `"Finwe"` in the `parent` role. The variable `c` means that any atom can occur in the `child` role. Variable names in **atom** are just single letters: they are local to the formula and not meant to be descriptive -- that's what the role names are for.
 
-An equivalent SQL query would be
+The syntax of **atom** queries is designed to be compact: for comparison, the equivalent SQL query would be
 ```
 SELECT parent, child
 FROM parent_child
 WHERE parent = "Finwe"
 ```
-One difference is that in **atom**, the relation itself does not have a dedicated name. When needed, we refer to the relation by a tuple of roles`(parent child)`.  Also, since roles are named, they can be given in any order: the query
+In **atom**, the relation itself does not have a dedicated name. When needed, we refer to the relation by a tuple of roles`(parent child)`. Roles can be given in any order: the query
 ```atom
 child c parent "Finwe"
 ```
-is the same as the above. The command line interface always returns facts with roles in the order entered by the user, but role order is not significant to the **atom** language itself.
+is the same as the above. The command line client always prints facts with roles in the order entered by the user, but role order is not significant to the **atom** language itself.
 
-### Relations vs. functions
-
-While a function is a one-way mapping from inputs to outputs, a relation has no particular input-output direction, but can be queried in multiple ways. For example,
-```atom
-child "Feanor" parent p 
-```
-views the parents of a given child, rather than the children of a given parent. This is important, because it allows all information to be kept in one place. A functional language would require two independent functions `parent(x) -> y` and `child(y) -> x` to represent the same information, and it is then up to the programmer to make sure that they are consistent with each other; the language has no way of knowing that they should be. With relations, consistency is guaranteed by definition.
-
-To view all parent-child relationships om this relation, we would use two variables:
+To view all parent-child relationships in this relation, we would use two variables:
 ```atom
 parent p child c
 ```
 We can also use the anonymous variable `_` whenever we don't variable names. Each occurrence of `_` counts as a distinct variable. Try it in the above query.
+
+### Relations vs. functions
+
+Relations can be viewed as a generalization of functions. While a function is a one-way mapping from inputs to outputs, a relation has no particular input-output direction, but can be queried in multiple ways. For example,
+```atom
+child "Feanor" parent p 
+```
+views the parents of a given child, rather than the children of a given parent, using the same relation. This is important, because it allows all information to be kept in one place. A functional language would need two independent functions `parent(x) -> y` and `child(y) -> x` to represent the same information, leaving it up to the programmer to make sure that they are consistent with each other -- the language has no way of knowing that they should be. A relation guarantees that the two directions are always consistent.
+
+### Symmetry
 
 Some relations are fundamentally symmetric: for example, if `x` is a spouse of `y`, then `y` is also a spouse of `x`. To handle such relations, **atom** allows a role to associated with more than one atom in a predicate:
 ```atom
@@ -66,7 +73,7 @@ spouse "Feanor" spouse _
 spouse _ spouse "Feanor"
 ```
 
-## Computed relations
+## Computing with relations
 
 Relations are not merely data tables: they can also represent computation. For example, addition is represented by the relation `( + + = )`,
 ```atom
@@ -74,37 +81,158 @@ Relations are not merely data tables: they can also represent computation. For e
 ```
 Here `+` and `=` are role names, with no special significance. Note that this relation has symmetry, with two atoms in the `+` role, so that `+ 2 + 1 = _` is the same query as the above. The addition relation is a primitive built into the **atom** system, but we can also define new computed relations (see [[Atom tutorial#Logic rules|logic rules]]). 
 
-The **atom** language itself makes no distinction between "computed" and "stored" relations. This allows expressing computation as questions or statements rather than procedures. Variables in queries are analogous to return values in functional or imperative languages. For example, we can think of the above query as selecting one fact from an infinite relation `(+ + -)` over all integers. 
+The **atom** language makes no distinction between "computed" and "stored" relations. This unifies code and data, letting us express both computation and data access as queries or views rather than procedures. For example, we can think of the addition query above as viewing one fact from an infinite relation `(+ + =)` over all integers. Variables are analogous to (multiple) return values in functional or imperative languages. 
 
-Since relations have no input-output direction, we can also do the "inverse" query
+Since relations have no input-output direction, we can also run the "inverse" query
 ```atom
 + 1 + x = 3
 ```
-to solve the equation for `x`. Such queries are not *always* possible, since not all operations can be easily inverted. For example, if we had a relation `(complex riemann-zeta)` representing the [Riemann zeta function](https://en.wikipedia.org/wiki/Riemann_zeta_function) of a complex number, computing the query `complex z riemann-zeta 0` would require proving the [Riemann hypothesis](https://en.wikipedia.org/wiki/Riemann_hypothesis). There are many examples of functions whose inverse is difficult to compute; but *if* an inverse is available, it can be represented with a relation.
+to solve the equation for `x`. Such queries are not *always* possible, since many operations are difficult or impossible to invert. For example, if  `(complex z riemann-zeta r)` represents the Riemann zeta function of a complex number `z`, then computing the query `complex z riemann-zeta 0` would amount to proving the [Riemann hypothesis](https://en.wikipedia.org/wiki/Riemann_hypothesis). But *if* an inverse is available, it can be represented with a relation.
 
-Relations handle also corner cases gracefully, since computations that do not have a well-defined result simply yield no tuples, rather than causing an error. For example
+Relations also handle corner cases gracefully, since computations that do not have a well-defined result simply yield no tuples, rather than causing an error. For example
 ```atom
 * 1 / 0 = _
 ```
-yields no tuple since division by zero is not defined. In most languages, implementing division by a function `divide(x, y) -> z` requires error handling, because functions must return a value. In **atom**, these kind of errors do not occur.
+yields no tuple since division by zero is not defined. In most languages, implementing division by a function `divide(x, y) -> z` requires error handling, because a function *must* return a value. In **atom**, these kind of errors do not occur.
 
-## Creating facts and atoms
+## Combining relations
 
-While data analysis in **atom** can be done almost exclusively with queries, we can of course also create new facts, or retract existing facts. This is done by *actions*, operations that modify the world. In the command-line client, actions are written with a `:` prefix. The simplest action is to *assert* a single fact, for example
+We often need to combine facts from different relations. In **atom**, as in other logic languages, this is done by logical AND (`&`) between two or more predicates. For example, the following query combines the `(parent child)` relation with the `(person sex)` relation to find the mother of Feanor:
 ```atom
-:assert parent "Elrond" child "Arwen"
+parent m child "Feanor" & person m sex "female"
 ```
-asserts that Elrond is a parent of Arwen. Removing facts are done with the *retract* action,
-```atom
-:retract parent "Elrond" child "Arwen"
+Here the variable `m` occurs twice, indicating an equality constraint: the same atom must occur in the roles `parent` and `person`. This corresponds to the SQL inner join query
+```
+SELECT parent, child, person, sex
+FROM parent_child
+JOIN person_sex ON (parent_child.parent = person_sex.sex)
+WHERE person_sex.sex = "female" AND parent_child.child = "Feanor"
 ```
 
-As we create new facts, we naturally also need to introduce new atoms. An atom is essentially  an identifier that represents some thing or concept; it has no internal structure. There two ways to create atoms:
+We can also combine a relation with itself: for example, to view the Finwe's childen with his other spouse Indis, we can write
+```atom
+parent "Finwe" child c & parent "Indis" child c
+```
+As an exercise, try writing a query to view two all children and grandchildren of Finwe.
+
+We can combine computed relations with `&` in the same way. For example,
+```atom
+* y * y = _ & =< y >= 1 & >= y =< 10
+```
+computes the squares of number 1 through 10. Here `=< y >= 1` is a relation over all integers greater than or equal to 1 (where `>=`and `=<` are roles) and `>= y =< 10` is the opposite bound. These relations are infinite on their own, but their join is not. This can be viewed as a mechanism for iteration over a set of values, though I prefer to think about it as just *viewing* the set defined by the query formula.
+
+The output may look odd since the command line client by default prints the full formula for every fact. If you like, you can switch the client to a table view with the command `:view table`. This will show a table for the unique, named variables only (try it in the above). Switch back with `:view formula` .
+
+Computed and stored relations can of course be mixed freely, as the language makes no distinction between them.  For example, 
+```atom
+person p birth-era "YT" & person p birth-year y & < y > 1200
+```
+views the individuals born after the year 1200 YT (years of the trees). Here `< a > b` is the strict inequality. 
+
+## Logic rules
+
+To build more complex views of data and computations, we define new relations from existing ones using logic rules. An example of a logic rule is
+```atom
+:assert mother m child c <-
+  parent m child c & person m sex "female"
+```
+Here `:assert` is a client command to assert (create) a rule, and `<-` means logical implication. It is hopefully clear that the above rule defines a `mother` of a `child` as a `parent` of that child who is female.  Having created this rule, we can now query
+```atom
+mother _ child "Feanor"
+```
+Rules can of course depend on other rules to successively build up increasingly complex transformations of data. Here's an example, first defining the predicate `even` testing if an integer is even, and then defining `odd` based on `even`
+```atom
+:assert even n <- * n / 2 = q rem 0
+:assert odd n <- + n - 1 = m & even m
+```
+The relation `(* / = rem)` is integer division with remainder. In the `odd` rule, we first find the number `m` which is one less than `n`, and test if it is even. Test it out:
+```atom
+odd 3
+```
+
+This what "programming" looks like in **atom**. Rules are not really programs though, but rather specifications that **atom** uses to *generate* programs -- so writing rules is more of "designing" than "programming." (Under the hood, **atom** performs just-in-time compilation of queries to generate programs that compute relations. We won't delve into this in the tutorial, but for a sneak peek try the `:inspect` command on a query, such as `:inspect odd 3`. This shows how the query is translated into a program consisting of relational operators.)
+
+### Rules in clause form
+
+While it is often convenient to express rules with the  `<-` connective, internally each rule is stored as a *clause*, a set of terms combined with logical OR (`|`). We can view rules in clause form with the command
+```atom
+:rules mother child
+```
+which lists rules involving a term of the form `(mother child)`. The clause shown is the same as
+```
+mother m child c <- parent m child c & person m sex "female"
+```
+Storing rules in clause form is important because it allows additional logical inferences. For example, if we state that a `person` is a `parent` but not a `mother`, then **atom** can deduce that the person cannot be female, since the above clause is also equivalent to the implication
+```
+! person p sex "female" <- ! mother p child c & parent p child c
+```
+So rules are not merely one-way routes from assumptions to conclusion. In general, a clause with *n* terms encodes *n* logical implications.
+
+### Recursive rules
+
+Rules can also be recursive. For example, we can compute all ancestors of a person as
+```atom
+:assert ancestor a descendant d <- parent a child d
+:assert ancestor a descendant d <-
+  parent a child x & ancestor x descendant d
+```
+Here the second rule is recursive, as it queries the `(ancestor descendant)` relation. In this case, this yields the transitive closure of the parent-child graph. So  descendants of Finwe are given by
+```atom
+ancestor "Finwe" descendant _
+```
+We can also query the relation in the other direction; for examplem the ancestors of Galadriel are
+```atom
+ancestor _ descendant "Galadriel"
+```
+
+Of course, recursion can be used with computed relations in the same way. Here's a classic example, computing the Fibonacci number sequence, which requires a more complex rule:
+```atom
+:assert fibonacci 0 number 0
+:assert fibonacci 1 number 1
+:assert fibonacci f number n <-
+  =< n >= 2 &
+  + n - 1 = p & fibonacci g number p &
+  + n - 2 = q & fibonacci h number q &
+  + g + h = f
+```
+Here we assert the first numbers (which terminate the recursion) as plain facts; then we specifies the recursion formula $f(n) = f(n-1) + f(n-2)$. Since **atom** does not have functions, rules must include intermediate steps: we must define  `+ n - 1 = p` and `+ n - 2 = q`, and we must add the recursively computed values `g` and `h` separately.  The order of terms in a rule does not matter -- the compiler will determine the order in which terms are evaluated.
+
+Here are the first Fibonacci numbers:
+```atom
+fibonacci f number n & =< n >= 1 & >= n =< 10
+```
+
+
+## Creating and modifying data
+
+Modifying data in **atom** means adding or removing facts. This is done by *actions*. In the client used here, actions are written with a `:` prefix. The simplest action is to *assert* a single fact, for example
+```atom
+:assert parent "Celebrian" child "Arwen"
+```
+asserts that Elrond is a parent of Arwen. Test the new data with a query:
+```atom
+ancestor _ descendant "Arwen"
+```
+
+We can remove a fact with the *retract* action,
+```atom
+:retract parent "Celebrian" child "Arwen"
+```
+
+### Creating atoms
+
+As we create new facts, we naturally also need to introduce new atoms. There two ways to create atoms:
 * a small set of literal atoms can be entered directly, including numbers and letters.
 * all other atoms are *defined by facts*.
 
-The latter is the more interesting case. To 
+The latter is the more interesting case:
+```atom
+circle * radius r
+```
 
+```atom
+circle _ radius 5
+```
 
 *NOTE: we need a way to list the ifacts of an ID atom.*
 In the above we also created a new atom `"Arwen"`. This atom is a string, which is actually just syntactic sugar for a list of characters ; we can view this as
@@ -112,116 +240,6 @@ In the above we also created a new atom `"Arwen"`. This atom is a string, which 
 list "Arwen" element _ position _
 ```
 This is also an example of data structure implemented with a relation. See [[Atom tutorial#Data structures and types|data structures]]. 
-
-
-
-## Combining relations
-
-We often need to combine facts from different relations. In **atom**, as in other logic languages, this is done by logical AND (`&`) between two or more predicates. For example, the following query combines the `(parent child)` relation with the `(person sex)` relation to find the mother of Feanor:
-```
-parent m child "Feanor" & person m sex "female"
-```
-Here the variable `m` occurs twice, indicating an equality constraint: in each fact, the same atom must occur in the roles `parent` and `person`. This corresponds to an *inner join* in database query languages. 
-
-We can also combine a relation with itself: for example, to view the Finwe's childen with his other spouse Indis, we can write
-```atom
-parent "Finwe" child c & parent "Indis" child c
-```
-
-Similarly, to view two generations of descendants of Finwe
-```atom
-parent "Finwe" child c & parent c child _
-```
-
-*We need a bit more on how joins can be used for computation*
-Computed and stored relations can be mixed freely: there language itself makes no distinction between them.  For example, 
-```
-person p birth-era "YT" & person p birth-year y & < y > 1200
-```
-views the individuals born after the year 1200 YT (years of the trees). The computed relation `< a > b` (where `<` and `>` are roles) expresses the strict numeric inequality $a > b$. 
-
-## Iteration
-
-Relations can also be implement a simple iteration primitive, since queries *enumerate* tuples. For example,
-```atom
-=< x >= 1 & >= x =< 10
-```
-enumerates all integers `x` between 1 and 10 (inclusive). I prefer to think about this as *viewing* the set $\{x : x \ge 1 \land x \le 10 \}$, but it is essentially the same thing. The output may look odd since the command line client prints the full formula for every fact, but this is merely a formatting issue.
-
-## Lookup
-
-To navigate an **atom** world, it is helpful to be able to ask "what relations does this atom participate in". This is handled by
-```
-// need to add this command to REPL
-:lookup "Finwe"
-```
-
-## Logic rules
-
-To build more complex views of data, we define new relations from existing ones using logic rules. An example of a logic rule is
-```atom
-:assert mother m child c <- parent m child c & person m sex "female"
-```
-Here `:assert` is a command to the interpreter to assert (create) a rule, not a part of the **atom** language proper. It is hopefully clear that the above rule defines a `mother` of a `child` as a `parent` of that child who is female.  Having created this rule, we can now query
-```atom
-mother _ child "Feanor"
-```
-Rules can of course depend on other rules to successively build up increasingly complex transformations of data. This what "programming" looks like in **atom**, although rules are not really programs, but rather specifications that **atom** uses to create a program: under the hood, **atom** performs just-in-time compilation of queries to generate programs that compute the result.
-
-If you're familiar with predicate logic, you'll notice that rules have *universally quantified* variables: the above rule is true with *any* atoms in place of the variables `f` and `p`: in predicate logic we would write $\forall f, c:  \text{mother(f, c)} \leftarrow \text{parent(f, c)} \;\land\; \text{sex}(f, \text{female})$.  We can also state that a predicate becomes true if there exists *some* atom(s) for which other predicate(s) are true; for example,
-```
-:assert parent p <- parent p child c
-```
-Because the variable `c` is not present in `(parent p)`, this rule is equivalent to $\forall p: \text{parent(p)} \leftarrow \exists c: \text{parent(f, c)}$, which is the same as $\forall p,c: \text{parent(p)} \leftarrow \text{parent(f, c)}$. 
-
-*This comes later*
-A unary predicate like `parent p` can also be seen a type definition: the type "parent" is the set of all atoms `p` that satisfy `parent p`. So the logic essentially gives a type system for free. 
-
-Another example is
-```
-:assert grandparent p grandchild c <- parent p child x & parent x child c
-```
-where `grandparent p grandchild c` is true if there exists some `x` in the intermediate generation.
-
-While it is often convenient to express rules with the  `<-` connective, internally each rule is stored as a *clause*, a set of terms combined with logical OR (`|`). We can view rules in this form with the command
-```
-:rules mother child
-```
-which lists any rule involving a term of the form `(mother child)`. In this case there is only one. The is important ibecuasethat it allows the implication to be reversed. For example, if we state that a `person` is a `parent` but not a `mother`, then **atom** can deduce that the person cannot be female, since the above clause is also equivalent to the implication
-```
-! person p sex "female" <- ! mother p child c & parent p child c
-```
-Therefore, rules are not merely one-way routes from assumptions to conclusions. In general, a clause with *n* terms encodes *n* logical implications.
-
-### Recursive rules
-
-Tules can also be recursive. For example, we can compute all ancestors of a person as
-```
-:assert ancestor a descendant d <- parent a child d
-:assert ancestor a descendant d <- parent a child x & ancestor x descendant d
-```
-where the second rule is recursive. So the descendants of Finwe are
-```
-ancestor "Finwe" descendant _
-```
-And, in the other direction, the ancestors of Galadriel are
-```
-ancestor _ descendant "Galadriel"
-```
-
-Of course, recursion can be used with computed relations in the same way. Here's a classic example, computing the Fibonacci number sequence, which requires a more complex rule:
-```
-:assert fibonacci 0 number 0
-:assert fibonacci 1 number 1
-:assert fibonacci f number n <- =< n >= 2 & + n - 1 = p & fibonacci g number p & + n - 2 = q & fibonacci h number q & + g + h = f
-```
-Here we assert the first numbers (which terminate the recursion) as plain facts; then we specifies the recursion formula $f(n) = f(n-1) + f(n-2)$. Since **atom** does not have functions, rules must include intermediate steps: we must define  `+ n - 1 = p` and `+ n - 2 = q`, and we must add the recursively computed values `g` and `h` separately.  The order of terms in a rule does not matter -- the compiler will determine the order in which terms are evaluated.
-
-Here are the first Fibonacci numbers:
-```
-fibonacci f number n & =< n >= 1 & >= n =< 10
-```
-
 
 ## Data structures and types
 
@@ -305,22 +323,21 @@ TODO: make `quantity` a function of `(value, unit)`,  meaning that `(value, unit
 
 
 
-
 ## Logical consistency
 
-Because **atom** is a logic language, we can use the language itself to ensure logical consistency of both data (facts) and code (logic rules).  For example, given the above examples, we might add a rule that a child cannot be a parent of any of its ancestors:
+As a logic language, **atom** allows expressing data integrity constraints natively, in the language itself. Any modification to the knowledgebase is tested for logical consistency before making changes, so all we need to do is provide the rules that valid data must satisfy. For example, for the *Silmarillion* family tree data set, we might add a rule that a child cannot be a parent of any of its ancestors:
 ```atom
 :assert ! parent d child a <- ancestor a descendant d
 ```
-Then any attempt to assert a fact that contradicts this rule will fail:
+Any attempt to assert a fact that contradicts this rule will now fail, because it would render the knowledgebase inconsistent:
 ```atom
 :assert parent "Galadriel" child "Finwe"
 ```
-In this way, describing data structures by logic rules automatically ensures data integrity. This holds for computed relations as well: for example, 
+As always, this holds for computed relations as well. For example, 
 ```atom
 :assert + 1 + 1 = 3
 ```
-is rejected because `! + 1 + 1 + 3` is inferred from the built-in arithmetic relations. This mechanism allows enforcing any condition that can be expressed in the language: for example, we might restrict a user input to be a positive number by a rule
+is rejected because the negated fact `! + 1 + 1 + 3` is inferred from the built-in arithmetic relations. Any data integrity condition that can be expressed in the language will be automatically enforced: for example, we might restrict a user input to be a positive number by a rule
 ```atom
 :assert < n > 0 <- input-number n
 ```
@@ -329,3 +346,15 @@ With this rule in place, **atom** will reject malformed input:
 :assert input-number -3
 ```
 
+## Lookup
+
+To navigate an **atom** world, it is helpful to be able to ask "what relations does this atom participate in". This is handled by
+```
+// need to add this command to REPL
+:lookup "Finwe"
+```
+
+
+## Where to go from here
+
+Stuff is under construction. The command line client. Contribute!
