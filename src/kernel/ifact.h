@@ -17,11 +17,8 @@
 #include "kernel/typedtuple.h"
 
 
-struct s_Service;
-
 /**
- * A conjunction is a set of facts from a single relation table, which is why it holds
- * the table rather than the relation: building an ifact writes tuples.
+ * A conjunction is a set of facts from a single relation.
  * 
  * TODO: perhaps rename this IFactRelation, as it corresponds 1:1 to
  * a set of tuples from a specific (typed) relation.
@@ -37,12 +34,6 @@ typedef struct s_IFactConjunction {
 	// each atom except the identified atom; see IFactAddTuple().
 	Atom * tuples;
 } IFactConjunction;
-
-/*
- * CLAUDE: An IFactConjunction does not hold a reference to the form of its relation.
- * The relation must outlive every ifact with a conjunction of the relation;
- * see ReleaseRelation().
- */
 
 
 /**
@@ -167,7 +158,7 @@ void IFactReserve(data64 hash);
 void IFactMarkCached(Atom ifact);
 
 /**
- * CLAUDE: Release the cache reference of every cached ifact consisting of a single
+ * Release the cache reference of every cached ifact consisting of a single
  * conjunction with the given ID column, on a relation of the given form.
  * Clear the IFACT_CACHED flag of each such ifact.
  * An ifact with no other reference is removed, together with its tuple.
@@ -175,8 +166,9 @@ void IFactMarkCached(Atom ifact);
 void IFactReleaseCached(Atom form, index8 idColumn);
 
 /**
- * CLAUDE: Return the number of tuples of all ifacts on the given relation.
- * This scans every ifact.
+ * Return the number of tuples of all ifacts on the given relation.
+ * 
+ * NOTE: this scans all ifacts in the system.
  */
 size32 IFactRelationNTuples(TypedRelation relation);
 
@@ -190,7 +182,7 @@ size32 IFactRelationNTuples(TypedRelation relation);
 void IFactCreateReaderService(TypedRelation relation, index8 idColumn);
 
 /**
- * CLAUDE: Test if the relation has a service created by IFactCreateReaderService().
+ * Test if the relation has a service created by IFactCreateReaderService().
  */
 bool IFactRelationHasReader(TypedRelation relation);
 
@@ -215,7 +207,7 @@ void IFactAcquire(Atom ifact);
 void IFactRelease(Atom ifact);
 
 /**
- * CLAUDE: Test if an AT_ID atom with the hash of the given atom is stored.
+ * Test if an AT_ID atom with the hash of the given atom is stored.
  */
 bool IFactExists(Atom ifact);
 
@@ -243,8 +235,8 @@ void IFactPrint(Atom ifact);
 typedef bool (*IFactPrinter)(Atom ifact);
 
 /**
- * CLAUDE: Set the function that IFactPrint() hands each AT_ID atom to. A zero printer
- * restores the default output of IFactPrint().
+ * Set the print function used by IFactPrint() for AT_ID atoms.
+ * Passing printer = 0 restores the default output of IFactPrint().
  */
 void IFactSetPrinter(IFactPrinter printer);
 

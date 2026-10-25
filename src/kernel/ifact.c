@@ -6,9 +6,7 @@
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
-#include "kernel/operator.h"
 #include "kernel/Parameter.h"
-#include "kernel/ServiceRegistry.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
 #include "lang/PredicateForm.h"
@@ -19,57 +17,7 @@
 #include "util/hashing.h"
 #include "util/ResizingArray.h"
 #include "util/sort.h"
-#include "storage/StorageProvider.h"
 
-
- /**
- * An IFactConjunction stores a block of tuples in a RelationWriter,
- * representing a conjunction of facts. Each ifact consists of 1 or more
- * IFactConjunction, stored sequentially.
- * 
- * We must always ensure that the defining fact stays constant over time.
- * For example, if we have an atom @cat with ifact
- * 
- *  list @cat element 1 position @c &
- *  list @cat element 2 position @a &
- *  list @cat element 3 position @t &
- *  list @cat length 3
- * 
- * then the ifact conjunctions store the marginal facts
- * 
- *  list @cat element _ position _
- *  list @cat length _
- * 
- * which is the same information stored by lookup.
- * 
- * TODO: can we avoid storing conjunctions and instead use lookup to
- * retrieve identifying facts when needed? This affects
- * IFactRelease() and sameIFacts()
- */
-
- /*
- * A complication is that the relation table does not necessarily sort
- * tuples so we may need to copy tuples and sort to compute a hash.
- * The b-tree storage _does_ maintain tuples sorted however.
- * 
- * While constructing an IFact, we cannot add tuples to the relation table
- * until the IFact is complete, as we do not know the atom ID (hash value)
- * until that time. Hence, if we don't store tuples in the IFact structure,
- * we must still have a temporary tuple storage during IFact creation.
- * 
- * (In a more mature implementation, it seems overly restrictive that IFacts
- * must necessarily be defined from tables. For example, a triangle can be
- * defined either by sides or by angles, and although the atom hash must be defined
- * consistently from one relation, say
- * 
- *    triangle *t side @s1 &
- *    triangle *t side @s2 &
- *    triangle *t side @s3
- * 
- * there is no reason why this relation cannot be computed. We must still ensure
- * that the relation cannot be altered.)
- * 
- */
 
 
 static IFactConjunction * lastConjunction(IFactHeader * header)
