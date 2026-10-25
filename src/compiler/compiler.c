@@ -1281,20 +1281,38 @@ static size8 parameterizeLocalVariables(
 }
 
 
+/*
+ * Test whether the query binds the given clause argument, and the argument has a
+ * known type. The parameter IO is read from the head term, since compiling a term turns the
+ * parameter into an input in the other terms; see propagateTermParameterTypes().
+ */
+static bool isTypedQueryInput(ClauseCompileState const * clauseState, index8 argument)
+{
+	if(clauseState->isConjunction || (argument >= clauseState->nQueryArguments))
+		return false;
+	Atom const * headParameters = IndexedFormulaPeekTermAtoms(
+		clauseState->indexedFormula, clauseState->headTermIndex);
+	for(index8 i = 0; i < clauseState->headTermArity; i++) {
+		if(headParameters[i].parameter.number == argument + 1)
+			return (headParameters[i].parameter.io == PARAMETER_IN)
+				&& headParameters[i].parameter.atomType;
+	}
+	return false;
+}
+
+
 /**
  * Rearrange the arguments of a compiled conjunction into the clause argument order,
  * emitting a PERMUTE operator unless they are in that order already. Takes over the
  * caller's reference to the given service; the caller instead obtains a reference
  * to the returned Service.
  *
- * The terms of the conjunction must together provide every clause argument. If they
- * do not, the clause cannot yield a valid relation: the arguments no term provides
- * would be left undefined. This is not a program error but an invalid rule, so we
- * free the operator and return 0.
+ * The terms of the conjunction must together provide every output argument.
  */
 static Operator * permuteToClauseArguments(
-	Operator * op, index8 const clauseMap[], size8 clauseNArguments)
+	Operator * op, ClauseCompileState const * clauseState, index8 const clauseMap[])
 {
+	size8 clauseNArguments = clauseState->nArguments;
 	bool covered[clauseNArguments];
 	SetMemory(covered, clauseNArguments * sizeof(bool), 0);
 	bool ordered = (op->nArguments == clauseNArguments);
@@ -1304,9 +1322,9 @@ static Operator * permuteToClauseArguments(
 			ordered = false;
 	}
 	for(index8 i = 0; i < clauseNArguments; i++) {
-		if(!covered[i]) {
+		if(!covered[i] && !isTypedQueryInput(clauseState, i)) {
 #ifdef DEBUG_COMPILER
-			PrintCString("Clause does not provide every argument\n");
+			PrintCString("Clause does not provide every output argument\n");
 #endif
 			CheckOperator(op);
 			return 0;
@@ -1630,7 +1648,7 @@ static Operator * compileConjunction(CompileStack * compileStack, ClauseCompileS
 
 	if(op) {	
 		// The compiled terms provide the clause arguments in their own order
-		op = permuteToClauseArguments(op, clauseMap, clauseState->nArguments);
+		op = permuteToClauseArguments(op, clauseState, clauseMap);
 
 		// Drop the local variable arguments again, and any duplicate tuples this creates.
 		// permuteToClauseArguments() has put the arguments in clause order, so the ones

@@ -93,6 +93,38 @@ void testPermuteOperator(void)
 
 
 /**
+ * CLAUDE: A PERMUTE operator from the relation (list position element) to the arguments
+ * (list element position extra) leaves the input argument extra unwritten. The caller binds
+ * the input argument extra, and every tuple keeps the bound value.
+ */
+void testPermuteOperatorInputArgument(void)
+{
+	Operator * listOperator = GetListOperator(AT_LETTER);
+	index8 argumentMap[3];
+	ListSetByteArray((index8[]) {0, 2, 1}, argumentMap);
+	Operator * permuteOperator = CreatePermuteOperator(4, 0, 0, 0, argumentMap, listOperator);
+	// The input argument follows the child's order
+	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[3], 3)
+
+	Atom string = CreateStringFromCString("alibaba");
+	Atom extra = CreateStringFromCString("extra");
+	Atom arguments[4] = {string, (Atom) {0}, (Atom) {0}, extra};
+	OperatorContext * context = OperatorCreateContext(permuteOperator, arguments);
+	size32 nElements = 0;
+	while(OperatorCall(context)) {
+		ASSERT_TRUE(SameAtoms(arguments[3], extra))
+		nElements++;
+	}
+	ASSERT_INT32_EQUAL(nElements, 7)
+	OperatorFreeContext(context);
+
+	IFactRelease(extra);
+	IFactRelease(string);
+	CheckOperator(permuteOperator);
+}
+
+
+/**
  * This tests using a PROJECT operator to marginalize the relation
  * (list element position) to (list element), dropping the trailing
  * position argument. Dropping it leaves duplicate tuples, which PROJECT
@@ -812,6 +844,7 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testMachineOperator);
 	ExecuteTest(testPermuteOperator);
+	ExecuteTest(testPermuteOperatorInputArgument);
 	ExecuteTest(testProjectOperator);
 	ExecuteTest(testJoinOperator1);
 	ExecuteTest(testJoinOperator2);

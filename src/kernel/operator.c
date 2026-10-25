@@ -122,6 +122,12 @@ static void deriveIndexOrderFromChild(
 		contributed[argument] = true;
 		op->indexOrder[nOrdered++] = argument;
 	}
+	// An argument not in the argument map is an input argument of a permute operator.
+	// The caller binds the input argument, so it is equal in every tuple.
+	for(index8 i = 0; i < op->nArguments; i++) {
+		if(!contributed[i])
+			op->indexOrder[nOrdered++] = i;
+	}
 	ASSERT(nOrdered == op->nArguments)
 }
 
@@ -300,18 +306,9 @@ Operator * CreatePermuteOperator(
 	}
 
 #ifdef DEBUG
-	// Bounds check the argument map against the parent arguments and the constants,
-	// and verify that the child operator provides every parent argument: a permute
-	// operator that leaves an argument unwritten does not yield a valid relation.
-	bool provided[nArguments];
-	SetMemory(provided, nArguments * sizeof(bool), 0);
-	for(index8 i = 0; i < childOperator->nArguments; i++) {
+	// Bounds check the argument map against the parent arguments and the constants
+	for(index8 i = 0; i < childOperator->nArguments; i++)
 		ASSERT(argumentMap[i] < nArguments + nConstants)
-		if(argumentMap[i] < nArguments)
-			provided[argumentMap[i]] = true;
-	}
-	for(index8 i = 0; i < nArguments; i++)
-		ASSERT(provided[i])
 	assertArgumentsAreDistinct(argumentMap, childOperator->nArguments, nArguments);
 #endif
 
