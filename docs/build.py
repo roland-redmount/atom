@@ -214,7 +214,7 @@ def main():
         write(os.path.join(args.out, target), build_page(source, template, warnings))
 
     shutil.copy2(os.path.join(DOCS, "styles.css"), os.path.join(args.out, "styles.css"))
-    shutil.copy2(os.path.join(REPO, "atom-logo-no-background.svg"), os.path.join(args.out, "atom-logo.svg"))
+    shutil.copy2(os.path.join(REPO, "docs", "images", "atom-logo-white.svg"), os.path.join(args.out, "atom-logo.svg"))
     if os.path.isdir(DATA):
         shutil.copytree(DATA, os.path.join(args.out, "data"))
     if os.path.isdir(FONTS):

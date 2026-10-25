@@ -10,7 +10,6 @@ on:
       - "web/**"
       - "src/**"
       - "CMakeLists.txt"
-      - "atom-logo-no-background.svg"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 

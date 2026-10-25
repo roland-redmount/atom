@@ -1,7 +1,10 @@
 <p align="center">
-	<img width="40%" src="atom-logo-no-background.svg"</img>
-<p align="center">
-
+	<picture>
+		<source media="(prefers-color-scheme: dark)" srcset="docs/images/atom-logo-white.svg">
+		<source media="(prefers-color-scheme: light)" srcset="docs/images/atom-logo-black.svg">
+		<img alt="atom logo" width="40%" src="docs/images/atom-logo-black.svg">
+	</picture>
+</p>
 
 ##
 
@@ -14,7 +17,7 @@ Features:
 * Type safety and correctness proofs from logic rules -- no dedicated type system
 * Interactive, fully persistent computation envivonment
 
-A brief, interactive tutorial on the **atom** language concepts is here [TODO].
+For a brief intro to **atom** language concepts, see this interactive [tutorial](https://roland-redmount.github.io/atom/).
 
 
 ## Platforms and dependencies
