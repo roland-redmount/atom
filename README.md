@@ -17,7 +17,7 @@ Features:
 * Type safety and correctness proofs from logic rules -- no dedicated type system
 * Interactive, fully persistent computation envivonment
 
-A brief, interactive tutorial on the **atom** language concepts is here [TODO].
+For a brief intro to **atom** language concepts, see this interactive [tutorial](https://roland-redmount.github.io/atom/).
 
 
 ## Platforms and dependencies
