@@ -22,6 +22,7 @@ typedef struct s_OperatorContext OperatorContext;
  * An operator is evaluated stepwise, at each call yielding one tuple,
  * similar to a co-routine.
  *
+ * Every operator must yield a valid relation with distinct tuples.
  * Every operator defines an index order, which is a permutation of its arguments
  * such that tuples are lexiographically ordered. For example, an operator
  * with arguments (a b c) and index order {1, 0, 2} orders its tuples lexiographically
@@ -54,13 +55,7 @@ typedef struct s_OperatorContext OperatorContext;
  * a permute operator may take a child argument from a constant, a constrain
  * operator may take several child arguments from one argument, and a join
  * operator does neither.
- *
- * Every operator provides all of its arguments and yields distinct tuples, and
- * so yields a valid relation. An operator can therefore be applied to any other
- * without regard for how that one was composed.
  */
-/* CLAUDE: CONSTANT is the product of the child relation with a relation holding a single
- * tuple of constants (x), restricted on the constant arguments the caller binds (sigma). */
  enum OperatorType {
 
 	/**
@@ -323,21 +318,16 @@ Operator * CreateIdentityOperator(Operator * childOperator);
 
 /**
  * Create a PERMUTE operator with the specified number of arguments.
- * The argumentMap array has length equal to childOperator->nArguments and gives the
- * source of each child argument: an index below nArguments is the index of a parent
- * argument, an index of nArguments or above refers to constants[index - nArguments].
- *
+ * 
+ * For child argument i, k = argumentMap[i] is the index into this operator's arguments array
+ * if i < nArguments, or else k - nArguments is an index into the constants array.
+ * corresponding to child argument i. A parent argument absent from argumentMap
+ * is an input argument that is not used by the child.
  * The constants and constantTypes arrays have length nConstants, and may be 0 if
  * there are none. The operator acquires a reference to each constant.
- *
- * The child operator must provide every parent argument exactly once, so that every
- * parent argument occurs in argumentMap, and none occurs twice. An argument this
- * operator does not write would be left at whatever the caller had in the arguments
- * tuple, and so would not be part of a relation; taking several child arguments from
- * one argument is what a constrain operator expresses.
- *
- * The index order is the child's, relabeled through the argument map; child arguments
- * bound to a constant drop out of it, being equal in every tuple.
+  *
+ * The operators' index order is the same as the child's, relabeled through the argument map,
+ * with input arguments ordered last.
  */
 Operator * CreatePermuteOperator(
 	size8 nArguments, Atom const constants[], byte const constantTypes[], size8 nConstants,

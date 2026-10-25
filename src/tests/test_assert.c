@@ -449,29 +449,68 @@ static size32 countQueryFacts(char const * queryString)
 
 
 /**
- * CLAUDE: Asserting (circle "c" radius -3) compiles a query for (< -3 > 0) while checking for a
- * contradiction, before the relation (circle radius) exists. The compiled service then has no
- * part from the rule. Creating the relation must invalidate the service, so that the next query
- * for (< -3 > 0) is compiled again from the rule; see InvalidateDependentServices().
+ * CLAUDE: Querying (positive -3) compiles a service before the relation (circle radius) exists.
+ * The compiled service then has a part from the stored relation (positive), and no part from
+ * the rule. Creating the relation (circle radius) must invalidate the service, so that the next
+ * query for (positive -3) is compiled again from the rule; see InvalidateDependentServices().
  */
 void testAssertFactAfterRule(void)
 {
-	Atom rule = CStringToClause("! circle c radius r | < r > 0");
+	Atom rule = CStringToClause("! circle c radius r | positive r");
 	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+	Atom positive = CStringToTerm("positive 5");
+	ASSERT_INT32_EQUAL(AssertFormula(positive), ASSERT_OK)
+	ASSERT_UINT32_EQUAL(countQueryFacts("positive -3"), 0)
+
 	Atom circle = CStringToTerm("circle \"c\" radius -3");
 	ASSERT_INT32_EQUAL(AssertFormula(circle), ASSERT_OK)
 
-	// (< -3 > 0) is derived from the rule, and (< 5 > 0) is computed by the MACHINE service
-	ASSERT_UINT32_EQUAL(countQueryFacts("< -3 > 0"), 1)
-	ASSERT_UINT32_EQUAL(countQueryFacts("< 5 > 0"), 1)
-	ASSERT_UINT32_EQUAL(countQueryFacts("< -5 > 0"), 0)
+	// (positive -3) is derived from the rule, and (positive 5) is stored
+	ASSERT_UINT32_EQUAL(countQueryFacts("positive -3"), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("positive 5"), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("positive -5"), 0)
 
 	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_OK)
-	ASSERT_UINT32_EQUAL(countQueryFacts("< -3 > 0"), 0)
+	ASSERT_UINT32_EQUAL(countQueryFacts("positive -3"), 0)
 	TypedRelation circleRelation = RelationFromFact(FormulaGetView(circle));
 	RetractFact(FormulaGetView(circle));
 	DropRelation(circleRelation);
+	TypedRelation positiveRelation = RelationFromFact(FormulaGetView(positive));
+	RetractFact(FormulaGetView(positive));
+	DropRelation(positiveRelation);
 	ReleaseFormula(circle);
+	ReleaseFormula(positive);
+	ReleaseFormula(rule);
+}
+
+
+/**
+ * CLAUDE: The rule (< r > 0 | ! circle c radius r) derives (! circle c radius r) for every c,
+ * when r is not greater than 0. The query (! circle "a" radius -3) binds c, and no term of the
+ * rule uses c; see permuteToClauseArguments(). So (circle "a" radius -3) is refused, and
+ * (circle "a" radius 3) is accepted. The query (! circle c radius -3) does not bind c, and the
+ * rule yields no service for the query.
+ */
+void testAssertContradictsRuleUnusedArgument(void)
+{
+	Atom rule = CStringToClause("< r > 0 | ! circle c radius r");
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+
+	Atom negativeCircle = CStringToTerm("circle \"a\" radius -3");
+	ASSERT_INT32_EQUAL(AssertFormula(negativeCircle), ASSERT_CONTRADICTION)
+	ASSERT_UINT32_EQUAL(countQueryFacts("! circle \"a\" radius -3"), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("! circle \"a\" radius 3"), 0)
+	ASSERT_UINT32_EQUAL(countQueryFacts("! circle c radius -3"), 0)
+
+	Atom positiveCircle = CStringToTerm("circle \"a\" radius 3");
+	ASSERT_INT32_EQUAL(AssertFormula(positiveCircle), ASSERT_OK)
+
+	TypedRelation circleRelation = RelationFromFact(FormulaGetView(positiveCircle));
+	RetractFact(FormulaGetView(positiveCircle));
+	DropRelation(circleRelation);
+	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_OK)
+	ReleaseFormula(positiveCircle);
+	ReleaseFormula(negativeCircle);
 	ReleaseFormula(rule);
 }
 
@@ -1142,6 +1181,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testRetractFormulaIFactRule);
 	ExecuteTest(testRetractFormulaRejects);
 	ExecuteTest(testAssertFactAfterRule);
+	ExecuteTest(testAssertContradictsRuleUnusedArgument);
 	ExecuteTest(testInvalidateDependentsOfNewRelation);
 	ExecuteTest(testInvalidateDependentsOfNewRule);
 	ExecuteTest(testInvalidateDependentsOfClosedRelation);
