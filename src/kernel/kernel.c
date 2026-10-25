@@ -121,8 +121,6 @@ static const index32 coreServiceRelationId[N_CORE_SERVICES + 1] = {
 	RELATION_PREDICATE_FORM,
 	// (multiset <ID element >ID multiple >INT)
 	RELATION_MULTISET_ID,
-	// (multiset >ID element >ID multiple >INT)
-	RELATION_MULTISET_ID,
 	// (term-form <ID predicate-form >ID sign >INT)
 	RELATION_TERM_FORM,
 	// (clause-form <ID)
@@ -144,8 +142,6 @@ static const byte coreServiceParameterIO[N_CORE_SERVICES + 1][CORE_FORMS_MAX_ARI
 	{PARAMETER_IN},
 	// (multiset <ID element >ID multiple >INT)
 	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
-	// (multiset >ID element >ID multiple >INT)
-	{PARAMETER_OUT, PARAMETER_OUT, PARAMETER_OUT},
 	// (term-form <ID predicate-form >ID sign >INT)
 	{PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT},
 	// (clause-form <ID)
@@ -170,7 +166,6 @@ typedef struct s_Kernel {
 	index8 corePredicateRoleIndex[N_CORE_FORMS + 1][CORE_FORMS_MAX_ARITY];
 	// Corresponding core relations, tuple stores and services
 	TypedRelation coreRelations[N_CORE_RELATIONS + 1];
-	TupleStore * coreTupleStores[N_CORE_RELATIONS + 1];
 	Operator * coreOperators[N_CORE_SERVICES + 1];
 
 	// number of ifacts and references created by bootstrapping
@@ -350,9 +345,9 @@ static void createCoreRelation(uint32 relationId)
 		.typeSignature = typeSignature
 	};
 	CreateRelationBootstrap(kernel->coreRelations[relationId], kernel->corePredicateForms[formId]);
-	kernel->coreTupleStores[relationId] = CreateTupleStore(
-		kernel->coreRelations[relationId],
-		GetStorageProvider(PROVIDER_BTREE), corePredicateArity[formId], kernel->corePredicateRoleIndex[formId]);
+	// CLAUDE: The tuples of a core relation are ifacts, with the identified atom in the
+	// first role of coreFormRoleIds
+	IFactCreateReaderService(kernel->coreRelations[relationId], kernel->corePredicateRoleIndex[formId][0]);
 	// Release the reference obtained from CreateRelationBootstrap(),
 	// since TupleStore and associated operators now hold references
 	ReleaseRelation(kernel->coreRelations[relationId]);
@@ -364,11 +359,6 @@ TypedRelation GetCoreRelation(index32 relationId)
 	return kernel->coreRelations[relationId];
 }
 
-
-TupleStore * GetCoreTupleStore(index32 relationId)
-{
-	return kernel->coreTupleStores[relationId];
-}
 
 
 /**
@@ -386,7 +376,7 @@ static void bootstrapTermForm(Atom termForm, Atom predicateForm)
 	IFactBegin(&draft);
 	IFactBeginConjunction(
 		&draft,
-		kernel->coreTupleStores[RELATION_TERM_FORM],
+		kernel->coreRelations[RELATION_TERM_FORM],
 		CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM)
 	);
 	Atom tuple[3];
@@ -531,7 +521,7 @@ static void setupCoreServices(void)
 	// defining facts
 	// (multiset @multiset-form element "multiset" multiple 1)
 	IFactBeginConjunction(
-		&multisetDraft, kernel->coreTupleStores[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
+		&multisetDraft, kernel->coreRelations[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
 	Atom multisetTuple[3];
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
@@ -556,7 +546,7 @@ static void setupCoreServices(void)
 	IFactEndConjunction(&multisetDraft);
 
 	// (predicate-form @multiset-form)
-	IFactBeginConjunction(&multisetDraft, kernel->coreTupleStores[RELATION_PREDICATE_FORM], 0);
+	IFactBeginConjunction(&multisetDraft, kernel->coreRelations[RELATION_PREDICATE_FORM], 0);
 	IFactAddTuple(&multisetDraft, (Atom[]) {multisetForm});
 	IFactEndConjunction(&multisetDraft);
 
@@ -573,7 +563,6 @@ static void setupCoreServices(void)
 	kernel->coreOperators[0] = 0;
 	setupCoreOperator(SERVICE_MULTISET_ID);
 	setupCoreOperator(SERVICE_MULTISET_NAME);
-	setupCoreOperator(SERVICE_MULTISET_ID_ALL);
 
 	/*
 	 * Create @predicate-form
@@ -585,7 +574,7 @@ static void setupCoreServices(void)
 	// defining facts
 	// (multiset @predicate-form element "predicate-form" multiple 1)
 	IFactBeginConjunction(
-		&predicateFormDraft, kernel->coreTupleStores[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
+		&predicateFormDraft, kernel->coreRelations[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
 		(Atom []) {predicateForm, GetCoreRoleName(ROLE_PREDICATE_FORM), (Atom) {._int = 1}},
@@ -595,7 +584,7 @@ static void setupCoreServices(void)
 	IFactEndConjunction(&predicateFormDraft);
 
 	// (predicate-form @predicate-form)
-	IFactBeginConjunction(&predicateFormDraft, kernel->coreTupleStores[RELATION_PREDICATE_FORM], 0);
+	IFactBeginConjunction(&predicateFormDraft, kernel->coreRelations[RELATION_PREDICATE_FORM], 0);
 	IFactAddTuple(&predicateFormDraft, (Atom[]) {predicateForm});
 	IFactEndConjunction(&predicateFormDraft);
 

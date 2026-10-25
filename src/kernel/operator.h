@@ -7,7 +7,6 @@
 
 
 struct s_RelationReader;
-struct s_TupleStore;
 
 typedef struct s_Operator Operator;
 typedef struct s_OperatorContext OperatorContext;
@@ -166,22 +165,18 @@ typedef struct s_OperatorContext OperatorContext;
 	OPERATOR_MACHINE = 10,
 
 	/**
-	 * IFACT creates an single-tuple ifact and yields that tuple. The ifact tuple is
-	 * stoered in the relation's TupleStore, with the identified atom in the ID column.
-	 * The caller binds every argument except the ID column, which is the output. If the ifact
-	 * already exists, IFACT yields the existing tuple. See ifact.h.
+	 * CLAUDE: IFACT creates single-tuple ifacts of a relation, with the identified atom in
+	 * the ID column. IFACT has no child operator. The ifact tuple is kept by ifact.c,
+	 * not in a TupleStore. See ifact.h.
 	 *
-	 * A tuple stored by IFACT is a cached result, not an asserted fact. IFACT creates one
-	 * reference to each ifact it has created, to ensure the tuple is kept. These references
-	 * are cleared only when the underlying ifact rule is removed; see DictionaryRemoveIFactRule()
+	 * The caller binds every argument except the ID column, which is the output. IFACT
+	 * creates the ifact of the argument tuple and yields the tuple. If the ifact already
+	 * exists, IFACT yields the existing tuple. The ifacts of the relation are read by the
+	 * primitive service of IFactCreateReaderService().
 	 *
-	 * The child operator of IFACT reads the TupleStore with the ID column as the only input.
-	 * IFACT does not directly call this child operator, but it is called from ifact.c when
-	 * removing an ifact; see IFactSetupStoreOperator().
-	 *
-	 * NOTE: creating an ifact adds a tuple to the TupleStore. A query that reads the same
-	 * TupleStore while IFACT creates a new ifact will fail, since the TupleStore's B-tree
-	 * is write-locked while it is read.
+	 * An ifact created by IFACT is a cached result, not an asserted fact. IFACT holds one
+	 * reference to each ifact it has created; see IFactMarkCached(). These references are
+	 * cleared only when the underlying ifact rule is removed; see DictionaryRemoveIFactRule().
 	 */
 	OPERATOR_IFACT = 11,
 
@@ -299,8 +294,7 @@ struct s_Operator {
 		} machine;
 		// for OPERATOR_IFACT
 		struct {
-			Operator * childOperator;
-			struct s_TupleStore * store;
+			TypedRelation relation;
 			index8 idColumn;
 		} ifact;
 		// for OPERATOR_CONSTANT
@@ -467,12 +461,11 @@ Operator * CreateProjectOperator(
 	Operator * childOperator, size8 nArguments, index8 const argumentMap[]);
 
 /**
- * Create an IFACT operator creating ifacts in the given TupleStore, with the
- * identified atom in idColumn; see OPERATOR_IFACT. The operator takes one argument
- * per column of the TupleStore, and has the index order of the TupleStore.
- * This function may register a new Service via IFactSetupStoreOperator().
+ * Create an IFACT operator creating ifacts w.r.t. the given relation, with the
+ * identified atom in idColumn; see OPERATOR_IFACT. The operator takes the same
+ * number of arguments as the arity of the relation.
  */
-Operator * CreateIFactOperator(struct s_TupleStore * store, index8 idColumn);
+Operator * CreateIFactOperator(TypedRelation relation, index8 idColumn);
 
 /**
  * Create a FIXPOINT operator deriving a recursive relation from the given child

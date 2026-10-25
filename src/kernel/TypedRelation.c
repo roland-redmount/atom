@@ -1,4 +1,5 @@
 
+#include "kernel/dictionary.h"
 #include "kernel/ifact.h"
 #include "kernel/TypedRelation.h"
 #include "kernel/TupleStore.h"
@@ -107,6 +108,9 @@ void AcquireRelation(TypedRelation relation)
 		Atom predicateForm = IsConjunctionForm(relation.form) ?
 			(Atom) {0} : TermFormGetPredicateForm(relation.form);
 		CreateRelationBootstrap(relation, predicateForm);
+		// CLAUDE: see FormIndexEntry
+		if(!predicateForm.hash)
+			DictionaryIndexConjunctionForm(relation.form);
 	}
 }
 
@@ -121,6 +125,14 @@ void ReleaseRelation(TypedRelation relation)
 		// At this point, no services refer to the relation,
 		// and we must have no tuple store.
 		ASSERT(!record->tupleStore)
+#ifdef DEBUG
+		// CLAUDE: A relation must outlive its ifacts; see IFactConjunction
+		ASSERT(IFactRelationNTuples(relation) == 0)
+#endif
+
+		// CLAUDE: see FormIndexEntry
+		if(!record->predicateForm.hash)
+			DictionaryUnindexConjunctionForm(record->relation.form);
 
 		if(record->ownsForm) {
 			// for all relations except a few "core" relations
@@ -164,13 +176,13 @@ TupleStore * RelationGetTupleStore(TypedRelation relation)
 	return record->tupleStore;
 }
 
-byte RelationAddTuple(TypedRelation relation, Atom const tuple[], uint8 idPosition)
+byte RelationAddTuple(TypedRelation relation, Atom const tuple[])
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
 	ASSERT(record->tupleStore)
 	ASSERT(TupleStoreIsWritable(record->tupleStore))
-	return TupleStoreAddTuple(record->tupleStore, tuple, idPosition);
+	return TupleStoreAddTuple(record->tupleStore, tuple);
 }
 
 
@@ -178,19 +190,23 @@ size32 RelationNRows(TypedRelation relation)
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
-	ASSERT(record->tupleStore)
-	ASSERT(TupleStoreIsFinite(record->tupleStore))
-	return TupleStoreNTuples(record->tupleStore);
+	// CLAUDE: the tuples of ifacts are counted with the stored tuples
+	size32 nRows = IFactRelationNTuples(relation);
+	if(record->tupleStore) {
+		ASSERT(TupleStoreIsFinite(record->tupleStore))
+		nRows += TupleStoreNTuples(record->tupleStore);
+	}
+	return nRows;
 }
 
 
-byte RelationRemoveTuple(TypedRelation relation, Atom const tuple[], uint8 idPosition)
+byte RelationRemoveTuple(TypedRelation relation, Atom const tuple[])
 {
 	RelationRecord * record = findRelationRecord(relation);
 	ASSERT(record)
 	ASSERT(record->tupleStore)
 	ASSERT(TupleStoreIsWritable(record->tupleStore))
-	return TupleStoreRemoveTuple(record->tupleStore, tuple, idPosition);
+	return TupleStoreRemoveTuple(record->tupleStore, tuple);
 }
 
 

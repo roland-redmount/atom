@@ -565,10 +565,18 @@ void testIndexOrder(void)
 	// The relation is stored in the kernel order (list position element), so reordering
 	// it to (list element position) yields tuples ordered by argument 0 (the list),
 	// then argument 2 (the position), then argument 1 (the element)
+
+	// CLAUDE: The list relation holds ifacts, and its operator yields tuples in the
+	// identity order; see IFactCreateReaderService(). The kernel role of each column, in identity order:
+	index8 const * listRoleIndex = GetListRoleIndex();
+	index8 columnRoles[3];
+	for(index8 i = 0; i < 3; i++)
+		columnRoles[listRoleIndex[i]] = i;
+	// The PERMUTE maps the roles (list position element) to the arguments (0 2 1)
+	index8 const permutedArguments[3] = {0, 2, 1};
 	Operator * permuteOperator = createPermutedListOperator();
-	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[0], 0)
-	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[1], 2)
-	ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[2], 1)
+	for(index8 i = 0; i < 3; i++)
+		ASSERT_UINT32_EQUAL(permuteOperator->indexOrder[i], permutedArguments[columnRoles[i]])
 
 	// PROJECT sorts tuple using a B-tree, and always give the identity index order
 	Operator * projectOperator = CreateProjectOperator(permuteOperator, 2, (index8[]) {0, 1});
@@ -585,7 +593,18 @@ void testIndexOrder(void)
 	ListSetByteArray((index8[]) {2, 3, 4}, rightMap);
 	Operator * joinOperator = CreateJoinOperator(
 		5, listOperator, leftMap, GetListOperator(AT_ID), rightMap);
-	index8 expectedJoinOrder[5] = {2, 0, 1, 3, 4};
+	// CLAUDE: The left child yields the roles in the order of columnRoles, and so does the
+	// right child, of which the shared list argument 2 is skipped
+	index8 const leftArguments[3] = {2, 0, 1};
+	index8 const rightArguments[3] = {2, 3, 4};
+	index8 expectedJoinOrder[5];
+	index8 nExpected = 0;
+	for(index8 i = 0; i < 3; i++)
+		expectedJoinOrder[nExpected++] = leftArguments[columnRoles[i]];
+	for(index8 i = 0; i < 3; i++) {
+		if(rightArguments[columnRoles[i]] != 2)
+			expectedJoinOrder[nExpected++] = rightArguments[columnRoles[i]];
+	}
 	for(index8 i = 0; i < 5; i++)
 		ASSERT_UINT32_EQUAL(joinOperator->indexOrder[i], expectedJoinOrder[i])
 

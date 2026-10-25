@@ -313,7 +313,7 @@ void testInvalidateRelationByRule(void)
 	Atom terminatingFact = CStringToTerm("number 0 faculty 1");	
 	TypedRelation relation = RelationFromFact(FormulaGetView(terminatingFact));
 	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
-	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)));
 	Atom faculty = CreateNameFromCString("faculty");
 	index8 facultyColumn = PredicateRoleIndex(TermFormGetPredicateForm(relation.form), faculty);
 	NameRelease(faculty);
@@ -333,7 +333,7 @@ void testInvalidateRelationByRule(void)
 	FreeMixedTypeRelation(mixedTypeRelation);
 
 	ReleaseFormula(queryTerm);
-	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)), 0);
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(terminatingFact)));
 	DictionaryRemoveClause(&clause);
 	DropRelation(relation);
 	ReleaseFormula(terminatingFact);
@@ -404,13 +404,13 @@ void testStaleBodyTermUsesPrimitiveOnly(void)
 	Atom alphaBetaFact = CStringToTerm("alpha \"a\" beta \"b\"");
 	TypedRelation alphaBetaRelation = RelationFromFact(FormulaGetView(alphaBetaFact));
 	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
-	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(alphaBetaFact)), 0);
+	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(alphaBetaFact)));
 
 	// TypedRelation (gamma delta) storing one fact ("c" "d")
 	Atom gammaDeltaFact = CStringToTerm("gamma \"c\" delta \"d\"");
 	TypedRelation gammaDeltaRelation = RelationFromFact(FormulaGetView(gammaDeltaFact));
 	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
-	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(gammaDeltaFact)), 0);
+	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(gammaDeltaFact)));
 
 	// Add rule giving (alpha beta) the tuples of (gamma delta), rendering all
 	// primitive services of the (alpha beta) relation stale.
@@ -429,8 +429,8 @@ void testStaleBodyTermUsesPrimitiveOnly(void)
 
 	DictionaryRemoveClause(&gRule);
 	DictionaryRemoveClause(&aRule);
-	RelationRemoveTuple(alphaBetaRelation, TypedTuplePeekAtoms(FormulaGetActors(alphaBetaFact)), 0);
-	RelationRemoveTuple(gammaDeltaRelation, TypedTuplePeekAtoms(FormulaGetActors(gammaDeltaFact)), 0);
+	RelationRemoveTuple(alphaBetaRelation, TypedTuplePeekAtoms(FormulaGetActors(alphaBetaFact)));
+	RelationRemoveTuple(gammaDeltaRelation, TypedTuplePeekAtoms(FormulaGetActors(gammaDeltaFact)));
 	DropRelation(alphaBetaRelation);
 	DropRelation(gammaDeltaRelation);
 	ReleaseFormula(alphaBetaFact);
@@ -448,15 +448,15 @@ void testSelfJoinOverUnionRelation(void)
 	Atom edge1 = CStringToTerm("alpha 'A beta 'B");
 	TypedRelation alphaBetaRelation = RelationFromFact(FormulaGetView(edge1));
 	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
-	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(edge1)), 0);
+	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(edge1)));
 	Atom edge2 = CStringToTerm("alpha 'B beta 'C");
-	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(edge2)), 0);
+	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(edge2)));
 
 	// TypedRelation (gamma delta) stores the edge (C, D)
 	Atom edge3 = CStringToTerm("gamma 'C delta 'D");
 	TypedRelation gammaDeltaRelation = RelationFromFact(FormulaGetView(edge3));
 	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
-	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(edge3)), 0);
+	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(edge3)));
 
 	// The below rule adds (C, D) to (alpha beta), its service is a UNION with tuples
 	// (alpha A beta B)
@@ -481,9 +481,9 @@ void testSelfJoinOverUnionRelation(void)
 
 	DictionaryRemoveClause(&muRule);
 	DictionaryRemoveClause(&alphaRule);
-	RelationRemoveTuple(alphaBetaRelation, TypedTuplePeekAtoms(FormulaGetActors(edge1)), 0);
-	RelationRemoveTuple(alphaBetaRelation, TypedTuplePeekAtoms(FormulaGetActors(edge2)), 0);
-	RelationRemoveTuple(gammaDeltaRelation, TypedTuplePeekAtoms(FormulaGetActors(edge3)), 0);
+	RelationRemoveTuple(alphaBetaRelation, TypedTuplePeekAtoms(FormulaGetActors(edge1)));
+	RelationRemoveTuple(alphaBetaRelation, TypedTuplePeekAtoms(FormulaGetActors(edge2)));
+	RelationRemoveTuple(gammaDeltaRelation, TypedTuplePeekAtoms(FormulaGetActors(edge3)));
 	DropRelation(alphaBetaRelation);
 	DropRelation(gammaDeltaRelation);
 	ReleaseFormula(edge1);
@@ -503,7 +503,7 @@ void testStorePrimitiveStaleWhenRuleExists(void)
 	Atom gammaFact = CStringToTerm("gamma 'C delta 'D");
 	TypedRelation gammaDeltaRelation = RelationFromFact(FormulaGetView(gammaFact));
 	TupleStore * gammaDeltaStore = CreateTupleStore(gammaDeltaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
-	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(gammaFact)), 0);
+	TupleStoreAddTuple(gammaDeltaStore, TypedTuplePeekAtoms(FormulaGetActors(gammaFact)));
 
 	// A rule deriving (alpha beta) from (gamma delta), added before any (alpha beta) relation
 	// exists and before (alpha beta) is queried, so nothing is compiled or invalidated.
@@ -514,15 +514,15 @@ void testStorePrimitiveStaleWhenRuleExists(void)
 	Atom alphaFact = CStringToTerm("alpha 'A beta 'B");
 	TypedRelation alphaBetaRelation = RelationFromFact(FormulaGetView(alphaFact));
 	TupleStore * alphaBetaStore = CreateTupleStore(alphaBetaRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
-	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(alphaFact)), 0);
+	TupleStoreAddTuple(alphaBetaStore, TypedTuplePeekAtoms(FormulaGetActors(alphaFact)));
 	ASSERT_INT32_EQUAL(numberOfStaleServices(alphaBetaRelation), 3)
 
 	// The query unions the stored edge (A, B) with the derived edge (C, D)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("alpha x beta y"), 2)
 
 	DictionaryRemoveClause(&alphaRule);
-	RelationRemoveTuple(alphaBetaRelation, TypedTuplePeekAtoms(FormulaGetActors(alphaFact)), 0);
-	RelationRemoveTuple(gammaDeltaRelation, TypedTuplePeekAtoms(FormulaGetActors(gammaFact)), 0);
+	RelationRemoveTuple(alphaBetaRelation, TypedTuplePeekAtoms(FormulaGetActors(alphaFact)));
+	RelationRemoveTuple(gammaDeltaRelation, TypedTuplePeekAtoms(FormulaGetActors(gammaFact)));
 	DropRelation(alphaBetaRelation);
 	DropRelation(gammaDeltaRelation);
 	ReleaseFormula(alphaFact);
@@ -613,7 +613,7 @@ void testFilterServiceOverReplacedPrimitive(void)
 	Atom fact = CStringToTerm("sym \"a\" with \"b\"");
 	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
 	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
-	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)));
 	FormulaView clause = DictionaryAddClauseFromCString("sym x with y | ! sym y with x");
 
 	// The query binding the second column; its only answer is the derived (sym "b" with "a")
@@ -636,7 +636,7 @@ void testFilterServiceOverReplacedPrimitive(void)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples(secondColumnQuery), 1)
 
 	DictionaryRemoveClause(&clause);
-	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)));
 	DropRelation(relation);
 	ReleaseFormula(fact);
 }
@@ -652,7 +652,7 @@ void testPrintServiceOverReplacedPrimitive(void)
 	Atom fact = CStringToTerm("sym \"a\" with \"b\"");
 	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
 	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
-	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)));
 	FormulaView clause = DictionaryAddClauseFromCString("sym x with y | ! sym y with x");
 
 	// The all-output query replaces the primitive service
@@ -668,7 +668,7 @@ void testPrintServiceOverReplacedPrimitive(void)
 	PrintChar('\n');
 
 	DictionaryRemoveClause(&clause);
-	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)), 0);
+	RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)));
 	DropRelation(relation);
 	ReleaseFormula(fact);
 }

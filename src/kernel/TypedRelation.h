@@ -136,25 +136,24 @@ bool RelationExists(TypedRelation relation);
 /**
  * Return the number of rows in a relation.
  */
+/* CLAUDE: The rows are the tuples of the relation's TupleStore, if any, and the tuples of
+   the ifacts on the relation; see IFactRelationNTuples(). */
 size32 RelationNRows(TypedRelation relation);
 
 /**
  * Add a single tuple to the relation, acquiring each atom in the tuple.
  * The relation must have a writable tuple store.
- * If idPosition is > 0 it indicates the 1-based position of an identified atom.
- * Acquires a reference to each atom in the tuple, except an identified atom.
+ * Acquires a reference to each atom in the tuple.
  * Does not add lookup entries; see AssertFact()
  */
-byte RelationAddTuple(TypedRelation relation, Atom const tuple[], uint8 idPosition);
+byte RelationAddTuple(TypedRelation relation, Atom const tuple[]);
 
 /**
  * Remove the given tuple from the relation.
  * The relation must have a writable tuple store.
- * If the tuple contains an identified atom, its position must match the given idPosition
- * to remove the tuple.
  * Does not remove the associated lookup entries; see RetractFact()
  */
-byte RelationRemoveTuple(TypedRelation relation, Atom const tuple[], uint8 idPosition);
+byte RelationRemoveTuple(TypedRelation relation, Atom const tuple[]);
 
 /**
  * Drop the relation, all its services, and any associated tuple storage.

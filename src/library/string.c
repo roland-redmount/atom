@@ -17,7 +17,6 @@ typedef struct s_StringLibrary {
 	Atom stringPredicateForm;
 	Atom stringTermForm;
 	TypedRelation stringRelation;
-	TupleStore * stringTupleStore;
 	Operator * stringOperator;
 } StringLibrary;
 
@@ -61,7 +60,7 @@ Atom CreateString(char const * chars, size32 length)
 	AddListToIFact(&draft, listElements, AT_LETTER, length);
 
 	// add (string @string) to ifact
-	IFactBeginConjunction(&draft, stringLibrary->stringTupleStore, 0);
+	IFactBeginConjunction(&draft, stringLibrary->stringRelation, 0);
 	Atom tuple[1] = {(Atom) {0}};
 	IFactAddTuple(&draft, tuple);
 	IFactEndConjunction(&draft);
@@ -131,7 +130,7 @@ void StringSetup(void)
 		.atomTypes = {AT_ID}
 	};
 	stringLibrary->stringRelation = (TypedRelation) {.form = stringLibrary->stringTermForm, .typeSignature = typeSignature};
-	stringLibrary->stringTupleStore = CreateTupleStore(stringLibrary->stringRelation, GetStorageProvider(PROVIDER_BTREE), 1, 0);
+	IFactCreateReaderService(stringLibrary->stringRelation, 0);
 	IFactRelease(stringLibrary->stringTermForm);
 
 	// Store a pointer to the (string<ID) service, created by the B-tree provider.

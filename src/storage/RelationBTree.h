@@ -61,7 +61,7 @@ size32 RelationBTreeNRows(RelationBTree const * relation);
 /**
  * Add a tuple to a B-tree relation.
  */
-byte RelationBTreeAddTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition);
+byte RelationBTreeAddTuple(RelationBTree * relation, Atom const tuple[]);
 
 // B-tree iterator structure.
 // The service signature determines the input arguments. The first n arguments
@@ -111,6 +111,6 @@ void RelationBTreeIteratorEnd(RelationBTreeIterator * iterator);
 /**
  * Remove a tuple from the BTree matching the query. See RelationRemoveTuple()
  */
-byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[], uint8 idPosition);
+byte RelationBTreeRemoveTuple(RelationBTree * relation, Atom const tuple[]);
 
 #endif	// RELATION_B_TREE_H

@@ -27,11 +27,12 @@
 typedef struct s_CircleFixture {
 	Atom termForm;
 	TypedRelation relation;
-	TupleStore * store;
 	index8 circleIndex;
 	index8 radiusIndex;
 	Service ifactService;
 	// The service reading the store with the ID column as the only input
+	// CLAUDE: The relation has no TupleStore; the service reads the ifacts of the relation,
+	// see IFactCreateReaderService()
 	Service byIdService;
 } CircleFixture;
 
@@ -70,13 +71,11 @@ static void setupCircleFixture(CircleFixture * fixture)
 		.form = fixture->termForm,
 		.typeSignature = CreateTypeSignature(atomTypes, 2)
 	};
-	// The ID column comes first in the index order, as CreateIFactOperator() requires
-	index8 indexColumns[2] = {fixture->circleIndex, fixture->radiusIndex};
-	fixture->store = CreateTupleStore(fixture->relation, GetStorageProvider(PROVIDER_BTREE), 2, indexColumns);
+	IFactCreateReaderService(fixture->relation, fixture->circleIndex);
 
 	fixture->ifactService = createCircleService(fixture, PARAMETER_OUT, PARAMETER_IN);
 	fixture->byIdService = createCircleService(fixture, PARAMETER_IN, PARAMETER_OUT);
-	CreateService(fixture->ifactService, CreateIFactOperator(fixture->store, fixture->circleIndex));
+	CreateService(fixture->ifactService, CreateIFactOperator(fixture->relation, fixture->circleIndex));
 }
 
 
@@ -84,14 +83,14 @@ static void setupCircleFixture(CircleFixture * fixture)
  * Remove the service reading the store by ID, which also removes the IFACT service
  * depending on it, then drop the relation.
  */
+/* CLAUDE: The IFACT service does not depend on the service reading the store, so the
+   IFACT service is removed by DropRelation(), if it still exists. */
 static void teardownCircleFixture(CircleFixture * fixture)
 {
 	// CLAUDE: The IFACT operator of the fixture is not compiled from an ifact rule,
 	// so its cached ifacts are released here
-	IFactReleaseCached(fixture->store, fixture->circleIndex);
-	RemoveService(fixture->byIdService);
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture->store), 0)
-	ASSERT_TRUE(ServiceGetOperator(fixture->ifactService) == 0)
+	IFactReleaseCached(fixture->termForm, fixture->circleIndex);
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture->relation), 0)
 	DropRelation(fixture->relation);
 	IFactRelease(fixture->termForm);
 }
@@ -124,28 +123,29 @@ void testIFactOperator(void)
 	// The first operator call creates the ifact and its tuple
 	Atom circle5 = callCircleIFact(&fixture, 5.0);
 	ASSERT_TRUE(circle5.hash != 0)
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 1)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture.relation), 1)
 	ASSERT_UINT32_EQUAL(IFactTotalCount(), nFixtureIFacts + 1)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(circle5), 1)
 
 	// A second call yields the existing ifact, and the cache still holds one reference
 	ASSERT_TRUE(SameAtoms(callCircleIFact(&fixture, 5.0), circle5))
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 1)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture.relation), 1)
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(circle5), 1)
 
 	// Another radius yields another ifact
 	Atom circle6 = callCircleIFact(&fixture, 6.0);
 	ASSERT_FALSE(SameAtoms(circle6, circle5))
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 2)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture.relation), 2)
 	ASSERT_UINT32_EQUAL(IFactTotalCount(), nFixtureIFacts + 2)
 
 	// A cached tuple cannot be retracted
+	// CLAUDE: The relation has no TupleStore; see IFactCreateReaderService()
 	TypedAtom actors[2];
 	actors[fixture.circleIndex] = CreateTypedAtom(AT_ID, circle5);
 	actors[fixture.radiusIndex] = CreateTypedAtom(AT_FLOAT, (Atom) {._float = 5.0});
 	Atom fact = CreateFormulaFromArray(fixture.termForm, actors);
 	RetractFact(FormulaGetView(fact));
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 2)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture.relation), 2)
 	ReleaseFormula(fact);
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(circle5), 1)
 
@@ -208,7 +208,7 @@ void testIFactQuery(void)
 	TypedAtom circle = TypedTupleGetElement(tuple, fixture.circleIndex);
 	ASSERT_UINT32_EQUAL(circle.type, AT_ID)
 	FreeTypedTuple(tuple);
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 1)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture.relation), 1)
 
 	// Query the cached tuple by its ID, with the service (circle <ID radius >FLOAT)
 	Atom variablesQuery = CStringToTerm("circle x radius r");
@@ -228,7 +228,7 @@ void testIFactQuery(void)
 	ASSERT_TRUE(SameTypedAtoms(TypedTupleGetElement(tuple, fixture.circleIndex), circle))
 	FreeTypedTuple(tuple);
 	// Reading the cached tuple creates no new tuple
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 1)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture.relation), 1)
 
 	teardownCircleFixture(&fixture);
 }
@@ -242,19 +242,12 @@ void testIFactQuery(void)
 void testIFactRuleInvalidation(void)
 {
 	// Create a fixture with a B-tree storage and a service using an IFACT operator
+	// CLAUDE: The fixture relation has no TupleStore; see setupCircleFixture()
 	CircleFixture fixture;
 	setupCircleFixture(&fixture);
 	// Evaluate the IFACT operator, caching a tuple
-	callCircleIFact(&fixture, 5.0);
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 1)
-
-	// Add a stored tuple (circle "c" radios 7.0)
-	Atom circle = CreateStringFromCString("c");
-	Atom tuple[2];
-	tuple[fixture.circleIndex] = circle;
-	tuple[fixture.radiusIndex] = (Atom) {._float = 7.0};
-	ASSERT_UINT32_EQUAL(TupleStoreAddTuple(fixture.store, tuple, 0), TUPLE_ADDED)
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 2)
+	Atom circle = callCircleIFact(&fixture, 5.0);
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture.relation), 1)
 
 	// Add the ifact rule (circle * radius r), invalidating existing services
 	Atom rule = CStringToTerm("circle * radius r");
@@ -264,18 +257,26 @@ void testIFactRuleInvalidation(void)
 	// The existing IFACT service is removed
 	ASSERT_TRUE(ServiceGetOperator(fixture.ifactService) == 0)
 	// the cached tuple is kept; normally released by DictionaryRemoveIFactRule()
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 2)
-	// The primitive service from the B-tree provider is marked stale
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture.relation), 1)
+	// CLAUDE: The primitive service reading the ifacts is marked stale
 	ASSERT_TRUE(ServiceIsStale(fixture.byIdService))
 
-	// A query on the relation still yields the stored fact,
-	// by marking the pritmitive service non-stale
-	Atom query = CStringToTerm("circle x radius r");
-	// CLAUDE: the query also yields the cached tuple
-	size32 nStored;
-	ASSERT_UINT32_EQUAL(runQueryCountAtom(query, fixture.circleIndex, circle, &nStored), 2)
-	ASSERT_UINT32_EQUAL(nStored, 1)
-	ReleaseFormula(query);
+	// CLAUDE: A query reading the cached tuple by its ID still yields the tuple,
+	// by marking the primitive service non-stale
+	Atom variablesQuery = CStringToTerm("circle x radius r");
+	FormulaView variablesView = FormulaGetView(variablesQuery);
+	TypedAtom actors[2];
+	for(index8 i = 0; i < 2; i++)
+		actors[i] = TypedTupleGetElement(variablesView.actors, i);
+	actors[fixture.circleIndex] = CreateTypedAtom(AT_ID, circle);
+	Atom byIdQuery = CreateFormulaFromArray(FormulaGetForm(variablesQuery), actors);
+	ReleaseFormula(variablesQuery);
+	TypedTuple * tuple;
+	ASSERT_UINT32_EQUAL(runQuery(byIdQuery, &tuple), 1)
+	ASSERT_TRUE(TypedTupleGetElement(tuple, fixture.radiusIndex).atom._float == 5.0)
+	FreeTypedTuple(tuple);
+	ReleaseFormula(byIdQuery);
+	ASSERT_FALSE(ServiceIsStale(fixture.byIdService))
 
 	// A relation of the term form created after the rule has stale primitive services
 	TypedRelation intRelation = {
@@ -292,9 +293,7 @@ void testIFactRuleInvalidation(void)
 
 	DictionaryRemoveIFactRule(&ifactRule);
 	// CLAUDE: removing the rule releases the cached tuple
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(fixture.store), 1)
-	ASSERT_UINT32_EQUAL(TupleStoreRemoveTuple(fixture.store, tuple, 0), TUPLE_REMOVED)
-	IFactRelease(circle);
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture.relation), 0)
 	teardownCircleFixture(&fixture);
 }
 
@@ -386,8 +385,8 @@ void testCompileIFactRule(void)
 
 	Service ifactService = createCircleRuleService(&circleRule, PARAMETER_OUT, PARAMETER_IN);
 	ASSERT_UINT32_EQUAL(countOperators(ServiceGetOperator(ifactService), OPERATOR_IFACT), 1)
-	TupleStore * store = RelationGetTupleStore(circleRule.relation);
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 1)
+	ASSERT_TRUE(RelationGetTupleStore(circleRule.relation) == 0)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(circleRule.relation), 1)
 	ASSERT_UINT32_EQUAL(IFactTotalCount(), nIFacts + 1)
 
 	// A second query yields the same circle
@@ -412,12 +411,13 @@ void testCompileIFactRule(void)
 	FreeTypedTuple(tuple);
 
 	// A query with the radius as output reads the stored tuples, with no IFACT operator
-	ASSERT_UINT32_EQUAL(runQuery(variablesQuery, &tuple), 1)
-	FreeTypedTuple(tuple);
+	// CLAUDE: The cached ifact is not a fact, and the relation has no service with the circle
+	// as output, so the query yields nothing
+	ASSERT_UINT32_EQUAL(runQuery(variablesQuery, &tuple), 0)
 	ReleaseFormula(variablesQuery);
 	Service allOutputService = createCircleRuleService(&circleRule, PARAMETER_OUT, PARAMETER_OUT);
-	ASSERT_UINT32_EQUAL(countOperators(ServiceGetOperator(allOutputService), OPERATOR_IFACT), 0)
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 1)
+	ASSERT_TRUE(ServiceGetOperator(allOutputService) == 0)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(circleRule.relation), 1)
 
 	// Removing the rule removes the IFACT service and the cached ifact
 	// A primitive service of the same signature, replaced by the IFACT service,
@@ -425,23 +425,9 @@ void testCompileIFactRule(void)
 	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
 	Operator const * ifactServiceOperator = ServiceGetOperator(ifactService);
 	ASSERT_TRUE(!ifactServiceOperator || (ifactServiceOperator->type == OPERATOR_MACHINE))
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 0)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(circleRule.relation), 0)
 	ASSERT_UINT32_EQUAL(IFactTotalCount(), nIFacts)
 	teardownCircleRule(&circleRule);
-}
-
-
-/**
- * Assert that the service is a UNION of an IFACT operator, as the first child,
- * and the primitive service that the service replaced; see ReplaceService().
- */
-static void assertIFactUnion(Service service)
-{
-	ServiceRecord const * record = ServiceGetRecord(service);
-	ASSERT_UINT32_EQUAL(record->op->type, OPERATOR_UNION)
-	ASSERT_UINT32_EQUAL(record->op->impl._union.first->type, OPERATOR_IFACT)
-	ASSERT_NOT_NULL(record->replacedOperator)
-	ASSERT_PTR_EQUAL(record->op->impl._union.second, record->replacedOperator)
 }
 
 
@@ -467,7 +453,7 @@ void testCompileIFactRuleWithClause(void)
 	// A second query yields the same tuples, and caches no new ifact
 	ASSERT_UINT32_EQUAL(runQueryCountAtom(query, circleRule.circleIndex, disk, &nDisks), 2)
 	ASSERT_UINT32_EQUAL(nDisks, 1)
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(RelationGetTupleStore(circleRule.relation)), 1)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(circleRule.relation), 1)
 	ReleaseFormula(query);
 
 	DictionaryRemoveClause(&clause);
@@ -480,12 +466,55 @@ void testCompileIFactRuleWithClause(void)
 
 
 /**
- * CLAUDE: A TupleStore with the ID column last in its index order has a primitive service
- * (circle >ID radius <FLOAT). The query (circle c radius 5.0) then compiles to a UNION of
- * the IFACT operator and that service, reading the same TupleStore that the IFACT operator
- * writes; see unionSetupContext().
+ * CLAUDE: The query (circle c radius r) compiles a service from the clause
+ * (circle c radius r | ! disk c size r), and this service alone holds the relation
+ * (circle ID radius FLOAT). The relation has no TupleStore, so the query
+ * (circle c radius 5.0) then adds a service reading the ifacts of the relation,
+ * and compiles to a UNION of the IFACT operator and the clause; see IFactSetupRelation().
  */
-void testCompileIFactRuleWithSeed(void)
+void testIFactRuleAfterCompiledService(void)
+{
+	CircleRule circleRule;
+	setupCircleRule(&circleRule);
+	Atom diskFact = CStringToTerm("disk \"d\" size 5.0");
+	ASSERT_INT32_EQUAL(AssertFormula(diskFact), ASSERT_OK)
+	index8 diskIndex = findRoleIndex(FormulaGetForm(diskFact), "disk");
+	Atom disk = TypedTupleGetElement(FormulaGetView(diskFact).actors, diskIndex).atom;
+	FormulaView clause = DictionaryAddClauseFromCString("circle c radius r | ! disk c size r");
+
+	TypedTuple * tuple;
+	Atom allQuery = CStringToTerm("circle c radius r");
+	ASSERT_UINT32_EQUAL(runQuery(allQuery, &tuple), 1)
+	FreeTypedTuple(tuple);
+	ReleaseFormula(allQuery);
+	ASSERT_TRUE(RelationExists(circleRule.relation))
+	ASSERT_TRUE(RelationGetTupleStore(circleRule.relation) == 0)
+	ASSERT_FALSE(IFactRelationHasReader(circleRule.relation))
+
+	Atom query = CStringToTerm("circle c radius 5.0");
+	size32 nDisks;
+	ASSERT_UINT32_EQUAL(runQueryCountAtom(query, circleRule.circleIndex, disk, &nDisks), 2)
+	ASSERT_UINT32_EQUAL(nDisks, 1)
+	ReleaseFormula(query);
+	ASSERT_TRUE(IFactRelationHasReader(circleRule.relation))
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(circleRule.relation), 1)
+
+	DictionaryRemoveClause(&clause);
+	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
+	RetractFact(FormulaGetView(diskFact));
+	DropRelation(RelationFromFact(FormulaGetView(diskFact)));
+	ReleaseFormula(diskFact);
+	teardownCircleRule(&circleRule);
+}
+
+
+/**
+ * CLAUDE: An ifact rule does not apply to a relation with a TupleStore, which holds
+ * asserted facts; see IFactSetupRelation(). With a B-tree TupleStore for the relation
+ * (circle ID radius FLOAT), the query (circle c radius 5.0) reads the B-tree only,
+ * and creates no ifact.
+ */
+void testIFactRuleWithStore(void)
 {
 	CircleRule circleRule;
 	setupCircleRule(&circleRule);
@@ -495,43 +524,20 @@ void testCompileIFactRuleWithSeed(void)
 	Atom tuple[2];
 	tuple[circleRule.circleIndex] = circle;
 	tuple[circleRule.radiusIndex] = (Atom) {._float = 5.0};
-	ASSERT_UINT32_EQUAL(TupleStoreAddTuple(store, tuple, 0), TUPLE_ADDED)
+	ASSERT_UINT32_EQUAL(TupleStoreAddTuple(store, tuple), TUPLE_ADDED)
+	size32 nIFacts = IFactTotalCount();
 
 	Atom query = CStringToTerm("circle c radius 5.0");
 	size32 nStored;
-	ASSERT_UINT32_EQUAL(runQueryCountAtom(query, circleRule.circleIndex, circle, &nStored), 2)
+	ASSERT_UINT32_EQUAL(runQueryCountAtom(query, circleRule.circleIndex, circle, &nStored), 1)
 	ASSERT_UINT32_EQUAL(nStored, 1)
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 2)
-	// A second query yields the same tuples, and caches no new ifact
-	ASSERT_UINT32_EQUAL(runQueryCountAtom(query, circleRule.circleIndex, circle, &nStored), 2)
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 2)
-
-	// CLAUDE: The compiled service is a UNION of the IFACT operator and the primitive
-	// service it replaced
-	Service ifactService = createCircleRuleService(&circleRule, PARAMETER_OUT, PARAMETER_IN);
-	assertIFactUnion(ifactService);
-
-	// CLAUDE: Creating an INT relation of the term form invalidates the compiled service,
-	// restoring the primitive service, marked stale; see ReplaceService()
-	TypedRelation intRelation = circleRule.relation;
-	intRelation.typeSignature.atomTypes[circleRule.radiusIndex] = AT_INT;
-	CreateTupleStore(intRelation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
-	ASSERT_UINT32_EQUAL(ServiceGetOperator(ifactService)->type, OPERATOR_MACHINE)
-	ASSERT_TRUE(ServiceIsStale(ifactService))
-
-	// CLAUDE: A new query compiles the same service again, reading the primitive service
-	ASSERT_UINT32_EQUAL(runQueryCountAtom(query, circleRule.circleIndex, circle, &nStored), 2)
-	ASSERT_UINT32_EQUAL(nStored, 1)
-	assertIFactUnion(ifactService);
 	ReleaseFormula(query);
-
-	// Removing the rule removes the cached tuple, and leaves the stored one
-	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 1)
-	// CLAUDE: and restores the primitive service
+	ASSERT_UINT32_EQUAL(IFactTotalCount(), nIFacts)
+	Service ifactService = createCircleRuleService(&circleRule, PARAMETER_OUT, PARAMETER_IN);
 	ASSERT_UINT32_EQUAL(ServiceGetOperator(ifactService)->type, OPERATOR_MACHINE)
-	DropRelation(intRelation);
-	ASSERT_UINT32_EQUAL(TupleStoreRemoveTuple(store, tuple, 0), TUPLE_REMOVED)
+
+	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
+	ASSERT_UINT32_EQUAL(TupleStoreRemoveTuple(store, tuple), TUPLE_REMOVED)
 	IFactRelease(circle);
 	teardownCircleRule(&circleRule);
 }
@@ -552,8 +558,7 @@ void testCompileIFactRuleTwoTypes(void)
 	ASSERT_UINT32_EQUAL(runQuery(floatQuery, &tuple), 1)
 	FreeTypedTuple(tuple);
 	ReleaseFormula(floatQuery);
-	TupleStore * floatStore = RelationGetTupleStore(circleRule.relation);
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(floatStore), 1)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(circleRule.relation), 1)
 
 	Atom intQuery = CStringToTerm("circle c radius 5");
 	ASSERT_UINT32_EQUAL(runQuery(intQuery, &tuple), 1)
@@ -561,20 +566,19 @@ void testCompileIFactRuleTwoTypes(void)
 	ReleaseFormula(intQuery);
 	TypedRelation intRelation = circleRule.relation;
 	intRelation.typeSignature.atomTypes[circleRule.radiusIndex] = AT_INT;
-	TupleStore * intStore = RelationGetTupleStore(intRelation);
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(intStore), 1)
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(floatStore), 1)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(intRelation), 1)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(circleRule.relation), 1)
 
 	// Both cached circles are found
+	// CLAUDE: A cached ifact is not a fact, so neither circle is found
 	Atom allQuery = CStringToTerm("circle c radius r");
-	ASSERT_UINT32_EQUAL(runQuery(allQuery, &tuple), 2)
-	FreeTypedTuple(tuple);
+	ASSERT_UINT32_EQUAL(runQuery(allQuery, &tuple), 0)
 	ReleaseFormula(allQuery);
 
 	// Removing the rule releases the cached ifacts of both relations
 	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(floatStore), 0)
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(intStore), 0)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(circleRule.relation), 0)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(intRelation), 0)
 	DropRelation(intRelation);
 	teardownCircleRule(&circleRule);
 }
@@ -590,7 +594,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testIFactRuleInvalidation);
 	ExecuteTest(testCompileIFactRule);
 	ExecuteTest(testCompileIFactRuleWithClause);
-	ExecuteTest(testCompileIFactRuleWithSeed);
+	ExecuteTest(testIFactRuleWithStore);
+	ExecuteTest(testIFactRuleAfterCompiledService);
 	ExecuteTest(testCompileIFactRuleTwoTypes);
 
 	UnloadLibraries();

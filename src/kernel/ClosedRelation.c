@@ -119,7 +119,7 @@ int CloseRelation(Atom form)
 	else if(formHasTupleStore(oppositeForm))
 		result = CLOSE_OPPOSITE_STORED;
 	else {
-		ASSERT(RelationAddTuple(closedRelations->relation, &form, 0) == TUPLE_ADDED)
+		ASSERT(RelationAddTuple(closedRelations->relation, &form) == TUPLE_ADDED)
 		LookupAddFactRoles(closedRelations->relation, &form);
 		// CLAUDE: The opposite relation is answered by INVERT operators from now on
 		InvalidateTermFormServices(oppositeForm, INVALIDATE_BY_RULE);
@@ -140,7 +140,7 @@ void OpenRelation(Atom form)
 	InvalidateTermFormServices(oppositeForm, INVALIDATE_BY_RULE);
 	IFactRelease(oppositeForm);
 	LookupRemoveFactRoles(closedRelations->relation, &form);
-	ASSERT(RelationRemoveTuple(closedRelations->relation, &form, 0) == TUPLE_REMOVED)
+	ASSERT(RelationRemoveTuple(closedRelations->relation, &form) == TUPLE_REMOVED)
 }
 
 

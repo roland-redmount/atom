@@ -26,7 +26,22 @@ typedef struct s_Dictionary {
 	BTree * btree;
 	// B-tree for the ifact rules, ordered by compareIFactRules()
 	BTree * ifactRules;
+	// B-tree of FormIndexEntry items, ordered by compareFormIndexEntries()
+	BTree * formIndex;
+	// B-tree of IndexedForm items, ordered by form
+	BTree * indexedForms;
 } Dictionary;
+
+
+/*
+ * CLAUDE: The number of references to a form in the form index; see indexForm().
+ * A clause form has one reference per rule of the form in the dictionary.
+ * A conjunction form has one reference per relation of the form.
+ */
+typedef struct s_IndexedForm {
+	Atom form;
+	uint32 referenceCount;
+} IndexedForm;
 
 
 static Dictionary * dictionary = 0;
@@ -96,6 +111,29 @@ static int8 btreeCompareIFactRules(void const * item, void const * itemOrKey, si
 }
 
 
+/**
+ * CLAUDE: Order form index entries by term form, then by form.
+ * A key with a zero form matches every entry of its term form.
+ */
+static int8 compareFormIndexEntries(void const * item, void const * itemOrKey, size32 itemSize)
+{
+	FormIndexEntry const * entry = item;
+	FormIndexEntry const * entryOrKey = itemOrKey;
+	int8 termFormOrder = CompareAtoms(entry->termForm, entryOrKey->termForm);
+	if(termFormOrder != 0)
+		return termFormOrder;
+	if(!entryOrKey->form.hash)
+		return 0;
+	return CompareAtoms(entry->form, entryOrKey->form);
+}
+
+
+static int8 compareIndexedForms(void const * item, void const * itemOrKey, size32 itemSize)
+{
+	return CompareAtoms(((IndexedForm const *) item)->form, ((IndexedForm const *) itemOrKey)->form);
+}
+
+
 static void btreeFreeItem(void const * item, size32 itemSize)
 {
 	FormulaView const * entry = item;
@@ -108,6 +146,8 @@ static NamedFunction const dictionaryFunctions[] = {
 	{"dictionary.btreeCompareItems", (AnyFunction) btreeCompareItems},
 	{"dictionary.btreeCompareIFactRules", (AnyFunction) btreeCompareIFactRules},
 	{"dictionary.btreeFreeItem", (AnyFunction) btreeFreeItem},
+	{"dictionary.compareFormIndexEntries", (AnyFunction) compareFormIndexEntries},
+	{"dictionary.compareIndexedForms", (AnyFunction) compareIndexedForms},
 };
 
 
@@ -123,6 +163,8 @@ void SetupDictionary(void)
 	SetPersistentState(STATE_KEY_DICTIONARY, dictionary);
 	dictionary->btree = BTreeCreate(sizeof(FormulaView), &btreeCompareItems, &btreeFreeItem);
 	dictionary->ifactRules = BTreeCreate(sizeof(FormulaView), &btreeCompareIFactRules, &btreeFreeItem);
+	dictionary->formIndex = BTreeCreate(sizeof(FormIndexEntry), &compareFormIndexEntries, 0);
+	dictionary->indexedForms = BTreeCreate(sizeof(IndexedForm), &compareIndexedForms, 0);
 }
 
 
@@ -137,10 +179,118 @@ void TeardownDictionary(void)
 {
 	BTreeFree(dictionary->btree);
 	BTreeFree(dictionary->ifactRules);
+	// CLAUDE: Every relation of a conjunction form must have been released
+	ASSERT(BTreeNItems(dictionary->indexedForms) == 0)
+	BTreeFree(dictionary->formIndex);
+	BTreeFree(dictionary->indexedForms);
 	Free(dictionary);
 	SetPersistentState(STATE_KEY_DICTIONARY, 0);
 	dictionary = 0;
 }
+
+/**
+ * CLAUDE: Add a reference to the given clause form or conjunction form in the form index.
+ * The first reference adds one FormIndexEntry for each term form of the form.
+ */
+static void indexForm(Atom form, bool isClause)
+{
+	IndexedForm key = {.form = form};
+	IndexedForm * indexedForm = BTreePeekItem(dictionary->indexedForms, &key);
+	if(indexedForm) {
+		indexedForm->referenceCount++;
+		return;
+	}
+	key.referenceCount = 1;
+	ASSERT(BTreeInsert(dictionary->indexedForms, &key) == BTREE_INSERTED)
+
+	MultisetIterator iterator;
+	MultisetIterate(form, AT_ID, &iterator);
+	while(MultisetIteratorNext(&iterator)) {
+		ElementMultiple element = MultisetIteratorGetElement(&iterator);
+		FormIndexEntry entry = {
+			.termForm = element.element,
+			.form = form,
+			.multiple = element.multiple,
+			.isClause = isClause
+		};
+		ASSERT(BTreeInsert(dictionary->formIndex, &entry) == BTREE_INSERTED)
+	}
+	MultisetIteratorEnd(&iterator);
+}
+
+
+/**
+ * CLAUDE: Release a reference to the given form in the form index; see indexForm().
+ * The last reference removes the entries of the form.
+ */
+static void unindexForm(Atom form)
+{
+	IndexedForm key = {.form = form};
+	IndexedForm * indexedForm = BTreePeekItem(dictionary->indexedForms, &key);
+	ASSERT(indexedForm)
+	ASSERT(indexedForm->referenceCount > 0)
+	indexedForm->referenceCount--;
+	if(indexedForm->referenceCount > 0)
+		return;
+	ASSERT(BTreeDelete(dictionary->indexedForms, &key, 0) == BTREE_DELETED)
+
+	MultisetIterator iterator;
+	MultisetIterate(form, AT_ID, &iterator);
+	while(MultisetIteratorNext(&iterator)) {
+		FormIndexEntry entryKey = {.termForm = MultisetIteratorGetElement(&iterator).element, .form = form};
+		ASSERT(BTreeDelete(dictionary->formIndex, &entryKey, 0) == BTREE_DELETED)
+	}
+	MultisetIteratorEnd(&iterator);
+}
+
+
+void DictionaryIndexConjunctionForm(Atom conjunctionForm)
+{
+	indexForm(conjunctionForm, false);
+}
+
+
+void DictionaryUnindexConjunctionForm(Atom conjunctionForm)
+{
+	unindexForm(conjunctionForm);
+}
+
+
+void DictionaryIterateFormIndex(Atom termForm, FormIndexIterator * iterator)
+{
+	iterator->termForm = termForm;
+	BTreeIterate(&(iterator->btreeIterator), dictionary->formIndex);
+}
+
+
+bool FormIndexIteratorNext(FormIndexIterator * iterator)
+{
+	if(!iterator->termForm.hash)
+		return BTreeIteratorNext(&(iterator->btreeIterator));
+	FormIndexEntry key = {.termForm = iterator->termForm};
+	bool foundItem;
+	if(BTreeIteratorBeforeFirst(&(iterator->btreeIterator)))
+		foundItem = BTreeIteratorSeek(&(iterator->btreeIterator), &key);
+	else
+		foundItem = BTreeIteratorNext(&(iterator->btreeIterator));
+	if(!foundItem)
+		return false;
+	return compareFormIndexEntries(
+		BTreeIteratorPeekItem(&(iterator->btreeIterator)), &key, sizeof(FormIndexEntry)) == 0;
+}
+
+
+FormIndexEntry const * FormIndexIteratorPeek(FormIndexIterator const * iterator)
+{
+	return BTreeIteratorPeekItem(&(iterator->btreeIterator));
+}
+
+
+void FormIndexIteratorEnd(FormIndexIterator * iterator)
+{
+	BTreeIteratorEnd(&(iterator->btreeIterator));
+}
+
 
 /*
  * Setup a formula to be stored in the dictionary.
@@ -216,34 +366,23 @@ bool DictionaryContainsClause(Atom clause)
  * Append each clause form containing the given term form to clauseForms, and return the
  * number of clause forms found. If clauseForms is 0, the scan stops at the first clause form;
  * this can be used to check of matching clauses exist.
- * The scan reads every (multiset element multiple) tuple, as findMatchingClauses() in
- * compiler.c does, for want of an element index; see the TODO there.
  */
+/* CLAUDE: Only a clause form with a rule in the dictionary is found; see indexForm(). */
 static size32 findClauseFormsForTermForm(Atom termForm, ResizingArray * clauseForms)
 {
-	Operator const * multisetOperator = GetCoreOperator(SERVICE_MULTISET_ID_ALL);
-	if(!multisetOperator) {
-		// The service does not exist during kernel bootstrapping
-		return 0;
-	}
-	Atom multisetQueryTuple[3];
-	OperatorContext * multisetContext = OperatorCreateContext(multisetOperator, multisetQueryTuple);
 	size32 nClauseForms = 0;
-	while(OperatorCall(multisetContext)) {
-		Atom clauseForm = multisetQueryTuple[
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)];
-		if(!IsClauseForm(clauseForm))
-			continue;
-		Atom element = multisetQueryTuple[
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)];
-		if(!SameAtoms(element, termForm))
+	FormIndexIterator iterator;
+	DictionaryIterateFormIndex(termForm, &iterator);
+	while(FormIndexIteratorNext(&iterator)) {
+		FormIndexEntry const * entry = FormIndexIteratorPeek(&iterator);
+		if(!entry->isClause)
 			continue;
 		nClauseForms++;
 		if(!clauseForms)
 			break;
-		ResizingArrayAppend(clauseForms, &clauseForm);
+		ResizingArrayAppend(clauseForms, &(entry->form));
 	}
-	OperatorFreeContext(multisetContext);
+	FormIndexIteratorEnd(&iterator);
 	return nClauseForms;
 }
 
@@ -293,30 +432,20 @@ typedef struct s_DependentForm {
  */
 static void collectFormMembers(ResizingArray * members)
 {
-	Operator const * multisetOperator = GetCoreOperator(SERVICE_MULTISET_ID_ALL);
-	if(!multisetOperator) {
-		// The service does not exist during kernel bootstrapping
-		return;
-	}
-	Atom multisetQueryTuple[3];
-	OperatorContext * multisetContext = OperatorCreateContext(multisetOperator, multisetQueryTuple);
-	while(OperatorCall(multisetContext)) {
-		Atom form = multisetQueryTuple[
-			CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)];
-		bool isClause = IsClauseForm(form);
-		if(!isClause && !IsConjunctionForm(form))
-			continue;
+	// CLAUDE: A zero term form iterates over the entire form index
+	FormIndexIterator iterator;
+	DictionaryIterateFormIndex((Atom) {0}, &iterator);
+	while(FormIndexIteratorNext(&iterator)) {
+		FormIndexEntry const * entry = FormIndexIteratorPeek(&iterator);
 		FormMember member = {
-			.form = form,
-			.isClause = isClause,
-			.termForm = multisetQueryTuple[
-				CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_ELEMENT)],
-			.multiple = (size32) multisetQueryTuple[
-				CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTIPLE)]._int,
+			.form = entry->form,
+			.isClause = entry->isClause,
+			.termForm = entry->termForm,
+			.multiple = entry->multiple,
 		};
 		ResizingArrayAppend(members, &member);
 	}
-	OperatorFreeContext(multisetContext);
+	FormIndexIteratorEnd(&iterator);
 
 	// The predicate forms are found after the scan, which must not be interrupted by
 	// other operator calls
@@ -453,6 +582,28 @@ void InvalidateDependentServices(Atom const termForms[], size32 nTermForms)
 }
 
 
+bool InvalidateServicesForNewRelation(Atom termForm)
+{
+	// Invalidate compiled services for this term form.
+	// NOTE: it is not sufficient to invalidate only the current relation,
+	// since any service compiled from a rule containing this term form
+	// may now become dependent on the this relation.
+	size32 nInvalidated = InvalidateTermFormServices(termForm, INVALIDATE_BY_PRIMITIVE);
+
+	// CLAUDE: A service compiled before this relation existed has no operator reading the
+	// relation, so InvalidateTermFormServices() does not reach the service
+	InvalidateDependentServices(&termForm, 1);
+
+	// A primitive service of this relation is stale if there exists a rule
+	// containing the term form. We also check (nInvalidated > 0) for cases where
+	// a dependent operator were added through other means than the compiler,
+	// so that no rule exists; this mainly occurs in test cases.
+	return (nInvalidated > 0) ||
+		ClauseFormExistsForTermForm(termForm) ||
+		IFactRuleExistsForTermForm(termForm);
+}
+
+
 FormulaView DictionaryAddClause(Atom clause)
 {
 	// A clause the dictionary already holds is left as it is. Building an entry for it
@@ -465,6 +616,7 @@ FormulaView DictionaryAddClause(Atom clause)
 	FormulaView clauseView = FormulaGetView(clause);
 	setupEntry(&entry, clauseView.form, clauseView.actors);
 	ASSERT(BTreeInsert(dictionary->btree, &entry) == BTREE_INSERTED)
+	indexForm(entry.form, true);
 	invalidateClauseServices(entry.form, true);
 	return entry;
 }
@@ -484,6 +636,7 @@ void DictionaryRemoveClause(FormulaView * clause)
 	// Invalidate before the entry goes: the clause form is released with it, and the
 	// compiled services are stale either way
 	invalidateClauseServices(clause->form, false);
+	unindexForm(clause->form);
 	ASSERT(BTreeDelete(dictionary->btree, clause, 0) == BTREE_DELETED)
 }
 
@@ -554,27 +707,12 @@ bool IFactRuleExistsForTermForm(Atom termForm)
  * These are the cached ifacts in the TupleStore of each relation of the term form of the
  * rule, with the ID column at the generator of the rule; see IFactReleaseCached().
  */
+/* CLAUDE: The cached ifacts are not kept in a TupleStore. IFactReleaseCached() finds the
+   cached ifacts by the term form of the rule. */
 static void releaseIFactRuleCache(FormulaView const * ifactRule)
 {
 	index8 idColumn = IFactRuleFindGeneratorIndex(ifactRule->actors);
-	// Collect the relations first, since releasing an ifact may alter the relation registry
-	ResizingArray relations;
-	CreateResizingArray(&relations, sizeof(TypedRelation), 4);
-	RelationIterator iterator;
-	RelationRegistryIterate(ifactRule->form, &iterator);
-	while(RelationIteratorNext(&iterator)) {
-		TypedRelation relation = RelationIteratorGet(&iterator);
-		ResizingArrayAppend(&relations, &relation);
-	}
-	RelationIteratorEnd(&iterator);
-
-	for(index32 i = 0; i < relations.nElements; i++) {
-		TypedRelation const * relation = ResizingArrayGetElement(&relations, i);
-		TupleStore * store = RelationGetTupleStore(*relation);
-		if(store)
-			IFactReleaseCached(store, idColumn);
-	}
-	FreeResizingArray(&relations);
+	IFactReleaseCached(ifactRule->form, idColumn);
 }
 
 
@@ -582,6 +720,8 @@ void DictionaryRemoveIFactRule(FormulaView * ifactRule)
 {
 	// We release the cache while the IFACT services still exist, since releasing an
 	// ifact reads its TupleStore by the ID column; see IFactSetupStoreOperator()
+
+	// CLAUDE: Releasing an ifact no longer reads a TupleStore; see IFactRelease().
 	releaseIFactRuleCache(ifactRule);
 	// Invalidate before the entry is removed, since the term form is released with it
 	InvalidateTermFormServices(ifactRule->form, INVALIDATE_BY_RULE);
@@ -591,6 +731,18 @@ void DictionaryRemoveIFactRule(FormulaView * ifactRule)
 
 void DictionaryRemoveAll(void)
 {
+	// CLAUDE: Release the form index reference of each clause, while its form is held
+	ResizingArray clauseForms;
+	CreateResizingArray(&clauseForms, sizeof(Atom), 16);
+	BTreeIterator clauseIterator;
+	BTreeIterate(&clauseIterator, dictionary->btree);
+	while(BTreeIteratorNext(&clauseIterator))
+		ResizingArrayAppend(&clauseForms, &(((FormulaView const *) BTreeIteratorPeekItem(&clauseIterator))->form));
+	BTreeIteratorEnd(&clauseIterator);
+	for(index32 i = 0; i < clauseForms.nElements; i++)
+		unindexForm(*(Atom const *) ResizingArrayGetElement(&clauseForms, i));
+	FreeResizingArray(&clauseForms);
+
 	BTreeClear(dictionary->btree);
 	// Release the cached ifacts of each ifact rule; see DictionaryRemoveIFactRule()
 	BTreeIterator iterator;

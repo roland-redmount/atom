@@ -31,15 +31,12 @@ typedef struct s_ListLibrary {
 	index8 listLengthRoleIndex[2];
 
 	TypedRelation listIDRelation;
-	TupleStore * listIDTupleStore;
 	Operator * listIDOperator;
 
 	TypedRelation listLetterRelation;
-	TupleStore * listLetterTupleStore;
 	Operator * listLetterOperator;
 
 	TypedRelation listLengthRelation;
-	TupleStore * listLengthTupleStore;
 	Operator * listLengthOperator;
 } ListLibrary;
 
@@ -140,7 +137,7 @@ Atom CreateListFromArray(Atom const elements[], byte elementType, size8 nElement
  */
 static void assertListLength(IFactDraft * draft, size32 nElements)
 {
-	IFactBeginConjunction(draft, listLibrary->listLengthTupleStore, listLibrary->listLengthRoleIndex[0]);
+	IFactBeginConjunction(draft, listLibrary->listLengthRelation, listLibrary->listLengthRoleIndex[0]);
 
 	Atom listLengthTuple[2];
 	listLengthTuple[listLibrary->listLengthRoleIndex[1]] = (Atom) {._int = nElements};
@@ -157,7 +154,7 @@ void AddListToIFact(IFactDraft * draft, Atom const elements[], byte elementType,
 	if(nElements > 0) {
 		TypedRelation relation = GetListRelation(elementType);
 		// assert (ĺist position elements) facts for each element
-		IFactBeginConjunction(draft, RelationGetTupleStore(relation), listLibrary->listRoleIndex[0]);
+		IFactBeginConjunction(draft, relation, listLibrary->listRoleIndex[0]);
 		Atom listElementTuple[3];
 		for(index32 i = 0; i < nElements; i++) {
 			TupleCopyPermuted(
@@ -216,20 +213,21 @@ static TypedRelation findListElementRelation(Atom list)
 Atom ListGetElement(Atom list, index32 position)
 {
 	ASSERT(ListLength(list) > 0)
-	TypedRelation relation = findListElementRelation(list);
-	ASSERT(!IsNullRelation(relation))
-
-	byte parameterIO[3];
-	CopyBytesPermuted(
-		(byte[]) {PARAMETER_IN, PARAMETER_IN, PARAMETER_OUT}, parameterIO, listLibrary->listRoleIndex, 3);
-	Operator const * op = ServiceGetOperator(
-		(Service) {.relation = relation, .ioSignature = CreateIOSignature(parameterIO, 3)}
-	);
-	Atom arguments[3];
-	arguments[listLibrary->listRoleIndex[0]] = list;
-	arguments[listLibrary->listRoleIndex[1]] = (Atom) {._int = position};
-	ASSERT(OperatorCallOnce(op, arguments))
-	return arguments[listLibrary->listRoleIndex[2]];
+	// CLAUDE: The list relation has a service with the list as the only input;
+	// see IFactCreateReaderService(). So the elements are read in order up to the position.
+	Atom element = {0};
+	bool found = false;
+	ListIterator iterator;
+	ListIterate(list, &iterator);
+	while(!found && ListIteratorNext(&iterator)) {
+		if(iterator.queryTuple[listLibrary->listRoleIndex[1]]._int == position) {
+			element = ListIteratorGetElement(&iterator);
+			found = true;
+		}
+	}
+	ListIteratorEnd(&iterator);
+	ASSERT(found)
+	return element;
 }
 
 
@@ -400,20 +398,20 @@ void ListSetup(void)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_ID}, typeSignature.atomTypes, listLibrary->listRoleIndex, 3);
 	listLibrary->listIDRelation = (TypedRelation) {.form = listLibrary->listTermForm, .typeSignature = typeSignature};
-	listLibrary->listIDTupleStore = CreateTupleStore(listLibrary->listIDRelation, GetStorageProvider(PROVIDER_BTREE), 3, listLibrary->listRoleIndex);
+	IFactCreateReaderService(listLibrary->listIDRelation, listLibrary->listRoleIndex[0]);
 	
 	// (list:ID position:INT element:LETTER)
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT, AT_LETTER}, typeSignature.atomTypes, listLibrary->listRoleIndex, 3);
 	listLibrary->listLetterRelation = (TypedRelation) {.form = listLibrary->listTermForm, .typeSignature = typeSignature};
-	listLibrary->listLetterTupleStore = CreateTupleStore(listLibrary->listLetterRelation, GetStorageProvider(PROVIDER_BTREE), 3, listLibrary->listRoleIndex);
+	IFactCreateReaderService(listLibrary->listLetterRelation, listLibrary->listRoleIndex[0]);
 	
 	// (list:ID length:INT)
 	typeSignature = (TypeSignature) {0};
 	CopyBytesPermuted(
 		(byte[]) {AT_ID, AT_INT}, typeSignature.atomTypes, listLibrary->listLengthRoleIndex, 2);
 	listLibrary->listLengthRelation = (TypedRelation) {.form = listLibrary->listLengthTermForm, .typeSignature = typeSignature};
-	listLibrary->listLengthTupleStore = CreateTupleStore(listLibrary->listLengthRelation, GetStorageProvider(PROVIDER_BTREE), 2, listLibrary->listLengthRoleIndex);
+	IFactCreateReaderService(listLibrary->listLengthRelation, listLibrary->listLengthRoleIndex[0]);
 	
 	IFactRelease(listLibrary->listLengthTermForm);
 	IFactRelease(listLibrary->listLengthPredicateForm);
