@@ -74,10 +74,15 @@ bool TupleStoreIsWritable(TupleStore const * store);
 bool TupleStoreIsFinite(TupleStore const * store);
 
 
+/* CLAUDE: A fact with several actors in one role is stored as one tuple for each order
+   of those actors. Adding any of these orders adds the fact, and removing any of these
+   orders removes the fact. */
 byte TupleStoreAddTuple(TupleStore * store, Atom const tuple[]);
 
 byte TupleStoreRemoveTuple(TupleStore * store, Atom const tuple[]);
 
+/* CLAUDE: The number of stored tuples. This exceeds the number of facts when a role
+   has several actors; see TupleStoreAddTuple(). */
 size32 TupleStoreNTuples(TupleStore const * store);
 
 

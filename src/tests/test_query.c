@@ -303,6 +303,56 @@ size32 numberOfStaleServices(TypedRelation relation)
 
 
 /**
+ * CLAUDE: A stored fact with two actors in one role is found whichever order the query
+ * writes the two actors in.
+ */
+void testQueryRepeatedRole(void)
+{
+	Atom fact = CStringToTerm("foo 1 foo 2");
+	Atom reversedFact = CStringToTerm("foo 2 foo 1");
+	Atom equalActorsFact = CStringToTerm("foo 3 foo 3");
+	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
+	ASSERT_UINT32_EQUAL(
+		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact))), TUPLE_ADDED)
+
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo 1 foo 2"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo 2 foo 1"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo 1 foo x"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo 2 foo x"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo 1"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo 2"), 1)
+	// The answers x = 1, y = 2 and x = 2, y = 1
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo y"), 2)
+
+	// The reversed fact is the same fact
+	ASSERT_UINT32_EQUAL(
+		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(reversedFact))), TUPLE_EXISTS)
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 2)
+
+	// Equal actors give a single stored tuple
+	ASSERT_UINT32_EQUAL(
+		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(equalActorsFact))), TUPLE_ADDED)
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 3)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo 3 foo x"), 1)
+
+	// Removing the reversed fact removes the fact
+	ASSERT_UINT32_EQUAL(
+		TupleStoreRemoveTuple(store, TypedTuplePeekAtoms(FormulaGetActors(reversedFact))), TUPLE_REMOVED)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo 1 foo x"), 0)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo 1"), 0)
+	ASSERT_UINT32_EQUAL(
+		TupleStoreRemoveTuple(store, TypedTuplePeekAtoms(FormulaGetActors(equalActorsFact))), TUPLE_REMOVED)
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 0)
+
+	DropRelation(relation);
+	ReleaseFormula(equalActorsFact);
+	ReleaseFormula(reversedFact);
+	ReleaseFormula(fact);
+}
+
+
+/**
  * Same example as testCompileRecursiveJoin2() in test_compiler.c, but here we create the rule
  * _after_ creating the stored tuple. This requires invalidating the relation so that
  * compilation will be triggered.
@@ -699,6 +749,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testQueryCompilesOnce);
 	ExecuteTest(testQueryParameterIO);
 	ExecuteTest(testQueryRepeatedVariable);
+	ExecuteTest(testQueryRepeatedRole);
 	ExecuteTest(testQueryCompileIgnoresRepeatedVariable);
 	ExecuteTest(testQueryWithoutAnswer);
 	ExecuteTest(testInvalidateServiceByNewRelation);

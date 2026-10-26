@@ -80,7 +80,8 @@ void FreePredicateIterator(PredicateIterator * iter);
 
 
 /**
- * Iterator over the possible permutations of a clause
+ * Iterator over the possible permutations of a term multiset,
+ * either a clause or a conjunction form
  */
 typedef struct s_ClauseIterator
 {
@@ -96,23 +97,31 @@ bool NextClausePermutation(ClauseIterator * iter);
 void FreeClauseIterator(ClauseIterator * iter);
 
 
-/* CLAUDE: A conjunction form is a multiset of term forms, just like a clause
-   form, so the same iterator permutes both; see CreateFormIterator(). */
+// Conjunction and clause forms share this iterator
 typedef ClauseIterator ConjunctionIterator;
 
 
 typedef struct s_FormIterator {
-	Atom form;
+	uint8 kind;
 	void * topIterator;
 } FormIterator;
+
+#define PREDICATE_ITERATOR			1
+#define TERM_MULTISET_ITERATOR		2
 
 // permute an array of indexes a, a+1., ..., a+n-1
 bool PermuteArray(index8 perm[], index8 a, size8 n);
 
+/**
+ * Create an iterator over all permutations of the form,
+ */
 FormIterator * CreateFormIterator(Atom form);
+
 bool NextFormPermutation(FormIterator* iter);
+
 // get corresponding tuple permutation vector
 void GetTuplePermutation(const FormIterator * iter, index8 permutation[]);
+
 void FreeFormIterator(const FormIterator* iter);
 
 
