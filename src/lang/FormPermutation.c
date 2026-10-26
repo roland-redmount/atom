@@ -308,13 +308,13 @@ FormIterator* CreateFormIterator(Atom form)
 bool NextFormPermutation(FormIterator * iter)
 {
 	switch(iter->kind) {
-		case PREDICATE_ITERATOR:
+	case PREDICATE_ITERATOR:
 		return NextPredicatePermutation(iter->topIterator);
 
-		case TERM_MULTISET_ITERATOR:
+	case TERM_MULTISET_ITERATOR:
 		return NextClausePermutation(iter->topIterator);
 
-		default:
+	default:
 		ASSERT(false);
 		return false;
 	}
@@ -324,15 +324,15 @@ bool NextFormPermutation(FormIterator * iter)
 void FreeFormIterator(const FormIterator* iter)
 {
 	switch(iter->kind) {
-		case PREDICATE_ITERATOR:
+	case PREDICATE_ITERATOR:
 		FreePredicateIterator(iter->topIterator);
 		break;
 
-		case TERM_MULTISET_ITERATOR:
+	case TERM_MULTISET_ITERATOR:
 		FreeClauseIterator(iter->topIterator);
 		break;
 		
-		default:
+	default:
 		ASSERT(false);
 	}
 	Free(iter);
@@ -348,15 +348,15 @@ void GetTuplePermutation(const FormIterator * iter, index8 permutation[])
 {
 	// TODO: the permutation vector should probably be supplied by caller
 	switch(iter->kind) {
-		case PREDICATE_ITERATOR:
+	case PREDICATE_ITERATOR:
 		getPredicatePermutation(iter->topIterator, permutation, 0);
 		break;
 
-		case TERM_MULTISET_ITERATOR:
+	case TERM_MULTISET_ITERATOR:
 		getClausePermutation(iter->topIterator, permutation, 0);
 		break;
 
-		default:
+	default:
 		ASSERT(false);
 	}
 }

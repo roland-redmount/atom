@@ -113,7 +113,7 @@ typedef struct s_FormIterator {
 bool PermuteArray(index8 perm[], index8 a, size8 n);
 
 /**
- * Create an iterator over all permutations of the form,
+ * Create an iterator over all permutations of the form.
  */
 FormIterator * CreateFormIterator(Atom form);
 
