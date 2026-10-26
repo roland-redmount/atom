@@ -320,7 +320,7 @@ Operator * CreateIdentityOperator(Operator * childOperator);
  * Create a PERMUTE operator with the specified number of arguments.
  * 
  * For child argument i, k = argumentMap[i] is the index into this operator's arguments array
- * if i < nArguments, or else k - nArguments is an index into the constants array.
+ * if k < nArguments, or else k - nArguments is an index into the constants array.
  * corresponding to child argument i. A parent argument absent from argumentMap
  * is an input argument that is not used by the child.
  * The constants and constantTypes arrays have length nConstants, and may be 0 if
