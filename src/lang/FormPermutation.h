@@ -109,17 +109,29 @@ typedef struct s_FormIterator {
 #define PREDICATE_ITERATOR			1
 #define TERM_MULTISET_ITERATOR		2
 
-// permute an array of indexes a, a+1., ..., a+n-1
+/**
+ * Permute an array of indexes a, a+1., ..., a+n-1
+ * 
+ * NOTE: could move this to sort.c ?
+ */
 bool PermuteArray(index8 perm[], index8 a, size8 n);
 
 /**
  * Create an iterator over all permutations of the form.
+ * The iterator is always positioned at the identity permutation
+ * after this call.
  */
 FormIterator * CreateFormIterator(Atom form);
 
+/**
+ * Advance the iterator to the next form permutation.
+ * Returns false if no more permutations exist.
+ */
 bool NextFormPermutation(FormIterator* iter);
 
-// get corresponding tuple permutation vector
+/**
+ * Get the current tuple permutation for the given FormIterator.
+ */
 void GetTuplePermutation(const FormIterator * iter, index8 permutation[]);
 
 void FreeFormIterator(const FormIterator* iter);
