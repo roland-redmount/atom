@@ -195,7 +195,7 @@ Of course, recursion can be used with computed relations in the same way. Here's
   + n - 2 = q & fibonacci h number q &
   + g + h = f
 ```
-Here we assert the first numbers (which terminate the recursion) as plain facts; then we specify the recursion formula $f(n) = f(n-1) + f(n-2)$. Since **atom** does not have functions, rules must include intermediate steps: we must define  `+ n - 1 = p` and `+ n - 2 = q`, and we must add the recursively computed values `g` and `h` separately.  The order of terms in a rule does not matter -- the compiler will determine the order in which terms are evaluated.
+Here we assert the first numbers (which terminate the recursion) as plain facts; then we specify the recursion formula *f(n) = f(n-1) + f(n-2)*. Since **atom** does not have functions, rules must include intermediate steps: we must define  `+ n - 1 = p` and `+ n - 2 = q`, and we must add the recursively computed values `g` and `h` separately.  The order of terms in a rule does not matter -- the compiler will determine the order in which terms are evaluated.
 
 Here are the first Fibonacci numbers:
 ```atom
@@ -221,106 +221,115 @@ We can remove a fact with the *retract* action,
 
 ### Creating atoms
 
-As we create new facts, we naturally also need to introduce new atoms. There are two ways to create atoms:
-* a small set of literal atoms can be entered directly, including numbers and letters.
-* all other atoms are *defined by facts*.
+As we create new facts, we naturally also need to introduce new atoms. A small set of literals can be entered directly, including numbers and letters; all other atoms are *defined by facts*.
 
-The latter is the more interesting case:
+To define an atom, we use a *generator* rule, a special rule that lets us to query for atoms with a particular definition. For example, a circle is defined entirely by its radius, and if we want an atom representing a circle, we first assert a generator rule
 ```atom
-circle * radius r
+:assert circle * radius r
 ```
-
+where the special symbol `*` indicates that the atom in this position is *defined by* a fact of this form. With this in place, we can obtain the circle with a specific radius with an ordinary query:
 ```atom
 circle _ radius 5
 ```
+The returned atom `ID(...)` is a unique identifier for this circle.  Repeating the query will give the same atom.  Note that the query is not a change to the knowledgebase: once the generator rule is created, it implies that all facts of its form exist (an infinite relation). So we consider all circles of all radii to already exist, and the query merely asks for one of them.
 
-*NOTE: we need a way to list the ifacts of an ID atom.*
-In the above we also created a new atom `"Arwen"`. This atom is a string, which is actually just syntactic sugar for a list of characters ; we can view this as
+**atom** does not have local variables that we can assign atoms to. Temporary names are supported by the command line client using the `@name` syntax: for example
 ```atom
-list "Arwen" element _ position _
+circle @myCircle radius 5
 ```
-This is also an example of a data structure implemented with a relation. See [[Atom tutorial#Data structures and types|data structures]]. 
+assigns the returns circle atom to `@myCircle`, which can then be used in queries:
+```atom
+circle @myCircle radius _
+```
 
-## Data structures and types
 
-Data structures in **atom** are represented by relations. For example, in an object-oriented language we might represent a generic car with a structure like
+## Types
+
+**atom** does not have a dedicated type system, since types are easily constructed from predicates. For example, `integer x` is true for all atoms that represent integers,
+```atom
+integer -17
+```
+and false for anything else,
+```atom
+! integer 3.14
+```
+The type "integer" is then the set of all atoms that satisfy this predicate. We can define "type predicates" from any relation with rules like
+```atom
+:assert circle c <- circle c radius _
+```
+which lets us test if an atom is a circle,
+```atom
+circle @myCircle
+```
+
+## Data structures
+
+There are no special-purpose data structures in **atom**, since relations can represent the same information. For example, in an object-oriented language we might represent a car with a structure like
 ```
 class Car {
    String brand;
    String model;
 }
-```
-An object is created from its class, specifying a value for each field,
-```
+
 Car myCar = {.brand = "Porsche", model = 911}
 ```
-In **atom**, a specific car is an atom, and we represent the same data structure with the facts
+To create a similar data structure in **atom**, we first define the car atom with a generator rule, say
+```atom
+:assert named * name n
+named @myCar name "myCar"
 ```
-car @myCar brand "Porsche"
-car @myCar model 911
-```
-Unlike the `Car` class, this data structure is flexible: we can represent missing values by simply omitting facts. It is therefore more suited for heterogeneous data.
-
-Many languages make a distinction between mutable and immutable objects. The atom counterpart of an immutable object is an atom defined by a set of facts.
-*Need a better example here.*
-
-
-; for example, we can define the atom by a name
-```
-named @myCar name "Sally"
-```
-and define its "components" by
-```
+Then, we add its "slots"
+```atom
 :assert car @myCar brand "Porsche"
 :assert car @myCar model 911
 ```
-This can be seen as a mutable data structure: from its definition, any properties of the atom `@myCar` can be changed.
+This can be viewed as a mutable data structure: both properties of `@myCar` can be changed or removed entirely at any time, since the atom is defined by name only. It is therefore suitable for representing missing values and heterogeneous data. Unlike the class, there is no notion of composition: the `brand` and `model` atoms are not "owned" by the `@myCar` atom in any way.
 
-*NOTE: this is not yet supported:*
-```
-:assert car * brand b & car * model m
-```
 
+<!--
 ### Temperature example
 
-Physical measurements (quantities) consist of a value (magnitude) and a unit. This is a triple where the quantity is defined by its magnitude and unit.
-
-
-```
+Physical measurements (quantities) consist of a value (magnitude) and a unit. This is a triple where the quantity is defined by its magnitude and unit. We can define it with a generator rule:
+```atom
 :assert quantity * value v unit u
-
-quantity _ value 20.0 unit "Celsius"
 ```
+
+```atom
+quantity @roomTemp value 23.0 unit "Celsius"
+```
+
 Conversion between Celsius and Kelvin:
+```atom
+:assert quantity t value k unit "Kelvin" <-
+  + c + 273.15 = k & quantity t value c unit "Celsius"
 ```
-:assert quantity t value k unit "Kelvin" | ! + c + 273.15 = k | ! quantity t value c unit "Celsius"
 
-quantity @1 value _ unit "Kelvin"
+```atom
+quantity @roomTemp value _ unit "Kelvin"
 ```
 
-Adding two quantities of different units.
+TODO: this requires ifacts and asserted facts to coexist -- requires multiple TupleStores per relation.
 
 A mutable temperature:
 ```
+named @someTemp name "someTemp"
 
-:assert named * name n
-named _ name "temp"
-
-:assert quantity @1 value 20.0 unit "Celsius"
-:assert quantity t value k unit "Kelvin" | ! + c + 273.15 = k | ! quantity t value c unit "Celsius"
+:assert quantity @someTemp value 15.0 unit "Celsius"
 
 quantity @1 value _ unit "Kelvin"
 ```
 
 Changing the temperature in Celsius units affects the temperature in Kelvin too:
-```
-:retract quantity @1 value 20.0 unit "Celsius" 
-:assert quantity @1 value 30.0 unit "Celsius"
+```atom
+:retract quantity @someTemp value 20.0 unit "Celsius" 
+:assert quantity @someTemp value 30.0 unit "Celsius"
 quantity @1 value _ unit "Kelvin"
 ```
 
 TODO: make `quantity` a function of `(value, unit)`,  meaning that `(value, unit)` is a unique key for the relation. 
 
+Adding two quantities of different units.
+-->
 
 
 ## Logical consistency
