@@ -671,6 +671,51 @@ static bool selfTermFitsHead(
 }
 
 
+/*
+ * CLAUDE: Test whether the self term can belong to the relation of the head term: in some
+ * column order of its form, each parameter type of the self term agrees with the head's
+ * where it is known. A self term whose types fit no column order belongs to another typed
+ * relation, and is not recursive; see reclassifySelfTerm().
+ */
+static bool selfTermTypesFitHead(ClauseCompileState const * state, index8 termIndex)
+{
+	size8 termArity = IndexedFormulaTermArity(state->indexedFormula, termIndex);
+	TypedTuple * termActors = IndexedFormulaGetTermTuple(state->indexedFormula, termIndex);
+	Atom termParameters[RELATION_MAX_ARITY];
+	termActorsToParameters(termActors, termParameters);
+	FreeTypedTuple(termActors);
+	Atom const * headParameters = IndexedFormulaPeekTermAtoms(state->indexedFormula, state->headTermIndex);
+
+	index8 permutation[RELATION_MAX_ARITY];
+	FormIterator * formIterator = CreateFormIterator(state->termForms[termIndex]);
+	bool fit = false;
+	do {
+		GetTuplePermutation(formIterator, permutation);
+		fit = true;
+		for(index8 i = 0; fit && (i < termArity); i++) {
+			byte termType = termParameters[permutation[i]].parameter.atomType;
+			fit = !termType || (termType == headParameters[i].parameter.atomType);
+		}
+	} while(!fit && NextFormPermutation(formIterator));
+	FreeFormIterator(formIterator);
+	return fit;
+}
+
+
+/*
+ * CLAUDE: A self term is a term of the clause body with the form of the head term. The setup of
+ * the clause marks a self term recursive; see setupClauseCompileState(). Once the other terms
+ * have compiled, the types of the self term are known, and a self term whose types fit no
+ * column order of the head term is marked not recursive; see selfTermTypesFitHead(). It is
+ * then compiled as any other term.
+ */
+static void reclassifySelfTerm(ClauseCompileState * state, index8 termIndex)
+{
+	if(state->termIsRecursive[termIndex] && !selfTermTypesFitHead(state, termIndex))
+		state->termIsRecursive[termIndex] = false;
+}
+
+
 /**
  * Attempt to compile the a "self" term in state->indexedClause given by termIndex,
  * which has the same form as the head term of the clause.
@@ -1029,7 +1074,8 @@ static Operator * dispatchNextTerms(
  * Compile the first non-excluded recursive term to a RECURSE operator; see
  * compileSelfTerm(). The term is then marked excluded. Returns 0 if no term compiled.
  */
-static Operator * compileNextRecursiveTerm(ClauseCompileState * clauseState, index8 termClauseMap[])
+static Operator * compileNextRecursiveTerm(
+	CompileStack * compileStack, ClauseCompileState * clauseState, index8 termClauseMap[])
 {
 	if(!clauseState->headParametersKnown)
 		return 0;
@@ -1038,6 +1084,16 @@ static Operator * compileNextRecursiveTerm(ClauseCompileState * clauseState, ind
 		index8 termIndex = clauseState->termOrder[p];
 		if(!clauseState->termIsRecursive[termIndex])
 			continue;
+		// CLAUDE: A self term of other types is compiled as any other term
+		reclassifySelfTerm(clauseState, termIndex);
+		if(!clauseState->termIsRecursive[termIndex]) {
+			ChoicePoint * choicePoint =
+				&(clauseState->choiceTree->choicePoints[clauseState->choiceTree->nChoicePoints]);
+			op = compileTermSet(
+				compileStack, clauseState, clauseState->termForms[termIndex], &termIndex, 1,
+				TERM_DISPATCH_OR_COMPILE, choicePoint, termClauseMap);
+			continue;
+		}
 #ifdef DEBUG_COMPILER
 		PrintCString("Pass = 3, recursive term: ");
 		TypedTuple * termActors = IndexedFormulaGetTermTuple(clauseState->indexedFormula, termIndex);
@@ -1081,6 +1137,9 @@ static Operator * replayTerm(ClauseCompileState * clauseState, index8 termClause
 #endif
 	TypedTuple * serviceParameters = CreateTypedTuple(termActors->nAtoms);
 	Operator * op;
+	// CLAUDE: The setup of each branch marks every self term recursive again; see reclassifySelfTerm()
+	if(choicePoint->nTerms == 1)
+		reclassifySelfTerm(clauseState, termIndices[0]);
 	if(clauseState->termIsRecursive[termIndices[0]]) {
 		// CLAUDE: A recursive term compiles on its own
 		ASSERT(choicePoint->nTerms == 1)
@@ -1142,6 +1201,9 @@ static Operator * compileNextChoice(
 	ChoiceTree * choiceTree = clauseState->choiceTree;
 	ChoicePoint * choicePoint = &(choiceTree->choicePoints[choiceTree->nChoicePoints]);
 	index8 const * termIndices = choicePoint->termIndices;
+	// CLAUDE: The setup of each branch marks every self term recursive again; see reclassifySelfTerm()
+	if(choicePoint->nTerms == 1)
+		reclassifySelfTerm(clauseState, termIndices[0]);
 	// CLAUDE: A recursive term has no choices, and so has no next choice either
 	ASSERT(!clauseState->termIsRecursive[termIndices[0]])
 #ifdef DEBUG_COMPILER
@@ -1224,7 +1286,7 @@ static Operator * compileConjunctionRecursive(
 			op = compileNextTerm(compileStack, clauseState, TERM_DISPATCH_OR_COMPILE, termClauseMap);
 		// pass 3
 		if(!op)
-			op = compileNextRecursiveTerm(clauseState, termClauseMap);
+			op = compileNextRecursiveTerm(compileStack, clauseState, termClauseMap);
 	}
 	if(!op) {
 		// No remaining term could be dispatched

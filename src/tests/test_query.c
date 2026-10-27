@@ -242,7 +242,11 @@ void testInvalidateServiceByNewRelation(void)
 	// Querying again compiles an additional service for the (before:ID after:INT) relation.
 	// Since the (prec:ID succ:INT) relation was empty, there are no additional tuples.
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("before x after y"), PREC_SUCC_N_CLOSURE_TUPLES)
-	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 2)
+	// CLAUDE: The (before:ID after:INT) relation is derived from the (before:ID after:ID)
+	// relation through its recursive clause. Its self term (before x after y), with y bound by
+	// (prec y succ z), has other types than its head term, so it compiles a third service
+	// (before:ID after:ID) with its second column bound; see reclassifySelfTerm() in compiler.c.
+	ASSERT_UINT32_EQUAL(NumberOfCompiledServices(), 3)
 	
 	// Cleanup
 	DropRelation(intRelation);
