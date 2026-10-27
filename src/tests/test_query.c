@@ -16,6 +16,7 @@
 #include "parser/TermBuilder.h"
 #include "testing/fixtures.h"
 #include "testing/testing.h"
+#include "ui/assert.h"
 #include "ui/query.h"
 
 
@@ -561,6 +562,80 @@ void testQueryRepeatedRoleRecursiveTermOrder(void)
 }
 
 
+/* CLAUDE: Assert each fact written by the C strings; see AssertFact(). */
+static void assertFacts(char const * const factStrings[], size8 nFacts)
+{
+	for(index8 i = 0; i < nFacts; i++) {
+		Atom fact = CStringToTerm(factStrings[i]);
+		ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_OK)
+		ReleaseFormula(fact);
+	}
+}
+
+
+/* CLAUDE: Retract each fact written by the C strings, and drop each relation left empty. */
+static void retractFacts(char const * const factStrings[], size8 nFacts)
+{
+	for(index8 i = 0; i < nFacts; i++) {
+		Atom fact = CStringToTerm(factStrings[i]);
+		RetractFact(FormulaGetView(fact));
+		ReleaseFormula(fact);
+	}
+	for(index8 i = 0; i < nFacts; i++) {
+		Atom fact = CStringToTerm(factStrings[i]);
+		TypedRelation relation = RelationFromFact(FormulaGetView(fact));
+		if(RelationExists(relation) && (RelationNRows(relation) == 0))
+			DropRelation(relation);
+		ReleaseFormula(fact);
+	}
+}
+
+
+/*
+ * CLAUDE: Count the facts of the queries in testQueryMixedTypeRecursion() over the given edges,
+ * with the recursive rule (reach x to z <- reach x to y & edge y to z).
+ */
+static void checkMixedTypeReach(
+	char const * const edges[], size8 nEdges, size32 nFacts, size32 nFromOne, size32 nOneToTwo)
+{
+	assertFacts(edges, nEdges);
+	FormulaView base = DictionaryAddClauseFromCString("reach x to y | ! edge x to y");
+	FormulaView step = DictionaryAddClauseFromCString("reach x to z | ! reach x to y | ! edge y to z");
+
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("reach x to y"), nFacts)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("reach 1 to x"), nFromOne)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("reach 1 to 2"), nOneToTwo)
+
+	DictionaryRemoveClause(&step);
+	DictionaryRemoveClause(&base);
+	retractFacts(edges, nEdges);
+}
+
+
+/**
+ * CLAUDE: A recursive rule over nodes of different atom types. A fact of one typed relation
+ * is derived from facts of other typed relations, also where no clause without recursive
+ * terms gives that typed relation a base case; see reclassifySelfTerm() and
+ * compileQueryClauses() in compiler.c. Here (reach 1 to 2), of type (INT, INT), is derived
+ * from (reach 1 to "a"), of type (INT, ID).
+ */
+void testQueryMixedTypeRecursion(void)
+{
+	// CLAUDE: 1 -> "a" -> 2 gives reach 1 to "a", "a" to 2 and 1 to 2
+	char const * const chain[] = {"edge 1 to \"a\"", "edge \"a\" to 2"};
+	checkMixedTypeReach(chain, 2, 3, 2, 1);
+
+	// CLAUDE: The edge 2 -> "b" adds reach 2 to "b", "a" to "b" and 1 to "b". The (INT, ID)
+	// and (INT, INT) relations each derive facts from the other.
+	char const * const longerChain[] = {"edge 1 to \"a\"", "edge \"a\" to 2", "edge 2 to \"b\""};
+	checkMixedTypeReach(longerChain, 3, 6, 3, 1);
+
+	// CLAUDE: The edge 3 -> 4 gives the (INT, INT) relation a base case
+	char const * const withBase[] = {"edge 1 to \"a\"", "edge \"a\" to 2", "edge 3 to 4"};
+	checkMixedTypeReach(withBase, 3, 4, 2, 1);
+}
+
+
 /**
  * Same example as testCompileRecursiveJoin2() in test_compiler.c, but here we create the rule
  * _after_ creating the stored tuple. This requires invalidating the relation so that
@@ -964,6 +1039,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testQueryRepeatedRoleMixedTypeRule);
 	ExecuteTest(testQueryRepeatedRoleRecursiveRule);
 	ExecuteTest(testQueryRepeatedRoleRecursiveTermOrder);
+	ExecuteTest(testQueryMixedTypeRecursion);
 	ExecuteTest(testQueryCompileIgnoresRepeatedVariable);
 	ExecuteTest(testQueryWithoutAnswer);
 	ExecuteTest(testInvalidateServiceByNewRelation);

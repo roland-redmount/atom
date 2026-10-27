@@ -324,6 +324,12 @@ void testMixedArithmetic(void)
 	ASSERT_UINT32_EQUAL(countTuples("* 3 * 2 = z"), 1)
 	ASSERT_UINT32_EQUAL(countTuples("* 3 * 2 = 6.0"), 0)
 
+	// CLAUDE: The FLOAT operand may be either actor of the repeated role
+	ASSERT_UINT32_EQUAL(countTuples("+ 3.0 + 2 = 5.0"), 1)
+	ASSERT_UINT32_EQUAL(countTuples("+ 3 + 2.0 = 5.0"), 1)
+	ASSERT_UINT32_EQUAL(countTuples("* 1.5 * 2 = 3.0"), 1)
+	ASSERT_UINT32_EQUAL(countTuples("* 2 * 1.5 = 3.0"), 1)
+
 	ASSERT_UINT32_EQUAL(countTuples("float 2.0"), 1)
 	ASSERT_UINT32_EQUAL(countTuples("float 2"), 0)
 }

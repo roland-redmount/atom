@@ -694,7 +694,8 @@ static bool selfTermTypesFitHead(ClauseCompileState const * state, index8 termIn
 		fit = true;
 		for(index8 i = 0; fit && (i < termArity); i++) {
 			byte termType = termParameters[permutation[i]].parameter.atomType;
-			fit = !termType || (termType == headParameters[i].parameter.atomType);
+			byte headType = headParameters[i].parameter.atomType;
+			fit = !termType || !headType || (termType == headType);
 		}
 	} while(!fit && NextFormPermutation(formIterator));
 	FreeFormIterator(formIterator);
@@ -1074,11 +1075,11 @@ static Operator * dispatchNextTerms(
  * Compile the first non-excluded recursive term to a RECURSE operator; see
  * compileSelfTerm(). The term is then marked excluded. Returns 0 if no term compiled.
  */
+static bool hasFullyTypedParameters(IndexedFormula * indexedFormula, index8 i);
+
 static Operator * compileNextRecursiveTerm(
 	CompileStack * compileStack, ClauseCompileState * clauseState, index8 termClauseMap[])
 {
-	if(!clauseState->headParametersKnown)
-		return 0;
 	Operator * op = 0;
 	for(index8 p = clauseState->nCompiledTerms; !op && (p < clauseState->nConjunctionTerms); p++) {
 		index8 termIndex = clauseState->termOrder[p];
@@ -1094,6 +1095,11 @@ static Operator * compileNextRecursiveTerm(
 				TERM_DISPATCH_OR_COMPILE, choicePoint, termClauseMap);
 			continue;
 		}
+		// CLAUDE: A recursive term reads the FIXPOINT of the typed relation of the head term, so
+		// the head parameter types must be known. The terms compiled so far may have resolved them.
+		if(!clauseState->headParametersKnown
+			&& !hasFullyTypedParameters(clauseState->indexedFormula, clauseState->headTermIndex))
+			continue;
 #ifdef DEBUG_COMPILER
 		PrintCString("Pass = 3, recursive term: ");
 		TypedTuple * termActors = IndexedFormulaGetTermTuple(clauseState->indexedFormula, termIndex);
@@ -2494,8 +2500,7 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
  * 
  * Matched rules are processed in two passes. Non-recursive clauses compile first, and determine
  * the possible query type signatures. for each compiled variant. The recursive clauses then
- * compile against these type signatures. A recursive clause therefore cannot occur without
- * at least one non-recursive clause of the same signature.
+ * compile against these type signatures.
  * 
  * Returns the new number of variants in the variants[] array.
  */
@@ -2559,6 +2564,25 @@ static size8 compileQueryClauses(
 	// If compilaton succeeds, a recursive clause yields a UNION with the non-recursive variant,
 	// so no new variants are added
 	ASSERT(nVariants == nNonRecursiveVariants)
+
+	// A typed relation that no clause without recursive terms produces may still be
+	// derived by a recursive clause from other typed relations; see reclassifySelfTerm().
+	// Each clause with recursive terms is compiled against the query itself, and a variant
+	// is kept if its type signature is new.
+	CompiledVariant newVariants[MAX_COMPILED_VARIANTS];
+	size8 nNewVariants = 0;
+	for(index32 i = 0; i < nClauseMatches; i++) {
+		if(matches[i].hasRecursiveTerms)
+			nNewVariants = compileClause(compileStack, query, &matches[i], 0, newVariants, nNewVariants);
+	}
+	for(index8 j = 0; j < nNewVariants; j++) {
+		if(FindCompiledVariant(variants, nVariants, newVariants[j].parameters, query->arity)) {
+			CheckOperator(newVariants[j].op);
+			continue;
+		}
+		ASSERT(nVariants < MAX_COMPILED_VARIANTS)
+		variants[nVariants++] = newVariants[j];
+	}
 
 	FreeResizingArray(&nonRecursiveOrder);
 	freeClauseMatches(&clauseMatches);
