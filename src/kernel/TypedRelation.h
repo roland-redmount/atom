@@ -77,12 +77,35 @@ bool IsNullRelation(TypedRelation relation);
 data64 RelationHash(TypedRelation relation, data64 initialHash);
 
 /**
- * Return the relation that the given fact belongs to,
- * based on its atom types. The fact must be a term.
+ * Write the canonical column order of the relation to the permutation[] array.
+ * In canonical column order, the atom types of the columns of each role
+ * ascend, and columns of equal type keep their order. Column i of the canonical order is
+ * column permutation[i] of the given relation.
+ * If the relation has a conjunction form, this returns the identity permutation.
+ */
+void GetCanonicalColumnOrder(TypedRelation relation, index8 permutation[]);
+
+/**
+ * Test whether a type signature is in canonical column order; see
+ * GetCanonicalColumnOrder().
+ */
+bool IsCanonicalRelation(TypedRelation relation);
+
+/**
+ * Return the relation that the given fact belongs to, based on its atom types.
+ * The fact must be a term.
+ * The relation is in canonical column order, which may differ from the given factM
+ * The canonical-order fact is given by FactGetRelationTuple().
  * The returned TypedRelation might not exist in the relation registry.
- * If the fact contains an AT_GENERATOR atom, the relation type is inferred to be AT_ID.
+ * If the fact contains an AT_GENERATOR atom, its relation type is inferred to be AT_ID.
  */
 TypedRelation RelationFromFact(FormulaView term);
+
+/**
+ * CLAUDE: Write the actors of a fact in the column order of the relation returned by
+ * RelationFromFact(). The tuple array must hold one element per actor.
+ */
+void FactGetRelationTuple(FormulaView fact, Atom * tuple);
 
 /**
  * Register a new TypedRelation, or aquire a reference to one that already exists.

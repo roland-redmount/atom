@@ -2,7 +2,6 @@
 #include "kernel/ClosedRelation.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
-#include "kernel/multiset.h"
 #include "kernel/Parameter.h"
 #include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
@@ -610,25 +609,6 @@ Operator * ServiceGetOperator(Service service)
 }
 
 
-/*
- * CLAUDE: Write the role of each column of a term form, numbering the roles of its
- * predicate form 0, 1, ... in the column order.
- */
-static void getColumnRoles(Atom termForm, index8 columnRoles[])
-{
-	Atom predicateForm = TermFormGetPredicateForm(termForm);
-	MultisetIterator iterator;
-	MultisetIterate(predicateForm, AT_NAME, &iterator);
-	index8 column = 0;
-	for(index8 role = 0; MultisetIteratorNext(&iterator); role++) {
-		ElementMultiple em = MultisetIteratorGetElement(&iterator);
-		for(index8 i = 0; i < em.multiple; i++)
-			columnRoles[column++] = role;
-	}
-	MultisetIteratorEnd(&iterator);
-}
-
-
 // CLAUDE: The columns filled by one argument of a service operator; see ServiceGetExchangeableGroups()
 typedef struct s_ArgumentColumns {
 	index8 role;
@@ -646,7 +626,7 @@ size8 ServiceGetExchangeableGroups(Service service, index8 * groupArguments, siz
 		return 0;
 	size8 arity = FormArity(form);
 	index8 columnRoles[arity];
-	getColumnRoles(form, columnRoles);
+	TermFormGetActorRoles(form, columnRoles);
 	index8 argumentMap[arity];
 	size8 nArguments = EqualitySignatureGetArgumentMap(service.equalitySignature, arity, argumentMap);
 

@@ -66,6 +66,36 @@ void testAssertRetract(void)
 
 
 /**
+ * CLAUDE: A fact with two actors of different atom types in one role is one fact in one
+ * relation, whichever order the actors are written in; see RelationFromFact().
+ */
+void testAssertRepeatedRoleMixedTypes(void)
+{
+	Atom fact = CStringToTerm("foo 1 foo \"a\"");
+	Atom reversedFact = CStringToTerm("foo \"a\" foo 1");
+	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
+	TypedRelation reversedRelation = {
+		.form = relation.form,
+		.typeSignature = CreateTypeSignature(
+			(byte[]) {relation.typeSignature.atomTypes[1], relation.typeSignature.atomTypes[0]}, 2)
+	};
+
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(reversedFact), 0), ASSERT_EXISTED)
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 1)
+	ASSERT_FALSE(RelationExists(reversedRelation))
+
+	// CLAUDE: Retracting the fact in either order removes it
+	RetractFact(FormulaGetView(reversedFact));
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 0)
+
+	DropRelation(relation);
+	ReleaseFormula(reversedFact);
+	ReleaseFormula(fact);
+}
+
+
+/**
  * Test asserting a fact that is already produced by a service
  */
 void testAssertOverlapsService(void)
@@ -1167,6 +1197,7 @@ int main(int argc, char * argv[])
 	LoadLibraries();
 
 	ExecuteTest(testAssertRetract);
+	ExecuteTest(testAssertRepeatedRoleMixedTypes);
 	ExecuteTest(testAssertOverlapsService);
 	ExecuteTest(testAssertContradictsStoredFact);
 	ExecuteTest(testAssertContradictsDerivedFact);

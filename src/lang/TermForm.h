@@ -21,6 +21,13 @@ bool IsTermForm(Atom form);
 Atom TermFormGetPredicateForm(Atom termForm);
 
 /**
+ * Index the roles of a term form 0, 1, ... in canonical order,
+ * and write the role index corresponding to each actor to roleIndices[].
+ * The actors of a role are adjacent, so roleIndices[] is monotone increasing.
+ */
+void TermFormGetActorRoles(Atom termForm, index8 roleIndices[]);
+
+/**
  * Return false is the term is negated
  */
 bool TermFormGetSign(Atom termForm);

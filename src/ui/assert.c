@@ -76,7 +76,9 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 {
 	ASSERT(IsTermForm(fact.form));
 	ASSERT(!TypedTupleContainsVariable(fact.actors));
-	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
+	// CLAUDE: The actors in the column order of the fact's relation; see RelationFromFact()
+	Atom actorsArray[fact.actors->nAtoms];
+	FactGetRelationTuple(fact, actorsArray);
 
 	// CLAUDE: The relation (closed-relation f) is only written by CloseRelation()
 	if(SameAtoms(fact.form, GetClosedRelationForm()))
@@ -88,9 +90,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 		return ASSERT_CONTRADICTION;
 
 	// find existing relation table, or create new
-	TypeSignature typeSignature = CreateTypeSignature(
-		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	TypedRelation relation = {.form = fact.form, .typeSignature = typeSignature};
+	TypedRelation relation = RelationFromFact(fact);
 	TupleStore * store = 0;
 	if(RelationExists(relation)) {
 	 	store = RelationGetTupleStore(relation);
@@ -199,9 +199,7 @@ void RetractFact(FormulaView fact)
 	if(!factExists(fact))
 		return;
 
-	TypeSignature typeSignature = CreateTypeSignature(
-		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	TypedRelation relation = {.form = fact.form, .typeSignature = typeSignature};
+	TypedRelation relation = RelationFromFact(fact);
 	TupleStore * store = RelationGetTupleStore(relation);
 	if(!store) {
 		// The relation has no stored tuples
@@ -210,7 +208,9 @@ void RetractFact(FormulaView fact)
 	// CLAUDE: The defining facts of an ifact are never stored in a TupleStore; see IFactConjunction
 	if(!TupleStoreIsWritable(store))
 		return;
-	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
+	// CLAUDE: The actors in the column order of the fact's relation; see RelationFromFact()
+	Atom actorsArray[fact.actors->nAtoms];
+	FactGetRelationTuple(fact, actorsArray);
 
 	// Remove the tuple. This will not remove defining facts
 	byte removeResult = TupleStoreRemoveTuple(store, actorsArray) ;

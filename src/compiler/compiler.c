@@ -2688,6 +2688,56 @@ static size8 compileInvertedQuery(
 }
 
 
+/*
+ * CLAUDE: Put each compiled variant in canonical column order, so that its service belongs to a
+ * relation in canonical column order; see GetCanonicalColumnOrder(). A variant whose type
+ * signature is in another column order is reordered by a PERMUTE operator. A reordered variant
+ * whose signature equals that of another variant is combined with it by addCompiledVariant().
+ * For example, the variants (bar #1>INT bar #2>ID) and (bar #1>ID bar #2>INT) of the query
+ * (bar x bar y) are combined into one variant (bar #1>ID bar #2>INT).
+ * Returns the new number of variants.
+ */
+static size8 canonicalizeVariantOrder(
+	ParameterizedQuery const * query, CompiledVariant variants[], size8 nVariants)
+{
+	size8 arity = query->arity;
+	CompiledVariant reordered[MAX_COMPILED_VARIANTS];
+	size8 nReordered = 0;
+	size8 nCanonical = 0;
+	for(index8 i = 0; i < nVariants; i++) {
+		TypedRelation relation = {
+			.form = query->form,
+			.typeSignature = CompiledVariantGetTypeSignature(&variants[i], arity)
+		};
+		if(IsCanonicalRelation(relation))
+			variants[nCanonical++] = variants[i];
+		else
+			reordered[nReordered++] = variants[i];
+	}
+	for(index8 i = 0; i < nReordered; i++) {
+		CompiledVariant const * variant = &reordered[i];
+		// CLAUDE: A seeded or replacing variant has the signature of an existing relation
+		ASSERT(!variant->isReplaced && (variant->op->type != OPERATOR_MACHINE))
+		TypeSignature typeSignature = CompiledVariantGetTypeSignature(variant, arity);
+		index8 permutation[arity];
+		GetCanonicalColumnOrder(
+			(TypedRelation) {.form = query->form, .typeSignature = typeSignature}, permutation);
+		Atom parameters[arity];
+		for(index8 j = 0; j < arity; j++)
+			parameters[j] = variant->parameters[permutation[j]];
+		size8 nArguments = RenumberParameters(parameters, arity);
+		// CLAUDE: The variant operator takes argument n - 1 for parameter number n
+		index8 argumentMap[nArguments];
+		for(index8 j = 0; j < arity; j++)
+			argumentMap[variant->parameters[permutation[j]].parameter.number - 1] =
+				parameters[j].parameter.number - 1;
+		Operator * op = CreatePermuteOperator(nArguments, 0, 0, 0, argumentMap, variant->op);
+		addCompiledVariant(variants, &nCanonical, parameters, arity, op, UNION_OPERATOR_LAST);
+	}
+	return nCanonical;
+}
+
+
 /**
  * Attempt to compile a query into one or more services (variants).
  * Returns the number of variants written to the variants array.
@@ -2746,7 +2796,8 @@ static size8 compileQueryVariants(
 	if(hasIFactRule)
 		nVariants = compileIFactRule(query, ifactRelation, ifactIdColumn, variants, nVariants);
 
-	return nVariants;
+	// CLAUDE: Every service belongs to a relation in canonical column order
+	return canonicalizeVariantOrder(query, variants, nVariants);
 }
 
 
@@ -2794,6 +2845,8 @@ static size8 compileParameterizedQuery(
 			.ioSignature = ioSignature,
 			.equalitySignature = CompiledVariantGetEqualitySignature(&variants[i], query->arity)
 		};
+		// CLAUDE: see canonicalizeVariantOrder()
+		ASSERT(IsCanonicalRelation(relation))
 		if(variants[i].op->type == OPERATOR_MACHINE) {
 			ServiceMarkNotStale(service);
 			continue;

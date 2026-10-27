@@ -363,19 +363,86 @@ data64 RelationHash(TypedRelation relation, data64 initialHash)
 }
 
 
-TypedRelation RelationFromFact(FormulaView term)
+void GetCanonicalColumnOrder(TypedRelation relation, index8 permutation[])
 {
-	ASSERT(IsTermForm(term.form))
+	size8 arity = FormArity(relation.form);
+	for(index8 i = 0; i < arity; i++)
+		permutation[i] = i;
+	if(!IsTermForm(relation.form))
+		return;
+	byte const * atomTypes = relation.typeSignature.atomTypes;
+	index8 roleIndices[arity];
+	TermFormGetActorRoles(relation.form, roleIndices);
+	// CLAUDE: Insertion sort within each role, which keeps columns of equal type in their
+	// order. The columns of a role are adjacent.
+	for(index8 i = 1; i < arity; i++) {
+		for(index8 j = i; (j > 0) && (roleIndices[j - 1] == roleIndices[j])
+			&& (atomTypes[permutation[j - 1]] > atomTypes[permutation[j]]); j--)
+		{
+			index8 swap = permutation[j - 1];
+			permutation[j - 1] = permutation[j];
+			permutation[j] = swap;
+		}
+	}
+}
+
+
+bool IsCanonicalRelation(TypedRelation relation)
+{
+	if(!IsTermForm(relation.form))
+		return true;
+	size8 arity = FormArity(relation.form);
+	byte const * atomTypes = relation.typeSignature.atomTypes;
+	index8 roleIndices[arity];
+	TermFormGetActorRoles(relation.form, roleIndices);
+	for(index8 i = 1; i < arity; i++) {
+		if((roleIndices[i - 1] == roleIndices[i]) && (atomTypes[i - 1] > atomTypes[i]))
+			return false;
+	}
+	return true;
+}
+
+
+/* CLAUDE: The relation of a fact with its columns in the order of the fact's actors,
+   which may differ from the canonical column order of RelationFromFact() */
+static TypedRelation factRelationInActorOrder(FormulaView fact)
+{
 	TypeSignature typeSignature = CreateTypeSignature(
-		TypedTuplePeekAtomTypes(term.actors), term.actors->nAtoms);
-	
+		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
+
 	// A generator atom corresponds to an AT_ID type
-	for(index8 i = 0; i < term.actors->nAtoms; i++) {
+	for(index8 i = 0; i < fact.actors->nAtoms; i++) {
 		if(typeSignature.atomTypes[i] == AT_GENERATOR)
 			typeSignature.atomTypes[i] = AT_ID;
 	}
 
-	return (TypedRelation) {.form = term.form, .typeSignature = typeSignature};
+	return (TypedRelation) {.form = fact.form, .typeSignature = typeSignature};
+}
+
+
+TypedRelation RelationFromFact(FormulaView term)
+{
+	ASSERT(IsTermForm(term.form))
+	TypedRelation relation = factRelationInActorOrder(term);
+	size8 arity = term.actors->nAtoms;
+	index8 permutation[arity];
+	GetCanonicalColumnOrder(relation, permutation);
+	byte canonicalTypes[arity];
+	for(index8 i = 0; i < arity; i++)
+		canonicalTypes[i] = relation.typeSignature.atomTypes[permutation[i]];
+	relation.typeSignature = CreateTypeSignature(canonicalTypes, arity);
+	return relation;
+}
+
+
+void FactGetRelationTuple(FormulaView fact, Atom * tuple)
+{
+	size8 arity = fact.actors->nAtoms;
+	index8 permutation[arity];
+	GetCanonicalColumnOrder(factRelationInActorOrder(fact), permutation);
+	Atom const * actors = TypedTuplePeekAtoms(fact.actors);
+	for(index8 i = 0; i < arity; i++)
+		tuple[i] = actors[permutation[i]];
 }
 
 

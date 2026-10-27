@@ -364,25 +364,37 @@ void testQueryRepeatedRole(void)
 
 
 /**
- * CLAUDE: Two actors of different atom types in one role are stored in one column order,
- * as swapping them gives a tuple of another typed relation.
+ * CLAUDE: A fact with two actors of different atom types in one role belongs to one typed
+ * relation, whichever order the actors are written in. The relation has its columns in
+ * canonical column order; see GetCanonicalColumnOrder(). Swapping the two actors would give
+ * a tuple of another typed relation, so the fact is stored in one column order only.
  */
 void testQueryRepeatedRoleMixedTypes(void)
 {
 	Atom fact = CStringToTerm("foo 1 foo \"a\"");
+	Atom reversedFact = CStringToTerm("foo \"a\" foo 1");
 	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
+	ASSERT_TRUE(SameRelations(relation, RelationFromFact(FormulaGetView(reversedFact))))
+	ASSERT_TRUE(IsCanonicalRelation(relation))
+
+	Atom tuple[2];
+	Atom reversedTuple[2];
+	FactGetRelationTuple(FormulaGetView(fact), tuple);
+	FactGetRelationTuple(FormulaGetView(reversedFact), reversedTuple);
+	ASSERT_TRUE(TupleCompare(tuple, reversedTuple, 2) == 0)
+
 	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
-	ASSERT_UINT32_EQUAL(
-		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact))), TUPLE_ADDED)
+	ASSERT_UINT32_EQUAL(TupleStoreAddTuple(store, tuple), TUPLE_ADDED)
 	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 1)
 
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo y"), 1)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo \"a\" foo x"), 1)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo 1"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo 1 foo x"), 1)
 
-	ASSERT_UINT32_EQUAL(
-		TupleStoreRemoveTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact))), TUPLE_REMOVED)
+	ASSERT_UINT32_EQUAL(TupleStoreRemoveTuple(store, reversedTuple), TUPLE_REMOVED)
 	DropRelation(relation);
+	ReleaseFormula(reversedFact);
 	ReleaseFormula(fact);
 }
 
@@ -400,7 +412,9 @@ static TypedRelation storeFacts(char const * const factStrings[], size8 nFacts)
 			store = CreateTupleStore(
 				relation, GetStorageProvider(PROVIDER_BTREE), FormArity(relation.form), 0);
 		}
-		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)));
+		Atom tuple[FormArity(relation.form)];
+		FactGetRelationTuple(FormulaGetView(fact), tuple);
+		TupleStoreAddTuple(store, tuple);
 		ReleaseFormula(fact);
 	}
 	return relation;
@@ -412,7 +426,9 @@ static void dropFacts(TypedRelation relation, char const * const factStrings[], 
 {
 	for(index8 i = 0; i < nFacts; i++) {
 		Atom fact = CStringToTerm(factStrings[i]);
-		RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)));
+		Atom tuple[FormArity(relation.form)];
+		FactGetRelationTuple(FormulaGetView(fact), tuple);
+		RelationRemoveTuple(relation, tuple);
 		ReleaseFormula(fact);
 	}
 	DropRelation(relation);
@@ -451,6 +467,34 @@ void testQueryRepeatedRoleRule(void)
 	DictionaryRemoveClause(&forward);
 
 	dropFacts(edgeRelation, edges, 1);
+}
+
+
+/**
+ * CLAUDE: A rule deriving a fact with two actors of different atom types in one role. Both
+ * column orders of the head term give variants of one relation in canonical column order;
+ * see canonicalizeVariantOrder(). The fact is found once, whichever column the query binds,
+ * and in either order of the queries.
+ */
+void testQueryRepeatedRoleMixedTypeRule(void)
+{
+	char const * const facts[] = {"foo 1 foo \"a\""};
+	TypedRelation fooRelation = storeFacts(facts, 1);
+
+	FormulaView clause = DictionaryAddClauseFromCString("bar x bar y | ! foo x foo y");
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("bar x bar y"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("bar \"a\" bar x"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("bar x bar 1"), 1)
+	DictionaryRemoveClause(&clause);
+
+	// CLAUDE: The same queries in the opposite order, compiled anew
+	clause = DictionaryAddClauseFromCString("bar x bar y | ! foo x foo y");
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("bar 1 bar x"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("bar x bar \"a\""), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("bar x bar y"), 1)
+	DictionaryRemoveClause(&clause);
+
+	dropFacts(fooRelation, facts, 1);
 }
 
 
@@ -922,6 +966,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testQueryRepeatedRole);
 	ExecuteTest(testQueryRepeatedRoleMixedTypes);
 	ExecuteTest(testQueryRepeatedRoleRule);
+	ExecuteTest(testQueryRepeatedRoleMixedTypeRule);
 	ExecuteTest(testQueryRepeatedRoleRecursiveRule);
 	ExecuteTest(testQueryRepeatedRoleRecursiveTermOrder);
 	ExecuteTest(testQueryCompileIgnoresRepeatedVariable);
