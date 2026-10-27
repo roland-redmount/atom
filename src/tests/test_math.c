@@ -312,6 +312,23 @@ void testIntegerFloat(void)
 }
 
 
+/**
+ * CLAUDE: The rules for mixing an INT and a FLOAT in (+ + =) and (* * =) apply only if one
+ * operand is a FLOAT; see MathSetup(). Two INT operands give an INT result only.
+ */
+void testMixedArithmetic(void)
+{
+	ASSERT_UINT32_EQUAL(countTuples("+ 3 + 2 = z"), 1)
+	ASSERT_UINT32_EQUAL(countTuples("+ 3 + 2 = 5"), 1)
+	ASSERT_UINT32_EQUAL(countTuples("+ 3 + 2 = 5.0"), 0)
+	ASSERT_UINT32_EQUAL(countTuples("* 3 * 2 = z"), 1)
+	ASSERT_UINT32_EQUAL(countTuples("* 3 * 2 = 6.0"), 0)
+
+	ASSERT_UINT32_EQUAL(countTuples("float 2.0"), 1)
+	ASSERT_UINT32_EQUAL(countTuples("float 2"), 0)
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(TRANSIENT_MEMORY);
@@ -323,6 +340,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testIntDivision);
 	ExecuteTest(testValueRounded);
 	ExecuteTest(testIntegerFloat);
+	ExecuteTest(testMixedArithmetic);
 
 	UnloadLibraries();
 	KernelShutdown();
