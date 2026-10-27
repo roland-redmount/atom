@@ -96,6 +96,24 @@ void testAssertRepeatedRoleMixedTypes(void)
 
 
 /**
+ * CLAUDE: Two rules that differ only in the order of the actors of a repeated role are one
+ * rule; see GetCanonicalActorOrder().
+ */
+void testAssertRuleRepeatedRoleOrder(void)
+{
+	Atom rule = CStringToClause("near x near y | ! edge x to y");
+	Atom reversedRule = CStringToClause("near y near x | ! edge x to y");
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(reversedRule), ASSERT_EXISTED)
+
+	FormulaView clause = DictionaryAddClause(rule);
+	DictionaryRemoveClause(&clause);
+	ReleaseFormula(reversedRule);
+	ReleaseFormula(rule);
+}
+
+
+/**
  * Test asserting a fact that is already produced by a service
  */
 void testAssertOverlapsService(void)
@@ -1191,6 +1209,25 @@ void testLoadRepeatedRole(void)
 }
 
 
+/**
+ * CLAUDE: LoadRelationText() puts the actors of each loaded fact in canonical order; see
+ * CreateFormulaView().
+ */
+void testLoadCanonicalActorOrder(void)
+{
+	index32 errorIndex;
+	Atom fooFoo = ParseTermForm("foo foo", 0, &errorIndex);
+	LoadReport report;
+	LoadRelationText("foo,foo\n2,1\n", fooFoo, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_OK)
+	ASSERT_UINT32_EQUAL(report.nAsserted, 1)
+
+	retractLoadedFact("foo 1 foo 2");
+	dropRelationOf("foo 1 foo 2");
+	IFactRelease(fooFoo);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(TRANSIENT_MEMORY);
@@ -1206,6 +1243,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertClosedRelationRejected);
 	ExecuteTest(testAssertFormulaFact);
 	ExecuteTest(testAssertFormulaRule);
+	ExecuteTest(testAssertRuleRepeatedRoleOrder);
 	ExecuteTest(testAssertFormulaIFactRule);
 	ExecuteTest(testAssertFormulaRejects);
 	ExecuteTest(testRetractFormulaRule);
@@ -1229,6 +1267,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCreateIFactRejects);
 	ExecuteTest(testLoadRelationText);
 	ExecuteTest(testLoadRepeatedRole);
+	ExecuteTest(testLoadCanonicalActorOrder);
 	ExecuteTest(testRetractMathRule);
 
 	UnloadLibraries();

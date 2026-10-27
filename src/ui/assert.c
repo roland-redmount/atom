@@ -47,7 +47,11 @@ static bool negatedFactExists(FormulaView fact)
 	// Run a query for the negated term.
 	Atom negatedTermForm = CreateTermForm(
 		TermFormGetPredicateForm(fact.form), !TermFormGetSign(fact.form));
-	bool foundTuple = factExists((FormulaView) {.form = negatedTermForm, .actors = fact.actors});
+	// CLAUDE: The negated form has the roles of the fact's form, so the copied actors are
+	// in canonical order already
+	TypedTuple * actors = CreateTupleFromTuple(fact.actors);
+	bool foundTuple = factExists(CreateFormulaView(negatedTermForm, actors));
+	FreeTypedTuple(actors);
 	IFactRelease(negatedTermForm);
 	return foundTuple;
 }
@@ -76,9 +80,8 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 {
 	ASSERT(IsTermForm(fact.form));
 	ASSERT(!TypedTupleContainsVariable(fact.actors));
-	// CLAUDE: The actors in the column order of the fact's relation; see RelationFromFact()
-	Atom actorsArray[fact.actors->nAtoms];
-	FactGetRelationTuple(fact, actorsArray);
+	// CLAUDE: The actors are in the column order of the fact's relation; see RelationFromFact()
+	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
 
 	// CLAUDE: The relation (closed-relation f) is only written by CloseRelation()
 	if(SameAtoms(fact.form, GetClosedRelationForm()))
@@ -208,9 +211,8 @@ void RetractFact(FormulaView fact)
 	// CLAUDE: The defining facts of an ifact are never stored in a TupleStore; see IFactConjunction
 	if(!TupleStoreIsWritable(store))
 		return;
-	// CLAUDE: The actors in the column order of the fact's relation; see RelationFromFact()
-	Atom actorsArray[fact.actors->nAtoms];
-	FactGetRelationTuple(fact, actorsArray);
+	// CLAUDE: The actors are in the column order of the fact's relation; see RelationFromFact()
+	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
 
 	// Remove the tuple. This will not remove defining facts
 	byte removeResult = TupleStoreRemoveTuple(store, actorsArray) ;

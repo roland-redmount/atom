@@ -128,16 +128,19 @@ static bool dispatchOrCompileTerm(
  * new choice, and the relations of the choices already taken are excluded. A failed attempt
  * leaves the choice point unchanged. */
 static bool dispatchOrCompileAtNewChoicePoint(
-	CompileStack * compileStack, FormulaView term, int dispatchMode, ChoicePoint * choicePoint)
+	CompileStack * compileStack, Atom form, TypedTuple const * actors, int dispatchMode,
+	ChoicePoint * choicePoint)
 {
 	ASSERT(choicePoint->nChoices < MAX_CHOICE_POINT_MATCHES)
 
 	// dispatch term, parameterized
+	// CLAUDE: The actors are taken from the clause, in clause order, which need not be the
+	// canonical order of a formula; see GetCanonicalActorOrder(). Dispatch matches any order.
 	ParameterizedQuery query = {
-		.form = term.form,
-		.arity = term.actors->nAtoms,
+		.form = form,
+		.arity = actors->nAtoms,
 	};
-	termActorsToParameters(term.actors, query.parameters);
+	termActorsToParameters(actors, query.parameters);
 
 	TypeSignature excludedSignatures[MAX_CHOICE_POINT_MATCHES];
 	for(index8 i = 0; i < choicePoint->nChoices; i++)
@@ -864,7 +867,7 @@ static Operator * compileTermSet(
 	Operator * op = 0;
 	// attempt to locate a service for the term
 	if(dispatchOrCompileAtNewChoicePoint(
-		compileStack, (FormulaView) {.form = form, .actors = termSetActors}, dispatchMode, choicePoint))
+		compileStack, form, termSetActors, dispatchMode, choicePoint))
 		op = buildOperatorFromChoicePoint(termSetActors, choicePoint, serviceParameters, termClauseMap);
 	if(op)
 		acceptCompiledTerms(clauseState, termIndices, nTerms, actorIndices, serviceParameters);
@@ -2690,7 +2693,7 @@ static size8 compileInvertedQuery(
 
 /*
  * CLAUDE: Put each compiled variant in canonical column order, so that its service belongs to a
- * relation in canonical column order; see GetCanonicalColumnOrder(). A variant whose type
+ * relation in canonical column order; see IsCanonicalRelation(). A variant whose type
  * signature is in another column order is reordered by a PERMUTE operator. A reordered variant
  * whose signature equals that of another variant is combined with it by addCompiledVariant().
  * For example, the variants (bar #1>INT bar #2>ID) and (bar #1>ID bar #2>INT) of the query
@@ -2718,11 +2721,17 @@ static size8 canonicalizeVariantOrder(
 		CompiledVariant const * variant = &reordered[i];
 		// CLAUDE: A seeded or replacing variant has the signature of an existing relation
 		ASSERT(!variant->isReplaced && (variant->op->type != OPERATOR_MACHINE))
-		TypeSignature typeSignature = CompiledVariantGetTypeSignature(variant, arity);
-		index8 permutation[arity];
-		GetCanonicalColumnOrder(
-			(TypedRelation) {.form = query->form, .typeSignature = typeSignature}, permutation);
-		Atom parameters[arity];
+		// CLAUDE: Each parameter is given as an atom of its resolved type with value zero, so
+		// GetCanonicalActorOrder() orders the parameters by type alone, keeping the order of
+		// parameters of one type
+		// CLAUDE: Fixed size arrays, since an optimized build reads variable length arrays here
+		// as regions of size 0; see -Wstringop-overflow
+		TypedAtom typedParameters[RELATION_MAX_ARITY];
+		for(index8 j = 0; j < arity; j++)
+			typedParameters[j] = (TypedAtom) {.type = variant->parameters[j].parameter.atomType};
+		index8 permutation[RELATION_MAX_ARITY];
+		GetCanonicalActorOrder(query->form, typedParameters, permutation);
+		Atom parameters[RELATION_MAX_ARITY];
 		for(index8 j = 0; j < arity; j++)
 			parameters[j] = variant->parameters[permutation[j]];
 		size8 nArguments = RenumberParameters(parameters, arity);
@@ -2845,8 +2854,6 @@ static size8 compileParameterizedQuery(
 			.ioSignature = ioSignature,
 			.equalitySignature = CompiledVariantGetEqualitySignature(&variants[i], query->arity)
 		};
-		// CLAUDE: see canonicalizeVariantOrder()
-		ASSERT(IsCanonicalRelation(relation))
 		if(variants[i].op->type == OPERATOR_MACHINE) {
 			ServiceMarkNotStale(service);
 			continue;

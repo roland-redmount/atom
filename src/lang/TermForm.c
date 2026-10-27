@@ -4,6 +4,7 @@
 #include "kernel/kernel.h"
 #include "kernel/multiset.h"
 #include "kernel/Parameter.h"
+#include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
 
 
@@ -101,16 +102,7 @@ Atom TermFormGetPredicateForm(Atom termForm)
 
 void TermFormGetActorRoles(Atom termForm, index8 roleIndices[])
 {
-	Atom predicateForm = TermFormGetPredicateForm(termForm);
-	MultisetIterator iterator;
-	MultisetIterate(predicateForm, AT_NAME, &iterator);
-	index8 k = 0;
-	for(index8 roleIndex = 0; MultisetIteratorNext(&iterator); roleIndex++) {
-		ElementMultiple em = MultisetIteratorGetElement(&iterator);
-		for(index8 i = 0; i < em.multiple; i++)
-			roleIndices[k++] = roleIndex;
-	}
-	MultisetIteratorEnd(&iterator);
+	PredicateFormGetActorRoles(TermFormGetPredicateForm(termForm), roleIndices);
 }
 
 

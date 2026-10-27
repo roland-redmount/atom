@@ -18,16 +18,6 @@
 // The arity of a formula is a size8
 #define FORMULA_MAX_ARITY	255
 
-/**
- * A view of the form and actors of a formula, as returned by FormulaGetView().
- * A view owns nothing, and is only valid while the caller holds a reference
- * to the formula it was taken from.
- */
-typedef struct s_FormulaView {
-	Atom form;
-	TypedTuple const * actors;
-} FormulaView;
-
 
 /**
  * Set up and tear down the formula registry.
@@ -43,7 +33,8 @@ void RestoreFormulaStorage(void);
 void FreeFormulaStorage(void);
 
 /**
- * Create a formula from a form and an actors tuple, which is copied.
+ * Create a formula from a form and an actors tuple.
+ * The actors tuple is copied and put into canonical order.
  * The formula holds a reference to the form atom and to each actor.
  */
 Atom CreateFormula(Atom form, TypedTuple const * actors);
@@ -79,9 +70,39 @@ Atom FormulaGetForm(Atom formula);
 TypedTuple const * FormulaGetActors(Atom formula);
 
 /**
+ * A view of the form and actors of a formula, as returned by CreateFormulaView().
+ * The actors tuple must always be in canonical order.
+ * A FormulaView is only valid while the caller holds a reference to the formula.
+ */
+typedef struct s_FormulaView {
+	Atom form;
+	TypedTuple const * actors;
+} FormulaView;
+
+/**
+ * Arrange the actors tuple to canonical order, in place, and return the view of the
+ * formula of the given form and actors.
+ */
+FormulaView CreateFormulaView(Atom form, TypedTuple * actors);
+
+/**
  * The form and actors of a formula, retrieved in a single lookup.
  */
 FormulaView FormulaGetView(Atom formula);
+
+/**
+ * CLAUDE: Write the canonical order of the actors of a formula of the given form. Actor i of
+ * the canonical order is actors[permutation[i]].
+ * - Within each role of a term or predicate, the actors ascend by CompareTypedAtoms(), so
+ *   by atom type first. The atom types of a fact then ascend within each role, as the
+ *   column types of a relation do; see IsCanonicalRelation().
+ * - In a clause or conjunction, each term is in canonical order, and the terms of each
+ *   term form ascend by their actors.
+ * The sort is stable, so actors that compare equal keep their order. Every formula has its
+ * actors in canonical order, so that (foo 1 foo 2) and (foo 2 foo 1) are one formula.
+ */
+void GetCanonicalActorOrder(Atom form, TypedAtom const actors[], index8 * permutation);
+
 
 /**
  * The number of formulas in the registry, and the number of references to them.

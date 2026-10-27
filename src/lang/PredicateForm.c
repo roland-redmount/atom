@@ -103,6 +103,20 @@ size8 PredicateArity(Atom predicateForm)
 }
 
 
+void PredicateFormGetActorRoles(Atom predicateForm, index8 roleIndices[])
+{
+	MultisetIterator iterator;
+	MultisetIterate(predicateForm, AT_NAME, &iterator);
+	index8 k = 0;
+	for(index8 roleIndex = 0; MultisetIteratorNext(&iterator); roleIndex++) {
+		ElementMultiple em = MultisetIteratorGetElement(&iterator);
+		for(index8 i = 0; i < em.multiple; i++)
+			roleIndices[k++] = roleIndex;
+	}
+	MultisetIteratorEnd(&iterator);
+}
+
+
 static bool predicateRoleIndex(Atom predicateForm, Atom roleName, index8 * index)
 {
 	ASSERT(IsPredicateForm(predicateForm));

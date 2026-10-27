@@ -35,6 +35,11 @@ size8 PredicateNRoles(Atom predicateForm);
 size8 PredicateArity(Atom predicateForm);
 
 /**
+ * CLAUDE: Same as TermFormGetActorRoles(), for a predicate form.
+ */
+void PredicateFormGetActorRoles(Atom predicateForm, index8 roleIndices[]);
+
+/**
  * 0-based index of the first occurence of the given role (a AT_NAME)
  * The role must exist in predicateForm, or an ASSERT occurs.
  * 

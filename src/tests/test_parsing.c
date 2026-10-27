@@ -897,6 +897,75 @@ static void testFormOrderingOf(char const * formulaString)
 }
 
 
+/*
+ * CLAUDE: Parse a formula, and check the integer actor at each position as written.
+ */
+static void checkEnteredActors(char const * formulaString, int64 const enteredActors[], size8 arity)
+{
+	FormOrdering ordering;
+	index32 errorPosition;
+	Atom formula = ParseFormula(formulaString, &ordering, &errorPosition);
+	ASSERT_TRUE(formula.hash != 0)
+	FormulaView view = FormulaGetView(formula);
+	ASSERT_UINT32_EQUAL(FormArity(view.form), arity)
+	index8 actorIndices[arity];
+	FormOrderingGetEnteredActors(view.form, &ordering, actorIndices);
+	for(index8 k = 0; k < arity; k++)
+		ASSERT_INT64_EQUAL(TypedTupleGetElement(view.actors, actorIndices[k]).atom._int, enteredActors[k])
+	ReleaseFormula(formula);
+}
+
+
+/**
+ * CLAUDE: ParseFormula() records the order as written, also where the canonical actor order
+ * differs from it; see GetCanonicalActorOrder().
+ */
+static void testFormOrderingCanonical(void)
+{
+	checkEnteredActors("foo 2 foo 1", (int64[]) {2, 1}, 2);
+	checkEnteredActors("foo 3 bar 1 foo 2", (int64[]) {3, 1, 2}, 3);
+	checkEnteredActors("foo 2 & foo 1", (int64[]) {2, 1}, 2);
+	checkEnteredActors("zed 3 alpha 4 & zed 1 alpha 2", (int64[]) {3, 4, 1, 2}, 4);
+	checkEnteredActors("foo 4 foo 3 | ! foo 2 foo 1", (int64[]) {4, 3, 2, 1}, 4);
+}
+
+
+/**
+ * CLAUDE: Formulas that differ only in the order of the actors of one role, or of the terms
+ * of one term form, are one formula; see GetCanonicalActorOrder().
+ */
+static void testCanonicalActorOrder(void)
+{
+	char const * const formulaPairs[][2] = {
+		{"foo 1 foo 2", "foo 2 foo 1"},
+		{"foo 1 foo \"a\"", "foo \"a\" foo 1"},
+		{"foo 1 & foo 2", "foo 2 & foo 1"},
+		{"bar 1 baz 2 & bar 3 baz 4", "bar 3 baz 4 & bar 1 baz 2"},
+		{"near x near y | ! edge x to y", "near y near x | ! edge x to y"},
+	};
+	for(index8 i = 0; i < sizeof(formulaPairs) / sizeof(formulaPairs[0]); i++) {
+		Atom formula1 = CStringToFormula(formulaPairs[i][0]);
+		Atom formula2 = CStringToFormula(formulaPairs[i][1]);
+		ASSERT_TRUE(SameAtoms(formula1, formula2))
+		ReleaseFormula(formula2);
+		ReleaseFormula(formula1);
+	}
+
+	// CLAUDE: A formula created from actors out of canonical order
+	Atom formula = CStringToTerm("foo 1 foo 2");
+	TypedAtom actors[2] = {
+		CreateTypedAtom(AT_INT, (Atom) {._int = 2}),
+		CreateTypedAtom(AT_INT, (Atom) {._int = 1})
+	};
+	TypedTuple * actorsTuple = CreateTypedTupleFromArray(actors, 2);
+	Atom createdFormula = CreateFormula(FormulaGetForm(formula), actorsTuple);
+	ASSERT_TRUE(SameAtoms(createdFormula, formula))
+	FreeTypedTuple(actorsTuple);
+	ReleaseFormula(createdFormula);
+	ReleaseFormula(formula);
+}
+
+
 /**
  * CLAUDE: ParseFormula() records the order in which terms and roles were written.
  */
@@ -1562,6 +1631,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testGeneratorActor);
 	ExecuteTest(testParseFormula);
 	ExecuteTest(testFormOrdering);
+	ExecuteTest(testFormOrderingCanonical);
+	ExecuteTest(testCanonicalActorOrder);
 	ExecuteTest(testParseTermForm);
 	ExecuteTest(testParseActors);
 	ExecuteTest(testSplitColumns);

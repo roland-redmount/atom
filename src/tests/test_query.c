@@ -364,24 +364,19 @@ void testQueryRepeatedRole(void)
 
 
 /**
- * CLAUDE: A fact with two actors of different atom types in one role belongs to one typed
- * relation, whichever order the actors are written in. The relation has its columns in
- * canonical column order; see GetCanonicalColumnOrder(). Swapping the two actors would give
- * a tuple of another typed relation, so the fact is stored in one column order only.
+ * CLAUDE: A fact with two actors of different atom types in one role is one formula,
+ * whichever order the actors are written in, and belongs to one typed relation; see
+ * GetCanonicalActorOrder(). Swapping the two actors would give a tuple of another typed
+ * relation, so the fact is stored in one column order only.
  */
 void testQueryRepeatedRoleMixedTypes(void)
 {
 	Atom fact = CStringToTerm("foo 1 foo \"a\"");
 	Atom reversedFact = CStringToTerm("foo \"a\" foo 1");
+	ASSERT_TRUE(SameAtoms(fact, reversedFact))
 	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
-	ASSERT_TRUE(SameRelations(relation, RelationFromFact(FormulaGetView(reversedFact))))
 	ASSERT_TRUE(IsCanonicalRelation(relation))
-
-	Atom tuple[2];
-	Atom reversedTuple[2];
-	FactGetRelationTuple(FormulaGetView(fact), tuple);
-	FactGetRelationTuple(FormulaGetView(reversedFact), reversedTuple);
-	ASSERT_TRUE(TupleCompare(tuple, reversedTuple, 2) == 0)
+	Atom const * tuple = TypedTuplePeekAtoms(FormulaGetActors(fact));
 
 	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
 	ASSERT_UINT32_EQUAL(TupleStoreAddTuple(store, tuple), TUPLE_ADDED)
@@ -392,7 +387,7 @@ void testQueryRepeatedRoleMixedTypes(void)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo 1"), 1)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo 1 foo x"), 1)
 
-	ASSERT_UINT32_EQUAL(TupleStoreRemoveTuple(store, reversedTuple), TUPLE_REMOVED)
+	ASSERT_UINT32_EQUAL(TupleStoreRemoveTuple(store, tuple), TUPLE_REMOVED)
 	DropRelation(relation);
 	ReleaseFormula(reversedFact);
 	ReleaseFormula(fact);
@@ -412,9 +407,7 @@ static TypedRelation storeFacts(char const * const factStrings[], size8 nFacts)
 			store = CreateTupleStore(
 				relation, GetStorageProvider(PROVIDER_BTREE), FormArity(relation.form), 0);
 		}
-		Atom tuple[FormArity(relation.form)];
-		FactGetRelationTuple(FormulaGetView(fact), tuple);
-		TupleStoreAddTuple(store, tuple);
+		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)));
 		ReleaseFormula(fact);
 	}
 	return relation;
@@ -426,9 +419,7 @@ static void dropFacts(TypedRelation relation, char const * const factStrings[], 
 {
 	for(index8 i = 0; i < nFacts; i++) {
 		Atom fact = CStringToTerm(factStrings[i]);
-		Atom tuple[FormArity(relation.form)];
-		FactGetRelationTuple(FormulaGetView(fact), tuple);
-		RelationRemoveTuple(relation, tuple);
+		RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)));
 		ReleaseFormula(fact);
 	}
 	DropRelation(relation);

@@ -207,6 +207,11 @@ Service RegisterMachineServiceWithState(
 	
 	// Create the relation, unless it already exists
 	TypedRelation relation = {.form = termView.form, .typeSignature = typeSignature};
+	// CLAUDE: Within a repeated role, the signature must list the parameter types in ascending
+	// order, as every relation is in canonical column order; see IsCanonicalRelation(). The
+	// parameters of a role are ordered by their raw values, not by their types; see
+	// GetCanonicalActorOrder().
+	ASSERT(IsCanonicalRelation(relation))
 	TupleStore * store = 0;
 	if(RelationExists(relation))
 		store = RelationGetTupleStore(relation);
