@@ -138,6 +138,30 @@ static void getProviderTuple(
 }
 
 
+/* CLAUDE: Advance the form iterator to the next permutation that moves each column to a
+   column of the same atom type, and write the permutation. Returns false when no such
+   permutation is left. A permutation that moves a column to a column of another type
+   gives a tuple of another typed relation. */
+static bool nextStoredPermutation(
+	TupleStore const * store, FormIterator * formIterator, index8 permutation[])
+{
+	byte const * atomTypes = store->relation.typeSignature.atomTypes;
+	while(NextFormPermutation(formIterator)) {
+		GetTuplePermutation(formIterator, permutation);
+		bool keepsTypes = true;
+		for(index8 i = 0; i < store->nColumns; i++) {
+			if(atomTypes[permutation[i]] != atomTypes[i]) {
+				keepsTypes = false;
+				break;
+			}
+		}
+		if(keepsTypes)
+			return true;
+	}
+	return false;
+}
+
+
 byte TupleStoreAddTuple(TupleStore * store, Atom const tuple[])
 {
 	ASSERT(TupleStoreIsWritable(store))
@@ -157,8 +181,7 @@ byte TupleStoreAddTuple(TupleStore * store, Atom const tuple[])
 		// a reader finds the fact whichever order dispatch passes the query arguments in;
 		// see permutationMatch() in dispatch.c. A permuted tuple equal to one already
 		// stored, from actors that are equal, yields TUPLE_EXISTS.
-		while(NextFormPermutation(formIterator)) {
-			GetTuplePermutation(formIterator, permutation);
+		while(nextStoredPermutation(store, formIterator, permutation)) {
 			getProviderTuple(store, tuple, permutation, providerTuple);
 			store->provider->addTuple(store->storage, providerTuple);
 		}
@@ -185,8 +208,7 @@ byte TupleStoreRemoveTuple(TupleStore * store, Atom const tuple[])
 
 	if(result == TUPLE_REMOVED) {
 		// CLAUDE: Remove the column orders stored by TupleStoreAddTuple()
-		while(NextFormPermutation(formIterator)) {
-			GetTuplePermutation(formIterator, permutation);
+		while(nextStoredPermutation(store, formIterator, permutation)) {
 			getProviderTuple(store, tuple, permutation, providerTuple);
 			store->provider->removeTuple(store->storage, providerTuple);
 		}

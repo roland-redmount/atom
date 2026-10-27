@@ -2,6 +2,7 @@
 #include "kernel/ClosedRelation.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
+#include "kernel/multiset.h"
 #include "kernel/Parameter.h"
 #include "kernel/TypedRelation.h"
 #include "kernel/ServiceRegistry.h"
@@ -606,6 +607,89 @@ Operator * ServiceGetOperator(Service service)
 {
 	ServiceRecord const * record = ServiceGetRecord(service);
 	return record ? record->op : 0;
+}
+
+
+/*
+ * CLAUDE: Write the role of each column of a term form, numbering the roles of its
+ * predicate form 0, 1, ... in the column order.
+ */
+static void getColumnRoles(Atom termForm, index8 columnRoles[])
+{
+	Atom predicateForm = TermFormGetPredicateForm(termForm);
+	MultisetIterator iterator;
+	MultisetIterate(predicateForm, AT_NAME, &iterator);
+	index8 column = 0;
+	for(index8 role = 0; MultisetIteratorNext(&iterator); role++) {
+		ElementMultiple em = MultisetIteratorGetElement(&iterator);
+		for(index8 i = 0; i < em.multiple; i++)
+			columnRoles[column++] = role;
+	}
+	MultisetIteratorEnd(&iterator);
+}
+
+
+// CLAUDE: The columns filled by one argument of a service operator; see ServiceGetExchangeableGroups()
+typedef struct s_ArgumentColumns {
+	index8 role;
+	byte atomType;
+	size8 nColumns;
+	// CLAUDE: whether the argument is an output filling columns of a single role
+	bool isExchangeable;
+} ArgumentColumns;
+
+
+size8 ServiceGetExchangeableGroups(Service service, index8 * groupArguments, size8 * groupSizes)
+{
+	Atom form = service.relation.form;
+	if(!IsTermForm(form))
+		return 0;
+	size8 arity = FormArity(form);
+	index8 columnRoles[arity];
+	getColumnRoles(form, columnRoles);
+	index8 argumentMap[arity];
+	size8 nArguments = EqualitySignatureGetArgumentMap(service.equalitySignature, arity, argumentMap);
+
+	ArgumentColumns arguments[nArguments];
+	SetMemory(arguments, nArguments * sizeof(ArgumentColumns), 0);
+	for(index8 i = 0; i < arity; i++) {
+		ArgumentColumns * argument = &arguments[argumentMap[i]];
+		if(argument->nColumns == 0) {
+			argument->role = columnRoles[i];
+			argument->atomType = service.relation.typeSignature.atomTypes[i];
+			argument->isExchangeable = (service.ioSignature.parameterIO[i] == PARAMETER_OUT);
+		}
+		else if(argument->role != columnRoles[i])
+			argument->isExchangeable = false;
+		argument->nColumns++;
+	}
+
+	// CLAUDE: Collect each group from its first argument, marking the arguments taken
+	bool taken[nArguments];
+	SetMemory(taken, nArguments * sizeof(bool), 0);
+	size8 nGroups = 0;
+	size8 nGroupArguments = 0;
+	for(index8 a = 0; a < nArguments; a++) {
+		if(taken[a] || !arguments[a].isExchangeable)
+			continue;
+		size8 groupSize = 1;
+		groupArguments[nGroupArguments] = a;
+		for(index8 b = a + 1; b < nArguments; b++) {
+			if(!taken[b] && arguments[b].isExchangeable
+				&& (arguments[b].role == arguments[a].role)
+				&& (arguments[b].atomType == arguments[a].atomType)
+				&& (arguments[b].nColumns == arguments[a].nColumns))
+			{
+				taken[b] = true;
+				groupArguments[nGroupArguments + groupSize++] = b;
+			}
+		}
+		if(groupSize >= 2) {
+			groupSizes[nGroups++] = groupSize;
+			nGroupArguments += groupSize;
+		}
+	}
+	return nGroups;
 }
 
 

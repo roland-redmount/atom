@@ -322,8 +322,19 @@ void testQueryRepeatedRole(void)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo 2 foo x"), 1)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo 1"), 1)
 	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo 2"), 1)
-	// The answers x = 1, y = 2 and x = 2, y = 1
-	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo y"), 2)
+	// CLAUDE: The answers x = 1, y = 2 and x = 2, y = 1 are one fact
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo y"), 1)
+
+	// CLAUDE: A join sees both column orders: only x = 2, y = 1 joins with (bar 2)
+	Atom barFact = CStringToTerm("bar 2");
+	TypedRelation barRelation = RelationFromFact(FormulaGetView(barFact));
+	TupleStore * barStore = CreateTupleStore(barRelation, GetStorageProvider(PROVIDER_BTREE), 1, 0);
+	TupleStoreAddTuple(barStore, TypedTuplePeekAtoms(FormulaGetActors(barFact)));
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo y & bar x"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo y & bar y"), 1)
+	TupleStoreRemoveTuple(barStore, TypedTuplePeekAtoms(FormulaGetActors(barFact)));
+	DropRelation(barRelation);
+	ReleaseFormula(barFact);
 
 	// The reversed fact is the same fact
 	ASSERT_UINT32_EQUAL(
@@ -349,6 +360,165 @@ void testQueryRepeatedRole(void)
 	ReleaseFormula(equalActorsFact);
 	ReleaseFormula(reversedFact);
 	ReleaseFormula(fact);
+}
+
+
+/**
+ * CLAUDE: Two actors of different atom types in one role are stored in one column order,
+ * as swapping them gives a tuple of another typed relation.
+ */
+void testQueryRepeatedRoleMixedTypes(void)
+{
+	Atom fact = CStringToTerm("foo 1 foo \"a\"");
+	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 2, 0);
+	ASSERT_UINT32_EQUAL(
+		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact))), TUPLE_ADDED)
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 1)
+
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo y"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo \"a\" foo x"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("foo x foo 1"), 1)
+
+	ASSERT_UINT32_EQUAL(
+		TupleStoreRemoveTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact))), TUPLE_REMOVED)
+	DropRelation(relation);
+	ReleaseFormula(fact);
+}
+
+
+/* CLAUDE: Add each fact written by the C strings to the tuple store of its relation, which
+   is created for the first fact. Returns the relation. */
+static TypedRelation storeFacts(char const * const factStrings[], size8 nFacts)
+{
+	TypedRelation relation;
+	TupleStore * store = 0;
+	for(index8 i = 0; i < nFacts; i++) {
+		Atom fact = CStringToTerm(factStrings[i]);
+		if(!store) {
+			relation = RelationFromFact(FormulaGetView(fact));
+			store = CreateTupleStore(
+				relation, GetStorageProvider(PROVIDER_BTREE), FormArity(relation.form), 0);
+		}
+		TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)));
+		ReleaseFormula(fact);
+	}
+	return relation;
+}
+
+
+/* CLAUDE: Remove the facts added by storeFacts(), and drop their relation. */
+static void dropFacts(TypedRelation relation, char const * const factStrings[], size8 nFacts)
+{
+	for(index8 i = 0; i < nFacts; i++) {
+		Atom fact = CStringToTerm(factStrings[i]);
+		RelationRemoveTuple(relation, TypedTuplePeekAtoms(FormulaGetActors(fact)));
+		ReleaseFormula(fact);
+	}
+	DropRelation(relation);
+}
+
+
+/**
+ * CLAUDE: A rule whose head term repeats a role derives a fact in every column order of
+ * the head, so a query finds the fact whichever column the query binds. The answer does
+ * not depend on which query compiles the rule first.
+ */
+void testQueryRepeatedRoleRule(void)
+{
+	char const * const edges[] = {"edge 1 to 2"};
+	TypedRelation edgeRelation = storeFacts(edges, 1);
+
+	FormulaView clause = DictionaryAddClauseFromCString("link x link y | ! edge x to y");
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("link 2 link x"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("link x link 2"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("link x link y"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("link 2 link 1"), 1)
+	DictionaryRemoveClause(&clause);
+
+	// CLAUDE: The same queries in the opposite order, compiled anew
+	clause = DictionaryAddClauseFromCString("link x link y | ! edge x to y");
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("link x link 2"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("link 2 link x"), 1)
+	DictionaryRemoveClause(&clause);
+
+	// CLAUDE: Two rules deriving the two column orders of one fact
+	FormulaView forward = DictionaryAddClauseFromCString("near x near y | ! edge x to y");
+	FormulaView backward = DictionaryAddClauseFromCString("near x near y | ! edge y to x");
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("near x near y"), 1)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("near 1 near x"), 1)
+	DictionaryRemoveClause(&backward);
+	DictionaryRemoveClause(&forward);
+
+	dropFacts(edgeRelation, edges, 1);
+}
+
+
+/**
+ * CLAUDE: The connected pairs of an undirected graph with edges 1 -> 2 -> 3, computed by
+ * a recursive rule whose head term repeats a role. Every pair of the 3 nodes is connected,
+ * which gives the 6 facts {1 1}, {2 2}, {3 3}, {1 2}, {2 3} and {1 3}.
+ *
+ * Each query binding a column runs before the query binding none, as the service for the
+ * latter would also answer the former through a FILTER operator.
+ */
+void testQueryRepeatedRoleRecursiveRule(void)
+{
+	char const * const edges[] = {"edge 1 to 2", "edge 2 to 3"};
+	TypedRelation edgeRelation = storeFacts(edges, 2);
+	FormulaView base = DictionaryAddClauseFromCString("conn x conn y | ! edge x to y");
+	FormulaView step = DictionaryAddClauseFromCString("conn x conn z | ! conn x conn y | ! conn y conn z");
+
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("conn 3 conn x"), 3)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("conn x conn 3"), 3)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("conn 1 conn x"), 3)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("conn x conn 1"), 3)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("conn x conn y"), 6)
+
+	DictionaryRemoveClause(&step);
+	DictionaryRemoveClause(&base);
+	dropFacts(edgeRelation, edges, 2);
+}
+
+
+/*
+ * CLAUDE: Count the facts of the queries in testQueryRepeatedRoleRecursiveTermOrder(), given
+ * the recursive rule written by the C string.
+ */
+static void runRecursiveTermOrderQueries(char const * recursiveRule)
+{
+	FormulaView base = DictionaryAddClauseFromCString("conn x conn y | ! edge x to y");
+	FormulaView step = DictionaryAddClauseFromCString(recursiveRule);
+
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("conn 3 conn x"), 3)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("conn x conn 3"), 3)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("conn 1 conn x"), 2)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("conn x conn 1"), 2)
+	ASSERT_UINT32_EQUAL(runUserQueryAndCountTuples("conn x conn y"), 5)
+
+	DictionaryRemoveClause(&step);
+	DictionaryRemoveClause(&base);
+}
+
+
+/**
+ * CLAUDE: Two recursive rules defining the same relation, with the recursive term written
+ * in either column order. A recursive term compiles after the other terms of its clause.
+ * For the query (conn 3 conn x) and the head term in swapped column order, the recursive
+ * term is then (conn #2> conn #3<) in the first rule and (conn #3< conn #2>) in the second.
+ * The first rule needs the recursive term read in swapped column order, and the second
+ * rule in its own column order; see compileSelfTerm().
+ *
+ * The rules extend a pair only along an edge in its forward direction. From the edges
+ * 1 -> 2 -> 3 they derive the 5 facts {1 2}, {2 3}, {1 3}, {2 2} and {3 3}.
+ */
+void testQueryRepeatedRoleRecursiveTermOrder(void)
+{
+	char const * const edges[] = {"edge 1 to 2", "edge 2 to 3"};
+	TypedRelation edgeRelation = storeFacts(edges, 2);
+	runRecursiveTermOrderQueries("conn x conn z | ! conn x conn y | ! edge y to z");
+	runRecursiveTermOrderQueries("conn x conn z | ! conn y conn x | ! edge y to z");
+	dropFacts(edgeRelation, edges, 2);
 }
 
 
@@ -750,6 +920,10 @@ int main(int argc, char * argv[])
 	ExecuteTest(testQueryParameterIO);
 	ExecuteTest(testQueryRepeatedVariable);
 	ExecuteTest(testQueryRepeatedRole);
+	ExecuteTest(testQueryRepeatedRoleMixedTypes);
+	ExecuteTest(testQueryRepeatedRoleRule);
+	ExecuteTest(testQueryRepeatedRoleRecursiveRule);
+	ExecuteTest(testQueryRepeatedRoleRecursiveTermOrder);
 	ExecuteTest(testQueryCompileIgnoresRepeatedVariable);
 	ExecuteTest(testQueryWithoutAnswer);
 	ExecuteTest(testInvalidateServiceByNewRelation);

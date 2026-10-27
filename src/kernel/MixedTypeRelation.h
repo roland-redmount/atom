@@ -57,6 +57,9 @@ typedef struct s_MixedTypeRelation {
 			// Context of the current service, null before the first service and
 			// between two services
 			OperatorContext * context;
+			// CLAUDE: The CANONICAL operator over the current service's operator, or 0 if
+			// the service has no exchangeable group; see ServiceGetExchangeableGroups()
+			Operator * canonicalOperator;
 			// Set once the last matching service has been read, as neither the
 			// dispatch iterator nor an operator context may be called again
 			bool isExhausted;

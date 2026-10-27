@@ -22,6 +22,7 @@
 #include "kernel/tuple.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"
+#include "lang/FormPermutation.h"
 #include "lang/IndexedFormula.h"
 #include "lang/SubstitutionList.h"
 #include "lang/TermForm.h"
@@ -32,6 +33,7 @@
 #include "storage/RelationBTree.h"
 #include "util/combinations.h"
 #include "util/ResizingArray.h"
+#include "util/sort.h"
 
 
 /**
@@ -637,6 +639,35 @@ static Operator * skipIdentityOperator(Operator * op)
 }
 
 
+/*
+ * Test whether the self term, with its actors in the given order, fits the head
+ * term: each parameter type agrees with the head's where it is known, the term has an input
+ * where the head has an input, and the term repeats an actor where the head repeats a
+ * parameter. The permutation maps termParameters[] to headParameters[]
+ */
+static bool selfTermFitsHead(
+	Atom const termParameters[], TypedTuple const * termActors, Atom const headParameters[],
+	EqualitySignature headEqualitySignature, index8 const permutation[], size8 termArity)
+{
+	for(index8 i = 0; i < termArity; i++) {
+		Atom termParameter = termParameters[permutation[i]];
+		// The term parameter type must agree with the head if it is known
+		if(termParameter.parameter.atomType
+			&& (termParameter.parameter.atomType != headParameters[i].parameter.atomType))
+			return false;
+		// The term must have an input parameter where the head term has an input parameter
+		if((headParameters[i].parameter.io == PARAMETER_IN) && (termParameter.parameter.io != PARAMETER_IN))
+			return false;
+		index8 repeatOf = headEqualitySignature.repeatOf[i];
+		if(repeatOf && !SameTypedAtoms(
+				TypedTupleGetElement(termActors, permutation[i]),
+				TypedTupleGetElement(termActors, permutation[repeatOf - 1])))
+			return false;
+	}
+	return true;
+}
+
+
 /**
  * Attempt to compile the a "self" term in state->indexedClause given by termIndex,
  * which has the same form as the head term of the clause.
@@ -660,26 +691,33 @@ static Operator * compileSelfTerm(
 
 	// The self term's parameter types and equality signature are determined by the head term's
 	byte headAtomTypes[termArity];
-	for(index8 i = 0; i < termArity; i++) {
-		// The term parameter type must agree with the head if it is known
+	for(index8 i = 0; i < termArity; i++)
 		headAtomTypes[i] = headParametersArray[i].parameter.atomType;
-		if(termParameters[i].parameter.atomType && (termParameters[i].parameter.atomType != headAtomTypes[i])) {
-			FreeTypedTuple(termActors);
-			return 0;
-		}
-	}
 	EqualitySignature equalitySignature = ParametersGetEqualitySignature(headParametersArray, termArity);
 
-	// The parameter IO is specified by the self term
-	byte termParameterIO[termArity];
-	for(index8 i = 0; i < termArity; i++) {
-		// The term must have an input parameter where the head term has an input parameter
-		termParameterIO[i] = termParameters[i].parameter.io;
-		if((headParametersArray[i].parameter.io == PARAMETER_IN) && (termParameterIO[i] != PARAMETER_IN)) {
-			FreeTypedTuple(termActors);
-			return 0;
-		}
+	// The derived relation holds every column order of a fact whose form repeats a
+	// role; see addHeadColumnOrderMatches(). The self term may therefore read the relation
+	// in any column order of its form, and takes the first order that fits the head term.
+	index8 permutation[termArity];
+	FormIterator * formIterator = CreateFormIterator(state->termForms[termIndex]);
+	bool fit = false;
+	do {
+		GetTuplePermutation(formIterator, permutation);
+		fit = selfTermFitsHead(
+			termParameters, termActors, headParametersArray, equalitySignature, permutation, termArity);
+	} while(!fit && NextFormPermutation(formIterator));
+	FreeFormIterator(formIterator);
+	if(!fit) {
+		FreeTypedTuple(termActors);
+		return 0;
 	}
+
+	// The parameter IO is specified by the self term
+	// CLAUDE: A fixed size array, since an optimized build reads a variable length array
+	// here as a region of size 0; see -Wstringop-overread
+	byte termParameterIO[RELATION_MAX_ARITY];
+	for(index8 i = 0; i < termArity; i++)
+		termParameterIO[i] = termParameters[permutation[i]].parameter.io;
 	IOSignature ioSignature = CreateIOSignature(termParameterIO, termArity);
 	
 	// The self term of a non-recursive clause reads the variant directly, if the term binds
@@ -703,9 +741,7 @@ static Operator * compileSelfTerm(
 	}
 
 	// Create the term operator, identity permutation
-	index8 permutation[termArity];
-	for(index8 i = 0; i < termArity; i++)
-		permutation[i] = i;
+	// CLAUDE: The permutation is the column order chosen by selfTermFitsHead(), which may differ from the identity
 	Operator * op = createTermOperator(
 		CreateTypeSignature(headAtomTypes, termArity), ioSignature, equalitySignature, childOperator,
 		termActors, permutation, serviceParameters, clauseMap);
@@ -1730,6 +1766,11 @@ typedef struct QueryClauseMatch {
 	bool hasRecursiveTerms;
 	// Whether the clause is recursive; see classifyClauses()
 	bool recursive;
+
+	// CLAUDE: A copy of the clause actors with the head term actors in another column order,
+	// owned by this match, or 0. If set, the actors field points to this copy; see
+	// addHeadColumnOrderMatches().
+	TypedTuple * permutedActors;
 } QueryClauseMatch;
 
 
@@ -1880,6 +1921,94 @@ static bool unifyQueryWithTerm(
 }
 
 
+/*
+ * CLAUDE: Test whether the given head actors equal those of a column order tried before.
+ * The triedHeads array holds the head actors of each column order tried, one after the other.
+ */
+static bool isTriedHead(ResizingArray const * triedHeads, TypedAtom const headActors[], size8 arity)
+{
+	TypedAtom const * tried = ResizingArrayGetMemory(triedHeads);
+	for(index32 k = 0; k < triedHeads->nElements; k += arity) {
+		bool same = true;
+		for(index8 i = 0; same && (i < arity); i++)
+			same = SameTypedAtoms(tried[k + i], headActors[i]);
+		if(same)
+			return true;
+	}
+	return false;
+}
+
+
+/*
+ * CLAUDE: Append a QueryClauseMatch for each distinct column order of the head term actors
+ * that unifies with the query. The clauseMatch gives the clause and the head term, with the
+ * actors in the order stored in the dictionary. A head term whose form repeats a role states
+ * the same fact in each column order of the actors of that role. For example, the clause
+ * (link x link y <- edge x to y) also derives (link y link x), and the query
+ * (link 2 link _) unifies only with that column order. Returns true if any column order
+ * unifies.
+ */
+static bool addHeadColumnOrderMatches(
+	ParameterizedQuery const * query, QueryClauseMatch const * clauseMatch,
+	ResizingArray * queryClauseMatches)
+{
+	size8 arity = query->arity;
+	TypedTuple const * clauseActors = clauseMatch->actors;
+	index8 headActorsOffset = clauseMatch->headActorsOffset;
+	ResizingArray triedHeads;
+	CreateResizingArray(&triedHeads, sizeof(TypedAtom), 2 * arity);
+	bool unifiesAny = false;
+	index8 permutation[arity];
+	FormIterator * formIterator = CreateFormIterator(query->form);
+	do {
+		GetTuplePermutation(formIterator, permutation);
+		TypedAtom headActors[arity];
+		for(index8 i = 0; i < arity; i++)
+			headActors[i] = TypedTupleGetElement(clauseActors, headActorsOffset + permutation[i]);
+		// CLAUDE: Equal actors in one role give the same head term in several column orders
+		if(isTriedHead(&triedHeads, headActors, arity))
+			continue;
+		for(index8 i = 0; i < arity; i++)
+			ResizingArrayAppend(&triedHeads, &headActors[i]);
+
+		TypedTuple * permutedActors = 0;
+		if(!IsIdentityPermutation(permutation, arity)) {
+			permutedActors = CreateTupleFromTuple(clauseActors);
+			for(index8 i = 0; i < arity; i++)
+				TypedTupleSetElement(permutedActors, headActorsOffset + i, headActors[i]);
+		}
+		TypedTuple const * actors = permutedActors ? permutedActors : clauseActors;
+		Substitution subst;
+		bool unifies = unifyQueryWithTerm(query, actors, headActorsOffset, &subst);
+		FreeSubstitution(&subst);
+		if(unifies) {
+			QueryClauseMatch match = *clauseMatch;
+			match.actors = actors;
+			match.permutedActors = permutedActors;
+			ResizingArrayAppend(queryClauseMatches, &match);
+			unifiesAny = true;
+		}
+		else if(permutedActors)
+			FreeTypedTuple(permutedActors);
+	} while(NextFormPermutation(formIterator));
+	FreeFormIterator(formIterator);
+	FreeResizingArray(&triedHeads);
+	return unifiesAny;
+}
+
+
+/* CLAUDE: Free the actors copies owned by the clause matches, and the array of matches. */
+static void freeClauseMatches(ResizingArray * clauseMatches)
+{
+	QueryClauseMatch * matches = ResizingArrayGetMemory(clauseMatches);
+	for(index32 i = 0; i < clauseMatches->nElements; i++) {
+		if(matches[i].permutedActors)
+			FreeTypedTuple(matches[i].permutedActors);
+	}
+	FreeResizingArray(clauseMatches);
+}
+
+
 /**
  * Collect every clause whose head term unifies with the query, appending one
  * QueryClauseMatch per clause to the given array. A clause with a term of the
@@ -1889,6 +2018,8 @@ static bool unifyQueryWithTerm(
  * To find rules (clauses) c that contains a matching term form,
  * we query (multiset c element @term-form multiple m),
  */
+/* CLAUDE: A clause whose head term form repeats a role may give one QueryClauseMatch for each
+   column order of its head term actors; see addHeadColumnOrderMatches(). */
 static void findMatchingClauses(ParameterizedQuery const * query, ResizingArray * queryClauseMatches)
 {
 	// Collect the clause forms holding the query term form, with the multiple of that term form
@@ -1922,22 +2053,16 @@ static void findMatchingClauses(ParameterizedQuery const * query, ResizingArray 
 			// first one that unifies as the head term.
 			// NOTE: is taking the first term always valid?
 			for(index8 m = 1; m <= clauseFormMultiple->multiple; m++) {
-				index8 headActorsOffset = ClauseGetTermActorsIndex(clauseForm, query->form, m);
-				Substitution subst;
-				bool unifies = unifyQueryWithTerm(query, clauseActors, headActorsOffset, &subst);
-				FreeSubstitution(&subst);
-				if(!unifies)
-					continue;
 				QueryClauseMatch clauseMatch = {
 					.clauseForm = clauseForm,
 					.actors = clauseActors,
 					.headTermIndex = ClauseGetTermIndex(clauseForm, query->form, m),
-					.headActorsOffset = headActorsOffset,
+					.headActorsOffset = ClauseGetTermActorsIndex(clauseForm, query->form, m),
 					.hasRecursiveTerms = hasRecursiveTerms,
 					.recursive = hasRecursiveTerms
 				};
-				ResizingArrayAppend(queryClauseMatches, &clauseMatch);
-				break;
+				if(addHeadColumnOrderMatches(query, &clauseMatch, queryClauseMatches))
+					break;
 			}
 		}
 		DictionaryIteratorEnd(&dictIterator);
@@ -2319,7 +2444,7 @@ static size8 compileQueryClauses(
 	findMatchingClauses(query, &clauseMatches);
 	size32 nClauseMatches = clauseMatches.nElements;
 	if(nClauseMatches == 0) {
-		FreeResizingArray(&clauseMatches);
+		freeClauseMatches(&clauseMatches);
 		return nVariants;
 	}
 	ResizingArray nonRecursiveOrder;
@@ -2371,7 +2496,7 @@ static size8 compileQueryClauses(
 	ASSERT(nVariants == nNonRecursiveVariants)
 
 	FreeResizingArray(&nonRecursiveOrder);
-	FreeResizingArray(&clauseMatches);
+	freeClauseMatches(&clauseMatches);
 	return nVariants;
 }
 

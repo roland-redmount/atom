@@ -171,7 +171,21 @@ void ServiceIteratorEnd(ServiceIterator * iterator);
  * Retrieve the operator of the service for the given Service.
  * If the service is not registers, returns 0
  */
+/* CLAUDE: For a relation whose form repeats a role, the operator yields every column order of
+   a fact that agrees with the input arguments. A CANONICAL operator over it yields one tuple
+   per fact; see ServiceGetExchangeableGroups() and createServiceContext() in MixedTypeRelation.c. */
 Operator * ServiceGetOperator(Service service);
+
+/**
+ * CLAUDE: Find the exchangeable groups of a service; see OPERATOR_CANONICAL. A group is a
+ * list of at least 2 output arguments of the service operator, in ascending order. The
+ * arguments of a group fill columns of one role and one atom type, and each argument
+ * fills the same number of columns. Exchanging the values of two such arguments gives
+ * the same fact. Only a term form has groups.
+ * The groupArguments and groupSizes arrays must hold one element per column of the
+ * relation. Returns the number of groups.
+ */
+size8 ServiceGetExchangeableGroups(Service service, index8 * groupArguments, size8 * groupSizes);
 
 /**
  * Copy the Service evaluated by the given operator to *service.
