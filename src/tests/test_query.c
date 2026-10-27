@@ -633,6 +633,22 @@ void testQueryMixedTypeRecursion(void)
 	// CLAUDE: The edge 3 -> 4 gives the (INT, INT) relation a base case
 	char const * const withBase[] = {"edge 1 to \"a\"", "edge \"a\" to 2", "edge 3 to 4"};
 	checkMixedTypeReach(withBase, 3, 4, 2, 1);
+
+	// CLAUDE: A longer chain, whose facts alternate between the (INT, ID) and (INT, INT)
+	// relations more often. The two relations are derived by separate fixpoints, which miss
+	// some of the 15 facts, so only the edges themselves are checked. The query
+	// (reach x to "c") compiles (reach #1>INT to #2<ID) inside its own compilation, which
+	// registered that service twice; see CompileStackContainsTerm().
+	char const * const longChain[] = {
+		"edge 1 to \"a\"", "edge \"a\" to 2", "edge 2 to \"b\"", "edge \"b\" to 3", "edge 3 to \"c\""};
+	assertFacts(longChain, 5);
+	FormulaView base = DictionaryAddClauseFromCString("reach x to y | ! edge x to y");
+	FormulaView step = DictionaryAddClauseFromCString("reach x to z | ! reach x to y | ! edge y to z");
+	ASSERT_TRUE(runUserQueryAndCountTuples("reach x to \"c\"") >= 1)
+	ASSERT_TRUE(runUserQueryAndCountTuples("reach x to y") >= 5)
+	DictionaryRemoveClause(&step);
+	DictionaryRemoveClause(&base);
+	retractFacts(longChain, 5);
 }
 
 

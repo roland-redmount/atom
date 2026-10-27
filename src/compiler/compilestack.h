@@ -39,6 +39,9 @@ void CompileStackPush(CompileStack * stack, ParameterizedQuery const * query);
  */
 void CompileStackPop(CompileStack * stack);
 
+/* CLAUDE: A query is on the stack also if it overlaps a query on the stack: a parameter of
+   unknown type in one of the two queries matches any type in the other. Compiling such a query
+   would register services that the query on the stack registers once it completes. */
 bool CompileStackContainsTerm(CompileStack const * stack, ParameterizedQuery const * query);
 
 /**
