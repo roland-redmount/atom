@@ -2810,6 +2810,45 @@ static size8 compileQueryVariants(
 }
 
 
+/*
+ * CLAUDE: Copy a parameterized query of a term form, and sort the parameters of each role
+ * whose parameter types are all known into canonical column order; see GetCanonicalActorOrder().
+ * The parameters are then numbered 1, 2, ... in their new order. A role holding a parameter of
+ * unknown type keeps its order, and canonicalizeVariantOrder() orders it once compilation has
+ * resolved the type. A query of a conjunction form is copied unchanged, as in
+ * canonicalizeVariantOrder().
+ */
+static void copyQueryInCanonicalOrder(ParameterizedQuery const * query, ParameterizedQuery * canonicalQuery)
+{
+	*canonicalQuery = *query;
+	if(!IsTermForm(query->form))
+		return;
+	// CLAUDE: Fixed size arrays, since an optimized build reads variable length arrays here
+	// as regions of size 0; see -Wstringop-overflow
+	index8 roleIndices[RELATION_MAX_ARITY];
+	TermFormGetActorRoles(query->form, roleIndices);
+	bool roleTypesKnown[RELATION_MAX_ARITY];
+	for(index8 i = 0; i < query->arity; i++)
+		roleTypesKnown[roleIndices[i]] = true;
+	for(index8 i = 0; i < query->arity; i++) {
+		if(!query->parameters[i].parameter.atomType)
+			roleTypesKnown[roleIndices[i]] = false;
+	}
+	// CLAUDE: The parameters of a role with an unknown type all compare equal, and keep their
+	// order, as the sort is stable
+	TypedAtom typedParameters[RELATION_MAX_ARITY];
+	for(index8 i = 0; i < query->arity; i++) {
+		byte atomType = roleTypesKnown[roleIndices[i]] ? query->parameters[i].parameter.atomType : 0;
+		typedParameters[i] = (TypedAtom) {.type = atomType};
+	}
+	index8 permutation[RELATION_MAX_ARITY];
+	GetCanonicalActorOrder(query->form, typedParameters, permutation);
+	for(index8 i = 0; i < query->arity; i++)
+		canonicalQuery->parameters[i] = query->parameters[permutation[i]];
+	RenumberParameters(canonicalQuery->parameters, query->arity);
+}
+
+
 /**
  * Compile a parameterized query into services, registering each one.
  * If the services array is not 0, a copy of each compiled service is written to it.
@@ -2817,15 +2856,22 @@ static size8 compileQueryVariants(
  * this function does nothing and returns 0.
  */
 static size8 compileParameterizedQuery(
-	CompileStack * compileStack, ParameterizedQuery const * query, Service services[])
+	CompileStack * compileStack, ParameterizedQuery const * givenQuery, Service services[])
 {
 #ifdef DEBUG
 	// CLAUDE: The parameters must be numbered 1, 2, ... in order of first occurrence
-	ParameterizedQuery renumberedQuery = *query;
-	RenumberParameters(renumberedQuery.parameters, query->arity);
-	for(index8 i = 0; i < query->arity; i++)
-		ASSERT(renumberedQuery.parameters[i].parameter.number == query->parameters[i].parameter.number)
+	ParameterizedQuery renumberedQuery = *givenQuery;
+	RenumberParameters(renumberedQuery.parameters, givenQuery->arity);
+	for(index8 i = 0; i < givenQuery->arity; i++)
+		ASSERT(renumberedQuery.parameters[i].parameter.number == givenQuery->parameters[i].parameter.number)
 #endif
+	// CLAUDE: A relation created while compiling, such as the relation of an ifact rule, takes the
+	// column order of the query; see setupIFactRuleRelation(). The caller finds the compiled
+	// services again by dispatch, which matches any column order.
+	ParameterizedQuery canonicalQuery;
+	copyQueryInCanonicalOrder(givenQuery, &canonicalQuery);
+	ParameterizedQuery const * query = &canonicalQuery;
+
 	// test if the query is on the compilation stack
 	if(CompileStackContainsTerm(compileStack, query))
 		return 0;
