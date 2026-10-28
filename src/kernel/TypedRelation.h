@@ -77,10 +77,15 @@ bool IsNullRelation(TypedRelation relation);
 data64 RelationHash(TypedRelation relation, data64 initialHash);
 
 /**
- * Return the relation that the given fact belongs to,
- * based on its atom types. The fact must be a term.
+ * Test whether a type signature is in canonical column order.
+ */
+bool IsCanonicalRelation(TypedRelation relation);
+
+/**
+ * Return the relation that the given fact belongs to, based on its atom types.
+ * The fact must be a term.
  * The returned TypedRelation might not exist in the relation registry.
- * If the fact contains an AT_GENERATOR atom, the relation type is inferred to be AT_ID.
+ * If the fact contains an AT_GENERATOR atom, its relation type is inferred to be AT_ID.
  */
 TypedRelation RelationFromFact(FormulaView term);
 

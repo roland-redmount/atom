@@ -109,6 +109,16 @@ static bool intDivisionCall(void * state, Atom arguments[], void * readerData, v
 //------------------------------- Floating point arithmetic ------------------------------------
 
 /**
+ * CLAUDE: Type predicate (float #1<FLOAT); see integerCall()
+ */
+static bool floatCall(void * state, Atom arguments[], void * readerData, void * storage)
+{
+	// CLAUDE: if the query dispatches to this service, the argument must be a FLOAT
+	return true;
+}
+
+
+/**
  * (+ x<FLOAT + y<FLOAT = z>FLOAT)
  */
 static bool addFloatCall(void * state, Atom arguments[], void * readerData, void * storage)
@@ -285,6 +295,7 @@ static bool rangeCall(void * state, Atom arguments[], void * readerData, void * 
 
 static NamedFunction const mathFunctions[] = {
 	{"math.integerCall", (AnyFunction) integerCall},
+	{"math.floatCall", (AnyFunction) floatCall},
 	{"math.addIntCall", (AnyFunction) addIntCall},
 	{"math.subIntCall", (AnyFunction) subIntCall},
 	{"math.mulIntCall", (AnyFunction) mulIntCall},
@@ -313,7 +324,7 @@ void RegisterMathFunctions(void)
 
 #define N_MATH_RULES	5
 // The number of relations closed by MathSetup()
-#define N_MATH_CLOSED_FORMS	7
+#define N_MATH_CLOSED_FORMS	8
 
 typedef struct s_MathLibrary {
 	uint32 moduleID;
@@ -346,6 +357,8 @@ void MathSetup(void)
 	// Type predicates
 	Service service = RegisterMachineService(mathLibrary->moduleID, "integer #1<INT", integerCall);
 	mathLibrary->closedForms[0] = service.relation.form;
+	service = RegisterMachineService(mathLibrary->moduleID, "float #1<FLOAT", floatCall);
+	mathLibrary->closedForms[7] = service.relation.form;
 
 	// Integer arithmetic
 	service = RegisterMachineService(mathLibrary->moduleID, "+ #1<INT + #2<INT = #3>INT", addIntCall);
@@ -397,8 +410,8 @@ void MathSetup(void)
 	addMathRule(2, "* x * y = z | ! * z / x = y");
 
 	// Mixed float-int arithmetic. These rules will yield services only for FLOAT x and INT i
-	addMathRule(3, "+ x + i = y | ! integer i float f | ! + x + f = y");
-	addMathRule(4, "* x * i = y | ! integer i float f | ! * x * f = y");
+	addMathRule(3, "+ x + i = y | ! float x | ! integer i float f | ! + x + f = y");
+	addMathRule(4, "* x * i = y | ! float x | ! integer i float f | ! * x * f = y");
 
 	// Close relations
 	for(index32 i = 0; i < N_MATH_CLOSED_FORMS; i++)

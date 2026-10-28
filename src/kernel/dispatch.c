@@ -114,11 +114,7 @@ static bool permutationMatch(
 	Service service, Atom const queryParameters[], size8 nParameters, int matchMode, index8 permutation[])
 {
 	// iterate over all permutations of the form
-	// CLAUDE: A conjunction form is permuted as a whole: its terms of equal form, and the
-	// roles within each term. A term form is permuted by its predicate form.
-	Atom permutedForm = IsConjunctionForm(service.relation.form) ?
-		service.relation.form : TermFormGetPredicateForm(service.relation.form);
-	FormIterator * iter = CreateFormIterator(permutedForm);
+	FormIterator * iter = CreateFormIterator(service.relation.form);
 	bool match = false;
 	do {
 		GetTuplePermutation(iter, permutation);

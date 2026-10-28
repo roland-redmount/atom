@@ -363,9 +363,27 @@ data64 RelationHash(TypedRelation relation, data64 initialHash)
 }
 
 
+bool IsCanonicalRelation(TypedRelation relation)
+{
+	if(!IsTermForm(relation.form))
+		return true;
+	size8 arity = FormArity(relation.form);
+	byte const * atomTypes = relation.typeSignature.atomTypes;
+	index8 roleIndices[arity];
+	TermFormGetActorRoles(relation.form, roleIndices);
+	for(index8 i = 1; i < arity; i++) {
+		if((roleIndices[i - 1] == roleIndices[i]) && (atomTypes[i - 1] > atomTypes[i]))
+			return false;
+	}
+	return true;
+}
+
+
 TypedRelation RelationFromFact(FormulaView term)
 {
 	ASSERT(IsTermForm(term.form))
+	// CLAUDE: The actors of the fact are in canonical order, so their atom types ascend
+	// within each role; see GetCanonicalActorOrder()
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(term.actors), term.actors->nAtoms);
 	

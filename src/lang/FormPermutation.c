@@ -5,6 +5,7 @@
 #include "lang/ConjunctionForm.h"
 #include "lang/FormPermutation.h"
 #include "lang/PredicateForm.h"
+#include "lang/TermForm.h"
 #include "memory/allocator.h"
 #include "util/utilities.h"
 
@@ -279,19 +280,24 @@ void FreeClauseIterator(ClauseIterator * iter)
 }
 
 
-// we now need interface functions here since form can take several types
-// poor mans polymorphism ...
-
 FormIterator* CreateFormIterator(Atom form)
 {
 	FormIterator * iter = Allocate(sizeof(FormIterator));
-	iter->form = form;
-	if(IsPredicateForm(form))
+	
+	if(IsPredicateForm(form)) {
 		iter->topIterator = CreatePredicateIterator(form);
-	// CLAUDE: a clause form and a conjunction form are both term multisets,
+		iter->kind = PREDICATE_ITERATOR;
+	}
+	else if(IsTermForm(form)) {
+		iter->topIterator = CreatePredicateIterator(TermFormGetPredicateForm(form));
+		iter->kind = PREDICATE_ITERATOR;
+	}
+	// Clause form and a conjunction form are both term multisets,
 	// so the same term-multiset iterator permutes either one
-	else if(IsClauseForm(form) || IsConjunctionForm(form))
+	else if(IsClauseForm(form) || IsConjunctionForm(form)) {
 		iter->topIterator = CreateClauseIterator(form);
+		iter->kind = TERM_MULTISET_ITERATOR;
+	}
 	else {
 		ASSERT(false);
 	}
@@ -301,11 +307,14 @@ FormIterator* CreateFormIterator(Atom form)
 
 bool NextFormPermutation(FormIterator * iter)
 {
-	if(IsPredicateForm(iter->form))
+	switch(iter->kind) {
+	case PREDICATE_ITERATOR:
 		return NextPredicatePermutation(iter->topIterator);
-	else if(IsClauseForm(iter->form) || IsConjunctionForm(iter->form))
+
+	case TERM_MULTISET_ITERATOR:
 		return NextClausePermutation(iter->topIterator);
-	else {
+
+	default:
 		ASSERT(false);
 		return false;
 	}
@@ -314,12 +323,18 @@ bool NextFormPermutation(FormIterator * iter)
 
 void FreeFormIterator(const FormIterator* iter)
 {
-	if(IsPredicateForm(iter->form))
+	switch(iter->kind) {
+	case PREDICATE_ITERATOR:
 		FreePredicateIterator(iter->topIterator);
-	else if(IsClauseForm(iter->form) || IsConjunctionForm(iter->form))
+		break;
+
+	case TERM_MULTISET_ITERATOR:
 		FreeClauseIterator(iter->topIterator);
-	else
+		break;
+		
+	default:
 		ASSERT(false);
+	}
 	Free(iter);
 }
 
@@ -332,10 +347,16 @@ void FreeFormIterator(const FormIterator* iter)
 void GetTuplePermutation(const FormIterator * iter, index8 permutation[])
 {
 	// TODO: the permutation vector should probably be supplied by caller
-	if(IsPredicateForm(iter->form))
+	switch(iter->kind) {
+	case PREDICATE_ITERATOR:
 		getPredicatePermutation(iter->topIterator, permutation, 0);
-	else if(IsClauseForm(iter->form) || IsConjunctionForm(iter->form))
+		break;
+
+	case TERM_MULTISET_ITERATOR:
 		getClausePermutation(iter->topIterator, permutation, 0);
-	else
+		break;
+
+	default:
 		ASSERT(false);
+	}
 }

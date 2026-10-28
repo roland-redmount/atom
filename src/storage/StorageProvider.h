@@ -61,7 +61,6 @@ typedef struct s_RelationReaderSpec
 
 } RelationReaderSpec;
 
-struct s_RelationImpl;
 
 /**
  * A storage provider is a particular data storage type, such as a B-tree or array.
@@ -70,7 +69,6 @@ struct s_RelationImpl;
  * values used to speed computed relations.
  * 
  * One provider may provide the storage of many relations, sharing the same callbacks.
- * The storage for each relation is described by a RelationImpl struct.
  *
  * For relations that do not require storage, the default storage provider can be used.
  */

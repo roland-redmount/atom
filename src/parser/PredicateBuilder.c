@@ -82,8 +82,6 @@ Atom PredicateBuilderCreateFormula(PredicateBuilder const * builder, index8 role
 	// determine the order of roles used by multiset
 	index8 order[arity]; 
 	MultisetIterationOrder(form, AT_NAME, roles, order, arity);
-	if(roleOrder)
-		CopyMemory(order, roleOrder, arity * sizeof(index8));
 
 	// ordered list of atoms
 	TypedAtom actors[arity];
@@ -91,8 +89,20 @@ Atom PredicateBuilderCreateFormula(PredicateBuilder const * builder, index8 role
 		TypedAtom actor = *((TypedAtom *) ResizingArrayGetElement(&(builder->actors), order[i]));
 		actors[i] = actor;
 	}
+
+	// CLAUDE: Sort the actors within each role, and give roleOrder the actor as entered at
+	// each position of the sorted actors; see GetCanonicalActorOrder()
+	index8 permutation[arity];
+	GetCanonicalActorOrder(form, actors, permutation);
+	TypedAtom canonicalActors[arity];
+	for(index8 i = 0; i < arity; i++)
+		canonicalActors[i] = actors[permutation[i]];
+	if(roleOrder) {
+		for(index8 i = 0; i < arity; i++)
+			roleOrder[i] = order[permutation[i]];
+	}
 	
-	Atom formula = CreateFormulaFromArray(form, actors);
+	Atom formula = CreateFormulaFromArray(form, canonicalActors);
 	IFactRelease(form);
 	return formula;
 }

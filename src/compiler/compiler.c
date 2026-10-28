@@ -22,6 +22,7 @@
 #include "kernel/tuple.h"
 #include "lang/ClauseForm.h"
 #include "lang/ConjunctionForm.h"
+#include "lang/FormPermutation.h"
 #include "lang/IndexedFormula.h"
 #include "lang/SubstitutionList.h"
 #include "lang/TermForm.h"
@@ -32,6 +33,7 @@
 #include "storage/RelationBTree.h"
 #include "util/combinations.h"
 #include "util/ResizingArray.h"
+#include "util/sort.h"
 
 
 /**
@@ -126,16 +128,19 @@ static bool dispatchOrCompileTerm(
  * new choice, and the relations of the choices already taken are excluded. A failed attempt
  * leaves the choice point unchanged. */
 static bool dispatchOrCompileAtNewChoicePoint(
-	CompileStack * compileStack, FormulaView term, int dispatchMode, ChoicePoint * choicePoint)
+	CompileStack * compileStack, Atom form, TypedTuple const * actors, int dispatchMode,
+	ChoicePoint * choicePoint)
 {
 	ASSERT(choicePoint->nChoices < MAX_CHOICE_POINT_MATCHES)
 
 	// dispatch term, parameterized
+	// CLAUDE: The actors are taken from the clause, in clause order, which need not be the
+	// canonical order of a formula; see GetCanonicalActorOrder(). Dispatch matches any order.
 	ParameterizedQuery query = {
-		.form = term.form,
-		.arity = term.actors->nAtoms,
+		.form = form,
+		.arity = actors->nAtoms,
 	};
-	termActorsToParameters(term.actors, query.parameters);
+	termActorsToParameters(actors, query.parameters);
 
 	TypeSignature excludedSignatures[MAX_CHOICE_POINT_MATCHES];
 	for(index8 i = 0; i < choicePoint->nChoices; i++)
@@ -637,6 +642,81 @@ static Operator * skipIdentityOperator(Operator * op)
 }
 
 
+/*
+ * Test whether the self term, with its actors in the given order, fits the head
+ * term: each parameter type agrees with the head's where it is known, the term has an input
+ * where the head has an input, and the term repeats an actor where the head repeats a
+ * parameter. The permutation maps termParameters[] to headParameters[]
+ */
+static bool selfTermFitsHead(
+	Atom const termParameters[], TypedTuple const * termActors, Atom const headParameters[],
+	EqualitySignature headEqualitySignature, index8 const permutation[], size8 termArity)
+{
+	for(index8 i = 0; i < termArity; i++) {
+		Atom termParameter = termParameters[permutation[i]];
+		// The term parameter type must agree with the head if it is known
+		if(termParameter.parameter.atomType
+			&& (termParameter.parameter.atomType != headParameters[i].parameter.atomType))
+			return false;
+		// The term must have an input parameter where the head term has an input parameter
+		if((headParameters[i].parameter.io == PARAMETER_IN) && (termParameter.parameter.io != PARAMETER_IN))
+			return false;
+		index8 repeatOf = headEqualitySignature.repeatOf[i];
+		if(repeatOf && !SameTypedAtoms(
+				TypedTupleGetElement(termActors, permutation[i]),
+				TypedTupleGetElement(termActors, permutation[repeatOf - 1])))
+			return false;
+	}
+	return true;
+}
+
+
+/*
+ * CLAUDE: Test whether the self term can belong to the relation of the head term: in some
+ * column order of its form, each parameter type of the self term agrees with the head's
+ * where it is known. A self term whose types fit no column order belongs to another typed
+ * relation, and is not recursive; see reclassifySelfTerm().
+ */
+static bool selfTermTypesFitHead(ClauseCompileState const * state, index8 termIndex)
+{
+	size8 termArity = IndexedFormulaTermArity(state->indexedFormula, termIndex);
+	TypedTuple * termActors = IndexedFormulaGetTermTuple(state->indexedFormula, termIndex);
+	Atom termParameters[RELATION_MAX_ARITY];
+	termActorsToParameters(termActors, termParameters);
+	FreeTypedTuple(termActors);
+	Atom const * headParameters = IndexedFormulaPeekTermAtoms(state->indexedFormula, state->headTermIndex);
+
+	index8 permutation[RELATION_MAX_ARITY];
+	FormIterator * formIterator = CreateFormIterator(state->termForms[termIndex]);
+	bool fit = false;
+	do {
+		GetTuplePermutation(formIterator, permutation);
+		fit = true;
+		for(index8 i = 0; fit && (i < termArity); i++) {
+			byte termType = termParameters[permutation[i]].parameter.atomType;
+			byte headType = headParameters[i].parameter.atomType;
+			fit = !termType || !headType || (termType == headType);
+		}
+	} while(!fit && NextFormPermutation(formIterator));
+	FreeFormIterator(formIterator);
+	return fit;
+}
+
+
+/*
+ * CLAUDE: A self term is a term of the clause body with the form of the head term. The setup of
+ * the clause marks a self term recursive; see setupClauseCompileState(). Once the other terms
+ * have compiled, the types of the self term are known, and a self term whose types fit no
+ * column order of the head term is marked not recursive; see selfTermTypesFitHead(). It is
+ * then compiled as any other term.
+ */
+static void reclassifySelfTerm(ClauseCompileState * state, index8 termIndex)
+{
+	if(state->termIsRecursive[termIndex] && !selfTermTypesFitHead(state, termIndex))
+		state->termIsRecursive[termIndex] = false;
+}
+
+
 /**
  * Attempt to compile the a "self" term in state->indexedClause given by termIndex,
  * which has the same form as the head term of the clause.
@@ -660,26 +740,33 @@ static Operator * compileSelfTerm(
 
 	// The self term's parameter types and equality signature are determined by the head term's
 	byte headAtomTypes[termArity];
-	for(index8 i = 0; i < termArity; i++) {
-		// The term parameter type must agree with the head if it is known
+	for(index8 i = 0; i < termArity; i++)
 		headAtomTypes[i] = headParametersArray[i].parameter.atomType;
-		if(termParameters[i].parameter.atomType && (termParameters[i].parameter.atomType != headAtomTypes[i])) {
-			FreeTypedTuple(termActors);
-			return 0;
-		}
-	}
 	EqualitySignature equalitySignature = ParametersGetEqualitySignature(headParametersArray, termArity);
 
-	// The parameter IO is specified by the self term
-	byte termParameterIO[termArity];
-	for(index8 i = 0; i < termArity; i++) {
-		// The term must have an input parameter where the head term has an input parameter
-		termParameterIO[i] = termParameters[i].parameter.io;
-		if((headParametersArray[i].parameter.io == PARAMETER_IN) && (termParameterIO[i] != PARAMETER_IN)) {
-			FreeTypedTuple(termActors);
-			return 0;
-		}
+	// The derived relation holds every column order of a fact whose form repeats a
+	// role; see addHeadColumnOrderMatches(). The self term may therefore read the relation
+	// in any column order of its form, and takes the first order that fits the head term.
+	index8 permutation[termArity];
+	FormIterator * formIterator = CreateFormIterator(state->termForms[termIndex]);
+	bool fit = false;
+	do {
+		GetTuplePermutation(formIterator, permutation);
+		fit = selfTermFitsHead(
+			termParameters, termActors, headParametersArray, equalitySignature, permutation, termArity);
+	} while(!fit && NextFormPermutation(formIterator));
+	FreeFormIterator(formIterator);
+	if(!fit) {
+		FreeTypedTuple(termActors);
+		return 0;
 	}
+
+	// The parameter IO is specified by the self term
+	// CLAUDE: A fixed size array, since an optimized build reads a variable length array
+	// here as a region of size 0; see -Wstringop-overread
+	byte termParameterIO[RELATION_MAX_ARITY];
+	for(index8 i = 0; i < termArity; i++)
+		termParameterIO[i] = termParameters[permutation[i]].parameter.io;
 	IOSignature ioSignature = CreateIOSignature(termParameterIO, termArity);
 	
 	// The self term of a non-recursive clause reads the variant directly, if the term binds
@@ -703,9 +790,7 @@ static Operator * compileSelfTerm(
 	}
 
 	// Create the term operator, identity permutation
-	index8 permutation[termArity];
-	for(index8 i = 0; i < termArity; i++)
-		permutation[i] = i;
+	// CLAUDE: The permutation is the column order chosen by selfTermFitsHead(), which may differ from the identity
 	Operator * op = createTermOperator(
 		CreateTypeSignature(headAtomTypes, termArity), ioSignature, equalitySignature, childOperator,
 		termActors, permutation, serviceParameters, clauseMap);
@@ -828,7 +913,7 @@ static Operator * compileTermSet(
 	Operator * op = 0;
 	// attempt to locate a service for the term
 	if(dispatchOrCompileAtNewChoicePoint(
-		compileStack, (FormulaView) {.form = form, .actors = termSetActors}, dispatchMode, choicePoint))
+		compileStack, form, termSetActors, dispatchMode, choicePoint))
 		op = buildOperatorFromChoicePoint(termSetActors, choicePoint, serviceParameters, termClauseMap);
 	if(op)
 		acceptCompiledTerms(clauseState, termIndices, nTerms, actorIndices, serviceParameters);
@@ -990,14 +1075,30 @@ static Operator * dispatchNextTerms(
  * Compile the first non-excluded recursive term to a RECURSE operator; see
  * compileSelfTerm(). The term is then marked excluded. Returns 0 if no term compiled.
  */
-static Operator * compileNextRecursiveTerm(ClauseCompileState * clauseState, index8 termClauseMap[])
+static bool hasFullyTypedParameters(IndexedFormula * indexedFormula, index8 i);
+
+static Operator * compileNextRecursiveTerm(
+	CompileStack * compileStack, ClauseCompileState * clauseState, index8 termClauseMap[])
 {
-	if(!clauseState->headParametersKnown)
-		return 0;
 	Operator * op = 0;
 	for(index8 p = clauseState->nCompiledTerms; !op && (p < clauseState->nConjunctionTerms); p++) {
 		index8 termIndex = clauseState->termOrder[p];
 		if(!clauseState->termIsRecursive[termIndex])
+			continue;
+		// CLAUDE: A self term of other types is compiled as any other term
+		reclassifySelfTerm(clauseState, termIndex);
+		if(!clauseState->termIsRecursive[termIndex]) {
+			ChoicePoint * choicePoint =
+				&(clauseState->choiceTree->choicePoints[clauseState->choiceTree->nChoicePoints]);
+			op = compileTermSet(
+				compileStack, clauseState, clauseState->termForms[termIndex], &termIndex, 1,
+				TERM_DISPATCH_OR_COMPILE, choicePoint, termClauseMap);
+			continue;
+		}
+		// CLAUDE: A recursive term reads the FIXPOINT of the typed relation of the head term, so
+		// the head parameter types must be known. The terms compiled so far may have resolved them.
+		if(!clauseState->headParametersKnown
+			&& !hasFullyTypedParameters(clauseState->indexedFormula, clauseState->headTermIndex))
 			continue;
 #ifdef DEBUG_COMPILER
 		PrintCString("Pass = 3, recursive term: ");
@@ -1042,6 +1143,9 @@ static Operator * replayTerm(ClauseCompileState * clauseState, index8 termClause
 #endif
 	TypedTuple * serviceParameters = CreateTypedTuple(termActors->nAtoms);
 	Operator * op;
+	// CLAUDE: The setup of each branch marks every self term recursive again; see reclassifySelfTerm()
+	if(choicePoint->nTerms == 1)
+		reclassifySelfTerm(clauseState, termIndices[0]);
 	if(clauseState->termIsRecursive[termIndices[0]]) {
 		// CLAUDE: A recursive term compiles on its own
 		ASSERT(choicePoint->nTerms == 1)
@@ -1103,6 +1207,9 @@ static Operator * compileNextChoice(
 	ChoiceTree * choiceTree = clauseState->choiceTree;
 	ChoicePoint * choicePoint = &(choiceTree->choicePoints[choiceTree->nChoicePoints]);
 	index8 const * termIndices = choicePoint->termIndices;
+	// CLAUDE: The setup of each branch marks every self term recursive again; see reclassifySelfTerm()
+	if(choicePoint->nTerms == 1)
+		reclassifySelfTerm(clauseState, termIndices[0]);
 	// CLAUDE: A recursive term has no choices, and so has no next choice either
 	ASSERT(!clauseState->termIsRecursive[termIndices[0]])
 #ifdef DEBUG_COMPILER
@@ -1185,7 +1292,7 @@ static Operator * compileConjunctionRecursive(
 			op = compileNextTerm(compileStack, clauseState, TERM_DISPATCH_OR_COMPILE, termClauseMap);
 		// pass 3
 		if(!op)
-			op = compileNextRecursiveTerm(clauseState, termClauseMap);
+			op = compileNextRecursiveTerm(compileStack, clauseState, termClauseMap);
 	}
 	if(!op) {
 		// No remaining term could be dispatched
@@ -1730,6 +1837,11 @@ typedef struct QueryClauseMatch {
 	bool hasRecursiveTerms;
 	// Whether the clause is recursive; see classifyClauses()
 	bool recursive;
+
+	// CLAUDE: A copy of the clause actors with the head term actors in another column order,
+	// owned by this match, or 0. If set, the actors field points to this copy; see
+	// addHeadColumnOrderMatches().
+	TypedTuple * permutedActors;
 } QueryClauseMatch;
 
 
@@ -1880,6 +1992,94 @@ static bool unifyQueryWithTerm(
 }
 
 
+/*
+ * CLAUDE: Test whether the given head actors equal those of a column order tried before.
+ * The triedHeads array holds the head actors of each column order tried, one after the other.
+ */
+static bool isTriedHead(ResizingArray const * triedHeads, TypedAtom const headActors[], size8 arity)
+{
+	TypedAtom const * tried = ResizingArrayGetMemory(triedHeads);
+	for(index32 k = 0; k < triedHeads->nElements; k += arity) {
+		bool same = true;
+		for(index8 i = 0; same && (i < arity); i++)
+			same = SameTypedAtoms(tried[k + i], headActors[i]);
+		if(same)
+			return true;
+	}
+	return false;
+}
+
+
+/*
+ * CLAUDE: Append a QueryClauseMatch for each distinct column order of the head term actors
+ * that unifies with the query. The clauseMatch gives the clause and the head term, with the
+ * actors in the order stored in the dictionary. A head term whose form repeats a role states
+ * the same fact in each column order of the actors of that role. For example, the clause
+ * (link x link y <- edge x to y) also derives (link y link x), and the query
+ * (link 2 link _) unifies only with that column order. Returns true if any column order
+ * unifies.
+ */
+static bool addHeadColumnOrderMatches(
+	ParameterizedQuery const * query, QueryClauseMatch const * clauseMatch,
+	ResizingArray * queryClauseMatches)
+{
+	size8 arity = query->arity;
+	TypedTuple const * clauseActors = clauseMatch->actors;
+	index8 headActorsOffset = clauseMatch->headActorsOffset;
+	ResizingArray triedHeads;
+	CreateResizingArray(&triedHeads, sizeof(TypedAtom), 2 * arity);
+	bool unifiesAny = false;
+	index8 permutation[arity];
+	FormIterator * formIterator = CreateFormIterator(query->form);
+	do {
+		GetTuplePermutation(formIterator, permutation);
+		TypedAtom headActors[arity];
+		for(index8 i = 0; i < arity; i++)
+			headActors[i] = TypedTupleGetElement(clauseActors, headActorsOffset + permutation[i]);
+		// CLAUDE: Equal actors in one role give the same head term in several column orders
+		if(isTriedHead(&triedHeads, headActors, arity))
+			continue;
+		for(index8 i = 0; i < arity; i++)
+			ResizingArrayAppend(&triedHeads, &headActors[i]);
+
+		TypedTuple * permutedActors = 0;
+		if(!IsIdentityPermutation(permutation, arity)) {
+			permutedActors = CreateTupleFromTuple(clauseActors);
+			for(index8 i = 0; i < arity; i++)
+				TypedTupleSetElement(permutedActors, headActorsOffset + i, headActors[i]);
+		}
+		TypedTuple const * actors = permutedActors ? permutedActors : clauseActors;
+		Substitution subst;
+		bool unifies = unifyQueryWithTerm(query, actors, headActorsOffset, &subst);
+		FreeSubstitution(&subst);
+		if(unifies) {
+			QueryClauseMatch match = *clauseMatch;
+			match.actors = actors;
+			match.permutedActors = permutedActors;
+			ResizingArrayAppend(queryClauseMatches, &match);
+			unifiesAny = true;
+		}
+		else if(permutedActors)
+			FreeTypedTuple(permutedActors);
+	} while(NextFormPermutation(formIterator));
+	FreeFormIterator(formIterator);
+	FreeResizingArray(&triedHeads);
+	return unifiesAny;
+}
+
+
+/* CLAUDE: Free the actors copies owned by the clause matches, and the array of matches. */
+static void freeClauseMatches(ResizingArray * clauseMatches)
+{
+	QueryClauseMatch * matches = ResizingArrayGetMemory(clauseMatches);
+	for(index32 i = 0; i < clauseMatches->nElements; i++) {
+		if(matches[i].permutedActors)
+			FreeTypedTuple(matches[i].permutedActors);
+	}
+	FreeResizingArray(clauseMatches);
+}
+
+
 /**
  * Collect every clause whose head term unifies with the query, appending one
  * QueryClauseMatch per clause to the given array. A clause with a term of the
@@ -1889,6 +2089,8 @@ static bool unifyQueryWithTerm(
  * To find rules (clauses) c that contains a matching term form,
  * we query (multiset c element @term-form multiple m),
  */
+/* CLAUDE: A clause whose head term form repeats a role may give one QueryClauseMatch for each
+   column order of its head term actors; see addHeadColumnOrderMatches(). */
 static void findMatchingClauses(ParameterizedQuery const * query, ResizingArray * queryClauseMatches)
 {
 	// Collect the clause forms holding the query term form, with the multiple of that term form
@@ -1922,22 +2124,16 @@ static void findMatchingClauses(ParameterizedQuery const * query, ResizingArray 
 			// first one that unifies as the head term.
 			// NOTE: is taking the first term always valid?
 			for(index8 m = 1; m <= clauseFormMultiple->multiple; m++) {
-				index8 headActorsOffset = ClauseGetTermActorsIndex(clauseForm, query->form, m);
-				Substitution subst;
-				bool unifies = unifyQueryWithTerm(query, clauseActors, headActorsOffset, &subst);
-				FreeSubstitution(&subst);
-				if(!unifies)
-					continue;
 				QueryClauseMatch clauseMatch = {
 					.clauseForm = clauseForm,
 					.actors = clauseActors,
 					.headTermIndex = ClauseGetTermIndex(clauseForm, query->form, m),
-					.headActorsOffset = headActorsOffset,
+					.headActorsOffset = ClauseGetTermActorsIndex(clauseForm, query->form, m),
 					.hasRecursiveTerms = hasRecursiveTerms,
 					.recursive = hasRecursiveTerms
 				};
-				ResizingArrayAppend(queryClauseMatches, &clauseMatch);
-				break;
+				if(addHeadColumnOrderMatches(query, &clauseMatch, queryClauseMatches))
+					break;
 			}
 		}
 		DictionaryIteratorEnd(&dictIterator);
@@ -2304,8 +2500,7 @@ static size8 seedVariantsFromServices(ParameterizedQuery const * query, Compiled
  * 
  * Matched rules are processed in two passes. Non-recursive clauses compile first, and determine
  * the possible query type signatures. for each compiled variant. The recursive clauses then
- * compile against these type signatures. A recursive clause therefore cannot occur without
- * at least one non-recursive clause of the same signature.
+ * compile against these type signatures.
  * 
  * Returns the new number of variants in the variants[] array.
  */
@@ -2319,7 +2514,7 @@ static size8 compileQueryClauses(
 	findMatchingClauses(query, &clauseMatches);
 	size32 nClauseMatches = clauseMatches.nElements;
 	if(nClauseMatches == 0) {
-		FreeResizingArray(&clauseMatches);
+		freeClauseMatches(&clauseMatches);
 		return nVariants;
 	}
 	ResizingArray nonRecursiveOrder;
@@ -2370,8 +2565,27 @@ static size8 compileQueryClauses(
 	// so no new variants are added
 	ASSERT(nVariants == nNonRecursiveVariants)
 
+	// A typed relation that no clause without recursive terms produces may still be
+	// derived by a recursive clause from other typed relations; see reclassifySelfTerm().
+	// Each clause with recursive terms is compiled against the query itself, and a variant
+	// is kept if its type signature is new.
+	CompiledVariant newVariants[MAX_COMPILED_VARIANTS];
+	size8 nNewVariants = 0;
+	for(index32 i = 0; i < nClauseMatches; i++) {
+		if(matches[i].hasRecursiveTerms)
+			nNewVariants = compileClause(compileStack, query, &matches[i], 0, newVariants, nNewVariants);
+	}
+	for(index8 j = 0; j < nNewVariants; j++) {
+		if(FindCompiledVariant(variants, nVariants, newVariants[j].parameters, query->arity)) {
+			CheckOperator(newVariants[j].op);
+			continue;
+		}
+		ASSERT(nVariants < MAX_COMPILED_VARIANTS)
+		variants[nVariants++] = newVariants[j];
+	}
+
 	FreeResizingArray(&nonRecursiveOrder);
-	FreeResizingArray(&clauseMatches);
+	freeClauseMatches(&clauseMatches);
 	return nVariants;
 }
 
@@ -2563,6 +2777,62 @@ static size8 compileInvertedQuery(
 }
 
 
+/*
+ * CLAUDE: Put each compiled variant in canonical column order, so that its service belongs to a
+ * relation in canonical column order; see IsCanonicalRelation(). A variant whose type
+ * signature is in another column order is reordered by a PERMUTE operator. A reordered variant
+ * whose signature equals that of another variant is combined with it by addCompiledVariant().
+ * For example, the variants (bar #1>INT bar #2>ID) and (bar #1>ID bar #2>INT) of the query
+ * (bar x bar y) are combined into one variant (bar #1>ID bar #2>INT).
+ * Returns the new number of variants.
+ */
+static size8 canonicalizeVariantOrder(
+	ParameterizedQuery const * query, CompiledVariant variants[], size8 nVariants)
+{
+	size8 arity = query->arity;
+	CompiledVariant reordered[MAX_COMPILED_VARIANTS];
+	size8 nReordered = 0;
+	size8 nCanonical = 0;
+	for(index8 i = 0; i < nVariants; i++) {
+		TypedRelation relation = {
+			.form = query->form,
+			.typeSignature = CompiledVariantGetTypeSignature(&variants[i], arity)
+		};
+		if(IsCanonicalRelation(relation))
+			variants[nCanonical++] = variants[i];
+		else
+			reordered[nReordered++] = variants[i];
+	}
+	for(index8 i = 0; i < nReordered; i++) {
+		CompiledVariant const * variant = &reordered[i];
+		// CLAUDE: A seeded or replacing variant has the signature of an existing relation
+		ASSERT(!variant->isReplaced && (variant->op->type != OPERATOR_MACHINE))
+		// CLAUDE: Each parameter is given as an atom of its resolved type with value zero, so
+		// GetCanonicalActorOrder() orders the parameters by type alone, keeping the order of
+		// parameters of one type
+		// CLAUDE: Fixed size arrays, since an optimized build reads variable length arrays here
+		// as regions of size 0; see -Wstringop-overflow
+		TypedAtom typedParameters[RELATION_MAX_ARITY];
+		for(index8 j = 0; j < arity; j++)
+			typedParameters[j] = (TypedAtom) {.type = variant->parameters[j].parameter.atomType};
+		index8 permutation[RELATION_MAX_ARITY];
+		GetCanonicalActorOrder(query->form, typedParameters, permutation);
+		Atom parameters[RELATION_MAX_ARITY];
+		for(index8 j = 0; j < arity; j++)
+			parameters[j] = variant->parameters[permutation[j]];
+		size8 nArguments = RenumberParameters(parameters, arity);
+		// CLAUDE: The variant operator takes argument n - 1 for parameter number n
+		index8 argumentMap[nArguments];
+		for(index8 j = 0; j < arity; j++)
+			argumentMap[variant->parameters[permutation[j]].parameter.number - 1] =
+				parameters[j].parameter.number - 1;
+		Operator * op = CreatePermuteOperator(nArguments, 0, 0, 0, argumentMap, variant->op);
+		addCompiledVariant(variants, &nCanonical, parameters, arity, op, UNION_OPERATOR_LAST);
+	}
+	return nCanonical;
+}
+
+
 /**
  * Attempt to compile a query into one or more services (variants).
  * Returns the number of variants written to the variants array.
@@ -2621,7 +2891,47 @@ static size8 compileQueryVariants(
 	if(hasIFactRule)
 		nVariants = compileIFactRule(query, ifactRelation, ifactIdColumn, variants, nVariants);
 
-	return nVariants;
+	// CLAUDE: Every service belongs to a relation in canonical column order
+	return canonicalizeVariantOrder(query, variants, nVariants);
+}
+
+
+/*
+ * CLAUDE: Copy a parameterized query of a term form, and sort the parameters of each role
+ * whose parameter types are all known into canonical column order; see GetCanonicalActorOrder().
+ * The parameters are then numbered 1, 2, ... in their new order. A role holding a parameter of
+ * unknown type keeps its order, and canonicalizeVariantOrder() orders it once compilation has
+ * resolved the type. A query of a conjunction form is copied unchanged, as in
+ * canonicalizeVariantOrder().
+ */
+static void copyQueryInCanonicalOrder(ParameterizedQuery const * query, ParameterizedQuery * canonicalQuery)
+{
+	*canonicalQuery = *query;
+	if(!IsTermForm(query->form))
+		return;
+	// CLAUDE: Fixed size arrays, since an optimized build reads variable length arrays here
+	// as regions of size 0; see -Wstringop-overflow
+	index8 roleIndices[RELATION_MAX_ARITY];
+	TermFormGetActorRoles(query->form, roleIndices);
+	bool roleTypesKnown[RELATION_MAX_ARITY];
+	for(index8 i = 0; i < query->arity; i++)
+		roleTypesKnown[roleIndices[i]] = true;
+	for(index8 i = 0; i < query->arity; i++) {
+		if(!query->parameters[i].parameter.atomType)
+			roleTypesKnown[roleIndices[i]] = false;
+	}
+	// CLAUDE: The parameters of a role with an unknown type all compare equal, and keep their
+	// order, as the sort is stable
+	TypedAtom typedParameters[RELATION_MAX_ARITY];
+	for(index8 i = 0; i < query->arity; i++) {
+		byte atomType = roleTypesKnown[roleIndices[i]] ? query->parameters[i].parameter.atomType : 0;
+		typedParameters[i] = (TypedAtom) {.type = atomType};
+	}
+	index8 permutation[RELATION_MAX_ARITY];
+	GetCanonicalActorOrder(query->form, typedParameters, permutation);
+	for(index8 i = 0; i < query->arity; i++)
+		canonicalQuery->parameters[i] = query->parameters[permutation[i]];
+	RenumberParameters(canonicalQuery->parameters, query->arity);
 }
 
 
@@ -2632,15 +2942,22 @@ static size8 compileQueryVariants(
  * this function does nothing and returns 0.
  */
 static size8 compileParameterizedQuery(
-	CompileStack * compileStack, ParameterizedQuery const * query, Service services[])
+	CompileStack * compileStack, ParameterizedQuery const * givenQuery, Service services[])
 {
 #ifdef DEBUG
 	// CLAUDE: The parameters must be numbered 1, 2, ... in order of first occurrence
-	ParameterizedQuery renumberedQuery = *query;
-	RenumberParameters(renumberedQuery.parameters, query->arity);
-	for(index8 i = 0; i < query->arity; i++)
-		ASSERT(renumberedQuery.parameters[i].parameter.number == query->parameters[i].parameter.number)
+	ParameterizedQuery renumberedQuery = *givenQuery;
+	RenumberParameters(renumberedQuery.parameters, givenQuery->arity);
+	for(index8 i = 0; i < givenQuery->arity; i++)
+		ASSERT(renumberedQuery.parameters[i].parameter.number == givenQuery->parameters[i].parameter.number)
 #endif
+	// CLAUDE: A relation created while compiling, such as the relation of an ifact rule, takes the
+	// column order of the query; see setupIFactRuleRelation(). The caller finds the compiled
+	// services again by dispatch, which matches any column order.
+	ParameterizedQuery canonicalQuery;
+	copyQueryInCanonicalOrder(givenQuery, &canonicalQuery);
+	ParameterizedQuery const * query = &canonicalQuery;
+
 	// test if the query is on the compilation stack
 	if(CompileStackContainsTerm(compileStack, query))
 		return 0;

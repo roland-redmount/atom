@@ -143,12 +143,137 @@ static bool sameFormula(FormulaRecord const * record, Atom form, TypedTuple cons
 }
 
 
+/*
+ * CLAUDE: Sort the actors of one term or predicate within each role, by CompareTypedAtoms().
+ * The actors start at the given offset of the permutation array, which holds indices into
+ * the actors array; see GetCanonicalActorOrder(). The insertion sort is stable.
+ */
+static void sortActorsWithinRoles(
+	Atom predicateForm, TypedAtom const actors[], index8 * permutation, index8 offset)
+{
+	size8 arity = PredicateArity(predicateForm);
+	index8 roleIndices[arity];
+	PredicateFormGetActorRoles(predicateForm, roleIndices);
+	index8 * order = permutation + offset;
+	for(index8 i = 1; i < arity; i++) {
+		for(index8 j = i; (j > 0) && (roleIndices[j - 1] == roleIndices[j])
+			&& (CompareTypedAtoms(actors[order[j - 1]], actors[order[j]]) > 0); j--)
+		{
+			index8 swap = order[j - 1];
+			order[j - 1] = order[j];
+			order[j] = swap;
+		}
+	}
+}
+
+
+/*
+ * CLAUDE: Compare two terms of one term form by their actors, as TypedTupleCompare() does.
+ * Each term is given by the offset of its first actor in the permutation array.
+ */
+static int8 compareTermActors(
+	TypedAtom const actors[], index8 const * permutation, index8 offset1, index8 offset2, size8 arity)
+{
+	for(index8 i = 0; i < arity; i++) {
+		int8 order = CompareTypedAtoms(
+			actors[permutation[offset1 + i]], actors[permutation[offset2 + i]]);
+		if(order)
+			return order;
+	}
+	return 0;
+}
+
+
+/*
+ * CLAUDE: Sort the terms of one term form of a clause or conjunction by their actors. The
+ * terms are adjacent, and the first starts at the given offset of the permutation array.
+ * The insertion sort is stable.
+ */
+static void sortTermsOfForm(
+	TypedAtom const actors[], index8 * permutation, index8 offset, size8 termArity, size8 nTerms)
+{
+	index8 swap[termArity];
+	for(index8 i = 1; i < nTerms; i++) {
+		for(index8 j = i; (j > 0) && (compareTermActors(actors, permutation,
+			offset + (j - 1) * termArity, offset + j * termArity, termArity) > 0); j--)
+		{
+			index8 * term1 = permutation + offset + (j - 1) * termArity;
+			index8 * term2 = permutation + offset + j * termArity;
+			CopyMemory(term1, swap, termArity * sizeof(index8));
+			CopyMemory(term2, term1, termArity * sizeof(index8));
+			CopyMemory(swap, term2, termArity * sizeof(index8));
+		}
+	}
+}
+
+
+void GetCanonicalActorOrder(Atom form, TypedAtom const actors[], index8 * permutation)
+{
+	size8 arity = FormArity(form);
+	for(index8 i = 0; i < arity; i++)
+		permutation[i] = i;
+	if(IsPredicateForm(form)) {
+		sortActorsWithinRoles(form, actors, permutation, 0);
+		return;
+	}
+	if(IsTermForm(form)) {
+		sortActorsWithinRoles(TermFormGetPredicateForm(form), actors, permutation, 0);
+		return;
+	}
+	// CLAUDE: The terms of each term form of a clause or conjunction are adjacent
+	ASSERT(IsClauseForm(form) || IsConjunctionForm(form))
+	MultisetIterator iterator;
+	MultisetIterate(form, AT_ID, &iterator);
+	index8 offset = 0;
+	while(MultisetIteratorNext(&iterator)) {
+		ElementMultiple em = MultisetIteratorGetElement(&iterator);
+		Atom predicateForm = TermFormGetPredicateForm(em.element);
+		size8 termArity = TermFormArity(em.element);
+		for(index8 m = 0; m < em.multiple; m++)
+			sortActorsWithinRoles(predicateForm, actors, permutation, offset + m * termArity);
+		sortTermsOfForm(actors, permutation, offset, termArity, em.multiple);
+		offset += em.multiple * termArity;
+	}
+	MultisetIteratorEnd(&iterator);
+}
+
+
+/*
+ * Put the actors of a formula of the given form in canonical order, in place.
+ */
+static void putActorsInCanonicalOrder(Atom form, TypedTuple * actors)
+{
+	size8 arity = actors->nAtoms;
+	// CLAUDE: Without actors there is nothing to order. Returning here also keeps an
+	// optimized build from reading the arrays below as regions of size 0.
+	if(arity == 0)
+		return;
+	TypedAtom elements[arity];
+	for(index8 i = 0; i < arity; i++)
+		elements[i] = TypedTupleGetElement(actors, i);
+	index8 permutation[arity];
+	GetCanonicalActorOrder(form, elements, permutation);
+	if(IsIdentityPermutation(permutation, arity))
+		return;
+	// CLAUDE: The tuple holds a reference to every element, so the elements stay valid while
+	// they are written back in another order
+	for(index8 i = 0; i < arity; i++)
+		AcquireTypedAtom(elements[i]);
+	for(index8 i = 0; i < arity; i++)
+		TypedTupleSetElement(actors, i, elements[permutation[i]]);
+	for(index8 i = 0; i < arity; i++)
+		ReleaseTypedAtom(elements[i]);
+}
+
+
 /**
  * Find or create the formula with the given form and actors. The actors tuple
  * is adopted by the registry if the formula is new, and freed if it is not.
  */
 static Atom internFormula(Atom form, TypedTuple * actors)
 {
+	// CLAUDE: A formula is identified by its actors in canonical order
+	putActorsInCanonicalOrder(form, actors);
 	data64 hash = formulaHash(form, actors, djb2InitialHash);
 	FormulaRecord * existingRecord = peekFormulaRecord(hash);
 	if(existingRecord) {
@@ -245,6 +370,13 @@ FormulaView FormulaGetView(Atom formula)
 	FormulaRecord const * record = peekFormulaRecord(formula.hash);
 	ASSERT(record)
 	return (FormulaView) {.form = record->form, .actors = record->actors};
+}
+
+
+FormulaView CreateFormulaView(Atom form, TypedTuple * actors)
+{
+	putActorsInCanonicalOrder(form, actors);
+	return (FormulaView) {.form = form, .actors = actors};
 }
 
 
@@ -381,10 +513,31 @@ static Atom createTermMultiset(
 	for(index8 i = 0; i < nTerms; i++)
 		blockSizes[i] = termArities[i] * sizeof(TypedAtom);
 	ReorderRaggedArray(actors, order, blockSizes, nTerms);
-	if(termOrder)
-		CopyMemory(order, termOrder, nTerms * sizeof(index8));
 
-	Atom formula = CreateFormulaFromArray(form, actors);
+	// CLAUDE: Sort the terms of each term form; see GetCanonicalActorOrder(). A term moves as a
+	// whole to the position of another term of its form, which starts at the same offset as
+	// the term of that form moved there.
+	index8 permutation[arity];
+	GetCanonicalActorOrder(form, actors, permutation);
+	TypedAtom canonicalActors[arity];
+	for(index8 i = 0; i < arity; i++)
+		canonicalActors[i] = actors[permutation[i]];
+	if(termOrder) {
+		index8 termOffsets[nTerms];
+		for(index8 i = 0, offset = 0; i < nTerms; i++) {
+			termOffsets[i] = offset;
+			offset += termArities[order[i]];
+		}
+		for(index8 i = 0; i < nTerms; i++) {
+			index8 sourceOffset = permutation[termOffsets[i]];
+			index8 source = 0;
+			while(termOffsets[source] != sourceOffset)
+				source++;
+			termOrder[i] = order[source];
+		}
+	}
+
+	Atom formula = CreateFormulaFromArray(form, canonicalActors);
 	IFactRelease(form);
 	return formula;
 }

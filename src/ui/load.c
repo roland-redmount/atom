@@ -143,7 +143,7 @@ static void assertActors(Loader * loader, TypedAtom const actors[])
 {
 	LoadReport * report = loader->report;
 	TypedTuple * tuple = CreateTypedTupleFromArray(actors, loader->arity);
-	int assertResult = AssertFact((FormulaView) {.form = loader->form, .actors = tuple}, 0);
+	int assertResult = AssertFact(CreateFormulaView(loader->form, tuple), 0);
 	FreeTypedTuple(tuple);
 
 	if(assertResult == ASSERT_OK)

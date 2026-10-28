@@ -609,6 +609,70 @@ Operator * ServiceGetOperator(Service service)
 }
 
 
+// CLAUDE: The columns filled by one argument of a service operator; see ServiceGetExchangeableGroups()
+typedef struct s_ArgumentColumns {
+	index8 role;
+	byte atomType;
+	size8 nColumns;
+	// CLAUDE: whether the argument is an output filling columns of a single role
+	bool isExchangeable;
+} ArgumentColumns;
+
+
+size8 ServiceGetExchangeableGroups(Service service, index8 * groupArguments, size8 * groupSizes)
+{
+	Atom form = service.relation.form;
+	if(!IsTermForm(form))
+		return 0;
+	size8 arity = FormArity(form);
+	index8 columnRoles[arity];
+	TermFormGetActorRoles(form, columnRoles);
+	index8 argumentMap[arity];
+	size8 nArguments = EqualitySignatureGetArgumentMap(service.equalitySignature, arity, argumentMap);
+
+	ArgumentColumns arguments[nArguments];
+	SetMemory(arguments, nArguments * sizeof(ArgumentColumns), 0);
+	for(index8 i = 0; i < arity; i++) {
+		ArgumentColumns * argument = &arguments[argumentMap[i]];
+		if(argument->nColumns == 0) {
+			argument->role = columnRoles[i];
+			argument->atomType = service.relation.typeSignature.atomTypes[i];
+			argument->isExchangeable = (service.ioSignature.parameterIO[i] == PARAMETER_OUT);
+		}
+		else if(argument->role != columnRoles[i])
+			argument->isExchangeable = false;
+		argument->nColumns++;
+	}
+
+	// CLAUDE: Collect each group from its first argument, marking the arguments taken
+	bool taken[nArguments];
+	SetMemory(taken, nArguments * sizeof(bool), 0);
+	size8 nGroups = 0;
+	size8 nGroupArguments = 0;
+	for(index8 a = 0; a < nArguments; a++) {
+		if(taken[a] || !arguments[a].isExchangeable)
+			continue;
+		size8 groupSize = 1;
+		groupArguments[nGroupArguments] = a;
+		for(index8 b = a + 1; b < nArguments; b++) {
+			if(!taken[b] && arguments[b].isExchangeable
+				&& (arguments[b].role == arguments[a].role)
+				&& (arguments[b].atomType == arguments[a].atomType)
+				&& (arguments[b].nColumns == arguments[a].nColumns))
+			{
+				taken[b] = true;
+				groupArguments[nGroupArguments + groupSize++] = b;
+			}
+		}
+		if(groupSize >= 2) {
+			groupSizes[nGroups++] = groupSize;
+			nGroupArguments += groupSize;
+		}
+	}
+	return nGroups;
+}
+
+
 void PrintServiceWithActors(Service service, TypedTuple const * actors)
 {
 	// Print the service signature

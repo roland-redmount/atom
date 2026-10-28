@@ -2,7 +2,9 @@
 #include "lang/Variable.h"
 #include "kernel/ifact.h"
 #include "kernel/kernel.h"
+#include "kernel/multiset.h"
 #include "kernel/Parameter.h"
+#include "lang/PredicateForm.h"
 #include "lang/TermForm.h"
 
 
@@ -95,6 +97,12 @@ Atom TermFormGetPredicateForm(Atom termForm)
 	Atom result[3];
 	termFormGetTuple(termForm, result);
 	return result[CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_PREDICATE_FORM)];
+}
+
+
+void TermFormGetActorRoles(Atom termForm, index8 roleIndices[])
+{
+	PredicateFormGetActorRoles(TermFormGetPredicateForm(termForm), roleIndices);
 }
 
 

@@ -3,6 +3,7 @@
 #include "kernel/dictionary.h"
 #include "kernel/operator.h"
 #include "kernel/TupleStore.h"
+#include "lang/FormPermutation.h"
 #include "memory/paging.h"
 #include "memory/pool.h"
 
@@ -127,20 +128,68 @@ bool TupleStoreIsWritable(TupleStore const * store)
 }
 
 
+/* CLAUDE: Write the tuple, with its columns permuted by the given permutation, in the
+   provider's column order; see TupleStore.indexColumns. */
+static void getProviderTuple(
+	TupleStore const * store, Atom const tuple[], index8 const permutation[], Atom providerTuple[])
+{
+	for(index8 i = 0; i < store->nColumns; i++)
+		providerTuple[i] = tuple[permutation[store->indexColumns[i]]];
+}
+
+
+/* CLAUDE: Advance the form iterator to the next permutation that moves each column to a
+   column of the same atom type, and write the permutation. Returns false when no such
+   permutation is left. A permutation that moves a column to a column of another type
+   gives a tuple of another typed relation. */
+static bool nextStoredPermutation(
+	TupleStore const * store, FormIterator * formIterator, index8 permutation[])
+{
+	byte const * atomTypes = store->relation.typeSignature.atomTypes;
+	while(NextFormPermutation(formIterator)) {
+		GetTuplePermutation(formIterator, permutation);
+		bool keepsTypes = true;
+		for(index8 i = 0; i < store->nColumns; i++) {
+			if(atomTypes[permutation[i]] != atomTypes[i]) {
+				keepsTypes = false;
+				break;
+			}
+		}
+		if(keepsTypes)
+			return true;
+	}
+	return false;
+}
+
+
 byte TupleStoreAddTuple(TupleStore * store, Atom const tuple[])
 {
 	ASSERT(TupleStoreIsWritable(store))
-	// Permute tuple to the provider's order
+
+	// We store one tuple for each form permutation to support querying for
+	// any role permutation of a term.
+	FormIterator * formIterator = CreateFormIterator(store->relation.form);
+	index8 permutation[store->nColumns];
 	Atom providerTuple[store->nColumns];
-	for(index8 i = 0; i < store->nColumns; i++)
-		providerTuple[i] = tuple[store->indexColumns[i]];
+	// The first permutation is the identity
+	GetTuplePermutation(formIterator, permutation);
+	getProviderTuple(store, tuple, permutation, providerTuple);
 	// Call the provider to store the tuple
 	byte result = store->provider->addTuple(store->storage, providerTuple);
-	// Acquire atoms
 	if(result == TUPLE_ADDED) {
+		// CLAUDE: Store the tuple in every column order that is the same fact, so that
+		// a reader finds the fact whichever order dispatch passes the query arguments in;
+		// see permutationMatch() in dispatch.c. A permuted tuple equal to one already
+		// stored, from actors that are equal, yields TUPLE_EXISTS.
+		while(nextStoredPermutation(store, formIterator, permutation)) {
+			getProviderTuple(store, tuple, permutation, providerTuple);
+			store->provider->addTuple(store->storage, providerTuple);
+		}
+		// Acquire atoms
 		for(index8 i = 0; i < store->nColumns; i++)
 			AcquireAtom(tuple[i], store->relation.typeSignature.atomTypes[i]);
 	}
+	FreeFormIterator(formIterator);
 	return result;
 }
 
@@ -148,18 +197,26 @@ byte TupleStoreAddTuple(TupleStore * store, Atom const tuple[])
 byte TupleStoreRemoveTuple(TupleStore * store, Atom const tuple[])
 {
 	ASSERT(TupleStoreIsWritable(store))
-	// Permute tuple to the provider's order
+	// Remove all permutations of the tuple
+	FormIterator * formIterator = CreateFormIterator(store->relation.form);
+	index8 permutation[store->nColumns];
 	Atom providerTuple[store->nColumns];
-	for(index8 i = 0; i < store->nColumns; i++)
-		providerTuple[i] = tuple[store->indexColumns[i]];
+	GetTuplePermutation(formIterator, permutation);
+	getProviderTuple(store, tuple, permutation, providerTuple);
 	// Call the provider to remove th tuple
 	byte result = store->provider->removeTuple(store->storage, providerTuple);
 
-	// Release atoms
 	if(result == TUPLE_REMOVED) {
+		// CLAUDE: Remove the column orders stored by TupleStoreAddTuple()
+		while(nextStoredPermutation(store, formIterator, permutation)) {
+			getProviderTuple(store, tuple, permutation, providerTuple);
+			store->provider->removeTuple(store->storage, providerTuple);
+		}
+		// Release atoms
 		for(index32 i = 0; i < store->nColumns; i++)
 			ReleaseTypedAtom(CreateTypedAtom(store->relation.typeSignature.atomTypes[i], tuple[i]));
 	}
+	FreeFormIterator(formIterator);
 	return result;
 }
 

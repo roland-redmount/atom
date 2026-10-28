@@ -47,7 +47,11 @@ static bool negatedFactExists(FormulaView fact)
 	// Run a query for the negated term.
 	Atom negatedTermForm = CreateTermForm(
 		TermFormGetPredicateForm(fact.form), !TermFormGetSign(fact.form));
-	bool foundTuple = factExists((FormulaView) {.form = negatedTermForm, .actors = fact.actors});
+	// CLAUDE: The negated form has the roles of the fact's form, so the copied actors are
+	// in canonical order already
+	TypedTuple * actors = CreateTupleFromTuple(fact.actors);
+	bool foundTuple = factExists(CreateFormulaView(negatedTermForm, actors));
+	FreeTypedTuple(actors);
 	IFactRelease(negatedTermForm);
 	return foundTuple;
 }
@@ -76,6 +80,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 {
 	ASSERT(IsTermForm(fact.form));
 	ASSERT(!TypedTupleContainsVariable(fact.actors));
+	// CLAUDE: The actors are in the column order of the fact's relation; see RelationFromFact()
 	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
 
 	// CLAUDE: The relation (closed-relation f) is only written by CloseRelation()
@@ -88,9 +93,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 		return ASSERT_CONTRADICTION;
 
 	// find existing relation table, or create new
-	TypeSignature typeSignature = CreateTypeSignature(
-		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	TypedRelation relation = {.form = fact.form, .typeSignature = typeSignature};
+	TypedRelation relation = RelationFromFact(fact);
 	TupleStore * store = 0;
 	if(RelationExists(relation)) {
 	 	store = RelationGetTupleStore(relation);
@@ -199,9 +202,7 @@ void RetractFact(FormulaView fact)
 	if(!factExists(fact))
 		return;
 
-	TypeSignature typeSignature = CreateTypeSignature(
-		TypedTuplePeekAtomTypes(fact.actors), fact.actors->nAtoms);
-	TypedRelation relation = {.form = fact.form, .typeSignature = typeSignature};
+	TypedRelation relation = RelationFromFact(fact);
 	TupleStore * store = RelationGetTupleStore(relation);
 	if(!store) {
 		// The relation has no stored tuples
@@ -210,6 +211,7 @@ void RetractFact(FormulaView fact)
 	// CLAUDE: The defining facts of an ifact are never stored in a TupleStore; see IFactConjunction
 	if(!TupleStoreIsWritable(store))
 		return;
+	// CLAUDE: The actors are in the column order of the fact's relation; see RelationFromFact()
 	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
 
 	// Remove the tuple. This will not remove defining facts

@@ -10,6 +10,8 @@
 #include "kernel/TypedRelation.h"
 #include "lang/name.h"
 #include "lang/formula.h"
+#include "lang/PredicateForm.h"
+#include "lang/TermForm.h"
 #include "library/library.h"
 #include "library/list.h"
 #include "library/string.h"
@@ -62,6 +64,54 @@ void testAssertRetract(void)
 	DropRelation(relation);
 	ReleaseFormula(fact2);
 	ReleaseFormula(fact1);
+}
+
+
+/**
+ * CLAUDE: A fact with two actors of different atom types in one role is one fact in one
+ * relation, whichever order the actors are written in; see RelationFromFact().
+ */
+void testAssertRepeatedRoleMixedTypes(void)
+{
+	Atom fact = CStringToTerm("foo 1 foo \"a\"");
+	Atom reversedFact = CStringToTerm("foo \"a\" foo 1");
+	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
+	TypedRelation reversedRelation = {
+		.form = relation.form,
+		.typeSignature = CreateTypeSignature(
+			(byte[]) {relation.typeSignature.atomTypes[1], relation.typeSignature.atomTypes[0]}, 2)
+	};
+
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(reversedFact), 0), ASSERT_EXISTED)
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 1)
+	ASSERT_FALSE(RelationExists(reversedRelation))
+
+	// CLAUDE: Retracting the fact in either order removes it
+	RetractFact(FormulaGetView(reversedFact));
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 0)
+
+	DropRelation(relation);
+	ReleaseFormula(reversedFact);
+	ReleaseFormula(fact);
+}
+
+
+/**
+ * CLAUDE: Two rules that differ only in the order of the actors of a repeated role are one
+ * rule; see GetCanonicalActorOrder().
+ */
+void testAssertRuleRepeatedRoleOrder(void)
+{
+	Atom rule = CStringToClause("near x near y | ! edge x to y");
+	Atom reversedRule = CStringToClause("near y near x | ! edge x to y");
+	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(reversedRule), ASSERT_EXISTED)
+
+	FormulaView clause = DictionaryAddClause(rule);
+	DictionaryRemoveClause(&clause);
+	ReleaseFormula(reversedRule);
+	ReleaseFormula(rule);
 }
 
 
@@ -995,6 +1045,64 @@ void testCreateIFactClause(void)
 /**
  * A formula that does not define an atom yields the zero atom.
  */
+/**
+ * CLAUDE: An ifact rule whose repeated role holds actors of different atom types, with its
+ * first ifact created through the body term of a rule. The body term (pair p elem a elem b)
+ * has its columns in clause order, but the relation holding the ifacts is created in
+ * canonical column order; see compileParameterizedQuery(). A query binding the identified
+ * atom then reads the ifact.
+ */
+void testCreateIFactRepeatedRoleThroughRule(void)
+{
+	Atom ifactRule = CStringToTerm("pair * elem x elem y");
+	ASSERT_INT32_EQUAL(AssertFormula(ifactRule), ASSERT_OK)
+	FormulaView clause = DictionaryAddClauseFromCString("link p from a to b | ! pair p elem a elem b");
+
+	// CLAUDE: Create the ifact through the rule, and take its identified atom
+	Atom linkQuery = CStringToTerm("link p from 1 to \"a\"");
+	MixedTypeRelation * links = UserQuery(FormulaGetView(linkQuery));
+	ASSERT_TRUE(MixedTypeRelationNext(links))
+	Atom linkRole = CreateNameFromCString("link");
+	index8 linkColumn = PredicateRoleIndex(TermFormGetPredicateForm(FormulaGetForm(linkQuery)), linkRole);
+	NameRelease(linkRole);
+	TypedAtom pair = TypedTupleGetElement(MixedTypeRelationPeekTuple(links), linkColumn);
+	ASSERT_UINT32_EQUAL(pair.type, AT_ID)
+	ASSERT_FALSE(MixedTypeRelationNext(links))
+	FreeMixedTypeRelation(links);
+
+	// CLAUDE: The same pair written in either order is the same ifact
+	ASSERT_UINT32_EQUAL(countQueryFacts("pair p elem 1 elem \"a\""), 1)
+	ASSERT_UINT32_EQUAL(countQueryFacts("pair p elem \"a\" elem 1"), 1)
+
+	// CLAUDE: Read the ifact with the identified atom bound
+	Atom pairQuery = CStringToTerm("pair p elem e elem f");
+	Atom pairRole = CreateNameFromCString("pair");
+	index8 pairColumn = PredicateRoleIndex(TermFormGetPredicateForm(FormulaGetForm(pairQuery)), pairRole);
+	NameRelease(pairRole);
+	TypedTuple * actors = CreateTupleFromTuple(FormulaGetActors(pairQuery));
+	TypedTupleSetElement(actors, pairColumn, pair);
+	MixedTypeRelation * pairs = UserQuery(CreateFormulaView(FormulaGetForm(pairQuery), actors));
+	ASSERT_TRUE(MixedTypeRelationNext(pairs))
+	ASSERT_FALSE(MixedTypeRelationNext(pairs))
+	FreeMixedTypeRelation(pairs);
+	FreeTypedTuple(actors);
+
+	ReleaseFormula(pairQuery);
+	ReleaseFormula(linkQuery);
+	DictionaryRemoveClause(&clause);
+	FormulaView ifactRuleView = DictionaryAddIFactRule(ifactRule);
+	DictionaryRemoveIFactRule(&ifactRuleView);
+
+	// CLAUDE: The relation holding the ifacts remains; drop it as testCreateIFactTerm() does
+	Atom ifactTerm = CStringToTerm("pair * elem 1 elem \"a\"");
+	TypedRelation ifactRelation = RelationFromFact(FormulaGetView(ifactTerm));
+	ASSERT_TRUE(RelationExists(ifactRelation))
+	DropRelation(ifactRelation);
+	ReleaseFormula(ifactTerm);
+	ReleaseFormula(ifactRule);
+}
+
+
 void testCreateIFactRejects(void)
 {
 	// a term with no generator says nothing about the atom being defined
@@ -1161,12 +1269,32 @@ void testLoadRepeatedRole(void)
 }
 
 
+/**
+ * CLAUDE: LoadRelationText() puts the actors of each loaded fact in canonical order; see
+ * CreateFormulaView().
+ */
+void testLoadCanonicalActorOrder(void)
+{
+	index32 errorIndex;
+	Atom fooFoo = ParseTermForm("foo foo", 0, &errorIndex);
+	LoadReport report;
+	LoadRelationText("foo,foo\n2,1\n", fooFoo, &report);
+	ASSERT_INT32_EQUAL(report.result, LOAD_OK)
+	ASSERT_UINT32_EQUAL(report.nAsserted, 1)
+
+	retractLoadedFact("foo 1 foo 2");
+	dropRelationOf("foo 1 foo 2");
+	IFactRelease(fooFoo);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(TRANSIENT_MEMORY);
 	LoadLibraries();
 
 	ExecuteTest(testAssertRetract);
+	ExecuteTest(testAssertRepeatedRoleMixedTypes);
 	ExecuteTest(testAssertOverlapsService);
 	ExecuteTest(testAssertContradictsStoredFact);
 	ExecuteTest(testAssertContradictsDerivedFact);
@@ -1175,6 +1303,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertClosedRelationRejected);
 	ExecuteTest(testAssertFormulaFact);
 	ExecuteTest(testAssertFormulaRule);
+	ExecuteTest(testAssertRuleRepeatedRoleOrder);
 	ExecuteTest(testAssertFormulaIFactRule);
 	ExecuteTest(testAssertFormulaRejects);
 	ExecuteTest(testRetractFormulaRule);
@@ -1196,8 +1325,10 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertIntoIFactRelation);
 	ExecuteTest(testCreateIFactDefiningFactsProtected);
 	ExecuteTest(testCreateIFactRejects);
+	ExecuteTest(testCreateIFactRepeatedRoleThroughRule);
 	ExecuteTest(testLoadRelationText);
 	ExecuteTest(testLoadRepeatedRole);
+	ExecuteTest(testLoadCanonicalActorOrder);
 	ExecuteTest(testRetractMathRule);
 
 	UnloadLibraries();
