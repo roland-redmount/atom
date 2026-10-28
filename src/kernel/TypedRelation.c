@@ -216,18 +216,18 @@ void DropRelation(TypedRelation relation)
 	bool foundService;
 	do {
 		// NOTE: we should have a GetFirstMatchingItem() in BTree instead of this
-		ServiceIterator iterator;
+		ServiceRegistryIterator iterator;
 		ServiceRegistryIterate(relation, &iterator);
 		Service service;
 		foundService = false;
-		while(ServiceIteratorNext(&iterator)) {
-			ServiceRecord const * record = ServiceIteratorPeekRecord(&iterator);
+		while(ServiceRegistryIteratorNext(&iterator)) {
+			ServiceRecord const * record = ServiceRegistryIteratorPeekRecord(&iterator);
 			service = record->service;
 			foundService = true;
 			break;
 		}
 		// Close the iterator, since RemoveService() alters the service registry B-tree
-		ServiceIteratorEnd(&iterator);
+		ServiceRegistryIteratorEnd(&iterator);
 		if(foundService) {
 			RemoveService(service);
 		}
@@ -256,16 +256,16 @@ static bool relationIsEmpty(RelationRecord * record)
 		return false;
 	// check for a non-primitive service
 	bool hasNonPrimitiveService = false;
-	ServiceIterator iterator;
+	ServiceRegistryIterator iterator;
 	ServiceRegistryIterate(record->relation, &iterator);
-	while(ServiceIteratorNext(&iterator)) {
-		ServiceRecord const * record = ServiceIteratorPeekRecord(&iterator);
+	while(ServiceRegistryIteratorNext(&iterator)) {
+		ServiceRecord const * record = ServiceRegistryIteratorPeekRecord(&iterator);
 		if(record->op->type != OPERATOR_MACHINE) {
 			hasNonPrimitiveService = true;
 			break;
 		}
 	}
-	ServiceIteratorEnd(&iterator);
+	ServiceRegistryIteratorEnd(&iterator);
 	return !hasNonPrimitiveService;
 }
 

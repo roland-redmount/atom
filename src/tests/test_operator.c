@@ -787,52 +787,6 @@ static Operator * createClosureOperator(index8 const inputArguments[], size8 nIn
  * A caller binding nothing asks for the whole relation, which is the closure of both
  * components of the graph.
  */
-/**
- * CLAUDE: A CANONICAL operator over the stored relation (foo foo foo), which holds every
- * column order of the fact (foo 1 foo 2 foo 3). The service binding the first column
- * yields two column orders for the input 2, of which CANONICAL keeps (2 1 3).
- */
-void testCanonicalOperator(void)
-{
-	Atom fact = CStringToTerm("foo 1 foo 2 foo 3");
-	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
-	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 3, 0);
-	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)));
-	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 6)
-
-	Service service = {
-		.relation = relation,
-		.ioSignature = CreateIOSignature((byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT}, 3)
-	};
-	index8 groupArguments[3];
-	size8 groupSizes[3];
-	ASSERT_UINT32_EQUAL(ServiceGetExchangeableGroups(service, groupArguments, groupSizes), 1)
-	ASSERT_UINT32_EQUAL(groupSizes[0], 2)
-	ASSERT_UINT32_EQUAL(groupArguments[0], 1)
-	ASSERT_UINT32_EQUAL(groupArguments[1], 2)
-
-	Operator * serviceOperator = ServiceGetOperator(service);
-	Operator * canonicalOperator = CreateCanonicalOperator(serviceOperator, groupArguments, groupSizes, 1);
-	Atom arguments[3] = {{._int = 2}, {0}, {0}};
-	OperatorContext * context = OperatorCreateContext(canonicalOperator, arguments);
-	ASSERT_TRUE(OperatorCall(context))
-	ASSERT_INT64_EQUAL(arguments[0]._int, 2)
-	ASSERT_INT64_EQUAL(arguments[1]._int, 1)
-	ASSERT_INT64_EQUAL(arguments[2]._int, 3)
-	ASSERT_FALSE(OperatorCall(context))
-	OperatorFreeContext(context);
-
-	// CLAUDE: CANONICAL yields its tuples in the index order of its child
-	for(index8 i = 0; i < 3; i++)
-		ASSERT_UINT32_EQUAL(canonicalOperator->indexOrder[i], serviceOperator->indexOrder[i])
-	CheckOperator(canonicalOperator);
-
-	TupleStoreRemoveTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)));
-	DropRelation(relation);
-	ReleaseFormula(fact);
-}
-
-
 void testFixpointOperator(void)
 {
 	setupGraphFixture();
@@ -904,7 +858,6 @@ int main(int argc, char * argv[])
 	ExecuteTest(testUnionOperator);
 	ExecuteTest(testUnionDuplicateAtExhaustion);
 	ExecuteTest(testIndexOrder);
-	ExecuteTest(testCanonicalOperator);
 	ExecuteTest(testFixpointOperator);
 	ExecuteTest(testFixpointCallBinding);
 

@@ -170,18 +170,18 @@ bool FindServiceByOperator(Operator const * op, Service * service)
 {
 	ASSERT(!IsNullRelation(op->relation))
 	// Iterate over all services for the given relation
-	ServiceIterator iterator;
+	ServiceRegistryIterator iterator;
 	ServiceRegistryIterate(op->relation, &iterator);
 	bool found = false;
-	while(ServiceIteratorNext(&iterator)) {
-		ServiceRecord const * record = ServiceIteratorPeekRecord(&iterator);
+	while(ServiceRegistryIteratorNext(&iterator)) {
+		ServiceRecord const * record = ServiceRegistryIteratorPeekRecord(&iterator);
 		if(record->op == op) {
 			*service = record->service;
 			found = true;
 			break;
 		}
 	}
-	ServiceIteratorEnd(&iterator);
+	ServiceRegistryIteratorEnd(&iterator);
 	return found;
 }
 
@@ -189,16 +189,16 @@ bool FindServiceByOperator(Operator const * op, Service * service)
 bool OperatorIsReplaced(Operator const * op)
 {
 	ASSERT(!IsNullRelation(op->relation))
-	ServiceIterator iterator;
+	ServiceRegistryIterator iterator;
 	ServiceRegistryIterate(op->relation, &iterator);
 	bool found = false;
-	while(ServiceIteratorNext(&iterator)) {
-		if(ServiceIteratorPeekRecord(&iterator)->replacedOperator == op) {
+	while(ServiceRegistryIteratorNext(&iterator)) {
+		if(ServiceRegistryIteratorPeekRecord(&iterator)->replacedOperator == op) {
 			found = true;
 			break;
 		}
 	}
-	ServiceIteratorEnd(&iterator);
+	ServiceRegistryIteratorEnd(&iterator);
 	return found;
 }
 
@@ -443,10 +443,10 @@ static size32 invalidateRelationServices(TypedRelation relation, InvalidationUse
 	CreateResizingArray(&staleServices, sizeof(Service), 8);
 
 	// Find each compiled service for this relation
-	ServiceIterator serviceIterator;
+	ServiceRegistryIterator serviceIterator;
 	ServiceRegistryIterate(relation, &serviceIterator);
-	while(ServiceIteratorNext(&serviceIterator)) {
-		ServiceRecord const * record = ServiceIteratorPeekRecord(&serviceIterator);
+	while(ServiceRegistryIteratorNext(&serviceIterator)) {
+		ServiceRecord const * record = ServiceRegistryIteratorPeekRecord(&serviceIterator);
 		if(record->op->type == OPERATOR_MACHINE) {
 			if(useCase == INVALIDATE_BY_RULE)
 				ServiceMarkStale(record->service);
@@ -458,7 +458,7 @@ static size32 invalidateRelationServices(TypedRelation relation, InvalidationUse
 			ResizingArrayAppend(&staleServices, &(record->service));
 		}
 	}
-	ServiceIteratorEnd(&serviceIterator);
+	ServiceRegistryIteratorEnd(&serviceIterator);
 
 	// Remove all stale services
 	size32 nServicesRemoved = 0;
@@ -551,20 +551,20 @@ size32 NumberOfCompiledServices(void)
 }
 
 
-void ServiceRegistryIterate(TypedRelation relation, ServiceIterator * iterator)
+void ServiceRegistryIterate(TypedRelation relation, ServiceRegistryIterator * iterator)
 {
 	iterator->relation = relation;
 	BTreeIterate(&(iterator->btreeIterator), serviceRegistry->serviceRecords);
 }
 
 
-ServiceRecord const * ServiceIteratorPeekRecord(ServiceIterator const * iterator)
+ServiceRecord const * ServiceRegistryIteratorPeekRecord(ServiceRegistryIterator const * iterator)
 {
 	return BTreeIteratorPeekItem(&(iterator->btreeIterator));
 }
 
 
-bool ServiceIteratorNext(ServiceIterator * iterator)
+bool ServiceRegistryIteratorNext(ServiceRegistryIterator * iterator)
 {
 	ServiceRecord key = {
 		.service = (Service) {
@@ -589,7 +589,7 @@ bool ServiceIteratorNext(ServiceIterator * iterator)
 }
 
 
-void ServiceIteratorEnd(ServiceIterator * iterator)
+void ServiceRegistryIteratorEnd(ServiceRegistryIterator * iterator)
 {
 	BTreeIteratorEnd(&(iterator->btreeIterator));
 }
@@ -609,7 +609,7 @@ Operator * ServiceGetOperator(Service service)
 }
 
 
-// CLAUDE: The columns filled by one argument of a service operator; see ServiceGetExchangeableGroups()
+// The service columns filled by one argument of a service operator
 typedef struct s_ArgumentColumns {
 	index8 role;
 	byte atomType;
@@ -619,7 +619,7 @@ typedef struct s_ArgumentColumns {
 } ArgumentColumns;
 
 
-size8 ServiceGetExchangeableGroups(Service service, index8 * groupArguments, size8 * groupSizes)
+size8 ServiceGetExchangeableGroups(Service service, index8 groupArguments[], size8 groupSizes[])
 {
 	Atom form = service.relation.form;
 	if(!IsTermForm(form))
@@ -740,10 +740,10 @@ void RelationDump(TypedRelation relation)
 	// Find an all-outputs service for enumerating all tuples from the relation
 	// NOTE: this can be done by dispatch?
 	ServiceRecord record = {0};
-	ServiceIterator iterator;
+	ServiceRegistryIterator iterator;
 	ServiceRegistryIterate(relation, &iterator);
-	while(ServiceIteratorNext(&iterator)) {
-		ServiceRecord const * candidate = ServiceIteratorPeekRecord(&iterator);
+	while(ServiceRegistryIteratorNext(&iterator)) {
+		ServiceRecord const * candidate = ServiceRegistryIteratorPeekRecord(&iterator);
 		// CLAUDE: a service with repeated parameters yields only some of the tuples
 		if(HasRepeatedParameters(candidate->service.equalitySignature))
 			continue;

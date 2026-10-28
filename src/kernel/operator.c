@@ -748,103 +748,6 @@ static void invertFinalizeContext(OperatorContext * context)
 }
 
 
-//------------------------------------- OPERATOR_CANONICAL ---------------------------------------
-
-typedef struct s_CanonicalContext {
-	OperatorContext * childContext;
-} CanonicalContext;
-
-
-Operator * CreateCanonicalOperator(
-	Operator * childOperator, index8 const groupArguments[], size8 const groupSizes[], size8 nGroups)
-{
-	ASSERT(nGroups > 0)
-	size8 nArguments = childOperator->nArguments;
-	Operator * op = createOperator(OPERATOR_CANONICAL, nArguments, sizeof(CanonicalContext));
-	op->impl.canonical.childOperator = childOperator;
-	addParent(childOperator);
-
-	size8 nGroupArguments = 0;
-	for(index8 g = 0; g < nGroups; g++) {
-		ASSERT(groupSizes[g] >= 2)
-		nGroupArguments += groupSizes[g];
-	}
-#ifdef DEBUG
-	bool grouped[nArguments];
-	SetMemory(grouped, nArguments * sizeof(bool), 0);
-	for(index8 i = 0; i < nGroupArguments; i++) {
-		ASSERT(groupArguments[i] < nArguments)
-		ASSERT(!grouped[groupArguments[i]])
-		grouped[groupArguments[i]] = true;
-	}
-#endif
-	op->impl.canonical.groupArguments = Allocate(nGroupArguments);
-	CopyMemory(groupArguments, op->impl.canonical.groupArguments, nGroupArguments);
-	op->impl.canonical.groupSizes = Allocate(nGroups);
-	CopyMemory(groupSizes, op->impl.canonical.groupSizes, nGroups);
-	op->impl.canonical.nGroups = nGroups;
-
-	// CLAUDE: Dropping tuples leaves the remaining ones in the order the child yielded them
-	allocateIndexOrder(op);
-	CopyMemory(childOperator->indexOrder, op->indexOrder, nArguments);
-	return op;
-}
-
-
-static void canonicalSetupContext(OperatorContext * context)
-{
-	CanonicalContext * canonicalContext = (CanonicalContext *) &context->data;
-	// CLAUDE: The child only writes the output arguments, so the input arguments are kept
-	canonicalContext->childContext = createContext(
-		context, context->op->impl.canonical.childOperator, context->arguments);
-}
-
-
-/**
- * CLAUDE: Test whether the values of each exchangeable group ascend in the given tuple.
- */
-static bool isCanonicalTuple(Operator const * op, Atom const tuple[])
-{
-	index8 const * groupArguments = op->impl.canonical.groupArguments;
-	for(index8 g = 0; g < op->impl.canonical.nGroups; g++) {
-		size8 groupSize = op->impl.canonical.groupSizes[g];
-		for(index8 i = 1; i < groupSize; i++) {
-			if(CompareAtoms(tuple[groupArguments[i - 1]], tuple[groupArguments[i]]) > 0)
-				return false;
-		}
-		groupArguments += groupSize;
-	}
-	return true;
-}
-
-
-static bool canonicalCall(OperatorContext * context)
-{
-	CanonicalContext * canonicalContext = (CanonicalContext *) &context->data;
-	while(OperatorCall(canonicalContext->childContext)) {
-		if(isCanonicalTuple(context->op, context->arguments))
-			return true;
-	}
-	return false;
-}
-
-
-static void canonicalFinalizeContext(OperatorContext * context)
-{
-	CanonicalContext * canonicalContext = (CanonicalContext *) &context->data;
-	OperatorFreeContext(canonicalContext->childContext);
-}
-
-
-static void teardownCanonicalOperator(Operator * op)
-{
-	ASSERT(op->type == OPERATOR_CANONICAL)
-	removeParent(op->impl.canonical.childOperator);
-	Free(op->impl.canonical.groupArguments);
-	Free(op->impl.canonical.groupSizes);
-}
-
-
 //------------------------------------- OPERATOR_JOIN -----------------------------------------
 
 typedef struct s_JoinContext {
@@ -1903,7 +1806,6 @@ size8 OperatorNChildren(Operator const * op)
 	case OPERATOR_FIXPOINT:
 	case OPERATOR_FILTER:
 	case OPERATOR_CONSTANT:
-	case OPERATOR_CANONICAL:
 		return 1;
 
 	case OPERATOR_INVERT:
@@ -1955,9 +1857,6 @@ Operator * OperatorGetChild(Operator const * op, index8 index)
 
 	case OPERATOR_INVERT:
 		return op->impl.invert.childOperator;
-
-	case OPERATOR_CANONICAL:
-		return op->impl.canonical.childOperator;
 
 	default:
 		ASSERT(false)
@@ -2019,10 +1918,6 @@ static void teardownOperator(Operator * op)
 
 	case OPERATOR_INVERT:
 		teardownInvertOperator(op);
-		break;
-
-	case OPERATOR_CANONICAL:
-		teardownCanonicalOperator(op);
 		break;
 	
 	default:
@@ -2134,10 +2029,6 @@ static OperatorContext * createContext(
 	case OPERATOR_INVERT:
 		invertSetupContext(context);
 		break;
-
-	case OPERATOR_CANONICAL:
-		canonicalSetupContext(context);
-		break;
 	
 	default:
 		ASSERT(false)
@@ -2232,10 +2123,6 @@ bool OperatorCall(OperatorContext * context)
 		success = invertCall(context);
 		break;
 
-	case OPERATOR_CANONICAL:
-		success = canonicalCall(context);
-		break;
-
 	default:
 		ASSERT(false)
 		success = false;
@@ -2303,10 +2190,6 @@ void OperatorFreeContext(OperatorContext * context)
 	case OPERATOR_INVERT:
 		invertFinalizeContext(context);
 		break;
-
-	case OPERATOR_CANONICAL:
-		canonicalFinalizeContext(context);
-		break;
 	
 	default:
 		ASSERT(false)
@@ -2342,8 +2225,7 @@ static const char * operatorNames[N_OPERATOR_TYPES + 1] = {
 	"MACHINE",
 	"IFACT",
 	"CONSTANT",
-	"INVERT",
-	"CANONICAL"
+	"INVERT"
 };
 
 /**
@@ -2550,12 +2432,6 @@ static void printOperatorRecursive(
 			printOperatorRecursive(op->impl.invert.childOperator, arguments, nextParameterNumber, depth + 1);
 			PrintChar(')');
 		}
-		break;
-
-	case OPERATOR_CANONICAL:
-		PrintCString(" (");
-		printOperatorRecursive(op->impl.canonical.childOperator, arguments, nextParameterNumber, depth + 1);
-		PrintChar(')');
 		break;
 
 	default:

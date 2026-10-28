@@ -4,6 +4,7 @@
 #include "kernel/kernel.h"
 #include "kernel/MixedTypeRelation.h"
 #include "kernel/TypedRelation.h"
+#include "kernel/ServiceIterator.h"
 #include "kernel/ServiceRegistry.h"
 #include "kernel/TupleStore.h"
 #include "library/library.h"
@@ -281,6 +282,48 @@ void testConcatAbandonedIteration(void)
 }
 
 
+/**
+ * CLAUDE: A ServiceIterator over the stored relation (foo foo foo), which holds every
+ * column order of the fact (foo 1 foo 2 foo 3). The service binding the first column
+ * yields two column orders for the input 2, of which the ServiceIterator keeps (2 1 3).
+ */
+void testServiceIterator(void)
+{
+	Atom fact = CStringToTerm("foo 1 foo 2 foo 3");
+	TypedRelation relation = RelationFromFact(FormulaGetView(fact));
+	TupleStore * store = CreateTupleStore(relation, GetStorageProvider(PROVIDER_BTREE), 3, 0);
+	TupleStoreAddTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)));
+	ASSERT_UINT32_EQUAL(TupleStoreNTuples(store), 6)
+
+	Service service = {
+		.relation = relation,
+		.ioSignature = CreateIOSignature((byte[]) {PARAMETER_IN, PARAMETER_OUT, PARAMETER_OUT}, 3)
+	};
+	index8 groupArguments[3];
+	size8 groupSizes[3];
+	ASSERT_UINT32_EQUAL(ServiceGetExchangeableGroups(service, groupArguments, groupSizes), 1)
+	ASSERT_UINT32_EQUAL(groupSizes[0], 2)
+	ASSERT_UINT32_EQUAL(groupArguments[0], 1)
+	ASSERT_UINT32_EQUAL(groupArguments[1], 2)
+
+	ServiceRecord const * serviceRecord = ServiceGetRecord(service);
+	ASSERT_TRUE(serviceRecord)
+	Atom values[3] = {{._int = 2}, {0}, {0}};
+	ServiceIterator iterator;
+	ServiceIterate(serviceRecord, values, &iterator);
+	ASSERT_TRUE(ServiceIteratorNext(&iterator))
+	ASSERT_INT64_EQUAL(ServiceIteratorGetElement(&iterator, 0).atom._int, 2)
+	ASSERT_INT64_EQUAL(ServiceIteratorGetElement(&iterator, 1).atom._int, 1)
+	ASSERT_INT64_EQUAL(ServiceIteratorGetElement(&iterator, 2).atom._int, 3)
+	ASSERT_FALSE(ServiceIteratorNext(&iterator))
+	ServiceIteratorEnd(&iterator);
+
+	TupleStoreRemoveTuple(store, TypedTuplePeekAtoms(FormulaGetActors(fact)));
+	DropRelation(relation);
+	ReleaseFormula(fact);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(TRANSIENT_MEMORY);
@@ -294,6 +337,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testConcatServiceCount);
 	ExecuteTest(testConcatWithoutMatch);
 	ExecuteTest(testConcatAbandonedIteration);
+	ExecuteTest(testServiceIterator);
 
 	UnloadLibraries();
 	KernelShutdown();

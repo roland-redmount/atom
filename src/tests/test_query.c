@@ -295,14 +295,14 @@ void testInvalidateServiceByRule(void)
 
 size32 numberOfStaleServices(TypedRelation relation)
 {
-	ServiceIterator iterator;
+	ServiceRegistryIterator iterator;
 	ServiceRegistryIterate(relation, &iterator);
 	size32 nStale = 0;
-	while(ServiceIteratorNext(&iterator)) {
-		if(ServiceIteratorPeekRecord(&iterator)->isStale)
+	while(ServiceRegistryIteratorNext(&iterator)) {
+		if(ServiceRegistryIteratorPeekRecord(&iterator)->isStale)
 			nStale++;
 	}
-	ServiceIteratorEnd(&iterator);
+	ServiceRegistryIteratorEnd(&iterator);
 	return nStale;
 }
 

@@ -149,35 +149,32 @@ void RemoveAllCompiledServices(void);
 
 
 /**
- * Iterating over services
+ * Iterating over services in the service registry
  */
 typedef struct {
 	TypedRelation relation;
 	BTreeIterator btreeIterator;
-} ServiceIterator;
+} ServiceRegistryIterator;
 
 /**
  * Create iterator over all service records for a given relation
  */
-void ServiceRegistryIterate(TypedRelation relation, ServiceIterator * iterator);
+void ServiceRegistryIterate(TypedRelation relation, ServiceRegistryIterator * iterator);
 
-bool ServiceIteratorNext(ServiceIterator * iterator);
+bool ServiceRegistryIteratorNext(ServiceRegistryIterator * iterator);
 
-ServiceRecord const * ServiceIteratorPeekRecord(ServiceIterator const * iterator);
+ServiceRecord const * ServiceRegistryIteratorPeekRecord(ServiceRegistryIterator const * iterator);
 
-void ServiceIteratorEnd(ServiceIterator * iterator);
+void ServiceRegistryIteratorEnd(ServiceRegistryIterator * iterator);
 
 /**
  * Retrieve the operator of the service for the given Service.
  * If the service is not registers, returns 0
  */
-/* CLAUDE: For a relation whose form repeats a role, the operator yields every column order of
-   a fact that agrees with the input arguments. A CANONICAL operator over it yields one tuple
-   per fact; see ServiceGetExchangeableGroups() and createServiceContext() in MixedTypeRelation.c. */
 Operator * ServiceGetOperator(Service service);
 
 /**
- * CLAUDE: Find the exchangeable groups of a service; see OPERATOR_CANONICAL. A group is a
+ * CLAUDE: Find the exchangeable groups of a service; see ServiceIterator. A group is a
  * list of at least 2 output arguments of the service operator, in ascending order. The
  * arguments of a group fill columns of one role and one atom type, and each argument
  * fills the same number of columns. Exchanging the values of two such arguments gives
@@ -185,7 +182,7 @@ Operator * ServiceGetOperator(Service service);
  * The groupArguments and groupSizes arrays must hold one element per column of the
  * relation. Returns the number of groups.
  */
-size8 ServiceGetExchangeableGroups(Service service, index8 * groupArguments, size8 * groupSizes);
+size8 ServiceGetExchangeableGroups(Service service, index8 groupArguments[], size8 groupSizes[]);
 
 /**
  * Copy the Service evaluated by the given operator to *service.
