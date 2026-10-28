@@ -47,13 +47,13 @@ Atom CreateTermForm(Atom predicateForm, bool sign)
 	IFactDraft draft;
 	IFactBegin(&draft);
 
-	IFactBeginConjunction(
+	IFactBeginRelation(
 		&draft, GetCoreRelation(RELATION_TERM_FORM), CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM));
 	Atom tuple[3];
 	// TODO: make this a kernel function CoreFormSetTuple()
 	termFormSetTuple(tuple, (Atom) {0}, predicateForm, (Atom) {._int = sign ? 1 : 0});
 	IFactAddTuple(&draft, tuple);
-	IFactEndConjunction(&draft);
+	IFactEndRelation(&draft);
 
 	return IFactEnd(&draft);
 }

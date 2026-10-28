@@ -1071,6 +1071,37 @@ static Operator * dispatchNextTerms(
 }
 
 
+/*
+ * Compile the first set of terms still to compile that matches the conjunction form of
+ * an ifact rule, such as (car x brand b & car x model m) for the rule
+ * (car * brand b & car * model m). The term set compiles to the IFACT operator of the rule;
+ * see compileQueryVariants(). Returns 0 if no set of terms compiled.
+ */
+static Operator * compileNextIFactTerms(
+	CompileStack * compileStack, ClauseCompileState * clauseState, index8 termClauseMap[])
+{
+	ChoicePoint * choicePoint = &(clauseState->choiceTree->choicePoints[clauseState->choiceTree->nChoicePoints]);
+	Atom const * candidateForms = ResizingArrayGetMemory(&(clauseState->candidateForms));
+	Operator * op = 0;
+	for(index32 i = 0; !op && (i < clauseState->candidateForms.nElements); i++) {
+		if(!IFactRuleExistsForForm(candidateForms[i]))
+			continue;
+		TermSetIterator iterator;
+		if(!termSetIterate(clauseState, candidateForms[i], &iterator))
+			continue;
+		index8 termIndices[RELATION_MAX_ARITY];
+		size8 nTerms;
+		while(!op && (nTerms = termSetIteratorNext(&iterator, termIndices))) {
+			op = compileTermSet(
+				compileStack, clauseState, candidateForms[i], termIndices, nTerms,
+				TERM_DISPATCH_OR_COMPILE, choicePoint, termClauseMap
+			);
+		}
+	}
+	return op;
+}
+
+
 /**
  * Compile the first non-excluded recursive term to a RECURSE operator; see
  * compileSelfTerm(). The term is then marked excluded. Returns 0 if no term compiled.
@@ -1227,6 +1258,9 @@ static Operator * compileNextChoice(
 		// CLAUDE: A set of several terms is only ever dispatched; see dispatchNextTerms()
 		form = findCandidateForm(clauseState, termIndices, choicePoint->nTerms);
 		mode = TERM_DISPATCH_ONLY;
+		// CLAUDE: A set of terms of the form of an ifact rule is also compiled; see compileNextIFactTerms()
+		if(IFactRuleExistsForForm(form))
+			mode = TERM_DISPATCH_OR_COMPILE;
 	}
 	return compileTermSet(
 		compileStack, clauseState, form, termIndices, choicePoint->nTerms, mode, choicePoint, termClauseMap);
@@ -1272,6 +1306,8 @@ static Operator * compileConjunctionRecursive(
 	 * as early as possible, to avoid generating calls to table-scanning operators which
 	 * then have to be filtered. It will not always yield the optimal solution.
 	 */
+	/* CLAUDE: Between pass 1 and pass 2, a set of terms matching the conjunction form of an
+	 * ifact rule is compiled; see compileNextIFactTerms(). */
 	ChoiceTree * choiceTree = clauseState->choiceTree;
 	index8 choicePointIndex = choiceTree->nChoicePoints;
 	ASSERT(choicePointIndex < MAX_CHOICE_POINTS)
@@ -1287,6 +1323,8 @@ static Operator * compileConjunctionRecursive(
 		choicePoint->hasNextMatch = false;
 		// pass 1
 		op = dispatchNextTerms(compileStack, clauseState, termClauseMap);
+		if(!op)
+			op = compileNextIFactTerms(compileStack, clauseState, termClauseMap);
 		// pass 2
 		if(!op)
 			op = compileNextTerm(compileStack, clauseState, TERM_DISPATCH_OR_COMPILE, termClauseMap);
@@ -2610,50 +2648,80 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
 }
 
 
-/**
- * Test the query has an output at idColumn, and a typed input at every other role.
- */
-static bool queryMatchesIFactRule(ParameterizedQuery const * query, index8 idColumn)
+/* CLAUDE: Find the term forms and the ID column of each term of a query that may match an
+ * ifact rule. The query must have exactly one distinct output parameter, untyped or AT_ID,
+ * which occurs exactly once in each term. Every other parameter must be a typed input that
+ * does not repeat. The ID column of a term is the index of the output parameter among the
+ * parameters of the term. Returns the number of terms, or 0 if the query has another
+ * structure. */
+static size8 findIFactQueryIDColumns(
+	ParameterizedQuery const * query, Atom termForms[], index8 idColumns[])
 {
-	for(index8 i = 0; i < query->arity; i++) {
-		Atom parameter = query->parameters[i];
-		if(i == idColumn) {
-			if(parameter.parameter.io != PARAMETER_OUT)
-				return false;
-			if(parameter.parameter.atomType && (parameter.parameter.atomType != AT_ID))
-				return false;
+	if(query->arity > RELATION_MAX_ARITY)
+		return 0;
+	size8 nTerms = RelationFormGetTermForms(query->form, termForms);
+	uint8 outputNumber = 0;
+	index8 termOffset = 0;
+	for(index8 i = 0; i < nTerms; i++) {
+		size8 termArity = TermFormArity(termForms[i]);
+		size8 nOutputs = 0;
+		for(index8 j = 0; j < termArity; j++) {
+			Atom parameter = query->parameters[termOffset + j];
+			if(parameter.parameter.io == PARAMETER_OUT) {
+				if(parameter.parameter.atomType && (parameter.parameter.atomType != AT_ID))
+					return 0;
+				if(!outputNumber)
+					outputNumber = parameter.parameter.number;
+				else if(parameter.parameter.number != outputNumber)
+					return 0;
+				idColumns[i] = j;
+				nOutputs++;
+			}
+			else if(!parameter.parameter.atomType)
+				return 0;
 		}
-		else {
-			if(parameter.parameter.io != PARAMETER_IN)
-				return false;
-			if(!parameter.parameter.atomType)
-				return false;
-		}
+		if(nOutputs != 1)
+			return 0;
+		termOffset += termArity;
 	}
-	return true;
+	// CLAUDE: Only the output parameter may repeat
+	EqualitySignature equalitySignature =
+		ParametersGetEqualitySignature(query->parameters, query->arity);
+	for(index8 i = 0; i < query->arity; i++) {
+		if(equalitySignature.repeatOf[i] && (query->parameters[i].parameter.io != PARAMETER_OUT))
+			return 0;
+	}
+	return nTerms;
 }
 
 
 /**
- * Find the ifact rule of the query's term form matching the query, and write the
- * index of the ID column of the rule to *idColumn; see queryMatchesIFactRule().
- * Returns false if no ifact rule matches, or if the query repeats a parameter.
+ * Find the ifact rule matching the query.
+ * The query form may be a conjunction form. Writes the term forms and ID columns of
+ * the query to termForms[] and idColumns[], and the number of terms to *nTerms; see
+ * findIFactQueryIDColumns(). A rule matches if its ID columns equal those of the query; see
+ * IFactRuleGetIDColumns().
  */
-static bool findIFactRule(ParameterizedQuery const * query, index8 * idColumn)
+static bool findIFactRule(
+	ParameterizedQuery const * query, Atom termForms[], index8 idColumns[], size8 * nTerms)
 {
-	EqualitySignature equalitySignature =
-		ParametersGetEqualitySignature(query->parameters, query->arity);
-	for(index8 i = 0; i < query->arity; i++) {
-		if(equalitySignature.repeatOf[i])
-			return false;
-	}
+	*nTerms = findIFactQueryIDColumns(query, termForms, idColumns);
+	if(*nTerms == 0)
+		return false;
+
 	// Ifact rules of one term form differ in the generator index, so at most one rule matches
 	bool foundRule = false;
 	DictionaryIterator iterator;
 	DictionaryIterateIFactRules(query->form, &iterator);
 	while(!foundRule && DictionaryIteratorNext(&iterator)) {
-		*idColumn = IFactRuleFindGeneratorIndex(DictionaryIteratorPeekActors(&iterator));
-		foundRule = queryMatchesIFactRule(query, *idColumn);
+		FormulaView ifactRule = {
+			.form = query->form,
+			.actors = DictionaryIteratorPeekActors(&iterator)
+		};
+		Atom ruleTermForms[RELATION_MAX_ARITY];
+		index8 ruleIDColumns[RELATION_MAX_ARITY];
+		IFactRuleGetIDColumns(&ifactRule, ruleTermForms, ruleIDColumns);
+		foundRule = CompareMemory(idColumns, ruleIDColumns, *nTerms * sizeof(index8)) == 0;
 	}
 	DictionaryIteratorEnd(&iterator);
 	return foundRule;
@@ -2662,37 +2730,65 @@ static bool findIFactRule(ParameterizedQuery const * query, index8 * idColumn)
 
 /**
  * Determine the relation for an ifact rule query, and ensure it can store ifacts.
- * An existing relation must not have a TupleStore; see IFactSetupRelation()
- *
- * This function must be called before seedVariantsFromServices()
+ * An existing relation must not have a TupleStore; see IFactSetupRelation().
+ * Writes one IFactTerm for each term of the query to terms[], and the number of terms
+ * to *nTerms. The relation of each term has AT_ID in the ID column, the query types in the
+ * other columns, and canonical column order; see IsCanonicalRelation(). Each term's relation
+ * is prepared to hold ifacts. Returns false if no ifact rule matches the query, or if a term
+ * relation cannot hold ifacts.
+ * This function must be called before seedVariantsFromServices().
  */
-static bool setupIFactRuleRelation(
-	CompileStack * compileStack, ParameterizedQuery const * query, index8 * idColumn,
-	TypedRelation * relation)
+static bool setupIFactRuleTerms(
+	CompileStack * compileStack, ParameterizedQuery const * query, IFactTerm terms[], size8 * nTerms)
 {
-	if(!findIFactRule(query, idColumn))
+	Atom termForms[RELATION_MAX_ARITY];
+	index8 idColumns[RELATION_MAX_ARITY];
+	if(!findIFactRule(query, termForms, idColumns, nTerms))
 		return false;
 
-	// The relation corresponding to the query
-	byte atomTypes[query->arity];
-	for(index8 i = 0; i < query->arity; i++)
-		atomTypes[i] = (i == *idColumn) ? AT_ID : query->parameters[i].parameter.atomType;
-	*relation = (TypedRelation) {
-		.form = query->form,
-		.typeSignature = CreateTypeSignature(atomTypes, query->arity)
-	};
-	bool createdReader;
-	if(!IFactSetupRelation(*relation, *idColumn, &createdReader))
-		return false;
-	if(createdReader)
-		compileStack->nRelationsCreated++;
+	index8 queryArgumentMap[RELATION_MAX_ARITY];
+	ParametersGetArgumentMap(query->parameters, query->arity, queryArgumentMap);
+	index8 termOffset = 0;
+	for(index8 i = 0; i < *nTerms; i++) {
+		size8 termArity = TermFormArity(termForms[i]);
+		// CLAUDE: Fixed size arrays, since an optimized build reads variable length arrays here
+		// as regions of size 0; see -Wstringop-overflow
+		TypedAtom typedParameters[RELATION_MAX_ARITY];
+		for(index8 j = 0; j < termArity; j++) {
+			byte atomType = (j == idColumns[i]) ? AT_ID : query->parameters[termOffset + j].parameter.atomType;
+			typedParameters[j] = (TypedAtom) {.type = atomType};
+		}
+		// CLAUDE: Each typed parameter has value zero, so the canonical order depends on types
+		// alone; see canonicalizeVariantOrder()
+		index8 permutation[RELATION_MAX_ARITY];
+		GetCanonicalActorOrder(termForms[i], typedParameters, permutation);
+		byte atomTypes[RELATION_MAX_ARITY];
+		IFactTerm * term = &(terms[i]);
+		SetMemory(term, sizeof(IFactTerm), 0);
+		for(index8 j = 0; j < termArity; j++) {
+			atomTypes[j] = typedParameters[permutation[j]].type;
+			term->argumentMap[j] = queryArgumentMap[termOffset + permutation[j]];
+			if(permutation[j] == idColumns[i])
+				term->idColumn = j;
+		}
+		term->relation = (TypedRelation) {
+			.form = termForms[i],
+			.typeSignature = CreateTypeSignature(atomTypes, termArity)
+		};
+		bool createdReader;
+		if(!IFactSetupRelation(term->relation, term->idColumn, &createdReader))
+			return false;
+		if(createdReader)
+			compileStack->nRelationsCreated++;
+		termOffset += termArity;
+	}
 	return true;
 }
 
 
 /**
- * Create an IFACT operator for a term query, which reads and writes the given TupleStore,
- * and add it to the compiled variants.
+ * Create an IFACT operator for a query and add it to the compiled variants.
+ * The query may be a conjunction query, with the terms from setupIFactRuleTerms()
  *
  * This function must be called after completeRecursiveVariant(), since an IFACT operator
  * cannot run within a FIXPOINT operator, whose child operator has no input arguments.
@@ -2700,13 +2796,19 @@ static bool setupIFactRuleRelation(
  * Returns the new number of variants.
  */
 static size8 compileIFactRule(
-	ParameterizedQuery const * query, TypedRelation relation, index8 idColumn,
+	ParameterizedQuery const * query, IFactTerm const terms[], size8 nTerms,
 	CompiledVariant variants[], size8 nVariants)
 {
+	index8 argumentMap[RELATION_MAX_ARITY];
+	size8 nArguments = ParametersGetArgumentMap(query->parameters, query->arity, argumentMap);
+	index8 idArgument = terms[0].argumentMap[terms[0].idColumn];
 	Atom resolvedParameters[query->arity];
 	TupleCopy(query->parameters, resolvedParameters, query->arity);
-	resolvedParameters[idColumn].parameter.atomType = AT_ID;
-	Operator * ifactOperator = CreateIFactOperator(relation, idColumn);
+	for(index8 i = 0; i < query->arity; i++) {
+		if(argumentMap[i] == idArgument)
+			resolvedParameters[i].parameter.atomType = AT_ID;
+	}
+	Operator * ifactOperator = CreateIFactOperator(terms, nTerms, nArguments);
 	addCompiledVariant(
 		variants, &nVariants, resolvedParameters, query->arity, ifactOperator, UNION_OPERATOR_FIRST);
 	return nVariants;
@@ -2848,11 +2950,10 @@ static size8 compileQueryVariants(
 	// Find a matching ifact and setup its TupleSTore before seeding;
 	// see setupIFactRuleStore()
 
-	// CLAUDE: see setupIFactRuleRelation()
-	index8 ifactIdColumn = 0;
-	TypedRelation ifactRelation;
-	bool hasIFactRule = !IsConjunctionForm(query->form) &&
-		setupIFactRuleRelation(compileStack, query, &ifactIdColumn, &ifactRelation);
+	// CLAUDE: see setupIFactRuleTerms()
+	IFactTerm ifactTerms[RELATION_MAX_ARITY];
+	size8 nIFactTerms = 0;
+	bool hasIFactRule = setupIFactRuleTerms(compileStack, query, ifactTerms, &nIFactTerms);
 
 	// CLAUDE: A relation created by a nested compilation invalidates services, but not the
 	// variants under construction here, which may read services compiled before the relation
@@ -2889,7 +2990,7 @@ static size8 compileQueryVariants(
 
 	// Compile an IFACT variant after the FIXPOINT operators are added; see compileIFactRule()
 	if(hasIFactRule)
-		nVariants = compileIFactRule(query, ifactRelation, ifactIdColumn, variants, nVariants);
+		nVariants = compileIFactRule(query, ifactTerms, nIFactTerms, variants, nVariants);
 
 	// CLAUDE: Every service belongs to a relation in canonical column order
 	return canonicalizeVariantOrder(query, variants, nVariants);
@@ -2951,9 +3052,9 @@ static size8 compileParameterizedQuery(
 	for(index8 i = 0; i < givenQuery->arity; i++)
 		ASSERT(renumberedQuery.parameters[i].parameter.number == givenQuery->parameters[i].parameter.number)
 #endif
-	// CLAUDE: A relation created while compiling, such as the relation of an ifact rule, takes the
-	// column order of the query; see setupIFactRuleRelation(). The caller finds the compiled
-	// services again by dispatch, which matches any column order.
+	// CLAUDE: A relation created while compiling, such as the relation of a term of an ifact rule,
+	// need not have the column order of the query; see setupIFactRuleTerms(). The caller finds
+	// the compiled services again by dispatch, which matches any column order.
 	ParameterizedQuery canonicalQuery;
 	copyQueryInCanonicalOrder(givenQuery, &canonicalQuery);
 	ParameterizedQuery const * query = &canonicalQuery;

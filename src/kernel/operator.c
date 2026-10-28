@@ -1735,13 +1735,19 @@ typedef struct s_IFactOperatorContext {
 } IFactOperatorContext;
 
 
-Operator * CreateIFactOperator(TypedRelation relation, index8 idColumn)
+Operator * CreateIFactOperator(IFactTerm const terms[], size8 nTerms, size8 nArguments)
 {
-	size8 nArguments = TypeSignatureNAtomTypes(relation.typeSignature);
-	ASSERT(idColumn < nArguments)
+	ASSERT(nTerms > 0)
 	Operator * op = createOperator(OPERATOR_IFACT, nArguments, sizeof(IFactOperatorContext));
-	op->impl.ifact.relation = relation;
-	op->impl.ifact.idColumn = idColumn;
+	op->impl.ifact.terms = Allocate(nTerms * sizeof(IFactTerm));
+	CopyMemory(terms, op->impl.ifact.terms, nTerms * sizeof(IFactTerm));
+	op->impl.ifact.nTerms = nTerms;
+	// Use the first term's idColumn for the ID argument position.
+	op->impl.ifact.idArgument = terms[0].argumentMap[terms[0].idColumn];
+	for(index8 i = 0; i < nTerms; i++) {
+		ASSERT(terms[i].argumentMap[terms[i].idColumn] == op->impl.ifact.idArgument)
+		ASSERT(IsTermForm(terms[i].relation.form))
+	}
 
 	// IFACT yields at most one tuple, so any index order holds
 	setIdentityIndexOrder(op);
@@ -1755,6 +1761,11 @@ static void ifactSetupContext(OperatorContext * context)
 }
 
 
+/* CLAUDE: TODO: A term with a repeated role, such as (pair * member a member b), stores its
+ * tuple in argument order. The ifact of (3, 5) then differs from the ifact of (5, 3). The tuple
+ * should be stored in canonical order, sorted by value within each role. Then IFACT and the
+ * reader of IFactCreateReaderService() must yield every actor order of the tuple, to give a
+ * complete relation. */
 static bool ifactCall(OperatorContext * context)
 {
 	Operator const * op = context->op;
@@ -1765,21 +1776,29 @@ static bool ifactCall(OperatorContext * context)
 
 	IFactDraft draft;
 	IFactBegin(&draft);
-	IFactBeginConjunction(&draft, op->impl.ifact.relation, op->impl.ifact.idColumn);
-	IFactAddTuple(&draft, context->arguments);
-	IFactEndConjunction(&draft);
+	// CLAUDE: The term forms are distinct, so each term gives one IFactRelation; see IsIFactRule()
+	for(index8 i = 0; i < op->impl.ifact.nTerms; i++) {
+		IFactTerm const * term = &(op->impl.ifact.terms[i]);
+		size8 nColumns = TypeSignatureNAtomTypes(term->relation.typeSignature);
+		Atom tuple[RELATION_MAX_ARITY];
+		for(index8 j = 0; j < nColumns; j++)
+			tuple[j] = context->arguments[term->argumentMap[j]];
+		IFactBeginRelation(&draft, term->relation, term->idColumn);
+		IFactAddTuple(&draft, tuple);
+		IFactEndRelation(&draft);
+	}
 	Atom idAtom = IFactEnd(&draft);
 
 	IFactMarkCached(idAtom);
 
-	context->arguments[op->impl.ifact.idColumn] = idAtom;
+	context->arguments[op->impl.ifact.idArgument] = idAtom;
 	return true;
 }
 
 
 static void teardownIFactOperator(Operator * op)
 {
-	// nothing to do
+	Free(op->impl.ifact.terms);
 }
 
 

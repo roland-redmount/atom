@@ -36,7 +36,8 @@ typedef struct s_Dictionary {
 /*
  * CLAUDE: The number of references to a form in the form index; see indexForm().
  * A clause form has one reference per rule of the form in the dictionary.
- * A conjunction form has one reference per relation of the form.
+ * A conjunction form has one reference per relation of the form, and one per ifact rule
+ * of the form.
  */
 typedef struct s_IndexedForm {
 	Atom form;
@@ -63,17 +64,23 @@ static int8 compareEntries(FormulaView const * entry, FormulaView const * entryO
 }
 
 
-/**
- * Index of the generator in an actors tuple. A generator must be present.
- */
-index8 IFactRuleFindGeneratorIndex(TypedTuple const * actors)
+size8 IFactRuleGetIDColumns(FormulaView const * ifactRule, Atom termForms[], index8 idColumns[])
 {
-	for(index8 i = 0; i < actors->nAtoms; i++) {
-		if(SameTypedAtoms(TypedTupleGetElement(actors, i), generatorAtom))
-			return i;
+	size8 nTerms = RelationFormGetTermForms(ifactRule->form, termForms);
+	index8 termOffset = 0;
+	for(index8 i = 0; i < nTerms; i++) {
+		size8 termArity = TermFormArity(termForms[i]);
+		bool foundGenerator = false;
+		for(index8 j = 0; !foundGenerator && (j < termArity); j++) {
+			if(SameTypedAtoms(TypedTupleGetElement(ifactRule->actors, termOffset + j), generatorAtom)) {
+				idColumns[i] = j;
+				foundGenerator = true;
+			}
+		}
+		ASSERT(foundGenerator)
+		termOffset += termArity;
 	}
-	ASSERT(false)
-	return 0;
+	return nTerms;
 }
 
 
@@ -81,6 +88,8 @@ index8 IFactRuleFindGeneratorIndex(TypedTuple const * actors)
  * Order ifact rules by term form, then by generator index. A key with no
  * actors matches every ifact rule of its term form.
  */
+/* CLAUDE: The form may be a conjunction form. Rules of one form are ordered by their ID
+ * columns; see IFactRuleGetIDColumns(). */
 static int8 compareIFactRules(FormulaView const * entry, FormulaView const * entryOrKey)
 {
 	if(entry->form.hash < entryOrKey->form.hash)
@@ -89,12 +98,17 @@ static int8 compareIFactRules(FormulaView const * entry, FormulaView const * ent
 		return 1;
 	if(!entryOrKey->actors)
 		return 0;
-	index8 generatorIndex = IFactRuleFindGeneratorIndex(entry->actors);
-	index8 keyGeneratorIndex = IFactRuleFindGeneratorIndex(entryOrKey->actors);
-	if(generatorIndex < keyGeneratorIndex)
-		return -1;
-	if(generatorIndex > keyGeneratorIndex)
-		return 1;
+	Atom termForms[RELATION_MAX_ARITY];
+	index8 idColumns[RELATION_MAX_ARITY];
+	index8 keyIDColumns[RELATION_MAX_ARITY];
+	size8 nTerms = IFactRuleGetIDColumns(entry, termForms, idColumns);
+	IFactRuleGetIDColumns(entryOrKey, termForms, keyIDColumns);
+	for(index8 i = 0; i < nTerms; i++) {
+		if(idColumns[i] < keyIDColumns[i])
+			return -1;
+		if(idColumns[i] > keyIDColumns[i])
+			return 1;
+	}
 	return 0;
 }
 
@@ -643,22 +657,42 @@ void DictionaryRemoveClause(FormulaView * clause)
 
 bool IsIFactRule(Atom formula)
 {
-	if(!FormulaIsTerm(formula))
+	if(!FormulaIsTerm(formula) && !FormulaIsConjunction(formula))
 		return false;
 	FormulaView view = FormulaGetView(formula);
-	if(!TermFormGetSign(view.form))
-		return false;
 	size8 arity = view.actors->nAtoms;
-	if(arity < 2)
+	// CLAUDE: The query of an ifact rule must fit in a relation; see RELATION_MAX_ARITY
+	if(arity > RELATION_MAX_ARITY)
 		return false;
 
-	size8 nGenerators = 0;
+	// CLAUDE: Every term is positive, has at least two roles and exactly one generator
+	Atom termForms[RELATION_MAX_ARITY];
+	size8 nTerms = RelationFormGetTermForms(view.form, termForms);
+	index8 termOffset = 0;
+	for(index8 i = 0; i < nTerms; i++) {
+		if(!TermFormGetSign(termForms[i]))
+			return false;
+		// CLAUDE: The term forms are distinct. Terms of the same form are adjacent; see
+		// RelationFormGetTermForms()
+		if((i > 0) && SameAtoms(termForms[i - 1], termForms[i]))
+			return false;
+		size8 termArity = TermFormArity(termForms[i]);
+		if(termArity < 2)
+			return false;
+		size8 nGenerators = 0;
+		for(index8 j = 0; j < termArity; j++) {
+			if(SameTypedAtoms(TypedTupleGetElement(view.actors, termOffset + j), generatorAtom))
+				nGenerators++;
+		}
+		if(nGenerators != 1)
+			return false;
+		termOffset += termArity;
+	}
+
 	for(index8 i = 0; i < arity; i++) {
 		TypedAtom actor = TypedTupleGetElement(view.actors, i);
-		if(SameTypedAtoms(actor, generatorAtom)) {
-			nGenerators++;
+		if(SameTypedAtoms(actor, generatorAtom))
 			continue;
-		}
 		if(actor.type != AT_VARIABLE)
 			return false;
 		// no variable may be repeated
@@ -667,7 +701,7 @@ bool IsIFactRule(Atom formula)
 				return false;
 		}
 	}
-	return nGenerators == 1;
+	return true;
 }
 
 
@@ -682,7 +716,14 @@ FormulaView DictionaryAddIFactRule(Atom rule)
 	setupEntry(&entry, key.form, key.actors);
 	ASSERT(BTreeInsert(dictionary->ifactRules, &entry) == BTREE_INSERTED)
 	InvalidateTermFormServices(entry.form, INVALIDATE_BY_RULE);
-	InvalidateDependentServices(&entry.form, 1);
+	// CLAUDE: InvalidateDependentServices() takes term forms, so a conjunction rule passes its terms
+	Atom termForms[RELATION_MAX_ARITY];
+	size8 nTerms = RelationFormGetTermForms(entry.form, termForms);
+	InvalidateDependentServices(termForms, nTerms);
+	// CLAUDE: The form index makes the form of a conjunction rule a candidate for a set of
+	// terms in a rule body; see compileNextIFactTerms() in compiler.c
+	if(nTerms > 1)
+		indexForm(entry.form, false);
 	return entry;
 }
 
@@ -698,21 +739,31 @@ bool DictionaryContainsIFactRule(Atom rule)
 bool IFactRuleExistsForTermForm(Atom termForm)
 {
 	FormulaView key = {.form = termForm, .actors = 0};
-	return BTreeContainsItem(dictionary->ifactRules, &key);
+	if(BTreeContainsItem(dictionary->ifactRules, &key))
+		return true;
+	// CLAUDE: A conjunction rule holding the term form is found by scanning every ifact rule
+	bool foundRule = false;
+	BTreeIterator iterator;
+	BTreeIterate(&iterator, dictionary->ifactRules);
+	while(!foundRule && BTreeIteratorNext(&iterator)) {
+		FormulaView const * ifactRule = BTreeIteratorPeekItem(&iterator);
+		foundRule = IsConjunctionForm(ifactRule->form) &&
+			(MultisetGetElementMultiple(ifactRule->form, termForm) > 0);
+	}
+	BTreeIteratorEnd(&iterator);
+	return foundRule;
 }
 
 
 /**
  * Release the cached ifacts created by IFACT operators compiled from an ifact rule.
- * These are the cached ifacts in the TupleStore of each relation of the term form of the
- * rule, with the ID column at the generator of the rule; see IFactReleaseCached().
  */
-/* CLAUDE: The cached ifacts are not kept in a TupleStore. IFactReleaseCached() finds the
-   cached ifacts by the term form of the rule. */
 static void releaseIFactRuleCache(FormulaView const * ifactRule)
 {
-	index8 idColumn = IFactRuleFindGeneratorIndex(ifactRule->actors);
-	IFactReleaseCached(ifactRule->form, idColumn);
+	Atom termForms[RELATION_MAX_ARITY];
+	index8 idColumns[RELATION_MAX_ARITY];
+	IFactRuleGetIDColumns(ifactRule, termForms, idColumns);
+	IFactReleaseCached(ifactRule->form, idColumns);
 }
 
 
@@ -725,7 +776,17 @@ void DictionaryRemoveIFactRule(FormulaView * ifactRule)
 	releaseIFactRuleCache(ifactRule);
 	// Invalidate before the entry is removed, since the term form is released with it
 	InvalidateTermFormServices(ifactRule->form, INVALIDATE_BY_RULE);
+	// CLAUDE: see DictionaryAddIFactRule()
+	if(IsConjunctionForm(ifactRule->form))
+		unindexForm(ifactRule->form);
 	ASSERT(BTreeDelete(dictionary->ifactRules, ifactRule, 0) == BTREE_DELETED)
+}
+
+
+bool IFactRuleExistsForForm(Atom form)
+{
+	FormulaView key = {.form = form, .actors = 0};
+	return BTreeContainsItem(dictionary->ifactRules, &key);
 }
 
 
@@ -747,8 +808,13 @@ void DictionaryRemoveAll(void)
 	// Release the cached ifacts of each ifact rule; see DictionaryRemoveIFactRule()
 	BTreeIterator iterator;
 	BTreeIterate(&iterator, dictionary->ifactRules);
-	while(BTreeIteratorNext(&iterator))
-		releaseIFactRuleCache(BTreeIteratorPeekItem(&iterator));
+	while(BTreeIteratorNext(&iterator)) {
+		FormulaView const * ifactRule = BTreeIteratorPeekItem(&iterator);
+		releaseIFactRuleCache(ifactRule);
+		// CLAUDE: see DictionaryAddIFactRule()
+		if(IsConjunctionForm(ifactRule->form))
+			unindexForm(ifactRule->form);
+	}
 	BTreeIteratorEnd(&iterator);
 	BTreeClear(dictionary->ifactRules);
 	RemoveAllCompiledServices();
@@ -766,11 +832,11 @@ void DictionaryIterateClauses(Atom clauseForm, DictionaryIterator * iterator)
 }
 
 
-void DictionaryIterateIFactRules(Atom termForm, DictionaryIterator * iterator)
+void DictionaryIterateIFactRules(Atom form, DictionaryIterator * iterator)
 {
-	ASSERT(IsTermForm(termForm))
+	ASSERT(IsRelationForm(form))
 	iterator->key = (FormulaView) {
-		.form = termForm,
+		.form = form,
 		.actors = 0
 	};
 	BTreeIterate(&(iterator->btreeIterator), dictionary->ifactRules);

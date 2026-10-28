@@ -135,19 +135,28 @@ void DictionaryRemoveClause(FormulaView * clause);
  * generator (*), where every other actor is a variable and no variable is repeated.
  * The term must have at least two roles, since the IFACT operator needs an input.
  */
+/* CLAUDE: An ifact rule may also be a conjunction, such as (car * brand b & car * model m).
+ * Each term of the conjunction must be a positive term with exactly one generator and at
+ * least two roles. The terms must have distinct term forms, so (car * feature f & car * feature g)
+ * is not an ifact rule. No variable is repeated anywhere in the conjunction. The rule has at
+ * most RELATION_MAX_ARITY actors. */
 bool IsIFactRule(Atom formula);
 
 /**
- * Index of the generator in the actors of an ifact rule.
+ * CLAUDE: Write the term form of each term of an ifact rule to termForms[], in the order of
+ * RelationFormGetTermForms(). Write the ID column of each term to idColumns[]. The ID column
+ * of a term is the index of the generator among the actors of the term. Returns the number
+ * of terms.
  */
-index8 IFactRuleFindGeneratorIndex(TypedTuple const * actors);
+size8 IFactRuleGetIDColumns(FormulaView const * ifactRule, Atom termForms[], index8 idColumns[]);
+
 
 /**
  * Add an ifact rule to the dictionary. The formula must be a valid ifact rule;
- * see IsIFactRule(). Two ifact rules are equal if they have the same term form and the
- * generator in the same role, so variable names do not matter. An ifact rule equal to
- * one already in the dictionary is not added again, and the entry already there is
- * returned. Adding an ifact rule invalidates compiled services involving its term form.
+ * see IsIFactRule(). Two ifact rules are equal if they have the same form and the
+ * the generator of each term is in the same position, so variable names do not matter.
+ * If an ifact rule is alreadyu in the dictionary; the existing rule is returned.
+ * Adding an ifact rule invalidates any compiled services involving its form.
  */
 FormulaView DictionaryAddIFactRule(Atom rule);
 
@@ -157,7 +166,8 @@ FormulaView DictionaryAddIFactRule(Atom rule);
 bool DictionaryContainsIFactRule(Atom rule);
 
 /**
- * Whether the dictionary holds an ifact rule of the given term form.
+ * Whether the dictionary holds an ifact rule overlapping the given term form,
+ * including a conjunction ifact rule with a term of the same form.
  * Used to decide whether a newly created primitive service must be marked stale.
  */
 bool IFactRuleExistsForTermForm(Atom termForm);
@@ -167,6 +177,13 @@ bool IFactRuleExistsForTermForm(Atom termForm);
  * This invalidates compiled services involving the term form of the rule.
  */
 void DictionaryRemoveIFactRule(FormulaView * ifactRule);
+
+/**
+ * Whether the dictionary holds an ifact rule of same form as the given form,
+ * which may be a term or conjunction form. Unlike IFactRuleExistsForTermForm(),
+ * the match must be exact.
+ */
+bool IFactRuleExistsForForm(Atom form);
 
 /**
  * Remove all rules, both clauses and ifact rules, from the dictionary.
@@ -188,7 +205,8 @@ void DictionaryIterateClauses(Atom clauseForm, DictionaryIterator * iterator);
 /**
  * Iterate over the ifact rules of a given term form.
  */
-void DictionaryIterateIFactRules(Atom termForm, DictionaryIterator * iterator);
+/* CLAUDE: The form may be a conjunction form; see IsRelationForm(). */
+void DictionaryIterateIFactRules(Atom form, DictionaryIterator * iterator);
 
 bool DictionaryIteratorNext(DictionaryIterator * iterator);
 

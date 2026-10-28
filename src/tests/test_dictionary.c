@@ -7,6 +7,7 @@
 #include "library/library.h"
 #include "library/string.h"
 #include "parser/ClauseBuilder.h"
+#include "parser/ConjunctionBuilder.h"
 #include "parser/TermBuilder.h"
 #include "parser/TermFormBuilder.h"
 #include "testing/testing.h"
@@ -183,6 +184,71 @@ void testIFactRuleRejects(void)
 }
 
 
+/**
+ * CLAUDE: Test adding conjunction ifact rules to the dictionary. Two conjunction rules are
+ * equal if they have the same conjunction form and the generators in the same roles,
+ * regardless of variable names and term order.
+ */
+void testIFactConjunctionRules(void)
+{
+	Atom rule = CStringToConjunction("car * brand b & car * model m");
+	Atom sameRule = CStringToConjunction("car * model x & car * brand y");
+	Atom otherRule = CStringToConjunction("car * brand b & car m model *");
+	Atom conjunctionForm = FormulaGetForm(rule);
+	Atom brandTerm = CStringToTerm("car c brand b");
+	Atom brandTermForm = FormulaGetForm(brandTerm);
+	ASSERT_TRUE(IsIFactRule(rule))
+	ASSERT_TRUE(IsIFactRule(otherRule))
+	ASSERT_FALSE(IFactRuleExistsForTermForm(brandTermForm))
+
+	FormulaView ifactRule = DictionaryAddIFactRule(rule);
+	ASSERT_TRUE(DictionaryContainsIFactRule(rule))
+	ASSERT_TRUE(DictionaryContainsIFactRule(sameRule))
+	ASSERT_FALSE(DictionaryContainsIFactRule(otherRule))
+	// A conjunction rule holding the term form counts as a rule for the term form
+	ASSERT_TRUE(IFactRuleExistsForTermForm(brandTermForm))
+
+	size32 nRules = 0;
+	DictionaryIterator iterator;
+	DictionaryIterateIFactRules(conjunctionForm, &iterator);
+	while(DictionaryIteratorNext(&iterator))
+		nRules++;
+	DictionaryIteratorEnd(&iterator);
+	ASSERT_UINT32_EQUAL(nRules, 1)
+
+	DictionaryRemoveIFactRule(&ifactRule);
+	ASSERT_FALSE(DictionaryContainsIFactRule(rule))
+	ASSERT_FALSE(IFactRuleExistsForTermForm(brandTermForm))
+	ReleaseFormula(brandTerm);
+	ReleaseFormula(otherRule);
+	ReleaseFormula(sameRule);
+	ReleaseFormula(rule);
+}
+
+
+/**
+ * CLAUDE: Test conjunctions that are not valid ifact rules; see IsIFactRule().
+ */
+void testIFactConjunctionRuleRejects(void)
+{
+	char const * const conjunctions[] = {
+		"car * brand b & car c model m",			// a term with no generator
+		"car * brand b & car * model b",			// a variable repeated across terms
+		"car * brand \"Volvo\" & car * model m",	// a constant
+		"car * brand b & ! car * model m",			// a negated term
+		"car * feature f & car * feature g",		// a repeated term form
+		"link * from a to b & link c from * to d",	// a repeated term form, generators in different roles
+		"box * width x height y & box * depth z colour u & box * weight v size w",	// too many actors
+	};
+	for(index8 i = 0; i < sizeof(conjunctions) / sizeof(conjunctions[0]); i++) {
+		Atom conjunction = CStringToConjunction(conjunctions[i]);
+		ASSERT_TRUE(conjunction.hash != 0)
+		ASSERT_FALSE(IsIFactRule(conjunction))
+		ReleaseFormula(conjunction);
+	}
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(TRANSIENT_MEMORY);
@@ -193,6 +259,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testDictionaryFindClauseForms);
 	ExecuteTest(testIFactRules);
 	ExecuteTest(testIFactRuleRejects);
+	ExecuteTest(testIFactConjunctionRules);
+	ExecuteTest(testIFactConjunctionRuleRejects);
 
 	UnloadLibraries();
 	KernelShutdown();

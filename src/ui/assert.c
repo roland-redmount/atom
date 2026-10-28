@@ -208,7 +208,7 @@ void RetractFact(FormulaView fact)
 		// The relation has no stored tuples
 		return;
 	}
-	// CLAUDE: The defining facts of an ifact are never stored in a TupleStore; see IFactConjunction
+	// CLAUDE: The defining facts of an ifact are never stored in a TupleStore; see IFactRelation
 	if(!TupleStoreIsWritable(store))
 		return;
 	// CLAUDE: The actors are in the column order of the fact's relation; see RelationFromFact()
@@ -424,13 +424,13 @@ Atom CreateIFact(FormulaView formula)
 		if(i == 0 || compareIFactTuples(&ifactTuples[i], &ifactTuples[i-1], sizeof(IFactTuple)) != 0) {
 			// Begin new conjunction, from a new RelationWriter
 			if(i > 0)
-				IFactEndConjunction(&draft);
-			IFactBeginConjunction(&draft, ifactTuples[i].relation, ifactTuples[i].idColumn);
+				IFactEndRelation(&draft);
+			IFactBeginRelation(&draft, ifactTuples[i].relation, ifactTuples[i].idColumn);
 		}
 		IFactAddTuple(&draft, ifactTuples[i].tuple);
 	}
 	// End the last conjunction
-	IFactEndConjunction(&draft);
+	IFactEndRelation(&draft);
 	
 	idAtom = IFactEnd(&draft);
 

@@ -1,6 +1,7 @@
 
 #include "kernel/dictionary.h"
 #include "kernel/ifact.h"
+#include "kernel/multiset.h"
 #include "kernel/TypedRelation.h"
 #include "kernel/TupleStore.h"
 #include "lang/ConjunctionForm.h"
@@ -126,7 +127,7 @@ void ReleaseRelation(TypedRelation relation)
 		// and we must have no tuple store.
 		ASSERT(!record->tupleStore)
 #ifdef DEBUG
-		// CLAUDE: A relation must outlive its ifacts; see IFactConjunction
+		// CLAUDE: A relation must outlive its ifacts; see IFactRelation
 		ASSERT(IFactRelationNTuples(relation) == 0)
 #endif
 
@@ -471,4 +472,15 @@ void RelationIteratorEnd(RelationIterator * iterator)
 bool IsRelationForm(Atom form)
 {
 	return IsTermForm(form) || IsConjunctionForm(form);
+}
+
+
+size8 RelationFormGetTermForms(Atom form, Atom termForms[])
+{
+	if(IsTermForm(form)) {
+		termForms[0] = form;
+		return 1;
+	}
+	ASSERT(IsConjunctionForm(form))
+	return ConjunctionFormGetTermForms(form, termForms);
 }

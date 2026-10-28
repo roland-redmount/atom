@@ -174,6 +174,7 @@ static void printHelp(void)
 	printLine("Commands:");
 	printLine(":assert <term>        Assert a fact. The term must not contain variables.");
 	printLine(":assert <term>        Assert an ifact rule, such as (circle * radius r).");
+	printLine(":assert <conjunction> Assert an ifact rule, such as (car * brand b & car * model m).");
 	printLine(":assert <clause>      Assert a rule. The clause must have > 1 term");
 	printLine("                      and contain at least one variable.");
 	printLine(":clear @name          Remove the name @name.");
@@ -181,7 +182,7 @@ static void printHelp(void)
 	printLine(":load <file> <form>   Import a facts from a CSV file, of the given form,");
 	printLine("                      whose roles must match file column names.");
 	printLine(":retract <term>       Retract a fact. The term must not contain variables.");
-	printLine(":retract <term>       Retract an ifact rule.");
+	printLine(":retract <term>       Retract an ifact rule, which may be a conjunction.");
 	printLine(":retract <clause>     Retract a rule. Variable names must match.");
 	printLine(":rules <form>         Print clause rules containing a term form.");
 	printLine(":view table|formula   Print results as a table of variables, or as formulas.");
@@ -743,7 +744,7 @@ static void printAssertResult(int result)
 		break;
 
 	case ASSERT_INVALID_IFACT:
-		printStatusLine("An ifact rule must be a single term with one generator (*) and distinct variables.");
+		printStatusLine("The terms of an ifact rule must have distinct forms and one generator (*) each, and the variables must be distinct.");
 		break;
 
 	case ASSERT_NOT_CLOSABLE:
@@ -803,7 +804,7 @@ static void printRetractResult(int result)
 		break;
 
 	case RETRACT_INVALID_IFACT:
-		printStatusLine("An ifact rule must be a single term with one generator (*) and distinct variables.");
+		printStatusLine("The terms of an ifact rule must have distinct forms and one generator (*) each, and the variables must be distinct.");
 		break;
 
 	case RETRACT_NOT_CLAUSE:

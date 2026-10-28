@@ -137,12 +137,12 @@ Atom CreateListFromArray(Atom const elements[], byte elementType, size8 nElement
  */
 static void assertListLength(IFactDraft * draft, size32 nElements)
 {
-	IFactBeginConjunction(draft, listLibrary->listLengthRelation, listLibrary->listLengthRoleIndex[0]);
+	IFactBeginRelation(draft, listLibrary->listLengthRelation, listLibrary->listLengthRoleIndex[0]);
 
 	Atom listLengthTuple[2];
 	listLengthTuple[listLibrary->listLengthRoleIndex[1]] = (Atom) {._int = nElements};
 	IFactAddTuple(draft, listLengthTuple);
-	IFactEndConjunction(draft);	
+	IFactEndRelation(draft);	
 }
 
 
@@ -154,7 +154,7 @@ void AddListToIFact(IFactDraft * draft, Atom const elements[], byte elementType,
 	if(nElements > 0) {
 		TypedRelation relation = GetListRelation(elementType);
 		// assert (ĺist position elements) facts for each element
-		IFactBeginConjunction(draft, relation, listLibrary->listRoleIndex[0]);
+		IFactBeginRelation(draft, relation, listLibrary->listRoleIndex[0]);
 		Atom listElementTuple[3];
 		for(index32 i = 0; i < nElements; i++) {
 			TupleCopyPermuted(
@@ -163,7 +163,7 @@ void AddListToIFact(IFactDraft * draft, Atom const elements[], byte elementType,
 			);
 			IFactAddTuple(draft, listElementTuple);
 		}
-		IFactEndConjunction(draft);
+		IFactEndRelation(draft);
 	}
 	assertListLength(draft, nElements);
 }
