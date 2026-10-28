@@ -202,8 +202,8 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 		// A scratch permutation, so that only the permutation of the best
 		// candidate is copied to the iterator
 		index8 candidatePermutation[iterator->nParameters];
-		while(ServiceIteratorNext(&(iterator->serviceIterator))) {
-			ServiceRecord const * candidate = ServiceIteratorPeekRecord(&(iterator->serviceIterator));
+		while(ServiceRegistryIteratorNext(&(iterator->serviceIterator))) {
+			ServiceRecord const * candidate = ServiceRegistryIteratorPeekRecord(&(iterator->serviceIterator));
 			if(permutationMatch(
 				candidate->service,	iterator->queryParameters, iterator->nParameters,
 				iterator->matchMode, candidatePermutation))
@@ -218,7 +218,7 @@ bool DispatchIteratorNext(DispatchIterator * iterator)
 				}
 			}
 		}
-		ServiceIteratorEnd(&(iterator->serviceIterator));
+		ServiceRegistryIteratorEnd(&(iterator->serviceIterator));
 		iterator->inRelation = false;
 		if(iterator->serviceRecord)
 			return true;
@@ -235,7 +235,7 @@ ServiceRecord const * DispatchIteratorPeekServiceRecord(DispatchIterator const *
 void DispatchIteratorEnd(DispatchIterator * iterator)
 {
 	if(iterator->inRelation) {
-		ServiceIteratorEnd(&(iterator->serviceIterator));
+		ServiceRegistryIteratorEnd(&(iterator->serviceIterator));
 		iterator->inRelation = false;
 	}
 	RelationIteratorEnd(&(iterator->relationIterator));

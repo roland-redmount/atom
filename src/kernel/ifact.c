@@ -708,11 +708,11 @@ void IFactCreateReaderService(TypedRelation relation, index8 idColumn)
 bool IFactRelationHasReader(TypedRelation relation)
 {
 	bool hasReader = false;
-	ServiceIterator iterator;
+	ServiceRegistryIterator iterator;
 	ServiceRegistryIterate(relation, &iterator);
-	while(!hasReader && ServiceIteratorNext(&iterator))
-		hasReader = isReaderOperator(ServiceIteratorPeekRecord(&iterator)->op);
-	ServiceIteratorEnd(&iterator);
+	while(!hasReader && ServiceRegistryIteratorNext(&iterator))
+		hasReader = isReaderOperator(ServiceRegistryIteratorPeekRecord(&iterator)->op);
+	ServiceRegistryIteratorEnd(&iterator);
 	return hasReader;
 }
 

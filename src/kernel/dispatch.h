@@ -127,7 +127,7 @@ typedef struct {
 	int matchMode;
 	index8 * permutation;
 	RelationIterator relationIterator;
-	ServiceIterator serviceIterator;
+	ServiceRegistryIterator serviceIterator;
 	// whether serviceIterator is positioned within the services of a relation table
 	bool inRelation;
 	// The service record at the current positon

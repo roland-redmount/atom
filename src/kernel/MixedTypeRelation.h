@@ -8,6 +8,7 @@
 #define MIXED_TYPE_RELATION_H
 
 #include "kernel/dispatch.h"
+#include "kernel/ServiceIterator.h"
 #include "kernel/typedtuple.h"
 
 
@@ -42,24 +43,19 @@ typedef struct s_MixedTypeRelation {
 			TypedTuple const * queryActors;
 			// Store a copy of the parameterized query
 			ParameterizedQuery parameterizedQuery;
-			// CLAUDE: The argument of the current service taken by each column; see
-			// EqualitySignatureGetArgumentMap()
-			index8 argumentMap[RELATION_MAX_ARITY];
-			// The arguments tuple the current service is called with, and the argument
-			// permutation matching it, both in service parameter order
-			Atom * arguments;
-			index8 * permutation;
+			// CLAUDE: The query actor index of each column of the current service; see
+			// DispatchIterate()
+			index8 permutation[RELATION_MAX_ARITY];
 			DispatchIterator dispatchIterator;
 			// Service service;
 			// Number of services read from so far, counted as each is opened;
 			// see MixedTypeRelationNServices()
 			size32 nServices;
-			// Context of the current service, null before the first service and
-			// between two services
-			OperatorContext * context;
-			// CLAUDE: The CANONICAL operator over the current service's operator, or 0 if
-			// the service has no exchangeable group; see ServiceGetExchangeableGroups()
-			Operator * canonicalOperator;
+			// CLAUDE: The tuples of the current service. The serviceIterator is open only
+			// while isReadingService is set, which is false before the first service and
+			// between two services.
+			ServiceIterator serviceIterator;
+			bool isReadingService;
 			// Set once the last matching service has been read, as neither the
 			// dispatch iterator nor an operator context may be called again
 			bool isExhausted;

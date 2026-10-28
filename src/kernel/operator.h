@@ -192,19 +192,9 @@ typedef struct s_OperatorContext OperatorContext;
 	 * to answer a query to the opposite relation of a closed relation; see CloseRelation().
 	 */
 	OPERATOR_INVERT = 13,
-
-	/**
-	 * CLAUDE: CANONICAL yields one tuple per fact of a relation whose form repeats a role.
-	 * Its child operator must yield every column order of each fact that agrees with
-	 * the input arguments. CANONICAL keeps a tuple only if the values of each exchangeable
-	 * group ascend. An exchangeable group is a list of output arguments whose values may be
-	 * exchanged without changing the fact; see ServiceGetExchangeableGroups().
-	 * The kept tuples are in the order the child yields them.
-	 */
-	OPERATOR_CANONICAL = 14,
 };
 
-#define N_OPERATOR_TYPES 14
+#define N_OPERATOR_TYPES 13
 
 
 struct s_Operator {
@@ -318,15 +308,6 @@ struct s_Operator {
 		struct {
 			Operator * childOperator;
 		} invert;
-		// for OPERATOR_CANONICAL
-		struct {
-			Operator * childOperator;
-			// CLAUDE: The arguments of every exchangeable group, one group after the other
-			index8 * groupArguments;
-			// CLAUDE: The number of arguments in each group
-			size8 * groupSizes;
-			size8 nGroups;
-		} canonical;
 	} impl;
 };
 
@@ -452,15 +433,6 @@ Operator * CreateConstantOperator(
 /* CLAUDE: The operator takes nArguments arguments. The childOperator may be 0, which stands
    for an empty child relation, so that the operator yields every tuple of bound arguments. */
 Operator * CreateInvertOperator(Operator * childOperator, size8 nArguments);
-
-/**
- * CLAUDE: Create a CANONICAL operator over the given child operator; see OPERATOR_CANONICAL.
- * The groupArguments array holds the arguments of each group, one group after the other,
- * and groupSizes holds the number of arguments in each group. A group holds at least
- * 2 arguments, and no argument is in two groups. The arrays are copied.
- */
-Operator * CreateCanonicalOperator(
-	Operator * childOperator, index8 const groupArguments[], size8 const groupSizes[], size8 nGroups);
 
 /**
  * Create a PROJECT operator with the given number of arguments, which may not exceed the
