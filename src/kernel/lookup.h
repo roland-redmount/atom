@@ -155,4 +155,3 @@ void RegisterLookupFunctions(void);
 
 
 #endif	// LOOKUP_H
-	

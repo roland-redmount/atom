@@ -38,7 +38,12 @@ static void checkTypeSizes(void)
 	// NOTE: pointer size is not checked. On WASM builds, pointers are 32-bit.
 	// If we end up storing pointers in Atom values, we must ensure to zero
 	// out the unused bits properly when type converting.
+
 	ASSERT(sizeof(Atom) == 8)
+	ASSERT(sizeof(struct s_LetterAtom) == 8)
+	ASSERT(sizeof(struct s_VariableAtom) == 8)
+	ASSERT(sizeof(struct s_ParameterAtom) == 8)
+
 	ASSERT(sizeof(TypedAtom) == 12)
 }
 
