@@ -250,6 +250,7 @@ void ShutdownPaging(void)
 void * GetPersistentState(PersistentStateKey key)
 {
 	ASSERT(key < N_STATE_KEYS)
+	ASSERT(paging.root)
 	return paging.root->states[key];
 }
 

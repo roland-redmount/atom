@@ -5,7 +5,10 @@
 
 /**
  * An atom is a 64-bit value with various interpretations,
- * depending on its type.
+ * depending on its type. Each union member must be 8 bytes
+ * so that union initialization, e.g. Atom x = {.letter = {.code = 1}}
+ * zero-fills the unused bytes. C99 does not otherwise guarantee
+ * complete initialization of a union (unlike struct and arrays)
  */
 typedef union u_Atom {
 	// AT_NAME, AT_ID, AT_FORMULA, AT_GENERATOR
@@ -15,24 +18,28 @@ typedef union u_Atom {
 	// AT_FLOAT
 	float64 _float;
 	// AT_LETTER
-	struct {
+	struct s_LetterAtom {
 		byte letterCase;
 		uint8 code;	// 1,2, ... 26 for A, B, ..., Z
+		byte fill[6];
 	} letter;
 	// AT_VARIABLE
-	// CLAUDE: The number is 0 for the anonymous variable, 1--26 for the variables a--z,
-	// and higher for the temporary variables of the compiler; see Variable.h
-	struct {
+	struct s_VariableAtom {
+		// number is 0 for the anonymous variable, 1--26 for the variables a--z,
+		// and > 26 for temporary variables
 		uint8 number;
 		bool quoted;
+		byte fill[6];
 	} variable;
 	// AT_PARAMETER
-	struct {
+	struct s_ParameterAtom {
 		uint8 number;
 		byte io;
 		byte atomType;
+		byte fill[5];
 	} parameter;
 } Atom;
+
 
 /**
  * Sort an array of atoms according to CompareAtoms()
