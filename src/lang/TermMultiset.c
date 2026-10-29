@@ -23,9 +23,9 @@ Atom CreateTermMultiset(Atom const termForms[], size8 nTermForms, index32 relati
 	AddMultisetToIFactFromArrays(&draft, uniqueTermForms, multiplicities, nUniqueTermForms, AT_ID);
 
 	// add the (clause-form) or (conjunction-form) tuple, depending on relationId
-	IFactBeginConjunction(&draft, GetCoreRelation(relationId), 0);
+	IFactBeginRelation(&draft, GetCoreRelation(relationId), 0);
 	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
-	IFactEndConjunction(&draft);
+	IFactEndRelation(&draft);
 
 	return IFactEnd(&draft);
 }

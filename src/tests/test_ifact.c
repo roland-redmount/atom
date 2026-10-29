@@ -12,6 +12,8 @@
 #include "lang/TermForm.h"
 #include "library/library.h"
 #include "library/string.h"
+#include "lang/Variable.h"
+#include "parser/ConjunctionBuilder.h"
 #include "parser/TermBuilder.h"
 #include "storage/RelationBTree.h"
 #include "testing/fixtures.h"
@@ -75,7 +77,12 @@ static void setupCircleFixture(CircleFixture * fixture)
 
 	fixture->ifactService = createCircleService(fixture, PARAMETER_OUT, PARAMETER_IN);
 	fixture->byIdService = createCircleService(fixture, PARAMETER_IN, PARAMETER_OUT);
-	CreateService(fixture->ifactService, CreateIFactOperator(fixture->relation, fixture->circleIndex));
+	IFactTerm ifactTerm = {
+		.relation = fixture->relation,
+		.idColumn = fixture->circleIndex,
+		.argumentMap = {0, 1}
+	};
+	CreateService(fixture->ifactService, CreateIFactOperator(&ifactTerm, 1, 2));
 }
 
 
@@ -89,7 +96,7 @@ static void teardownCircleFixture(CircleFixture * fixture)
 {
 	// CLAUDE: The IFACT operator of the fixture is not compiled from an ifact rule,
 	// so its cached ifacts are released here
-	IFactReleaseCached(fixture->termForm, fixture->circleIndex);
+	IFactReleaseCached(fixture->termForm, &(fixture->circleIndex));
 	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture->relation), 0)
 	DropRelation(fixture->relation);
 	IFactRelease(fixture->termForm);
@@ -144,7 +151,7 @@ void testIFactOperator(void)
 	actors[fixture.circleIndex] = CreateTypedAtom(AT_ID, circle5);
 	actors[fixture.radiusIndex] = CreateTypedAtom(AT_FLOAT, (Atom) {._float = 5.0});
 	Atom fact = CreateFormulaFromArray(fixture.termForm, actors);
-	RetractFact(FormulaGetView(fact));
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(fact)), RETRACT_NOT_ASSERTED)
 	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture.relation), 2)
 	ReleaseFormula(fact);
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(circle5), 1)
@@ -584,6 +591,273 @@ void testCompileIFactRuleTwoTypes(void)
 }
 
 
+/*
+ * CLAUDE: Create a copy of the formula with every occurrence of the named variable
+ * replaced by the given atom. The caller must release the returned formula.
+ */
+static Atom substituteVariable(Atom formula, char variableName, TypedAtom atom)
+{
+	FormulaView view = FormulaGetView(formula);
+	size8 arity = view.actors->nAtoms;
+	TypedAtom actors[arity];
+	Atom variable = CreateVariable(variableName);
+	for(index8 i = 0; i < arity; i++) {
+		actors[i] = TypedTupleGetElement(view.actors, i);
+		if((actors[i].type == AT_VARIABLE) && SameVariable(actors[i].atom, variable))
+			actors[i] = atom;
+	}
+	return CreateFormulaFromArray(view.form, actors);
+}
+
+
+/*
+ * CLAUDE: Run a query and return the ID atom of its single result tuple that is not a string.
+ */
+static TypedAtom runQueryForID(char const * conjunction)
+{
+	Atom query = CStringToConjunction(conjunction);
+	TypedTuple * tuple;
+	ASSERT_UINT32_EQUAL(runQuery(query, &tuple), 1)
+	ReleaseFormula(query);
+	TypedAtom id = {0};
+	for(index8 i = 0; i < tuple->nAtoms; i++) {
+		TypedAtom element = TypedTupleGetElement(tuple, i);
+		if((element.type == AT_ID) && !IsString(element.atom))
+			id = element;
+	}
+	FreeTypedTuple(tuple);
+	ASSERT_UINT32_EQUAL(id.type, AT_ID)
+	return id;
+}
+
+
+/**
+ * CLAUDE: The conjunction query (car x brand "Volvo" & car x model "Amazon") compiles to an
+ * IFACT operator from the ifact rule (car * brand b & car * model m). The ifact has one tuple
+ * in each of the relations (car ID brand STRING) and (car ID model STRING), and each term is
+ * read by its ID.
+ */
+void testCompileIFactConjunctionRule(void)
+{
+	Atom rule = CStringToConjunction("car * brand b & car * model m");
+	FormulaView ifactRule = DictionaryAddIFactRule(rule);
+	Atom volvo = CreateStringFromCString("Volvo");
+	Atom amazon = CreateStringFromCString("Amazon");
+	size32 nIFacts = IFactTotalCount();
+
+	TypedAtom car = runQueryForID("car x brand \"Volvo\" & car x model \"Amazon\"");
+	ASSERT_UINT32_EQUAL(IFactTotalCount(), nIFacts + 1)
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(car.atom), 1)
+
+	// A second query, also with the terms in another order, yields the same car
+	ASSERT_TRUE(SameTypedAtoms(runQueryForID("car x brand \"Volvo\" & car x model \"Amazon\""), car))
+	ASSERT_TRUE(SameTypedAtoms(runQueryForID("car x model \"Amazon\" & car x brand \"Volvo\""), car))
+	ASSERT_UINT32_EQUAL(IFactTotalCount(), nIFacts + 1)
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(car.atom), 1)
+
+	// Another model yields another car
+	TypedAtom otherCar = runQueryForID("car x brand \"Volvo\" & car x model \"Duett\"");
+	ASSERT_FALSE(SameTypedAtoms(otherCar, car))
+
+	// Each term of the ifact is read by the car ID
+	TypedTuple * tuple;
+	Atom brandQuery = CStringToTerm("car c brand b");
+	Atom brandByID = substituteVariable(brandQuery, 'c', car);
+	ASSERT_UINT32_EQUAL(runQuery(brandByID, &tuple), 1)
+	ASSERT_TRUE(TypedTupleContainsAtom(tuple, CreateTypedAtom(AT_ID, volvo)))
+	FreeTypedTuple(tuple);
+	Atom modelQuery = CStringToTerm("car c model m");
+	Atom modelByID = substituteVariable(modelQuery, 'c', car);
+	ASSERT_UINT32_EQUAL(runQuery(modelByID, &tuple), 1)
+	ASSERT_TRUE(TypedTupleContainsAtom(tuple, CreateTypedAtom(AT_ID, amazon)))
+	FreeTypedTuple(tuple);
+
+	// CLAUDE: A string is an ID atom, so both columns of each relation have type AT_ID
+	byte atomTypes[2] = {AT_ID, AT_ID};
+	TypedRelation brandRelation = {
+		.form = FormulaGetForm(brandQuery),
+		.typeSignature = CreateTypeSignature(atomTypes, 2)
+	};
+	TypedRelation modelRelation = {
+		.form = FormulaGetForm(modelQuery),
+		.typeSignature = CreateTypeSignature(atomTypes, 2)
+	};
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(brandRelation), 2)
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(modelRelation), 2)
+	ReleaseFormula(brandByID);
+	ReleaseFormula(modelByID);
+	ReleaseFormula(brandQuery);
+	ReleaseFormula(modelQuery);
+
+	// Removing the rule releases both cached ifacts
+	DictionaryRemoveIFactRule(&ifactRule);
+	ASSERT_FALSE(IFactExists(car.atom))
+	ASSERT_FALSE(IFactExists(otherCar.atom))
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(brandRelation), 0)
+	ASSERT_UINT32_EQUAL(IFactTotalCount(), nIFacts)
+	DropRelation(brandRelation);
+	DropRelation(modelRelation);
+	ReleaseFormula(rule);
+	IFactRelease(volvo);
+	IFactRelease(amazon);
+}
+
+
+/*
+ * CLAUDE: Run a term query and return the atom in the "pair" role of its single result.
+ */
+static TypedAtom runQueryForPair(Atom query)
+{
+	TypedTuple * tuple;
+	ASSERT_UINT32_EQUAL(runQuery(query, &tuple), 1)
+	TypedAtom pair = TypedTupleGetElement(tuple, findRoleIndex(FormulaGetForm(query), "pair"));
+	FreeTypedTuple(tuple);
+	ASSERT_UINT32_EQUAL(pair.type, AT_ID)
+	return pair;
+}
+
+
+/*
+ * CLAUDE: Run the query written by the C string, with the variable p replaced by the given pair,
+ * and return the number of results.
+ */
+static size32 countPairResults(char const * queryString, TypedAtom pair)
+{
+	Atom query = CStringToTerm(queryString);
+	Atom byIdQuery = substituteVariable(query, 'p', pair);
+	TypedTuple * tuple;
+	size32 nResults = runQuery(byIdQuery, &tuple);
+	if(tuple)
+		FreeTypedTuple(tuple);
+	ReleaseFormula(byIdQuery);
+	ReleaseFormula(query);
+	return nResults;
+}
+
+
+/**
+ * CLAUDE: With the ifact rule (pair * member a member b), whose role "member" holds two actors,
+ * the actors of the role may be given in either order. The ifact stores the tuple in canonical
+ * order, so (pair x member 3 member 5) and (pair x member 5 member 3) yield the same pair, also
+ * through the clause (link p from a to b | ! pair p member a member b). The reader of the
+ * relation yields the tuple in both orders, so a query with the pair bound finds the other
+ * member from either member; see IFactReaderState.
+ */
+void testIFactRepeatedRole(void)
+{
+	Atom rule = CStringToTerm("pair * member a member b");
+	FormulaView ifactRule = DictionaryAddIFactRule(rule);
+	FormulaView clause = DictionaryAddClauseFromCString("link p from a to b | ! pair p member a member b");
+
+	Atom query35 = CStringToTerm("pair x member 3 member 5");
+	Atom query53 = CStringToTerm("pair x member 5 member 3");
+	TypedAtom pair = runQueryForPair(query35);
+	ASSERT_TRUE(SameTypedAtoms(runQueryForPair(query53), pair))
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(pair.atom), 1)
+
+	// CLAUDE: CreateIFact() stores the same canonical tuple
+	Atom ifactFormula = CStringToTerm("pair * member 5 member 3");
+	Atom createdPair = CreateIFact(FormulaGetView(ifactFormula));
+	ASSERT_DATA64_EQUAL(createdPair.hash, pair.atom.hash)
+	IFactRelease(createdPair);
+	ReleaseFormula(ifactFormula);
+
+	// CLAUDE: The pair read with either member bound, and with no member bound
+	ASSERT_UINT32_EQUAL(countPairResults("pair p member 5 member 3", pair), 1)
+	ASSERT_UINT32_EQUAL(countPairResults("pair p member 3 member 5", pair), 1)
+	ASSERT_UINT32_EQUAL(countPairResults("pair p member 5 member b", pair), 1)
+	ASSERT_UINT32_EQUAL(countPairResults("pair p member 3 member b", pair), 1)
+	ASSERT_UINT32_EQUAL(countPairResults("pair p member 4 member b", pair), 0)
+	ASSERT_UINT32_EQUAL(countPairResults("pair p member a member b", pair), 1)
+
+	// CLAUDE: Equal members give one fact, with no duplicate tuple
+	Atom query44 = CStringToTerm("pair x member 4 member 4");
+	TypedAtom pair44 = runQueryForPair(query44);
+	ASSERT_UINT32_EQUAL(countPairResults("pair p member a member b", pair44), 1)
+
+	// CLAUDE: The clause binds the members in either order
+	Atom link53 = CStringToTerm("link p from 5 to 3");
+	Atom link35 = CStringToTerm("link p from 3 to 5");
+	TypedTuple * tuple;
+	ASSERT_UINT32_EQUAL(runQuery(link53, &tuple), 1)
+	ASSERT_TRUE(SameTypedAtoms(TypedTupleGetElement(tuple, findRoleIndex(FormulaGetForm(link53), "link")), pair))
+	FreeTypedTuple(tuple);
+	ASSERT_UINT32_EQUAL(runQuery(link35, &tuple), 1)
+	ASSERT_TRUE(SameTypedAtoms(TypedTupleGetElement(tuple, findRoleIndex(FormulaGetForm(link35), "link")), pair))
+	FreeTypedTuple(tuple);
+
+	byte atomTypes[3] = {AT_INT, AT_INT, AT_INT};
+	atomTypes[findRoleIndex(FormulaGetForm(rule), "pair")] = AT_ID;
+	TypedRelation relation = {
+		.form = FormulaGetForm(rule),
+		.typeSignature = CreateTypeSignature(atomTypes, 3)
+	};
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(relation), 2)
+
+	ReleaseFormula(link35);
+	ReleaseFormula(link53);
+	ReleaseFormula(query44);
+	ReleaseFormula(query53);
+	ReleaseFormula(query35);
+	DictionaryRemoveClause(&clause);
+	DictionaryRemoveIFactRule(&ifactRule);
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(relation), 0)
+	DropRelation(relation);
+	ReleaseFormula(rule);
+}
+
+
+/**
+ * CLAUDE: The clause (make c brand b model m | ! car c brand b | ! car c model m) reads the
+ * ifacts of the rule (car * brand b & car * model m). The term set of the clause body compiles
+ * to the IFACT operator of the rule, with no conjunction query compiled before; see
+ * compileNextIFactTerms(). The car is the same as for the conjunction query.
+ */
+void testCompileIFactConjunctionRuleInClause(void)
+{
+	Atom rule = CStringToConjunction("car * brand b & car * model m");
+	FormulaView ifactRule = DictionaryAddIFactRule(rule);
+	FormulaView clause = DictionaryAddClauseFromCString(
+		"make c brand b model m | ! car c brand b | ! car c model m");
+	size32 nIFacts = IFactTotalCount();
+
+	Atom query = CStringToTerm("make c brand \"Volvo\" model \"Amazon\"");
+	TypedTuple * tuple;
+	ASSERT_UINT32_EQUAL(runQuery(query, &tuple), 1)
+	index8 makeIndex = findRoleIndex(FormulaGetForm(query), "make");
+	TypedAtom car = TypedTupleGetElement(tuple, makeIndex);
+	FreeTypedTuple(tuple);
+	ASSERT_UINT32_EQUAL(car.type, AT_ID)
+	ASSERT_FALSE(IsString(car.atom))
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(car.atom), 1)
+	ASSERT_TRUE(SameTypedAtoms(runQueryForID("car x brand \"Volvo\" & car x model \"Amazon\""), car))
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(car.atom), 1)
+
+	// CLAUDE: The term forms of the relations are held by the rule
+	Atom brandQuery = CStringToTerm("car c brand b");
+	Atom modelQuery = CStringToTerm("car c model m");
+	byte atomTypes[2] = {AT_ID, AT_ID};
+	TypedRelation brandRelation = {
+		.form = FormulaGetForm(brandQuery),
+		.typeSignature = CreateTypeSignature(atomTypes, 2)
+	};
+	TypedRelation modelRelation = {
+		.form = FormulaGetForm(modelQuery),
+		.typeSignature = CreateTypeSignature(atomTypes, 2)
+	};
+	ReleaseFormula(query);
+	DictionaryRemoveIFactRule(&ifactRule);
+	ASSERT_FALSE(IFactExists(car.atom))
+	ASSERT_UINT32_EQUAL(IFactTotalCount(), nIFacts)
+	DictionaryRemoveClause(&clause);
+	DropRelation(brandRelation);
+	DropRelation(modelRelation);
+	ReleaseFormula(brandQuery);
+	ReleaseFormula(modelQuery);
+	ReleaseFormula(rule);
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(TRANSIENT_MEMORY);
@@ -597,6 +871,9 @@ int main(int argc, char * argv[])
 	ExecuteTest(testIFactRuleWithStore);
 	ExecuteTest(testIFactRuleAfterCompiledService);
 	ExecuteTest(testCompileIFactRuleTwoTypes);
+	ExecuteTest(testCompileIFactConjunctionRule);
+	ExecuteTest(testCompileIFactConjunctionRuleInClause);
+	ExecuteTest(testIFactRepeatedRole);
 
 	UnloadLibraries();
 	KernelShutdown();

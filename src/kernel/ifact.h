@@ -1,12 +1,11 @@
 /**
- * An identifying fact (ifact) is a conjunction of predicates
+ * An identifying fact (ifact) is a conjunction of terms
  * across one or more relations that uniquely identify an atom.
  * To create an identifying fact, we must (1) build the conjunction
- * (2) compute a hash value from the conjunction (3) create the
- * corresponding facts (protected from deletion) across one or more
- * tables. The hash serves as the identified atom ID.
+ * (2) compute a hash value from the conjunction (3) store the
+ * corresponding facts. The hash serves as the identified atom ID.
  * 
- * Predicates that are part of an identifying fact cannot be retracted
+ * Facts that are part of an identifying fact cannot be retracted
  * until the identified atom is released.
  */
 
@@ -18,22 +17,20 @@
 
 
 /**
- * A conjunction is a set of facts from a single relation.
- * 
- * TODO: perhaps rename this IFactRelation, as it corresponds 1:1 to
- * a set of tuples from a specific (typed) relation.
- * The entire IFact is a conjuction ...
+ * An IFactRelation is a set of facts from a single relation.
+ * Two IFactRelations may have the same TypedRelation if the idColumn differs,
+ * as in (foo * bar x) & (bar * foo x)
  */
-typedef struct s_IFactConjunction {
+typedef struct s_IFactRelation {
 	TypedRelation relation;
 	size8 nColumns;
 	index8 idColumn;		// position of the identified atom in the tuple
-	size16 nRows;			// number of tuples in this conjunction
+	size16 nRows;			// number of tuples in this ifact relation
 	// CLAUDE: nRows tuples of nColumns atoms each, in canonical order, ordered by
 	// TupleCompare(). The tuples are allocated with Allocate(), and hold a reference to
 	// each atom except the identified atom; see IFactAddTuple().
 	Atom * tuples;
-} IFactConjunction;
+} IFactRelation;
 
 
 /**
@@ -44,11 +41,11 @@ typedef struct s_IFactHeader IFactHeader;
 
 struct s_IFactHeader {
 	data64 hash;				// 8 bytes
-	size8 nConjunctions;
+	size8 nRelations;
 	data8 flags;
 	data8 reserved[2];			// pad to even 4-byte
 	uint32 refCount;
-	IFactConjunction * conjunctions;	// pointer, 8 bytes
+	IFactRelation * relations;	// pointer, 8 bytes
 } __attribute__((packed)) ;
 
 #define IFACT_NEW		1
@@ -93,27 +90,25 @@ void FreeIFacts(void);
 void IFactBegin(IFactDraft * draft);
 
 /**
- * Begin a new conjunction for the IFactDraft, storing tuples in the given TupleStore.
+ * Begin a new relation for the IFactDraft. The TypedRelation must have a term form.
  * The idColumn indicates the actor that is being defined by the IFact.
- * The new conjunction acquires a reference to the given RelationWriter.
- * 
- * NOTE: this function may register a new service for the TupleStore's relation
- * with the idColumn as the single input, if no such service already exists.
  */
-void IFactBeginConjunction(IFactDraft * draft, TypedRelation relation, index8 idColumn);
+void IFactBeginRelation(IFactDraft * draft, TypedRelation relation, index8 idColumn);
 
 /**
- * Add one tuple, defining one predicate of the current conjunction (predicate form).
- * The atom in the ID column of the conjunction is ignored; it will
- * be computed by IFactEnd()
+ * Add one tuple to the current IFactRelation.
+ * The atom in the ID column of the tuple is ignored; it will be computed by IFactEnd()
+ * The tuple must be in canonical order, with the actors of each role sorted; see
+ * GetCanonicalActorOrder(). This assumption is not checked here, since it is not
+ * possible during kernel bootstrap.
  */
 void IFactAddTuple(IFactDraft * draft, Atom const tuple[]);
 
 /**
- * End the current predicate form. This function must be called before
- * calling IFactEnd(). Returns the number of predicates for this form.
+ * End the current relation (term form). This function must be called before
+ * calling IFactEnd(). Returns the number of facts added for this relation.
  */
-size32 IFactEndConjunction(IFactDraft * draft);
+size32 IFactEndRelation(IFactDraft * draft);
 
 /**
  * Return the number of tupled added so far for the current predicate form.
@@ -143,7 +138,7 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash);
  * acquires a reference to its form, but that form's IFact cannot be built
  * until the relation itself exists.
  *
- * A reserved header holds no conjunctions and can only be acquired and
+ * A reserved header holds no IFactRelations and can only be acquired and
  * released; it must be finalized by a matching IFactEndBootstrap() call with
  * the same hash before the identified atom is used for anything else.
  */
@@ -158,12 +153,11 @@ void IFactReserve(data64 hash);
 void IFactMarkCached(Atom ifact);
 
 /**
- * Release the cache reference of every cached ifact consisting of a single
- * conjunction with the given ID column, on a relation of the given form.
- * Clear the IFACT_CACHED flag of each such ifact.
- * An ifact with no other reference is removed, together with its tuple.
+ * Release the cache reference of every cached ifact matching the form and idColumns.
+ * If the form is a conjunction form, we have one ID column per term.
+ * Clears the IFACT_CACHED flag of each released ifact.
  */
-void IFactReleaseCached(Atom form, index8 idColumn);
+void IFactReleaseCached(Atom form, index8 const idColumns[]);
 
 /**
  * Return the number of tuples of all ifacts on the given relation.
@@ -180,6 +174,13 @@ size32 IFactRelationNTuples(TypedRelation relation);
  * see AssertFact(). The service must not already exist.
  */
 void IFactCreateReaderService(TypedRelation relation, index8 idColumn);
+
+/**
+ * CLAUDE: Same as IFactCreateReaderService(), for a core relation, which has no repeated role.
+ * The column orders of the relation are not found, since the core forms cannot be read while
+ * the kernel creates them; see createCoreRelation() in kernel.c.
+ */
+void IFactCreateCoreReaderService(TypedRelation relation, index8 idColumn);
 
 /**
  * Test if the relation has a service created by IFactCreateReaderService().

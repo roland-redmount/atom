@@ -38,6 +38,22 @@ size8 ConjunctionFormArity(Atom form)
 }
 
 
+// NOTE: this could go to TermMultiSet instead
+size8 ConjunctionFormGetTermForms(Atom form, Atom termForms[])
+{
+	size8 nTerms = 0;
+	MultisetIterator iterator;
+	MultisetIterate(form, AT_ID, &iterator);
+	while(MultisetIteratorNext(&iterator)) {
+		ElementMultiple elementMultiple = MultisetIteratorGetElement(&iterator);
+		for(index8 i = 0; i < elementMultiple.multiple; i++)
+			termForms[nTerms++] = elementMultiple.element;
+	}
+	MultisetIteratorEnd(&iterator);
+	return nTerms;
+}
+
+
 /**
  * Traverse and print a form to stdout
  */

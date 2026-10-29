@@ -74,7 +74,7 @@ void AddMultisetToIFact(
 	ASSERT(!IsNullRelation(relation))
 
 	// assert (multiset element multiple) facts
-	IFactBeginConjunction(
+	IFactBeginRelation(
 		draft, 
 		relation,
 		CorePredicateRoleIndex(FORM_MULTISET_ELEMENT_MULTIPLE, ROLE_MULTISET)
@@ -93,7 +93,7 @@ void AddMultisetToIFact(
 		);
 		IFactAddTuple(draft, tuple);
 	}
-	IFactEndConjunction(draft);
+	IFactEndRelation(draft);
 }
 
 

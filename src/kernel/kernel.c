@@ -347,7 +347,7 @@ static void createCoreRelation(uint32 relationId)
 	CreateRelationBootstrap(kernel->coreRelations[relationId], kernel->corePredicateForms[formId]);
 	// CLAUDE: The tuples of a core relation are ifacts, with the identified atom in the
 	// first role of coreFormRoleIds
-	IFactCreateReaderService(kernel->coreRelations[relationId], kernel->corePredicateRoleIndex[formId][0]);
+	IFactCreateCoreReaderService(kernel->coreRelations[relationId], kernel->corePredicateRoleIndex[formId][0]);
 	// Release the reference obtained from CreateRelationBootstrap(),
 	// since TupleStore and associated operators now hold references
 	ReleaseRelation(kernel->coreRelations[relationId]);
@@ -374,7 +374,7 @@ static void bootstrapTermForm(Atom termForm, Atom predicateForm)
 {
 	IFactDraft draft;
 	IFactBegin(&draft);
-	IFactBeginConjunction(
+	IFactBeginRelation(
 		&draft,
 		kernel->coreRelations[RELATION_TERM_FORM],
 		CorePredicateRoleIndex(FORM_TERM_FORM, ROLE_TERM_FORM)
@@ -387,7 +387,7 @@ static void bootstrapTermForm(Atom termForm, Atom predicateForm)
 		tuple
 	);
 	IFactAddTuple(&draft, tuple);
-	IFactEndConjunction(&draft);
+	IFactEndRelation(&draft);
 	IFactEndBootstrap(&draft, termForm.hash);
 }
 
@@ -520,7 +520,7 @@ static void setupCoreServices(void)
 
 	// defining facts
 	// (multiset @multiset-form element "multiset" multiple 1)
-	IFactBeginConjunction(
+	IFactBeginRelation(
 		&multisetDraft, kernel->coreRelations[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
 	Atom multisetTuple[3];
 	CoreFormSetTuple(
@@ -543,12 +543,12 @@ static void setupCoreServices(void)
 		multisetTuple
 	);
 	IFactAddTuple(&multisetDraft, multisetTuple);
-	IFactEndConjunction(&multisetDraft);
+	IFactEndRelation(&multisetDraft);
 
 	// (predicate-form @multiset-form)
-	IFactBeginConjunction(&multisetDraft, kernel->coreRelations[RELATION_PREDICATE_FORM], 0);
+	IFactBeginRelation(&multisetDraft, kernel->coreRelations[RELATION_PREDICATE_FORM], 0);
 	IFactAddTuple(&multisetDraft, (Atom[]) {multisetForm});
-	IFactEndConjunction(&multisetDraft);
+	IFactEndRelation(&multisetDraft);
 
 	/**
 	 * We can't call the usual IFactEnd() here because it calls 
@@ -573,7 +573,7 @@ static void setupCoreServices(void)
 
 	// defining facts
 	// (multiset @predicate-form element "predicate-form" multiple 1)
-	IFactBeginConjunction(
+	IFactBeginRelation(
 		&predicateFormDraft, kernel->coreRelations[RELATION_MULTISET_NAME], MULTISET_MULTISET_COLUMN);
 	CoreFormSetTuple(
 		FORM_MULTISET_ELEMENT_MULTIPLE,
@@ -581,12 +581,12 @@ static void setupCoreServices(void)
 		multisetTuple
 	);
 	IFactAddTuple(&predicateFormDraft, multisetTuple);
-	IFactEndConjunction(&predicateFormDraft);
+	IFactEndRelation(&predicateFormDraft);
 
 	// (predicate-form @predicate-form)
-	IFactBeginConjunction(&predicateFormDraft, kernel->coreRelations[RELATION_PREDICATE_FORM], 0);
+	IFactBeginRelation(&predicateFormDraft, kernel->coreRelations[RELATION_PREDICATE_FORM], 0);
 	IFactAddTuple(&predicateFormDraft, (Atom[]) {predicateForm});
-	IFactEndConjunction(&predicateFormDraft);
+	IFactEndRelation(&predicateFormDraft);
 
 	// This gives 1 reference to the predicateForm atom
 	IFactEndBootstrap(&predicateFormDraft, predicateForm.hash);

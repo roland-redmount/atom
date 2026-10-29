@@ -136,5 +136,15 @@ void GetTuplePermutation(const FormIterator * iter, index8 permutation[]);
 
 void FreeFormIterator(const FormIterator* iter);
 
+/**
+ * CLAUDE: Advance the iterator to the next form permutation that moves each column to a
+ * column of the same atom type, given by atomTypes[], and write the permutation to
+ * permutation[]; see GetTuplePermutation(). Column i of the permuted tuple holds column
+ * permutation[i] of the tuple. Returns false when no such permutation is left. A permutation
+ * that moves a column to a column of another type gives a tuple of another typed relation.
+ */
+bool NextTypeKeepingPermutation(
+	FormIterator * iter, byte const atomTypes[], size8 nColumns, index8 permutation[]);
+
 
 #endif	// FORMPERMUTATION_H

@@ -60,10 +60,10 @@ Atom CreateString(char const * chars, size32 length)
 	AddListToIFact(&draft, listElements, AT_LETTER, length);
 
 	// add (string @string) to ifact
-	IFactBeginConjunction(&draft, stringLibrary->stringRelation, 0);
+	IFactBeginRelation(&draft, stringLibrary->stringRelation, 0);
 	Atom tuple[1] = {(Atom) {0}};
 	IFactAddTuple(&draft, tuple);
-	IFactEndConjunction(&draft);
+	IFactEndRelation(&draft);
 
 	return IFactEnd(&draft);
 }

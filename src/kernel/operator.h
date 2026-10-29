@@ -8,6 +8,20 @@
 
 struct s_RelationReader;
 
+/**
+ * CLAUDE: One term of the ifact created by an IFACT operator. The relation has a term form,
+ * and holds the identified atom in idColumn. Column i of the relation holds operator
+ * argument argumentMap[i].
+ */
+typedef struct s_IFactTerm {
+	TypedRelation relation;
+	index8 idColumn;
+	index8 argumentMap[RELATION_MAX_ARITY];
+	// CLAUDE: Whether a role of the term holds several actors, set by CreateIFactOperator()
+	bool hasRepeatedRole;
+} IFactTerm;
+
+
 typedef struct s_Operator Operator;
 typedef struct s_OperatorContext OperatorContext;
 
@@ -160,14 +174,14 @@ typedef struct s_OperatorContext OperatorContext;
 	OPERATOR_MACHINE = 10,
 
 	/**
-	 * CLAUDE: IFACT creates single-tuple ifacts of a relation, with the identified atom in
-	 * the ID column. IFACT has no child operator. The ifact tuple is kept by ifact.c,
-	 * not in a TupleStore. See ifact.h.
+	 * CLAUDE: IFACT creates ifacts with one tuple per term, with the identified atom in the
+	 * ID column of each term; see IFactTerm. IFACT has no child operator. The ifact tuples
+	 * are kept by ifact.c, not in a TupleStore. See ifact.h.
 	 *
-	 * The caller binds every argument except the ID column, which is the output. IFACT
+	 * The caller binds every argument except the ID argument, which is the output. IFACT
 	 * creates the ifact of the argument tuple and yields the tuple. If the ifact already
-	 * exists, IFACT yields the existing tuple. The ifacts of the relation are read by the
-	 * primitive service of IFactCreateReaderService().
+	 * exists, IFACT yields the existing tuple. The ifacts of the relation of each term are
+	 * read by the primitive service of IFactCreateReaderService().
 	 *
 	 * An ifact created by IFACT is a cached result, not an asserted fact. IFACT holds one
 	 * reference to each ifact it has created; see IFactMarkCached(). These references are
@@ -289,8 +303,10 @@ struct s_Operator {
 		} machine;
 		// for OPERATOR_IFACT
 		struct {
-			TypedRelation relation;
-			index8 idColumn;
+			IFactTerm * terms;
+			size8 nTerms;
+			// CLAUDE: The argument holding the identified atom
+			index8 idArgument;
 		} ifact;
 		// for OPERATOR_CONSTANT
 		struct {
@@ -452,10 +468,13 @@ Operator * CreateProjectOperator(
 
 /**
  * Create an IFACT operator creating ifacts w.r.t. the given relation, with the
- * identified atom in idColumn; see OPERATOR_IFACT. The operator takes the same
- * number of arguments as the arity of the relation.
+ * identified atom in idColumn; see OPERATOR_IFACT.
+ * The operator takes nArguments arguments, and creates ifacts with one tuple per term;
+ * see IFactTerm. The terms must have distinct term forms. Every term must map its ID column to
+ * the same argument, which is the output of the operator. Each term of a conjunction query,
+ * such as (car x brand b & car x model m), gives one IFactTerm.
  */
-Operator * CreateIFactOperator(TypedRelation relation, index8 idColumn);
+Operator * CreateIFactOperator(IFactTerm const terms[], size8 nTerms, size8 nArguments);
 
 /**
  * Create a FIXPOINT operator deriving a recursive relation from the given child

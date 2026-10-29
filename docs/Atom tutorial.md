@@ -1,5 +1,4 @@
-<!-- title: Atom tutorial -->
-<!-- date: 2026-10-21 -->
+<!-- title: Atom tutorial --><!-- date: 2026-10-21 -->
 
 This is a brief tutorial of the main concepts of the **atom** language. We'll work through examples with a command line client to **atom** running in the browser, so you can freely experiment with the language. This instance of atom is in-memory only, so the session is not saved anywhere. A local version of the client with a persistent session can be built from [source](https://github.com/roland-redmount/atom).
 
@@ -227,25 +226,36 @@ To define an atom, we use a *generator* rule, a special rule that lets us to que
 ```atom
 :assert circle * radius r
 ```
-where the special symbol `*` indicates that the atom in this position is *defined by* a fact of this form. With this in place, we can obtain the circle with a specific radius with an ordinary query:
+where the special symbol `*` indicates that the atom in this position is *defined by* the fact. With this rule in place, we can obtain a circle with a given radius using an ordinary query:
 ```atom
 circle _ radius 5
 ```
-The returned atom `ID(...)` is a unique identifier for this circle.  Repeating the query will give the same atom.  Note that the query is not a change to the knowledgebase: once the generator rule is created, it implies that all facts of its form exist (an infinite relation). So we consider all circles of all radii to already exist, and the query merely asks for one of them.
+The returned atom `ID(...)` represents this circle. This atom is unique: repeating the query will give the same atom.  Note that the query does *not* change the knowledgebase: the change occurs when the generator rule is asserted. We can think of the generator rule as defining an implicit, infinite relation containing all possible circles, of any radius. The query merely asks for one of them.
 
 **atom** does not have local variables that we can assign atoms to. Temporary names are supported by the command line client using the `@name` syntax: for example
 ```atom
 circle @myCircle radius 5
 ```
-assigns the returns circle atom to `@myCircle`, which can then be used in queries:
+assigns the returns circle atom to `@myCircle`, which can then be used in queries. For example, this rule gives us the circle area:
 ```atom
-circle @myCircle radius _
+:assert circle c area a <-
+  circle c radius r & * r * r = s & * 3.14 * s = a
+
+circle @myCircle area _
 ```
 
+A fact that defines an atom cannot be retracted:
+```atom
+:retract circle @myCircle radius 5
+```
+This is because the fact was not explicitly asserted: it is *entailed* by the generator rule, and so will hold true as long as the generator rule is in place. The same goes for facts entails by other rules:
+```atom
+:retract circle @myCircle area 78.5
+```
 
 ## Types
 
-**atom** does not have a dedicated type system, since types are easily constructed from predicates. For example, `integer x` is true for all atoms that represent integers,
+The **atom** language does not have a dedicated type system, since predicates are essentially the same thing as types. For example, `integer x` is true for all atoms that represent integers,
 ```atom
 integer -17
 ```
@@ -253,7 +263,7 @@ and false for anything else,
 ```atom
 ! integer 3.14
 ```
-The type "integer" is then the set of all atoms that satisfy this predicate. We can define "type predicates" from any relation with rules like
+The type "integer" is then just the set of all atoms that satisfy this predicate. In general, a type *T* is just the set of atoms that satisfy a "type predicate" for *T*.  A type predicates can be any logical rule. For example, a "circle" type could be defined as
 ```atom
 :assert circle c <- circle c radius _
 ```
@@ -261,10 +271,14 @@ which lets us test if an atom is a circle,
 ```atom
 circle @myCircle
 ```
+Similarly, a type predicate for the natural numbers (positive integers) can be defined as
+```atom
+:assert natural-number n <- integer n & < n > 0
+```
 
 ## Data structures
 
-There are no special-purpose data structures in **atom**, since relations can represent the same information. For example, in an object-oriented language we might represent a car with a structure like
+In an object-oriented language we might represent a car with an data structure like
 ```
 class Car {
    String brand;
@@ -273,27 +287,65 @@ class Car {
 
 Car myCar = {.brand = "Porsche", model = 911}
 ```
-To create a similar data structure in **atom**, we first define the car atom with a generator rule, say
+
+The **atom** language replaces objects with relations, which can represent the same information. First, instead of instantiating an object, we define an atom `@myCar` by a name:
 ```atom
 :assert named * name n
 named @myCar name "myCar"
 ```
-Then, we add its "slots"
+At this point the `@myCar` atom has no data attached to it other than its name. We then build up the data structure by adding facts:
 ```atom
 :assert car @myCar brand "Porsche"
 :assert car @myCar model 911
 ```
-This can be viewed as a mutable data structure: both properties of `@myCar` can be changed or removed entirely at any time, since the atom is defined by name only. It is therefore suitable for representing missing values and heterogeneous data. Unlike the class, there is no notion of composition: the `brand` and `model` atoms are not "owned" by the `@myCar` atom in any way.
+This can be viewed as a mutable data structure: both properties of `@myCar` can be changed or removed entirely at any time, since the atom is defined by name only. This makes it easy to represent missing values and heterogeneous data. Unlike the object-oriented view, there is no notion of composition: the `brand` and `model` atoms are not contained in, or "owned" by, the `@myCar` atom in any way.
 
+Similar to the `Car` class, we can define a type predicate for cars:
+```atom
+:assert car c <- car c brand _ & car c model _
+```
+This asserts that an atom *is a* car if it has a brand and a model. (That's probably not the best definition of a car, but that's another story.) Let's confirm that `@myCar` indeed is a car in this sense:
+```atom
+car @myCar
+```
+Note that "types" in this sense are dynamic: if we retract either of the `model` or `brand` facts, then `@myCar` is no longer a car.
+
+### Immutable data structures
+
+An immutable data structure can be represented by an atom whose defining facts describe that data structure. For example, an immutable 2D point:
+```atom
+:assert point * x x & point * y y
+```
+Here the generator rule includes two predicates specifying the `x` and `y` coordinates of the points. This corresponds to an immutable `class Point { float x; float y}`. Here is the point with coordinates (-1, 3):
+```atom
+point @p x -1 & point @p y 3
+```
+The point is immutable:
+```atom
+:retract point @p x -1
+```
+
+Let's define vector addition of two points to yields another (immutable) point:
+```atom
+:assert point p point q sum s <-
+  point p x a & point p y b &
+  point q x c & point q y d &
+  + a + c = e & + b + d = f &
+  point s x e & point s y f
+```
+For example, adding (-1, 3) to (5, -2):
+```atom
+point @q x 5 & point @q y -2
+point @p point @q sum @s
+point @s x _ & point @s y_
+```
 
 <!--
-### Temperature example
-
-Physical measurements (quantities) consist of a value (magnitude) and a unit. This is a triple where the quantity is defined by its magnitude and unit. We can define it with a generator rule:
+For example, we can model a physical quantity (like a measurement) to consist of a value (magnitude) and a unit:
 ```atom
 :assert quantity * value v unit u
 ```
-
+Here's a temperature atom, measured in the Celsius unit:
 ```atom
 quantity @roomTemp value 23.0 unit "Celsius"
 ```
@@ -331,7 +383,6 @@ TODO: make `quantity` a function of `(value, unit)`,  meaning that `(value, unit
 Adding two quantities of different units.
 -->
 
-
 ## Logical consistency
 
 As a logic language, **atom** allows expressing data integrity constraints natively, in the language itself. Any modification to the knowledgebase is tested for logical consistency before making changes, so all we need to do is provide the rules that valid data must satisfy. For example, for the *Silmarillion* family tree data set, we might add a rule that a child cannot be a parent of any of its ancestors:
@@ -355,15 +406,16 @@ With this rule in place, **atom** will reject malformed input:
 :assert input-number -3
 ```
 
-## Lookup
-
+<!--
 To navigate an **atom** world, it is helpful to be able to ask "what relations does this atom participate in?". This is handled by
 ```
 // need to add this command to REPL
 :lookup "Finwe"
 ```
+-->
 
+## Conclusion
 
-## Where to go from here
+Hopefully this tutorial gave you a feel for the **atom** language and what it can do. If you want to experiment further, a command-line version of the REPL client can be build from [source](https://github.com/roland-redmount/atom).
 
-Stuff is under construction. The command line client. Contribute!
+Please not that the **atom** language is still a work in progress. Not all features are in place, and there are a number of known bugs. If you run into issues, [report them here](https://github.com/roland-redmount/atom/issues).  If you are interested in contributing, please contact [roland@redmount.net](mailto:roland@redmount.net)

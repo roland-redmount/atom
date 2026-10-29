@@ -57,6 +57,12 @@ typedef struct s_TypedRelation {
 bool IsRelationForm(Atom form);
 
 /**
+ * Write the term forms of a form to termForms[], and return the number of terms,
+ * accounting for multiples. If the form is a term form, it has a single term (itself).
+ */
+size8 RelationFormGetTermForms(Atom form, Atom termForms[]);
+
+/**
  * Ordering of two relation signatures
  */
 int8 CompareRelations(TypedRelation relation, TypedRelation relationOrKey);

@@ -50,14 +50,16 @@ typedef struct s_NamedID {
 
 /*
  * A NewName is a @name in a query line that names no ID atom yet. The query line is
- * expanded with the anonymous variable _ in place of the @name. The anonymous variable is
- * the anonymousIndex-th anonymous variable of the query, counted in the order entered.
- * executeQuery() binds the name to the ID atom found in place of that anonymous variable.
+ * expanded with the anonymous variable _ in place of the @name.
+ * Each occurrence of a NewName in the line is expanded to the same variable, named
+ * variableName, which occurs nowhere else in the line. So in the query
+ * (car @myCar brand "Volvo" & car @myCar model 240)
+ * both occurrences of @myCar are the same variable, and the query yields one ID atom for both.
  */
 typedef struct s_NewName {
 	char const * name;	// points to the char after the '@' in the line entered
 	size32 nameLength;
-	index32 anonymousIndex;
+	char variableName;
 } NewName;
 
 typedef struct s_SessionState {
@@ -174,6 +176,7 @@ static void printHelp(void)
 	printLine("Commands:");
 	printLine(":assert <term>        Assert a fact. The term must not contain variables.");
 	printLine(":assert <term>        Assert an ifact rule, such as (circle * radius r).");
+	printLine(":assert <conjunction> Assert an ifact rule, such as (car * brand b & car * model m).");
 	printLine(":assert <clause>      Assert a rule. The clause must have > 1 term");
 	printLine("                      and contain at least one variable.");
 	printLine(":clear @name          Remove the name @name.");
@@ -181,7 +184,7 @@ static void printHelp(void)
 	printLine(":load <file> <form>   Import a facts from a CSV file, of the given form,");
 	printLine("                      whose roles must match file column names.");
 	printLine(":retract <term>       Retract a fact. The term must not contain variables.");
-	printLine(":retract <term>       Retract an ifact rule.");
+	printLine(":retract <term>       Retract an ifact rule, which may be a conjunction.");
 	printLine(":retract <clause>     Retract a rule. Variable names must match.");
 	printLine(":rules <form>         Print clause rules containing a term form.");
 	printLine(":view table|formula   Print results as a table of variables, or as formulas.");
@@ -323,15 +326,44 @@ static NewName const * findNewName(char const * name, size32 length)
 }
 
 
+// CLAUDE: The number of variable names a--z; see CreateVariable()
+#define N_LETTERS	26
+
+/*
+ * CLAUDE: Write each letter a--z that does not occur in the line outside of strings to
+ * variableNames, and return the number of letters written. Such a letter is not a variable
+ * of the line, as a variable is named by a single letter, case-insensitive. A letter in a word,
+ * such as a role name, also counts as occurring, which may leave out a letter that is free.
+ */
+static size8 findFreeVariableNames(char const * line, char variableNames[])
+{
+	bool isUsed[N_LETTERS] = {false};
+	bool isInString = false;
+	for(index32 i = 0; line[i]; i++) {
+		if(line[i] == '"')
+			isInString = !isInString;
+		else if(!isInString && IsLetterChar(line[i]))
+			isUsed[ToLower(line[i]) - 'a'] = true;
+	}
+	size8 nFree = 0;
+	for(index8 i = 0; i < N_LETTERS; i++) {
+		if(!isUsed[i])
+			variableNames[nFree++] = 'a' + i;
+	}
+	return nFree;
+}
+
+
 /*
  * CLAUDE: Copy an input line to expandedLine, replacing each @name. A @name is @ at the start
  * of a word and outside of a string, followed by a name; see IsNameInitialChar(). A @name of a
  * NamedID is replaced by the hash of the ID atom, written as @ followed by ID_HASH_LENGTH hex
  * digits; see TOKEN_ID. A hash entered by the user is copied as is.
  *
- * In a query line (isQuery), a @name of no NamedID is replaced by the anonymous variable _,
- * and recorded as a NewName. Such a @name may occur only once in the line, and not inside
- * [ ]. In any other line, a @name of no NamedID is an error.
+ * In a query line (isQuery), a @name of no NamedID is replaced by the variable of its NewName.
+ * The variable is a letter that does not occur elsewhere in the line; see findFreeVariableNames().
+ * Such a @name may occur several times in the line, but not inside [ ]. In any other line, a
+ * @name of no NamedID is an error.
  *
  * Other text is copied as is, and left for ParseFormula() to judge. Returns false, having
  * printed an error, if a @name cannot be replaced.
@@ -341,10 +373,10 @@ static bool expandIDNames(char const * line, bool isQuery)
 	StringBufferReset(&sessionState->expandedLine);
 	ResizingArrayReset(&sessionState->idExpansions);
 	ResizingArrayReset(&sessionState->newNames);
+	char freeVariableNames[N_LETTERS];
+	size8 nFreeVariableNames = findFreeVariableNames(line, freeVariableNames);
 	bool isInString = false;
 	size32 bracketDepth = 0;
-	// CLAUDE: the number of anonymous variables outside [ ] so far; see NewName
-	index32 nAnonymous = 0;
 	index32 i = 0;
 	while(line[i]) {
 		if(line[i] == '"')
@@ -360,8 +392,6 @@ static bool expandIDNames(char const * line, bool isQuery)
 				bracketDepth++;
 			if((line[i] == ']') && (bracketDepth > 0))
 				bracketDepth--;
-			if((line[i] == '_') && (bracketDepth == 0))
-				nAnonymous++;
 		}
 
 		bool isWordStart = (i == 0) || !IsNameChar(line[i - 1]);
@@ -404,18 +434,23 @@ static bool expandIDNames(char const * line, bool isQuery)
 				printNameError(i, "a new name cannot be inside [ ]");
 				return false;
 			}
-			if(findNewName(name, length)) {
-				printNameError(i, "a new name can occur only once in a query");
-				return false;
+			NewName const * newName = findNewName(name, length);
+			if(!newName) {
+				if(sessionState->newNames.nElements == nFreeVariableNames) {
+					printNameError(i, "too many new names in one query");
+					return false;
+				}
+				NewName addedName = {
+					.name = name,
+					.nameLength = length,
+					.variableName = freeVariableNames[sessionState->newNames.nElements],
+				};
+				ResizingArrayAppend(&sessionState->newNames, &addedName);
+				newName = ResizingArrayGetElement(
+					&sessionState->newNames, sessionState->newNames.nElements - 1);
 			}
-			StringBufferPush(&sessionState->expandedLine, '_');
+			StringBufferPush(&sessionState->expandedLine, newName->variableName);
 			expansion.expandedLength = 1;
-			NewName newName = {
-				.name = name,
-				.nameLength = length,
-				.anonymousIndex = nAnonymous++,
-			};
-			ResizingArrayAppend(&sessionState->newNames, &newName);
 		}
 		ResizingArrayAppend(&sessionState->idExpansions, &expansion);
 		i += 1 + length;
@@ -469,25 +504,19 @@ static void printInspectSummary(size32 nServices)
 
 
 /*
- * CLAUDE: Write the index in the query actors of the anonymous variable of each NewName, in
- * the order of newNames; see NewName.
+ * CLAUDE: Write the index in the query actors of an occurrence of the variable of each NewName,
+ * in the order of newNames; see NewName.
  */
-static void findNewNameActors(FormulaView queryView, FormOrdering const * ordering, index8 actorIndices[])
+static void findNewNameActors(FormulaView queryView, index8 actorIndices[])
 {
-	size8 arity = FormArity(queryView.form);
-	index8 enteredActorIndices[arity];
-	FormOrderingGetEnteredActors(queryView.form, ordering, enteredActorIndices);
-	index32 nAnonymous = 0;
-	for(index8 k = 0; k < arity; k++) {
-		TypedAtom actor = TypedTupleGetElement(queryView.actors, enteredActorIndices[k]);
-		if((actor.type != AT_VARIABLE) || (actor.atom.hash != anonymousVariable.atom.hash))
-			continue;
-		for(index32 i = 0; i < sessionState->newNames.nElements; i++) {
-			NewName const * newName = ResizingArrayGetElement(&sessionState->newNames, i);
-			if(newName->anonymousIndex == nAnonymous)
-				actorIndices[i] = enteredActorIndices[k];
+	for(index32 i = 0; i < sessionState->newNames.nElements; i++) {
+		NewName const * newName = ResizingArrayGetElement(&sessionState->newNames, i);
+		Atom variable = CreateVariable(newName->variableName);
+		for(index8 k = queryView.actors->nAtoms; k > 0; k--) {
+			TypedAtom actor = TypedTupleGetElement(queryView.actors, k - 1);
+			if((actor.type == AT_VARIABLE) && SameVariable(actor.atom, variable))
+				actorIndices[i] = k - 1;
 		}
-		nAnonymous++;
 	}
 }
 
@@ -543,11 +572,26 @@ static int resultView = RESULT_VIEW_FORMULA;
 #define TABLE_COLUMN_GAP	2
 
 
+/*
+ * CLAUDE: Test whether a variable of the query stands for a NewName; see NewName.
+ */
+static bool isNewNameVariable(Atom variable)
+{
+	for(index32 i = 0; i < sessionState->newNames.nElements; i++) {
+		NewName const * newName = ResizingArrayGetElement(&sessionState->newNames, i);
+		if(SameVariable(variable, CreateVariable(newName->variableName)))
+			return true;
+	}
+	return false;
+}
+
+
 /**
  * Write the actor index of the first occurrence of each named variable of a
  * query, in the order entered, and return the number of named variables.
  * Anonymous variables and quoted variables are ignored.
  */
+/* CLAUDE: The variable of a NewName is also ignored; see isNewNameVariable(). */
 static size8 findColumnActors(FormulaView queryView, FormOrdering const * ordering, index8 actorIndices[])
 {
 	size8 arity = FormArity(queryView.form);
@@ -559,6 +603,8 @@ static size8 findColumnActors(FormulaView queryView, FormOrdering const * orderi
 		if((actor.type != AT_VARIABLE) || (actor.atom.hash == anonymousVariable.atom.hash))
 			continue;
 		if(VariableIsQuoted(actor.atom))
+			continue;
+		if(isNewNameVariable(actor.atom))
 			continue;
 		bool isNewVariable = true;
 		for(index8 j = 0; j < nColumns; j++) {
@@ -686,7 +732,7 @@ static int executeQuery(char const * line)
 	bool hasNewNames = (sessionState->newNames.nElements > 0);
 	if(hasNewNames && (nTuples == 1)) {
 		index8 actorIndices[sessionState->newNames.nElements];
-		findNewNameActors(queryView, &ordering, actorIndices);
+		findNewNameActors(queryView, actorIndices);
 		addNewNames(printedResults[0], actorIndices);
 	}
 
@@ -743,7 +789,7 @@ static void printAssertResult(int result)
 		break;
 
 	case ASSERT_INVALID_IFACT:
-		printStatusLine("An ifact rule must be a single term with one generator (*) and distinct variables.");
+		printStatusLine("The terms of an ifact rule must have distinct forms and one generator (*) each, and the variables must be distinct.");
 		break;
 
 	case ASSERT_NOT_CLOSABLE:
@@ -794,16 +840,27 @@ static void printRetractResult(int result)
 		printStatusLine("Ok.");
 		break;
 
+	case RETRACT_IFACT_OK:
+		printStatusLine("Ok. Atoms defined by the rule may still exist.");
+		break;
+
 	case RETRACT_NOT_FOUND:
-		printStatusLine("No such rule.");
+		printStatusLine("No such fact or rule.");
+		break;
+
+	case RETRACT_NOT_ASSERTED:
+		printStatusLine("Attempt to retract an ifact or computed fact.");
 		break;
 
 	case RETRACT_TERM_VARIABLE:
 		printStatusLine("A fact may not contain a variable.");
 		break;
 
-	case RETRACT_INVALID_IFACT:
-		printStatusLine("An ifact rule must be a single term with one generator (*) and distinct variables.");
+	case RETRACT_INVALID_IFACT_RULE:
+		printStatusLine(
+			"The terms of an ifact rule must have distinct forms and one generator (*) each, "
+			"and all variables must be distinct."
+		);
 		break;
 
 	case RETRACT_NOT_CLAUSE:

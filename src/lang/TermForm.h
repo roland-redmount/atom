@@ -54,3 +54,8 @@ void PrintReflectedTermForm(Atom termForm);
  * Number of actors in a term of this form.
  */
 size8 TermFormArity(Atom termForm);
+
+/**
+ * CLAUDE: Test whether some role of the term form holds more than one actor.
+ */
+bool TermFormHasRepeatedRole(Atom termForm);

@@ -76,7 +76,7 @@ static int assertClosedRelation(FormulaView fact)
 }
 
 
-int AssertFact(FormulaView fact, StorageProvider const * provider)
+uint8 AssertFact(FormulaView fact, StorageProvider const * provider)
 {
 	ASSERT(IsTermForm(fact.form));
 	ASSERT(!TypedTupleContainsVariable(fact.actors));
@@ -127,7 +127,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 /**
  * Add a clause to the rule dictionary.
  */
-static int assertRule(Atom clause, FormulaView clauseView)
+static uint8 assertRule(Atom clause, FormulaView clauseView)
 {
 	// A rule must have at least two terms
 	if(ClauseFormNTerms(clauseView.form) < 2)
@@ -147,7 +147,7 @@ static int assertRule(Atom clause, FormulaView clauseView)
 }
 
 
-int AssertFormula(Atom formula)
+uint8 AssertFormula(Atom formula)
 {
 	FormulaView formulaView = FormulaGetView(formula);
 
@@ -177,68 +177,68 @@ int AssertFormula(Atom formula)
 }
 
 
-/*
- * CLAUDE: Retract the fact (closed-relation f), opening the relation of the form f.
+/**
+ * Retract the fact (closed-relation f), opening the relation of the form f.
  */
-static void retractClosedRelation(FormulaView fact)
+static uint8 retractClosedRelation(FormulaView fact)
 {
+	// The form f in (closed-relation f)
 	TypedAtom form = TypedTupleGetElement(fact.actors, 0);
-	if((form.type == AT_ID) && RelationIsClosedForm(form.atom))
+	if((form.type == AT_ID) && RelationIsClosedForm(form.atom)) {
 		OpenRelation(form.atom);
+		return RETRACT_OK;
+	}
+	else
+		return RETRACT_NOT_FOUND;
 }
 
 
-void RetractFact(FormulaView fact)
+uint8 RetractFact(FormulaView fact)
 {
-	// CLAUDE: The relation (closed-relation f) is only written by OpenRelation()
-	if(SameAtoms(fact.form, GetClosedRelationForm())) {
-		retractClosedRelation(fact);
-		return;
-	}
-
-	// If the fact does not exist, there is nothing to do.
-	// TODO: if the fact is produced by a compiled service and the relation
-	// also has storage that does not contain the fact, this won't work.
-	if(!factExists(fact))
-		return;
+	// Test for the special case (closed-relation f) which is only written by OpenRelation()
+	if(SameAtoms(fact.form, GetClosedRelationForm()))
+		return retractClosedRelation(fact);
 
 	TypedRelation relation = RelationFromFact(fact);
-	TupleStore * store = RelationGetTupleStore(relation);
-	if(!store) {
-		// The relation has no stored tuples
-		return;
+	TupleStore * store = RelationExists(relation) ? RelationGetTupleStore(relation) : 0;
+	if(store && TupleStoreIsWritable(store)) {
+		// The relation has a writable tuple store
+		Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
+		if(TupleStoreRemoveTuple(store, actorsArray) == TUPLE_REMOVED) {
+			// The fact was found and removed.
+			LookupRemoveFactRoles(relation, actorsArray);
+			return RETRACT_OK;
+		}
 	}
-	// CLAUDE: The defining facts of an ifact are never stored in a TupleStore; see IFactConjunction
-	if(!TupleStoreIsWritable(store))
-		return;
-	// CLAUDE: The actors are in the column order of the fact's relation; see RelationFromFact()
-	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
-
-	// Remove the tuple. This will not remove defining facts
-	byte removeResult = TupleStoreRemoveTuple(store, actorsArray) ;
-	if(removeResult == TUPLE_REMOVED)
-		LookupRemoveFactRoles(relation, actorsArray);
+	// Else the fact was not explicitly asserted
+	if(factExists(fact)) {
+		// The fact is entailed by a rule or ifact rule
+		return RETRACT_NOT_ASSERTED;
+	}
+	else {
+		// The fact is not entailed
+		return RETRACT_NOT_FOUND;
+	}
 }
 
 
-int RetractFormula(Atom formula)
+uint8 RetractFormula(Atom formula)
 {
 	FormulaView formulaView = FormulaGetView(formula);
 
 	if(TypedTupleContainsAtom(formulaView.actors, generatorAtom)) {
 		if(!IsIFactRule(formula))
-			return RETRACT_INVALID_IFACT;
+			return RETRACT_INVALID_IFACT_RULE;
 		if(!DictionaryContainsIFactRule(formula))
 			return RETRACT_NOT_FOUND;
 		DictionaryRemoveIFactRule(&formulaView);
-		return RETRACT_OK;
+		return RETRACT_IFACT_OK;
 	}
 
 	if(FormulaIsTerm(formula)) {
 		if(TypedTupleContainsVariable(formulaView.actors))
 			return RETRACT_TERM_VARIABLE;
-		RetractFact(formulaView);
-		return RETRACT_OK;
+		return RetractFact(formulaView);
 	}
 
 	if(FormulaIsClause(formula)) {
@@ -303,26 +303,39 @@ static bool collectTermIFactTuples(
 	IFactTuple ifactTuple = {.nColumns = termArity};
 	TypeSignature termSignature = {0};
 	bool hasGenerator = false;
+	// CLAUDE: The role of the generator holds no other actor; see IsIFactRule()
+	bool isGeneratorRoleSingle = true;
 	index8 i0 = termActorIndex ? * termActorIndex : 0;
-	for(index8 i = 0; i < termArity; i++) {
-		TypedAtom actor = TypedTupleGetElement(actors, i0 + i);
-		if(SameTypedAtoms(actor, generatorAtom)) {
-			if(hasGenerator) {
-				// term contains more than one generator
-				return false;
+	// CLAUDE: The roles of the predicate form hold the actors of the term in order; see
+	// PredicateFormGetActorRoles()
+	index8 i = 0;
+	MultisetIterator iterator;
+	MultisetIterate(TermFormGetPredicateForm(termForm), AT_NAME, &iterator);
+	while(MultisetIteratorNext(&iterator)) {
+		ElementMultiple role = MultisetIteratorGetElement(&iterator);
+		for(index8 j = 0; j < role.multiple; j++, i++) {
+			TypedAtom actor = TypedTupleGetElement(actors, i0 + i);
+			if(SameTypedAtoms(actor, generatorAtom)) {
+				if(hasGenerator) {
+					// term contains more than one generator
+					MultisetIteratorEnd(&iterator);
+					return false;
+				}
+				hasGenerator = true;
+				isGeneratorRoleSingle = (role.multiple == 1);
+				ifactTuple.idColumn = i;
+				termSignature.atomTypes[i] = AT_ID;
+				ifactTuple.tuple[i] = (Atom) {0};
 			}
-			hasGenerator = true;
-			ifactTuple.idColumn = i;
-			termSignature.atomTypes[i] = AT_ID;
-			ifactTuple.tuple[i] = (Atom) {0};
-		}
-		else {
-			termSignature.atomTypes[i] = actor.type;
-			ifactTuple.tuple[i] = actor.atom;
+			else {
+				termSignature.atomTypes[i] = actor.type;
+				ifactTuple.tuple[i] = actor.atom;
+			}
 		}
 	}
+	MultisetIteratorEnd(&iterator);
 	// the term is valid if it had a generator
-	if(!hasGenerator)
+	if(!hasGenerator || !isGeneratorRoleSingle)
 		return false;
 
 	ifactTuple.relation = (TypedRelation) {.form = termForm, .typeSignature = termSignature};
@@ -424,13 +437,13 @@ Atom CreateIFact(FormulaView formula)
 		if(i == 0 || compareIFactTuples(&ifactTuples[i], &ifactTuples[i-1], sizeof(IFactTuple)) != 0) {
 			// Begin new conjunction, from a new RelationWriter
 			if(i > 0)
-				IFactEndConjunction(&draft);
-			IFactBeginConjunction(&draft, ifactTuples[i].relation, ifactTuples[i].idColumn);
+				IFactEndRelation(&draft);
+			IFactBeginRelation(&draft, ifactTuples[i].relation, ifactTuples[i].idColumn);
 		}
 		IFactAddTuple(&draft, ifactTuples[i].tuple);
 	}
 	// End the last conjunction
-	IFactEndConjunction(&draft);
+	IFactEndRelation(&draft);
 	
 	idAtom = IFactEnd(&draft);
 

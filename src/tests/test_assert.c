@@ -428,14 +428,14 @@ void testRetractFormulaIFactRule(void)
 	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
 
 	Atom renamedRule = CStringToTerm("circle * radius s");
-	ASSERT_INT32_EQUAL(RetractFormula(renamedRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(renamedRule), RETRACT_IFACT_OK)
 	ASSERT_FALSE(DictionaryContainsIFactRule(rule))
 	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_NOT_FOUND)
 	ReleaseFormula(renamedRule);
 	ReleaseFormula(rule);
 
 	Atom invalidRule = CStringToTerm("circle * radius 5.0");
-	ASSERT_INT32_EQUAL(RetractFormula(invalidRule), RETRACT_INVALID_IFACT)
+	ASSERT_INT32_EQUAL(RetractFormula(invalidRule), RETRACT_INVALID_IFACT_RULE)
 	ReleaseFormula(invalidRule);
 }
 
@@ -495,6 +495,72 @@ static size32 countQueryFacts(char const * queryString)
 	FreeMixedTypeRelation(relation);
 	ReleaseFormula(query);
 	return nFacts;
+}
+
+
+/**
+ * CLAUDE: The relation (foo bar) holds the asserted fact (foo 1 bar 2), and the clause
+ * (foo x bar y | ! baz x qux y) derives the fact (foo 3 bar 4). Only the asserted fact can be
+ * retracted. Retracting the derived fact leaves it in place, and a fact that is neither
+ * asserted nor derived is not found.
+ */
+void testRetractDerivedFact(void)
+{
+	Atom storedFact = CStringToTerm("foo 1 bar 2");
+	Atom bazFact = CStringToTerm("baz 3 qux 4");
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(storedFact), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(bazFact), 0), ASSERT_OK)
+	FormulaView clause = DictionaryAddClauseFromCString("foo x bar y | ! baz x qux y");
+	TypedRelation relation = RelationFromFact(FormulaGetView(storedFact));
+
+	Atom derivedFact = CStringToTerm("foo 3 bar 4");
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(derivedFact)), RETRACT_NOT_ASSERTED)
+	ASSERT_UINT32_EQUAL(countQueryFacts("foo 3 bar 4"), 1)
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 1)
+
+	Atom missingFact = CStringToTerm("foo 9 bar 9");
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(missingFact)), RETRACT_NOT_FOUND)
+
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(storedFact)), RETRACT_OK)
+	ASSERT_UINT32_EQUAL(RelationNRows(relation), 0)
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(storedFact)), RETRACT_NOT_FOUND)
+
+	DictionaryRemoveClause(&clause);
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(bazFact)), RETRACT_OK)
+	DropRelation(RelationFromFact(FormulaGetView(bazFact)));
+	DropRelation(relation);
+	ReleaseFormula(missingFact);
+	ReleaseFormula(derivedFact);
+	ReleaseFormula(bazFact);
+	ReleaseFormula(storedFact);
+}
+
+
+/**
+ * CLAUDE: A fact computed by a primitive service, such as (+ 2 + 3 = 5), is not asserted,
+ * so it cannot be retracted. A false fact such as (+ 2 + 3 = 6) is not found.
+ */
+void testRetractComputedFact(void)
+{
+	Atom computedFact = CStringToTerm("+ 2 + 3 = 5");
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(computedFact)), RETRACT_NOT_ASSERTED)
+	ReleaseFormula(computedFact);
+
+	Atom falseFact = CStringToTerm("+ 2 + 3 = 6");
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(falseFact)), RETRACT_NOT_FOUND)
+	ReleaseFormula(falseFact);
+}
+
+
+/**
+ * CLAUDE: Retracting (closed-relation [. odd]) for the relation (odd x), which is not closed,
+ * finds nothing to open.
+ */
+void testRetractClosedRelationNotClosed(void)
+{
+	Atom closedOdd = CStringToTerm("closed-relation [. odd]");
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(closedOdd)), RETRACT_NOT_FOUND)
+	ReleaseFormula(closedOdd);
 }
 
 
@@ -707,7 +773,7 @@ void testCompileAfterStoreCreated(void)
 	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 1)
 
 	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(ifactRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(ifactRule), RETRACT_IFACT_OK)
 	ASSERT_INT32_EQUAL(RetractFormula(bigFact), RETRACT_OK)
 	dropFormRelations("circle 1 radius 1");
 	dropFormRelations("big 1");
@@ -1133,6 +1199,11 @@ void testCreateIFactRejects(void)
 	Atom clauseNoGenerator = CStringToClause("foo 1 bar 2");
 	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(clauseNoGenerator)).hash, 0)
 	ReleaseFormula(clauseNoGenerator);
+
+	// CLAUDE: a generator in a role with another actor is defined by an actor of its own role
+	Atom repeatedRole = CStringToTerm("sibling * sibling \"a\"");
+	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(repeatedRole)).hash, 0)
+	ReleaseFormula(repeatedRole);
 }
 
 
@@ -1309,6 +1380,9 @@ int main(int argc, char * argv[])
 	ExecuteTest(testRetractFormulaRule);
 	ExecuteTest(testRetractFormulaIFactRule);
 	ExecuteTest(testRetractFormulaRejects);
+	ExecuteTest(testRetractDerivedFact);
+	ExecuteTest(testRetractComputedFact);
+	ExecuteTest(testRetractClosedRelationNotClosed);
 	ExecuteTest(testAssertFactAfterRule);
 	ExecuteTest(testAssertContradictsRuleUnusedArgument);
 	ExecuteTest(testInvalidateDependentsOfNewRelation);
