@@ -171,6 +171,7 @@ void testIFactRuleRejects(void)
 		"circle x radius r",			// no generator
 		"! circle * radius r",			// a negated term
 		"rect * width x height x",		// a repeated variable
+		"sibling * sibling x",			// a generator in a role with another actor
 	};
 	for(index8 i = 0; i < sizeof(terms) / sizeof(terms[0]); i++) {
 		Atom term = CStringToTerm(terms[i]);
@@ -237,6 +238,7 @@ void testIFactConjunctionRuleRejects(void)
 		"car * brand \"Volvo\" & car * model m",	// a constant
 		"car * brand b & ! car * model m",			// a negated term
 		"car * feature f & car * feature g",		// a repeated term form
+		"car * brand b & sibling * sibling x",		// a generator in a role with another actor
 		"link * from a to b & link c from * to d",	// a repeated term form, generators in different roles
 		"box * width x height y & box * depth z colour u & box * weight v size w",	// too many actors
 	};

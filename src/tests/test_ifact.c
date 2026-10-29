@@ -703,6 +703,110 @@ void testCompileIFactConjunctionRule(void)
 }
 
 
+/*
+ * CLAUDE: Run a term query and return the atom in the "pair" role of its single result.
+ */
+static TypedAtom runQueryForPair(Atom query)
+{
+	TypedTuple * tuple;
+	ASSERT_UINT32_EQUAL(runQuery(query, &tuple), 1)
+	TypedAtom pair = TypedTupleGetElement(tuple, findRoleIndex(FormulaGetForm(query), "pair"));
+	FreeTypedTuple(tuple);
+	ASSERT_UINT32_EQUAL(pair.type, AT_ID)
+	return pair;
+}
+
+
+/*
+ * CLAUDE: Run the query written by the C string, with the variable p replaced by the given pair,
+ * and return the number of results.
+ */
+static size32 countPairResults(char const * queryString, TypedAtom pair)
+{
+	Atom query = CStringToTerm(queryString);
+	Atom byIdQuery = substituteVariable(query, 'p', pair);
+	TypedTuple * tuple;
+	size32 nResults = runQuery(byIdQuery, &tuple);
+	if(tuple)
+		FreeTypedTuple(tuple);
+	ReleaseFormula(byIdQuery);
+	ReleaseFormula(query);
+	return nResults;
+}
+
+
+/**
+ * CLAUDE: With the ifact rule (pair * member a member b), whose role "member" holds two actors,
+ * the actors of the role may be given in either order. The ifact stores the tuple in canonical
+ * order, so (pair x member 3 member 5) and (pair x member 5 member 3) yield the same pair, also
+ * through the clause (link p from a to b | ! pair p member a member b). The reader of the
+ * relation yields the tuple in both orders, so a query with the pair bound finds the other
+ * member from either member; see IFactReaderState.
+ */
+void testIFactRepeatedRole(void)
+{
+	Atom rule = CStringToTerm("pair * member a member b");
+	FormulaView ifactRule = DictionaryAddIFactRule(rule);
+	FormulaView clause = DictionaryAddClauseFromCString("link p from a to b | ! pair p member a member b");
+
+	Atom query35 = CStringToTerm("pair x member 3 member 5");
+	Atom query53 = CStringToTerm("pair x member 5 member 3");
+	TypedAtom pair = runQueryForPair(query35);
+	ASSERT_TRUE(SameTypedAtoms(runQueryForPair(query53), pair))
+	ASSERT_UINT32_EQUAL(IFactReferenceCount(pair.atom), 1)
+
+	// CLAUDE: CreateIFact() stores the same canonical tuple
+	Atom ifactFormula = CStringToTerm("pair * member 5 member 3");
+	Atom createdPair = CreateIFact(FormulaGetView(ifactFormula));
+	ASSERT_DATA64_EQUAL(createdPair.hash, pair.atom.hash)
+	IFactRelease(createdPair);
+	ReleaseFormula(ifactFormula);
+
+	// CLAUDE: The pair read with either member bound, and with no member bound
+	ASSERT_UINT32_EQUAL(countPairResults("pair p member 5 member 3", pair), 1)
+	ASSERT_UINT32_EQUAL(countPairResults("pair p member 3 member 5", pair), 1)
+	ASSERT_UINT32_EQUAL(countPairResults("pair p member 5 member b", pair), 1)
+	ASSERT_UINT32_EQUAL(countPairResults("pair p member 3 member b", pair), 1)
+	ASSERT_UINT32_EQUAL(countPairResults("pair p member 4 member b", pair), 0)
+	ASSERT_UINT32_EQUAL(countPairResults("pair p member a member b", pair), 1)
+
+	// CLAUDE: Equal members give one fact, with no duplicate tuple
+	Atom query44 = CStringToTerm("pair x member 4 member 4");
+	TypedAtom pair44 = runQueryForPair(query44);
+	ASSERT_UINT32_EQUAL(countPairResults("pair p member a member b", pair44), 1)
+
+	// CLAUDE: The clause binds the members in either order
+	Atom link53 = CStringToTerm("link p from 5 to 3");
+	Atom link35 = CStringToTerm("link p from 3 to 5");
+	TypedTuple * tuple;
+	ASSERT_UINT32_EQUAL(runQuery(link53, &tuple), 1)
+	ASSERT_TRUE(SameTypedAtoms(TypedTupleGetElement(tuple, findRoleIndex(FormulaGetForm(link53), "link")), pair))
+	FreeTypedTuple(tuple);
+	ASSERT_UINT32_EQUAL(runQuery(link35, &tuple), 1)
+	ASSERT_TRUE(SameTypedAtoms(TypedTupleGetElement(tuple, findRoleIndex(FormulaGetForm(link35), "link")), pair))
+	FreeTypedTuple(tuple);
+
+	byte atomTypes[3] = {AT_INT, AT_INT, AT_INT};
+	atomTypes[findRoleIndex(FormulaGetForm(rule), "pair")] = AT_ID;
+	TypedRelation relation = {
+		.form = FormulaGetForm(rule),
+		.typeSignature = CreateTypeSignature(atomTypes, 3)
+	};
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(relation), 2)
+
+	ReleaseFormula(link35);
+	ReleaseFormula(link53);
+	ReleaseFormula(query44);
+	ReleaseFormula(query53);
+	ReleaseFormula(query35);
+	DictionaryRemoveClause(&clause);
+	DictionaryRemoveIFactRule(&ifactRule);
+	ASSERT_UINT32_EQUAL(IFactRelationNTuples(relation), 0)
+	DropRelation(relation);
+	ReleaseFormula(rule);
+}
+
+
 /**
  * CLAUDE: The clause (make c brand b model m | ! car c brand b | ! car c model m) reads the
  * ifacts of the rule (car * brand b & car * model m). The term set of the clause body compiles
@@ -769,6 +873,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileIFactRuleTwoTypes);
 	ExecuteTest(testCompileIFactConjunctionRule);
 	ExecuteTest(testCompileIFactConjunctionRuleInClause);
+	ExecuteTest(testIFactRepeatedRole);
 
 	UnloadLibraries();
 	KernelShutdown();

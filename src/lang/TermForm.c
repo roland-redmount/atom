@@ -135,3 +135,10 @@ size8 TermFormArity(Atom termForm)
 {
 	return PredicateArity(TermFormGetPredicateForm(termForm));
 }
+
+
+bool TermFormHasRepeatedRole(Atom termForm)
+{
+	Atom predicateForm = TermFormGetPredicateForm(termForm);
+	return MultisetNUniqueElements(predicateForm, AT_NAME) < MultisetSize(predicateForm, AT_NAME);
+}

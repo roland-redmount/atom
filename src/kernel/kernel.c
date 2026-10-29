@@ -347,7 +347,7 @@ static void createCoreRelation(uint32 relationId)
 	CreateRelationBootstrap(kernel->coreRelations[relationId], kernel->corePredicateForms[formId]);
 	// CLAUDE: The tuples of a core relation are ifacts, with the identified atom in the
 	// first role of coreFormRoleIds
-	IFactCreateReaderService(kernel->coreRelations[relationId], kernel->corePredicateRoleIndex[formId][0]);
+	IFactCreateCoreReaderService(kernel->coreRelations[relationId], kernel->corePredicateRoleIndex[formId][0]);
 	// Release the reference obtained from CreateRelationBootstrap(),
 	// since TupleStore and associated operators now hold references
 	ReleaseRelation(kernel->coreRelations[relationId]);

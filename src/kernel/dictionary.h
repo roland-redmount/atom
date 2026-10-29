@@ -131,15 +131,15 @@ FormulaView DictionaryAddClauseFromCString(const char * clauseString);
 void DictionaryRemoveClause(FormulaView * clause);
 
 /**
- * Test if the formula is a valid ifact rule: a positive term with exactly one
- * generator (*), where every other actor is a variable and no variable is repeated.
+ * Test if the formula is a valid ifact rule
+ * (1) a positive term, or a conjunction of positive terms with distinct
+ *     forms and at least two roles, such as (car * brand b & car * model m)
+ *     but not (car * feature f & car * feature g)
+ * (2) exactly one generator (*) per term, in a role with multiplicity 1:
+ *     (sibling * sibling x) is not a valid rule
+ * (3) with all others actors are variable and no variable is repeated.
  * The term must have at least two roles, since the IFACT operator needs an input.
  */
-/* CLAUDE: An ifact rule may also be a conjunction, such as (car * brand b & car * model m).
- * Each term of the conjunction must be a positive term with exactly one generator and at
- * least two roles. The terms must have distinct term forms, so (car * feature f & car * feature g)
- * is not an ifact rule. No variable is repeated anywhere in the conjunction. The rule has at
- * most RELATION_MAX_ARITY actors. */
 bool IsIFactRule(Atom formula);
 
 /**

@@ -1747,6 +1747,7 @@ Operator * CreateIFactOperator(IFactTerm const terms[], size8 nTerms, size8 nArg
 	for(index8 i = 0; i < nTerms; i++) {
 		ASSERT(terms[i].argumentMap[terms[i].idColumn] == op->impl.ifact.idArgument)
 		ASSERT(IsTermForm(terms[i].relation.form))
+		op->impl.ifact.terms[i].hasRepeatedRole = TermFormHasRepeatedRole(terms[i].relation.form);
 	}
 
 	// IFACT yields at most one tuple, so any index order holds
@@ -1761,11 +1762,29 @@ static void ifactSetupContext(OperatorContext * context)
 }
 
 
-/* CLAUDE: TODO: A term with a repeated role, such as (pair * member a member b), stores its
- * tuple in argument order. The ifact of (3, 5) then differs from the ifact of (5, 3). The tuple
- * should be stored in canonical order, sorted by value within each role. Then IFACT and the
- * reader of IFactCreateReaderService() must yield every actor order of the tuple, to give a
- * complete relation. */
+/*
+ * CLAUDE: Sort the actors of each role of a term tuple, putting the tuple in canonical order;
+ * see GetCanonicalActorOrder(). The atom in the ID column is not read, since the role of the
+ * ID column holds no other actor; see IsIFactRule().
+ */
+static void sortTermTuple(IFactTerm const * term, Atom tuple[])
+{
+	size8 nColumns = TypeSignatureNAtomTypes(term->relation.typeSignature);
+	TypedAtom actors[RELATION_MAX_ARITY];
+	for(index8 j = 0; j < nColumns; j++) {
+		Atom atom = (j == term->idColumn) ? (Atom) {0} : tuple[j];
+		actors[j] = CreateTypedAtom(term->relation.typeSignature.atomTypes[j], atom);
+	}
+	index8 permutation[RELATION_MAX_ARITY];
+	GetCanonicalActorOrder(term->relation.form, actors, permutation);
+	for(index8 j = 0; j < nColumns; j++)
+		tuple[j] = actors[permutation[j]].atom;
+}
+
+
+/* CLAUDE: The arguments bound by the caller need not be in canonical order, as in a clause
+ * (link p from a to b | ! pair p member a member b), so each term tuple is sorted; see
+ * IFactAddTuple(). The arguments themselves are yielded as bound. */
 static bool ifactCall(OperatorContext * context)
 {
 	Operator const * op = context->op;
@@ -1783,6 +1802,8 @@ static bool ifactCall(OperatorContext * context)
 		Atom tuple[RELATION_MAX_ARITY];
 		for(index8 j = 0; j < nColumns; j++)
 			tuple[j] = context->arguments[term->argumentMap[j]];
+		if(term->hasRepeatedRole)
+			sortTermTuple(term, tuple);
 		IFactBeginRelation(&draft, term->relation, term->idColumn);
 		IFactAddTuple(&draft, tuple);
 		IFactEndRelation(&draft);

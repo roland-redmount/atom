@@ -56,7 +56,7 @@ void ShutdownPaging(void);
 // Persistent data version number. Must be increased whenever the layout of
 // a persistent structure, a PersistentStateKey or a registered function name changes,
 // since a paging file written by an earlier version can then not be restored.
-#define PERSISTENCE_VERSION	5
+#define PERSISTENCE_VERSION	6
 
 /**
  * Keys for the array of persistent state slots stored in the paging area.

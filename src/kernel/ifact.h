@@ -98,6 +98,9 @@ void IFactBeginRelation(IFactDraft * draft, TypedRelation relation, index8 idCol
 /**
  * Add one tuple to the current IFactRelation.
  * The atom in the ID column of the tuple is ignored; it will be computed by IFactEnd()
+ * The tuple must be in canonical order, with the actors of each role sorted; see
+ * GetCanonicalActorOrder(). This assumption is not checked here, since it is not
+ * possible during kernel bootstrap.
  */
 void IFactAddTuple(IFactDraft * draft, Atom const tuple[]);
 
@@ -171,6 +174,13 @@ size32 IFactRelationNTuples(TypedRelation relation);
  * see AssertFact(). The service must not already exist.
  */
 void IFactCreateReaderService(TypedRelation relation, index8 idColumn);
+
+/**
+ * CLAUDE: Same as IFactCreateReaderService(), for a core relation, which has no repeated role.
+ * The column orders of the relation are not found, since the core forms cannot be read while
+ * the kernel creates them; see createCoreRelation() in kernel.c.
+ */
+void IFactCreateCoreReaderService(TypedRelation relation, index8 idColumn);
 
 /**
  * Test if the relation has a service created by IFactCreateReaderService().

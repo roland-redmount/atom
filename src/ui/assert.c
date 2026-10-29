@@ -303,26 +303,39 @@ static bool collectTermIFactTuples(
 	IFactTuple ifactTuple = {.nColumns = termArity};
 	TypeSignature termSignature = {0};
 	bool hasGenerator = false;
+	// CLAUDE: The role of the generator holds no other actor; see IsIFactRule()
+	bool isGeneratorRoleSingle = true;
 	index8 i0 = termActorIndex ? * termActorIndex : 0;
-	for(index8 i = 0; i < termArity; i++) {
-		TypedAtom actor = TypedTupleGetElement(actors, i0 + i);
-		if(SameTypedAtoms(actor, generatorAtom)) {
-			if(hasGenerator) {
-				// term contains more than one generator
-				return false;
+	// CLAUDE: The roles of the predicate form hold the actors of the term in order; see
+	// PredicateFormGetActorRoles()
+	index8 i = 0;
+	MultisetIterator iterator;
+	MultisetIterate(TermFormGetPredicateForm(termForm), AT_NAME, &iterator);
+	while(MultisetIteratorNext(&iterator)) {
+		ElementMultiple role = MultisetIteratorGetElement(&iterator);
+		for(index8 j = 0; j < role.multiple; j++, i++) {
+			TypedAtom actor = TypedTupleGetElement(actors, i0 + i);
+			if(SameTypedAtoms(actor, generatorAtom)) {
+				if(hasGenerator) {
+					// term contains more than one generator
+					MultisetIteratorEnd(&iterator);
+					return false;
+				}
+				hasGenerator = true;
+				isGeneratorRoleSingle = (role.multiple == 1);
+				ifactTuple.idColumn = i;
+				termSignature.atomTypes[i] = AT_ID;
+				ifactTuple.tuple[i] = (Atom) {0};
 			}
-			hasGenerator = true;
-			ifactTuple.idColumn = i;
-			termSignature.atomTypes[i] = AT_ID;
-			ifactTuple.tuple[i] = (Atom) {0};
-		}
-		else {
-			termSignature.atomTypes[i] = actor.type;
-			ifactTuple.tuple[i] = actor.atom;
+			else {
+				termSignature.atomTypes[i] = actor.type;
+				ifactTuple.tuple[i] = actor.atom;
+			}
 		}
 	}
+	MultisetIteratorEnd(&iterator);
 	// the term is valid if it had a generator
-	if(!hasGenerator)
+	if(!hasGenerator || !isGeneratorRoleSingle)
 		return false;
 
 	ifactTuple.relation = (TypedRelation) {.form = termForm, .typeSignature = termSignature};

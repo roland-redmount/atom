@@ -668,7 +668,7 @@ bool IsIFactRule(Atom formula)
 	// CLAUDE: Every term is positive, has at least two roles and exactly one generator
 	Atom termForms[RELATION_MAX_ARITY];
 	size8 nTerms = RelationFormGetTermForms(view.form, termForms);
-	index8 termOffset = 0;
+	index8 actorIndex = 0;
 	for(index8 i = 0; i < nTerms; i++) {
 		if(!TermFormGetSign(termForms[i]))
 			return false;
@@ -676,17 +676,28 @@ bool IsIFactRule(Atom formula)
 		// RelationFormGetTermForms()
 		if((i > 0) && SameAtoms(termForms[i - 1], termForms[i]))
 			return false;
-		size8 termArity = TermFormArity(termForms[i]);
-		if(termArity < 2)
+		if(TermFormArity(termForms[i]) < 2)
 			return false;
+		// CLAUDE: The roles of the predicate form hold the actors of the term in order; see
+		// PredicateFormGetActorRoles()
 		size8 nGenerators = 0;
-		for(index8 j = 0; j < termArity; j++) {
-			if(SameTypedAtoms(TypedTupleGetElement(view.actors, termOffset + j), generatorAtom))
-				nGenerators++;
+		bool isGeneratorRoleSingle = true;
+		MultisetIterator iterator;
+		MultisetIterate(TermFormGetPredicateForm(termForms[i]), AT_NAME, &iterator);
+		while(MultisetIteratorNext(&iterator)) {
+			ElementMultiple role = MultisetIteratorGetElement(&iterator);
+			for(index8 j = 0; j < role.multiple; j++) {
+				if(SameTypedAtoms(TypedTupleGetElement(view.actors, actorIndex++), generatorAtom)) {
+					nGenerators++;
+					// CLAUDE: The role of the generator holds no other actor, since an atom defined
+					// by another actor of its own role, as in (sibling * sibling x), is circular
+					isGeneratorRoleSingle = isGeneratorRoleSingle && (role.multiple == 1);
+				}
+			}
 		}
-		if(nGenerators != 1)
+		MultisetIteratorEnd(&iterator);
+		if((nGenerators != 1) || !isGeneratorRoleSingle)
 			return false;
-		termOffset += termArity;
 	}
 
 	for(index8 i = 0; i < arity; i++) {

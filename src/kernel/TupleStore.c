@@ -138,27 +138,13 @@ static void getProviderTuple(
 }
 
 
-/* CLAUDE: Advance the form iterator to the next permutation that moves each column to a
-   column of the same atom type, and write the permutation. Returns false when no such
-   permutation is left. A permutation that moves a column to a column of another type
-   gives a tuple of another typed relation. */
+/* CLAUDE: Advance the form iterator to the next permutation that keeps the column types of
+   the store; see NextTypeKeepingPermutation(). */
 static bool nextStoredPermutation(
 	TupleStore const * store, FormIterator * formIterator, index8 permutation[])
 {
-	byte const * atomTypes = store->relation.typeSignature.atomTypes;
-	while(NextFormPermutation(formIterator)) {
-		GetTuplePermutation(formIterator, permutation);
-		bool keepsTypes = true;
-		for(index8 i = 0; i < store->nColumns; i++) {
-			if(atomTypes[permutation[i]] != atomTypes[i]) {
-				keepsTypes = false;
-				break;
-			}
-		}
-		if(keepsTypes)
-			return true;
-	}
-	return false;
+	return NextTypeKeepingPermutation(
+		formIterator, store->relation.typeSignature.atomTypes, store->nColumns, permutation);
 }
 
 

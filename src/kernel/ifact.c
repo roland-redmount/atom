@@ -9,6 +9,7 @@
 #include "kernel/Parameter.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
+#include "lang/FormPermutation.h"
 #include "lang/PredicateForm.h"
 #include "memory/allocator.h"
 #include "memory/paging.h"
@@ -55,6 +56,7 @@ static int8 btreeCompareHeaders(void const * item1, void const * item2, size32 i
 
 static void readerSetupState(void * state, Atom arguments[], void * readerData, void * storage);
 static bool readerCall(void * state, Atom arguments[], void * readerData, void * storage);
+static void readerFinalizeState(void * state, void * readerData, void * storage);
 static void readerFinalizeReader(void * readerData, void * storage);
 
 
@@ -62,6 +64,7 @@ static NamedFunction const ifactFunctions[] = {
 	{"ifact.btreeCompareHeaders", (AnyFunction) btreeCompareHeaders},
 	{"ifact.readerSetupState", (AnyFunction) readerSetupState},
 	{"ifact.readerCall", (AnyFunction) readerCall},
+	{"ifact.readerFinalizeState", (AnyFunction) readerFinalizeState},
 	{"ifact.readerFinalizeReader", (AnyFunction) readerFinalizeReader},
 };
 
@@ -633,23 +636,95 @@ typedef struct s_IFactReaderData {
 	index8 idColumn;
 	// The input columns other than the ID column
 	bool isInput[RELATION_MAX_ARITY];
+	// CLAUDE: The column orders of the relation that keep the column types, the identity first;
+	// see NextTypeKeepingPermutation(). A relation with no repeated role has the identity only.
+	size32 nPermutations;
+	index8 (* permutations)[RELATION_MAX_ARITY];
 } IFactReaderData;
+
+
+/*
+ * CLAUDE: The state of a reader. A relation with several column orders yields each stored
+ * tuple in each column order. These tuples are collected in permutedTuples, sorted by
+ * TupleCompare() and without duplicates, so that the reader yields its tuples in the
+ * identity index order. A relation with one column order reads the stored tuples instead.
+ */
+typedef struct s_IFactReaderState {
+	IFactTupleIterator iterator;
+	Atom * permutedTuples;
+	index32 nPermutedTuples;
+	index32 nextPermutedTuple;
+} IFactReaderState;
+
+
+/*
+ * CLAUDE: Collect the tuples of the given ifact on the reader's relation in every column order
+ * of the reader; see IFactReaderState.
+ */
+static void collectPermutedTuples(IFactReaderData const * data, Atom ifact, IFactReaderState * state)
+{
+	IFactHeader const * header = peekIFactHeader(ifact.hash);
+	IFactRelation const * ifactRelation =
+		header ? findIFactRelation(header, data->relation, data->idColumn) : 0;
+	if(!ifactRelation)
+		return;
+	size8 nColumns = data->nColumns;
+	size32 nTuples = ifactRelation->nRows * data->nPermutations;
+	state->permutedTuples = Allocate(nTuples * nColumns * sizeof(Atom));
+	Atom * permutedTuple = state->permutedTuples;
+	for(index32 i = 0; i < ifactRelation->nRows; i++) {
+		Atom const * tuple = ifactRelation->tuples + i * nColumns;
+		for(index32 k = 0; k < data->nPermutations; k++) {
+			for(index8 j = 0; j < nColumns; j++)
+				permutedTuple[j] = tuple[data->permutations[k][j]];
+			permutedTuple += nColumns;
+		}
+	}
+	QuickSort(state->permutedTuples, nTuples, nColumns * sizeof(Atom), compareTuples);
+	// CLAUDE: Equal actors in a role give equal permuted tuples, of which one is kept
+	state->nPermutedTuples = (nTuples > 0) ? 1 : 0;
+	for(index32 i = 1; i < nTuples; i++) {
+		Atom const * tuple = state->permutedTuples + i * nColumns;
+		Atom * lastTuple = state->permutedTuples + (state->nPermutedTuples - 1) * nColumns;
+		if(TupleCompare(lastTuple, tuple, nColumns) != 0) {
+			CopyMemory(tuple, lastTuple + nColumns, nColumns * sizeof(Atom));
+			state->nPermutedTuples++;
+		}
+	}
+}
 
 
 static void readerSetupState(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	IFactReaderData const * data = readerData;
-	iterateTuples(arguments[data->idColumn], data->relation, data->idColumn, state);
+	IFactReaderState * readerState = state;
+	if(data->nPermutations > 1)
+		collectPermutedTuples(data, arguments[data->idColumn], readerState);
+	else
+		iterateTuples(arguments[data->idColumn], data->relation, data->idColumn, &(readerState->iterator));
 }
 
 
-/* CLAUDE: TODO: For a term with a repeated role, the reader should yield every actor order of
- * each tuple; see the TODO at ifactCall() in operator.c. */
+/*
+ * CLAUDE: Return the next tuple of the reader state, or 0 if there is none; see IFactReaderState.
+ */
+static Atom const * readerStateNext(IFactReaderData const * data, IFactReaderState * state)
+{
+	if(data->nPermutations > 1) {
+		if(state->nextPermutedTuple >= state->nPermutedTuples)
+			return 0;
+		return state->permutedTuples + (state->nextPermutedTuple++) * data->nColumns;
+	}
+	else
+		return tupleIteratorNext(&(state->iterator));
+}
+
+
 static bool readerCall(void * state, Atom arguments[], void * readerData, void * storage)
 {
 	IFactReaderData const * data = readerData;
 	Atom const * tuple;
-	while((tuple = tupleIteratorNext(state))) {
+	while((tuple = readerStateNext(data, state))) {
 		bool matches = true;
 		for(index8 i = 0; matches && (i < data->nColumns); i++) {
 			if(data->isInput[i] && !SameAtoms(tuple[i], arguments[i]))
@@ -664,9 +739,58 @@ static bool readerCall(void * state, Atom arguments[], void * readerData, void *
 }
 
 
+static void readerFinalizeState(void * state, void * readerData, void * storage)
+{
+	IFactReaderState const * readerState = state;
+	if(readerState->permutedTuples)
+		Free(readerState->permutedTuples);
+}
+
+
 static void readerFinalizeReader(void * readerData, void * storage)
 {
-	Free(readerData);
+	IFactReaderData const * data = readerData;
+	Free(data->permutations);
+	Free(data);
+}
+
+
+/*
+ * CLAUDE: Write the identity column order to the reader data, as its only column order;
+ * see IFactReaderData.
+ */
+static void setIdentityPermutation(IFactReaderData * data)
+{
+	data->nPermutations = 1;
+	data->permutations = Allocate(sizeof(data->permutations[0]));
+	for(index8 j = 0; j < data->nColumns; j++)
+		data->permutations[0][j] = j;
+}
+
+
+/*
+ * CLAUDE: Write the column orders of the relation that keep the column types to the reader
+ * data, the identity first; see IFactReaderData.
+ */
+static void findReaderPermutations(IFactReaderData * data)
+{
+	FormIterator * formIterator = CreateFormIterator(data->relation.form);
+	byte const * atomTypes = data->relation.typeSignature.atomTypes;
+	index8 permutation[RELATION_MAX_ARITY];
+	// CLAUDE: Count first, then fill, as the number of column orders is not known beforehand
+	data->nPermutations = 1;
+	while(NextTypeKeepingPermutation(formIterator, atomTypes, data->nColumns, permutation))
+		data->nPermutations++;
+	FreeFormIterator(formIterator);
+
+	data->permutations = Allocate(data->nPermutations * sizeof(data->permutations[0]));
+	formIterator = CreateFormIterator(data->relation.form);
+	GetTuplePermutation(formIterator, data->permutations[0]);
+	for(index32 k = 1; k < data->nPermutations; k++) {
+		bool found = NextTypeKeepingPermutation(formIterator, atomTypes, data->nColumns, data->permutations[k]);
+		ASSERT(found)
+	}
+	FreeFormIterator(formIterator);
 }
 
 
@@ -676,8 +800,16 @@ static void readerFinalizeReader(void * readerData, void * storage)
  * The reader yields the tuples of the ifact given at idColumn that match the other inputs.
  * The reader yields its tuples in the identity index order; see CreateMachineOperator().
  */
+/* CLAUDE: A relation with a repeated role yields each tuple in every column order that keeps
+ * the column types, as a TupleStore does; see TupleStoreAddTuple(). With columnOrders =
+ * READER_IDENTITY_ORDER, the reader yields each tuple as stored; see IFactCreateCoreReaderService(). */
+
+#define READER_ALL_COLUMN_ORDERS	1
+#define READER_IDENTITY_ORDER		2
+
 static void setupReader(
-	RelationReaderSpec * spec, TypedRelation relation, index8 idColumn, IOSignature ioSignature)
+	RelationReaderSpec * spec, TypedRelation relation, index8 idColumn, IOSignature ioSignature,
+	int columnOrders)
 {
 	size8 nColumns = TypeSignatureNAtomTypes(relation.typeSignature);
 	ASSERT(ioSignature.parameterIO[idColumn] == PARAMETER_IN)
@@ -687,13 +819,18 @@ static void setupReader(
 	data->idColumn = idColumn;
 	for(index8 i = 0; i < nColumns; i++)
 		data->isInput[i] = (i != idColumn) && (ioSignature.parameterIO[i] == PARAMETER_IN);
+	if(columnOrders == READER_ALL_COLUMN_ORDERS)
+		findReaderPermutations(data);
+	else
+		setIdentityPermutation(data);
 
 	SetMemory(spec, sizeof(RelationReaderSpec), 0);
 	spec->ioSignature = ioSignature;
 	spec->readerData = data;
-	spec->stateSize = sizeof(IFactTupleIterator);
+	spec->stateSize = sizeof(IFactReaderState);
 	spec->setupState = readerSetupState;
 	spec->call = readerCall;
+	spec->finalizeState = readerFinalizeState;
 	spec->finalizeReader = readerFinalizeReader;
 }
 
@@ -717,7 +854,11 @@ static bool isReaderOperator(Operator const * op)
 }
 
 
-void IFactCreateReaderService(TypedRelation relation, index8 idColumn)
+/*
+ * CLAUDE: Create the reader service of IFactCreateReaderService(), with the given column orders;
+ * see setupReader().
+ */
+static void createReaderServiceWithOrders(TypedRelation relation, index8 idColumn, int columnOrders)
 {
 	size8 nColumns = TypeSignatureNAtomTypes(relation.typeSignature);
 	Service service = createReaderService(relation, idColumn);
@@ -725,10 +866,22 @@ void IFactCreateReaderService(TypedRelation relation, index8 idColumn)
 	bool isStale = InvalidateServicesForNewRelation(relation.form);
 	ASSERT(!ServiceGetRecord(service))
 	RelationReaderSpec readerSpec;
-	setupReader(&readerSpec, relation, idColumn, service.ioSignature);
+	setupReader(&readerSpec, relation, idColumn, service.ioSignature, columnOrders);
 	CreateService(service, CreateMachineOperator(nColumns, 0, &readerSpec, 0));
 	if(isStale)
 		ServiceMarkStale(service);
+}
+
+
+void IFactCreateReaderService(TypedRelation relation, index8 idColumn)
+{
+	createReaderServiceWithOrders(relation, idColumn, READER_ALL_COLUMN_ORDERS);
+}
+
+
+void IFactCreateCoreReaderService(TypedRelation relation, index8 idColumn)
+{
+	createReaderServiceWithOrders(relation, idColumn, READER_IDENTITY_ORDER);
 }
 
 

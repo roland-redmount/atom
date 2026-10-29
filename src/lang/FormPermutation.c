@@ -360,3 +360,18 @@ void GetTuplePermutation(const FormIterator * iter, index8 permutation[])
 		ASSERT(false);
 	}
 }
+
+
+bool NextTypeKeepingPermutation(
+	FormIterator * iter, byte const atomTypes[], size8 nColumns, index8 permutation[])
+{
+	while(NextFormPermutation(iter)) {
+		GetTuplePermutation(iter, permutation);
+		bool keepsTypes = true;
+		for(index8 i = 0; keepsTypes && (i < nColumns); i++)
+			keepsTypes = (atomTypes[permutation[i]] == atomTypes[i]);
+		if(keepsTypes)
+			return true;
+	}
+	return false;
+}

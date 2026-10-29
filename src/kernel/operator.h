@@ -17,6 +17,8 @@ typedef struct s_IFactTerm {
 	TypedRelation relation;
 	index8 idColumn;
 	index8 argumentMap[RELATION_MAX_ARITY];
+	// CLAUDE: Whether a role of the term holds several actors, set by CreateIFactOperator()
+	bool hasRepeatedRole;
 } IFactTerm;
 
 

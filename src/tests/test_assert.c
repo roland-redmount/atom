@@ -1199,6 +1199,11 @@ void testCreateIFactRejects(void)
 	Atom clauseNoGenerator = CStringToClause("foo 1 bar 2");
 	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(clauseNoGenerator)).hash, 0)
 	ReleaseFormula(clauseNoGenerator);
+
+	// CLAUDE: a generator in a role with another actor is defined by an actor of its own role
+	Atom repeatedRole = CStringToTerm("sibling * sibling \"a\"");
+	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(repeatedRole)).hash, 0)
+	ReleaseFormula(repeatedRole);
 }
 
 
