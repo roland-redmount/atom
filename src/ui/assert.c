@@ -232,7 +232,7 @@ uint8 RetractFormula(Atom formula)
 		if(!DictionaryContainsIFactRule(formula))
 			return RETRACT_NOT_FOUND;
 		DictionaryRemoveIFactRule(&formulaView);
-		return RETRACT_OK;
+		return RETRACT_IFACT_OK;
 	}
 
 	if(FormulaIsTerm(formula)) {

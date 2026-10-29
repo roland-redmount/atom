@@ -840,6 +840,10 @@ static void printRetractResult(int result)
 		printStatusLine("Ok.");
 		break;
 
+	case RETRACT_IFACT_OK:
+		printStatusLine("Ok. Atoms defined by the rule may still exist.");
+		break;
+
 	case RETRACT_NOT_FOUND:
 		printStatusLine("No such fact or rule.");
 		break;

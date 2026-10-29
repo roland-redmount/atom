@@ -63,12 +63,13 @@ uint8 RetractFact(FormulaView fact);
 uint8 RetractFormula(Atom formula);
 
 // Result codes for RetractFact() and RetractFormula()
-#define RETRACT_OK					1	// the fact or rule was retracted
-#define RETRACT_NOT_FOUND			2	// the fact or rule is not in the knowledgebase
-#define RETRACT_NOT_ASSERTED		3	// the fact is not explicitly asserted (ifact or computed fact)
-#define RETRACT_TERM_VARIABLE		4	// a term containing variables is not a fact
-#define RETRACT_INVALID_IFACT_RULE	5	// a formula with generators that is not an ifact rule
-#define RETRACT_NOT_CLAUSE			6	// a conjunction
+#define RETRACT_OK					1	// a fact or rule was retracted
+#define RETRACT_IFACT_OK			2	// an ifact rule was retracted
+#define RETRACT_NOT_FOUND			3	// the fact or rule is not in the knowledgebase
+#define RETRACT_NOT_ASSERTED		4	// the fact is not explicitly asserted (ifact or computed fact)
+#define RETRACT_TERM_VARIABLE		5	// a term containing variables is not a fact
+#define RETRACT_INVALID_IFACT_RULE	6	// a formula with generators that is not an ifact rule
+#define RETRACT_NOT_CLAUSE			7	// a conjunction
 
 /**
  * High level function to create an IFact from a formula containing

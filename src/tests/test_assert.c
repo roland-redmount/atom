@@ -428,7 +428,7 @@ void testRetractFormulaIFactRule(void)
 	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
 
 	Atom renamedRule = CStringToTerm("circle * radius s");
-	ASSERT_INT32_EQUAL(RetractFormula(renamedRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(renamedRule), RETRACT_IFACT_OK)
 	ASSERT_FALSE(DictionaryContainsIFactRule(rule))
 	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_NOT_FOUND)
 	ReleaseFormula(renamedRule);
@@ -773,7 +773,7 @@ void testCompileAfterStoreCreated(void)
 	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 1)
 
 	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(ifactRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(ifactRule), RETRACT_IFACT_OK)
 	ASSERT_INT32_EQUAL(RetractFormula(bigFact), RETRACT_OK)
 	dropFormRelations("circle 1 radius 1");
 	dropFormRelations("big 1");
