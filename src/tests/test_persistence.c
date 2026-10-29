@@ -180,10 +180,13 @@ static void writeSessionToPageFile(void)
  */
 void testRestartKernel(void)
 {
+	// CLAUDE: resolve the executable path per platform; /proc/self/exe is Linux only
+	char executablePath[maxPathLength + 1];
+	GetExecutablePath(executablePath, maxPathLength + 1);
 	pid_t child = fork();
 	if(child == 0) {
 		char * childArguments[] = {"test_persistence", "--write-session", 0};
-		execv("/proc/self/exe", childArguments);
+		execv(executablePath, childArguments);
 		_exit(1);
 	}
 	int childStatus;
