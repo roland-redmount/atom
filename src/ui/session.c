@@ -841,15 +841,22 @@ static void printRetractResult(int result)
 		break;
 
 	case RETRACT_NOT_FOUND:
-		printStatusLine("No such rule.");
+		printStatusLine("No such fact or rule.");
+		break;
+
+	case RETRACT_NOT_ASSERTED:
+		printStatusLine("Attempt to retract an ifact or computed fact.");
 		break;
 
 	case RETRACT_TERM_VARIABLE:
 		printStatusLine("A fact may not contain a variable.");
 		break;
 
-	case RETRACT_INVALID_IFACT:
-		printStatusLine("The terms of an ifact rule must have distinct forms and one generator (*) each, and the variables must be distinct.");
+	case RETRACT_INVALID_IFACT_RULE:
+		printStatusLine(
+			"The terms of an ifact rule must have distinct forms and one generator (*) each, "
+			"and all variables must be distinct."
+		);
 		break;
 
 	case RETRACT_NOT_CLAUSE:

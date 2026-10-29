@@ -151,7 +151,7 @@ void testIFactOperator(void)
 	actors[fixture.circleIndex] = CreateTypedAtom(AT_ID, circle5);
 	actors[fixture.radiusIndex] = CreateTypedAtom(AT_FLOAT, (Atom) {._float = 5.0});
 	Atom fact = CreateFormulaFromArray(fixture.termForm, actors);
-	RetractFact(FormulaGetView(fact));
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(fact)), RETRACT_NOT_ASSERTED)
 	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture.relation), 2)
 	ReleaseFormula(fact);
 	ASSERT_UINT32_EQUAL(IFactReferenceCount(circle5), 1)

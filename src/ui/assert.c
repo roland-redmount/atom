@@ -76,7 +76,7 @@ static int assertClosedRelation(FormulaView fact)
 }
 
 
-int AssertFact(FormulaView fact, StorageProvider const * provider)
+uint8 AssertFact(FormulaView fact, StorageProvider const * provider)
 {
 	ASSERT(IsTermForm(fact.form));
 	ASSERT(!TypedTupleContainsVariable(fact.actors));
@@ -127,7 +127,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider)
 /**
  * Add a clause to the rule dictionary.
  */
-static int assertRule(Atom clause, FormulaView clauseView)
+static uint8 assertRule(Atom clause, FormulaView clauseView)
 {
 	// A rule must have at least two terms
 	if(ClauseFormNTerms(clauseView.form) < 2)
@@ -147,7 +147,7 @@ static int assertRule(Atom clause, FormulaView clauseView)
 }
 
 
-int AssertFormula(Atom formula)
+uint8 AssertFormula(Atom formula)
 {
 	FormulaView formulaView = FormulaGetView(formula);
 
@@ -177,57 +177,58 @@ int AssertFormula(Atom formula)
 }
 
 
-/*
- * CLAUDE: Retract the fact (closed-relation f), opening the relation of the form f.
+/**
+ * Retract the fact (closed-relation f), opening the relation of the form f.
  */
-static void retractClosedRelation(FormulaView fact)
+static uint8 retractClosedRelation(FormulaView fact)
 {
+	// The form f in (closed-relation f)
 	TypedAtom form = TypedTupleGetElement(fact.actors, 0);
-	if((form.type == AT_ID) && RelationIsClosedForm(form.atom))
+	if((form.type == AT_ID) && RelationIsClosedForm(form.atom)) {
 		OpenRelation(form.atom);
+		return RETRACT_OK;
+	}
+	else
+		return RETRACT_NOT_FOUND;
 }
 
 
-void RetractFact(FormulaView fact)
+uint8 RetractFact(FormulaView fact)
 {
-	// CLAUDE: The relation (closed-relation f) is only written by OpenRelation()
-	if(SameAtoms(fact.form, GetClosedRelationForm())) {
-		retractClosedRelation(fact);
-		return;
-	}
-
-	// If the fact does not exist, there is nothing to do.
-	// TODO: if the fact is produced by a compiled service and the relation
-	// also has storage that does not contain the fact, this won't work.
-	if(!factExists(fact))
-		return;
+	// Test for the special case (closed-relation f) which is only written by OpenRelation()
+	if(SameAtoms(fact.form, GetClosedRelationForm()))
+		return retractClosedRelation(fact);
 
 	TypedRelation relation = RelationFromFact(fact);
-	TupleStore * store = RelationGetTupleStore(relation);
-	if(!store) {
-		// The relation has no stored tuples
-		return;
+	TupleStore * store = RelationExists(relation) ? RelationGetTupleStore(relation) : 0;
+	if(store && TupleStoreIsWritable(store)) {
+		// The relation has a writable tuple store
+		Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
+		if(TupleStoreRemoveTuple(store, actorsArray) == TUPLE_REMOVED) {
+			// The fact was found and removed.
+			LookupRemoveFactRoles(relation, actorsArray);
+			return RETRACT_OK;
+		}
 	}
-	// CLAUDE: The defining facts of an ifact are never stored in a TupleStore; see IFactRelation
-	if(!TupleStoreIsWritable(store))
-		return;
-	// CLAUDE: The actors are in the column order of the fact's relation; see RelationFromFact()
-	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
-
-	// Remove the tuple. This will not remove defining facts
-	byte removeResult = TupleStoreRemoveTuple(store, actorsArray) ;
-	if(removeResult == TUPLE_REMOVED)
-		LookupRemoveFactRoles(relation, actorsArray);
+	// Else the fact was not explicitly asserted
+	if(factExists(fact)) {
+		// The fact is entailed by a rule or ifact rule
+		return RETRACT_NOT_ASSERTED;
+	}
+	else {
+		// The fact is not entailed
+		return RETRACT_NOT_FOUND;
+	}
 }
 
 
-int RetractFormula(Atom formula)
+uint8 RetractFormula(Atom formula)
 {
 	FormulaView formulaView = FormulaGetView(formula);
 
 	if(TypedTupleContainsAtom(formulaView.actors, generatorAtom)) {
 		if(!IsIFactRule(formula))
-			return RETRACT_INVALID_IFACT;
+			return RETRACT_INVALID_IFACT_RULE;
 		if(!DictionaryContainsIFactRule(formula))
 			return RETRACT_NOT_FOUND;
 		DictionaryRemoveIFactRule(&formulaView);
@@ -237,8 +238,7 @@ int RetractFormula(Atom formula)
 	if(FormulaIsTerm(formula)) {
 		if(TypedTupleContainsVariable(formulaView.actors))
 			return RETRACT_TERM_VARIABLE;
-		RetractFact(formulaView);
-		return RETRACT_OK;
+		return RetractFact(formulaView);
 	}
 
 	if(FormulaIsClause(formula)) {

@@ -17,7 +17,7 @@
  * Creates a new relation table using the indicated storage provider if one
  * did not already exist; if provider = 0, RelationBTree is used by default.
  */
-int AssertFact(FormulaView fact, StorageProvider const * provider);
+uint8 AssertFact(FormulaView fact, StorageProvider const * provider);
 
 /**
  * High level method to assert any formula.
@@ -28,7 +28,7 @@ int AssertFact(FormulaView fact, StorageProvider const * provider);
  * 2) a clause with at least two terms and at least one variable is a rule,
  *    sent to DictionaryAddClause()
  */
-int AssertFormula(Atom formula);
+uint8 AssertFormula(Atom formula);
 
 // Result codes for AssertFact() and AssertFormula()
 #define ASSERT_OK					1	// a new fact or rule was created
@@ -46,28 +46,29 @@ int AssertFormula(Atom formula);
 /**
  * High level method to retract a fact. Removes the tuple from the corresponding
  * relation table and removes corresponding entries from the lookup table.
- * The actors tuple may not contain variables. This method cannot be used to
- * retract an identifying fact; this is done by ReleaseIFact().
- * This function should always succeed, as (non-identifying) facts can be retracted
- * at any time.
+ * The fact may not contain variables. This method cannot be used to
+ * retract an identifying fact; see ReleaseIFact().
+ * This function returns RETRACT_OK, RETRACT_NOT_ASSERTED or RETRACT_NOT_FOUND
+ * if the fact was asserted, entailed by a rule, or not entailed at all, respectively.
  */
-void RetractFact(FormulaView fact);
+uint8 RetractFact(FormulaView fact);
 
 /**
  * High level method to retract any formula; the counterpart of AssertFormula().
  * An ifact rule is removed by DictionaryRemoveIFactRule(), a fact by RetractFact(),
  * and a clause by DictionaryRemoveClause().
  * 
- * NOTE: The clause must have the same variable names as when asserted; see DictionaryAddClause().
+ * NOTE: A clause ruel must have the same variable names as when asserted; see DictionaryAddClause().
  */
-int RetractFormula(Atom formula);
+uint8 RetractFormula(Atom formula);
 
-// Result codes for RetractFormula()
-#define RETRACT_OK					1	// the fact or rule was retracted, or the fact did not exist
-#define RETRACT_NOT_FOUND			2	// the rule is not in the dictionary
-#define RETRACT_TERM_VARIABLE		3	// a term containing variables is not a fact
-#define RETRACT_INVALID_IFACT		4	// a formula with generators that is not an ifact rule
-#define RETRACT_NOT_CLAUSE			5	// a conjunction
+// Result codes for RetractFact() and RetractFormula()
+#define RETRACT_OK					1	// the fact or rule was retracted
+#define RETRACT_NOT_FOUND			2	// the fact or rule is not in the knowledgebase
+#define RETRACT_NOT_ASSERTED		3	// the fact is not explicitly asserted (ifact or computed fact)
+#define RETRACT_TERM_VARIABLE		4	// a term containing variables is not a fact
+#define RETRACT_INVALID_IFACT_RULE	5	// a formula with generators that is not an ifact rule
+#define RETRACT_NOT_CLAUSE			6	// a conjunction
 
 /**
  * High level function to create an IFact from a formula containing
