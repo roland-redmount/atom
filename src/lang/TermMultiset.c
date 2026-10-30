@@ -7,7 +7,7 @@
 #include "kernel/TypedRelation.h"
 
 
-Atom CreateTermMultiset(Atom const termForms[], size8 nTermForms, index32 relationId)
+Atom CreateTermMultiset(Atom const termForms[], size8 nTermForms, TypedRelation formRelation)
 {
 	// reduce to unique terms
 	Atom uniqueTermForms[nTermForms];
@@ -23,7 +23,7 @@ Atom CreateTermMultiset(Atom const termForms[], size8 nTermForms, index32 relati
 	AddMultisetToIFactFromArrays(&draft, uniqueTermForms, multiplicities, nUniqueTermForms, AT_ID);
 
 	// add the (clause-form) or (conjunction-form) tuple, depending on relationId
-	IFactBeginRelation(&draft, GetCoreRelation(relationId), 0);
+	IFactBeginRelation(&draft, formRelation, 0);
 	IFactAddTuple(&draft, (Atom[]) {(Atom) {0}});
 	IFactEndRelation(&draft);
 

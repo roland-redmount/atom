@@ -858,6 +858,72 @@ void testCompileIFactConjunctionRuleInClause(void)
 }
 
 
+/**
+ * CLAUDE: Create the formula of an ifact with the generator (*) in place of the ID atom.
+ */
+static Atom createRuleFromIFactFormula(Atom ifactFormula, Atom idAtom)
+{
+	FormulaView view = FormulaGetView(ifactFormula);
+	TypedTuple * actors = CreateTupleFromTuple(view.actors);
+	TypedAtom idActor = CreateTypedAtom(AT_ID, idAtom);
+	for(index8 i = 0; i < view.actors->nAtoms; i++) {
+		if(SameTypedAtoms(TypedTupleGetElement(actors, i), idActor))
+			TypedTupleSetElement(actors, i, generatorAtom);
+	}
+	Atom rule = CreateFormula(view.form, actors);
+	FreeTypedTuple(actors);
+	return rule;
+}
+
+
+/**
+ * CLAUDE: Create the ifact of a rule, and check that GetIFactFormula() yields the rule with
+ * the ID atom in place of each generator. Every relation of the rule is dropped afterwards.
+ */
+static void checkIFactFormula(Atom rule)
+{
+	Atom idAtom = CreateIFact(FormulaGetView(rule));
+	Atom ifactFormula = GetIFactFormula(idAtom);
+	ASSERT_DATA64_EQUAL(FormulaGetForm(ifactFormula).hash, FormulaGetForm(rule).hash)
+	Atom ruleCopy = createRuleFromIFactFormula(ifactFormula, idAtom);
+	ASSERT_DATA64_EQUAL(ruleCopy.hash, rule.hash)
+	ReleaseFormula(ruleCopy);
+	ReleaseFormula(ifactFormula);
+	IFactRelease(idAtom);
+	ReleaseFormula(rule);
+}
+
+
+static void dropTermRelation(char const * termText)
+{
+	Atom term = CStringToTerm(termText);
+	DropRelation(RelationFromFact(FormulaGetView(term)));
+	ReleaseFormula(term);
+}
+
+
+/**
+ * CLAUDE: GetIFactFormula() yields the formula given to CreateIFact(), with the ID atom in
+ * place of each generator. A term form repeated in a conjunction is tested both before and
+ * after a single term form, since the order of the term forms of a conjunction form depends
+ * on multiplicity; see MultisetIterate().
+ */
+void testGetIFactFormula(void)
+{
+	checkIFactFormula(CStringToTerm("circle * radius 5"));
+	dropTermRelation("circle * radius 5");
+
+	checkIFactFormula(CStringToConjunction("car * brand 1 & car * model 2"));
+	dropTermRelation("car * brand 1");
+	dropTermRelation("car * model 2");
+
+	checkIFactFormula(CStringToConjunction("pair * member 1 & pair * member 2 & foo * x 3"));
+	checkIFactFormula(CStringToConjunction("foo * x 1 & foo * x 2 & pair * member 3"));
+	dropTermRelation("pair * member 1");
+	dropTermRelation("foo * x 1");
+}
+
+
 int main(int argc, char * argv[])
 {
 	KernelInitialize(TRANSIENT_MEMORY);
@@ -874,6 +940,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCompileIFactConjunctionRule);
 	ExecuteTest(testCompileIFactConjunctionRuleInClause);
 	ExecuteTest(testIFactRepeatedRole);
+	ExecuteTest(testGetIFactFormula);
 
 	UnloadLibraries();
 	KernelShutdown();

@@ -8,7 +8,7 @@
 
 Atom CreateClauseForm(Atom const termForms[], size8 nTermForms)
 {
-	return CreateTermMultiset(termForms, nTermForms, RELATION_CLAUSE_FORM);
+	return CreateTermMultiset(termForms, nTermForms, GetCoreRelation(RELATION_CLAUSE_FORM));
 }
 
 

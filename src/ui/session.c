@@ -20,6 +20,7 @@
 #include "parser/StringBuffer.h"
 #include "parser/TermFormBuilder.h"
 #include "parser/Tokenizer.h"
+#include "parser/TupleParser.h"
 #include "platform.h"
 #include "ui/query.h"
 #include "ui/session.h"
@@ -180,6 +181,7 @@ static void printHelp(void)
 	printLine(":assert <clause>      Assert a rule. The clause must have > 1 term");
 	printLine("                      and contain at least one variable.");
 	printLine(":clear @name          Remove the name @name.");
+	printLine(":def <ID atom>        Print the identifying facts of an ID atom.");
 	printLine(":inspect <query>      Print the service(s) that the query dispatches to");
 	printLine(":load <file> <form>   Import a facts from a CSV file, of the given form,");
 	printLine("                      whose roles must match file column names.");
@@ -1089,6 +1091,33 @@ static void executeRules(char const * termFormText, index32 linePosition)
 }
 
 
+/**
+ * Print the identifying facts of the ID atom following the :def command
+ */
+static void executeDef(char const * atomText, index32 linePosition)
+{
+	TypedAtom actor;
+	size8 nActors;
+	index32 errorIndex;
+	if(!ParseActors(atomText, &actor, 1, &nActors, &errorIndex)) {
+		printParseError(linePosition + errorIndex);
+		return;
+	}
+	if((nActors != 1) || (actor.type != AT_ID)) {
+		if(nActors == 1)
+			ReleaseTypedAtom(actor);
+		printStatusLine(":def requires an ID atom, such as @myCar.");
+		return;
+	}
+
+	Atom formula = GetIFactFormula(actor.atom);
+	PrintFormula(formula);
+	PrintChar('\n');
+	ReleaseFormula(formula);
+	ReleaseTypedAtom(actor);
+}
+
+
 /*
  * Remove the name entered after the :clear command, so that the name can be bound
  * to another ID atom. The session releases its reference to the ID atom.
@@ -1209,6 +1238,12 @@ static int executeCommand(char const * line, char const * commandText)
 	char const * termFormText = matchCommand(commandText, ":rules");
 	if(termFormText) {
 		executeRules(termFormText, termFormText - line);
+		return SESSION_CONTINUE;
+	}
+
+	char const * atomText = matchCommand(commandText, ":def");
+	if(atomText) {
+		executeDef(atomText, atomText - line);
 		return SESSION_CONTINUE;
 	}
 
