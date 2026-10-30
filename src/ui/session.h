@@ -3,9 +3,8 @@
  * evaluates them and prints responses to stdout.
  * A line containing a formula is a query. A line beginning with ':' is a command instead.
  * 
- * ID atoms received in query results are printed as @number, and the session lets the user
- * refer to those ID atoms by @number in following input. This number is kept by the session only,
- * and is not part of the language; see expandIDNumbers() in ui/session.c.
+ * The session also lets the user refer to ID atoms using tags of the form @tag.
+ * This feature is not part of the atom language.
  */
 
 
@@ -17,8 +16,9 @@
 
 // The prompt used prior to user input
 #define SESSION_PROMPT		"> "
-// CLAUDE: The prompt used prior to each further line of an entry; see SessionExecuteLine().
-// The prompt is as wide as SESSION_PROMPT, so that a caret pointing at an error lines up.
+
+// The prompt used when continuing input over multiple lines.
+// This prompt must have the same length as SESSION_PROMPT to correctly align an error caret.
 #define SESSION_CONTINUATION_PROMPT	"  "
 
 // Prefix used for a status line; see SessionPrintStatusPrefix()
@@ -47,14 +47,6 @@ void SessionPrintStatusPrefix(void);
  * session has been asked to end, and SESSION_CONTINUE while it has not.
  */
 int SessionExecuteLine(char const * line);
-
-/*
- * CLAUDE: The line given to SessionExecuteLine() is an entry of one or more lines,
- * separated by '\n'. SessionExecuteLine() returns SESSION_INCOMPLETE if the formula of the
- * entry is not complete yet, as in "foo x <-". The front end then appends '\n' and the next
- * line to the entry, and calls SessionExecuteLine() with the entry again. An entry ending
- * with a blank line is never incomplete, so a blank line ends an entry that is not complete.
- */
 
 
 #endif	// SESSION_H

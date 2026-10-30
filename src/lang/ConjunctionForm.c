@@ -8,7 +8,7 @@
 
 Atom CreateConjunctionForm(Atom const termForms[], size8 nTermForms)
 {
-	return CreateTermMultiset(termForms, nTermForms, RELATION_CONJUNCTION_FORM);
+	return CreateTermMultiset(termForms, nTermForms, GetCoreRelation(RELATION_CONJUNCTION_FORM));
 }
 
 

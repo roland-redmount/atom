@@ -18,7 +18,7 @@
 
 
 /**
- * The registry stores a FormulaRecord for every formula, keyed on the formula
+ * The formula registry stores a FormulaRecord for every formula, keyed on the formula
  * hash, and owns the actors tuple of each one. A record is only reachable
  * through peekFormulaRecord(), so a caller never sees one.
  *
@@ -238,7 +238,7 @@ void GetCanonicalActorOrder(Atom form, TypedAtom const actors[], index8 * permut
 }
 
 
-/*
+/**
  * Put the actors of a formula of the given form in canonical order, in place.
  */
 static void putActorsInCanonicalOrder(Atom form, TypedTuple * actors)
@@ -255,7 +255,7 @@ static void putActorsInCanonicalOrder(Atom form, TypedTuple * actors)
 	GetCanonicalActorOrder(form, elements, permutation);
 	if(IsIdentityPermutation(permutation, arity))
 		return;
-	// CLAUDE: The tuple holds a reference to every element, so the elements stay valid while
+	// Temporarily acquire a reference to every element, so the elements stay valid while
 	// they are written back in another order
 	for(index8 i = 0; i < arity; i++)
 		AcquireTypedAtom(elements[i]);
@@ -270,9 +270,9 @@ static void putActorsInCanonicalOrder(Atom form, TypedTuple * actors)
  * Find or create the formula with the given form and actors. The actors tuple
  * is adopted by the registry if the formula is new, and freed if it is not.
  */
-static Atom internFormula(Atom form, TypedTuple * actors)
+static Atom storeFormula(Atom form, TypedTuple * actors)
 {
-	// CLAUDE: A formula is identified by its actors in canonical order
+	// A formula is identified by its actors in canonical order
 	putActorsInCanonicalOrder(form, actors);
 	data64 hash = formulaHash(form, actors, djb2InitialHash);
 	FormulaRecord * existingRecord = peekFormulaRecord(hash);
@@ -307,13 +307,13 @@ static Atom internFormula(Atom form, TypedTuple * actors)
 
 Atom CreateFormula(Atom form, TypedTuple const * actors)
 {
-	return internFormula(form, CreateTupleFromTuple(actors));
+	return storeFormula(form, CreateTupleFromTuple(actors));
 }
 
 
 Atom CreateFormulaFromArray(Atom form, TypedAtom const actors[])
 {
-	return internFormula(form, CreateTypedTupleFromArray(actors, FormArity(form)));
+	return storeFormula(form, CreateTypedTupleFromArray(actors, FormArity(form)));
 }
 
 
@@ -468,9 +468,11 @@ Atom TermGetRoleActor(Atom termForm, Atom const termActors[], const char * role,
 }
 
 
-/* CLAUDE: Create a clause or a conjunction from its terms. The two differ only
-   in the form they build, so createForm is CreateClauseForm or CreateConjunctionForm. */
-static Atom createTermMultiset(
+/**
+ * Create a clause or a conjunction from an array of terms. The two differ only
+ * in the form, obtained by setting createForm = CreateClauseForm or CreateConjunctionForm.
+ */
+static Atom createClauseOrConjunction(
 	Atom const terms[], size8 nTerms, Atom (* createForm)(Atom const termForms[], size8 nTermForms),
 	index8 termOrder[])
 {
@@ -514,7 +516,7 @@ static Atom createTermMultiset(
 		blockSizes[i] = termArities[i] * sizeof(TypedAtom);
 	ReorderRaggedArray(actors, order, blockSizes, nTerms);
 
-	// CLAUDE: Sort the terms of each term form; see GetCanonicalActorOrder(). A term moves as a
+	// Sort the terms of each term form; see GetCanonicalActorOrder(). A term moves as a
 	// whole to the position of another term of its form, which starts at the same offset as
 	// the term of that form moved there.
 	index8 permutation[arity];
@@ -545,13 +547,13 @@ static Atom createTermMultiset(
 
 Atom CreateClause(Atom const terms[], size8 nTerms, index8 termOrder[])
 {
-	return createTermMultiset(terms, nTerms, CreateClauseForm, termOrder);
+	return createClauseOrConjunction(terms, nTerms, CreateClauseForm, termOrder);
 }
 
 
 Atom CreateConjunction(Atom const terms[], size8 nTerms, index8 termOrder[])
 {
-	return createTermMultiset(terms, nTerms, CreateConjunctionForm, termOrder);
+	return createClauseOrConjunction(terms, nTerms, CreateConjunctionForm, termOrder);
 }
 
 

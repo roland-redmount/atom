@@ -33,9 +33,10 @@ void RestoreFormulaStorage(void);
 void FreeFormulaStorage(void);
 
 /**
- * Create a formula from a form and an actors tuple.
- * The actors tuple is copied and put into canonical order.
- * The formula holds a reference to the form atom and to each actor.
+ * Create a formula from a form and an actors tuple and store it in the formula registry.
+ * The given actors tuple need not be in canonical order; it is copied and rearranged
+ * to canonical order.
+ * The created formula holds a reference to the form atom and to each actor.
  */
 Atom CreateFormula(Atom form, TypedTuple const * actors);
 

@@ -9,6 +9,7 @@
 #include "kernel/Parameter.h"
 #include "kernel/tuple.h"
 #include "kernel/typedtuple.h"
+#include "lang/ConjunctionForm.h"
 #include "lang/FormPermutation.h"
 #include "lang/PredicateForm.h"
 #include "memory/allocator.h"
@@ -365,39 +366,72 @@ static data64 hashIFact(IFactDraft * draft)
 
 
 /**
+ * Iterator over the tuples of one iIFactRelation, with the identified
+ * atom in the given ID column. The tuples are yielded in the order of TupleCompare().
+ * The ifact must not be released during the iteration.
+ */
+typedef struct s_IFactTupleIterator {
+	IFactRelation const * ifactRelation;
+	index32 nextRow;
+} IFactTupleIterator;
+
+
+/**
+ * Begin iterating over the tuples of an IFactRelation. If ifactRelation is 0, the
+ * iteration yields no tuples.
+ */
+static void iterateRelationTuples(IFactRelation const * ifactRelation, IFactTupleIterator * iterator)
+{
+	iterator->ifactRelation = ifactRelation;
+	iterator->nextRow = 0;
+}
+
+
+/**
+ * Return the next tuple, or 0 if the iteration is complete. The tuple holds the
+ * identified atom in the ID column, and remains valid while the ifact exists.
+ */
+static Atom const * tupleIteratorNext(IFactTupleIterator * iterator)
+{
+	IFactRelation const * relation = iterator->ifactRelation;
+	if(!relation || (iterator->nextRow >= relation->nRows))
+		return 0;
+	return relation->tuples + (iterator->nextRow++) * relation->nColumns;
+}
+
+
+/**
  * Test whether the draft IFact is identical to an existing IFact
  * with the same hash value, by comparing the actual defining facts.
  * This is needed to ensure we do not have a hash collision.
  */
 static bool sameIFact(IFactDraft * draft, IFactHeader * existingIFact)
 {
-	// We need to iterate over tuples from each relation involved,
-	// and compare to the sorted tuples in our temporary storage
-
 	if(draft->header.nRelations != existingIFact->nRelations)
 		return false;
 
+	// Iterate over and compare all tuples from each IFactRelation
+	// in the draft and existing ifact
 	for(index32 i = 0; i < existingIFact->nRelations; i++) {
 		IFactRelation * relation = &(draft->header.relations[i]);
-		size16 nRows = relation->nRows;
-		size8 nColumns = relation->nColumns;
 		IFactRelation * existingRelation = &(existingIFact->relations[i]);
 		// check IFactRelation headers are identical
 		if(compareIFactRelations(relation, existingRelation, sizeof(IFactRelation)) != 0)
 			return false;
-		if(nRows != existingRelation->nRows)
+		if(relation->nRows != existingRelation->nRows)
 			return false;
 
 		// compare tuples
-		Atom * tuple = relation->tuples;
-		Atom * existingTuple = existingRelation->tuples;
-		for(index32 j = 0; j < nRows; j++) {
-			for(index8 k = 0; k < nColumns; k++) {
+		IFactTupleIterator iterator, existingIterator;
+		iterateRelationTuples(relation, &iterator);
+		iterateRelationTuples(existingRelation, &existingIterator);
+		Atom const * tuple;
+		while((tuple = tupleIteratorNext(&iterator))) {
+			Atom const * existingTuple = tupleIteratorNext(&existingIterator);
+			for(index8 k = 0; k < relation->nColumns; k++) {
 				if(k != relation->idColumn && !SameAtoms(existingTuple[k], tuple[k]))
 					return false;
 			}
-			tuple += nColumns;
-			existingTuple += nColumns;
 		}
 	}
 	return true;
@@ -558,17 +592,6 @@ void IFactReleaseCached(Atom form, index8 const idColumns[])
 }
 
 
-/**
- * CLAUDE: Iteration over the tuples of one ifact on one relation, with the identified
- * atom in the given ID column. The tuples are yielded in the order of TupleCompare().
- * The ifact must not be released during the iteration.
- */
-typedef struct s_IFactTupleIterator {
-	IFactRelation const * ifactRelation;
-	index32 nextRow;
-} IFactTupleIterator;
-
-
 static IFactRelation const * findIFactRelation(
 	IFactHeader const * header, TypedRelation relation, index8 idColumn)
 {
@@ -589,24 +612,8 @@ static IFactRelation const * findIFactRelation(
  */
 static void iterateTuples(Atom ifact, TypedRelation relation, index8 idColumn, IFactTupleIterator * iterator)
 {
-	iterator->ifactRelation = 0;
-	iterator->nextRow = 0;
 	IFactHeader const * header = peekIFactHeader(ifact.hash);
-	if(header)
-		iterator->ifactRelation = findIFactRelation(header, relation, idColumn);
-}
-
-
-/**
- * CLAUDE: Return the next tuple, or 0 if the iteration is complete. The tuple holds the
- * identified atom in the ID column, and remains valid while the ifact exists.
- */
-static Atom const * tupleIteratorNext(IFactTupleIterator * iterator)
-{
-	IFactRelation const * relation = iterator->ifactRelation;
-	if(!relation || (iterator->nextRow >= relation->nRows))
-		return 0;
-	return relation->tuples + (iterator->nextRow++) * relation->nColumns;
+	iterateRelationTuples(header ? findIFactRelation(header, relation, idColumn) : 0, iterator);
 }
 
 
@@ -910,6 +917,58 @@ bool IFactSetupRelation(TypedRelation relation, index8 idColumn, bool * createdR
 	IFactCreateReaderService(relation, idColumn);
 	*createdReader = true;
 	return true;
+}
+
+
+Atom GetIFactFormula(Atom atom)
+{
+	IFactHeader const * header = peekIFactHeader(atom.hash);
+	ASSERT(header)
+	// A header reserved by IFactReserve() has no IFactRelations yet
+	ASSERT(header->nRelations > 0)
+
+	size32 nTerms = 0;
+	size32 arity = 0;
+	for(index8 i = 0; i < header->nRelations; i++) {
+		nTerms += header->relations[i].nRows;
+		arity += header->relations[i].nRows * header->relations[i].nColumns;
+	}
+	ASSERT(arity <= FORMULA_MAX_ARITY)
+
+	// CLAUDE: Concatenate the actors of every tuple, one term per tuple
+	Atom termForms[nTerms];
+	size32 blockSizes[nTerms];
+	TypedAtom actors[arity];
+	index32 termIndex = 0;
+	index32 actorIndex = 0;
+	for(index8 i = 0; i < header->nRelations; i++) {
+		IFactRelation const * ifactRelation = &(header->relations[i]);
+		IFactTupleIterator iterator;
+		iterateRelationTuples(ifactRelation, &iterator);
+		Atom const * tuple;
+		while((tuple = tupleIteratorNext(&iterator))) {
+			// Column k of an ifact tuple is actor k of the term; see IFactAddTuple()
+			for(index8 k = 0; k < ifactRelation->nColumns; k++)
+				actors[actorIndex++] = CreateTypedAtom(ifactRelation->relation.typeSignature.atomTypes[k], tuple[k]);
+			termForms[termIndex] = ifactRelation->relation.form;
+			blockSizes[termIndex] = ifactRelation->nColumns * sizeof(TypedAtom);
+			termIndex++;
+		}
+	}
+
+	if(nTerms == 1)
+		return CreateFormulaFromArray(termForms[0], actors);
+
+	// CLAUDE: The term forms of a conjunction form are ordered by multiplicity first, unlike
+	// the IFactRelations of an ifact; see MultisetIterate(). CreateFormulaFromArray() then
+	// sorts the terms of each term form.
+	Atom form = CreateConjunctionForm(termForms, nTerms);
+	index8 order[nTerms];
+	MultisetIterationOrder(form, AT_ID, termForms, order, nTerms);
+	ReorderRaggedArray(actors, order, blockSizes, nTerms);
+	Atom conjunction = CreateFormulaFromArray(form, actors);
+	IFactRelease(form);
+	return conjunction;
 }
 
 

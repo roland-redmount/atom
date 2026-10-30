@@ -8,13 +8,13 @@
 #ifndef TERMMULTISET_H
 #define TERMMULTISET_H
 
-#include "lang/TypedAtom.h"
+#include "kernel/TypedRelation.h"
 
 /**
- * Create a term multiset from a list of term forms, possibly containing
- * duplicates, stored in the given core relation.
+ * Create a multiset of term forms from a list of term forms, possibly containing
+ * duplicates, stored in the given form relation: either (clause-form) or (conjunction-form)
  */
-Atom CreateTermMultiset(Atom const termForms[], size8 nTermForms, index32 relationIds);
+Atom CreateTermMultiset(Atom const termForms[], size8 nTermForms, TypedRelation formRelation);
 
 /**
  * Number of unique term forms, discounting multiplicities.

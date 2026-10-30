@@ -145,16 +145,16 @@ Atom IFactEndBootstrap(IFactDraft * draft, data64 hash);
 void IFactReserve(data64 hash);
 
 /**
- * Mark an ifact as cached, taking over the reference the caller holds.
+ * Mark an AT_ID atom as cached, taking over the reference the caller holds.
  * A cached ifact holds exactly one reference owned by the cache. If the ifact is
  * already cached, the caller's reference is released instead.
  * This is required for ifacts created by the IFACT operator. See OPERATOR_IFACT in operator.h.
  */
-void IFactMarkCached(Atom ifact);
+void IFactMarkCached(Atom atom);
 
 /**
- * Release the cache reference of every cached ifact matching the form and idColumns.
- * If the form is a conjunction form, we have one ID column per term.
+ * Release the cache reference of every cached AT_ID atom matching the given
+ * form and idColumns. If the form is a conjunction form, we have one ID column per term.
  * Clears the IFACT_CACHED flag of each released ifact.
  */
 void IFactReleaseCached(Atom form, index8 const idColumns[]);
@@ -199,18 +199,18 @@ bool IFactSetupRelation(TypedRelation relation, index8 idColumn, bool * createdR
 /**
  * Acquire a reference to an AT_ID atom.
  */
-void IFactAcquire(Atom ifact);
+void IFactAcquire(Atom atom);
 
 /**
  * Release a reference to an AT_ID atom. When the last reference is released,
  * the underlying identifying facts are retracted.
  */
-void IFactRelease(Atom ifact);
+void IFactRelease(Atom atom);
 
 /**
  * Test if an AT_ID atom with the hash of the given atom is stored.
  */
-bool IFactExists(Atom ifact);
+bool IFactExists(Atom atom);
 
 /**
  * Reference counts
@@ -225,9 +225,16 @@ uint32 IFactTotalReferenceCount(void);
 uint32 IFactTotalCount(void);
 
 /**
+ * Create the formula of the identifying facts for an AT_ID atom. The formula is a term
+ * if the ifact has one tuple, and a conjunction otherwise.
+ * The caller obtains a reference to the formula.
+ */
+Atom GetIFactFormula(Atom atom);
+
+/**
  * Print an AT_ID atom
  */
-void IFactPrint(Atom ifact);
+void IFactPrint(Atom atom);
 
 /**
  * A callbavk used to modify the default output of IFactPrint(). If this function
