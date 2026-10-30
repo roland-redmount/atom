@@ -36,47 +36,47 @@
 typedef struct s_IDExpansion {
 	index32 linePosition;
 	size32 inputLength;		// including the @ character
-	// CLAUDE: the length of the replacement in the expanded line; see expandIDNames()
+	// CLAUDE: the length of the replacement in the expanded line; see expandIDTags()
 	size32 expandedLength;
 } IDExpansion;
 
 /*
- * A NamedID maps a name entered by the user to an ID atom. The user enters the name
- * as @name in queries and commands, and the session prints the ID atom as @name.
+ * A TaggedID maps a tag entered by the user to an ID atom. The user enters the tag
+ * as @tag in queries and commands, and the session prints the ID atom as @tag.
  */
-typedef struct s_NamedID {
-	char * name;		// without the @ character
+typedef struct s_TaggedID {
+	char * tag;		// without the @ character
 	Atom id;
-} NamedID;
+} TaggedID;
 
 /*
- * A NewName is a @name in a query line that names no ID atom yet. The query line is
- * expanded with the anonymous variable _ in place of the @name.
- * Each occurrence of a NewName in the line is expanded to the same variable, named
+ * A NewTag is a @tag in a query line that tags no ID atom yet. The query line is
+ * expanded with the anonymous variable _ in place of the @tag.
+ * Each occurrence of a NewTag in the line is expanded to the same variable, named
  * variableName, which occurs nowhere else in the line. So in the query
  * (car @myCar brand "Volvo" & car @myCar model 240)
  * both occurrences of @myCar are the same variable, and the query yields one ID atom for both.
  */
-typedef struct s_NewName {
-	char const * name;	// points to the char after the '@' in the line entered
-	size32 nameLength;
+typedef struct s_NewTag {
+	char const * tag;	// points to the char after the '@' in the line entered
+	size32 tagLength;
 	char variableName;
-} NewName;
+} NewTag;
 
 typedef struct s_SessionState {
 	/*
-	 * Each NamedID of the session. The session holds a reference to each named ID atom,
-	 * so that the name stays valid until the user removes it with :clear.
-	 * NOTE: the same ID atom may have more than one name.
+	 * Each TaggedID of the session. The session holds a reference to each tagged ID atom,
+	 * so that the tag stays valid until the user removes it with :clear.
+	 * NOTE: the same ID atom may have more than one tag.
 	 */
-	ResizingArray namedIDs;
+	ResizingArray taggedIDs;
 
 	// The line input expanded so that each ID atom number is replaced by the hash of the ID atom.
 	StringBuffer expandedLine;
 	// Each IDExpansion in idExpansions records one replacement, in the order of the line.
 	ResizingArray idExpansions;
-	// CLAUDE: Each NewName of the line, in the order of the line
-	ResizingArray newNames;
+	// CLAUDE: Each NewTag of the line, in the order of the line
+	ResizingArray newTags;
 } SessionState;
 
 /* Session state, persisted in STATE_KEY_SESSION. SessionExecuteLine() sets
@@ -93,9 +93,9 @@ static void initializeSession(void)
 {
 	sessionState = Allocate(sizeof(SessionState));
 	SetPersistentState(STATE_KEY_SESSION, sessionState);
-	CreateResizingArray(&sessionState->namedIDs, sizeof(NamedID), 16);
+	CreateResizingArray(&sessionState->taggedIDs, sizeof(TaggedID), 16);
 	CreateResizingArray(&sessionState->idExpansions, sizeof(IDExpansion), 4);
-	CreateResizingArray(&sessionState->newNames, sizeof(NewName), 4);
+	CreateResizingArray(&sessionState->newTags, sizeof(NewTag), 4);
 	StringBufferInit(&sessionState->expandedLine);
 }
 
@@ -170,7 +170,7 @@ static void printHelp(void)
 	printLine("Queries are entered directly as a formula, such as");
 	printLine("  + 2 + 3 = _    or    foo x bar y & foo y bar z");
 	printLine("Variables are single letters, _ is the anonymous variable.");
-	printLine("An ID atom can be assigned a @name with a query like");
+	printLine("An ID atom can be assigned a @tag with a query like");
 	printLine("  circle @myCircle radius 1.0");
 	printLine("Input may continue across multiple lines until complete.");
 	PrintChar('\n');
@@ -180,7 +180,7 @@ static void printHelp(void)
 	printLine(":assert <conjunction> Assert an ifact rule, such as (car * brand b & car * model m).");
 	printLine(":assert <clause>      Assert a rule. The clause must have > 1 term");
 	printLine("                      and contain at least one variable.");
-	printLine(":clear @name          Remove the name @name.");
+	printLine(":clear @tag           Remove the tag @tag.");
 	printLine(":def <ID atom>        Print the identifying facts of an ID atom.");
 	printLine(":inspect <query>      Print the service(s) that the query dispatches to");
 	printLine(":load <file> <form>   Import a facts from a CSV file, of the given form,");
@@ -197,72 +197,72 @@ static void printHelp(void)
 
 
 /*
- * Return the NamedID with the given name, or 0 if there is none.
+ * Return the TaggedID with the given tag, or 0 if there is none.
  */
-static NamedID * findNamedIDByName(char const * name, size32 length)
+static TaggedID * findTaggedIDByTag(char const * tag, size32 length)
 {
-	for(index32 i = 0; i < sessionState->namedIDs.nElements; i++) {
-		NamedID * namedID = ResizingArrayGetElement(&sessionState->namedIDs, i);
-		if((CStringLength(namedID->name) == length) && (CompareMemory(namedID->name, name, length) == 0))
-			return namedID;
+	for(index32 i = 0; i < sessionState->taggedIDs.nElements; i++) {
+		TaggedID * taggedID = ResizingArrayGetElement(&sessionState->taggedIDs, i);
+		if((CStringLength(taggedID->tag) == length) && (CompareMemory(taggedID->tag, tag, length) == 0))
+			return taggedID;
 	}
 	return 0;
 }
 
 
 /*
- * Return the first NamedID of an ID atom, or 0 if the ID atom has no name.
+ * Return the first TaggedID of an ID atom, or 0 if the ID atom has no tag.
  */
-static NamedID * findNamedIDByID(Atom id)
+static TaggedID * findTaggedIDByID(Atom id)
 {
-	for(index32 i = 0; i < sessionState->namedIDs.nElements; i++) {
-		NamedID * namedID = ResizingArrayGetElement(&sessionState->namedIDs, i);
-		if(SameAtoms(namedID->id, id))
-			return namedID;
+	for(index32 i = 0; i < sessionState->taggedIDs.nElements; i++) {
+		TaggedID * taggedID = ResizingArrayGetElement(&sessionState->taggedIDs, i);
+		if(SameAtoms(taggedID->id, id))
+			return taggedID;
 	}
 	return 0;
 }
 
 
 /*
- * Bind a name to an ID atom. The name must not be bound to an ID atom already.
+ * Bind a tag to an ID atom. The tag must not be bound to an ID atom already.
  */
-static void addNamedID(char const * name, size32 length, Atom id)
+static void addTaggedID(char const * tag, size32 length, Atom id)
 {
-	ASSERT(!findNamedIDByName(name, length))
-	NamedID namedID = {
-		.name = Allocate(length + 1),
+	ASSERT(!findTaggedIDByTag(tag, length))
+	TaggedID taggedID = {
+		.tag = Allocate(length + 1),
 		.id = id,
 	};
-	CopyMemory(name, namedID.name, length);
-	namedID.name[length] = 0;
+	CopyMemory(tag, taggedID.tag, length);
+	taggedID.tag[length] = 0;
 	IFactAcquire(id);
-	ResizingArrayAppend(&sessionState->namedIDs, &namedID);
+	ResizingArrayAppend(&sessionState->taggedIDs, &taggedID);
 }
 
 
 /*
- * Print an ID atom as @name. Returns false, having printed nothing, if the
- * ID atom has no name; see IFactSetPrinter().
+ * Print an ID atom as @tag. Returns false, having printed nothing, if the
+ * ID atom has no tag; see IFactSetPrinter().
  */
-static bool printNamedID(Atom id)
+static bool printTaggedID(Atom id)
 {
-	NamedID const * namedID = findNamedIDByID(id);
-	if(!namedID)
+	TaggedID const * taggedID = findTaggedIDByID(id);
+	if(!taggedID)
 		return false;
 	PrintChar('@');
-	PrintCString(namedID->name);
+	PrintCString(taggedID->tag);
 	return true;
 }
 
 
 /*
- * Print a name entered by the user, with the @ character.
+ * Print a tag entered by the user, with the @ character.
  */
-static void printEnteredName(char const * name, size32 length)
+static void printEnteredTag(char const * tag, size32 length)
 {
 	PrintChar('@');
-	PrintCharString(name, length);
+	PrintCharString(tag, length);
 }
 
 
@@ -302,10 +302,10 @@ static void printParseError(index32 errorPosition)
 
 
 /*
- * CLAUDE: Point at the character of the line entered where a @name went wrong, like
+ * CLAUDE: Point at the character of the line entered where a @tag went wrong, like
  * printParseError() does, and print the message after the caret.
  */
-static void printNameError(index32 linePosition, char const * message)
+static void printTagError(index32 linePosition, char const * message)
 {
 	printCaretIndent(linePosition);
 	PrintCString("^ ");
@@ -315,14 +315,14 @@ static void printNameError(index32 linePosition, char const * message)
 
 
 /*
- * CLAUDE: Return the NewName of the line with the given name, or 0 if there is none.
+ * CLAUDE: Return the NewTag of the line with the given tag, or 0 if there is none.
  */
-static NewName const * findNewName(char const * name, size32 length)
+static NewTag const * findNewTag(char const * tag, size32 length)
 {
-	for(index32 i = 0; i < sessionState->newNames.nElements; i++) {
-		NewName const * newName = ResizingArrayGetElement(&sessionState->newNames, i);
-		if((newName->nameLength == length) && (CompareMemory(newName->name, name, length) == 0))
-			return newName;
+	for(index32 i = 0; i < sessionState->newTags.nElements; i++) {
+		NewTag const * newTag = ResizingArrayGetElement(&sessionState->newTags, i);
+		if((newTag->tagLength == length) && (CompareMemory(newTag->tag, tag, length) == 0))
+			return newTag;
 	}
 	return 0;
 }
@@ -357,24 +357,25 @@ static size8 findFreeVariableNames(char const * line, char variableNames[])
 
 
 /*
- * CLAUDE: Copy an input line to expandedLine, replacing each @name. A @name is @ at the start
- * of a word and outside of a string, followed by a name; see IsNameInitialChar(). A @name of a
- * NamedID is replaced by the hash of the ID atom, written as @ followed by ID_HASH_LENGTH hex
- * digits; see TOKEN_ID. A hash entered by the user is copied as is.
+ * CLAUDE: Copy an input line to expandedLine, replacing each @tag. A @tag is @ at the start
+ * of a word and outside of a string, followed by a tag. A tag is written like a name; see
+ * IsNameInitialChar(). A @tag of a TaggedID is replaced by the hash of the ID atom, written as
+ * @ followed by ID_HASH_LENGTH hex digits; see TOKEN_ID. A hash entered by the user is copied
+ * as is.
  *
- * In a query line (isQuery), a @name of no NamedID is replaced by the variable of its NewName.
+ * In a query line (isQuery), a @tag of no TaggedID is replaced by the variable of its NewTag.
  * The variable is a letter that does not occur elsewhere in the line; see findFreeVariableNames().
- * Such a @name may occur several times in the line, but not inside [ ]. In any other line, a
- * @name of no NamedID is an error.
+ * Such a @tag may occur several times in the line, but not inside [ ]. In any other line, a
+ * @tag of no TaggedID is an error.
  *
  * Other text is copied as is, and left for ParseFormula() to judge. Returns false, having
- * printed an error, if a @name cannot be replaced.
+ * printed an error, if a @tag cannot be replaced.
  */
-static bool expandIDNames(char const * line, bool isQuery)
+static bool expandIDTags(char const * line, bool isQuery)
 {
 	StringBufferReset(&sessionState->expandedLine);
 	ResizingArrayReset(&sessionState->idExpansions);
-	ResizingArrayReset(&sessionState->newNames);
+	ResizingArrayReset(&sessionState->newTags);
 	char freeVariableNames[N_LETTERS];
 	size8 nFreeVariableNames = findFreeVariableNames(line, freeVariableNames);
 	bool isInString = false;
@@ -402,15 +403,15 @@ static bool expandIDNames(char const * line, bool isQuery)
 			continue;
 		}
 
-		char const * name = line + i + 1;
+		char const * tag = line + i + 1;
 		size32 length = 0;
 		bool isHex = true;
-		while(IsNameChar(name[length])) {
-			isHex = isHex && IsHexDigitChar(name[length]);
+		while(IsNameChar(tag[length])) {
+			isHex = isHex && IsHexDigitChar(tag[length]);
 			length++;
 		}
 		bool isHash = isHex && (length == ID_HASH_LENGTH);
-		if(isHash || !IsNameInitialChar(name[0])) {
+		if(isHash || !IsNameInitialChar(tag[0])) {
 			StringBufferPush(&sessionState->expandedLine, line[i++]);
 			continue;
 		}
@@ -419,39 +420,39 @@ static bool expandIDNames(char const * line, bool isQuery)
 			.linePosition = i,
 			.inputLength = 1 + length,
 		};
-		NamedID const * namedID = findNamedIDByName(name, length);
-		if(namedID) {
+		TaggedID const * taggedID = findTaggedIDByTag(tag, length);
+		if(taggedID) {
 			char hashString[ID_HASH_LENGTH + 2];
-			FormatString(hashString, sizeof(hashString), "@%016llx", (unsigned long long) namedID->id.hash);
+			FormatString(hashString, sizeof(hashString), "@%016llx", (unsigned long long) taggedID->id.hash);
 			for(index32 j = 0; hashString[j]; j++)
 				StringBufferPush(&sessionState->expandedLine, hashString[j]);
 			expansion.expandedLength = 1 + ID_HASH_LENGTH;
 		}
 		else {
 			if(!isQuery) {
-				printNameError(i, "no ID atom has this name");
+				printTagError(i, "no ID atom has this tag");
 				return false;
 			}
 			if(bracketDepth > 0) {
-				printNameError(i, "a new name cannot be inside [ ]");
+				printTagError(i, "a new tag cannot be inside [ ]");
 				return false;
 			}
-			NewName const * newName = findNewName(name, length);
-			if(!newName) {
-				if(sessionState->newNames.nElements == nFreeVariableNames) {
-					printNameError(i, "too many new names in one query");
+			NewTag const * newTag = findNewTag(tag, length);
+			if(!newTag) {
+				if(sessionState->newTags.nElements == nFreeVariableNames) {
+					printTagError(i, "too many new tags in one query");
 					return false;
 				}
-				NewName addedName = {
-					.name = name,
-					.nameLength = length,
-					.variableName = freeVariableNames[sessionState->newNames.nElements],
+				NewTag addedTag = {
+					.tag = tag,
+					.tagLength = length,
+					.variableName = freeVariableNames[sessionState->newTags.nElements],
 				};
-				ResizingArrayAppend(&sessionState->newNames, &addedName);
-				newName = ResizingArrayGetElement(
-					&sessionState->newNames, sessionState->newNames.nElements - 1);
+				ResizingArrayAppend(&sessionState->newTags, &addedTag);
+				newTag = ResizingArrayGetElement(
+					&sessionState->newTags, sessionState->newTags.nElements - 1);
 			}
-			StringBufferPush(&sessionState->expandedLine, newName->variableName);
+			StringBufferPush(&sessionState->expandedLine, newTag->variableName);
 			expansion.expandedLength = 1;
 		}
 		ResizingArrayAppend(&sessionState->idExpansions, &expansion);
@@ -506,14 +507,14 @@ static void printInspectSummary(size32 nServices)
 
 
 /*
- * CLAUDE: Write the index in the query actors of an occurrence of the variable of each NewName,
- * in the order of newNames; see NewName.
+ * CLAUDE: Write the index in the query actors of an occurrence of the variable of each NewTag,
+ * in the order of newTags; see NewTag.
  */
-static void findNewNameActors(FormulaView queryView, index8 actorIndices[])
+static void findNewTagActors(FormulaView queryView, index8 actorIndices[])
 {
-	for(index32 i = 0; i < sessionState->newNames.nElements; i++) {
-		NewName const * newName = ResizingArrayGetElement(&sessionState->newNames, i);
-		Atom variable = CreateVariable(newName->variableName);
+	for(index32 i = 0; i < sessionState->newTags.nElements; i++) {
+		NewTag const * newTag = ResizingArrayGetElement(&sessionState->newTags, i);
+		Atom variable = CreateVariable(newTag->variableName);
 		for(index8 k = queryView.actors->nAtoms; k > 0; k--) {
 			TypedAtom actor = TypedTupleGetElement(queryView.actors, k - 1);
 			if((actor.type == AT_VARIABLE) && SameVariable(actor.atom, variable))
@@ -524,27 +525,27 @@ static void findNewNameActors(FormulaView queryView, index8 actorIndices[])
 
 
 /*
- * CLAUDE: Bind each NewName to the ID atom at its actor index in the single result of a query.
+ * CLAUDE: Bind each NewTag to the ID atom at its actor index in the single result of a query.
  */
-static void addNewNames(TypedTuple const * result, index8 const actorIndices[])
+static void addNewTags(TypedTuple const * result, index8 const actorIndices[])
 {
-	for(index32 i = 0; i < sessionState->newNames.nElements; i++) {
-		NewName const * newName = ResizingArrayGetElement(&sessionState->newNames, i);
+	for(index32 i = 0; i < sessionState->newTags.nElements; i++) {
+		NewTag const * newTag = ResizingArrayGetElement(&sessionState->newTags, i);
 		TypedAtom actor = TypedTupleGetElement(result, actorIndices[i]);
 		if(actor.type == AT_ID)
-			addNamedID(newName->name, newName->nameLength, actor.atom);
+			addTaggedID(newTag->tag, newTag->tagLength, actor.atom);
 	}
 }
 
 
 /*
- * CLAUDE: Report each NewName that executeQuery() could not bind to an ID atom.
+ * CLAUDE: Report each NewTag that executeQuery() could not bind to an ID atom.
  */
-static void printNewNamesNotAdded(size32 nTuples)
+static void printNewTagsNotAdded(size32 nTuples)
 {
-	for(index32 i = 0; i < sessionState->newNames.nElements; i++) {
-		NewName const * newName = ResizingArrayGetElement(&sessionState->newNames, i);
-		if(findNamedIDByName(newName->name, newName->nameLength))
+	for(index32 i = 0; i < sessionState->newTags.nElements; i++) {
+		NewTag const * newTag = ResizingArrayGetElement(&sessionState->newTags, i);
+		if(findTaggedIDByTag(newTag->tag, newTag->tagLength))
 			continue;
 		SessionPrintStatusPrefix();
 		if(nTuples == 0)
@@ -553,8 +554,8 @@ static void printNewNamesNotAdded(size32 nTuples)
 			PrintF("%u results, so ", nTuples);
 		else
 			PrintCString("The result is not an ID atom, so ");
-		printEnteredName(newName->name, newName->nameLength);
-		PrintCString(" was not named.\n");
+		printEnteredTag(newTag->tag, newTag->tagLength);
+		PrintCString(" was not tagged.\n");
 	}
 }
 
@@ -575,13 +576,13 @@ static int resultView = RESULT_VIEW_FORMULA;
 
 
 /*
- * CLAUDE: Test whether a variable of the query stands for a NewName; see NewName.
+ * CLAUDE: Test whether a variable of the query stands for a NewTag; see NewTag.
  */
-static bool isNewNameVariable(Atom variable)
+static bool isNewTagVariable(Atom variable)
 {
-	for(index32 i = 0; i < sessionState->newNames.nElements; i++) {
-		NewName const * newName = ResizingArrayGetElement(&sessionState->newNames, i);
-		if(SameVariable(variable, CreateVariable(newName->variableName)))
+	for(index32 i = 0; i < sessionState->newTags.nElements; i++) {
+		NewTag const * newTag = ResizingArrayGetElement(&sessionState->newTags, i);
+		if(SameVariable(variable, CreateVariable(newTag->variableName)))
 			return true;
 	}
 	return false;
@@ -593,7 +594,7 @@ static bool isNewNameVariable(Atom variable)
  * query, in the order entered, and return the number of named variables.
  * Anonymous variables and quoted variables are ignored.
  */
-/* CLAUDE: The variable of a NewName is also ignored; see isNewNameVariable(). */
+/* CLAUDE: The variable of a NewTag is also ignored; see isNewTagVariable(). */
 static size8 findColumnActors(FormulaView queryView, FormOrdering const * ordering, index8 actorIndices[])
 {
 	size8 arity = FormArity(queryView.form);
@@ -606,7 +607,7 @@ static size8 findColumnActors(FormulaView queryView, FormOrdering const * orderi
 			continue;
 		if(VariableIsQuoted(actor.atom))
 			continue;
-		if(isNewNameVariable(actor.atom))
+		if(isNewTagVariable(actor.atom))
 			continue;
 		bool isNewVariable = true;
 		for(index8 j = 0; j < nColumns; j++) {
@@ -730,19 +731,19 @@ static int executeQuery(char const * line)
 		nTuples++;
 	}
 
-	// CLAUDE: A NewName is bound only if the query has a single result.
-	bool hasNewNames = (sessionState->newNames.nElements > 0);
-	if(hasNewNames && (nTuples == 1)) {
-		index8 actorIndices[sessionState->newNames.nElements];
-		findNewNameActors(queryView, actorIndices);
-		addNewNames(printedResults[0], actorIndices);
+	// CLAUDE: A NewTag is bound only if the query has a single result.
+	bool hasNewTags = (sessionState->newTags.nElements > 0);
+	if(hasNewTags && (nTuples == 1)) {
+		index8 actorIndices[sessionState->newTags.nElements];
+		findNewTagActors(queryView, actorIndices);
+		addNewTags(printedResults[0], actorIndices);
 	}
 
 	printQueryResults(queryView, &ordering, printedResults, nPrinted, nTuples);
 	// the relation counts the services it read, so it is read out before being freed
 	printQueryResultSummary(resultRelations, nTuples);
-	if(hasNewNames)
-		printNewNamesNotAdded(nTuples);
+	if(hasNewTags)
+		printNewTagsNotAdded(nTuples);
 	for(index32 i = 0; i < nPrinted; i++)
 		FreeTypedTuple(printedResults[i]);
 	FreeMixedTypeRelation(resultRelations);
@@ -1106,7 +1107,7 @@ static void executeDef(char const * atomText, index32 linePosition)
 	if((nActors != 1) || (actor.type != AT_ID)) {
 		if(nActors == 1)
 			ReleaseTypedAtom(actor);
-		printStatusLine(":def requires an ID atom, such as @myCar.");
+		printStatusLine(":def requires an ID atom.");
 		return;
 	}
 
@@ -1119,33 +1120,33 @@ static void executeDef(char const * atomText, index32 linePosition)
 
 
 /*
- * Remove the name entered after the :clear command, so that the name can be bound
+ * Remove the tag entered after the :clear command, so that the tag can be bound
  * to another ID atom. The session releases its reference to the ID atom.
  */
-static void executeClear(char const * nameText, index32 linePosition)
+static void executeClear(char const * tagText, index32 linePosition)
 {
 	size32 length = 0;
-	if(nameText[0] == '@') {
-		while(IsNameChar(nameText[1 + length]))
+	if(tagText[0] == '@') {
+		while(IsNameChar(tagText[1 + length]))
 			length++;
 	}
-	char const * rest = nameText + 1 + length;
+	char const * rest = tagText + 1 + length;
 	while(IsSpaceChar(*rest))
 		rest++;
 	if((length == 0) || *rest) {
-		printStatusLine(":clear requires a name, such as @myCar.");
+		printStatusLine(":clear requires a tag, such as @myCar.");
 		return;
 	}
 
-	NamedID * namedID = findNamedIDByName(nameText + 1, length);
-	if(!namedID) {
-		printNameError(linePosition, "no ID atom has this name");
+	TaggedID * taggedID = findTaggedIDByTag(tagText + 1, length);
+	if(!taggedID) {
+		printTagError(linePosition, "no such tag");
 		return;
 	}
-	IFactRelease(namedID->id);
-	Free(namedID->name);
-	index32 index = namedID - (NamedID *) ResizingArrayGetMemory(&sessionState->namedIDs);
-	ResizingArrayRemoveElement(&sessionState->namedIDs, index);
+	IFactRelease(taggedID->id);
+	Free(taggedID->tag);
+	index32 index = taggedID - (TaggedID *) ResizingArrayGetMemory(&sessionState->taggedIDs);
+	ResizingArrayRemoveElement(&sessionState->taggedIDs, index);
 	printStatusLine("Ok.");
 }
 
@@ -1287,11 +1288,11 @@ int SessionExecuteLine(char const * line)
 	sessionState = GetPersistentState(STATE_KEY_SESSION);
 	if(!sessionState)
 		initializeSession();
-	IFactSetPrinter(printNamedID);
+	IFactSetPrinter(printTaggedID);
 	enteredEntry = line;
 	isLastLineBlank = endsWithBlankLine(line);
 
-	// :clear reads its @name as entered, so it is matched before the line is expanded
+	// :clear reads its @tag as entered, so it is matched before the line is expanded
 	char const * enteredFirstCharacter = line;
 	while(IsSpaceChar(*enteredFirstCharacter))
 		enteredFirstCharacter++;
@@ -1301,9 +1302,9 @@ int SessionExecuteLine(char const * line)
 		return SESSION_CONTINUE;
 	}
 
-	// Expand each @name; see expandIDNames()
+	// Expand each @tag; see expandIDTags()
 	bool isQuery = (*enteredFirstCharacter != ':');
-	if(!expandIDNames(line, isQuery))
+	if(!expandIDTags(line, isQuery))
 		return SESSION_CONTINUE;
 	// The rest of the session reads the expanded line
 	line = sessionState->expandedLine.buffer;

@@ -232,11 +232,11 @@ circle _ radius 5
 ```
 The returned atom `ID(...)` represents this circle. This atom is unique: repeating the query will give the same atom.  Note that the query does *not* change the knowledgebase: the change occurs when the generator rule is asserted. We can think of the generator rule as defining an implicit, infinite relation containing all possible circles, of any radius. The query merely asks for one of them.
 
-**atom** does not have local variables that we can assign atoms to. Temporary names are supported by the command line client using the `@name` syntax: for example
+The **atom** language does not have local variables that we can assign atoms to, but the command line client allows tagging atoms returned by queries using the `@tag` syntax: for example
 ```atom
 circle @myCircle radius 5
 ```
-assigns the returns circle atom to `@myCircle`, which can then be used in queries. For example, this rule gives us the circle area:
+assigns the returned circle atom to the tag `@myCircle`, which can then be used in queries. For example, this rule gives us the circle area:
 ```atom
 :assert circle c area a <-
   circle c radius r & * r * r = s & * 3.14 * s = a
