@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 #
-# CLAUDE: Serve the documentation site for development.
+# Serve the documentation site for development.
 #
-#   python docs/serve.py [--dir <directory>] [--port <port>]
+#   python docs/markdown/serve.py [--dir <directory>] [--port <port>]
 #
-# --dir is the site to serve (default build/site); see docs/build.py.
+# --dir is the site to serve (default build/site); see docs/markdown/build.py.
 # --port is the port to listen on (default 8000).
 #
 # Each response tells the browser to check for a newer file before using a cached one.
@@ -17,7 +17,7 @@ import http.server
 import os
 
 DOCS = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(DOCS)
+REPO = os.path.dirname(os.path.dirname(DOCS))
 
 
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
