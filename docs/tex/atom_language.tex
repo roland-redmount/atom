@@ -44,14 +44,150 @@
 
 \section{Introduction}
 
-\textbf{atom} is a logic-relational language based on the relational fragment of first order predicate logic, aimed at data science applications. Unlike languages such as Datalog and Logica,   in an interactive environment, similar to lisp systems, and
+\textbf{atom} is a logic-relational language based on the relational fragment of first order predicate logic, aimed at data science applications. Unlike most logic languages, atom uses classical negation and distinguished between true, false and unknown, and thus supports "open-world" databases. All data is represented as facts, which are predicates (possibly negated) over one or more atoms. An atom is merely a symbol, and has no internal structure, leads to a relational view of data rather than an object-oriented one. The language is intended to be used in an interactive environment, similar to lisp or smalltalk systems. The language itself has no dedicated type system, since types can be expressed by unary predicates. The current implementation compiles atom queries to relational operators, and uses typed atoms under the hood for efficiency.
+
+This document first describes the atom language, independent of implementation. Later sections describe current implementation choice. This document is intended as a brief reference; for an introduction, see the atom tutorial.
+
+\section{Language elements}
+
+\subsection{Atoms and predicates}
+
+An \emph{atom} is written as lowercase bold ($\atom{a}$). A \emph{variable} is written as lowercase ($x$). A \emph{name} is written in smallcaps ($\name{name}$). A \emph{predicate} consists of one or more roles, where a \emph{role} consists of a name followed by one or more \emph{actors}; each actor may be either an atom or a variable. The number of actors in a role is the role multiple. We write predicates as a tuple, for example
+\begin{equation}\label{eq:example_predicate}
+	\stuple{\role{edge}{e}, \roletwo{node}{\atom{a}}{y}}	
+\end{equation}
+which might represent edges $e$ in a graph between a given node $\atom{a}$ and any other node $y$. The order of roles in a predicate is not significant, and neither is the order of actors associated with a given name. Hence,
+\begin{align}
+	\stuple{\roletwo{node}{\atom{a}}{y}, \role{edge}{e}} \\
+	\stuple{\role{edge}{e}, \roletwo{node}{y}{\atom{a}}} \\
+	\stuple{\roletwo{node}{y}{\atom{a}}, \role{edge}{e}}
+\end{align}
+all denote the same predicate as (\ref{eq:example_predicate}). For brevity, in this document we may also write a predicate as
+\begin{equation}
+	p(e, \{\atom{a}, y\})
+\end{equation}
+when role names are not important. Here, each argument or set of arguments is assumed to correspond to a distinct name, so the order of arguments is important.
+
+\subsection{Formulas}
+
+A \emph{term} $t$ is predicate $p$ with or without logical negation, $t = p$ or $t = \neg p$. For example,
+\begin{align}
+	t_1 = \stuple{\role{parent}{\atom{a}}, \role{child}{\atom{b}}} \\
+	t_2 = \neg \stuple{\role{parent}{\atom{a}}, \role{child}{\atom{b}}} = \neg t_1
+\end{align}
+are both terms. As usual, double negations cancel, so that $\neg t_2 = t_1$.
+
+A \emph{clause} is a logical disjunction of one or more terms, $ t_1 \lor \dots \lor t_n$.
+
+A \emph{conjunction} is a logical conjunction of one or more terms, $t_1 \land \dots \land t_n$. We do not allow more complex formulas such as clauses of conjunctions or conjunction of clauses.
+
+A \emph{formula} is either a term, clause or conjunction.
 
 
-An atom is written as lowercase bold $\atom{a}$, or $\typedatom{a}{\tau}$ to indicate the type $\tau$. A variable is written as lowercase $x$, and has no type. A parameter with type $\tau$ is written as $\parin{\alpha}^\tau$ or $\parout{\alpha}^\tau$ for input or output parameters, respectively. Names are written in smallcaps $\name{a}$. A \emph{predicate} consists of one or more roles; a role is a name plus one or more \emph{actors} The number of actors in a role is called the role multiplicity. An actor may be an atom, a variable or a parameter. We write predicates as $\stuple{\role{a}{x}, \roletwo{b}{\atom{a}}{y},\role{c}{\alpha}}$, or as $p(x, y, \alpha)$ when role names are not important. The order of actors associated with a given name is not significant, so for example $\stuple{\role{edge}{e}, \roletwo{node}{x}{y}}$ and $\stuple{\role{edge}{e}, \roletwo{node}{y}{x}}$ denote the same predicate. A \emph{term} $t$ is predicate with or without logical negation, $t = p$ or $t = \neg p$. A \emph{clause} is a logical disjunction of terms, $ t_1 \lor \dots \lor t_n$. A \emph{conjunction} is a logical disjunction of terms, $t_1 \land \dots \land t_n$. We do not consider more complex logical formulas such as clauses of conjunction, or conjunction of clauses. A \emph{formula} refers to either a term, clause or conjunction. A \emph{fact} is a term whose actors are all atoms. A \emph{query} is a term or conjunction whose actors are either atoms or variables, but not parameters.
+\subsection{Forms}
 
-\section{Forms and tuples}
+The \emph{form} of a predicate is the set of role names in the predicate with multiples, written as exponents. For example, the form of $\stuple{\role{edge}{e}, \roletwo{node}{\atom{a}}{y}}$ is $\{\name{edge}, \name{node}^2\}$. The form of a term includes its negation, if any, so that the form of $\neg \stuple{\role{parent}{\atom{b}}, \role{child}{\atom{a}}}$ is $\neg\{\name{parent}, \name{child}\}$.
 
-The \emph{form} of a formula is obtained by taking only the names for every predicate in the formula, discarding the actors. It is often convenient to write a formula $F$ as $F = (f, x)$ where $f$ is the form of $F$ and $x$ is a tuple of actors, in the order corresponding to $f$. For example, the form of the formula $\stuple{\role{a} x, \role{b}{\atom{a}}} \land \neg \stuple{\role{c}{y}}$ is $\stuple{\name{a}, \name{b}} \land \neg \stuple{\name{c}}$, and the actors tuple is $\stuple{x, \atom{a}, y}$. Role or term multiples are written as exponents, so that the form of $\stuple{\role{edge}{e}, \roletwo{node}{x}{y}}$ is written $\stuple{\name{edge}, \name{node}^2}$.
+The form of a clause or conjunction is the set of forms for its predicates, again with multiples.
+
+It is often convenient to write a formula $F$ as $F = (f, x)$ where $f$ is the form of $F$ and $x$ is a tuple of actors, in the order corresponding to $f$. For example, the form of the formula $\stuple{\role{a} x, \role{b}{\atom{a}}} \land \neg \stuple{\role{c}{y}}$ is $\stuple{\name{a}, \name{b}} \land \neg \stuple{\name{c}}$, and the actors tuple is $\stuple{x, \atom{a}, y}$.
+
+
+\subsection{Rules}
+
+A \emph{rule} is a clause $c = t_1 \lor \dots \lor t_n$ where $n \ge 2$ and at least one term contains a variable. A clause rule is equivalent to any of the $n$ formulas
+\begin{equation}\label{eq:clause_rule}
+    t_i \leftarrow \bigwedge_{j \neq i} \neg t_j, \quad i = 1, \dots, n
+\end{equation}
+When a rule is written in this form, term $t_i$ is called the \emph{head}, and the conjunction of the remaining negated terms is called the \emph{body}. Note that $t_i$ may be a negated predicate.
+
+\begin{example}
+    The clause
+    $$ \role{odd}{x} \lor \role{even}{x} $$
+    is equivalent to either
+    $$ \role{odd}{x} \leftarrow \neg \role{even}{x} \quad \text{or} \quad
+       \role{even}{x} \leftarrow \neg \role{odd}{x} $$
+\end{example}
+
+
+A rule is recursive with respect to a head term $t_i$ if another term $t_j$ unifies with $t_i$.
+
+\subsection{Generators}
+% Naming: I think just "generator" is better than "generator rule", as this is not a typical logic rule
+
+A \emph{generator} is a conjunction (possibly a term) where in each predicate, the special $*$ atom acts in exactly one role, and is the only actor in that role (the role multiple is 1). For example,
+\begin{equation}
+	\stuple{\role{circle}{*}, \role{radius}{r}}
+\end{equation}
+and
+\begin{equation}
+	\stuple{\role{quantity}{*}, \role{magnitude}{m}, \role{unit}{u}}
+\end{equation}
+are both generators. A generator is a mechanism for defining ("creating") an atom based on a formula, without altering state: a query matching a generator returns a fact containing a unique atom in place of $*$, and this unique atom is a function of the query formula. For example, the query
+\begin{equation}
+	\stuple{\role{circle}{*}, \role{radius}{3}}
+\end{equation}
+returns a single fact
+\begin{equation}
+	\stuple{\role{circle}{\atom{c}}, \role{radius}{3}}
+\end{equation}
+where $\atom{c}$ is a unique atom.
+
+\subsection{Reflection}
+
+The \emph{reflection} mechanism allows representing the \textbf{atom} language within itself. A reflection $[e]$ is an atom that represents (reflects) a language element $e$ (which is itself not an atom). The language element may be a role name $[\name{edge}]$ or a formula $[\stuple{\role{edge}{e}, \roletwo{node}{\atom{a}}{y}}]$.
+
+
+\section{Queries and relations}
+
+\subsection{Relations}
+
+A \emph{relation} is a set of conjunctions (possibly with a single term) of the same form, which contains no variables. For example,
+\begin{align}
+	\stuple{\role{parent}{\atom{a}}, \role{child}{\atom{e}}} \\
+	\stuple{\role{parent}{\atom{a}}, \role{child}{\atom{d}}} \\
+	\stuple{\role{parent}{\atom{b}}, \role{child}{\atom{e}}} \\
+	\stuple{\role{parent}{\atom{c}}, \role{child}{\atom{d}}}
+\end{align}
+is a relation containing four facts. A relation may be infinite: for example,
+\begin{align*}
+	\stuple{\roletwo{+}{1}{1}, \role{=}{2}} \\
+	\stuple{\roletwo{+}{1}{2}, \role{=}{3}} \\
+	\stuple{\roletwo{+}{1}{3}, \role{=}{4}} \\
+	\dots \\
+	\stuple{\roletwo{+}{2}{2}, \role{=}{4}} \\
+	\stuple{\roletwo{+}{2}{3}, \role{=}{5}} \\
+	\dots
+\end{align*}
+is an infinite relation of the form $\{\name{+}^2, \name{=}\}$ representing integer addition.
+
+
+\subsection{Queries}
+
+A \emph{query} is a term or conjunction whose actors may be either atoms or variables.
+
+
+
+\section{Logical deduction}
+
+% Is it better to use "fact" only for asserted facts?
+A \emph{fact} is a term whose actors are all atoms, which logically entailed by the current knowledgebase.
+
+The \emph{knowledgebase} (KB) consists of a set of asserted facts (corresponding to the extensional database in Datalog), a set of rules $\mathcal{R}$, and a set of generators $\mathcal{G}$. The \emph{dictionary} is the set of all rules and generators $\mathcal{D} = \mathcal{R} \cup \mathcal{G}$.
+
+The knowledgebase is at all time logically consistent.
+
+
+%---------------------- implementation stuff below. move to separate doc? -------------------------------
+
+
+% TODO: move this
+% Typed atom: $\typedatom{a}{\tau}$ to indicate the type $\tau$
+% A parameter with type $\tau$ is written as $\parin{\alpha}^\tau$ or $\parout{\alpha}^\tau$ for input or output parameters, respectively. 
+
+\section{Tuples}
+
+It is often convenient to write a formula $F$ as $F = (f, x)$ where $f$ is the form of $F$ and $x$ is a tuple of actors, in the order corresponding to $f$. For example, the form of the formula $\stuple{\role{a} x, \role{b}{\atom{a}}} \land \neg \stuple{\role{c}{y}}$ is $\stuple{\name{a}, \name{b}} \land \neg \stuple{\name{c}}$, and the actors tuple is $\stuple{x, \atom{a}, y}$. Role or term multiples are written as exponents, so that the form of $\stuple{\role{edge}{e}, \roletwo{node}{x}{y}}$ is written $\stuple{\name{edge}, \name{node}^2}$.
 
 A caveat is that, if a form has multiplicities $> 1$, then its actor tuple is not unique: For example, for $\stuple{\role{edge}{e}, \roletwo{node}{x}{y}}$ both $(e\ x\ y)$ and $(e\ y\ x)$ are valid actor lists. Assuming a total ordering exists over all possible atoms, we may define the \emph{canonical} actors tuple for a given formula as the first tuple in lexical ordering among all possible actor tuples. 
 \begin{example}
@@ -64,37 +200,6 @@ A caveat is that, if a form has multiplicities $> 1$, then its actor tuple is no
     of which the first is the canonical one.
 \end{example}
 
-
-\section{Rules}
-
-A \emph{rule} is either a clause or a generator rule. The dictionary $\mathcal{D}$ is a set of rules.
-
-\subsection{Clause rules}
-
-A clause rule of $n$ terms is a clause $c = t_1 \lor \dots \lor t_n$ where at least one term contains a variable. A clause rule is equivalent to any of the $n$ formulas
-\begin{equation}
-    t_i \leftarrow \bigwedge_{j \neq i} \neg t_j, \quad i = 1, \dots, n
-\end{equation}
-Here $t_i$ is called the \emph{head term}, and the conjunction is called the \emph{rule body}.
-
-\begin{example}
-    The clause
-    $$ \name{odd} x \lor \name{even} x $$
-    is equivalent to either
-    $$ \name{odd} x \leftarrow \neg \name{even} x \quad \text{or} \quad
-       \name{even} x \leftarrow \neg \name{odd} x$$
-\end{example}
-
-A clause rule is recursive with respect to a head term $t_i$ if another term $t_j$ unifies with $t_i$.
-
-\subsection{Generator rules}
-
-A generator rule is a term having the generator $*$ as an actor. 
-\begin{example}
-    The term
-    $$ \stuple{\role{circle}{*}, \role{radius}{r}} $$
-    is a generator rule.
-\end{example}
 
 
 
