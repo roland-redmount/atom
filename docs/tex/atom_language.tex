@@ -1,0 +1,283 @@
+\documentclass{article}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{stackengine}
+\usepackage{kvsetkeys} % Required for processing list elements
+
+\setlength{\parskip}{6pt}
+\setlength{\parindent}{0pt}
+
+\theoremstyle{definition}
+\newtheorem{example}{Example}
+
+\title{The atom language}
+\author{Roland Nilsson}
+\date{September 2026}
+
+
+\newcommand{\atom}[1]{\mathbf{#1}}                  % an atom
+\newcommand{\typedatom}[2]{\mathbf{#1}^{#2}}        % an atom with type indicated
+\newcommand{\name}[1]{\textsc{#1}}                  % a role name
+\newcommand{\parout}[1]{\stackon[1.2pt]{$#1$}{\scalebox{0.6}{$\rightarrow$}}}
+\newcommand{\parin}[1]{\stackon[1.2pt]{$#1$}{\scalebox{0.6}{$\leftarrow$}}}
+
+\newcommand{\role}[2]{\name{#1}\;#2}
+\newcommand{\roletwo}[3]{\name{#1}\;#2\;#3}         % a role with 2 actors
+
+% A command for a space-separated vector, for tuples
+\makeatletter
+\newcommand{\stuple}[1]{%
+  \ensuremath{\left(%
+    \gdef\tuple@sep{}% no separator for the first element
+    \comma@parse{#1}{\tuple@element}%
+  \right)}%
+}
+\newcommand{\tuple@element}[1]{\tuple@sep#1\gdef\tuple@sep{\;}} % spacing size
+\makeatother
+
+
+\begin{document}
+
+\maketitle
+
+
+\section{Introduction}
+
+\textbf{atom} is a logic-relational language based on the relational fragment of first order predicate logic, aimed at data science applications. Unlike languages such as Datalog and Logica,   in an interactive environment, similar to lisp systems, and
+
+
+An atom is written as lowercase bold $\atom{a}$, or $\typedatom{a}{\tau}$ to indicate the type $\tau$. A variable is written as lowercase $x$, and has no type. A parameter with type $\tau$ is written as $\parin{\alpha}^\tau$ or $\parout{\alpha}^\tau$ for input or output parameters, respectively. Names are written in smallcaps $\name{a}$. A \emph{predicate} consists of one or more roles; a role is a name plus one or more \emph{actors} The number of actors in a role is called the role multiplicity. An actor may be an atom, a variable or a parameter. We write predicates as $\stuple{\role{a}{x}, \roletwo{b}{\atom{a}}{y},\role{c}{\alpha}}$, or as $p(x, y, \alpha)$ when role names are not important. The order of actors associated with a given name is not significant, so for example $\stuple{\role{edge}{e}, \roletwo{node}{x}{y}}$ and $\stuple{\role{edge}{e}, \roletwo{node}{y}{x}}$ denote the same predicate. A \emph{term} $t$ is predicate with or without logical negation, $t = p$ or $t = \neg p$. A \emph{clause} is a logical disjunction of terms, $ t_1 \lor \dots \lor t_n$. A \emph{conjunction} is a logical disjunction of terms, $t_1 \land \dots \land t_n$. We do not consider more complex logical formulas such as clauses of conjunction, or conjunction of clauses. A \emph{formula} refers to either a term, clause or conjunction. A \emph{fact} is a term whose actors are all atoms. A \emph{query} is a term or conjunction whose actors are either atoms or variables, but not parameters.
+
+\section{Forms and tuples}
+
+The \emph{form} of a formula is obtained by taking only the names for every predicate in the formula, discarding the actors. It is often convenient to write a formula $F$ as $F = (f, x)$ where $f$ is the form of $F$ and $x$ is a tuple of actors, in the order corresponding to $f$. For example, the form of the formula $\stuple{\role{a} x, \role{b}{\atom{a}}} \land \neg \stuple{\role{c}{y}}$ is $\stuple{\name{a}, \name{b}} \land \neg \stuple{\name{c}}$, and the actors tuple is $\stuple{x, \atom{a}, y}$. Role or term multiples are written as exponents, so that the form of $\stuple{\role{edge}{e}, \roletwo{node}{x}{y}}$ is written $\stuple{\name{edge}, \name{node}^2}$.
+
+A caveat is that, if a form has multiplicities $> 1$, then its actor tuple is not unique: For example, for $\stuple{\role{edge}{e}, \roletwo{node}{x}{y}}$ both $(e\ x\ y)$ and $(e\ y\ x)$ are valid actor lists. Assuming a total ordering exists over all possible atoms, we may define the \emph{canonical} actors tuple for a given formula as the first tuple in lexical ordering among all possible actor tuples. 
+\begin{example}
+    The formula $F = \stuple{\roletwo{a}{x}{y}, \role{b}{z}} \land \stuple{\roletwo{a}{u}{v}, \role{b}{w}}$ with form $\stuple{\name{a}^2, \role{b}}^2$ has 8 possible actor tuples
+    \begin{align*}
+        \stuple{x, y, z, u, v, w}, \stuple{y, x, z, u, v, w}, \stuple{x, y, z, v, u, w},                \stuple{y, x, z, v, u, w} \\
+        \stuple{u, v, w, x, y, z}, \stuple{u, v, w, y, x, z}, \stuple{v, u, w, x, y, z},
+            \stuple{v, u, w, y, x, z}
+    \end{align*}
+    of which the first is the canonical one.
+\end{example}
+
+
+\section{Rules}
+
+A \emph{rule} is either a clause or a generator rule. The dictionary $\mathcal{D}$ is a set of rules.
+
+\subsection{Clause rules}
+
+A clause rule of $n$ terms is a clause $c = t_1 \lor \dots \lor t_n$ where at least one term contains a variable. A clause rule is equivalent to any of the $n$ formulas
+\begin{equation}
+    t_i \leftarrow \bigwedge_{j \neq i} \neg t_j, \quad i = 1, \dots, n
+\end{equation}
+Here $t_i$ is called the \emph{head term}, and the conjunction is called the \emph{rule body}.
+
+\begin{example}
+    The clause
+    $$ \name{odd} x \lor \name{even} x $$
+    is equivalent to either
+    $$ \name{odd} x \leftarrow \neg \name{even} x \quad \text{or} \quad
+       \name{even} x \leftarrow \neg \name{odd} x$$
+\end{example}
+
+A clause rule is recursive with respect to a head term $t_i$ if another term $t_j$ unifies with $t_i$.
+
+\subsection{Generator rules}
+
+A generator rule is a term having the generator $*$ as an actor. 
+\begin{example}
+    The term
+    $$ \stuple{\role{circle}{*}, \role{radius}{r}} $$
+    is a generator rule.
+\end{example}
+
+
+
+\section{Services and operators}
+
+A \emph{relation} is a set of facts (terms) of the same form. A relation can be written as $R = (f, X)$ where $f$ is the form and $X^R = \{x_1, x_2, \dots \}$ is the set of the actor tuples $x_i$ of each fact. We refer to $X^R$ as the relation table, and we often refer to its elements simply as "tuples". In general, $X^R$ may contain an infinite number of tuples: this is the case for example for the arithmetic relation $(+ x + y = z)$.
+
+A \emph{service} is a tuple $S = (s, \Phi)$ where the \emph{signature} $s$ is a term or conjunction $s = (f, \alpha)$ whose actors $\alpha$ are either parameters or atoms; and $\Phi : u \mapsto X$ is a function that takes a vector $u$ of atoms corresponding to the unique input parameters of $\alpha$ and returns a relation table $X$, such that for each tuple $x \in X$, we have $x_i = u_k$ whenever $\alpha_i$ is an input parameter corresponding to argument $u_k$. In other words, $\Phi(u)$ gives a relation table $X$ matching the given arguments. Importantly, $\Phi(u)$ must be complete in the sense that it contains tuples from $X^R$ that match the arguments $u$.
+
+The service function $\Phi$ is implemented by operators. An \emph{operator} is a mapping $T_u: X \mapsto Y$ where $X,Y$ are relation tables and $u$ is a vector of arguments that determine the mapping. A \emph{primitive} operator is a function $T_\alpha : \emptyset \mapsto X$ with no inputs, that is, simply a relation table whose contents are determined by the value of $\alpha$. Primitive operators typically read tuples from storage, or compute them as a function of the input $u$. The function $\Phi$ is a composition over a directed acyclic graph of operators, whose leaves are primitive operators.
+
+The \emph{service registry} is a set of services that can be searched for services matching a particular query; see section \ref{sec_dispatch}.
+
+\subsection{The mandatory all-input service}
+
+A service with signature $s = (f, x)$ is associated with the relation $R = (f, X^R)$ whose form is the same as that of the service signature. For each relation $R$, there must always exist a service $S_0 = (s_0, \Phi_0), s_0 = (f, \alpha)$ where $\alpha = (\parin{\alpha}_1, \dots \parin{\alpha}_n)$ are all distinct input parameters; we refer to this as the all-input service for the relation $R$. The function $\Phi_0$ of this service must return $\Phi(x) = \{x\}$ for any tuple $x$ in the relation table $X^R$; that is, the service $S_0$ allows verifying every fact in the relation $R$.
+
+\section{Unification}
+
+Two formulas $F = (f, u)$ and $F = (f', u')$ unify if (i) they have the same forms, $f = f'$, and (ii) their actors lists unify, written $u \sim u'$. Unification $F \sim F'$ is symmetric.
+
+Let $G(u, u')$ be the undirected graph whose node set is the union of all actors in $u$ and $u'$, and containing the edges $\{u_i, u'_i\}, i = 1, \dots, n$. Then $u \sim u'$ if for each connected component $C$ of $G$ these criteria hold:
+\begin{enumerate}
+    \item $C$ contains at most one atom
+    \item all parameters in $C$ have the same direction and type $\tau$, and, if $C$ contains an atom, it also has type $\tau$.
+\end{enumerate}
+
+%A pair of actors $x, y$ unify ($x \sim y $) if (i) either $x$ or $y$ is a variable; (ii) $x$ is a parameter and $y$ is an atom, or vice versa, and both have the same type $t$; (iii) $x$ and $y$ are both parameters with the same direction (input or output) and type; or (iv) $x = y$.
+
+If $u, u'$ unify, let the representative $r_C$ of component $C$ be its atom, if one exists; else a parameter, if on exists; else a variable. Then $\sigma = \{\forall C, \forall x \in C: x \mapsto r_C, \}$ is a unifying substitution, such that $u / \sigma = u' / \sigma$.
+
+\begin{example}
+    For the tuples $u = \stuple{x, \atom{a}^\tau}$ and $v = \stuple{\parout{\alpha}_1^\sigma, \parin{\alpha}_2^\tau}$, the unification graph $G$ has edges $\{ \{x, \parout{\alpha}_1^\sigma \}, \{\atom{a}^\tau, \parin{\alpha}_2^\tau \} \}$. The two connected components satisfy the unification criteria, so $u \sim v$.
+\end{example}
+
+\begin{example}
+    For the tuples $u = \stuple{x, x}$ and $v = \stuple{\atom{a}, \atom{b}}$, the unification graph $G$ has edges $\{ \{x, \atom{a} \}, \{x, \atom{b}\} \}$. The single connected component contains two atoms which violates unification criteria (1), so $u \not\sim v$.
+\end{example}
+
+\begin{example}
+    For the tuples $u = \stuple{x, x}$ and $v = \stuple{\parout{\alpha}_1^\tau, \parin{\alpha}_2^\tau}$, the unification graph $G$ has edges $\{ \{x, \parout{\alpha}_1^\tau \}, \{x, \parin{\alpha}_2^\tau\} \}$. The single connected component contains two parameters with opposite direction, which violates unification criteria (2), so $u \not\sim v$.
+\end{example}
+
+For two formulas $F = (f, x), F' = (f, y)$ where the form $f$ has multiples $> 1$, the actor tuples $x,y$ are not unique. The forms then unify if there exists a valid actors tuple $x$ such that $x \sim y$.
+
+\begin{example}
+    For the formulas $F = \stuple{\role{a}{x}, \role{a}{y}} \land \stuple{\role{a}{x}, \role{a}{y}}$ and $F' = \stuple{\role{a}{\atom{a}}, \role{a}{\atom{b}}} \land \stuple{\role{a}{\atom{a}}, \role{a}{\atom{b}}}$, there are 8 possible form permutations but due to symmetry only 4 distinct actor tuples. The canonical tuples $u = \stuple{x, y, x, y}$ and $v = \stuple{\atom{a}, \atom{b}, \atom{a}, \atom{b}}$ satisfy $u \sim v$.
+\end{example}
+
+\subsection{Without connected components}
+
+We can determine $u \sim u'$ and compute the unifying substitution $\sigma$ without determining the connected components. The algorithm is as follows (sketch)
+\begin{enumerate}
+    \item Create the graph $G(u, u')$ and initialize $\sigma = \emptyset$.
+    \item Pick any edge $(x, y)$ from $G$. \begin{enumerate}
+        \item If $y$ is a variable and $x$ is not, or if $y$ is a parameter and $x$ is an atom, swap $x$ and $y$.
+        \item If $x$ is a parameter, then if $y$ is parameter, then $x, y$ must have the same direction and type, else $u \not\sim u'$; else $y$ is an atom, and must have the same type as $x$, else $u \not\sim u'$. 
+        \item if $x$ is an atom, is must equal $y$. 
+        \item Replace all $x$ in $G$ with $y$. Add $x \mapsto y$ to $\sigma$, and replace any existing substitution $z \mapsto x$ in $\sigma$ with $z \mapsto y$.
+    \end{enumerate}
+\end{enumerate}
+
+\section{Query execution}
+
+The main job of the atom system is to execute queries. This is done by either (1) dispatching the query to an existing service, or (2) compiling a new service to which the query can be dispatched.
+
+A query is a either a term or a conjunction, and may not contain parameters.
+
+\subsection{Dispatch}\label{sec_dispatch}
+
+To dispatch a query, we search the registry for a service whose signature matches the query. A query $q = (f_q, x)$ matches a service signature $s = (f_s, y)$ if $f_q = f_s$ and each query actor $x_i$ matches the corresponding service parameter $y_i$ as follows:
+\begin{enumerate}
+    \item A query variable $x_i$ matches an output parameter $y_i = \parout{\alpha}_i^\tau$ or an atom $y_i = \atom{a}_i^\tau$ of any type $\tau$.
+    \item A query atom $x_i =\atom{a}_i^\tau$ matches an input parameter $y_i = \parin{\alpha}_i^\tau$ of the same atom type, or the same atom $y_i = \atom{a}_i^\tau$.
+\end{enumerate}
+Hence, an atom in the service signature tuple $y$ matches either a query variable or atom. This is a special case of unification in that the query contains only variables and atoms, and the service signature contains only parameters. Repeated parameters and variables must be handled.
+
+\begin{example}
+    The query $\stuple{\role{a}{x}, \role{b}{\atom{a}^\tau}}$ matches the signature $\stuple{\role{a}{\parout{\alpha}_1^\sigma}, \role{b}{\parin{\alpha}_2^\tau}}$
+\end{example}
+
+\begin{example}
+    The query $\stuple{\role{a}{\atom{a}^\tau}, \role{b}{\atom{a}^\tau}}$ matches the signatures $\stuple{\role{a}{\parin{\alpha}_1^\tau}, \role{b}{\parin{\alpha}_1^\tau}}$ and $\stuple{\role{a}{\parin{\alpha}_1^\tau}, \role{b}{\parin{\alpha}_2^\tau}}$ and $\stuple{\role{a}{\parin{\alpha}_1^\tau}, \role{b}{\atom{a}^\tau}}$, but not $\stuple{\role{a}{\parin{\alpha}_1^\sigma}, \role{b}{\parin{\alpha}_2^\tau}}$.
+\end{example}
+
+\begin{example}
+    The query $\stuple{\role{a}{x}, \role{b}{x}}$ matches the signatures $\stuple{\role{a}{\parout{\alpha}_1^\tau}, \role{b}{\parout{\alpha}_2^\tau}}$ or $\stuple{\role{a}{\parout{\alpha}^\tau}, \role{b}{\atom{a}^\tau}}$, but not $\stuple{\role{a}{\parout{\alpha}_1^\sigma}, \role{b}{\parout{\alpha}_2^\tau}}$ (distinct types) or $\stuple{\role{a}{\atom{a}}, \role{b}{\atom{b}}}$.
+\end{example}
+
+Every query must have at most one matching service in the registry. Given the matching criteria above, this means that for any two services $S = (f, y)$ and $S' = (f, y')$ of the same form, we must have $y_i$ and $y_i$ parameters of opposite signs or distinct types.
+
+
+\subsubsection{Parameterized queries}
+
+An equivalent method is as follows. First, let $q'$ be the \emph{parameterized} query, obtained by replacing each query variable $x_i$ by an untyped output parameter, and replacing any other atom $x_i$ with an input parameter $y_i$ with the atom type of $x_i$. Repeated variables yield repeated parameters. Then, the parameterized query $q' = (f_q, x')$ matches a signature $s = (f_s, y_i)$ if all parameters match. This method is used by the compiler. \textbf{Problem:} this does not account for atoms in the service signature.
+
+\begin{example}
+The query $(\name{a} x \name{b} \atom{y})$ parameterizes to  $(\name{a} \parout{\alpha} \name{b} \parin{\beta})$
+\end{example}
+
+\begin{example}
+The query $(\name{a} x \name{b} \atom{y} \name{c} \atom{z})$ parameterizes to  $(\name{a} \parout{\alpha} \name{b} \parin{\beta} \name{c} \parin{\gamma})$
+\end{example}
+
+It is clear that parameterized queries can never have repeated input parameters.
+
+\section{The compiler}
+
+The compiler generates services for a query $q$ using rules from the dictionary. The compiler must generate a service such that, if the
+
+The overall algorithm $\textsc{CompileTerm}(q)$ is as follows:
+\begin{enumerate}
+    \item Parameterize the query and initialize a set of services $S = \emptyset$
+    \item Find any service $s$ that the query dispatches to and add it to $S$. \begin{enumerate}
+        \item Exact match
+        \item Relaxed equality pattern + CONSTRAIN
+        \item Relaxed IO direction + FILTER
+    \end{enumerate}
+    \item For each matching rule in the dictionary: \begin{enumerate}
+        \item Form the conjunction of terms in the rule body minus the matched head term.
+        \item Attempt to compile each term $t$ in the rule body by calling $\textsc{CompileTerm}(q)$
+    \end{enumerate}
+\end{enumerate}
+
+When multiple rules match a query, we compile a single service as a union operator over all their operators.
+
+The above algorithm can yield different programs (operator graphs) depending on the order in which terms are chosen in step (3b). Often, there are more than one candidate terms that can be chosen. The heuristic should be to pick terms with as many inputs as possible, as these yield smaller relations.
+
+\subsection{Parameterizing the query}
+
+In the first step of compiling a query, we parameterize it as described above. 
+
+\subsection{Compiling a term}
+
+For each term in the body of a rule, we do the following:
+\begin{enumerate}
+    \item If the term dispatches to a service, pick that service
+    \item Else attempt to compile the term to a new service
+\end{enumerate}
+
+\textbf{NOTE:} We currently prioritize terms that dispatch to existing services. I think this is the wrong heuristic: instead, we should prioritize terms with as many inputs as possible.
+
+
+\subsection{Rectifying rules}
+
+We run into problems when the head term of a rule contains repeated variables or constants, as we want to keep service parameters distinct. The classic solution for Datalog, which stores rules in the form of Horn clauses, is to \emph{rectify} such rules by adding equality constraints. For example
+\begin{equation}\label{eq_head_with_repeats_constants}
+  \stuple{\role{a}{x}, \role{b}{x}, \role{c}{\atom{a}}} \leftarrow \stuple{\role{c}{x}}
+\end{equation}
+is transformed to
+\begin{equation}
+  \stuple{\role{a}{x}, \role{b}{y}, \role{c}{z}}
+  \leftarrow \stuple{\role{c}{x}} \land \stuple{\role{=}{x}, \role{=}{y}}
+      \land \stuple{\role{=}{z}, \role{=}{\atom{a}}}
+\end{equation}
+where the head now has only unique variables. This doesn't work for rules in clause form however, since the head term is now known before a query is matched to the rule. Instead, we must rectify rules at compile time: we compile the rule (\ref{eq_head_with_repeats_constants}) as usual, but wrap it in operators that enforce the equality constraints. The result is a service with distinct parameters, say $(\parin{\alpha}_1, \parin{\alpha}_2, \parout{\alpha}_3)$. A disadvantage is that query tuples such as $(\atom{a}, \atom{b}, x)$ will match this service, even though we known from the rule that it will produce no tuples; but this could be optimized later.
+
+\subsection{Recursive terms}
+
+A term $t$ in a clause with head term $t_h$ is recursive if $t \sim t_h$. Such clauses cannot compile on their own, but require a non-recursive rule as the "base case". For example, the faculty function
+\begin{equation}\label{eq_faculty_rule}
+  \stuple{\role{f}{f}, \role{n}{n}} \leftarrow
+    (\le n \ge 0) \land (+ n - 1 = m) \land \stuple{\role{f}{e}, \role{n}{m}}
+    \land ({} * e * n = f)
+\end{equation}
+is recursive since $\stuple{\role{f}{f}, \role{n}{n}} \sim \stuple{\role{f}{e}, \role{n}{m}}$, and therefore requires a base case in the form of a fact $\stuple{\role{f}{1}, \role{n}{0}}$ to compile.
+
+In the general case, because multiple clauses $c_1, \dots, c_K$ can match a given term, the test for a recursive clause becomes more complex: clause $c_k$ is recursive if any term $t$ in $c_k$ unifies with its own head term, or with the head term of another recursive clause. Equivalently, clause $c_k$ is non-recursive if it \emph{only} unifies with the head term of a non-recursive clause.
+\begin{example}
+    Consider the clauses and fact
+    \begin{align}
+        \label{eq_chain_1}
+        \stuple{\role{a}{x}, \role{b}{\atom{a}}}
+            & \leftarrow \stuple{\role{a}{x}, \role{b}{\atom{b}}}\\
+        \label{eq_chain_2}
+        \stuple{\role{a}{x}, \role{b}{\atom{b}}}
+            & \leftarrow \stuple{\role{a}{x}, \role{b}{\atom{c}}} \\
+        \label{eq_chain_3}
+        \stuple{\role{a}{\atom{d}}, \role{b}{\atom{c}}}
+    \end{align}
+    Here (\ref{eq_chain_2}) is not recursive because its body term if unifies with (\ref{eq_chain_3}), and in turn, (\ref{eq_chain_1}) is not recursive because it unifies with (\ref{eq_chain_2}).
+\end{example}
+
+
+
+\end{document}
