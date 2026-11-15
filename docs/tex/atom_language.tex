@@ -1,6 +1,7 @@
 \documentclass{article}
 \usepackage{graphicx} % Required for inserting images
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{amsthm}
 \usepackage{stackengine}
 \usepackage{kvsetkeys} % Required for processing list elements
@@ -10,6 +11,7 @@
 
 \theoremstyle{definition}
 \newtheorem{example}{Example}
+\newtheorem{property}{Property}
 
 \title{The atom language}
 \author{Roland Nilsson}
@@ -25,13 +27,22 @@
 \newcommand{\role}[2]{\name{#1}\;#2}
 \newcommand{\roletwo}[3]{\name{#1}\;#2\;#3}         % a role with 2 actors
 
-% A command for a space-separated vector, for tuples
+\newcommand{\kb}{\mathcal{K}}						% the knowledgebase
+\newcommand{\edb}{\mathcal{E}}						% the extensional database
+\newcommand{\idb}{\mathcal{I}}						% the intensional database
+\newcommand{\dict}{\mathcal{R}}						% the rule dictionary
+\newcommand{\entails}{\Vdash}						% logical entailment
+\newcommand{\eval}{\varepsilon}						% the evaluator function
+
+
+
+% A space-separated list of symbols, without () delimiters
 \makeatletter
-\newcommand{\stuple}[1]{%
-  \ensuremath{\left(%
+\newcommand{\svec}[1]{%
+  \ensuremath{%
     \gdef\tuple@sep{}% no separator for the first element
     \comma@parse{#1}{\tuple@element}%
-  \right)}%
+  }%
 }
 \newcommand{\tuple@element}[1]{\tuple@sep#1\gdef\tuple@sep{\;}} % spacing size
 \makeatother
@@ -44,53 +55,85 @@
 
 \section{Introduction}
 
-\textbf{atom} is a logic-relational language based on the relational fragment of first order predicate logic, aimed at data science applications. Unlike most logic languages, atom uses classical negation and distinguished between true, false and unknown, and thus supports "open-world" databases. All data is represented as facts, which are predicates (possibly negated) over one or more atoms. An atom is merely a symbol, and has no internal structure, leads to a relational view of data rather than an object-oriented one. The language is intended to be used in an interactive environment, similar to lisp or smalltalk systems. The language itself has no dedicated type system, since types can be expressed by unary predicates. The current implementation compiles atom queries to relational operators, and uses typed atoms under the hood for efficiency.
+\textbf{atom} is a logic-relational language based on the relational fragment of first order predicate logic, aimed at data science applications. Unlike most logic languages, atom uses classical negation and distinguishes between true, false and unknown statements, and thus supports "open-world" databases. All data is represented as facts, which are predicates (possibly negated) over one or more atoms. An atom is merely an identifier with no internal structure, but atoms can be defined based on facts using a "generator" mechanism. This leads to a fully relational view of data, with no structured objects. There is no dedicated type system; types are expressed as unary predicates. The language is intended to be used in an interactive environment, similar to lisp or smalltalk systems. The current implementation compiles atom queries to relational operators, and uses typed atoms and relations under the hood for efficiency.
 
-This document first describes the atom language, independent of implementation. Later sections describe current implementation choice. This document is intended as a brief reference; for an introduction, see the atom tutorial.
+This document first describes the atom language, independent of implementation. Later sections describe current implementation choice. This document is intended as a reference; for an introduction, see the atom tutorial.
 
 \section{Language elements}
 
-\subsection{Atoms and predicates}
+\subsection{Atoms and formulas}
 
-An \emph{atom} is written as lowercase bold ($\atom{a}$). A \emph{variable} is written as lowercase ($x$). A \emph{name} is written in smallcaps ($\name{name}$). A \emph{predicate} consists of one or more roles, where a \emph{role} consists of a name followed by one or more \emph{actors}; each actor may be either an atom or a variable. The number of actors in a role is the role multiple. We write predicates as a tuple, for example
+An \emph{atom}\footnote{Our terminology differs from that common in mathematical logic, where "atom" is short for "atomic formula", and what we call an "atom" is commonly called a "term".}  is written as lowercase bold ($\atom{a}$). A \emph{variable} is written as lowercase ($x$). A \emph{predicate} consists of one or more roles, where a \emph{role} consists of a \emph{name}, written in smallcaps ($\name{name}$), followed by one or more \emph{actors}, which may be either an atom or a variable.  We write predicates as a sequence of roles, for example
 \begin{equation}\label{eq:example_predicate}
-	\stuple{\role{edge}{e}, \roletwo{node}{\atom{a}}{y}}	
+	\svec{\role{edge}{e}, \roletwo{node}{\atom{a}}{y}}	
 \end{equation}
-which might represent edges $e$ in a graph between a given node $\atom{a}$ and any other node $y$. The order of roles in a predicate is not significant, and neither is the order of actors associated with a given name. Hence,
+which might represent edges $e$ in a graph between a given node $\atom{a}$ and any other node $y$. The number of actors in a role is the role's \emph{multiple}. The order of roles in a predicate is not significant, and neither is the order of actors associated with a given name. Hence,
 \begin{align}
-	\stuple{\roletwo{node}{\atom{a}}{y}, \role{edge}{e}} \\
-	\stuple{\role{edge}{e}, \roletwo{node}{y}{\atom{a}}} \\
-	\stuple{\roletwo{node}{y}{\atom{a}}, \role{edge}{e}}
+	\svec{\roletwo{node}{\atom{a}}{y}, \role{edge}{e}} \\
+	\svec{\role{edge}{e}, \roletwo{node}{y}{\atom{a}}} \\
+	\svec{\roletwo{node}{y}{\atom{a}}, \role{edge}{e}}
 \end{align}
-all denote the same predicate as (\ref{eq:example_predicate}). For brevity, in this document we may also write a predicate as
-\begin{equation}
-	p(e, \{\atom{a}, y\})
-\end{equation}
-when role names are not important. Here, each argument or set of arguments is assumed to correspond to a distinct name, so the order of arguments is important.
+all denote the same predicate as (\ref{eq:example_predicate}). However, we will assume throughout that for each predicate there exists some "canonical" order of roles, and we will always write predicates in this order. (An implementation can easily map any order role order to the canonical one.)
 
-\subsection{Formulas}
+% NOTE: the below alternative notation is not used right now
+
+% For brevity, in this document we may also write a predicate as
+% \begin{equation}
+% 	p(e, \{\atom{a}, y\})
+% \end{equation}
+% when role names are not important. Here, each argument or set of arguments is assumed to correspond to a distinct name, so the order of arguments is important.
 
 A \emph{term} $t$ is predicate $p$ with or without logical negation, $t = p$ or $t = \neg p$. For example,
-\begin{align}
-	t_1 = \stuple{\role{parent}{\atom{a}}, \role{child}{\atom{b}}} \\
-	t_2 = \neg \stuple{\role{parent}{\atom{a}}, \role{child}{\atom{b}}} = \neg t_1
-\end{align}
+\begin{align*}
+	t_1 &= \svec{\role{parent}{\atom{a}}, \role{child}{\atom{b}}} \\
+	t_2 &= \neg (\svec{\role{parent}{\atom{a}}, \role{child}{\atom{b}}}) = \neg t_1
+\end{align*}
 are both terms. As usual, double negations cancel, so that $\neg t_2 = t_1$.
 
-A \emph{clause} is a logical disjunction of one or more terms, $ t_1 \lor \dots \lor t_n$.
+A \emph{clause} is a logical disjunction of one or more terms, $ t_1 \lor \dots \lor t_n$. A \emph{conjunction} is a logical conjunction of one or more terms, $t_1 \land \dots \land t_n$. As with predicates, the order of terms in an a clause or conjunction is not significant, but we assume there exists a canonical order of terms, and will always write clauses and conjunctions in this canonical order.
 
-A \emph{conjunction} is a logical conjunction of one or more terms, $t_1 \land \dots \land t_n$. We do not allow more complex formulas such as clauses of conjunctions or conjunction of clauses.
+A \emph{formula} is either a term, clause or conjunction. Note that clauses of conjunctions, or conjunction of clauses, are not formulas.
 
-A \emph{formula} is either a term, clause or conjunction.
+A \emph{ground} formula is a formula whose actors are all atoms.
 
 
 \subsection{Forms}
 
-The \emph{form} of a predicate is the set of role names in the predicate with multiples, written as exponents. For example, the form of $\stuple{\role{edge}{e}, \roletwo{node}{\atom{a}}{y}}$ is $\{\name{edge}, \name{node}^2\}$. The form of a term includes its negation, if any, so that the form of $\neg \stuple{\role{parent}{\atom{b}}, \role{child}{\atom{a}}}$ is $\neg\{\name{parent}, \name{child}\}$.
+The \emph{form} $f(p)$ of a predicate $p$ is the sequence of its role names, in the same "canonical" order as the predicate, and with role multiples written as exponents. We also define the actors list $a(p)$ as the corresponding list of actors in each role, which is a set of the same size as the role multiple. For example, with $p = (\svec{\role{edge}{e}, \roletwo{node}{\atom{a}}{y}})$, the form is $f(p) = (\svec{\name{edge}, \name{node}^2})$ and actors $a(p) = (\svec{\{e\}, \{\atom{a}, y\}})$. As a shorthand we may write singleton sets $\{x\}$ simply as $x$ when the meaning is clear from context.
+% TODO: the \svec command removes commas from nested sets \{a, b\} here. Make a better command ...
 
-The form of a clause or conjunction is the set of forms for its predicates, again with multiples.
+The form of a term includes its negation, if any. For example, the form of $t = \neg (\svec{\role{parent}{\atom{b}}, \role{child}{\atom{a}}}) $ is $f(p) = \neg(\svec{\name{parent}, \name{child}})$, and $a(p) = (\svec{\atom{b}, \atom{a}})$.
 
-It is often convenient to write a formula $F$ as $F = (f, x)$ where $f$ is the form of $F$ and $x$ is a tuple of actors, in the order corresponding to $f$. For example, the form of the formula $\stuple{\role{a} x, \role{b}{\atom{a}}} \land \neg \stuple{\role{c}{y}}$ is $\stuple{\name{a}, \name{b}} \land \neg \stuple{\name{c}}$, and the actors tuple is $\stuple{x, \atom{a}, y}$.
+The form of a clause or conjunction is the list of its term's forms, again in canonical order and with multiples written as exponents. For example, with
+\[ c = \svec{\role{parent}{x}, \role{child}{y}} \lor
+	\svec{\role{parent}{x}, \role{child}{z}} \lor
+	\neg (\svec{\roletwo{sibling}{y}{z}})
+\]
+we have the form
+\[ f(c) = (\svec{\name{parent}, \role{child}{y}})^2 \land \neg (\svec{\name{sibling}^2}) \]
+and actors
+\[ a(c) = (\{(\svec{x, y}), (\svec{x, z})\}, (\{y, z\})) \]
+
+
+\subsection{Relations}\label{sec:relations}
+
+A \emph{relation} is a set of conjunctions (possibly with a single term) of the same form, containing no variables. For example,
+\begin{align*}
+	\svec{\role{parent}{\atom{a}}, \role{child}{\atom{e}}} \\
+	\svec{\role{parent}{\atom{a}}, \role{child}{\atom{d}}} \\
+	\svec{\role{parent}{\atom{b}}, \role{child}{\atom{e}}} \\
+	\svec{\role{parent}{\atom{c}}, \role{child}{\atom{d}}}
+\end{align*}
+is a relation of the form $\{\name{parent}, \name{child}\}$ containing four facts. A relation may be infinite: for example,
+\begin{align*}
+	\svec{\roletwo{+}{1}{1}, \role{=}{2}} \\
+	\svec{\roletwo{+}{1}{2}, \role{=}{3}} \\
+	\dots \\
+	\svec{\roletwo{+}{2}{2}, \role{=}{4}} \\
+	\svec{\roletwo{+}{2}{3}, \role{=}{5}} \\
+	\dots
+\end{align*}
+is an infinite relation of the form $\{\name{+}^2, \name{=}\}$ representing integer addition.
 
 
 \subsection{Rules}
@@ -109,6 +152,16 @@ When a rule is written in this form, term $t_i$ is called the \emph{head}, and t
        \role{even}{x} \leftarrow \neg \role{odd}{x} $$
 \end{example}
 
+In Datalog and related languages, rules are always in the form (\ref{eq:clause_rule}) and restricted so that the head has no variables that does not occur in the body, to avoid infinite relations. In contrast, a clause rule like
+\[ \svec{\role{parent}{x}} \lor \neg (\svec{\role{parent}{x}, \role{child}{y}}) \]
+is equivalent to either of
+\[ \svec{\role{parent}{x}} \leftarrow \svec{\role{parent}{x}, \role{child}{y}} \]
+\[ \neg(\svec{\role{parent}{x}}) \rightarrow \neg (\svec{\role{parent}{x}, \role{child}{y}}) \]
+where the latter yields an infinite relation. We allow such rules, but avoid enumerating infinite relations; see \S\ref{sec:queries}.
+% NOTE: this is not yet implemented.
+
+
+\subsubsection{Recursive rules}
 
 A rule is recursive with respect to a head term $t_i$ if another term $t_j$ unifies with $t_i$.
 
@@ -117,271 +170,135 @@ A rule is recursive with respect to a head term $t_i$ if another term $t_j$ unif
 
 A \emph{generator} is a conjunction (possibly a term) where in each predicate, the special $*$ atom acts in exactly one role, and is the only actor in that role (the role multiple is 1). For example,
 \begin{equation}
-	\stuple{\role{circle}{*}, \role{radius}{r}}
+	\svec{\role{circle}{*}, \role{radius}{r}}
 \end{equation}
 and
 \begin{equation}
-	\stuple{\role{quantity}{*}, \role{magnitude}{m}, \role{unit}{u}}
+	\svec{\role{quantity}{*}, \role{magnitude}{m}} \land
+	\svec{\role{quantity}{*}, \role{unit}{u}}
 \end{equation}
-are both generators. A generator is a mechanism for defining ("creating") an atom based on a formula, without altering state: a query matching a generator returns a fact containing a unique atom in place of $*$, and this unique atom is a function of the query formula. For example, the query
+are both generators. A generator is a mechanism for defining ("creating") an atom based on a formula, without altering state. A query (\S\ref{sec:queries}) matching a generator returns a fact containing a unique atom in place of $*$, and this unique atom is a function of the query formula. For example, the query
 \begin{equation}
-	\stuple{\role{circle}{*}, \role{radius}{3}}
+	\svec{\role{circle}{*}, \role{radius}{3}}
 \end{equation}
 returns a single fact
 \begin{equation}
-	\stuple{\role{circle}{\atom{c}}, \role{radius}{3}}
+	\svec{\role{circle}{\atom{c}}, \role{radius}{3}}
 \end{equation}
 where $\atom{c}$ is a unique atom.
 
 \subsection{Reflection}
 
-The \emph{reflection} mechanism allows representing the \textbf{atom} language within itself. A reflection $[e]$ is an atom that represents (reflects) a language element $e$ (which is itself not an atom). The language element may be a role name $[\name{edge}]$ or a formula $[\stuple{\role{edge}{e}, \roletwo{node}{\atom{a}}{y}}]$.
+The \emph{reflection} mechanism allows representing the \textbf{atom} language within itself. A reflection $[e]$ is an atom that represents (reflects) a language element $e$ (which is itself not an atom). The language element may be a role name $[\name{edge}]$ or a formula $[\svec{\role{edge}{e}, \roletwo{node}{\atom{a}}{y}}]$.
 
 
-\section{Queries and relations}
+\section{Queries and logical reasoning}
 
-\subsection{Relations}
+\subsection{The knowledgebase}
 
-A \emph{relation} is a set of conjunctions (possibly with a single term) of the same form, which contains no variables. For example,
-\begin{align}
-	\stuple{\role{parent}{\atom{a}}, \role{child}{\atom{e}}} \\
-	\stuple{\role{parent}{\atom{a}}, \role{child}{\atom{d}}} \\
-	\stuple{\role{parent}{\atom{b}}, \role{child}{\atom{e}}} \\
-	\stuple{\role{parent}{\atom{c}}, \role{child}{\atom{d}}}
-\end{align}
-is a relation containing four facts. A relation may be infinite: for example,
-\begin{align*}
-	\stuple{\roletwo{+}{1}{1}, \role{=}{2}} \\
-	\stuple{\roletwo{+}{1}{2}, \role{=}{3}} \\
-	\stuple{\roletwo{+}{1}{3}, \role{=}{4}} \\
-	\dots \\
-	\stuple{\roletwo{+}{2}{2}, \role{=}{4}} \\
-	\stuple{\roletwo{+}{2}{3}, \role{=}{5}} \\
-	\dots
-\end{align*}
-is an infinite relation of the form $\{\name{+}^2, \name{=}\}$ representing integer addition.
+The \emph{extensional database} $\edb$ is a set of ground terms which are asserted to hold true, and which do not depend on a logic rule. This includes facts from computed relations such as $(\svec{\name{+}^2, \name{=}})$, and facts obtained from generators. It is sufficient to consider ground terms, since a asserting a ground conjunction is the same as asserting each of its terms.
+
+The \emph{knowledgebase} $\kb$ consists of $\edb$ and set of rules $\dict$. We say that a formula $t$ is \emph{entailed} by the knowledgebase $\kb$, written $\kb \entails t$, if $t$ can be deduced from the facts in $\edb$ by natural deduction over the rules in $\dict$. Note that $\kb \not\entails t$ does not imply $\kb \entails \neg t$. If neither $t$ nor $\neg t$ are entailed, then the truth value of $t$ is unknown. The \emph{intensional database} $\idb$ is the set $\{t : \kb \entails t\}$ of all facts that are entailed by $\kb$.
+
+The knowledgebase is always \emph{consistent}, in the following sense.
+\begin{property}\label{prop:consistency}
+	For any formula $t$, we may have either $\kb \entails t$ or $\kb \entails \neg t$, but never both.
+\end{property}
+Section \S\ref{sec:actions} describes criteria ensuring that consistency is always maintained.
 
 
-\subsection{Queries}
+\subsection{Unification}
 
-A \emph{query} is a term or conjunction whose actors may be either atoms or variables.
+Two formulas $t, t'$ \emph{unify}, written $t \sim t'$, if (i) they have the same forms, $f(t) = f(t')$, and (ii) their actor lists unify, $a(t) \sim a(t')$, defined as follows.
+
+% TODO: describe the valid form permutations (those that only permute multiples)
+Let $\pi$ be a permutation of the form $f(t)$, and let $u = \pi(a(t))$ and $u' = \pi(a(t'))$ be the corresponding ordered actor lists. Let $G(u, u')$ be the undirected graph whose node set is the union of all (unique) actors in $u$ and $u'$, and containing the edges $\{u_i, u'_i\}, i = 1, \dots, n$. Then $u \sim u'$ if each connected component $C$ of $G$ contains at most one atom.
+Finally, $a(t) \sim a(t')$ if there exists a form permutation $\pi$ such that $\pi(a(t)) \sim \pi(a(t'))$.
+
+Unification $t \sim t'$ is symmetric but not transitive: for example, with actor lists $a = (\svec{x, \atom{a}})$, $a' = (\svec{\atom{b}, y})$ and $a'' = (\svec{\atom{b}, \atom{c}})$, we have $a \sim a'$ and $a' \sim a''$ but $a \not\sim a''$.
+
+\subsection{Queries}\label{sec:queries}
+
+A \emph{query} is a term or conjunction whose actors may be either atoms or variables. A query $q$ can be evaluated by a function $\eval(q)$ that returns a pair $(R, c)$ where $R$ is a relation and $c \in \{0, 1, \infty\}$ is a result code. Let $\tau(q) = \{t: t \sim q \land \kb \entails t\}$ be the set of facts $t$ that unify with $q$ and are entailed by $\kb$, that is, the complete answer to the query $q$. The result code $c$ then has the following interpretation:
+\begin{center}
+	\begin{tabular}{|c|c|l|}
+		$c$ & Meaning & Interpretation \\
+		\hline
+		$0$ & $R = \tau(q)$ & $R$ is complete \\
+		$1$ & $R \subseteq \tau(q)$ & $R$ may be incomplete \\
+		$\infty$ & $|\tau(q)| = \infty$ & $\tau(q)$ is infinite, and $R$ is incomplete \\
+	\end{tabular}
+\end{center}
+Note that $c = 1$ does not rule out the possibility $R = \tau(q)$.
+
+A query without variables evaluates to a relation containing at most one fact. The following property always holds:
+\begin{property}\label{prop:query}
+	If a query $q$ contains no variables, then $\eval(q) = \tau(q)$, which implies that $\eval(q) = (\{q\}, 0)$ if $\kb \entails q$, and $\eval(q) = (\emptyset, 0)$ if $\kb \not\entails q$.
+\end{property}
+
+If a query $q$ contains variables, then property \ref{prop:query} does not hold: the resulting relation $R$ may be a strict subset of the facts entailed by $\kb$. This can occur if a storage engine does not support a particular query pattern: for example, an array-based storage for sets may support the query $(\svec{\role{set}{\atom{s}}, \role{element}{e}})$ but not $(\svec{\role{set}{e}, \role{element}{\atom{e}}})$ (asking for all sets $s$ that contain element $\atom{e}$). Then $\eval(q) = (\emptyset, 1)$. In other cases, we may obtain $\eval(q) = (R, 1)$ where $R$ is not empty.
+
+If a query $q$ contains variables, then $\tau(q)$ may also be infinite. For example, for query $q = (\svec{\roletwo{+}{x}{y}, \role{=}{0}})$, we have $\tau(q) = \{ (\svec{\roletwo{+}{1}{{-1}}, \role{=}{0}})$, $(\svec{\roletwo{+}{2}{{-2}}, \role{=}{0}}), \dots \}$ which infinite. In this case $\eval(q) = (R, \infty)$ where $R$ is arbitrary; it might contain an example, say $R = \{\svec{\roletwo{+}{1}{{-1}}, \role{=}{0}}\}$.
+% This "example" mechanism may be skipped; it is not required for consistency checks
+
+Of course, queries that match a finite subset of an infinite relation can return exact results. For example, a query $(\svec{\roletwo{+}{\atom{a}}{\atom{b}}, \role{=}{x}})$ where $\atom{a}$ and $\atom{b}$ are integers yields a finite relation (here, a single fact), and so does $(\svec{\roletwo{+}{x}{\atom{a}}, \role{=}{\atom{b}}})$.
+
+\subsection{Conjunction queries}
+
+% this can go to implementation
+
+Queries of conjunction form $q = t_1 \land \cdots \land t_n$ may match multiple services $S_1, \dots, S_m$, each of a distinct form, involving subsets $T_1, \dots, T_m$ of the $n$ terms. Assume first that the $T_i$ a partition of $\{1, \dots, n\}$. We then compute the resulting relation $R$ with an inner join over the corresponding relations $R_1, \dots, R_m$. Assume that the join order is performed left-to right, with $R_1 \bowtie R_2$ performed first.
+% NOTE: The join order is not arbitrary, but determined by the service signatures ...
+The return code $c$ is determined by initializing $c = 0$, and then for each $i = 1, \dots, n$ set $c = \max \{c, c_i\}$. Thus, we will have $c = 0$ if all $c_i = 0$; $c = 1$ if any $c_i = 1$ but no $c_i = \infty$; and else $c = \infty$. So any join where at least one relation is incomplete will be incomplete.
+
+If the $T_i$ are overlapping, then they can be organized into groups, where each group is again a partition of $\{1,\dots,n\}$. We can then apply the above algorithm to each such group of services, and union the result.
 
 
+\section{Actions}\label{sec:actions}
 
-\section{Logical deduction}
+An \emph{action} is an operation that alters the knowledgebase $\kb$, either by asserting or retracting facts in $\edb$, or by asserting or retracting rules from $\dict$.
 
-% Is it better to use "fact" only for asserted facts?
-A \emph{fact} is a term whose actors are all atoms, which logically entailed by the current knowledgebase.
+\subsection{Asserting and retracting facts}
 
-The \emph{knowledgebase} (KB) consists of a set of asserted facts (corresponding to the extensional database in Datalog), a set of rules $\mathcal{R}$, and a set of generators $\mathcal{G}$. The \emph{dictionary} is the set of all rules and generators $\mathcal{D} = \mathcal{R} \cup \mathcal{G}$.
+Asserting a fact $t$ (a term) adds it to the extensional database: $\edb \leftarrow \edb \cup \{t\}$.
 
-The knowledgebase is at all time logically consistent.
-
-
-%---------------------- implementation stuff below. move to separate doc? -------------------------------
-
-
-% TODO: move this
-% Typed atom: $\typedatom{a}{\tau}$ to indicate the type $\tau$
-% A parameter with type $\tau$ is written as $\parin{\alpha}^\tau$ or $\parout{\alpha}^\tau$ for input or output parameters, respectively. 
-
-\section{Tuples}
-
-It is often convenient to write a formula $F$ as $F = (f, x)$ where $f$ is the form of $F$ and $x$ is a tuple of actors, in the order corresponding to $f$. For example, the form of the formula $\stuple{\role{a} x, \role{b}{\atom{a}}} \land \neg \stuple{\role{c}{y}}$ is $\stuple{\name{a}, \name{b}} \land \neg \stuple{\name{c}}$, and the actors tuple is $\stuple{x, \atom{a}, y}$. Role or term multiples are written as exponents, so that the form of $\stuple{\role{edge}{e}, \roletwo{node}{x}{y}}$ is written $\stuple{\name{edge}, \name{node}^2}$.
-
-A caveat is that, if a form has multiplicities $> 1$, then its actor tuple is not unique: For example, for $\stuple{\role{edge}{e}, \roletwo{node}{x}{y}}$ both $(e\ x\ y)$ and $(e\ y\ x)$ are valid actor lists. Assuming a total ordering exists over all possible atoms, we may define the \emph{canonical} actors tuple for a given formula as the first tuple in lexical ordering among all possible actor tuples. 
-\begin{example}
-    The formula $F = \stuple{\roletwo{a}{x}{y}, \role{b}{z}} \land \stuple{\roletwo{a}{u}{v}, \role{b}{w}}$ with form $\stuple{\name{a}^2, \role{b}}^2$ has 8 possible actor tuples
-    \begin{align*}
-        \stuple{x, y, z, u, v, w}, \stuple{y, x, z, u, v, w}, \stuple{x, y, z, v, u, w},                \stuple{y, x, z, v, u, w} \\
-        \stuple{u, v, w, x, y, z}, \stuple{u, v, w, y, x, z}, \stuple{v, u, w, x, y, z},
-            \stuple{v, u, w, y, x, z}
-    \end{align*}
-    of which the first is the canonical one.
-\end{example}
-
-
-
-
-\section{Services and operators}
-
-A \emph{relation} is a set of facts (terms) of the same form. A relation can be written as $R = (f, X)$ where $f$ is the form and $X^R = \{x_1, x_2, \dots \}$ is the set of the actor tuples $x_i$ of each fact. We refer to $X^R$ as the relation table, and we often refer to its elements simply as "tuples". In general, $X^R$ may contain an infinite number of tuples: this is the case for example for the arithmetic relation $(+ x + y = z)$.
-
-A \emph{service} is a tuple $S = (s, \Phi)$ where the \emph{signature} $s$ is a term or conjunction $s = (f, \alpha)$ whose actors $\alpha$ are either parameters or atoms; and $\Phi : u \mapsto X$ is a function that takes a vector $u$ of atoms corresponding to the unique input parameters of $\alpha$ and returns a relation table $X$, such that for each tuple $x \in X$, we have $x_i = u_k$ whenever $\alpha_i$ is an input parameter corresponding to argument $u_k$. In other words, $\Phi(u)$ gives a relation table $X$ matching the given arguments. Importantly, $\Phi(u)$ must be complete in the sense that it contains tuples from $X^R$ that match the arguments $u$.
-
-The service function $\Phi$ is implemented by operators. An \emph{operator} is a mapping $T_u: X \mapsto Y$ where $X,Y$ are relation tables and $u$ is a vector of arguments that determine the mapping. A \emph{primitive} operator is a function $T_\alpha : \emptyset \mapsto X$ with no inputs, that is, simply a relation table whose contents are determined by the value of $\alpha$. Primitive operators typically read tuples from storage, or compute them as a function of the input $u$. The function $\Phi$ is a composition over a directed acyclic graph of operators, whose leaves are primitive operators.
-
-The \emph{service registry} is a set of services that can be searched for services matching a particular query; see section \ref{sec_dispatch}.
-
-\subsection{The mandatory all-input service}
-
-A service with signature $s = (f, x)$ is associated with the relation $R = (f, X^R)$ whose form is the same as that of the service signature. For each relation $R$, there must always exist a service $S_0 = (s_0, \Phi_0), s_0 = (f, \alpha)$ where $\alpha = (\parin{\alpha}_1, \dots \parin{\alpha}_n)$ are all distinct input parameters; we refer to this as the all-input service for the relation $R$. The function $\Phi_0$ of this service must return $\Phi(x) = \{x\}$ for any tuple $x$ in the relation table $X^R$; that is, the service $S_0$ allows verifying every fact in the relation $R$.
-
-\section{Unification}
-
-Two formulas $F = (f, u)$ and $F = (f', u')$ unify if (i) they have the same forms, $f = f'$, and (ii) their actors lists unify, written $u \sim u'$. Unification $F \sim F'$ is symmetric.
-
-Let $G(u, u')$ be the undirected graph whose node set is the union of all actors in $u$ and $u'$, and containing the edges $\{u_i, u'_i\}, i = 1, \dots, n$. Then $u \sim u'$ if for each connected component $C$ of $G$ these criteria hold:
+Logical consistency is ensured by the following constraint:
 \begin{enumerate}
-    \item $C$ contains at most one atom
-    \item all parameters in $C$ have the same direction and type $\tau$, and, if $C$ contains an atom, it also has type $\tau$.
+	\item A fact (term) $t$ may be asserted only if its negation $\neg t$ is not entailed by the current database.
 \end{enumerate}
 
-%A pair of actors $x, y$ unify ($x \sim y $) if (i) either $x$ or $y$ is a variable; (ii) $x$ is a parameter and $y$ is an atom, or vice versa, and both have the same type $t$; (iii) $x$ and $y$ are both parameters with the same direction (input or output) and type; or (iv) $x = y$.
+Retracting a fact $t$ (a term) removes it from the extensional database: $\edb \leftarrow \edb \setminus \{t\}$. This does not affect consistency.
 
-If $u, u'$ unify, let the representative $r_C$ of component $C$ be its atom, if one exists; else a parameter, if on exists; else a variable. Then $\sigma = \{\forall C, \forall x \in C: x \mapsto r_C, \}$ is a unifying substitution, such that $u / \sigma = u' / \sigma$.
+% NOTE: this may NOT hold true with asserted facts involving reflected relations. For example, with $s = "ABC",
+% :assert relation [: list @s element _ :] size 3
+% :retract list @s position 1 element 'A'  -->  implies relation [: list @s element _ :] size 2, contradiction
+% This is difficult to catch. 
 
-\begin{example}
-    For the tuples $u = \stuple{x, \atom{a}^\tau}$ and $v = \stuple{\parout{\alpha}_1^\sigma, \parin{\alpha}_2^\tau}$, the unification graph $G$ has edges $\{ \{x, \parout{\alpha}_1^\sigma \}, \{\atom{a}^\tau, \parin{\alpha}_2^\tau \} \}$. The two connected components satisfy the unification criteria, so $u \sim v$.
-\end{example}
 
-\begin{example}
-    For the tuples $u = \stuple{x, x}$ and $v = \stuple{\atom{a}, \atom{b}}$, the unification graph $G$ has edges $\{ \{x, \atom{a} \}, \{x, \atom{b}\} \}$. The single connected component contains two atoms which violates unification criteria (1), so $u \not\sim v$.
-\end{example}
+\subsection{Asserting rules}
 
-\begin{example}
-    For the tuples $u = \stuple{x, x}$ and $v = \stuple{\parout{\alpha}_1^\tau, \parin{\alpha}_2^\tau}$, the unification graph $G$ has edges $\{ \{x, \parout{\alpha}_1^\tau \}, \{x, \parin{\alpha}_2^\tau\} \}$. The single connected component contains two parameters with opposite direction, which violates unification criteria (2), so $u \not\sim v$.
-\end{example}
 
-For two formulas $F = (f, x), F' = (f, y)$ where the form $f$ has multiples $> 1$, the actor tuples $x,y$ are not unique. The forms then unify if there exists a valid actors tuple $x$ such that $x \sim y$.
 
-\begin{example}
-    For the formulas $F = \stuple{\role{a}{x}, \role{a}{y}} \land \stuple{\role{a}{x}, \role{a}{y}}$ and $F' = \stuple{\role{a}{\atom{a}}, \role{a}{\atom{b}}} \land \stuple{\role{a}{\atom{a}}, \role{a}{\atom{b}}}$, there are 8 possible form permutations but due to symmetry only 4 distinct actor tuples. The canonical tuples $u = \stuple{x, y, x, y}$ and $v = \stuple{\atom{a}, \atom{b}, \atom{a}, \atom{b}}$ satisfy $u \sim v$.
-\end{example}
+\subsection{Logical consistency}
 
-\subsection{Without connected components}
-
-We can determine $u \sim u'$ and compute the unifying substitution $\sigma$ without determining the connected components. The algorithm is as follows (sketch)
+Logical consistency of the knowledgebase is ensured by two constraints:
 \begin{enumerate}
-    \item Create the graph $G(u, u')$ and initialize $\sigma = \emptyset$.
-    \item Pick any edge $(x, y)$ from $G$. \begin{enumerate}
-        \item If $y$ is a variable and $x$ is not, or if $y$ is a parameter and $x$ is an atom, swap $x$ and $y$.
-        \item If $x$ is a parameter, then if $y$ is parameter, then $x, y$ must have the same direction and type, else $u \not\sim u'$; else $y$ is an atom, and must have the same type as $x$, else $u \not\sim u'$. 
-        \item if $x$ is an atom, is must equal $y$. 
-        \item Replace all $x$ in $G$ with $y$. Add $x \mapsto y$ to $\sigma$, and replace any existing substitution $z \mapsto x$ in $\sigma$ with $z \mapsto y$.
-    \end{enumerate}
+	\item A fact (term) $t$ may be asserted only if its negation $\neg t$ is not entailed by the current database.
+	\item A rule (clause) $c$ may be asserted only if the query $\neg c$ (a conjunction) is not entailed by the current database, for any values of variables in $c$.
 \end{enumerate}
 
-\section{Query execution}
+We can check constraint (1) by running the query $\neg t$, which contains no variables; if the result is $(\emptyset, 0)$ then the assertion is valid, else it is rejected.
 
-The main job of the atom system is to execute queries. This is done by either (1) dispatching the query to an existing service, or (2) compiling a new service to which the query can be dispatched.
+% Add an example:
+% :assert ! parent "bob"
+% :assert parent x <- parent x child y
+% :assert parent "bob" child "lisa" --> contradicts the knowledgebase (works)
 
-A query is a either a term or a conjunction, and may not contain parameters.
+To check constraint (2), we must run the query $\neg c$ which contains variables. If the result is $(\emptyset, 0)$, then the assertion is accepted. For any other result the assertion is rejected: a result $(R, c)$ with $R \neq \emptyset$ indicates a contradiction for any $c$, and so does $(\emptyset, \infty)$; for $(\emptyset, 1)$ we cannot tell if the clause will cause a contradiction, so we reject to err on the side of caution.
 
-\subsection{Dispatch}\label{sec_dispatch}
+% this is wrong in the current implementation:
+% :assert parent "bob" child "lisa" --> OK (KB is now inconsistent)
 
-To dispatch a query, we search the registry for a service whose signature matches the query. A query $q = (f_q, x)$ matches a service signature $s = (f_s, y)$ if $f_q = f_s$ and each query actor $x_i$ matches the corresponding service parameter $y_i$ as follows:
-\begin{enumerate}
-    \item A query variable $x_i$ matches an output parameter $y_i = \parout{\alpha}_i^\tau$ or an atom $y_i = \atom{a}_i^\tau$ of any type $\tau$.
-    \item A query atom $x_i =\atom{a}_i^\tau$ matches an input parameter $y_i = \parin{\alpha}_i^\tau$ of the same atom type, or the same atom $y_i = \atom{a}_i^\tau$.
-\end{enumerate}
-Hence, an atom in the service signature tuple $y$ matches either a query variable or atom. This is a special case of unification in that the query contains only variables and atoms, and the service signature contains only parameters. Repeated parameters and variables must be handled.
-
-\begin{example}
-    The query $\stuple{\role{a}{x}, \role{b}{\atom{a}^\tau}}$ matches the signature $\stuple{\role{a}{\parout{\alpha}_1^\sigma}, \role{b}{\parin{\alpha}_2^\tau}}$
-\end{example}
-
-\begin{example}
-    The query $\stuple{\role{a}{\atom{a}^\tau}, \role{b}{\atom{a}^\tau}}$ matches the signatures $\stuple{\role{a}{\parin{\alpha}_1^\tau}, \role{b}{\parin{\alpha}_1^\tau}}$ and $\stuple{\role{a}{\parin{\alpha}_1^\tau}, \role{b}{\parin{\alpha}_2^\tau}}$ and $\stuple{\role{a}{\parin{\alpha}_1^\tau}, \role{b}{\atom{a}^\tau}}$, but not $\stuple{\role{a}{\parin{\alpha}_1^\sigma}, \role{b}{\parin{\alpha}_2^\tau}}$.
-\end{example}
-
-\begin{example}
-    The query $\stuple{\role{a}{x}, \role{b}{x}}$ matches the signatures $\stuple{\role{a}{\parout{\alpha}_1^\tau}, \role{b}{\parout{\alpha}_2^\tau}}$ or $\stuple{\role{a}{\parout{\alpha}^\tau}, \role{b}{\atom{a}^\tau}}$, but not $\stuple{\role{a}{\parout{\alpha}_1^\sigma}, \role{b}{\parout{\alpha}_2^\tau}}$ (distinct types) or $\stuple{\role{a}{\atom{a}}, \role{b}{\atom{b}}}$.
-\end{example}
-
-Every query must have at most one matching service in the registry. Given the matching criteria above, this means that for any two services $S = (f, y)$ and $S' = (f, y')$ of the same form, we must have $y_i$ and $y_i$ parameters of opposite signs or distinct types.
-
-
-\subsubsection{Parameterized queries}
-
-An equivalent method is as follows. First, let $q'$ be the \emph{parameterized} query, obtained by replacing each query variable $x_i$ by an untyped output parameter, and replacing any other atom $x_i$ with an input parameter $y_i$ with the atom type of $x_i$. Repeated variables yield repeated parameters. Then, the parameterized query $q' = (f_q, x')$ matches a signature $s = (f_s, y_i)$ if all parameters match. This method is used by the compiler. \textbf{Problem:} this does not account for atoms in the service signature.
-
-\begin{example}
-The query $(\name{a} x \name{b} \atom{y})$ parameterizes to  $(\name{a} \parout{\alpha} \name{b} \parin{\beta})$
-\end{example}
-
-\begin{example}
-The query $(\name{a} x \name{b} \atom{y} \name{c} \atom{z})$ parameterizes to  $(\name{a} \parout{\alpha} \name{b} \parin{\beta} \name{c} \parin{\gamma})$
-\end{example}
-
-It is clear that parameterized queries can never have repeated input parameters.
-
-\section{The compiler}
-
-The compiler generates services for a query $q$ using rules from the dictionary. The compiler must generate a service such that, if the
-
-The overall algorithm $\textsc{CompileTerm}(q)$ is as follows:
-\begin{enumerate}
-    \item Parameterize the query and initialize a set of services $S = \emptyset$
-    \item Find any service $s$ that the query dispatches to and add it to $S$. \begin{enumerate}
-        \item Exact match
-        \item Relaxed equality pattern + CONSTRAIN
-        \item Relaxed IO direction + FILTER
-    \end{enumerate}
-    \item For each matching rule in the dictionary: \begin{enumerate}
-        \item Form the conjunction of terms in the rule body minus the matched head term.
-        \item Attempt to compile each term $t$ in the rule body by calling $\textsc{CompileTerm}(q)$
-    \end{enumerate}
-\end{enumerate}
-
-When multiple rules match a query, we compile a single service as a union operator over all their operators.
-
-The above algorithm can yield different programs (operator graphs) depending on the order in which terms are chosen in step (3b). Often, there are more than one candidate terms that can be chosen. The heuristic should be to pick terms with as many inputs as possible, as these yield smaller relations.
-
-\subsection{Parameterizing the query}
-
-In the first step of compiling a query, we parameterize it as described above. 
-
-\subsection{Compiling a term}
-
-For each term in the body of a rule, we do the following:
-\begin{enumerate}
-    \item If the term dispatches to a service, pick that service
-    \item Else attempt to compile the term to a new service
-\end{enumerate}
-
-\textbf{NOTE:} We currently prioritize terms that dispatch to existing services. I think this is the wrong heuristic: instead, we should prioritize terms with as many inputs as possible.
-
-
-\subsection{Rectifying rules}
-
-We run into problems when the head term of a rule contains repeated variables or constants, as we want to keep service parameters distinct. The classic solution for Datalog, which stores rules in the form of Horn clauses, is to \emph{rectify} such rules by adding equality constraints. For example
-\begin{equation}\label{eq_head_with_repeats_constants}
-  \stuple{\role{a}{x}, \role{b}{x}, \role{c}{\atom{a}}} \leftarrow \stuple{\role{c}{x}}
-\end{equation}
-is transformed to
-\begin{equation}
-  \stuple{\role{a}{x}, \role{b}{y}, \role{c}{z}}
-  \leftarrow \stuple{\role{c}{x}} \land \stuple{\role{=}{x}, \role{=}{y}}
-      \land \stuple{\role{=}{z}, \role{=}{\atom{a}}}
-\end{equation}
-where the head now has only unique variables. This doesn't work for rules in clause form however, since the head term is now known before a query is matched to the rule. Instead, we must rectify rules at compile time: we compile the rule (\ref{eq_head_with_repeats_constants}) as usual, but wrap it in operators that enforce the equality constraints. The result is a service with distinct parameters, say $(\parin{\alpha}_1, \parin{\alpha}_2, \parout{\alpha}_3)$. A disadvantage is that query tuples such as $(\atom{a}, \atom{b}, x)$ will match this service, even though we known from the rule that it will produce no tuples; but this could be optimized later.
-
-\subsection{Recursive terms}
-
-A term $t$ in a clause with head term $t_h$ is recursive if $t \sim t_h$. Such clauses cannot compile on their own, but require a non-recursive rule as the "base case". For example, the faculty function
-\begin{equation}\label{eq_faculty_rule}
-  \stuple{\role{f}{f}, \role{n}{n}} \leftarrow
-    (\le n \ge 0) \land (+ n - 1 = m) \land \stuple{\role{f}{e}, \role{n}{m}}
-    \land ({} * e * n = f)
-\end{equation}
-is recursive since $\stuple{\role{f}{f}, \role{n}{n}} \sim \stuple{\role{f}{e}, \role{n}{m}}$, and therefore requires a base case in the form of a fact $\stuple{\role{f}{1}, \role{n}{0}}$ to compile.
-
-In the general case, because multiple clauses $c_1, \dots, c_K$ can match a given term, the test for a recursive clause becomes more complex: clause $c_k$ is recursive if any term $t$ in $c_k$ unifies with its own head term, or with the head term of another recursive clause. Equivalently, clause $c_k$ is non-recursive if it \emph{only} unifies with the head term of a non-recursive clause.
-\begin{example}
-    Consider the clauses and fact
-    \begin{align}
-        \label{eq_chain_1}
-        \stuple{\role{a}{x}, \role{b}{\atom{a}}}
-            & \leftarrow \stuple{\role{a}{x}, \role{b}{\atom{b}}}\\
-        \label{eq_chain_2}
-        \stuple{\role{a}{x}, \role{b}{\atom{b}}}
-            & \leftarrow \stuple{\role{a}{x}, \role{b}{\atom{c}}} \\
-        \label{eq_chain_3}
-        \stuple{\role{a}{\atom{d}}, \role{b}{\atom{c}}}
-    \end{align}
-    Here (\ref{eq_chain_2}) is not recursive because its body term if unifies with (\ref{eq_chain_3}), and in turn, (\ref{eq_chain_1}) is not recursive because it unifies with (\ref{eq_chain_2}).
-\end{example}
 
 
 
