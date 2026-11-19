@@ -388,9 +388,9 @@ TypedRelation RelationFromFact(FormulaView term)
 	TypeSignature typeSignature = CreateTypeSignature(
 		TypedTuplePeekAtomTypes(term.actors), term.actors->nAtoms);
 	
-	// A generator atom corresponds to an AT_ID type
+	// A novum atom corresponds to an AT_ID type
 	for(index8 i = 0; i < term.actors->nAtoms; i++) {
-		if(typeSignature.atomTypes[i] == AT_GENERATOR)
+		if(typeSignature.atomTypes[i] == AT_NOVUM)
 			typeSignature.atomTypes[i] = AT_ID;
 	}
 

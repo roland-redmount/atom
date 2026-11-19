@@ -23,7 +23,7 @@
 
 TypedAtom invalidAtom = {0};
 
-TypedAtom generatorAtom = {.type = AT_GENERATOR, .atom = {0}};
+TypedAtom novumAtom = {.type = AT_NOVUM, .atom = {0}};
 
 /**
  * Create (typed) atom
@@ -151,7 +151,7 @@ void PrintTypedAtom(TypedAtom typedAtom)
 		PrintParameter(typedAtom.atom);
 		break;
 	
-	case AT_GENERATOR:
+	case AT_NOVUM:
 		PrintChar('*');
 		break;
 

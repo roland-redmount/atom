@@ -792,7 +792,7 @@ static void printAssertResult(int result)
 		break;
 
 	case ASSERT_INVALID_IFACT:
-		printStatusLine("The terms of an ifact rule must have distinct forms and one generator (*) each, and the variables must be distinct.");
+		printStatusLine("The terms of an ifact rule must have distinct forms and one novum (*) each, and the variables must be distinct.");
 		break;
 
 	case ASSERT_NOT_CLOSABLE:
@@ -861,7 +861,7 @@ static void printRetractResult(int result)
 
 	case RETRACT_INVALID_IFACT_RULE:
 		printStatusLine(
-			"The terms of an ifact rule must have distinct forms and one generator (*) each, "
+			"The terms of an ifact rule must have distinct forms and one novum (*) each, "
 			"and all variables must be distinct."
 		);
 		break;

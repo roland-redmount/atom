@@ -20,8 +20,8 @@ typedef struct s_TypedAtom
 // The invalid atom, only used internally to signal errors
 extern TypedAtom invalidAtom;
 
-// The generator atom (*)
-extern  TypedAtom generatorAtom;
+// The novum atom (*)
+extern  TypedAtom novumAtom;
 
 /**
  * Shorthand for (TypedAtom) {.type = type, .atom = atom}

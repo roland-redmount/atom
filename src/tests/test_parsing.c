@@ -549,9 +549,9 @@ static void testLetterActor(void)
 
 
 /**
- * Test parsing a term containing a generator (*) actor
+ * Test parsing a term containing a novum (*) actor
  */
-static void testGeneratorActor(void)
+static void testNovumActor(void)
 {
 	Atom term = CStringToTerm("list \"abc\" position 1 element *");
 	TypedTuple const * actors = FormulaGetActors(term);
@@ -563,7 +563,7 @@ static void testGeneratorActor(void)
 	NameRelease(elementRole);
 
 	TypedAtom element = TypedTupleGetElement(actors, elementIndex);
-	ASSERT_TRUE(SameTypedAtoms(element, generatorAtom))
+	ASSERT_TRUE(SameTypedAtoms(element, novumAtom))
 	ReleaseFormula(term);
 }
 
@@ -1628,7 +1628,7 @@ int main(int argc, char * argv[])
 	ExecuteTest(testCStringToConjunction);
 	ExecuteTest(testCStringToFormula);
 	ExecuteTest(testLetterActor);
-	ExecuteTest(testGeneratorActor);
+	ExecuteTest(testNovumActor);
 	ExecuteTest(testParseFormula);
 	ExecuteTest(testFormOrdering);
 	ExecuteTest(testFormOrderingCanonical);

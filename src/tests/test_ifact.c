@@ -859,7 +859,7 @@ void testCompileIFactConjunctionRuleInClause(void)
 
 
 /**
- * CLAUDE: Create the formula of an ifact with the generator (*) in place of the ID atom.
+ * CLAUDE: Create the formula of an ifact with the novum (*) in place of the ID atom.
  */
 static Atom createRuleFromIFactFormula(Atom ifactFormula, Atom idAtom)
 {
@@ -868,7 +868,7 @@ static Atom createRuleFromIFactFormula(Atom ifactFormula, Atom idAtom)
 	TypedAtom idActor = CreateTypedAtom(AT_ID, idAtom);
 	for(index8 i = 0; i < view.actors->nAtoms; i++) {
 		if(SameTypedAtoms(TypedTupleGetElement(actors, i), idActor))
-			TypedTupleSetElement(actors, i, generatorAtom);
+			TypedTupleSetElement(actors, i, novumAtom);
 	}
 	Atom rule = CreateFormula(view.form, actors);
 	FreeTypedTuple(actors);
@@ -878,7 +878,7 @@ static Atom createRuleFromIFactFormula(Atom ifactFormula, Atom idAtom)
 
 /**
  * CLAUDE: Create the ifact of a rule, and check that GetIFactFormula() yields the rule with
- * the ID atom in place of each generator. Every relation of the rule is dropped afterwards.
+ * the ID atom in place of each novum. Every relation of the rule is dropped afterwards.
  */
 static void checkIFactFormula(Atom rule)
 {
@@ -904,7 +904,7 @@ static void dropTermRelation(char const * termText)
 
 /**
  * CLAUDE: GetIFactFormula() yields the formula given to CreateIFact(), with the ID atom in
- * place of each generator. A term form repeated in a conjunction is tested both before and
+ * place of each novum. A term form repeated in a conjunction is tested both before and
  * after a single term form, since the order of the term forms of a conjunction form depends
  * on multiplicity; see MultisetIterate().
  */

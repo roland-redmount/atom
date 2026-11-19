@@ -222,7 +222,7 @@ We can remove a fact with the *retract* action,
 
 As we create new facts, we naturally also need to introduce new atoms. A small set of literals can be entered directly, including numbers and letters; all other atoms are *defined by facts*.
 
-To define an atom, we use a *generator* rule, a special rule that lets us to query for atoms with a particular definition. For example, a circle is defined entirely by its radius, and if we want an atom representing a circle, we first assert a generator rule
+To define an atom, we use a *generator*, a special rule that lets us to query for atoms with a particular definition. For example, a circle is defined entirely by its radius, and if we want an atom representing a circle, we first assert a generator rule
 ```atom
 :assert circle * radius r
 ```
@@ -230,7 +230,7 @@ where the special symbol `*` indicates that the atom in this position is *define
 ```atom
 circle _ radius 5
 ```
-The returned atom `ID(...)` represents this circle. This atom is unique: repeating the query will give the same atom.  Note that the query does *not* change the knowledgebase: the change occurs when the generator rule is asserted. We can think of the generator rule as defining an implicit, infinite relation containing all possible circles, of any radius. The query merely asks for one of them.
+The returned atom `ID(...)` represents this circle. This atom is unique: repeating the query will give the same atom.  Note that the query does *not* change the knowledgebase: the change occurs when the generator is created. We can think of the generator as defining an implicit, infinite relation containing all possible circles, of any radius. The query merely asks for one of them.
 
 The **atom** language does not have local variables that we can assign atoms to, but the command line client allows tagging atoms returned by queries using the `@tag` syntax: for example
 ```atom
@@ -248,7 +248,7 @@ A fact that defines an atom cannot be retracted:
 ```atom
 :retract circle @myCircle radius 5
 ```
-This is because the fact was not explicitly asserted: it is *entailed* by the generator rule, and so will hold true as long as the generator rule is in place. The same goes for facts entails by other rules:
+This is because the fact was not explicitly asserted: it is *entailed* by the generator rule, and so will hold true as long as the novum rule is in place. The same goes for facts entails by other rules:
 ```atom
 :retract circle @myCircle area 78.5
 ```
@@ -316,7 +316,7 @@ An immutable data structure can be represented by an atom whose defining facts d
 ```atom
 :assert point * x x & point * y y
 ```
-Here the generator rule includes two predicates specifying the `x` and `y` coordinates of the points. This corresponds to an immutable `class Point { float x; float y}`. Here is the point with coordinates (-1, 3):
+Here the novum rule includes two predicates specifying the `x` and `y` coordinates of the points. This corresponds to an immutable `class Point { float x; float y}`. Here is the point with coordinates (-1, 3):
 ```atom
 point @p x -1 & point @p y 3
 ```

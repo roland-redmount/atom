@@ -19,7 +19,7 @@
 #define AT_LETTER				5		// a letter of the English alphabet TODO: should be removed
 #define AT_VARIABLE             6		// variable with a letter identifier
 #define AT_PARAMETER			7		// a parameter in a service
-#define AT_GENERATOR			8		// atom representing the * generator construct
+#define AT_NOVUM				8		// atom representing the * novum construct
 #define AT_FORMULA				9		// a form plus its actors
 #define AT_RELATION				10		// the relation defined by a query formula
 

@@ -2709,7 +2709,7 @@ static bool findIFactRule(
 	if(*nTerms == 0)
 		return false;
 
-	// Ifact rules of one term form differ in the generator index, so at most one rule matches
+	// Ifact rules of one term form differ in the novum index, so at most one rule matches
 	bool foundRule = false;
 	DictionaryIterator iterator;
 	DictionaryIterateIFactRules(query->form, &iterator);

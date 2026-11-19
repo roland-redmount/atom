@@ -238,7 +238,7 @@ static enum TokenizerResult actorStateBeginToken(Tokenizer * tokenizer, char c)
 		return TOKENIZER_ACCEPTED;
 
 	case '*':
-		return beginSingleCharacterToken(tokenizer, TOKEN_GENERATOR);
+		return beginSingleCharacterToken(tokenizer, TOKEN_NOVUM);
 
 	case '[':
 		// CLAUDE: the next character decides whether this begins a form or a relation
@@ -617,8 +617,8 @@ Token TokenizerGetToken(Tokenizer const * tokenizer)
 		token.typedAtom = CreateTypedAtom(AT_NAME, CreateName(string, stringLength));
 		break;
 
-	case TOKEN_GENERATOR:
-		token.typedAtom = generatorAtom;
+	case TOKEN_NOVUM:
+		token.typedAtom = novumAtom;
 		break;
 
 	case TOKEN_ID:

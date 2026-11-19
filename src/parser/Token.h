@@ -24,7 +24,7 @@ enum TokenType {
 	TOKEN_BEGIN_FORM,		// begin a reflected form, written [.
 	TOKEN_BEGIN_RELATION,	// begin a reflected relation, written [:
 	TOKEN_END_REFLECT,		// end any reflection, written ]
-	TOKEN_GENERATOR,		// the * generator character
+	TOKEN_NOVUM,			// the * novum character
 	TOKEN_ID,				// an AT_ID atom written by its hash, as @ and 16 hex digits
 	TOKEN_IMPLIED_BY,		// logical implication (<-)
 };

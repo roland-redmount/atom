@@ -11,7 +11,7 @@
  * complete initialization of a union (unlike struct and arrays)
  */
 typedef union u_Atom {
-	// AT_NAME, AT_ID, AT_FORMULA, AT_GENERATOR
+	// AT_NAME, AT_ID, AT_FORMULA, AT_NOVUM
 	data64 hash;
 	// AT_INT
 	int64 _int;

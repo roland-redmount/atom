@@ -151,9 +151,9 @@ uint8 AssertFormula(Atom formula)
 {
 	FormulaView formulaView = FormulaGetView(formula);
 
-	// Any formula that contains a generator (*) is added to the dictionary
+	// Any formula that contains a novum (*) is added to the dictionary
 	// as an ifact rule; see IsIFactRule()
-	if(TypedTupleContainsAtom(formulaView.actors, generatorAtom)) {
+	if(TypedTupleContainsAtom(formulaView.actors, novumAtom)) {
 		if(!IsIFactRule(formula))
 			return ASSERT_INVALID_IFACT;
 		if(DictionaryContainsIFactRule(formula))
@@ -226,7 +226,7 @@ uint8 RetractFormula(Atom formula)
 {
 	FormulaView formulaView = FormulaGetView(formula);
 
-	if(TypedTupleContainsAtom(formulaView.actors, generatorAtom)) {
+	if(TypedTupleContainsAtom(formulaView.actors, novumAtom)) {
 		if(!IsIFactRule(formula))
 			return RETRACT_INVALID_IFACT_RULE;
 		if(!DictionaryContainsIFactRule(formula))
@@ -299,12 +299,12 @@ static bool collectTermIFactTuples(
 	size8 termArity = TermFormArity(termForm);
 	ASSERT(termArity <= RELATION_MAX_ARITY)
 
-	// Each term must contain exactly one generator, marking the identified atom.
+	// Each term must contain exactly one novum, marking the identified atom.
 	IFactTuple ifactTuple = {.nColumns = termArity};
 	TypeSignature termSignature = {0};
-	bool hasGenerator = false;
-	// CLAUDE: The role of the generator holds no other actor; see IsIFactRule()
-	bool isGeneratorRoleSingle = true;
+	bool hasNovum = false;
+	// CLAUDE: The role of the novum holds no other actor; see IsIFactRule()
+	bool isNovumRoleSingle = true;
 	index8 i0 = termActorIndex ? * termActorIndex : 0;
 	// CLAUDE: The roles of the predicate form hold the actors of the term in order; see
 	// PredicateFormGetActorRoles()
@@ -315,14 +315,14 @@ static bool collectTermIFactTuples(
 		ElementMultiple role = MultisetIteratorGetElement(&iterator);
 		for(index8 j = 0; j < role.multiple; j++, i++) {
 			TypedAtom actor = TypedTupleGetElement(actors, i0 + i);
-			if(SameTypedAtoms(actor, generatorAtom)) {
-				if(hasGenerator) {
-					// term contains more than one generator
+			if(SameTypedAtoms(actor, novumAtom)) {
+				if(hasNovum) {
+					// term contains more than one novum
 					MultisetIteratorEnd(&iterator);
 					return false;
 				}
-				hasGenerator = true;
-				isGeneratorRoleSingle = (role.multiple == 1);
+				hasNovum = true;
+				isNovumRoleSingle = (role.multiple == 1);
 				ifactTuple.idColumn = i;
 				termSignature.atomTypes[i] = AT_ID;
 				ifactTuple.tuple[i] = (Atom) {0};
@@ -334,8 +334,8 @@ static bool collectTermIFactTuples(
 		}
 	}
 	MultisetIteratorEnd(&iterator);
-	// the term is valid if it had a generator
-	if(!hasGenerator || !isGeneratorRoleSingle)
+	// the term is valid if it had a novum
+	if(!hasNovum || !isNovumRoleSingle)
 		return false;
 
 	ifactTuple.relation = (TypedRelation) {.form = termForm, .typeSignature = termSignature};

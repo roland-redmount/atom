@@ -1,6 +1,6 @@
 /**
  * The dictionary stores logic rules in clause form, as well as ifact rules.
- * An ifact rule is a term with one generator (*), such as (circle * radius r).
+ * An ifact rule is a term with one novum (*), such as (circle * radius r).
  */
 
 #ifndef DICTIONARY_H
@@ -135,7 +135,7 @@ void DictionaryRemoveClause(FormulaView * clause);
  * (1) a positive term, or a conjunction of positive terms with distinct
  *     forms and at least two roles, such as (car * brand b & car * model m)
  *     but not (car * feature f & car * feature g)
- * (2) exactly one generator (*) per term, in a role with multiplicity 1:
+ * (2) exactly one novum (*) per term, in a role with multiplicity 1:
  *     (sibling * sibling x) is not a valid rule
  * (3) with all others actors are variable and no variable is repeated.
  * The term must have at least two roles, since the IFACT operator needs an input.
@@ -145,7 +145,7 @@ bool IsIFactRule(Atom formula);
 /**
  * CLAUDE: Write the term form of each term of an ifact rule to termForms[], in the order of
  * RelationFormGetTermForms(). Write the ID column of each term to idColumns[]. The ID column
- * of a term is the index of the generator among the actors of the term. Returns the number
+ * of a term is the index of the novum among the actors of the term. Returns the number
  * of terms.
  */
 size8 IFactRuleGetIDColumns(FormulaView const * ifactRule, Atom termForms[], index8 idColumns[]);
@@ -154,7 +154,7 @@ size8 IFactRuleGetIDColumns(FormulaView const * ifactRule, Atom termForms[], ind
 /**
  * Add an ifact rule to the dictionary. The formula must be a valid ifact rule;
  * see IsIFactRule(). Two ifact rules are equal if they have the same form and the
- * the generator of each term is in the same position, so variable names do not matter.
+ * the novum of each term is in the same position, so variable names do not matter.
  * If an ifact rule is alreadyu in the dictionary; the existing rule is returned.
  * Adding an ifact rule invalidates any compiled services involving its form.
  */

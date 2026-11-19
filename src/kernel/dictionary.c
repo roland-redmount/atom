@@ -70,14 +70,14 @@ size8 IFactRuleGetIDColumns(FormulaView const * ifactRule, Atom termForms[], ind
 	index8 termOffset = 0;
 	for(index8 i = 0; i < nTerms; i++) {
 		size8 termArity = TermFormArity(termForms[i]);
-		bool foundGenerator = false;
-		for(index8 j = 0; !foundGenerator && (j < termArity); j++) {
-			if(SameTypedAtoms(TypedTupleGetElement(ifactRule->actors, termOffset + j), generatorAtom)) {
+		bool foundNovum = false;
+		for(index8 j = 0; !foundNovum && (j < termArity); j++) {
+			if(SameTypedAtoms(TypedTupleGetElement(ifactRule->actors, termOffset + j), novumAtom)) {
 				idColumns[i] = j;
-				foundGenerator = true;
+				foundNovum = true;
 			}
 		}
-		ASSERT(foundGenerator)
+		ASSERT(foundNovum)
 		termOffset += termArity;
 	}
 	return nTerms;
@@ -85,7 +85,7 @@ size8 IFactRuleGetIDColumns(FormulaView const * ifactRule, Atom termForms[], ind
 
 
 /**
- * Order ifact rules by term form, then by generator index. A key with no
+ * Order ifact rules by term form, then by novum index. A key with no
  * actors matches every ifact rule of its term form.
  */
 /* CLAUDE: The form may be a conjunction form. Rules of one form are ordered by their ID
@@ -665,7 +665,7 @@ bool IsIFactRule(Atom formula)
 	if(arity > RELATION_MAX_ARITY)
 		return false;
 
-	// CLAUDE: Every term is positive, has at least two roles and exactly one generator
+	// CLAUDE: Every term is positive, has at least two roles and exactly one novum
 	Atom termForms[RELATION_MAX_ARITY];
 	size8 nTerms = RelationFormGetTermForms(view.form, termForms);
 	index8 actorIndex = 0;
@@ -680,29 +680,29 @@ bool IsIFactRule(Atom formula)
 			return false;
 		// CLAUDE: The roles of the predicate form hold the actors of the term in order; see
 		// PredicateFormGetActorRoles()
-		size8 nGenerators = 0;
-		bool isGeneratorRoleSingle = true;
+		size8 nNovums = 0;
+		bool isNovumRoleSingle = true;
 		MultisetIterator iterator;
 		MultisetIterate(TermFormGetPredicateForm(termForms[i]), AT_NAME, &iterator);
 		while(MultisetIteratorNext(&iterator)) {
 			ElementMultiple role = MultisetIteratorGetElement(&iterator);
 			for(index8 j = 0; j < role.multiple; j++) {
-				if(SameTypedAtoms(TypedTupleGetElement(view.actors, actorIndex++), generatorAtom)) {
-					nGenerators++;
-					// CLAUDE: The role of the generator holds no other actor, since an atom defined
+				if(SameTypedAtoms(TypedTupleGetElement(view.actors, actorIndex++), novumAtom)) {
+					nNovums++;
+					// CLAUDE: The role of the novum holds no other actor, since an atom defined
 					// by another actor of its own role, as in (sibling * sibling x), is circular
-					isGeneratorRoleSingle = isGeneratorRoleSingle && (role.multiple == 1);
+					isNovumRoleSingle = isNovumRoleSingle && (role.multiple == 1);
 				}
 			}
 		}
 		MultisetIteratorEnd(&iterator);
-		if((nGenerators != 1) || !isGeneratorRoleSingle)
+		if((nNovums != 1) || !isNovumRoleSingle)
 			return false;
 	}
 
 	for(index8 i = 0; i < arity; i++) {
 		TypedAtom actor = TypedTupleGetElement(view.actors, i);
-		if(SameTypedAtoms(actor, generatorAtom))
+		if(SameTypedAtoms(actor, novumAtom))
 			continue;
 		if(actor.type != AT_VARIABLE)
 			return false;

@@ -21,7 +21,7 @@ uint8 AssertFact(FormulaView fact, StorageProvider const * provider);
 
 /**
  * High level method to assert any formula.
- * 1) a formula containing a generator (*) is an ifact rule, sent to
+ * 1) a formula containing a novum (*) is an ifact rule, sent to
  *    DictionaryAddIFactRule().
  * 1) a single term without variables is a (ground) fact,
  *    sent to AssertFact()
@@ -38,7 +38,7 @@ uint8 AssertFormula(Atom formula);
 #define ASSERT_CLAUSE_NO_VARIABLE	5	// a clause with no variables cannot be a rule
 #define ASSERT_CLAUSE_ONE_TERM		6	// a clause of one term cannot be a rule
 #define ASSERT_NOT_CLAUSE			7	// a conjunction
-#define ASSERT_INVALID_IFACT		8	// a formula with generators that is not an ifact
+#define ASSERT_INVALID_IFACT		8	// a formula with novums that is not an ifact
 #define ASSERT_NOT_WRITABLE			9	// the specified relation is not writable
 #define ASSERT_NOT_CLOSABLE			10	// CLAUDE: the relation cannot be closed; see CloseRelation()
 #define ASSERT_RESERVED_FORM		11	// CLAUDE: a rule cannot derive (closed-relation f)
@@ -68,12 +68,12 @@ uint8 RetractFormula(Atom formula);
 #define RETRACT_NOT_FOUND			3	// the fact or rule is not in the knowledgebase
 #define RETRACT_NOT_ASSERTED		4	// the fact is not explicitly asserted (ifact or computed fact)
 #define RETRACT_TERM_VARIABLE		5	// a term containing variables is not a fact
-#define RETRACT_INVALID_IFACT_RULE	6	// a formula with generators that is not an ifact rule
+#define RETRACT_INVALID_IFACT_RULE	6	// a formula with novums that is not an ifact rule
 #define RETRACT_NOT_CLAUSE			7	// a conjunction
 
 /**
  * High level function to create an IFact from a formula containing
- * one of more generator (*) atoms. The caller obtains a reference to the IFact.
+ * one of more novum (*) atoms. The caller obtains a reference to the IFact.
  */
 /* CLAUDE: Returns a zero atom if the formula is not a valid ifact, or if a relation of
    the formula has a TupleStore; see IFactSetupRelation(). */

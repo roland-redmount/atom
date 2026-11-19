@@ -361,8 +361,8 @@ void testAssertFormulaRule(void)
 
 
 /**
- * A term holding a generator is an ifact rule, and asserting it adds the rule
- * to the dictionary. A formula with a generator that is not an ifact rule is refused.
+ * A term holding a novum is an ifact rule, and asserting it adds the rule
+ * to the dictionary. A formula with a novum that is not an ifact rule is refused.
  */
 void testAssertFormulaIFactRule(void)
 {
@@ -420,7 +420,7 @@ void testRetractFormulaRule(void)
 
 /**
  * CLAUDE: An ifact rule is retracted whatever its variable names, since the dictionary
- * compares ifact rules by term form and generator position only.
+ * compares ifact rules by term form and novum position only.
  */
 void testRetractFormulaIFactRule(void)
 {
@@ -815,7 +815,7 @@ void testAssertFormulaRejects(void)
 
 
 /**
- * Test creating an ifact from a conjunction of terms sharing one generator.
+ * Test creating an ifact from a conjunction of terms sharing one novum.
  */
 void testCreateIFactList(void)
 {
@@ -887,7 +887,7 @@ void testCreateIFactNewRelations(void)
 
 /**
  * Test creating two ifacts where the defining fact containg a conjunction
- * of terms of the same form, but with the generator (*) in different roles.
+ * of terms of the same form, but with the novum (*) in different roles.
  * The two terms are stored in the same table, but belong to different IFactConjunctions.
  */
 void testCreateIFactTwoIdColumns(void)
@@ -973,7 +973,7 @@ void testCreateIFactDefiningFactsProtected(void)
 	ASSERT_UINT32_EQUAL(RelationNRows(listLength), listLengthNRows + 1)
 
 	// Build the (list length) term the ifact defines, by putting the identified atom
-	// where the generator stands. The conjunction holds the actors of both its terms,
+	// where the novum stands. The conjunction holds the actors of both its terms,
 	// so the length term is found by its own form.
 	Atom lengthTerm = CStringToTerm("list \"x\" length 1");
 	size8 arity = FormulaGetActors(lengthTerm)->nAtoms;
@@ -982,7 +982,7 @@ void testCreateIFactDefiningFactsProtected(void)
 		TypedAtom actor = TypedTupleGetElement(formulaView.actors, formulaView.actors->nAtoms - arity + i);
 		TypedTupleSetElement(
 			actors, i,
-			SameTypedAtoms(actor, generatorAtom) ? CreateTypedAtom(AT_ID, ifact) : actor);
+			SameTypedAtoms(actor, novumAtom) ? CreateTypedAtom(AT_ID, ifact) : actor);
 	}
 	Atom definingFact = CreateFormula(FormulaGetForm(lengthTerm), actors);
 	FreeTypedTuple(actors);
@@ -1003,7 +1003,7 @@ void testCreateIFactDefiningFactsProtected(void)
 
 
 /**
- * Test create an ifact with a single term containing one generator (*).
+ * Test create an ifact with a single term containing one novum (*).
  * The corresponding relation is created to hold the fact, and dropped again
  * once the AT_ID atom is released.
  */
@@ -1012,12 +1012,12 @@ void testCreateIFactTerm(void)
 	Atom term = CStringToTerm("colour * code 4");
 	size8 nColumns = FormulaGetActors(term)->nAtoms;
 
-	// The relation of the defining fact carries the identified atom in the generator
+	// The relation of the defining fact carries the identified atom in the novum
 	// column, with type AT_ID
 	byte atomTypes[2];
 	for(index8 i = 0; i < nColumns; i++) {
 		TypedAtom actor = TypedTupleGetElement(FormulaGetActors(term), i);
-		atomTypes[i] = SameTypedAtoms(actor, generatorAtom) ? AT_ID : actor.type;
+		atomTypes[i] = SameTypedAtoms(actor, novumAtom) ? AT_ID : actor.type;
 	}
 	TypeSignature typeSignature = CreateTypeSignature(atomTypes, nColumns);
 	TypedRelation relation = {.form = FormulaGetForm(term), .typeSignature = typeSignature};
@@ -1044,17 +1044,17 @@ void testCreateIFactTerm(void)
 
 
 /**
- * A term whose generator (*) is not the first actor of its form. The order of the
+ * A term whose novum (*) is not the first actor of its form. The order of the
  * actors follows the role names of the form, not the order they were written in,
  * so the identified atom can land in any column.
  */
 void testCreateIFactIdColumnNotFirst(void)
 {
-	// The roles of this form order as (alpha zebra), so the generator is the second actor
+	// The roles of this form order as (alpha zebra), so the novum is the second actor
 	Atom term = CStringToTerm("zebra * alpha 1");
 	FormulaView termView = FormulaGetView(term);
 	TypedAtom firstActor = TypedTupleGetElement(FormulaGetActors(term), 0);
-	ASSERT_FALSE(SameTypedAtoms(firstActor, generatorAtom))
+	ASSERT_FALSE(SameTypedAtoms(firstActor, novumAtom))
 
 	// CreateIFact() here creates a compiled service using a FILTER operator
 	// to find its identifying fact tuples, and creates the relation
@@ -1171,36 +1171,36 @@ void testCreateIFactRepeatedRoleThroughRule(void)
 
 void testCreateIFactRejects(void)
 {
-	// a term with no generator says nothing about the atom being defined
-	Atom noGenerator = CStringToConjunction("list * length 1 & foo 1 bar 2");
-	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(noGenerator)).hash, 0)
-	ReleaseFormula(noGenerator);
+	// a term with no novum says nothing about the atom being defined
+	Atom noNovum = CStringToConjunction("list * length 1 & foo 1 bar 2");
+	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(noNovum)).hash, 0)
+	ReleaseFormula(noNovum);
 
-	// two generators in one term leave it unclear which one is being defined
-	Atom twoGenerators = CStringToConjunction("list * length 1 & foo * bar *");
-	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(twoGenerators)).hash, 0)
-	ReleaseFormula(twoGenerators);
+	// two novums in one term leave it unclear which one is being defined
+	Atom twoNovums = CStringToConjunction("list * length 1 & foo * bar *");
+	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(twoNovums)).hash, 0)
+	ReleaseFormula(twoNovums);
 
 	// the same two, without a conjunction around them
-	Atom termNoGenerator = CStringToTerm("foo 1 bar 2");
-	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(termNoGenerator)).hash, 0)
-	ReleaseFormula(termNoGenerator);
+	Atom termNoNovum = CStringToTerm("foo 1 bar 2");
+	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(termNoNovum)).hash, 0)
+	ReleaseFormula(termNoNovum);
 
-	Atom termTwoGenerators = CStringToTerm("foo * bar *");
-	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(termTwoGenerators)).hash, 0)
-	ReleaseFormula(termTwoGenerators);
+	Atom termTwoNovums = CStringToTerm("foo * bar *");
+	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(termTwoNovums)).hash, 0)
+	ReleaseFormula(termTwoNovums);
 
 	// CLAUDE: a clause of two terms is a disjunction, which defines nothing
 	Atom clauseDisjunction = CStringToClause("foo * bar 1 | baz * qux 2");
 	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(clauseDisjunction)).hash, 0)
 	ReleaseFormula(clauseDisjunction);
 
-	// a clause of one term with no generator defines nothing either
-	Atom clauseNoGenerator = CStringToClause("foo 1 bar 2");
-	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(clauseNoGenerator)).hash, 0)
-	ReleaseFormula(clauseNoGenerator);
+	// a clause of one term with no novum defines nothing either
+	Atom clauseNoNovum = CStringToClause("foo 1 bar 2");
+	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(clauseNoNovum)).hash, 0)
+	ReleaseFormula(clauseNoNovum);
 
-	// CLAUDE: a generator in a role with another actor is defined by an actor of its own role
+	// CLAUDE: a novum in a role with another actor is defined by an actor of its own role
 	Atom repeatedRole = CStringToTerm("sibling * sibling \"a\"");
 	ASSERT_DATA64_EQUAL(CreateIFact(FormulaGetView(repeatedRole)).hash, 0)
 	ReleaseFormula(repeatedRole);

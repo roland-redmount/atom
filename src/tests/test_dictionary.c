@@ -124,7 +124,7 @@ static void testDictionaryFindClauseForms(void)
 
 /**
  * Test adding ifact rules to the dictionary. Two ifact rules are equal
- * if they have the same term form and generator role, regardless of variable names.
+ * if they have the same term form and novum role, regardless of variable names.
  */
 void testIFactRules(void)
 {
@@ -167,11 +167,11 @@ void testIFactRuleRejects(void)
 {
 	char const * const terms[] = {
 		"circle * radius 5.0",			// a constant
-		"circle * radius *",			// two generators
-		"circle x radius r",			// no generator
+		"circle * radius *",			// two novums
+		"circle x radius r",			// no novum
 		"! circle * radius r",			// a negated term
 		"rect * width x height x",		// a repeated variable
-		"sibling * sibling x",			// a generator in a role with another actor
+		"sibling * sibling x",			// a novum in a role with another actor
 	};
 	for(index8 i = 0; i < sizeof(terms) / sizeof(terms[0]); i++) {
 		Atom term = CStringToTerm(terms[i]);
@@ -187,7 +187,7 @@ void testIFactRuleRejects(void)
 
 /**
  * CLAUDE: Test adding conjunction ifact rules to the dictionary. Two conjunction rules are
- * equal if they have the same conjunction form and the generators in the same roles,
+ * equal if they have the same conjunction form and the novums in the same roles,
  * regardless of variable names and term order.
  */
 void testIFactConjunctionRules(void)
@@ -233,13 +233,13 @@ void testIFactConjunctionRules(void)
 void testIFactConjunctionRuleRejects(void)
 {
 	char const * const conjunctions[] = {
-		"car * brand b & car c model m",			// a term with no generator
+		"car * brand b & car c model m",			// a term with no novum
 		"car * brand b & car * model b",			// a variable repeated across terms
 		"car * brand \"Volvo\" & car * model m",	// a constant
 		"car * brand b & ! car * model m",			// a negated term
 		"car * feature f & car * feature g",		// a repeated term form
-		"car * brand b & sibling * sibling x",		// a generator in a role with another actor
-		"link * from a to b & link c from * to d",	// a repeated term form, generators in different roles
+		"car * brand b & sibling * sibling x",		// a novum in a role with another actor
+		"link * from a to b & link c from * to d",	// a repeated term form, novums in different roles
 		"box * width x height y & box * depth z colour u & box * weight v size w",	// too many actors
 	};
 	for(index8 i = 0; i < sizeof(conjunctions) / sizeof(conjunctions[0]); i++) {
