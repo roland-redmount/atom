@@ -3,6 +3,7 @@ build/**
 coverage
 docs/~*
 docs/*/~*
-docs/.obsidian
+docs/markdown/*/~*
+docs/markdown/.obsidian
 sqlite/**
 tmp/**

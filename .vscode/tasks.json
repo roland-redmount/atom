@@ -159,12 +159,12 @@
 			}
 		},
 		{
-			// Builds the documentation site; see docs/build.py. Creates the
+			// Builds the documentation site; see docs/markdown/build.py. Creates the
 			// Python environment .venv first if it is missing. .venv is kept outside
 			// build/ so that "clean" does not remove it.
 			"label": "build docs",
 			"type": "shell",
-			"command": "[ -x .venv/bin/python ] || { python3 -m venv .venv && .venv/bin/pip install -r docs/requirements.txt; } && .venv/bin/python docs/build.py",
+			"command": "[ -x .venv/bin/python ] || { python3 -m venv .venv && .venv/bin/pip install -r docs/markdown/requirements.txt; } && .venv/bin/python docs/markdown/build.py",
 			"group": {
 				"kind": "build",
 				"isDefault": false
@@ -176,10 +176,10 @@
 			"problemMatcher": []
 		},
 		{
-			// Serves the documentation site; see docs/serve.py.
+			// Serves the documentation site; see docs/markdown/serve.py.
 			"label": "serve docs",
 			"type": "shell",
-			"command": ".venv/bin/python docs/serve.py",
+			"command": ".venv/bin/python docs/markdown/serve.py",
 			"dependsOn": "build docs",
 			"isBackground": true,
 			"presentation": {

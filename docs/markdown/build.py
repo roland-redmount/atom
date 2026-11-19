@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 #
-# CLAUDE: Build the documentation site from the markdown pages in docs/.
+# Build the documentation site from the markdown pages in docs/markdown/.
 #
-#   python docs/build.py [--atom <directory>] [--out <directory>]
+#   python docs/markdown/build.py [--atom <directory>] [--out <directory>]
 #
 # --atom is the built web front end (default build/wasm/web); see web/publish.sh.
 # --out is where the site is written (default build/site). Serve that directory over
-# http to view it, with python docs/serve.py, since a browser does not run the web
+# http to view it, with python docs/markdown/serve.py, since a browser does not run the web
 # front end from a file:// address.
 
 import argparse
@@ -19,13 +19,13 @@ import sys
 import mistune
 
 DOCS = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(DOCS)
+REPO = os.path.dirname(os.path.dirname(DOCS))
 # CLAUDE: the data files that snippets read with :load, copied to the same place in the site
 DATA = os.path.join(DOCS, "data")
 # CLAUDE: the web fonts that styles.css loads
 FONTS = os.path.join(DOCS, "fonts")
 
-# CLAUDE: each published page, from the markdown file name in docs/ to the page written
+# CLAUDE: each published page, from the markdown file name in docs/markdown/ to the page written
 PAGES = {
     "Atom tutorial.md": "index.html",
 }
@@ -153,7 +153,7 @@ def enable_atom_snippets(content):
 
 
 def data_files():
-    # CLAUDE: the path of each file in DATA, relative to docs/, with / as separator
+    # CLAUDE: the path of each file in DATA, relative to docs/markdown/, with / as separator
     paths = []
     for directory, _, names in os.walk(DATA):
         for name in names:
@@ -214,7 +214,7 @@ def main():
         write(os.path.join(args.out, target), build_page(source, template, warnings))
 
     shutil.copy2(os.path.join(DOCS, "styles.css"), os.path.join(args.out, "styles.css"))
-    shutil.copy2(os.path.join(REPO, "docs", "images", "atom-logo-white.svg"), os.path.join(args.out, "atom-logo.svg"))
+    shutil.copy2(os.path.join(DOCS, "images", "atom-logo-white.svg"), os.path.join(args.out, "atom-logo.svg"))
     if os.path.isdir(DATA):
         shutil.copytree(DATA, os.path.join(args.out, "data"))
     if os.path.isdir(FONTS):

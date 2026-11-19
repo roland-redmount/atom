@@ -1,0 +1,313 @@
+\documentclass{article}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{stackengine}
+\usepackage{kvsetkeys} % Required for processing list elements
+
+\setlength{\parskip}{6pt}
+\setlength{\parindent}{0pt}
+
+\theoremstyle{definition}
+\newtheorem{example}{Example}
+\newtheorem{property}{Property}
+
+\title{The atom language}
+\author{Roland Nilsson}
+\date{September 2026}
+
+
+\newcommand{\at}[1]{\mathbf{#1}}					% an atom
+\newcommand{\name}[1]{\textsc{#1}}                  % a role name
+\newcommand{\role}[2]{\name{#1}\;#2}				% a role with 1 actor
+\newcommand{\roletwo}[3]{\name{#1}\;#2\;#3}         % a role with 2 actors
+
+\newcommand{\kb}{\mathcal{K}}						% the knowledgebase
+\newcommand{\edb}{\mathcal{E}}						% the extensional database
+\newcommand{\idb}{\mathcal{I}}						% the intensional database
+\newcommand{\dict}{\mathcal{R}}						% the rule dictionary
+\newcommand{\entails}{\Vdash}						% logical entailment
+\newcommand{\eval}{\varepsilon}						% the evaluator function
+
+
+
+% A space-separated list of symbols, without () delimiters
+\makeatletter
+\newcommand{\svec}[1]{%
+  \ensuremath{%
+    \gdef\tuple@sep{}% no separator for the first element
+    \comma@parse{#1}{\tuple@element}%
+  }%
+}
+\newcommand{\tuple@element}[1]{\tuple@sep#1\gdef\tuple@sep{\;}} % spacing size
+\makeatother
+
+
+\begin{document}
+
+\maketitle
+
+
+\section{Introduction}
+
+\textbf{atom} is a logic-relational language based on the relational fragment of first order predicate logic, aimed at data science applications. Unlike most logic languages, atom uses classical negation and distinguishes between true, false and unknown statements, and thus supports "open-world" databases. All data is represented as facts, which are predicates (possibly negated) over one or more atoms. An atom is merely an identifier with no internal structure, but atoms can be defined based on facts using a "generator" mechanism. This leads to a fully relational view of data, with no structured objects. There is no dedicated type system; types are expressed as unary predicates. The language is intended to be used in an interactive environment, similar to lisp or smalltalk systems. The current implementation compiles atom queries to relational operators, and uses typed atoms and relations under the hood for efficiency.
+
+This document first describes the atom language, independent of implementation. Later sections describe current implementation choice. This document is intended as a reference; for an introduction, see the atom tutorial.
+
+\section{Language elements}
+
+\subsection{Atoms and formulas}
+
+An \emph{atom}\footnote{Our terminology differs from that common in mathematical logic, where "atom" is short for "atomic formula", and what we call an "atom" is commonly called a "term".}  is written as lowercase bold ($\at{a}$). A \emph{variable} is written as lowercase ($x$). A \emph{predicate} consists of one or more roles, where a \emph{role} consists of a \emph{name}, written in smallcaps ($\name{name}$), followed by one or more \emph{actors}, which may be either an atom or a variable.  We write predicates as a sequence of roles, for example
+\begin{equation}\label{eq:example_predicate}
+	\svec{\role{edge}{e}, \roletwo{node}{\at{a}}{y}}	
+\end{equation}
+which might represent edges $e$ in a graph between a given node $\at{a}$ and any other node $y$. The number of actors in a role is the role's \emph{multiple}. The order of roles in a predicate is not significant, and neither is the order of actors associated with a given name. Hence,
+\begin{align}
+	\svec{\roletwo{node}{\at{a}}{y}, \role{edge}{e}} \\
+	\svec{\role{edge}{e}, \roletwo{node}{y}{\at{a}}} \\
+	\svec{\roletwo{node}{y}{\at{a}}, \role{edge}{e}}
+\end{align}
+all denote the same predicate as (\ref{eq:example_predicate}). However, we will assume throughout that for each predicate there exists some "canonical" order of roles, and we will always write predicates in this order. (An implementation can easily map any order role order to the canonical one.)
+
+% NOTE: the below alternative notation is not used right now
+
+% For brevity, in this document we may also write a predicate as
+% \begin{equation}
+% 	p(e, \{\at{a}, y\})
+% \end{equation}
+% when role names are not important. Here, each argument or set of arguments is assumed to correspond to a distinct name, so the order of arguments is important.
+
+A \emph{term} $t$ is predicate $p$ with or without logical negation, $t = p$ or $t = \neg p$. For example,
+\begin{align*}
+	t_1 &= \svec{\role{parent}{\at{a}}, \role{child}{\at{b}}} \\
+	t_2 &= \neg (\svec{\role{parent}{\at{a}}, \role{child}{\at{b}}}) = \neg t_1
+\end{align*}
+are both terms. As usual, double negations cancel, so that $\neg t_2 = t_1$.
+
+A \emph{clause} is a logical disjunction of one or more terms, $ t_1 \lor \dots \lor t_n$. A \emph{conjunction} is a logical conjunction of one or more terms, $t_1 \land \dots \land t_n$. As with predicates, the order of terms in an a clause or conjunction is not significant, but we assume there exists a canonical order of terms, and will always write clauses and conjunctions in this canonical order.
+
+A \emph{formula} is either a term, clause or conjunction. Note that clauses of conjunctions, or conjunction of clauses, are not formulas.
+
+A \emph{ground} formula is a formula whose actors are all atoms.
+
+
+\subsection{Forms}
+
+The \emph{form} $f(p)$ of a predicate $p$ is the sequence of its role names, in the same "canonical" order as the predicate, and with role multiples written as exponents. We also define the actors list $a(p)$ as the corresponding list of actors in each role, which is a set of the same size as the role multiple. For example, with $p = (\svec{\role{edge}{e}, \roletwo{node}{\at{a}}{y}})$, the form is $f(p) = (\svec{\name{edge}, \name{node}^2})$ and actors $a(p) = (\svec{\{e\}, \{\at{a}, y\}})$. As a shorthand we may write singleton sets $\{x\}$ simply as $x$ when the meaning is clear from context.
+% TODO: the \svec command removes commas from nested sets \{a, b\} here. Make a better command ...
+
+The form of a term includes its negation, if any. For example, the form of $t = \neg (\svec{\role{parent}{\at{b}}, \role{child}{\at{a}}}) $ is $f(p) = \neg(\svec{\name{parent}, \name{child}})$, and $a(p) = (\svec{\at{b}, \at{a}})$.
+
+The form of a clause or conjunction is the list of its term's forms, again in canonical order and with multiples written as exponents. For example, with
+\[ c = \svec{\role{parent}{x}, \role{child}{y}} \lor
+	\svec{\role{parent}{x}, \role{child}{z}} \lor
+	\neg (\svec{\roletwo{sibling}{y}{z}})
+\]
+we have the form
+\[ f(c) = (\svec{\name{parent}, \role{child}{y}})^2 \land \neg (\svec{\name{sibling}^2}) \]
+and actors
+\[ a(c) = (\{(\svec{x, y}), (\svec{x, z})\}, (\{y, z\})) \]
+
+
+\subsection{Relations}\label{sec:relations}
+
+A \emph{relation} is a set of conjunctions (possibly with a single term) of the same form, containing no variables. For example,
+\begin{align*}
+	\svec{\role{parent}{\at{a}}, \role{child}{\at{e}}} \\
+	\svec{\role{parent}{\at{a}}, \role{child}{\at{d}}} \\
+	\svec{\role{parent}{\at{b}}, \role{child}{\at{e}}} \\
+	\svec{\role{parent}{\at{c}}, \role{child}{\at{d}}}
+\end{align*}
+is a relation of the form $\{\name{parent}, \name{child}\}$ containing four facts. A relation may be infinite: for example,
+\begin{align*}
+	\svec{\roletwo{+}{1}{1}, \role{=}{2}} \\
+	\svec{\roletwo{+}{1}{2}, \role{=}{3}} \\
+	\dots \\
+	\svec{\roletwo{+}{2}{2}, \role{=}{4}} \\
+	\svec{\roletwo{+}{2}{3}, \role{=}{5}} \\
+	\dots
+\end{align*}
+is an infinite relation of the form $\{\name{+}^2, \name{=}\}$ representing integer addition.
+
+
+\subsection{Rules}
+
+A \emph{rule} is a clause $c = t_1 \lor \dots \lor t_n$ where $n \ge 2$ and at least one term contains a variable. A clause rule is equivalent to any of the $n$ formulas
+\begin{equation}\label{eq:clause_rule}
+    t_i \leftarrow \bigwedge_{j \neq i} \neg t_j, \quad i = 1, \dots, n
+\end{equation}
+When a rule is written in this form, term $t_i$ is called the \emph{head}, and the conjunction of the remaining negated terms is called the \emph{body}. Note that $t_i$ may be a negated predicate.
+
+\begin{example}
+    The clause
+    $$ \role{odd}{x} \lor \role{even}{x} $$
+    is equivalent to either
+    $$ \role{odd}{x} \leftarrow \neg \role{even}{x} \quad \text{or} \quad
+       \role{even}{x} \leftarrow \neg \role{odd}{x} $$
+\end{example}
+
+In Datalog and related languages, rules are always in the form (\ref{eq:clause_rule}) and restricted so that the head has no variables that does not occur in the body, to avoid infinite relations. In contrast, a clause rule like
+\[ \svec{\role{parent}{x}} \lor \neg (\svec{\role{parent}{x}, \role{child}{y}}) \]
+is equivalent to either of
+\[ \svec{\role{parent}{x}} \leftarrow \svec{\role{parent}{x}, \role{child}{y}} \]
+\[ \neg(\svec{\role{parent}{x}}) \rightarrow \neg (\svec{\role{parent}{x}, \role{child}{y}}) \]
+where the latter yields an infinite relation. We allow such rules, but avoid enumerating infinite relations; see \S\ref{sec:queries}.
+% NOTE: this is not yet implemented.
+
+
+\subsubsection{Recursive rules}
+
+A rule is recursive with respect to a head term $t_i$ if another term $t_j$ unifies with $t_i$.
+
+\subsection{Generators}
+% Naming: I think just "generator" is better than "generator rule", as this is not a typical logic rule
+
+A \emph{generator} is a conjunction (possibly a term) where in each predicate, the special $*$ atom acts in exactly one role, and is the only actor in that role (the role multiple is 1). For example,
+\begin{equation}
+	\svec{\role{circle}{*}, \role{radius}{r}}
+\end{equation}
+and
+\begin{equation}
+	\svec{\role{quantity}{*}, \role{magnitude}{m}} \land
+	\svec{\role{quantity}{*}, \role{unit}{u}}
+\end{equation}
+are both generators. A generator is a mechanism for defining ("creating") an atom based on a formula, without altering state. A query (\S\ref{sec:queries}) matching a generator returns a fact containing a unique atom in place of $*$, and this unique atom is a function of the query formula. For example, the query
+\begin{equation}
+	\svec{\role{circle}{*}, \role{radius}{3}}
+\end{equation}
+returns a single fact
+\begin{equation}
+	\svec{\role{circle}{\at{c}}, \role{radius}{3}}
+\end{equation}
+where $\at{c}$ is a unique atom.
+
+
+\section{Queries and logical reasoning}
+
+\subsection{The knowledgebase}
+
+The \emph{extensional database} $\edb$ is a set of ground terms which are asserted to hold true, and which do not depend on a logic rule. This includes facts from computed relations such as $(\svec{\name{+}^2, \name{=}})$, and facts obtained from generators. It is sufficient to consider ground terms, since a asserting a ground conjunction is the same as asserting each of its terms.
+
+The \emph{knowledgebase} $\kb$ consists of $\edb$ and set of rules $\dict$. We say that a formula $t$ is \emph{entailed} by the knowledgebase $\kb$, written $\kb \entails t$, if $t$ can be deduced from the facts in $\edb$ by natural deduction over the rules in $\dict$. Note that $\kb \not\entails t$ does not imply $\kb \entails \neg t$. If neither $t$ nor $\neg t$ are entailed, then the truth value of $t$ is unknown. The \emph{intensional database} $\idb$ is the set $\{t : \kb \entails t\}$ of all facts that are entailed by $\kb$.
+
+The knowledgebase is always \emph{consistent}, in the following sense.
+\begin{property}\label{prop:consistency}
+	For any formula $t$, we may have either $\kb \entails t$ or $\kb \entails \neg t$, but never both.
+\end{property}
+Section \S\ref{sec:actions} describes criteria ensuring that consistency is always maintained.
+
+
+\subsection{Unification}
+
+Two formulas $t, t'$ \emph{unify}, written $t \sim t'$, if (i) they have the same forms, $f(t) = f(t')$, and (ii) their actor lists unify, $a(t) \sim a(t')$, defined as follows.
+
+% TODO: describe the valid form permutations (those that only permute multiples)
+Let $\pi$ be a permutation of the form $f(t)$, and let $u = \pi(a(t))$ and $u' = \pi(a(t'))$ be the corresponding ordered actor lists. Let $G(u, u')$ be the undirected graph whose node set is the union of all (unique) actors in $u$ and $u'$, and containing the edges $\{u_i, u'_i\}, i = 1, \dots, n$. Then $u \sim u'$ if each connected component $C$ of $G$ contains at most one atom.
+Finally, $a(t) \sim a(t')$ if there exists a form permutation $\pi$ such that $\pi(a(t)) \sim \pi(a(t'))$.
+
+Unification $t \sim t'$ is symmetric but not transitive: for example, with actor lists $a = (\svec{x, \at{a}})$, $a' = (\svec{\at{b}, y})$ and $a'' = (\svec{\at{b}, \at{c}})$, we have $a \sim a'$ and $a' \sim a''$ but $a \not\sim a''$.
+
+\subsection{Queries}\label{sec:queries}
+
+A \emph{query} is a term or conjunction whose actors may be either atoms or variables. A query $q$ can be evaluated by a function $\eval(q)$ that returns a pair $(R, c)$ where $R$ is a relation and $c \in \{0, 1, \infty\}$ is a result code. Let $\tau(q) = \{t: t \sim q \land \kb \entails t\}$ be the set of facts $t$ that unify with $q$ and are entailed by $\kb$, that is, the complete answer to the query $q$. The result code $c$ then has the following interpretation:
+\begin{center}
+	\begin{tabular}{|c|c|l|}
+		$c$ & Meaning & Interpretation \\
+		\hline
+		$0$ & $R = \tau(q)$ & $R$ is complete \\
+		$1$ & $R \subset \tau(q)$ & $R$ is incomplete \\
+		$\infty$ & $|\tau(q)| = \infty$ & $\tau(q)$ is infinite, and $R$ is incomplete \\
+	\end{tabular}
+\end{center}
+
+A query without variables evaluates to a relation containing at most one fact. The following property always holds:
+\begin{property}\label{prop:query}
+	If a query $q$ contains no variables, then $\eval(q) = \tau(q)$, which implies that $\eval(q) = (\{q\}, 0)$ if $\kb \entails q$, and $\eval(q) = (\emptyset, 0)$ if $\kb \not\entails q$.
+\end{property}
+
+If a query $q$ contains variables, then property \ref{prop:query} does not hold: the resulting relation $R$ may be a strict subset of the facts entailed by $\kb$. This can occur if a storage engine does not support a particular query pattern: for example, an array-based storage for sets may support the query $(\svec{\role{set}{\at{s}}, \role{element}{e}})$ but not $(\svec{\role{set}{e}, \role{element}{\at{e}}})$ (asking for all sets $s$ that contain element $\at{e}$). Then $\eval(q) = (\emptyset, 1)$. In other cases, we may obtain $\eval(q) = (R, 1)$ where $R$ is not empty.
+
+If a query $q$ contains variables, then $\tau(q)$ may also be infinite. For example, for query $q = (\svec{\roletwo{+}{x}{y}, \role{=}{0}})$, we have $\tau(q) = \{ (\svec{\roletwo{+}{1}{{-1}}, \role{=}{0}})$, $(\svec{\roletwo{+}{2}{{-2}}, \role{=}{0}}), \dots \}$ which infinite. In this case $\eval(q) = (R, \infty)$ where $R$ is arbitrary; it might contain an example, say $R = \{\svec{\roletwo{+}{1}{{-1}}, \role{=}{0}}\}$.
+% This "example" mechanism may be skipped; it is not required for consistency checks
+
+Of course, queries that match a finite subset of an infinite relation can return exact results. For example, a query $(\svec{\roletwo{+}{\at{a}}{\at{b}}, \role{=}{x}})$ where $\at{a}$ and $\at{b}$ are integers yields a finite relation (here, a single fact), and so does $(\svec{\roletwo{+}{x}{\at{a}}, \role{=}{\at{b}}})$.
+
+\subsection{Conjunction queries}
+
+% this can go to implementation
+
+Queries of conjunction form $q = t_1 \land \cdots \land t_n$ may match multiple services $S_1, \dots, S_m$, each of a distinct form, involving subsets $T_1, \dots, T_m$ of the $n$ terms. Assume first that the $T_i$ a partition of $\{1, \dots, n\}$. We then compute the resulting relation $R$ with an inner join over the corresponding relations $R_1, \dots, R_m$. Assume that the join order is performed left-to right, with $R_1 \bowtie R_2$ performed first.
+% NOTE: The join order is not arbitrary, but determined by the service signatures ...
+The return code $c$ is determined by initializing $c = 0$, and then for each $i = 1, \dots, n$ set $c = \max \{c, c_i\}$. Thus, we will have $c = 0$ if all $c_i = 0$; $c = 1$ if any $c_i = 1$ but no $c_i = \infty$; and else $c = \infty$. So any join where at least one relation is incomplete will be incomplete.
+
+If the $T_i$ are overlapping, then they can be organized into groups, where each group is again a partition of $\{1,\dots,n\}$. We can then apply the above algorithm to each such group of services, and union the result.
+
+
+\section{Actions}\label{sec:actions}
+
+An \emph{action} is an operation that alters the knowledgebase $\kb$, either by asserting or retracting facts in $\edb$, or by asserting or retracting rules from $\dict$.
+
+\subsection{Asserting and retracting facts}
+
+Asserting a fact $t$ (a term) adds it to the extensional database: $\edb \leftarrow \edb \cup \{t\}$.
+
+Logical consistency is ensured by the following constraint:
+\begin{enumerate}
+	\item A fact (term) $t$ may be asserted only if its negation $\neg t$ is not entailed by the current database.
+\end{enumerate}
+
+Retracting a fact $t$ (a term) removes it from the extensional database: $\edb \leftarrow \edb \setminus \{t\}$. This does not affect consistency.
+
+% NOTE: this may NOT hold true with asserted facts involving reflected relations. For example, with $s = "ABC",
+% :assert relation [: list @s element _ :] size 3
+% :retract list @s position 1 element 'A'  -->  implies relation [: list @s element _ :] size 2, contradiction
+% This is difficult to catch. 
+
+
+\subsection{Asserting rules}
+
+
+\subsection{Logical consistency}
+
+Logical consistency of the knowledgebase is ensured by two constraints:
+\begin{enumerate}
+	\item A fact (term) $t$ may be asserted only if its negation $\neg t$ is not entailed by the current database.
+	\item A rule (clause) $c$ may be asserted only if the query $\neg c$ (a conjunction) is not entailed by the current database, for any values of variables in $c$.
+\end{enumerate}
+
+We can check constraint (1) by running the query $\neg t$, which contains no variables; if the result is $(\emptyset, 0)$ then the assertion is valid, else it is rejected.
+
+% Add an example:
+% :assert ! parent "bob"
+% :assert parent x <- parent x child y
+% :assert parent "bob" child "lisa" --> contradicts the knowledgebase (works)
+
+To check constraint (2), we must run the query $\neg c$ which contains variables. If the result is $(\emptyset, 0)$, then the assertion is accepted. For any other result the assertion is rejected: a result $(R, c)$ with $R \neq \emptyset$ indicates a contradiction for any $c$, and so does $(\emptyset, \infty)$; for $(\emptyset, 1)$ we cannot tell if the clause will cause a contradiction, so we reject to err on the side of caution.
+
+% this is wrong in the current implementation:
+% :assert parent "bob" child "lisa" --> OK (KB is now inconsistent)
+
+
+\section{Reflection}
+
+% NOTE: this section is experimental
+
+The \emph{reflection} mechanism allows representing the \textbf{atom} language within itself. A reflection $[e]$ is an atom that represents (reflects) a language element $e$ (which is itself not an atom). The language element may be a role name $[\name{edge}]$ or a formula $[\svec{\role{edge}{e}, \roletwo{node}{\at{a}}{y}}]$.
+
+Certain built-in relations using reflection allow implementing features that are not possible within the language itself, such as aggregate functions which map relations to facts, and uniqueness on relations.
+
+
+The ($\svec{\name{query}, \name{relation}, \name{code}})$ relation associates each query $q$ with the evaluation result $\eval(q) = (R, c)$.
+\begin{equation}
+	\svec{\role{query}{q}, \role{relation}{r}, \role{code}{c}}
+\end{equation}
+Here the atom $r$ is a reflected relation. We may use this to assert that a particular query is always completely answered:
+\begin{equation}
+	\svec{\role{query}{\svec{[\role{foo}{x}, \role{bar}{\at{a}}]}}, \role{relation}{r}, \role{code}{0}}
+\end{equation}
+
+
+
+\end{document}

@@ -48,8 +48,8 @@ jobs:
 
       - name: Build the site
         run: |
-          pip install -r docs/requirements.txt
-          python docs/build.py --atom build/wasm/web --out build/site
+          pip install -r docs/markdown/requirements.txt
+          python docs/markdown/build.py --atom build/wasm/web --out build/site
 
       - uses: actions/configure-pages@v6
 
