@@ -127,8 +127,14 @@ uint8 AssertFact(FormulaView fact, StorageProvider const * provider)
 /**
  * Add a clause to the rule dictionary.
  */
-static uint8 assertRule(Atom clause, FormulaView clauseView)
+uint8 AssertRule(Atom clause)
 {
+	if(!FormulaIsClause(clause))
+		return ASSERT_NOT_CLAUSE;
+	FormulaView clauseView = FormulaGetView(clause);
+	// A rule must not contain a novum (*)
+	if(TypedTupleContainsAtom(clauseView.actors, novumAtom))
+		return ASSERT_RULE_NOVUM;
 	// A rule must have at least two terms
 	if(ClauseFormNTerms(clauseView.form) < 2)
 		return ASSERT_CLAUSE_ONE_TERM;
@@ -147,20 +153,25 @@ static uint8 assertRule(Atom clause, FormulaView clauseView)
 }
 
 
+uint8 CreateGenerator(Atom formula)
+{
+	if(!IsGenerator(formula))
+		return ASSERT_INVALID_IFACT;
+	if(DictionaryContainsGenerator(formula))
+		return ASSERT_EXISTED;
+	DictionaryAddGenerator(formula);
+	return ASSERT_OK;
+}
+
+
 uint8 AssertFormula(Atom formula)
 {
 	FormulaView formulaView = FormulaGetView(formula);
 
 	// Any formula that contains a novum (*) is added to the dictionary
 	// as a generator; see IsGenerator()
-	if(TypedTupleContainsAtom(formulaView.actors, novumAtom)) {
-		if(!IsGenerator(formula))
-			return ASSERT_INVALID_IFACT;
-		if(DictionaryContainsGenerator(formula))
-			return ASSERT_EXISTED;
-		DictionaryAddGenerator(formula);
-		return ASSERT_OK;
-	}
+	if(TypedTupleContainsAtom(formulaView.actors, novumAtom))
+		return CreateGenerator(formula);
 
 	if(FormulaIsTerm(formula)) {
 		// A term is interpreted as a fact, and may not contain variables
@@ -171,7 +182,7 @@ uint8 AssertFormula(Atom formula)
 	}
 
 	if(FormulaIsClause(formula))
-		return assertRule(formula, formulaView);
+		return AssertRule(formula);
 
 	return ASSERT_NOT_CLAUSE;
 }

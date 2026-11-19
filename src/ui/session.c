@@ -176,10 +176,10 @@ static void printHelp(void)
 	PrintChar('\n');
 	printLine("Commands:");
 	printLine(":assert <term>        Assert a fact. The term must not contain variables.");
-	printLine(":assert <term>        Assert a generator, such as (circle * radius r).");
-	printLine(":assert <conjunction> Assert a generator, such as (car * brand b & car * model m).");
-	printLine(":assert <clause>      Assert a rule. The clause must have > 1 term");
+	printLine(":rule <clause>        Assert a rule. The clause must have > 1 term");
 	printLine("                      and contain at least one variable.");
+	printLine(":generator <formula>  Create a generator, a term or conjunction with a novum (*),");
+	printLine("                      such as (circle * radius r).");
 	printLine(":clear @tag           Remove the tag @tag.");
 	printLine(":def <ID atom>        Print the identifying facts of an ID atom.");
 	printLine(":inspect <query>      Print the service(s) that the query dispatches to");
@@ -753,8 +753,7 @@ static int executeQuery(char const * line)
 
 
 /*
- * Report what asserting a formula came to, naming the rule broken by one that could be
- * neither a fact nor a rule.
+ * Print a response based on result codes from AssertFact(), AssertRule() and CreateGenerator().
  */
 static void printAssertResult(int result)
 {
@@ -784,7 +783,7 @@ static void printAssertResult(int result)
 		break;
 
 	case ASSERT_NOT_CLAUSE:
-		printStatusLine("Only a fact or a rule can be asserted.");
+		printStatusLine("The formula must be a clause.");
 		break;
 
 	case ASSERT_NOT_WRITABLE:
@@ -803,6 +802,14 @@ static void printAssertResult(int result)
 		printStatusLine("A rule cannot derive the relation (closed-relation f).");
 		break;
 
+	case ASSERT_NOT_TERM:
+		printStatusLine("Only a term without a novum (*) can be asserted as a fact. See :rule and :generator.");
+		break;
+
+	case ASSERT_RULE_NOVUM:
+		printStatusLine("A rule may not contain a novum (*). Use :generator.");
+		break;
+
 	default:
 		ASSERT(false)
 		break;
@@ -811,14 +818,15 @@ static void printAssertResult(int result)
 
 
 /*
- * Assert one formula, which is the text following the :assert command. That text begins
- * part way into the line the user typed, so its position there is what puts the caret of a
- * syntax error under the character it names.
+ * Parse the text following a command that asserts a formula, and apply the given function
+ * to the formula. That text begins part way into the line the user typed, so its position
+ * there is what puts the caret of a syntax error under the character it names.
  */
-static int executeAssert(char const * formulaText, index32 linePosition)
+static int executeAssertFormula(
+	char const * formulaText, index32 linePosition, char const * usage, uint8 (*assertFunction)(Atom))
 {
 	if(!*formulaText) {
-		printStatusLine(":assert requies a term or a clause.");
+		printStatusLine(usage);
 		return SESSION_CONTINUE;
 	}
 
@@ -827,9 +835,24 @@ static int executeAssert(char const * formulaText, index32 linePosition)
 	if(!formula.hash)
 		return parseResult;
 
-	printAssertResult(AssertFormula(formula));
+	printAssertResult(assertFunction(formula));
 	ReleaseFormula(formula);
 	return SESSION_CONTINUE;
+}
+
+
+/*
+ * Assert a fact, which is the term following the :assert command. See executeAssertFormula().
+ */
+static uint8 assertTerm(Atom formula)
+{
+	FormulaView view = FormulaGetView(formula);
+	if(!FormulaIsTerm(formula) || TypedTupleContainsAtom(view.actors, novumAtom)) {
+		return ASSERT_NOT_TERM;
+	}
+	if(TypedTupleContainsVariable(view.actors))
+		return ASSERT_TERM_VARIABLE;
+	return AssertFact(view, 0);
 }
 
 
@@ -1224,7 +1247,16 @@ static int executeCommand(char const * line, char const * commandText)
 
 	char const * formulaText = matchCommand(commandText, ":assert");
 	if(formulaText)
-		return executeAssert(formulaText, formulaText - line);
+		return executeAssertFormula(formulaText, formulaText - line, ":assert requires a term.", &assertTerm);
+
+	char const * clauseText = matchCommand(commandText, ":rule");
+	if(clauseText)
+		return executeAssertFormula(clauseText, clauseText - line, ":rule requires a clause.", &AssertRule);
+
+	char const * generatorText = matchCommand(commandText, ":generator");
+	if(generatorText)
+		return executeAssertFormula(
+			generatorText, generatorText - line, ":generator requires a term or conjunction.", &CreateGenerator);
 
 	char const * queryText = matchCommand(commandText, ":inspect");
 	if(queryText)

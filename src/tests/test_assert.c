@@ -382,6 +382,66 @@ void testAssertFormulaGenerator(void)
 
 
 /**
+ * CLAUDE: AssertRule() takes a clause only, and refuses a clause containing a novum (*).
+ */
+void testAssertRule(void)
+{
+	Atom rule = CStringToClause("before x after y | ! prec x succ y");
+	ASSERT_INT32_EQUAL(AssertRule(rule), ASSERT_OK)
+	ASSERT_TRUE(DictionaryContainsClause(rule))
+	ASSERT_INT32_EQUAL(AssertRule(rule), ASSERT_EXISTED)
+	FormulaView clause = DictionaryAddClause(rule);
+	DictionaryRemoveClause(&clause);
+	ReleaseFormula(rule);
+
+	Atom term = CStringToTerm("foo x bar 1");
+	ASSERT_INT32_EQUAL(AssertRule(term), ASSERT_NOT_CLAUSE)
+	ReleaseFormula(term);
+
+	Atom conjunction = CStringToConjunction("foo x bar 1 & barf 42 frob y");
+	ASSERT_INT32_EQUAL(AssertRule(conjunction), ASSERT_NOT_CLAUSE)
+	ReleaseFormula(conjunction);
+
+	Atom novumRule = CStringToClause("circle * radius r | ! foo r");
+	ASSERT_INT32_EQUAL(AssertRule(novumRule), ASSERT_RULE_NOVUM)
+	ASSERT_FALSE(DictionaryContainsClause(novumRule))
+	ReleaseFormula(novumRule);
+}
+
+
+/**
+ * CLAUDE: CreateGenerator() takes a term or a conjunction with a novum (*), and refuses
+ * a formula that is not a generator; see IsGenerator().
+ */
+void testCreateGenerator(void)
+{
+	Atom term = CStringToTerm("circle * radius r");
+	ASSERT_INT32_EQUAL(CreateGenerator(term), ASSERT_OK)
+	ASSERT_TRUE(DictionaryContainsGenerator(term))
+	ASSERT_INT32_EQUAL(CreateGenerator(term), ASSERT_EXISTED)
+	FormulaView termGenerator = DictionaryAddGenerator(term);
+	DictionaryRemoveGenerator(&termGenerator);
+	ReleaseFormula(term);
+
+	Atom conjunction = CStringToConjunction("car * brand b & car * model m");
+	ASSERT_INT32_EQUAL(CreateGenerator(conjunction), ASSERT_OK)
+	ASSERT_INT32_EQUAL(CreateGenerator(conjunction), ASSERT_EXISTED)
+	FormulaView conjunctionGenerator = DictionaryAddGenerator(conjunction);
+	DictionaryRemoveGenerator(&conjunctionGenerator);
+	ReleaseFormula(conjunction);
+
+	// a fact has no novum
+	Atom fact = CStringToTerm("foo 1 bar 2");
+	ASSERT_INT32_EQUAL(CreateGenerator(fact), ASSERT_INVALID_IFACT)
+	ReleaseFormula(fact);
+
+	Atom invalid = CStringToTerm("circle * radius 5.0");
+	ASSERT_INT32_EQUAL(CreateGenerator(invalid), ASSERT_INVALID_IFACT)
+	ReleaseFormula(invalid);
+}
+
+
+/**
  * CLAUDE: Retracting a rule removes it from the dictionary and invalidates the services
  * compiled from it. The rule (! even x | ! odd x) makes (even 3) contradict (odd 3);
  * see testAssertContradictsDerivedFact(). Once the rule is retracted, (even 3) can be asserted.
@@ -1376,6 +1436,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertFormulaRule);
 	ExecuteTest(testAssertRuleRepeatedRoleOrder);
 	ExecuteTest(testAssertFormulaGenerator);
+	ExecuteTest(testAssertRule);
+	ExecuteTest(testCreateGenerator);
 	ExecuteTest(testAssertFormulaRejects);
 	ExecuteTest(testRetractFormulaRule);
 	ExecuteTest(testRetractFormulaGenerator);

@@ -20,17 +20,30 @@
 uint8 AssertFact(FormulaView fact, StorageProvider const * provider);
 
 /**
+ * Add a rule to the dictionary. The formula must be a clause of at least two terms
+ * with at least one variable, and may not contain a novum (*).
+ * See DictionaryAddClause().
+ */
+uint8 AssertRule(Atom clause);
+
+/**
+ * Add a generator to the dictionary; see IsGenerator() and DictionaryAddGenerator().
+ * The formula may be a term or a conjunction.
+ */
+uint8 CreateGenerator(Atom formula);
+
+/**
  * High level method to assert any formula.
  * 1) a formula containing a novum (*) is a generator, sent to
- *    DictionaryAddGenerator().
- * 1) a single term without variables is a (ground) fact,
+ *    CreateGenerator()
+ * 2) a single term without variables is a (ground) fact,
  *    sent to AssertFact()
- * 2) a clause with at least two terms and at least one variable is a rule,
- *    sent to DictionaryAddClause()
+ * 3) a clause with at least two terms and at least one variable is a rule,
+ *    sent to AssertRule()
  */
 uint8 AssertFormula(Atom formula);
 
-// Result codes for AssertFact() and AssertFormula()
+// Result codes for AssertFact(), AssertRule(), CreateGenerator() and AssertFormula()
 #define ASSERT_OK					1	// a new fact or rule was created
 #define ASSERT_EXISTED				2	// the fact or rule already existed, nothing changed
 #define ASSERT_CONTRADICTION		3	// logical contradiction, nothing changed
@@ -42,6 +55,8 @@ uint8 AssertFormula(Atom formula);
 #define ASSERT_NOT_WRITABLE			9	// the specified relation is not writable
 #define ASSERT_NOT_CLOSABLE			10	// CLAUDE: the relation cannot be closed; see CloseRelation()
 #define ASSERT_RESERVED_FORM		11	// CLAUDE: a rule cannot derive (closed-relation f)
+#define ASSERT_RULE_NOVUM			12	// CLAUDE: a rule cannot contain a novum (*)
+#define ASSERT_NOT_TERM				13	// CLAUDE: a fact must be a term without a novum (*)
 
 /**
  * High level method to retract a fact. Removes the tuple from the corresponding
