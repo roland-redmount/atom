@@ -1073,7 +1073,7 @@ static Operator * dispatchNextTerms(
 
 /*
  * Compile the first set of terms still to compile that matches the conjunction form of
- * an ifact rule, such as (car x brand b & car x model m) for the rule
+ * a generator, such as (car x brand b & car x model m) for the rule
  * (car * brand b & car * model m). The term set compiles to the IFACT operator of the rule;
  * see compileQueryVariants(). Returns 0 if no set of terms compiled.
  */
@@ -1084,7 +1084,7 @@ static Operator * compileNextIFactTerms(
 	Atom const * candidateForms = ResizingArrayGetMemory(&(clauseState->candidateForms));
 	Operator * op = 0;
 	for(index32 i = 0; !op && (i < clauseState->candidateForms.nElements); i++) {
-		if(!IFactRuleExistsForForm(candidateForms[i]))
+		if(!GeneratorExistsForForm(candidateForms[i]))
 			continue;
 		TermSetIterator iterator;
 		if(!termSetIterate(clauseState, candidateForms[i], &iterator))
@@ -1258,8 +1258,8 @@ static Operator * compileNextChoice(
 		// CLAUDE: A set of several terms is only ever dispatched; see dispatchNextTerms()
 		form = findCandidateForm(clauseState, termIndices, choicePoint->nTerms);
 		mode = TERM_DISPATCH_ONLY;
-		// CLAUDE: A set of terms of the form of an ifact rule is also compiled; see compileNextIFactTerms()
-		if(IFactRuleExistsForForm(form))
+		// CLAUDE: A set of terms of the form of a generator is also compiled; see compileNextIFactTerms()
+		if(GeneratorExistsForForm(form))
 			mode = TERM_DISPATCH_OR_COMPILE;
 	}
 	return compileTermSet(
@@ -1307,7 +1307,7 @@ static Operator * compileConjunctionRecursive(
 	 * then have to be filtered. It will not always yield the optimal solution.
 	 */
 	/* CLAUDE: Between pass 1 and pass 2, a set of terms matching the conjunction form of an
-	 * ifact rule is compiled; see compileNextIFactTerms(). */
+	 * generator is compiled; see compileNextIFactTerms(). */
 	ChoiceTree * choiceTree = clauseState->choiceTree;
 	index8 choicePointIndex = choiceTree->nChoicePoints;
 	ASSERT(choicePointIndex < MAX_CHOICE_POINTS)
@@ -2649,7 +2649,7 @@ static void completeRecursiveVariant(CompiledVariant * variant, size8 arity)
 
 
 /* CLAUDE: Find the term forms and the ID column of each term of a query that may match an
- * ifact rule. The query must have exactly one distinct output parameter, untyped or AT_ID,
+ * generator. The query must have exactly one distinct output parameter, untyped or AT_ID,
  * which occurs exactly once in each term. Every other parameter must be a typed input that
  * does not repeat. The ID column of a term is the index of the output parameter among the
  * parameters of the term. Returns the number of terms, or 0 if the query has another
@@ -2696,31 +2696,31 @@ static size8 findIFactQueryIDColumns(
 
 
 /**
- * Find the ifact rule matching the query.
+ * Find the generator matching the query.
  * The query form may be a conjunction form. Writes the term forms and ID columns of
  * the query to termForms[] and idColumns[], and the number of terms to *nTerms; see
  * findIFactQueryIDColumns(). A rule matches if its ID columns equal those of the query; see
- * IFactRuleGetIDColumns().
+ * GeneratorGetIDColumns().
  */
-static bool findIFactRule(
+static bool findGenerator(
 	ParameterizedQuery const * query, Atom termForms[], index8 idColumns[], size8 * nTerms)
 {
 	*nTerms = findIFactQueryIDColumns(query, termForms, idColumns);
 	if(*nTerms == 0)
 		return false;
 
-	// Ifact rules of one term form differ in the novum index, so at most one rule matches
+	// Generators of one term form differ in the novum index, so at most one rule matches
 	bool foundRule = false;
 	DictionaryIterator iterator;
-	DictionaryIterateIFactRules(query->form, &iterator);
+	DictionaryIterateGenerators(query->form, &iterator);
 	while(!foundRule && DictionaryIteratorNext(&iterator)) {
-		FormulaView ifactRule = {
+		FormulaView generator = {
 			.form = query->form,
 			.actors = DictionaryIteratorPeekActors(&iterator)
 		};
 		Atom ruleTermForms[RELATION_MAX_ARITY];
 		index8 ruleIDColumns[RELATION_MAX_ARITY];
-		IFactRuleGetIDColumns(&ifactRule, ruleTermForms, ruleIDColumns);
+		GeneratorGetIDColumns(&generator, ruleTermForms, ruleIDColumns);
 		foundRule = CompareMemory(idColumns, ruleIDColumns, *nTerms * sizeof(index8)) == 0;
 	}
 	DictionaryIteratorEnd(&iterator);
@@ -2729,21 +2729,21 @@ static bool findIFactRule(
 
 
 /**
- * Determine the relation for an ifact rule query, and ensure it can store ifacts.
+ * Determine the relation for a generator query, and ensure it can store ifacts.
  * An existing relation must not have a TupleStore; see IFactSetupRelation().
  * Writes one IFactTerm for each term of the query to terms[], and the number of terms
  * to *nTerms. The relation of each term has AT_ID in the ID column, the query types in the
  * other columns, and canonical column order; see IsCanonicalRelation(). Each term's relation
- * is prepared to hold ifacts. Returns false if no ifact rule matches the query, or if a term
+ * is prepared to hold ifacts. Returns false if no generator matches the query, or if a term
  * relation cannot hold ifacts.
  * This function must be called before seedVariantsFromServices().
  */
-static bool setupIFactRuleTerms(
+static bool setupGeneratorTerms(
 	CompileStack * compileStack, ParameterizedQuery const * query, IFactTerm terms[], size8 * nTerms)
 {
 	Atom termForms[RELATION_MAX_ARITY];
 	index8 idColumns[RELATION_MAX_ARITY];
-	if(!findIFactRule(query, termForms, idColumns, nTerms))
+	if(!findGenerator(query, termForms, idColumns, nTerms))
 		return false;
 
 	index8 queryArgumentMap[RELATION_MAX_ARITY];
@@ -2788,14 +2788,14 @@ static bool setupIFactRuleTerms(
 
 /**
  * Create an IFACT operator for a query and add it to the compiled variants.
- * The query may be a conjunction query, with the terms from setupIFactRuleTerms()
+ * The query may be a conjunction query, with the terms from setupGeneratorTerms()
  *
  * This function must be called after completeRecursiveVariant(), since an IFACT operator
  * cannot run within a FIXPOINT operator, whose child operator has no input arguments.
  *
  * Returns the new number of variants.
  */
-static size8 compileIFactRule(
+static size8 compileGenerator(
 	ParameterizedQuery const * query, IFactTerm const terms[], size8 nTerms,
 	CompiledVariant variants[], size8 nVariants)
 {
@@ -2947,13 +2947,10 @@ static size8 compileQueryVariants(
 	if(queryIsClosedInferred(query))
 		return compileInvertedQuery(compileStack, query, variants);
 
-	// Find a matching ifact and setup its TupleSTore before seeding;
-	// see setupIFactRuleStore()
-
-	// CLAUDE: see setupIFactRuleTerms()
+	// Find a matching ifact and setup its TupleSTore before seeding
 	IFactTerm ifactTerms[RELATION_MAX_ARITY];
 	size8 nIFactTerms = 0;
-	bool hasIFactRule = setupIFactRuleTerms(compileStack, query, ifactTerms, &nIFactTerms);
+	bool hasGenerator = setupGeneratorTerms(compileStack, query, ifactTerms, &nIFactTerms);
 
 	// CLAUDE: A relation created by a nested compilation invalidates services, but not the
 	// variants under construction here, which may read services compiled before the relation
@@ -2988,9 +2985,9 @@ static size8 compileQueryVariants(
 			completeRecursiveVariant(&variants[i], query->arity);
 	}
 
-	// Compile an IFACT variant after the FIXPOINT operators are added; see compileIFactRule()
-	if(hasIFactRule)
-		nVariants = compileIFactRule(query, ifactTerms, nIFactTerms, variants, nVariants);
+	// Compile an IFACT variant after the FIXPOINT operators are added; see compileGenerator()
+	if(hasGenerator)
+		nVariants = compileGenerator(query, ifactTerms, nIFactTerms, variants, nVariants);
 
 	// CLAUDE: Every service belongs to a relation in canonical column order
 	return canonicalizeVariantOrder(query, variants, nVariants);
@@ -3052,8 +3049,8 @@ static size8 compileParameterizedQuery(
 	for(index8 i = 0; i < givenQuery->arity; i++)
 		ASSERT(renumberedQuery.parameters[i].parameter.number == givenQuery->parameters[i].parameter.number)
 #endif
-	// CLAUDE: A relation created while compiling, such as the relation of a term of an ifact rule,
-	// need not have the column order of the query; see setupIFactRuleTerms(). The caller finds
+	// CLAUDE: A relation created while compiling, such as the relation of a term of a generator,
+	// need not have the column order of the query; see setupGeneratorTerms(). The caller finds
 	// the compiled services again by dispatch, which matches any column order.
 	ParameterizedQuery canonicalQuery;
 	copyQueryInCanonicalOrder(givenQuery, &canonicalQuery);

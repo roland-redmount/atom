@@ -21,8 +21,8 @@ uint8 AssertFact(FormulaView fact, StorageProvider const * provider);
 
 /**
  * High level method to assert any formula.
- * 1) a formula containing a novum (*) is an ifact rule, sent to
- *    DictionaryAddIFactRule().
+ * 1) a formula containing a novum (*) is a generator, sent to
+ *    DictionaryAddGenerator().
  * 1) a single term without variables is a (ground) fact,
  *    sent to AssertFact()
  * 2) a clause with at least two terms and at least one variable is a rule,
@@ -55,7 +55,7 @@ uint8 RetractFact(FormulaView fact);
 
 /**
  * High level method to retract any formula; the counterpart of AssertFormula().
- * An ifact rule is removed by DictionaryRemoveIFactRule(), a fact by RetractFact(),
+ * A generator is removed by DictionaryRemoveGenerator(), a fact by RetractFact(),
  * and a clause by DictionaryRemoveClause().
  * 
  * NOTE: A clause ruel must have the same variable names as when asserted; see DictionaryAddClause().
@@ -64,11 +64,11 @@ uint8 RetractFormula(Atom formula);
 
 // Result codes for RetractFact() and RetractFormula()
 #define RETRACT_OK					1	// a fact or rule was retracted
-#define RETRACT_IFACT_OK			2	// an ifact rule was retracted
+#define RETRACT_IFACT_OK			2	// a generator was retracted
 #define RETRACT_NOT_FOUND			3	// the fact or rule is not in the knowledgebase
 #define RETRACT_NOT_ASSERTED		4	// the fact is not explicitly asserted (ifact or computed fact)
 #define RETRACT_TERM_VARIABLE		5	// a term containing variables is not a fact
-#define RETRACT_INVALID_IFACT_RULE	6	// a formula with novums that is not an ifact rule
+#define RETRACT_INVALID_GENERATOR	6	// a formula with novums that is not a generator
 #define RETRACT_NOT_CLAUSE			7	// a conjunction
 
 /**

@@ -1,6 +1,6 @@
 /**
- * The dictionary stores logic rules in clause form, as well as ifact rules.
- * An ifact rule is a term with one novum (*), such as (circle * radius r).
+ * The dictionary stores logic rules in clause form, as well as generators.
+ * A generator is a term with one novum (*), such as (circle * radius r).
  */
 
 #ifndef DICTIONARY_H
@@ -105,7 +105,7 @@ void FormIndexIteratorEnd(FormIndexIterator * iterator);
  *
  * A service compiled while B had no service has no operator reading B, so removing services
  * of B does not reach the service. This function is called when B may gain services: by
- * CreateTupleStore(), DictionaryAddClause(), DictionaryAddIFactRule() and CloseRelation().
+ * CreateTupleStore(), DictionaryAddClause(), DictionaryAddGenerator() and CloseRelation().
  */
 void InvalidateDependentServices(Atom const termForms[], size32 nTermForms);
 
@@ -131,7 +131,7 @@ FormulaView DictionaryAddClauseFromCString(const char * clauseString);
 void DictionaryRemoveClause(FormulaView * clause);
 
 /**
- * Test if the formula is a valid ifact rule
+ * Test if the formula is a valid generator
  * (1) a positive term, or a conjunction of positive terms with distinct
  *     forms and at least two roles, such as (car * brand b & car * model m)
  *     but not (car * feature f & car * feature g)
@@ -140,53 +140,53 @@ void DictionaryRemoveClause(FormulaView * clause);
  * (3) with all others actors are variable and no variable is repeated.
  * The term must have at least two roles, since the IFACT operator needs an input.
  */
-bool IsIFactRule(Atom formula);
+bool IsGenerator(Atom formula);
 
 /**
- * CLAUDE: Write the term form of each term of an ifact rule to termForms[], in the order of
+ * CLAUDE: Write the term form of each term of a generator to termForms[], in the order of
  * RelationFormGetTermForms(). Write the ID column of each term to idColumns[]. The ID column
  * of a term is the index of the novum among the actors of the term. Returns the number
  * of terms.
  */
-size8 IFactRuleGetIDColumns(FormulaView const * ifactRule, Atom termForms[], index8 idColumns[]);
+size8 GeneratorGetIDColumns(FormulaView const * generator, Atom termForms[], index8 idColumns[]);
 
 
 /**
- * Add an ifact rule to the dictionary. The formula must be a valid ifact rule;
- * see IsIFactRule(). Two ifact rules are equal if they have the same form and the
+ * Add a generator to the dictionary. The formula must be a valid generator;
+ * see IsGenerator(). Two generators are equal if they have the same form and the
  * the novum of each term is in the same position, so variable names do not matter.
- * If an ifact rule is alreadyu in the dictionary; the existing rule is returned.
- * Adding an ifact rule invalidates any compiled services involving its form.
+ * If a generator is alreadyu in the dictionary; the existing rule is returned.
+ * Adding a generator invalidates any compiled services involving its form.
  */
-FormulaView DictionaryAddIFactRule(Atom rule);
+FormulaView DictionaryAddGenerator(Atom rule);
 
 /**
- * Whether the dictionary holds an ifact rule equal to the given one.
+ * Whether the dictionary holds a generator equal to the given one.
  */
-bool DictionaryContainsIFactRule(Atom rule);
+bool DictionaryContainsGenerator(Atom rule);
 
 /**
- * Whether the dictionary holds an ifact rule overlapping the given term form,
- * including a conjunction ifact rule with a term of the same form.
+ * Whether the dictionary holds a generator overlapping the given term form,
+ * including a conjunction generator with a term of the same form.
  * Used to decide whether a newly created primitive service must be marked stale.
  */
-bool IFactRuleExistsForTermForm(Atom termForm);
+bool GeneratorExistsForTermForm(Atom termForm);
 
 /**
- * Remove a single ifact rule from the dictionary.
+ * Remove a single generator from the dictionary.
  * This invalidates compiled services involving the term form of the rule.
  */
-void DictionaryRemoveIFactRule(FormulaView * ifactRule);
+void DictionaryRemoveGenerator(FormulaView * generator);
 
 /**
- * Whether the dictionary holds an ifact rule of same form as the given form,
- * which may be a term or conjunction form. Unlike IFactRuleExistsForTermForm(),
+ * Whether the dictionary holds a generator of same form as the given form,
+ * which may be a term or conjunction form. Unlike GeneratorExistsForTermForm(),
  * the match must be exact.
  */
-bool IFactRuleExistsForForm(Atom form);
+bool GeneratorExistsForForm(Atom form);
 
 /**
- * Remove all rules, both clauses and ifact rules, from the dictionary.
+ * Remove all rules, both clauses and generators, from the dictionary.
  * This invalidates all compiled services. Used for testing only. 
  */
 void DictionaryRemoveAll(void);
@@ -203,10 +203,10 @@ typedef struct {
 void DictionaryIterateClauses(Atom clauseForm, DictionaryIterator * iterator);
 
 /**
- * Iterate over the ifact rules of a given term form.
+ * Iterate over the generators of a given term form.
  */
 /* CLAUDE: The form may be a conjunction form; see IsRelationForm(). */
-void DictionaryIterateIFactRules(Atom form, DictionaryIterator * iterator);
+void DictionaryIterateGenerators(Atom form, DictionaryIterator * iterator);
 
 bool DictionaryIteratorNext(DictionaryIterator * iterator);
 

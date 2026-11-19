@@ -1765,7 +1765,7 @@ static void ifactSetupContext(OperatorContext * context)
 /*
  * CLAUDE: Sort the actors of each role of a term tuple, putting the tuple in canonical order;
  * see GetCanonicalActorOrder(). The atom in the ID column is not read, since the role of the
- * ID column holds no other actor; see IsIFactRule().
+ * ID column holds no other actor; see IsGenerator().
  */
 static void sortTermTuple(IFactTerm const * term, Atom tuple[])
 {
@@ -1795,7 +1795,7 @@ static bool ifactCall(OperatorContext * context)
 
 	IFactDraft draft;
 	IFactBegin(&draft);
-	// CLAUDE: The term forms are distinct, so each term gives one IFactRelation; see IsIFactRule()
+	// CLAUDE: The term forms are distinct, so each term gives one IFactRelation; see IsGenerator()
 	for(index8 i = 0; i < op->impl.ifact.nTerms; i++) {
 		IFactTerm const * term = &(op->impl.ifact.terms[i]);
 		size8 nColumns = TypeSignatureNAtomTypes(term->relation.typeSignature);

@@ -123,47 +123,47 @@ static void testDictionaryFindClauseForms(void)
 
 
 /**
- * Test adding ifact rules to the dictionary. Two ifact rules are equal
+ * Test adding generators to the dictionary. Two generators are equal
  * if they have the same term form and novum role, regardless of variable names.
  */
-void testIFactRules(void)
+void testGenerators(void)
 {
 	Atom rule = CStringToTerm("circle * radius r");
 	Atom sameRule = CStringToTerm("circle * radius s");
 	Atom termForm = FormulaGetForm(rule);
-	ASSERT_TRUE(IsIFactRule(rule))
-	ASSERT_FALSE(DictionaryContainsIFactRule(rule))
-	ASSERT_FALSE(IFactRuleExistsForTermForm(termForm))
+	ASSERT_TRUE(IsGenerator(rule))
+	ASSERT_FALSE(DictionaryContainsGenerator(rule))
+	ASSERT_FALSE(GeneratorExistsForTermForm(termForm))
 
-	FormulaView ifactRule = DictionaryAddIFactRule(rule);
-	ASSERT_TRUE(DictionaryContainsIFactRule(rule))
-	ASSERT_TRUE(DictionaryContainsIFactRule(sameRule))
-	ASSERT_TRUE(IFactRuleExistsForTermForm(termForm))
+	FormulaView generator = DictionaryAddGenerator(rule);
+	ASSERT_TRUE(DictionaryContainsGenerator(rule))
+	ASSERT_TRUE(DictionaryContainsGenerator(sameRule))
+	ASSERT_TRUE(GeneratorExistsForTermForm(termForm))
 
 	// Adding an equal rule yields the entry already there
-	FormulaView sameIFactRule = DictionaryAddIFactRule(sameRule);
-	ASSERT_PTR_EQUAL(sameIFactRule.actors, ifactRule.actors)
+	FormulaView sameGenerator = DictionaryAddGenerator(sameRule);
+	ASSERT_PTR_EQUAL(sameGenerator.actors, generator.actors)
 
 	size32 nRules = 0;
 	DictionaryIterator iterator;
-	DictionaryIterateIFactRules(termForm, &iterator);
+	DictionaryIterateGenerators(termForm, &iterator);
 	while(DictionaryIteratorNext(&iterator))
 		nRules++;
 	DictionaryIteratorEnd(&iterator);
 	ASSERT_UINT32_EQUAL(nRules, 1)
 
-	DictionaryRemoveIFactRule(&ifactRule);
-	ASSERT_FALSE(DictionaryContainsIFactRule(rule))
-	ASSERT_FALSE(IFactRuleExistsForTermForm(termForm))
+	DictionaryRemoveGenerator(&generator);
+	ASSERT_FALSE(DictionaryContainsGenerator(rule))
+	ASSERT_FALSE(GeneratorExistsForTermForm(termForm))
 	ReleaseFormula(sameRule);
 	ReleaseFormula(rule);
 }
 
 
 /**
- * Test formulas that are not valid ifact rules; see IsIFactRule().
+ * Test formulas that are not valid generators; see IsGenerator().
  */
-void testIFactRuleRejects(void)
+void testGeneratorRejects(void)
 {
 	char const * const terms[] = {
 		"circle * radius 5.0",			// a constant
@@ -175,18 +175,18 @@ void testIFactRuleRejects(void)
 	};
 	for(index8 i = 0; i < sizeof(terms) / sizeof(terms[0]); i++) {
 		Atom term = CStringToTerm(terms[i]);
-		ASSERT_FALSE(IsIFactRule(term))
+		ASSERT_FALSE(IsGenerator(term))
 		ReleaseFormula(term);
 	}
 
 	Atom clause = CStringToClause("circle * radius r | ! square s side r");
-	ASSERT_FALSE(IsIFactRule(clause))
+	ASSERT_FALSE(IsGenerator(clause))
 	ReleaseFormula(clause);
 }
 
 
 /**
- * CLAUDE: Test adding conjunction ifact rules to the dictionary. Two conjunction rules are
+ * CLAUDE: Test adding conjunction generators to the dictionary. Two conjunction rules are
  * equal if they have the same conjunction form and the novums in the same roles,
  * regardless of variable names and term order.
  */
@@ -198,28 +198,28 @@ void testIFactConjunctionRules(void)
 	Atom conjunctionForm = FormulaGetForm(rule);
 	Atom brandTerm = CStringToTerm("car c brand b");
 	Atom brandTermForm = FormulaGetForm(brandTerm);
-	ASSERT_TRUE(IsIFactRule(rule))
-	ASSERT_TRUE(IsIFactRule(otherRule))
-	ASSERT_FALSE(IFactRuleExistsForTermForm(brandTermForm))
+	ASSERT_TRUE(IsGenerator(rule))
+	ASSERT_TRUE(IsGenerator(otherRule))
+	ASSERT_FALSE(GeneratorExistsForTermForm(brandTermForm))
 
-	FormulaView ifactRule = DictionaryAddIFactRule(rule);
-	ASSERT_TRUE(DictionaryContainsIFactRule(rule))
-	ASSERT_TRUE(DictionaryContainsIFactRule(sameRule))
-	ASSERT_FALSE(DictionaryContainsIFactRule(otherRule))
+	FormulaView generator = DictionaryAddGenerator(rule);
+	ASSERT_TRUE(DictionaryContainsGenerator(rule))
+	ASSERT_TRUE(DictionaryContainsGenerator(sameRule))
+	ASSERT_FALSE(DictionaryContainsGenerator(otherRule))
 	// A conjunction rule holding the term form counts as a rule for the term form
-	ASSERT_TRUE(IFactRuleExistsForTermForm(brandTermForm))
+	ASSERT_TRUE(GeneratorExistsForTermForm(brandTermForm))
 
 	size32 nRules = 0;
 	DictionaryIterator iterator;
-	DictionaryIterateIFactRules(conjunctionForm, &iterator);
+	DictionaryIterateGenerators(conjunctionForm, &iterator);
 	while(DictionaryIteratorNext(&iterator))
 		nRules++;
 	DictionaryIteratorEnd(&iterator);
 	ASSERT_UINT32_EQUAL(nRules, 1)
 
-	DictionaryRemoveIFactRule(&ifactRule);
-	ASSERT_FALSE(DictionaryContainsIFactRule(rule))
-	ASSERT_FALSE(IFactRuleExistsForTermForm(brandTermForm))
+	DictionaryRemoveGenerator(&generator);
+	ASSERT_FALSE(DictionaryContainsGenerator(rule))
+	ASSERT_FALSE(GeneratorExistsForTermForm(brandTermForm))
 	ReleaseFormula(brandTerm);
 	ReleaseFormula(otherRule);
 	ReleaseFormula(sameRule);
@@ -228,7 +228,7 @@ void testIFactConjunctionRules(void)
 
 
 /**
- * CLAUDE: Test conjunctions that are not valid ifact rules; see IsIFactRule().
+ * CLAUDE: Test conjunctions that are not valid generators; see IsGenerator().
  */
 void testIFactConjunctionRuleRejects(void)
 {
@@ -245,7 +245,7 @@ void testIFactConjunctionRuleRejects(void)
 	for(index8 i = 0; i < sizeof(conjunctions) / sizeof(conjunctions[0]); i++) {
 		Atom conjunction = CStringToConjunction(conjunctions[i]);
 		ASSERT_TRUE(conjunction.hash != 0)
-		ASSERT_FALSE(IsIFactRule(conjunction))
+		ASSERT_FALSE(IsGenerator(conjunction))
 		ReleaseFormula(conjunction);
 	}
 }
@@ -259,8 +259,8 @@ int main(int argc, char * argv[])
 	ExecuteTest(testDictionary);
 	ExecuteTest(testDictionaryAddTwice);
 	ExecuteTest(testDictionaryFindClauseForms);
-	ExecuteTest(testIFactRules);
-	ExecuteTest(testIFactRuleRejects);
+	ExecuteTest(testGenerators);
+	ExecuteTest(testGeneratorRejects);
 	ExecuteTest(testIFactConjunctionRules);
 	ExecuteTest(testIFactConjunctionRuleRejects);
 

@@ -87,14 +87,13 @@ static void setupCircleFixture(CircleFixture * fixture)
 
 
 /**
- * Remove the service reading the store by ID, which also removes the IFACT service
- * depending on it, then drop the relation.
+ * Remove the service reading the store by ID.
+ * The IFACT service does not depend on the service reading the store, so the
+ * IFACT service is removed by DropRelation(), if it still exists.
  */
-/* CLAUDE: The IFACT service does not depend on the service reading the store, so the
-   IFACT service is removed by DropRelation(), if it still exists. */
 static void teardownCircleFixture(CircleFixture * fixture)
 {
-	// CLAUDE: The IFACT operator of the fixture is not compiled from an ifact rule,
+	// CLAUDE: The IFACT operator of the fixture is not compiled from a generator,
 	// so its cached ifacts are released here
 	IFactReleaseCached(fixture->termForm, &(fixture->circleIndex));
 	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture->relation), 0)
@@ -242,11 +241,11 @@ void testIFactQuery(void)
 
 
 /**
- * Adding an ifact rule invalidates services of its term form, as with adding a clause.
+ * Adding a generator invalidates services of its term form, as with adding a clause.
  * Compiled services are removed, including an IFACT service, and primitive services are
  * marked stale, also for a relation created after the rule.
  */
-void testIFactRuleInvalidation(void)
+void testGeneratorInvalidation(void)
 {
 	// Create a fixture with a B-tree storage and a service using an IFACT operator
 	// CLAUDE: The fixture relation has no TupleStore; see setupCircleFixture()
@@ -256,14 +255,14 @@ void testIFactRuleInvalidation(void)
 	Atom circle = callCircleIFact(&fixture, 5.0);
 	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture.relation), 1)
 
-	// Add the ifact rule (circle * radius r), invalidating existing services
+	// Add the generator (circle * radius r), invalidating existing services
 	Atom rule = CStringToTerm("circle * radius r");
-	FormulaView ifactRule = DictionaryAddIFactRule(rule);
+	FormulaView generator = DictionaryAddGenerator(rule);
 	ReleaseFormula(rule);
 
 	// The existing IFACT service is removed
 	ASSERT_TRUE(ServiceGetOperator(fixture.ifactService) == 0)
-	// the cached tuple is kept; normally released by DictionaryRemoveIFactRule()
+	// the cached tuple is kept; normally released by DictionaryRemoveGenerator()
 	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture.relation), 1)
 	// CLAUDE: The primitive service reading the ifacts is marked stale
 	ASSERT_TRUE(ServiceIsStale(fixture.byIdService))
@@ -298,7 +297,7 @@ void testIFactRuleInvalidation(void)
 	ASSERT_UINT32_EQUAL(TupleStoreNTuples(intStore), 0)
 	DropRelation(intRelation);
 
-	DictionaryRemoveIFactRule(&ifactRule);
+	DictionaryRemoveGenerator(&generator);
 	// CLAUDE: removing the rule releases the cached tuple
 	ASSERT_UINT32_EQUAL(IFactRelationNTuples(fixture.relation), 0)
 	teardownCircleFixture(&fixture);
@@ -307,14 +306,14 @@ void testIFactRuleInvalidation(void)
 
 /**
  * CLAUDE: The term form (circle radius) with the column index of each role, and the
- * relation (circle ID radius FLOAT), for tests compiling the ifact rule (circle * radius r).
+ * relation (circle ID radius FLOAT), for tests compiling the generator (circle * radius r).
  */
 typedef struct s_CircleRule {
 	Atom termForm;
 	index8 circleIndex;
 	index8 radiusIndex;
 	TypedRelation relation;
-	FormulaView ifactRule;
+	FormulaView generator;
 } CircleRule;
 
 
@@ -331,13 +330,13 @@ static void setupCircleRule(CircleRule * circleRule)
 		.typeSignature = CreateTypeSignature(atomTypes, 2)
 	};
 	Atom rule = CStringToTerm("circle * radius r");
-	circleRule->ifactRule = DictionaryAddIFactRule(rule);
+	circleRule->generator = DictionaryAddGenerator(rule);
 	ReleaseFormula(rule);
 }
 
 
 /**
- * CLAUDE: Drop the relation and release the term form. The caller must remove the ifact rule
+ * CLAUDE: Drop the relation and release the term form. The caller must remove the generator
  * first, which releases the cached ifacts.
  */
 static void teardownCircleRule(CircleRule * circleRule)
@@ -373,10 +372,10 @@ static size32 countOperators(Operator const * op, enum OperatorType type)
 
 
 /**
- * CLAUDE: The query (circle c radius 5.0) compiles to an IFACT operator from the ifact rule
+ * CLAUDE: The query (circle c radius 5.0) compiles to an IFACT operator from the generator
  * (circle * radius r), creating the relation (circle ID radius FLOAT).
  */
-void testCompileIFactRule(void)
+void testCompileGenerator(void)
 {
 	CircleRule circleRule;
 	setupCircleRule(&circleRule);
@@ -429,7 +428,7 @@ void testCompileIFactRule(void)
 	// Removing the rule removes the IFACT service and the cached ifact
 	// A primitive service of the same signature, replaced by the IFACT service,
 	// is restored; see ReplaceService()
-	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
+	DictionaryRemoveGenerator(&(circleRule.generator));
 	Operator const * ifactServiceOperator = ServiceGetOperator(ifactService);
 	ASSERT_TRUE(!ifactServiceOperator || (ifactServiceOperator->type == OPERATOR_MACHINE))
 	ASSERT_UINT32_EQUAL(IFactRelationNTuples(circleRule.relation), 0)
@@ -439,11 +438,11 @@ void testCompileIFactRule(void)
 
 
 /**
- * CLAUDE: With both the ifact rule (circle * radius r) and the clause
+ * CLAUDE: With both the generator (circle * radius r) and the clause
  * (circle c radius r | ! disk c size r), the query (circle c radius 5.0) compiles to a UNION
  * of the IFACT operator and the clause, yielding the ifact circle and the disk "d".
  */
-void testCompileIFactRuleWithClause(void)
+void testCompileGeneratorWithClause(void)
 {
 	CircleRule circleRule;
 	setupCircleRule(&circleRule);
@@ -464,7 +463,7 @@ void testCompileIFactRuleWithClause(void)
 	ReleaseFormula(query);
 
 	DictionaryRemoveClause(&clause);
-	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
+	DictionaryRemoveGenerator(&(circleRule.generator));
 	RetractFact(FormulaGetView(diskFact));
 	DropRelation(RelationFromFact(FormulaGetView(diskFact)));
 	ReleaseFormula(diskFact);
@@ -479,7 +478,7 @@ void testCompileIFactRuleWithClause(void)
  * (circle c radius 5.0) then adds a service reading the ifacts of the relation,
  * and compiles to a UNION of the IFACT operator and the clause; see IFactSetupRelation().
  */
-void testIFactRuleAfterCompiledService(void)
+void testGeneratorAfterCompiledService(void)
 {
 	CircleRule circleRule;
 	setupCircleRule(&circleRule);
@@ -507,7 +506,7 @@ void testIFactRuleAfterCompiledService(void)
 	ASSERT_UINT32_EQUAL(IFactRelationNTuples(circleRule.relation), 1)
 
 	DictionaryRemoveClause(&clause);
-	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
+	DictionaryRemoveGenerator(&(circleRule.generator));
 	RetractFact(FormulaGetView(diskFact));
 	DropRelation(RelationFromFact(FormulaGetView(diskFact)));
 	ReleaseFormula(diskFact);
@@ -516,12 +515,12 @@ void testIFactRuleAfterCompiledService(void)
 
 
 /**
- * CLAUDE: An ifact rule does not apply to a relation with a TupleStore, which holds
+ * CLAUDE: A generator does not apply to a relation with a TupleStore, which holds
  * asserted facts; see IFactSetupRelation(). With a B-tree TupleStore for the relation
  * (circle ID radius FLOAT), the query (circle c radius 5.0) reads the B-tree only,
  * and creates no ifact.
  */
-void testIFactRuleWithStore(void)
+void testGeneratorWithStore(void)
 {
 	CircleRule circleRule;
 	setupCircleRule(&circleRule);
@@ -543,7 +542,7 @@ void testIFactRuleWithStore(void)
 	Service ifactService = createCircleRuleService(&circleRule, PARAMETER_OUT, PARAMETER_IN);
 	ASSERT_UINT32_EQUAL(ServiceGetOperator(ifactService)->type, OPERATOR_MACHINE)
 
-	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
+	DictionaryRemoveGenerator(&(circleRule.generator));
 	ASSERT_UINT32_EQUAL(TupleStoreRemoveTuple(store, tuple), TUPLE_REMOVED)
 	IFactRelease(circle);
 	teardownCircleRule(&circleRule);
@@ -552,10 +551,10 @@ void testIFactRuleWithStore(void)
 
 /**
  * CLAUDE: The queries (circle c radius 3.14) and (circle c radius 5) create one relation
- * each from the ifact rule (circle * radius r). Creating the INT relation invalidates the
+ * each from the generator (circle * radius r). Creating the INT relation invalidates the
  * IFACT service of the FLOAT relation, but the cached ifact of the FLOAT relation is kept.
  */
-void testCompileIFactRuleTwoTypes(void)
+void testCompileGeneratorTwoTypes(void)
 {
 	CircleRule circleRule;
 	setupCircleRule(&circleRule);
@@ -583,7 +582,7 @@ void testCompileIFactRuleTwoTypes(void)
 	ReleaseFormula(allQuery);
 
 	// Removing the rule releases the cached ifacts of both relations
-	DictionaryRemoveIFactRule(&(circleRule.ifactRule));
+	DictionaryRemoveGenerator(&(circleRule.generator));
 	ASSERT_UINT32_EQUAL(IFactRelationNTuples(circleRule.relation), 0)
 	ASSERT_UINT32_EQUAL(IFactRelationNTuples(intRelation), 0)
 	DropRelation(intRelation);
@@ -633,14 +632,14 @@ static TypedAtom runQueryForID(char const * conjunction)
 
 /**
  * CLAUDE: The conjunction query (car x brand "Volvo" & car x model "Amazon") compiles to an
- * IFACT operator from the ifact rule (car * brand b & car * model m). The ifact has one tuple
+ * IFACT operator from the generator (car * brand b & car * model m). The ifact has one tuple
  * in each of the relations (car ID brand STRING) and (car ID model STRING), and each term is
  * read by its ID.
  */
 void testCompileIFactConjunctionRule(void)
 {
 	Atom rule = CStringToConjunction("car * brand b & car * model m");
-	FormulaView ifactRule = DictionaryAddIFactRule(rule);
+	FormulaView generator = DictionaryAddGenerator(rule);
 	Atom volvo = CreateStringFromCString("Volvo");
 	Atom amazon = CreateStringFromCString("Amazon");
 	size32 nIFacts = IFactTotalCount();
@@ -690,7 +689,7 @@ void testCompileIFactConjunctionRule(void)
 	ReleaseFormula(modelQuery);
 
 	// Removing the rule releases both cached ifacts
-	DictionaryRemoveIFactRule(&ifactRule);
+	DictionaryRemoveGenerator(&generator);
 	ASSERT_FALSE(IFactExists(car.atom))
 	ASSERT_FALSE(IFactExists(otherCar.atom))
 	ASSERT_UINT32_EQUAL(IFactRelationNTuples(brandRelation), 0)
@@ -736,7 +735,7 @@ static size32 countPairResults(char const * queryString, TypedAtom pair)
 
 
 /**
- * CLAUDE: With the ifact rule (pair * member a member b), whose role "member" holds two actors,
+ * CLAUDE: With the generator (pair * member a member b), whose role "member" holds two actors,
  * the actors of the role may be given in either order. The ifact stores the tuple in canonical
  * order, so (pair x member 3 member 5) and (pair x member 5 member 3) yield the same pair, also
  * through the clause (link p from a to b | ! pair p member a member b). The reader of the
@@ -746,7 +745,7 @@ static size32 countPairResults(char const * queryString, TypedAtom pair)
 void testIFactRepeatedRole(void)
 {
 	Atom rule = CStringToTerm("pair * member a member b");
-	FormulaView ifactRule = DictionaryAddIFactRule(rule);
+	FormulaView generator = DictionaryAddGenerator(rule);
 	FormulaView clause = DictionaryAddClauseFromCString("link p from a to b | ! pair p member a member b");
 
 	Atom query35 = CStringToTerm("pair x member 3 member 5");
@@ -800,7 +799,7 @@ void testIFactRepeatedRole(void)
 	ReleaseFormula(query53);
 	ReleaseFormula(query35);
 	DictionaryRemoveClause(&clause);
-	DictionaryRemoveIFactRule(&ifactRule);
+	DictionaryRemoveGenerator(&generator);
 	ASSERT_UINT32_EQUAL(IFactRelationNTuples(relation), 0)
 	DropRelation(relation);
 	ReleaseFormula(rule);
@@ -816,7 +815,7 @@ void testIFactRepeatedRole(void)
 void testCompileIFactConjunctionRuleInClause(void)
 {
 	Atom rule = CStringToConjunction("car * brand b & car * model m");
-	FormulaView ifactRule = DictionaryAddIFactRule(rule);
+	FormulaView generator = DictionaryAddGenerator(rule);
 	FormulaView clause = DictionaryAddClauseFromCString(
 		"make c brand b model m | ! car c brand b | ! car c model m");
 	size32 nIFacts = IFactTotalCount();
@@ -846,7 +845,7 @@ void testCompileIFactConjunctionRuleInClause(void)
 		.typeSignature = CreateTypeSignature(atomTypes, 2)
 	};
 	ReleaseFormula(query);
-	DictionaryRemoveIFactRule(&ifactRule);
+	DictionaryRemoveGenerator(&generator);
 	ASSERT_FALSE(IFactExists(car.atom))
 	ASSERT_UINT32_EQUAL(IFactTotalCount(), nIFacts)
 	DictionaryRemoveClause(&clause);
@@ -931,12 +930,12 @@ int main(int argc, char * argv[])
 
 	ExecuteTest(testIFactOperator);
 	ExecuteTest(testIFactQuery);
-	ExecuteTest(testIFactRuleInvalidation);
-	ExecuteTest(testCompileIFactRule);
-	ExecuteTest(testCompileIFactRuleWithClause);
-	ExecuteTest(testIFactRuleWithStore);
-	ExecuteTest(testIFactRuleAfterCompiledService);
-	ExecuteTest(testCompileIFactRuleTwoTypes);
+	ExecuteTest(testGeneratorInvalidation);
+	ExecuteTest(testCompileGenerator);
+	ExecuteTest(testCompileGeneratorWithClause);
+	ExecuteTest(testGeneratorWithStore);
+	ExecuteTest(testGeneratorAfterCompiledService);
+	ExecuteTest(testCompileGeneratorTwoTypes);
 	ExecuteTest(testCompileIFactConjunctionRule);
 	ExecuteTest(testCompileIFactConjunctionRuleInClause);
 	ExecuteTest(testIFactRepeatedRole);

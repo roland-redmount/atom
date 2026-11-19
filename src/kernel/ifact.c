@@ -540,7 +540,7 @@ void IFactMarkCached(Atom ifact)
 
 /*
  * Test whether the IFactRelations of an ifact correspond 1:1 to the given terms, with
- * the same (term form, ID column) pair. The term forms must be distinct; see IsIFactRule().
+ * the same (term form, ID column) pair. The term forms must be distinct; see IsGenerator().
  */
 static bool hasTermRelations(
 	IFactHeader const * header, Atom const termForms[], index8 const idColumns[], size8 nTerms)

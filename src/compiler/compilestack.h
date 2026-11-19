@@ -26,8 +26,7 @@
 typedef struct s_CompileStack {
 	ParameterizedQuery queries[MAX_COMPILE_STACK_DEPTH];
 	size8 depth;
-	// The number of relations created by setupIFactRuleRelation() during the compilation;
-	// see compileQueryVariants()
+	// The number of relations created during the compilation; see compileQueryVariants()
 	size32 nRelationsCreated;
 } CompileStack;
 

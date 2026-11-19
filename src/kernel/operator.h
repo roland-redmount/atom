@@ -185,7 +185,7 @@ typedef struct s_OperatorContext OperatorContext;
 	 *
 	 * An ifact created by IFACT is a cached result, not an asserted fact. IFACT holds one
 	 * reference to each ifact it has created; see IFactMarkCached(). These references are
-	 * cleared only when the underlying ifact rule is removed; see DictionaryRemoveIFactRule().
+	 * cleared only when the underlying generator is removed; see DictionaryRemoveGenerator().
 	 */
 	OPERATOR_IFACT = 11,
 

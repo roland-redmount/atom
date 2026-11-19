@@ -361,22 +361,22 @@ void testAssertFormulaRule(void)
 
 
 /**
- * A term holding a novum is an ifact rule, and asserting it adds the rule
- * to the dictionary. A formula with a novum that is not an ifact rule is refused.
+ * A term holding a novum is a generator, and asserting it adds the rule
+ * to the dictionary. A formula with a novum that is not a generator is refused.
  */
-void testAssertFormulaIFactRule(void)
+void testAssertFormulaGenerator(void)
 {
 	Atom rule = CStringToTerm("circle * radius r");
 	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
-	ASSERT_TRUE(DictionaryContainsIFactRule(rule))
+	ASSERT_TRUE(DictionaryContainsGenerator(rule))
 	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_EXISTED)
 
 	Atom invalidRule = CStringToTerm("circle * radius 5.0");
 	ASSERT_INT32_EQUAL(AssertFormula(invalidRule), ASSERT_INVALID_IFACT)
 	ReleaseFormula(invalidRule);
 
-	FormulaView ifactRule = DictionaryAddIFactRule(rule);
-	DictionaryRemoveIFactRule(&ifactRule);
+	FormulaView generator = DictionaryAddGenerator(rule);
+	DictionaryRemoveGenerator(&generator);
 	ReleaseFormula(rule);
 }
 
@@ -419,29 +419,29 @@ void testRetractFormulaRule(void)
 
 
 /**
- * CLAUDE: An ifact rule is retracted whatever its variable names, since the dictionary
- * compares ifact rules by term form and novum position only.
+ * A generator is retracted whatever its variable names, since the dictionary
+ * compares generators by term form and novum position only.
  */
-void testRetractFormulaIFactRule(void)
+void testRetractFormulaGenerator(void)
 {
 	Atom rule = CStringToTerm("circle * radius r");
 	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
 
 	Atom renamedRule = CStringToTerm("circle * radius s");
 	ASSERT_INT32_EQUAL(RetractFormula(renamedRule), RETRACT_IFACT_OK)
-	ASSERT_FALSE(DictionaryContainsIFactRule(rule))
+	ASSERT_FALSE(DictionaryContainsGenerator(rule))
 	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_NOT_FOUND)
 	ReleaseFormula(renamedRule);
 	ReleaseFormula(rule);
 
 	Atom invalidRule = CStringToTerm("circle * radius 5.0");
-	ASSERT_INT32_EQUAL(RetractFormula(invalidRule), RETRACT_INVALID_IFACT_RULE)
+	ASSERT_INT32_EQUAL(RetractFormula(invalidRule), RETRACT_INVALID_GENERATOR)
 	ReleaseFormula(invalidRule);
 }
 
 
 /**
- * CLAUDE: A term with variables is neither a fact nor an ifact rule, and a conjunction
+ * A term with variables is neither a fact nor a generator, and a conjunction
  * is neither a fact nor a rule.
  */
 void testRetractFormulaRejects(void)
@@ -762,10 +762,10 @@ void testInvalidateDependentsOfClosedRelation(void)
  */
 void testCompileAfterStoreCreated(void)
 {
-	Atom ifactRule = CStringToTerm("circle * radius r");
+	Atom generator = CStringToTerm("circle * radius r");
 	Atom bigRule = CStringToClause("big c | ! circle c radius r | ! < r > 10");
 	Atom bigFact = CStringToTerm("big \"x\"");
-	ASSERT_INT32_EQUAL(AssertFormula(ifactRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFormula(generator), ASSERT_OK)
 	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
 	ASSERT_INT32_EQUAL(AssertFormula(bigFact), ASSERT_OK)
 
@@ -773,13 +773,13 @@ void testCompileAfterStoreCreated(void)
 	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 1)
 
 	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(ifactRule), RETRACT_IFACT_OK)
+	ASSERT_INT32_EQUAL(RetractFormula(generator), RETRACT_IFACT_OK)
 	ASSERT_INT32_EQUAL(RetractFormula(bigFact), RETRACT_OK)
 	dropFormRelations("circle 1 radius 1");
 	dropFormRelations("big 1");
 	ReleaseFormula(bigFact);
 	ReleaseFormula(bigRule);
-	ReleaseFormula(ifactRule);
+	ReleaseFormula(generator);
 }
 
 
@@ -1112,7 +1112,7 @@ void testCreateIFactClause(void)
  * A formula that does not define an atom yields the zero atom.
  */
 /**
- * CLAUDE: An ifact rule whose repeated role holds actors of different atom types, with its
+ * CLAUDE: A generator whose repeated role holds actors of different atom types, with its
  * first ifact created through the body term of a rule. The body term (pair p elem a elem b)
  * has its columns in clause order, but the relation holding the ifacts is created in
  * canonical column order; see compileParameterizedQuery(). A query binding the identified
@@ -1120,8 +1120,8 @@ void testCreateIFactClause(void)
  */
 void testCreateIFactRepeatedRoleThroughRule(void)
 {
-	Atom ifactRule = CStringToTerm("pair * elem x elem y");
-	ASSERT_INT32_EQUAL(AssertFormula(ifactRule), ASSERT_OK)
+	Atom generator = CStringToTerm("pair * elem x elem y");
+	ASSERT_INT32_EQUAL(AssertFormula(generator), ASSERT_OK)
 	FormulaView clause = DictionaryAddClauseFromCString("link p from a to b | ! pair p elem a elem b");
 
 	// CLAUDE: Create the ifact through the rule, and take its identified atom
@@ -1156,8 +1156,8 @@ void testCreateIFactRepeatedRoleThroughRule(void)
 	ReleaseFormula(pairQuery);
 	ReleaseFormula(linkQuery);
 	DictionaryRemoveClause(&clause);
-	FormulaView ifactRuleView = DictionaryAddIFactRule(ifactRule);
-	DictionaryRemoveIFactRule(&ifactRuleView);
+	FormulaView generatorView = DictionaryAddGenerator(generator);
+	DictionaryRemoveGenerator(&generatorView);
 
 	// CLAUDE: The relation holding the ifacts remains; drop it as testCreateIFactTerm() does
 	Atom ifactTerm = CStringToTerm("pair * elem 1 elem \"a\"");
@@ -1165,7 +1165,7 @@ void testCreateIFactRepeatedRoleThroughRule(void)
 	ASSERT_TRUE(RelationExists(ifactRelation))
 	DropRelation(ifactRelation);
 	ReleaseFormula(ifactTerm);
-	ReleaseFormula(ifactRule);
+	ReleaseFormula(generator);
 }
 
 
@@ -1375,10 +1375,10 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertFormulaFact);
 	ExecuteTest(testAssertFormulaRule);
 	ExecuteTest(testAssertRuleRepeatedRoleOrder);
-	ExecuteTest(testAssertFormulaIFactRule);
+	ExecuteTest(testAssertFormulaGenerator);
 	ExecuteTest(testAssertFormulaRejects);
 	ExecuteTest(testRetractFormulaRule);
-	ExecuteTest(testRetractFormulaIFactRule);
+	ExecuteTest(testRetractFormulaGenerator);
 	ExecuteTest(testRetractFormulaRejects);
 	ExecuteTest(testRetractDerivedFact);
 	ExecuteTest(testRetractComputedFact);

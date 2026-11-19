@@ -176,8 +176,8 @@ static void printHelp(void)
 	PrintChar('\n');
 	printLine("Commands:");
 	printLine(":assert <term>        Assert a fact. The term must not contain variables.");
-	printLine(":assert <term>        Assert an ifact rule, such as (circle * radius r).");
-	printLine(":assert <conjunction> Assert an ifact rule, such as (car * brand b & car * model m).");
+	printLine(":assert <term>        Assert a generator, such as (circle * radius r).");
+	printLine(":assert <conjunction> Assert a generator, such as (car * brand b & car * model m).");
 	printLine(":assert <clause>      Assert a rule. The clause must have > 1 term");
 	printLine("                      and contain at least one variable.");
 	printLine(":clear @tag           Remove the tag @tag.");
@@ -186,7 +186,7 @@ static void printHelp(void)
 	printLine(":load <file> <form>   Import a facts from a CSV file, of the given form,");
 	printLine("                      whose roles must match file column names.");
 	printLine(":retract <term>       Retract a fact. The term must not contain variables.");
-	printLine(":retract <term>       Retract an ifact rule, which may be a conjunction.");
+	printLine(":retract <term>       Retract a generator, which may be a conjunction.");
 	printLine(":retract <clause>     Retract a rule. Variable names must match.");
 	printLine(":rules <form>         Print clause rules containing a term form.");
 	printLine(":view table|formula   Print results as a table of variables, or as formulas.");
@@ -792,7 +792,7 @@ static void printAssertResult(int result)
 		break;
 
 	case ASSERT_INVALID_IFACT:
-		printStatusLine("The terms of an ifact rule must have distinct forms and one novum (*) each, and the variables must be distinct.");
+		printStatusLine("The terms of a generator must have distinct forms and one novum (*) each, and the variables must be distinct.");
 		break;
 
 	case ASSERT_NOT_CLOSABLE:
@@ -859,9 +859,9 @@ static void printRetractResult(int result)
 		printStatusLine("A fact may not contain a variable.");
 		break;
 
-	case RETRACT_INVALID_IFACT_RULE:
+	case RETRACT_INVALID_GENERATOR:
 		printStatusLine(
-			"The terms of an ifact rule must have distinct forms and one novum (*) each, "
+			"The terms of a generator must have distinct forms and one novum (*) each, "
 			"and all variables must be distinct."
 		);
 		break;
@@ -878,7 +878,7 @@ static void printRetractResult(int result)
 
 
 /*
- * Retract a fact, a clause rule or an ifact rule.
+ * Retract a fact, a clause rule or a generator.
  */
 static int executeRetract(char const * formulaText, index32 linePosition)
 {
@@ -1051,7 +1051,7 @@ static int executeInspect(char const * queryText, index32 linePosition)
 
 /*
  * Print each clause rule in the dictionary containing the term form written by the
- * text following the :rules command, such as "foo bar" or "! foo bar". Ifact rules are not
+ * text following the :rules command, such as "foo bar" or "! foo bar". Generators are not
  * printed.
  */
 static void executeRules(char const * termFormText, index32 linePosition)

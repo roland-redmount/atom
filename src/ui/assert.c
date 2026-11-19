@@ -152,13 +152,13 @@ uint8 AssertFormula(Atom formula)
 	FormulaView formulaView = FormulaGetView(formula);
 
 	// Any formula that contains a novum (*) is added to the dictionary
-	// as an ifact rule; see IsIFactRule()
+	// as a generator; see IsGenerator()
 	if(TypedTupleContainsAtom(formulaView.actors, novumAtom)) {
-		if(!IsIFactRule(formula))
+		if(!IsGenerator(formula))
 			return ASSERT_INVALID_IFACT;
-		if(DictionaryContainsIFactRule(formula))
+		if(DictionaryContainsGenerator(formula))
 			return ASSERT_EXISTED;
-		DictionaryAddIFactRule(formula);
+		DictionaryAddGenerator(formula);
 		return ASSERT_OK;
 	}
 
@@ -212,7 +212,7 @@ uint8 RetractFact(FormulaView fact)
 	}
 	// Else the fact was not explicitly asserted
 	if(factExists(fact)) {
-		// The fact is entailed by a rule or ifact rule
+		// The fact is entailed by a rule or generator
 		return RETRACT_NOT_ASSERTED;
 	}
 	else {
@@ -227,11 +227,11 @@ uint8 RetractFormula(Atom formula)
 	FormulaView formulaView = FormulaGetView(formula);
 
 	if(TypedTupleContainsAtom(formulaView.actors, novumAtom)) {
-		if(!IsIFactRule(formula))
-			return RETRACT_INVALID_IFACT_RULE;
-		if(!DictionaryContainsIFactRule(formula))
+		if(!IsGenerator(formula))
+			return RETRACT_INVALID_GENERATOR;
+		if(!DictionaryContainsGenerator(formula))
 			return RETRACT_NOT_FOUND;
-		DictionaryRemoveIFactRule(&formulaView);
+		DictionaryRemoveGenerator(&formulaView);
 		return RETRACT_IFACT_OK;
 	}
 
@@ -303,7 +303,7 @@ static bool collectTermIFactTuples(
 	IFactTuple ifactTuple = {.nColumns = termArity};
 	TypeSignature termSignature = {0};
 	bool hasNovum = false;
-	// CLAUDE: The role of the novum holds no other actor; see IsIFactRule()
+	// CLAUDE: The role of the novum holds no other actor; see IsGenerator()
 	bool isNovumRoleSingle = true;
 	index8 i0 = termActorIndex ? * termActorIndex : 0;
 	// CLAUDE: The roles of the predicate form hold the actors of the term in order; see
