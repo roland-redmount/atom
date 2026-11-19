@@ -105,8 +105,8 @@ void testAssertRuleRepeatedRoleOrder(void)
 {
 	Atom rule = CStringToClause("near x near y | ! edge x to y");
 	Atom reversedRule = CStringToClause("near y near x | ! edge x to y");
-	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
-	ASSERT_INT32_EQUAL(AssertFormula(reversedRule), ASSERT_EXISTED)
+	ASSERT_INT32_EQUAL(AssertRule(rule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertRule(reversedRule), ASSERT_EXISTED)
 
 	FormulaView clause = DictionaryAddClause(rule);
 	DictionaryRemoveClause(&clause);
@@ -260,7 +260,7 @@ void testAssertClosedRelationRejected(void)
 	RetractFact(FormulaGetView(notOdd3));
 	DropRelation(notOddRelation);
 
-	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_RESERVED_FORM)
+	ASSERT_INT32_EQUAL(AssertRule(rule), ASSERT_RESERVED_FORM)
 
 	ReleaseFormula(rule);
 	ReleaseFormula(closedOdd);
@@ -317,67 +317,22 @@ void testAssertContradictsDerivedFact(void)
 /**
  * A term holding no variable is a fact
  */
-void testAssertFormulaFact(void)
+void testAssertTermFact(void)
 {
 	Atom fact = CStringToTerm("foo \"barf\" bar 1");
 
-	ASSERT_INT32_EQUAL(AssertFormula(fact), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_OK)
 	// the same fact a second time changes nothing
-	ASSERT_INT32_EQUAL(AssertFormula(fact), ASSERT_EXISTED)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_EXISTED)
 
 	// a fact contradicting it is refused, as it is by AssertFact()
 	Atom negatedFact = CStringToTerm("! foo \"barf\" bar 1");
-	ASSERT_INT32_EQUAL(AssertFormula(negatedFact), ASSERT_CONTRADICTION)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(negatedFact), 0), ASSERT_CONTRADICTION)
 	ReleaseFormula(negatedFact);
 
 	RetractFact(FormulaGetView(fact));
 	DropRelation(RelationFromFact(FormulaGetView(fact)));
 	ReleaseFormula(fact);
-}
-
-
-/**
- * A clause of two or more terms holding a variable is a rule, and asserting it adds the
- * rule to the dictionary.
- */
-void testAssertFormulaRule(void)
-{
-	Atom rule = CStringToClause("before x after y | ! prec x succ y");
-
-	ASSERT_FALSE(DictionaryContainsClause(rule))
-	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
-	ASSERT_TRUE(DictionaryContainsClause(rule))
-
-	// the same rule a second time changes nothing
-	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_EXISTED)
-
-	// Adding a clause already in the dictionary yields the entry already there,
-	// which is what the rule is removed with
-	FormulaView clause = DictionaryAddClause(rule);
-	DictionaryRemoveClause(&clause);
-	ASSERT_FALSE(DictionaryContainsClause(rule))
-	ReleaseFormula(rule);
-}
-
-
-/**
- * A term holding a novum is a generator, and asserting it adds the rule
- * to the dictionary. A formula with a novum that is not a generator is refused.
- */
-void testAssertFormulaGenerator(void)
-{
-	Atom rule = CStringToTerm("circle * radius r");
-	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
-	ASSERT_TRUE(DictionaryContainsGenerator(rule))
-	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_EXISTED)
-
-	Atom invalidRule = CStringToTerm("circle * radius 5.0");
-	ASSERT_INT32_EQUAL(AssertFormula(invalidRule), ASSERT_INVALID_IFACT)
-	ReleaseFormula(invalidRule);
-
-	FormulaView generator = DictionaryAddGenerator(rule);
-	DictionaryRemoveGenerator(&generator);
-	ReleaseFormula(rule);
 }
 
 
@@ -403,7 +358,7 @@ void testAssertRule(void)
 	ReleaseFormula(conjunction);
 
 	Atom novumRule = CStringToClause("circle * radius r | ! foo r");
-	ASSERT_INT32_EQUAL(AssertRule(novumRule), ASSERT_RULE_NOVUM)
+	ASSERT_INT32_EQUAL(AssertRule(novumRule), ASSERT_CLAUSE_WITH_NOVUM)
 	ASSERT_FALSE(DictionaryContainsClause(novumRule))
 	ReleaseFormula(novumRule);
 }
@@ -432,11 +387,11 @@ void testCreateGenerator(void)
 
 	// a fact has no novum
 	Atom fact = CStringToTerm("foo 1 bar 2");
-	ASSERT_INT32_EQUAL(CreateGenerator(fact), ASSERT_INVALID_IFACT)
+	ASSERT_INT32_EQUAL(CreateGenerator(fact), ASSERT_NOT_GENERATOR)
 	ReleaseFormula(fact);
 
 	Atom invalid = CStringToTerm("circle * radius 5.0");
-	ASSERT_INT32_EQUAL(CreateGenerator(invalid), ASSERT_INVALID_IFACT)
+	ASSERT_INT32_EQUAL(CreateGenerator(invalid), ASSERT_NOT_GENERATOR)
 	ReleaseFormula(invalid);
 }
 
@@ -449,7 +404,7 @@ void testCreateGenerator(void)
 void testRetractFormulaRule(void)
 {
 	Atom rule = CStringToClause("! even x | ! odd x");
-	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertRule(rule), ASSERT_OK)
 
 	Atom odd3 = CStringToTerm("odd 3");
 	FormulaView odd3View = FormulaGetView(odd3);
@@ -485,7 +440,7 @@ void testRetractFormulaRule(void)
 void testRetractFormulaGenerator(void)
 {
 	Atom rule = CStringToTerm("circle * radius r");
-	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(CreateGenerator(rule), ASSERT_OK)
 
 	Atom renamedRule = CStringToTerm("circle * radius s");
 	ASSERT_INT32_EQUAL(RetractFormula(renamedRule), RETRACT_IFACT_OK)
@@ -526,7 +481,7 @@ void testRetractMathRule(void)
 	Atom rule = CStringToClause("+ x + y = z | ! + z - x = y");
 	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_OK)
 	ASSERT_FALSE(DictionaryContainsClause(rule))
-	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertRule(rule), ASSERT_OK)
 	ReleaseFormula(rule);
 
 	Atom closedInteger = CStringToTerm("closed-relation [. integer]");
@@ -534,7 +489,7 @@ void testRetractMathRule(void)
 	Atom integer = CStringToTerm("integer 1");
 	ASSERT_FALSE(RelationIsClosed(FormulaGetForm(integer)))
 
-	ASSERT_INT32_EQUAL(AssertFormula(closedInteger), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedInteger), 0), ASSERT_OK)
 	ASSERT_TRUE(RelationIsClosed(FormulaGetForm(integer)))
 	ReleaseFormula(integer);
 	ReleaseFormula(closedInteger);
@@ -633,13 +588,13 @@ void testRetractClosedRelationNotClosed(void)
 void testAssertFactAfterRule(void)
 {
 	Atom rule = CStringToClause("! circle c radius r | positive r");
-	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertRule(rule), ASSERT_OK)
 	Atom positive = CStringToTerm("positive 5");
-	ASSERT_INT32_EQUAL(AssertFormula(positive), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(positive), 0), ASSERT_OK)
 	ASSERT_UINT32_EQUAL(countQueryFacts("positive -3"), 0)
 
 	Atom circle = CStringToTerm("circle \"c\" radius -3");
-	ASSERT_INT32_EQUAL(AssertFormula(circle), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(circle), 0), ASSERT_OK)
 
 	// (positive -3) is derived from the rule, and (positive 5) is stored
 	ASSERT_UINT32_EQUAL(countQueryFacts("positive -3"), 1)
@@ -670,16 +625,16 @@ void testAssertFactAfterRule(void)
 void testAssertContradictsRuleUnusedArgument(void)
 {
 	Atom rule = CStringToClause("< r > 0 | ! circle c radius r");
-	ASSERT_INT32_EQUAL(AssertFormula(rule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertRule(rule), ASSERT_OK)
 
 	Atom negativeCircle = CStringToTerm("circle \"a\" radius -3");
-	ASSERT_INT32_EQUAL(AssertFormula(negativeCircle), ASSERT_CONTRADICTION)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(negativeCircle), 0), ASSERT_CONTRADICTION)
 	ASSERT_UINT32_EQUAL(countQueryFacts("! circle \"a\" radius -3"), 1)
 	ASSERT_UINT32_EQUAL(countQueryFacts("! circle \"a\" radius 3"), 0)
 	ASSERT_UINT32_EQUAL(countQueryFacts("! circle c radius -3"), 0)
 
 	Atom positiveCircle = CStringToTerm("circle \"a\" radius 3");
-	ASSERT_INT32_EQUAL(AssertFormula(positiveCircle), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(positiveCircle), 0), ASSERT_OK)
 
 	TypedRelation circleRelation = RelationFromFact(FormulaGetView(positiveCircle));
 	RetractFact(FormulaGetView(positiveCircle));
@@ -726,12 +681,12 @@ void testInvalidateDependentsOfNewRelation(void)
 	Atom hugeRule = CStringToClause("huge c | ! big c");
 	Atom hugeFact = CStringToTerm("huge \"x\"");
 	Atom circleFact = CStringToTerm("circle \"d\" radius 20");
-	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
-	ASSERT_INT32_EQUAL(AssertFormula(hugeRule), ASSERT_OK)
-	ASSERT_INT32_EQUAL(AssertFormula(hugeFact), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertRule(bigRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertRule(hugeRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(hugeFact), 0), ASSERT_OK)
 	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 1)
 
-	ASSERT_INT32_EQUAL(AssertFormula(circleFact), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(circleFact), 0), ASSERT_OK)
 	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 2)
 
 	ASSERT_INT32_EQUAL(RetractFormula(hugeRule), RETRACT_OK)
@@ -758,13 +713,13 @@ void testInvalidateDependentsOfNewRule(void)
 	Atom hugeFact = CStringToTerm("huge \"x\"");
 	Atom hugeRule = CStringToClause("huge c | ! big c");
 	Atom bigRule = CStringToClause("big c | ! small c");
-	ASSERT_INT32_EQUAL(AssertFormula(smallFact), ASSERT_OK)
-	ASSERT_INT32_EQUAL(AssertFormula(hugeFact), ASSERT_OK)
-	ASSERT_INT32_EQUAL(AssertFormula(hugeRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(smallFact), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(hugeFact), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertRule(hugeRule), ASSERT_OK)
 	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 1)
 	ASSERT_UINT32_EQUAL(countQueryFacts("huge c & small d"), 1)
 
-	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertRule(bigRule), ASSERT_OK)
 	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 2)
 	ASSERT_UINT32_EQUAL(countQueryFacts("huge c & small d"), 2)
 
@@ -792,12 +747,12 @@ void testInvalidateDependentsOfClosedRelation(void)
 	Atom smallRule = CStringToClause("small c | big c");
 	Atom hugeFact = CStringToTerm("huge \"z\"");
 	Atom bigRule = CStringToClause("big c | ! huge c");
-	ASSERT_INT32_EQUAL(AssertFormula(closedBig), ASSERT_OK)
-	ASSERT_INT32_EQUAL(AssertFormula(smallRule), ASSERT_OK)
-	ASSERT_INT32_EQUAL(AssertFormula(hugeFact), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(closedBig), 0), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertRule(smallRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(hugeFact), 0), ASSERT_OK)
 	ASSERT_UINT32_EQUAL(countQueryFacts("small \"z\""), 1)
 
-	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertRule(bigRule), ASSERT_OK)
 	ASSERT_UINT32_EQUAL(countQueryFacts("big \"z\""), 1)
 	ASSERT_UINT32_EQUAL(countQueryFacts("small \"z\""), 0)
 
@@ -825,9 +780,9 @@ void testCompileAfterStoreCreated(void)
 	Atom generator = CStringToTerm("circle * radius r");
 	Atom bigRule = CStringToClause("big c | ! circle c radius r | ! < r > 10");
 	Atom bigFact = CStringToTerm("big \"x\"");
-	ASSERT_INT32_EQUAL(AssertFormula(generator), ASSERT_OK)
-	ASSERT_INT32_EQUAL(AssertFormula(bigRule), ASSERT_OK)
-	ASSERT_INT32_EQUAL(AssertFormula(bigFact), ASSERT_OK)
+	ASSERT_INT32_EQUAL(CreateGenerator(generator), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertRule(bigRule), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(bigFact), 0), ASSERT_OK)
 
 	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 1)
 	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 1)
@@ -844,32 +799,26 @@ void testCompileAfterStoreCreated(void)
 
 
 /**
- * A formula that is neither a fact nor a rule is refused, and the result code says which
- * of the two it failed to be.
+ * A formula that is not a rule is refused by AssertRule(), and the result code says why.
  */
-void testAssertFormulaRejects(void)
+void testAssertRuleRejects(void)
 {
-	// a term holding a variable states nothing that could be stored
-	Atom termWithVariable = CStringToTerm("foo x bar 1");
-	ASSERT_INT32_EQUAL(AssertFormula(termWithVariable), ASSERT_TERM_VARIABLE)
-	ReleaseFormula(termWithVariable);
-
 	// a clause holding no variable derives nothing
 	Atom groundClause = CStringToClause("foo 1 | ! bar 2");
-	ASSERT_INT32_EQUAL(AssertFormula(groundClause), ASSERT_CLAUSE_NO_VARIABLE)
+	ASSERT_INT32_EQUAL(AssertRule(groundClause), ASSERT_CLAUSE_NO_VARIABLE)
 	ReleaseFormula(groundClause);
 
 	// A clause of one term says no more than that term. The parser never builds one,
 	// yielding the term itself instead, so it is built here.
 	Atom term = CStringToTerm("foo x bar 1");
 	Atom singleTermClause = CreateClause(&term, 1, 0);
-	ASSERT_INT32_EQUAL(AssertFormula(singleTermClause), ASSERT_CLAUSE_ONE_TERM)
+	ASSERT_INT32_EQUAL(AssertRule(singleTermClause), ASSERT_CLAUSE_ONE_TERM)
 	ReleaseFormula(singleTermClause);
 	ReleaseFormula(term);
 
 	// a conjunction is several facts at once, which this interface does not take
 	Atom conjunction = CStringToConjunction("foo x bar 1 & barf 42 frob y");
-	ASSERT_INT32_EQUAL(AssertFormula(conjunction), ASSERT_NOT_CLAUSE)
+	ASSERT_INT32_EQUAL(AssertRule(conjunction), ASSERT_NOT_CLAUSE)
 	ReleaseFormula(conjunction);
 }
 
@@ -987,7 +936,7 @@ void testCreateIFactTwoIdColumns(void)
 void testAssertIntoIFactRelation(void)
 {
 	Atom fact = CStringToTerm("list \"ab\" length 5");
-	ASSERT_INT32_EQUAL(AssertFormula(fact), ASSERT_NOT_WRITABLE)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_NOT_WRITABLE)
 	ReleaseFormula(fact);
 }
 
@@ -1181,7 +1130,7 @@ void testCreateIFactClause(void)
 void testCreateIFactRepeatedRoleThroughRule(void)
 {
 	Atom generator = CStringToTerm("pair * elem x elem y");
-	ASSERT_INT32_EQUAL(AssertFormula(generator), ASSERT_OK)
+	ASSERT_INT32_EQUAL(CreateGenerator(generator), ASSERT_OK)
 	FormulaView clause = DictionaryAddClauseFromCString("link p from a to b | ! pair p elem a elem b");
 
 	// CLAUDE: Create the ifact through the rule, and take its identified atom
@@ -1432,13 +1381,11 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertClosedRelation);
 	ExecuteTest(testAssertClosedComputedRelation);
 	ExecuteTest(testAssertClosedRelationRejected);
-	ExecuteTest(testAssertFormulaFact);
-	ExecuteTest(testAssertFormulaRule);
+	ExecuteTest(testAssertTermFact);
 	ExecuteTest(testAssertRuleRepeatedRoleOrder);
-	ExecuteTest(testAssertFormulaGenerator);
 	ExecuteTest(testAssertRule);
 	ExecuteTest(testCreateGenerator);
-	ExecuteTest(testAssertFormulaRejects);
+	ExecuteTest(testAssertRuleRejects);
 	ExecuteTest(testRetractFormulaRule);
 	ExecuteTest(testRetractFormulaGenerator);
 	ExecuteTest(testRetractFormulaRejects);

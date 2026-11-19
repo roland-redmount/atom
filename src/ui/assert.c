@@ -78,8 +78,13 @@ static int assertClosedRelation(FormulaView fact)
 
 uint8 AssertFact(FormulaView fact, StorageProvider const * provider)
 {
-	ASSERT(IsTermForm(fact.form));
-	ASSERT(!TypedTupleContainsVariable(fact.actors));
+	if(!IsTermForm(fact.form))
+		return ASSERT_NOT_TERM;
+	// CLAUDE: A novum (*) is for a generator; see CreateGenerator()
+	if(TypedTupleContainsAtom(fact.actors, novumAtom))
+		return ASSERT_TERM_WITH_NOVUM;
+	if(TypedTupleContainsVariable(fact.actors))
+		return ASSERT_TERM_VARIABLE;
 	// CLAUDE: The actors are in the column order of the fact's relation; see RelationFromFact()
 	Atom const * actorsArray = TypedTuplePeekAtoms(fact.actors);
 
@@ -125,7 +130,7 @@ uint8 AssertFact(FormulaView fact, StorageProvider const * provider)
 
 
 /**
- * Add a clause to the rule dictionary.
+ * Add a clause rule to the dictionary.
  */
 uint8 AssertRule(Atom clause)
 {
@@ -134,15 +139,15 @@ uint8 AssertRule(Atom clause)
 	FormulaView clauseView = FormulaGetView(clause);
 	// A rule must not contain a novum (*)
 	if(TypedTupleContainsAtom(clauseView.actors, novumAtom))
-		return ASSERT_RULE_NOVUM;
+		return ASSERT_CLAUSE_WITH_NOVUM;
 	// A rule must have at least two terms
 	if(ClauseFormNTerms(clauseView.form) < 2)
 		return ASSERT_CLAUSE_ONE_TERM;
 	//  A clause with no variable is a disjunction of facts, not a rule
 	if(!TypedTupleContainsVariable(clauseView.actors))
 		return ASSERT_CLAUSE_NO_VARIABLE;
-	// CLAUDE: The relation (closed-relation f) is only written by CloseRelation(), and a rule
-	// deriving its tuples would be ignored
+	// The relation (closed-relation f) is only written by CloseRelation(),
+	// and cannot be the head of a rule (non-negated term)
 	if(MultisetGetElementMultiple(clauseView.form, GetClosedRelationForm()) > 0)
 		return ASSERT_RESERVED_FORM;
 
@@ -156,35 +161,11 @@ uint8 AssertRule(Atom clause)
 uint8 CreateGenerator(Atom formula)
 {
 	if(!IsGenerator(formula))
-		return ASSERT_INVALID_IFACT;
+		return ASSERT_NOT_GENERATOR;
 	if(DictionaryContainsGenerator(formula))
 		return ASSERT_EXISTED;
 	DictionaryAddGenerator(formula);
 	return ASSERT_OK;
-}
-
-
-uint8 AssertFormula(Atom formula)
-{
-	FormulaView formulaView = FormulaGetView(formula);
-
-	// Any formula that contains a novum (*) is added to the dictionary
-	// as a generator; see IsGenerator()
-	if(TypedTupleContainsAtom(formulaView.actors, novumAtom))
-		return CreateGenerator(formula);
-
-	if(FormulaIsTerm(formula)) {
-		// A term is interpreted as a fact, and may not contain variables
-		if(TypedTupleContainsVariable(formulaView.actors))
-			return ASSERT_TERM_VARIABLE;
-		// Assert the fact, use default storage provider
-		return AssertFact(formulaView, 0);
-	}
-
-	if(FormulaIsClause(formula))
-		return AssertRule(formula);
-
-	return ASSERT_NOT_CLAUSE;
 }
 
 

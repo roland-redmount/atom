@@ -447,7 +447,7 @@ void testCompileGeneratorWithClause(void)
 	CircleRule circleRule;
 	setupCircleRule(&circleRule);
 	Atom diskFact = CStringToTerm("disk \"d\" size 5.0");
-	ASSERT_INT32_EQUAL(AssertFormula(diskFact), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(diskFact), 0), ASSERT_OK)
 	index8 diskIndex = findRoleIndex(FormulaGetForm(diskFact), "disk");
 	Atom disk = TypedTupleGetElement(FormulaGetView(diskFact).actors, diskIndex).atom;
 	FormulaView clause = DictionaryAddClauseFromCString("circle c radius r | ! disk c size r");
@@ -483,7 +483,7 @@ void testGeneratorAfterCompiledService(void)
 	CircleRule circleRule;
 	setupCircleRule(&circleRule);
 	Atom diskFact = CStringToTerm("disk \"d\" size 5.0");
-	ASSERT_INT32_EQUAL(AssertFormula(diskFact), ASSERT_OK)
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(diskFact), 0), ASSERT_OK)
 	index8 diskIndex = findRoleIndex(FormulaGetForm(diskFact), "disk");
 	Atom disk = TypedTupleGetElement(FormulaGetView(diskFact).actors, diskIndex).atom;
 	FormulaView clause = DictionaryAddClauseFromCString("circle c radius r | ! disk c size r");

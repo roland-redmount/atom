@@ -2,6 +2,7 @@
 #include "platform.h"
 #include "kernel/kernel.h"
 #include "library/library.h"
+#include "parser/ClauseBuilder.h"
 #include "parser/FormulaBuilder.h"
 #include "ui/assert.h"
 #include "ui/query.h"
@@ -130,11 +131,19 @@ static size32 countAnswers(char const * query)
 }
 
 
-static void assertFormula(char const * formulaString)
+static void assertFact(char const * factString)
 {
-	Atom formula = CStringToFormula(formulaString);
-	ASSERT_INT32_EQUAL(AssertFormula(formula), ASSERT_OK)
-	ReleaseFormula(formula);
+	Atom fact = CStringToTerm(factString);
+	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(fact), 0), ASSERT_OK)
+	ReleaseFormula(fact);
+}
+
+
+static void assertRule(char const * ruleString)
+{
+	Atom rule = CStringToClause(ruleString);
+	ASSERT_INT32_EQUAL(AssertRule(rule), ASSERT_OK)
+	ReleaseFormula(rule);
 }
 
 
@@ -163,11 +172,11 @@ static void writeSessionToPageFile(void)
 {
 	ASSERT_TRUE(KernelInitialize(NEW_PERSISTENT_MEMORY))
 	LoadLibraries();
-	assertFormula("parent 1 child 2");
-	assertFormula("parent 2 child 3");
-	assertFormula("grandparent x grandchild z | ! parent x child y | ! parent y child z");
-	assertFormula("name \"ann\" age 3");
-	assertFormula("closed-relation [. parent child]");
+	assertFact("parent 1 child 2");
+	assertFact("parent 2 child 3");
+	assertRule("grandparent x grandchild z | ! parent x child y | ! parent y child z");
+	assertFact("name \"ann\" age 3");
+	assertFact("closed-relation [. parent child]");
 	checkSessionAnswers();
 	KernelClose();
 }
