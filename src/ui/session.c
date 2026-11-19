@@ -182,12 +182,12 @@ static void printHelp(void)
 	printLine("                      such as (circle * radius r).");
 	printLine(":clear @tag           Remove the tag @tag.");
 	printLine(":def <ID atom>        Print the identifying facts of an ID atom.");
+	printLine(":drop <formula>       Remove a rule (a clause, with matching variable names)");
+	printLine("                      or a generator (a term or conjunction with a novum).");
 	printLine(":inspect <query>      Print the service(s) that the query dispatches to");
 	printLine(":load <file> <form>   Import a facts from a CSV file, of the given form,");
 	printLine("                      whose roles must match file column names.");
 	printLine(":retract <term>       Retract a fact. The term must not contain variables.");
-	printLine(":retract <term>       Retract a generator, which may be a conjunction.");
-	printLine(":retract <clause>     Retract a rule. Variable names must match.");
 	printLine(":rules <form>         Print clause rules containing a term form.");
 	printLine(":view table|formula   Print results as a table of variables, or as formulas.");
 	printLine(":help                 Print this text.");
@@ -890,7 +890,7 @@ static int executeGenerator(char const * generatorText, index32 linePosition)
 
 
 /*
- * Report the result of retracting a formula.
+ * Report the result of retracting a fact, or dropping a rule or generator.
  */
 static void printRetractResult(int result)
 {
@@ -899,12 +899,8 @@ static void printRetractResult(int result)
 		printStatusLine("Ok.");
 		break;
 
-	case RETRACT_IFACT_OK:
-		printStatusLine("Ok. Atoms defined by the rule may still exist.");
-		break;
-
 	case RETRACT_NOT_FOUND:
-		printStatusLine("No such fact or rule.");
+		printStatusLine("No such fact, rule or generator.");
 		break;
 
 	case RETRACT_NOT_ASSERTED:
@@ -923,7 +919,15 @@ static void printRetractResult(int result)
 		break;
 
 	case RETRACT_NOT_CLAUSE:
-		printStatusLine("Only a fact or a rule can be retracted.");
+		printStatusLine("Only a clause can be dropped as a rule. A generator contains a novum (*).");
+		break;
+
+	case RETRACT_NOT_TERM:
+		printStatusLine("Only a term can be retracted as a fact. See :drop.");
+		break;
+
+	case RETRACT_TERM_WITH_NOVUM:
+		printStatusLine("A fact may not contain a novum (*). See :drop.");
 		break;
 
 	default:
@@ -934,12 +938,12 @@ static void printRetractResult(int result)
 
 
 /*
- * Retract a fact, a clause rule or a generator.
+ * Retract the fact following the :retract command.
  */
 static int executeRetract(char const * formulaText, index32 linePosition)
 {
 	if(!*formulaText) {
-		printStatusLine(":retract requires a term or a clause.");
+		printStatusLine(":retract requires a term.");
 		return SESSION_CONTINUE;
 	}
 
@@ -948,7 +952,37 @@ static int executeRetract(char const * formulaText, index32 linePosition)
 	if(!formula.hash)
 		return parseResult;
 
-	printRetractResult(RetractFormula(formula));
+	printRetractResult(RetractFact(FormulaGetView(formula)));
+	ReleaseFormula(formula);
+	return SESSION_CONTINUE;
+}
+
+
+/*
+ * Remove the rule or generator following the :drop command. A formula containing a novum (*)
+ * is a generator, and any other formula is a rule.
+ */
+static int executeDrop(char const * formulaText, index32 linePosition)
+{
+	if(!*formulaText) {
+		printStatusLine(":drop requires a rule or a generator.");
+		return SESSION_CONTINUE;
+	}
+
+	Atom formula;
+	int parseResult = parseEntryFormula(formulaText, linePosition, 0, &formula);
+	if(!formula.hash)
+		return parseResult;
+
+	if(TypedTupleContainsAtom(FormulaGetView(formula).actors, novumAtom)) {
+		int result = DropGenerator(formula);
+		if(result == RETRACT_OK)
+			printStatusLine("Ok. Atoms defined by the generator may still exist.");
+		else
+			printRetractResult(result);
+	}
+	else
+		printRetractResult(DropRule(formula));
 	ReleaseFormula(formula);
 	return SESSION_CONTINUE;
 }
@@ -1321,6 +1355,10 @@ static int executeCommand(char const * line, char const * commandText)
 	char const * retractText = matchCommand(commandText, ":retract");
 	if(retractText)
 		return executeRetract(retractText, retractText - line);
+
+	char const * dropText = matchCommand(commandText, ":drop");
+	if(dropText)
+		return executeDrop(dropText, dropText - line);
 
 	printStatusLine("Unknown command. Enter :help for the commands.");
 	return SESSION_CONTINUE;

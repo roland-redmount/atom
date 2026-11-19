@@ -401,7 +401,7 @@ void testCreateGenerator(void)
  * compiled from it. The rule (! even x | ! odd x) makes (even 3) contradict (odd 3);
  * see testAssertContradictsDerivedFact(). Once the rule is retracted, (even 3) can be asserted.
  */
-void testRetractFormulaRule(void)
+void testDropRule(void)
 {
 	Atom rule = CStringToClause("! even x | ! odd x");
 	ASSERT_INT32_EQUAL(AssertRule(rule), ASSERT_OK)
@@ -413,20 +413,20 @@ void testRetractFormulaRule(void)
 	FormulaView even3View = FormulaGetView(even3);
 	ASSERT_INT32_EQUAL(AssertFact(even3View, 0), ASSERT_CONTRADICTION)
 
-	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(DropRule(rule), RETRACT_OK)
 	ASSERT_FALSE(DictionaryContainsClause(rule))
-	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_NOT_FOUND)
+	ASSERT_INT32_EQUAL(DropRule(rule), RETRACT_NOT_FOUND)
 	ASSERT_INT32_EQUAL(AssertFact(even3View, 0), ASSERT_OK)
 
 	// a clause with other variable names is a different clause; see DictionaryAddClause()
 	Atom renamedRule = CStringToClause("! even y | ! odd y");
-	ASSERT_INT32_EQUAL(RetractFormula(renamedRule), RETRACT_NOT_FOUND)
+	ASSERT_INT32_EQUAL(DropRule(renamedRule), RETRACT_NOT_FOUND)
 	ReleaseFormula(renamedRule);
 
-	ASSERT_INT32_EQUAL(RetractFormula(even3), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(even3)), RETRACT_OK)
 	DropRelation(RelationFromFact(even3View));
 	ReleaseFormula(even3);
-	ASSERT_INT32_EQUAL(RetractFormula(odd3), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(odd3)), RETRACT_OK)
 	DropRelation(RelationFromFact(odd3View));
 	ReleaseFormula(odd3);
 	ReleaseFormula(rule);
@@ -437,36 +437,42 @@ void testRetractFormulaRule(void)
  * A generator is retracted whatever its variable names, since the dictionary
  * compares generators by term form and novum position only.
  */
-void testRetractFormulaGenerator(void)
+void testDropGenerator(void)
 {
 	Atom rule = CStringToTerm("circle * radius r");
 	ASSERT_INT32_EQUAL(CreateGenerator(rule), ASSERT_OK)
 
 	Atom renamedRule = CStringToTerm("circle * radius s");
-	ASSERT_INT32_EQUAL(RetractFormula(renamedRule), RETRACT_IFACT_OK)
+	ASSERT_INT32_EQUAL(DropGenerator(renamedRule), RETRACT_OK)
 	ASSERT_FALSE(DictionaryContainsGenerator(rule))
-	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_NOT_FOUND)
+	ASSERT_INT32_EQUAL(DropGenerator(rule), RETRACT_NOT_FOUND)
 	ReleaseFormula(renamedRule);
 	ReleaseFormula(rule);
 
 	Atom invalidRule = CStringToTerm("circle * radius 5.0");
-	ASSERT_INT32_EQUAL(RetractFormula(invalidRule), RETRACT_INVALID_GENERATOR)
+	ASSERT_INT32_EQUAL(DropGenerator(invalidRule), RETRACT_INVALID_GENERATOR)
 	ReleaseFormula(invalidRule);
 }
 
 
 /**
- * A term with variables is neither a fact nor a generator, and a conjunction
- * is neither a fact nor a rule.
+ * CLAUDE: RetractFact() refuses a term with a variable or a novum (*) and a formula that is not a
+ * term. DropRule() refuses a formula that is not a clause.
  */
-void testRetractFormulaRejects(void)
+void testRetractRejects(void)
 {
 	Atom termWithVariable = CStringToTerm("foo x bar 1");
-	ASSERT_INT32_EQUAL(RetractFormula(termWithVariable), RETRACT_TERM_VARIABLE)
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(termWithVariable)), RETRACT_TERM_VARIABLE)
 	ReleaseFormula(termWithVariable);
 
+	Atom termWithNovum = CStringToTerm("circle * radius r");
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(termWithNovum)), RETRACT_TERM_WITH_NOVUM)
+	ASSERT_INT32_EQUAL(DropRule(termWithNovum), RETRACT_NOT_CLAUSE)
+	ReleaseFormula(termWithNovum);
+
 	Atom conjunction = CStringToConjunction("foo x & bar x");
-	ASSERT_INT32_EQUAL(RetractFormula(conjunction), RETRACT_NOT_CLAUSE)
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(conjunction)), RETRACT_NOT_TERM)
+	ASSERT_INT32_EQUAL(DropRule(conjunction), RETRACT_NOT_CLAUSE)
 	ReleaseFormula(conjunction);
 }
 
@@ -479,13 +485,13 @@ void testRetractFormulaRejects(void)
 void testRetractMathRule(void)
 {
 	Atom rule = CStringToClause("+ x + y = z | ! + z - x = y");
-	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(DropRule(rule), RETRACT_OK)
 	ASSERT_FALSE(DictionaryContainsClause(rule))
 	ASSERT_INT32_EQUAL(AssertRule(rule), ASSERT_OK)
 	ReleaseFormula(rule);
 
 	Atom closedInteger = CStringToTerm("closed-relation [. integer]");
-	ASSERT_INT32_EQUAL(RetractFormula(closedInteger), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(closedInteger)), RETRACT_OK)
 	Atom integer = CStringToTerm("integer 1");
 	ASSERT_FALSE(RelationIsClosed(FormulaGetForm(integer)))
 
@@ -601,7 +607,7 @@ void testAssertFactAfterRule(void)
 	ASSERT_UINT32_EQUAL(countQueryFacts("positive 5"), 1)
 	ASSERT_UINT32_EQUAL(countQueryFacts("positive -5"), 0)
 
-	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(DropRule(rule), RETRACT_OK)
 	ASSERT_UINT32_EQUAL(countQueryFacts("positive -3"), 0)
 	TypedRelation circleRelation = RelationFromFact(FormulaGetView(circle));
 	RetractFact(FormulaGetView(circle));
@@ -639,7 +645,7 @@ void testAssertContradictsRuleUnusedArgument(void)
 	TypedRelation circleRelation = RelationFromFact(FormulaGetView(positiveCircle));
 	RetractFact(FormulaGetView(positiveCircle));
 	DropRelation(circleRelation);
-	ASSERT_INT32_EQUAL(RetractFormula(rule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(DropRule(rule), RETRACT_OK)
 	ReleaseFormula(positiveCircle);
 	ReleaseFormula(negativeCircle);
 	ReleaseFormula(rule);
@@ -689,10 +695,10 @@ void testInvalidateDependentsOfNewRelation(void)
 	ASSERT_INT32_EQUAL(AssertFact(FormulaGetView(circleFact), 0), ASSERT_OK)
 	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 2)
 
-	ASSERT_INT32_EQUAL(RetractFormula(hugeRule), RETRACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(circleFact), RETRACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(hugeFact), RETRACT_OK)
+	ASSERT_INT32_EQUAL(DropRule(hugeRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(DropRule(bigRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(circleFact)), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(hugeFact)), RETRACT_OK)
 	dropFormRelations("circle 1 radius 1");
 	dropFormRelations("huge 1");
 	ReleaseFormula(circleFact);
@@ -723,10 +729,10 @@ void testInvalidateDependentsOfNewRule(void)
 	ASSERT_UINT32_EQUAL(countQueryFacts("huge c"), 2)
 	ASSERT_UINT32_EQUAL(countQueryFacts("huge c & small d"), 2)
 
-	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(hugeRule), RETRACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(hugeFact), RETRACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(smallFact), RETRACT_OK)
+	ASSERT_INT32_EQUAL(DropRule(bigRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(DropRule(hugeRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(hugeFact)), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(smallFact)), RETRACT_OK)
 	dropFormRelations("huge 1");
 	dropFormRelations("small 1");
 	ReleaseFormula(bigRule);
@@ -756,10 +762,10 @@ void testInvalidateDependentsOfClosedRelation(void)
 	ASSERT_UINT32_EQUAL(countQueryFacts("big \"z\""), 1)
 	ASSERT_UINT32_EQUAL(countQueryFacts("small \"z\""), 0)
 
-	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(smallRule), RETRACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(closedBig), RETRACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(hugeFact), RETRACT_OK)
+	ASSERT_INT32_EQUAL(DropRule(bigRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(DropRule(smallRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(closedBig)), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(hugeFact)), RETRACT_OK)
 	dropFormRelations("huge 1");
 	ReleaseFormula(bigRule);
 	ReleaseFormula(hugeFact);
@@ -787,9 +793,9 @@ void testCompileAfterStoreCreated(void)
 	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 1)
 	ASSERT_UINT32_EQUAL(countQueryFacts("big c & circle d radius 20"), 1)
 
-	ASSERT_INT32_EQUAL(RetractFormula(bigRule), RETRACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(generator), RETRACT_IFACT_OK)
-	ASSERT_INT32_EQUAL(RetractFormula(bigFact), RETRACT_OK)
+	ASSERT_INT32_EQUAL(DropRule(bigRule), RETRACT_OK)
+	ASSERT_INT32_EQUAL(DropGenerator(generator), RETRACT_OK)
+	ASSERT_INT32_EQUAL(RetractFact(FormulaGetView(bigFact)), RETRACT_OK)
 	dropFormRelations("circle 1 radius 1");
 	dropFormRelations("big 1");
 	ReleaseFormula(bigFact);
@@ -1386,9 +1392,9 @@ int main(int argc, char * argv[])
 	ExecuteTest(testAssertRule);
 	ExecuteTest(testCreateGenerator);
 	ExecuteTest(testAssertRuleRejects);
-	ExecuteTest(testRetractFormulaRule);
-	ExecuteTest(testRetractFormulaGenerator);
-	ExecuteTest(testRetractFormulaRejects);
+	ExecuteTest(testDropRule);
+	ExecuteTest(testDropGenerator);
+	ExecuteTest(testRetractRejects);
 	ExecuteTest(testRetractDerivedFact);
 	ExecuteTest(testRetractComputedFact);
 	ExecuteTest(testRetractClosedRelationNotClosed);

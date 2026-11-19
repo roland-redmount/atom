@@ -187,6 +187,13 @@ static uint8 retractClosedRelation(FormulaView fact)
 
 uint8 RetractFact(FormulaView fact)
 {
+	if(!IsTermForm(fact.form))
+		return RETRACT_NOT_TERM;
+	if(TypedTupleContainsAtom(fact.actors, novumAtom))
+		return RETRACT_TERM_WITH_NOVUM;
+	if(TypedTupleContainsVariable(fact.actors))
+		return RETRACT_TERM_VARIABLE;
+
 	// Test for the special case (closed-relation f) which is only written by OpenRelation()
 	if(SameAtoms(fact.form, GetClosedRelationForm()))
 		return retractClosedRelation(fact);
@@ -214,33 +221,27 @@ uint8 RetractFact(FormulaView fact)
 }
 
 
-uint8 RetractFormula(Atom formula)
+uint8 DropRule(Atom clause)
 {
+	if(!FormulaIsClause(clause))
+		return RETRACT_NOT_CLAUSE;
+	if(!DictionaryContainsClause(clause))
+		return RETRACT_NOT_FOUND;
+	FormulaView clauseView = FormulaGetView(clause);
+	DictionaryRemoveClause(&clauseView);
+	return RETRACT_OK;
+}
+
+
+uint8 DropGenerator(Atom formula)
+{
+	if(!IsGenerator(formula))
+		return RETRACT_INVALID_GENERATOR;
+	if(!DictionaryContainsGenerator(formula))
+		return RETRACT_NOT_FOUND;
 	FormulaView formulaView = FormulaGetView(formula);
-
-	if(TypedTupleContainsAtom(formulaView.actors, novumAtom)) {
-		if(!IsGenerator(formula))
-			return RETRACT_INVALID_GENERATOR;
-		if(!DictionaryContainsGenerator(formula))
-			return RETRACT_NOT_FOUND;
-		DictionaryRemoveGenerator(&formulaView);
-		return RETRACT_IFACT_OK;
-	}
-
-	if(FormulaIsTerm(formula)) {
-		if(TypedTupleContainsVariable(formulaView.actors))
-			return RETRACT_TERM_VARIABLE;
-		return RetractFact(formulaView);
-	}
-
-	if(FormulaIsClause(formula)) {
-		if(!DictionaryContainsClause(formula))
-			return RETRACT_NOT_FOUND;
-		DictionaryRemoveClause(&formulaView);
-		return RETRACT_OK;
-	}
-
-	return RETRACT_NOT_CLAUSE;
+	DictionaryRemoveGenerator(&formulaView);
+	return RETRACT_OK;
 }
 
 

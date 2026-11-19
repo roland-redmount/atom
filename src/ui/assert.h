@@ -59,22 +59,28 @@ uint8 CreateGenerator(Atom formula);
 uint8 RetractFact(FormulaView fact);
 
 /**
- * High level method to retract any formula, created by AssertFact(), AssertRule() or CreateGenerator().
- * A generator is removed by DictionaryRemoveGenerator(), a fact by RetractFact(),
- * and a clause by DictionaryRemoveClause().
- * 
+ * Remove a rule from the dictionary; the counterpart of AssertRule().
+ * See DictionaryRemoveClause().
+ *
  * NOTE: A clause rule must have the same variable names as when asserted; see DictionaryAddClause().
  */
-uint8 RetractFormula(Atom formula);
+uint8 DropRule(Atom clause);
 
-// Result codes for RetractFact() and RetractFormula()
-#define RETRACT_OK					1	// a fact or rule was retracted
-#define RETRACT_IFACT_OK			2	// a generator was retracted
-#define RETRACT_NOT_FOUND			3	// the fact or rule is not in the knowledgebase
-#define RETRACT_NOT_ASSERTED		4	// the fact is not explicitly asserted (ifact or computed fact)
-#define RETRACT_TERM_VARIABLE		5	// a term containing variables is not a fact
-#define RETRACT_INVALID_GENERATOR	6	// a formula with novums that is not a generator
-#define RETRACT_NOT_CLAUSE			7	// a conjunction
+/**
+ * Remove a generator from the dictionary; the counterpart of CreateGenerator().
+ * See DictionaryRemoveGenerator().
+ */
+uint8 DropGenerator(Atom formula);
+
+// Result codes for RetractFact(), DropRule() and DropGenerator()
+#define RETRACT_OK					1	// a fact, rule or generator was retracted
+#define RETRACT_NOT_FOUND			2	// the fact or rule is not in the knowledgebase
+#define RETRACT_NOT_ASSERTED		3	// the fact is not explicitly asserted (ifact or computed fact)
+#define RETRACT_TERM_VARIABLE		4	// a term containing variables is not a fact
+#define RETRACT_INVALID_GENERATOR	5	// a formula with novums that is not a generator
+#define RETRACT_NOT_CLAUSE			6	// the formula is not a clause
+#define RETRACT_NOT_TERM			7	// a fact must be a term
+#define RETRACT_TERM_WITH_NOVUM		8	// a term containing a novum (*) is not a fact
 
 /**
  * High level function to create an IFact from a formula containing
